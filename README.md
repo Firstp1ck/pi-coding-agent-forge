@@ -1,3 +1,5 @@
+
+
 # Pi Coding Agent Forge
 
 A collection of practical add-ons for the [Pi coding agent](https://www.npmjs.com/package/@earendil-works/pi-coding-agent).
@@ -67,7 +69,7 @@ Extensions add commands, tools, interface elements, or automatic behavior to Pi.
 - **[Setup Skills for Pi](pi-extension-setup-skills/README.md)** — Choose which local Pi skills are enabled from one interactive list.
 - **[Small Modal Reliability for Pi](pi-extension-small-modal-reliability/README.md)** — Gives smaller language models a clearer task loop, scratchpad, and verification routine.
 - **[Stats for Pi](pi-extension-stats/README.md)** — See where your Pi tokens and model costs are going over time.
-- **[Subagent Review Diversity for Pi](pi-extension-subagent-minimum-fanout/README.md)** — Checks reviewer model diversity without restricting worker or workflow fanout.
+- **[Subagent Review Diversity for Pi](pi-extension-subagent-minimum-fanout/README.md)** — Enforces reviewer model diversity without restricting worker or workflow fanout.
 - **[Tech News for Pi](pi-extension-tech-news/README.md)** — Bring technology news from several sources into Pi for browsing and summaries.
 - **[Todo Progress for Pi](pi-extension-todo-progress/README.md)** — Shows a live checklist for prompts that contain several steps or goals.
 - **[Tools for Pi](pi-extension-tools/README.md)** — Turn Pi tools on or off from an interactive selector.
