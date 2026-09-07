@@ -23,7 +23,7 @@
     ]
   },
   "dependencies": {
-    "@firstpick/pi-utils": "^0.2.7"
+    "@firstpick/pi-utils": "^0.3.0"
   },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "*"
