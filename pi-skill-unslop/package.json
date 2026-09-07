@@ -1,6 +1,6 @@
 {
   "name": "@firstpick/pi-skill-unslop",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Agents should invoke this skill whenever they write or edit prose for people, including READMEs, docs, commit messages, PR descriptions, changelogs, release notes, comments, and chat replies, to cut AI tells and restore human voice.",
   "license": "MIT",
   "homepage": "https://github.com/Firstp1ck/pi-coding-agent-forge/tree/main/pi-skill-unslop#readme",

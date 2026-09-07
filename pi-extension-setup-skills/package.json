@@ -1,6 +1,6 @@
 {
   "name": "@firstpick/pi-extension-setup-skills",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "description": "Interactive Pi command to enable or disable local skills from a multi-selection list.",
   "license": "MIT",
   "homepage": "https://github.com/Firstp1ck/pi-coding-agent-forge/tree/main/pi-extension-setup-skills#readme",

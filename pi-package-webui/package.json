@@ -1,6 +1,6 @@
 {
   "name": "@firstpick/pi-package-webui",
-  "version": "0.10.4",
+  "version": "0.10.5",
   "description": "Pi Web UI companion package with a local browser UI CLI plus /webui-start and /webui-status commands.",
   "license": "MIT",
   "homepage": "https://github.com/Firstp1ck/pi-coding-agent-forge/tree/main/pi-package-webui#readme",
