@@ -1,0 +1,21 @@
+{
+  "name": "@firstpick/pi-skill-stop-slop",
+  "version": "0.1.0",
+  "description": "Evaluate prose after Unslop or on its own with deterministic local style scores, exact findings, and before/after comparisons.",
+  "license": "MIT",
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "homepage": "https://github.com/Firstp1ck/pi-coding-agent-forge/tree/main/pi-skill-stop-slop#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Firstp1ck/pi-coding-agent-forge.git",
+    "directory": "pi-skill-stop-slop"
+  },
+  "keywords": ["pi-package", "pi", "pi-coding-agent", "skill", "agent-skill", "writing", "editing", "stop-slop", "prose-linter"],
+  "pi": { "skills": ["./skills"] },
+  "bin": { "slopcheck": "./skills/stop-slop/scripts/slopcheck.mjs" },
+  "exports": { ".": "./skills/stop-slop/scripts/analyzer.mjs" },
+  "files": ["skills", "README.md", "TECHNICAL.md", "DEVELOPMENT.md", "LICENSE"],
+  "scripts": { "test": "node --test", "check": "node --check skills/stop-slop/scripts/slopcheck.mjs && node --check skills/stop-slop/scripts/analyzer.mjs && node --check skills/stop-slop/scripts/rules.mjs && node --check skills/stop-slop/scripts/text.mjs" },
+  "publishConfig": { "access": "public" }
+}

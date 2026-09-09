@@ -1,0 +1,11 @@
+{
+  "repository": "https://github.com/hardikpandya/stop-slop",
+  "commit": "8da1f030185bdfe8471220585162991eaeb970e9",
+  "files": [
+    { "upstreamPath": "SKILL.md", "bundledPath": "SKILL.md.txt", "sha256": "7432a1d9ebdd42b27666da8458af252edf549f723fb14bcd4791425103930310" },
+    { "upstreamPath": "references/phrases.md", "bundledPath": "phrases.md", "sha256": "4ca1b7e97123b5c67eff3dc97e5e977332e0b24021265c1553888a93ec33fa93" },
+    { "upstreamPath": "references/structures.md", "bundledPath": "structures.md", "sha256": "ffbf1316c7fb5aaf552de005609a64a9639b546ecd76bfb0e482864d5bbe6f58" },
+    { "upstreamPath": "references/examples.md", "bundledPath": "examples.md", "sha256": "49c592899eb4457f95d0767e15e3143569e2cef50f2927c3174e62432984cd3d" },
+    { "upstreamPath": "LICENSE", "bundledPath": "LICENSE", "sha256": "2e2b2beaf41cc0ce28485455a62aed81777cdcdf68702e142427aef1cd720f2c" }
+  ]
+}

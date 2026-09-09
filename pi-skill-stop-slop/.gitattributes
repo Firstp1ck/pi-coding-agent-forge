@@ -1,0 +1,4 @@
+# Preserve upstream snapshot bytes for provenance verification on every platform.
+skills/stop-slop/references/upstream/* -text
+# Keep scored fixtures byte-identical across checkouts.
+test/fixtures/* -text

@@ -108,6 +108,7 @@ Skills give Pi a reusable workflow for a particular kind of work. You normally a
 - **[Server Audit](pi-skill-server-audit/README.md)** — Review a Linux server for exposed services, weak access controls, and practical hardening opportunities.
 - **[Shoo Auth](pi-skill-shoo-auth/README.md)** — Implement or troubleshoot Shoo Google sign-in in browser applications.
 - **[Spec vs Impl Checker](pi-skill-spec-vs-impl-checker/README.md)** — Check whether code actually matches a specification, plan, README, or issue.
+- **[Stop Slop](pi-skill-stop-slop/README.md)** checks prose with deterministic style scores, flagged passages, and before/after comparisons, with or without Unslop.
 - **[Subagent Governance](pi-skill-subagent-governance/README.md)** — Keep delegated agent work properly scoped, isolated, reviewed, and safely retried.
 - **[Tauri Django React](pi-skill-tauri-django-react/README.md)** — Build and troubleshoot desktop apps that combine Tauri, Django, and React.
 - **[Tech Debt Tracker](pi-skill-tech-debt-tracker/README.md)** — Find, group, and prioritize technical debt so cleanup work becomes actionable.
