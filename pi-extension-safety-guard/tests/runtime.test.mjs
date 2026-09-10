@@ -33,13 +33,16 @@ function makeHarness(requestAutoReviewFn, { hasUI = true, select = async () => "
   const statuses = [];
   const widgets = [];
   let selectCalls = 0;
+  const sessionEntries = [];
   const pi = {
     on(name, handler) { handlers.set(name, handler); },
     registerCommand(name, command) { commands.set(name, command); },
+    appendEntry(customType, data) { sessionEntries.push({ type: "custom", customType, data: structuredClone(data) }); },
   };
   createSafetyGuardExtension({ requestAutoReviewFn, allowStorePath: path.join(tempDir, "allow.json") })(pi);
   const ctx = {
     cwd: tempDir,
+    sessionManager: { getSessionId: () => "runtime-test", getEntries: () => sessionEntries },
     hasUI,
     mode: "tui",
     modelRegistry: {},
@@ -179,7 +182,7 @@ test("session allow-list bypass remains ahead of model review", async () => {
   const harness = makeHarness(async () => {
     reviewCalls += 1;
     throw new Error("use prompt");
-  }, { select: async () => "Allow this exact command for this session" });
+  }, { select: async () => "Allow the command for the current session" });
 
   assert.equal(await harness.call(), undefined);
   assert.equal(await harness.call(), undefined);

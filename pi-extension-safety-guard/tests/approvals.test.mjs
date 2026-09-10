@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import path from "node:path";
 import { test } from "node:test";
-import { bashRuleGrant, isKnownBashRuleId, ruleAllowKey } from "../src/approvals.ts";
+import { bashRuleGrant, isKnownBashRuleId, ruleAllowKey, operationAllowKey, globalOperationAllowKey } from "../src/approvals.ts";
 
 test("branch-creation grants use a stable identity across simple names and both supported flags", () => {
   for (const command of ["git switch -c feature/a", "git switch --create branch-b", " git\tswitch -c v2.0_fix \t"]) {
@@ -30,6 +30,16 @@ test("broader grants reject every unsupported command shape", () => {
     "git switch -c --orphan", "git switch -c", "git switch -c branch-a <<EOF\ntext\nEOF",
     "git switch -c branch-a\u2028", "git switch -c branch-a\u2029",
   ]) assert.equal(bashRuleGrant(command), undefined, command);
+});
+
+test("global exact-operation identities omit cwd without colliding with existing keys or argv boundaries", () => {
+  const argv = ["rm", "-rf", "./build"];
+  const key = globalOperationAllowKey(argv);
+  assert.equal(key, 'operation-global:["bash",["rm","-rf","./build"]]');
+  for (const cwd of [".", "elsewhere", "*", ""]) assert.notEqual(key, operationAllowKey(argv, cwd));
+  assert.notEqual(key, globalOperationAllowKey(["rm", "-rf ./build"]));
+  assert.notEqual(key, globalOperationAllowKey(["rm", "-rf", "./other"]));
+  assert.notEqual(key, globalOperationAllowKey(["rm", "-r", "./build"]));
 });
 
 test("rule keys are cwd-scoped, normalized, and disjoint from legacy exact keys", () => {

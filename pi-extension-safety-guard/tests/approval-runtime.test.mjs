@@ -2,9 +2,11 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { randomUUID } from "node:crypto";
+import { projectApprovalFile } from "../src/approval-store.ts";
 import { after, test } from "node:test";
 import { createSafetyGuardExtension } from "../index.ts";
-import { ruleAllowKey, operationRule, operationRuleAllowKey, operationAllowKey } from "../src/approvals.ts";
+import { ruleAllowKey, operationRule, operationRuleAllowKey, operationAllowKey, globalOperationAllowKey } from "../src/approvals.ts";
 import { BASH_CHOICES as CHOICE } from "../src/bash-prompt.ts";
 import { defaultSafetyGuardConfig, writeSafetyGuardConfig } from "../src/config.mjs";
 
@@ -24,7 +26,7 @@ function fixture() {
   writeSafetyGuardConfig(defaultSafetyGuardConfig(), configFile);
   return { cwd, allowStorePath: path.join(cwd, "allow.json") };
 }
-function harness(location, choices = [], { hasUI = true, requestAutoReviewFn, analyzeShellFn } = {}) {
+function harness(location, choices = [], { hasUI = true, requestAutoReviewFn, analyzeShellFn, session = { id: randomUUID(), entries: [] } } = {}) {
   const handlers = new Map();
   const commands = new Map();
   const prompts = [];
@@ -32,9 +34,11 @@ function harness(location, choices = [], { hasUI = true, requestAutoReviewFn, an
   createSafetyGuardExtension({ allowStorePath: location.allowStorePath, requestAutoReviewFn, analyzeShellFn })({
     on: (name, fn) => handlers.set(name, fn),
     registerCommand: (name, definition) => commands.set(name, definition),
+    appendEntry: (customType, data) => session.entries.push({ type: "custom", customType, data: structuredClone(data) }),
   });
   const ctx = {
     cwd: location.cwd, hasUI, mode: hasUI ? "tui" : "print", modelRegistry: {},
+    sessionManager: { getSessionId: () => session.id, getEntries: () => session.entries },
     ui: {
       theme: { fg: (_tone, value) => value },
       select: async (title, options) => { prompts.push({ title, options }); return choices.shift() ?? "Block"; },
@@ -42,7 +46,8 @@ function harness(location, choices = [], { hasUI = true, requestAutoReviewFn, an
     },
   };
   return {
-    prompts, notices, ctx,
+    prompts, notices, ctx, session,
+    start: () => handlers.get("session_start")({}, ctx),
     call: async (command) => {
       const event = { type: "tool_call", toolName: "bash", input: { command } };
       const result = await handlers.get("tool_call")(event, ctx);
@@ -58,7 +63,10 @@ function legacy(location, command) {
   return { key: `bash:${location.cwd}:${command}`, kind: "bash", value: command,
     cwd: location.cwd, label: "git switch", createdAt: "2026-01-01T00:00:00.000Z" };
 }
-function entries(location) { return fs.existsSync(location.allowStorePath) ? JSON.parse(fs.readFileSync(location.allowStorePath, "utf8")).entries : []; }
+function entries(location) {
+  const all = [projectApprovalFile(location.cwd), location.allowStorePath].flatMap((file) => fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, "utf8")).entries : []);
+  return [...new Map(all.map((entry) => [entry.key, entry])).values()];
+}
 
 test("one prompt shows every operation and risk; block saves nothing", async () => {
   const location = fixture();
@@ -70,6 +78,88 @@ test("one prompt shows every operation and risk; block saves nothing", async () 
   assert.match(current.prompts[0].title, /recursive rm/);
   assert.deepEqual(entries(location), []);
   assert.ok(!current.prompts[0].options.includes(CHOICE.rulePermanent));
+});
+
+test("prompts mark the actual risk pattern, not the surrounding unsupported syntax", async () => {
+  for (const [command, marker, reason] of [
+    ["psql <<SQL\nDROP TABLE sample;\nSQL", ">>> DROP TABLE <<<", /SQL drop table/],
+    ["git 'switch' main", ">>> git 'switch' <<<", /git switch/],
+    ["git switch main > /tmp/out", ">>> git switch <<<", /git switch/],
+  ]) {
+    const current = harness(fixture());
+    assert.equal((await current.call(command)).block, true);
+    const title = current.prompts[0].title;
+    assert.match(title, reason);
+    assert.ok(title.includes(marker), title);
+    assert.ok(title.indexOf(marker) < title.indexOf("\n\nCommand\n"));
+    assert.ok(!title.includes("Unverified shell execution"));
+    assert.ok(!title.includes(">>> > /tmp/out <<<"));
+    assert.ok(!title.includes(">>> <<SQL <<<"));
+  }
+  const current = harness(fixture(), [], { analyzeShellFn: async () => { throw new Error("test failure"); } });
+  assert.equal(await current.call("git diff --stat"), undefined);
+  assert.equal((await current.call("git switch main")).block, true);
+  assert.match(current.prompts[0].title, />>> git switch <<</);
+  assert.ok(!current.prompts[0].title.includes("No specific snippet identified"));
+});
+
+test("published pattern-driven behavior allows routine diagnostics even when parsing fails", async () => {
+  const commands = [
+    "git diff --stat; git diff -- pi-extension-safety-guard/src/bash-prompt.ts pi-extension-safety-guard/index.ts pi-extension-safety-guard/tests/approval-runtime.test.mjs",
+    "tsc --noEmit --skipLibCheck --allowImportingTsExtensions --module nodenext --target es2022 pi-extension-safety-guard/src/bash-dialog.ts pi-extension-safety-guard/src/bash-prompt.ts",
+    "git diff --check; git diff --check -- '*.md' ':(exclude)**/node_modules/**' ':(exclude)**/vendor/**'; git status --short; git diff --stat",
+    ...[12, 20, 28].map((lines) => `npm test --prefix pi-extension-safety-guard > /tmp/safety-guard-tests.log 2>&1; result=$?; tail -${lines} /tmp/safety-guard-tests.log; exit "$result"`),
+    "node --input-type=module <<'JS'\nimport { createRequire } from 'node:module';\nconst req = createRequire(import.meta.url);\nconsole.log(req.resolve('web-tree-sitter'));\nJS",
+    "node --input-type=module <<'JS'\nimport { createJiti } from 'jiti';\nconst jiti = createJiti(import.meta.url);\nconst { analyzeShell } = await jiti.import('./src/shell-analysis.ts');\nconsole.log(await analyzeShell('git diff --stat'));\nJS",
+    "echo $PATH", "node -e '0'", "echo ok > /tmp/out", "echo ok\u001b[0m",
+  ];
+  for (const hasUI of [true, false]) for (const failure of [false, true]) {
+    const location = fixture();
+    writeSafetyGuardConfig({ autoReview: { enabled: true } }, configFile);
+    let reviews = 0;
+    const current = harness(location, [], { hasUI,
+      ...(failure ? { analyzeShellFn: async () => { throw new Error("missing grammar"); } } : {}),
+      requestAutoReviewFn: async () => { reviews++; return { verdict: "block", reason: "should not review" }; },
+    });
+    for (const command of commands) assert.equal(await current.call(command), undefined, command);
+    assert.equal(current.prompts.length, 0);
+    assert.equal(reviews, 0);
+    assert.deepEqual(entries(location), []);
+  }
+});
+
+test("known risks still prompt with broken parsing and always have a matched snippet", async () => {
+  for (const [command, label] of [
+    ["git reset --hard", "git reset --hard"], ["rm -rf ./data", "recursive rm"],
+    ["docker volume prune", "docker volume removal/prune"], ["npm uninstall example", "JS package removal"],
+    ["sudo true", "sudo"], ["psql <<SQL\nDROP TABLE sample;\nSQL", "SQL drop table"],
+    ["cat .env", "possible secret file access"],
+  ]) {
+    const current = harness(fixture(), [], { analyzeShellFn: async () => { throw new Error("missing grammar"); } });
+    assert.equal((await current.call(command)).block, true, command);
+    assert.ok(current.prompts[0].title.includes(label), command);
+    assert.ok(current.prompts[0].title.includes(">>> "), command);
+    assert.ok(!current.prompts[0].title.includes("Unverified shell execution"), command);
+    assert.ok(!current.prompts[0].options.includes(CHOICE.operationPermanent), command);
+  }
+});
+
+test("masked heredoc bodies preserve source positions for real risks after the body", async () => {
+  const current = harness(fixture());
+  const command = "node <<'JS'\n// git switch fake; rm -rf fake\nconsole.log('ok');\nJS\ngit switch real";
+  assert.equal((await current.call(command)).block, true);
+  const title = current.prompts[0].title;
+  assert.match(title, /L5:C1  >>> git switch <<< real/);
+  assert.ok(!title.includes(">>> rm -rf"));
+  assert.ok(!title.includes("recursive rm"));
+});
+
+test("pattern checks do not discard risks beyond the parser input limit", async () => {
+  const current = harness(fixture());
+  const command = `echo ${"x".repeat(70_000)}\nrm -rf ./data`;
+  assert.equal((await current.call(command)).block, true);
+  assert.deepEqual(current.prompts[0].options, ["Block", CHOICE.once]);
+  assert.match(current.prompts[0].title, /recursive rm/);
 });
 
 test("scope and lifetime choices form an explicit matrix for eligible operations", async () => {
@@ -134,15 +224,187 @@ test("operation approvals remember argv rather than the original chain or quotin
   }
 });
 
-test("whole-command exact approvals do not silently become operation permissions", async () => {
-  for (const choice of [CHOICE.commandSession, CHOICE.commandPermanent]) {
+test("global exact operations persist across reload and cwd but never allow different arguments", async () => {
+  const location = fixture();
+  const first = harness(location, [CHOICE.operationEverywhere]);
+  assert.equal(await first.call("rm -rf ./build && rm -rf ./build"), undefined);
+  assert.deepEqual(entries(location).map(({ matchType, cwd, argv, key }) => ({ matchType, cwd, argv, key })), [{
+    matchType: "operation-global", cwd: "", argv: ["rm", "-rf", "./build"], key: globalOperationAllowKey(["rm", "-rf", "./build"]),
+  }]);
+  const current = harness(location);
+  current.ctx.cwd = path.join(location.cwd, "other-project");
+  assert.equal(await current.call("rm '-rf' ./build && echo done"), undefined);
+  assert.equal(current.prompts.length, 0);
+  for (const command of ["rm -rf ./other", "rm -r ./build", "rm -rf ./build --", "git switch main"]) {
+    assert.equal((await current.call(command)).block, true, command);
+  }
+  assert.equal(entries(location).length, 1);
+});
+
+test("global choices grant only pending operations and do not widen existing cwd permissions", async () => {
+  const location = fixture();
+  const current = harness(location, [CHOICE.operationPermanent, CHOICE.operationEverywhere]);
+  await current.call("git switch main");
+  await current.call("git switch main && git branch -d old");
+  assert.deepEqual(entries(location).map((entry) => entry.matchType), ["operation", "operation-global"]);
+  current.ctx.cwd = path.join(location.cwd, "other-project");
+  assert.equal(await current.call("git branch -d old"), undefined);
+  assert.equal((await current.call("git switch main")).block, true);
+});
+
+test("global grants cannot cover another risky operation, unsupported syntax or protected file tools", async () => {
+  const location = fixture();
+  const current = harness(location, [CHOICE.operationEverywhere, CHOICE.operationEverywhere]);
+  await current.call("git switch main");
+  await current.call("cat .env");
+  current.ctx.cwd = path.join(location.cwd, "other-project");
+  assert.equal((await current.call("git switch main && rm -rf ./other")).block, true);
+  for (const command of ["git switch main > /tmp/out", "git switch $BRANCH"]) {
+    assert.equal((await current.call(command)).block, true);
+    assert.ok(!current.prompts.at(-1).options.includes(CHOICE.operationEverywhere));
+  }
+  assert.equal((await current.file("write", ".env")).block, true);
+  assert.equal((await current.file("edit", ".env")).block, true);
+  const brokenParser = harness(location, [], { analyzeShellFn: async () => { throw new Error("unavailable"); } });
+  assert.equal((await brokenParser.call("git switch main")).block, true);
+  assert.equal(entries(location).length, 2);
+});
+
+test("global SQL operation grants cannot authorize a pipeline receiver", async () => {
+  const location = fixture();
+  const current = harness(location, [CHOICE.operationEverywhere]);
+  const command = "psql -c 'DROP TABLE sample;'";
+  assert.equal(await current.call(command), undefined);
+  current.ctx.cwd = path.join(location.cwd, "other-project");
+  assert.equal(await current.call(command), undefined);
+  assert.equal((await current.call(`${command} | cat`)).block, true);
+  assert.ok(!current.prompts.at(-1).options.includes(CHOICE.operationEverywhere));
+});
+
+test("global identities reject malformed or disguised cwd-scoped entries", async () => {
+  const location = fixture();
+  const command = "git switch main";
+  const argv = ["git", "switch", "main"];
+  const base = { ...legacy(location, command), matchType: "operation-global", argv, cwd: "", key: globalOperationAllowKey(argv) };
+  for (const patch of [
+    { cwd: location.cwd }, { cwd: "*" }, { kind: "write" }, { kind: "edit" },
+    { argv: [] }, { argv: ["git", 1] }, { argv: undefined }, { ruleId: "git.switch.create.operation.v1" },
+    { key: operationAllowKey(argv, location.cwd) }, { matchType: "operation" }, { matchType: undefined },
+  ]) {
+    seed(location, [{ ...base, ...patch }]);
+    assert.equal((await harness(location).call(command)).block, true, JSON.stringify(patch));
+  }
+  seed(location, [{ ...base, matchType: "operation", cwd: "*", key: operationAllowKey(argv, "*") }]);
+  assert.equal((await harness(location).call(command)).block, true);
+});
+
+test("global grants bypass review across directories and are clearly listed and revocable", async () => {
+  const location = fixture();
+  const current = harness(location, [CHOICE.operationEverywhere]);
+  await current.call("git switch private-branch-name");
+  assert.match(current.notices.at(-1), /operation-global git switch @ EVERYWHERE/);
+  assert.ok(!current.notices.at(-1).includes("private-branch-name"));
+  await current.control("allow-list");
+  assert.match(current.notices.at(-1), /EVERYWHERE/);
+  assert.ok(!current.notices.at(-1).includes("private-branch-name"));
+  writeSafetyGuardConfig({ autoReview: { enabled: true } }, configFile);
+  let reviews = 0;
+  const reloaded = harness(location, [], { hasUI: false, requestAutoReviewFn: async () => { reviews++; throw new Error("should skip review"); } });
+  reloaded.ctx.cwd = path.join(location.cwd, "other-project");
+  assert.equal(await reloaded.call("git switch private-branch-name"), undefined);
+  assert.equal(reviews, 0);
+  await reloaded.control("allow-clear-permanent");
+  assert.deepEqual(entries(location), []);
+  assert.equal((await reloaded.call("git switch private-branch-name")).block, true);
+});
+
+test("unoffered global choices, late aborts and storage failures never save global grants", async () => {
+  const unoffered = fixture();
+  assert.equal((await harness(unoffered, [CHOICE.operationEverywhere]).call("git switch main >out")).block, true);
+  assert.deepEqual(entries(unoffered), []);
+  const cancelled = fixture();
+  const controller = new AbortController();
+  const current = harness(cancelled);
+  current.ctx.signal = controller.signal;
+  current.ctx.ui.select = async () => { controller.abort(); return CHOICE.operationEverywhere; };
+  assert.equal((await current.call("git switch main")).block, true);
+  assert.deepEqual(entries(cancelled), []);
+  const failed = fixture();
+  fs.mkdirSync(failed.allowStorePath);
+  assert.equal((await harness(failed, [CHOICE.operationEverywhere]).call("git switch main")).block, true);
+  assert.deepEqual(fs.readdirSync(failed.cwd), ["allow.json"]);
+});
+
+test("legacy whole-command approvals stay exact, while removed choices cannot create new grants", async () => {
+  const location = fixture();
+  seed(location, [legacy(location, "git switch -c branch-a")]);
+  const current = harness(location);
+  assert.equal(await current.call("git switch -c branch-a"), undefined);
+  assert.equal((await current.call("git switch -c branch-a && echo done")).block, true);
+  assert.equal((await current.call("git switch -c branch-b")).block, true);
+  assert.equal((await current.call("git  switch -c branch-a")).block, true);
+  for (const choice of ["Allow this exact command for this session", "Always allow this exact command in this cwd"]) {
+    const fresh = fixture();
+    const rejected = harness(fresh, [choice]);
+    assert.equal((await rejected.call("git switch main")).block, true);
+    assert.ok(!rejected.prompts[0].options.includes(choice));
+    assert.deepEqual(entries(fresh), []);
+    assert.deepEqual(rejected.session.entries, []);
+  }
+});
+
+test("session lifecycle restores the same session, persists clearing, and rejects new/forked sessions", async () => {
+  const location = fixture();
+  const first = harness(location, [CHOICE.operationSession]);
+  assert.equal(await first.call("git switch main"), undefined);
+  assert.equal(first.session.entries.length, 1);
+  assert.deepEqual(entries(location), []);
+  const resumed = harness(location, [], { session: first.session });
+  await resumed.start();
+  assert.equal(await resumed.call("git switch main"), undefined);
+  assert.equal(resumed.prompts.length, 0);
+  const forked = harness(location, [], { session: { id: randomUUID(), entries: structuredClone(first.session.entries) } });
+  await forked.start();
+  assert.equal((await forked.call("git switch main")).block, true);
+  assert.equal((await harness(location).call("git switch main")).block, true);
+  await resumed.control("allow-clear-session");
+  const cleared = harness(location, [], { session: first.session });
+  await cleared.start();
+  assert.equal((await cleared.call("git switch main")).block, true);
+});
+
+test("guard routes permanent grants physically and clears only current cwd plus EVERYWHERE", async () => {
+  const location = fixture();
+  const current = harness(location, [CHOICE.operationPermanent, CHOICE.operationEverywhere, CHOICE.operationPermanent]);
+  await current.call("git switch main");
+  assert.equal(fs.existsSync(location.allowStorePath), false);
+  assert.equal(JSON.parse(fs.readFileSync(projectApprovalFile(location.cwd), "utf8")).entries.length, 1);
+  await current.call("rm -rf ./build");
+  assert.ok(JSON.parse(fs.readFileSync(location.allowStorePath, "utf8")).entries.every((entry) => entry.matchType === "operation-global"));
+  const other = path.join(location.cwd, "other-project");
+  fs.mkdirSync(other);
+  current.ctx.cwd = other;
+  await current.call("git branch -d old");
+  assert.equal(JSON.parse(fs.readFileSync(projectApprovalFile(other), "utf8")).entries.length, 1);
+  await current.control("allow-clear-permanent");
+  assert.deepEqual(JSON.parse(fs.readFileSync(projectApprovalFile(other), "utf8")).entries, []);
+  assert.deepEqual(JSON.parse(fs.readFileSync(location.allowStorePath, "utf8")).entries, []);
+  current.ctx.cwd = location.cwd;
+  assert.equal(await current.call("git switch main"), undefined);
+});
+
+test("changing session or cwd while an approval is open saves nothing", async () => {
+  for (const change of ["session", "cwd"]) {
     const location = fixture();
-    const current = harness(location, [choice]);
-    assert.equal(await current.call("git switch -c branch-a"), undefined);
-    assert.equal(await current.call("git switch -c branch-a"), undefined);
-    assert.equal((await current.call("git switch -c branch-a && echo done")).block, true);
-    assert.equal((await current.call("git switch -c branch-b")).block, true);
-    assert.equal((await current.call("git  switch -c branch-a")).block, true);
+    const current = harness(location);
+    current.ctx.ui.select = async () => {
+      if (change === "session") current.session.id = randomUUID();
+      else current.ctx.cwd = path.join(location.cwd, "other-project");
+      return CHOICE.operationEverywhere;
+    };
+    assert.equal((await current.call("git switch main")).block, true);
+    assert.deepEqual(entries(location), []);
+    assert.deepEqual(current.session.entries, []);
   }
 });
 
@@ -185,12 +447,11 @@ test("fallback syntax cannot reuse operation grants, even if one component is al
     "git switch -c branch-b > .env", "git switch -c branch-b 2>&1", "git switch -c $(echo branch-b)",
     "git switch -c `echo branch-b`", "git switch -c $BRANCH", "sudo git switch -c branch-b",
     "cd elsewhere && git switch -c branch-b", "GIT_DIR=elsewhere git switch -c branch-b",
-    "git -C elsewhere switch -c branch-b", "git switch -c branch-b &", "git switch -c branch-b &&",
-    "git switch -c branch-b\u2028", "echo $PATH", "node -e '0'",
+    "git switch -c branch-b &", "git switch -c branch-b &&", "git switch -c branch-b\u2028",
   ]) {
     const current = harness(location);
     assert.equal((await current.call(command)).block, true, command);
-    assert.match(current.prompts[0].title, /WHOLE-COMMAND APPROVAL REQUIRED/);
+    assert.match(current.prompts[0].title, /Whole-command approval required/);
     assert.ok(!current.prompts[0].options.includes(CHOICE.operationSession));
     assert.ok(!current.prompts[0].options.includes(CHOICE.rulePermanent));
   }
@@ -218,7 +479,7 @@ test("piped SQL requires whole-command approval without reusable operation choic
     assert.equal((await current.call(command))?.block, true, command);
     assert.equal(current.prompts.length, 1);
     assert.match(current.prompts[0].title, /SQL drop/);
-    assert.match(current.prompts[0].title, /WHOLE-COMMAND APPROVAL REQUIRED/);
+    assert.match(current.prompts[0].title, /Whole-command approval required/);
     assert.ok(!current.prompts[0].options.includes(CHOICE.operationPermanent));
     assert.ok(!current.prompts[0].options.includes(CHOICE.rulePermanent));
     assert.equal((await harness(location, [], { hasUI: false }).call(command))?.block, true);
@@ -238,14 +499,19 @@ test("SQL pipeline context cannot reuse saved producer or client operation grant
   }
 });
 
-test("whole-command pipeline approval stays exact; standalone printed SQL stays harmless", async () => {
+test("legacy pipeline approval stays exact; new pipeline decisions offer only once or block", async () => {
   const location = fixture();
   const command = "echo 'DROP TABLE sample;' | psql";
-  const current = harness(location, [CHOICE.commandPermanent]);
+  seed(location, [{ ...legacy(location, command), matchType: "exact" }]);
+  const current = harness(location);
   assert.equal(await current.call(command), undefined);
   assert.equal(entries(location)[0]?.matchType, "exact");
   assert.equal(await harness(location).call(command), undefined);
   assert.equal((await harness(location).call("echo 'DROP TABLE sample;' | mysql"))?.block, true);
+  const fresh = harness(fixture(), [CHOICE.once]);
+  assert.equal(await fresh.call(command), undefined);
+  assert.deepEqual(fresh.prompts[0].options, ["Block", CHOICE.once]);
+  assert.equal((await fresh.call(command)).block, true);
   const standalone = harness(location);
   assert.equal(await standalone.call("echo 'DROP TABLE sample;'; echo ok | cat"), undefined);
   assert.equal(await standalone.call("echo 'DROP TABLE sample;'; psql"), undefined);
@@ -373,7 +639,8 @@ test("parser failure cannot reuse operation permissions", async () => {
   await harness(location, [CHOICE.operationPermanent]).call("git switch main");
   const current = harness(location, [], { analyzeShellFn: async () => { throw new Error("missing grammar"); } });
   assert.equal((await current.call("git switch main")).block, true);
-  assert.match(current.prompts[0].title, /parser unavailable/);
+  assert.match(current.prompts[0].title, />>> git switch <<</);
+  assert.ok(!current.prompts[0].title.includes("parser unavailable"));
   assert.ok(!current.prompts[0].options.includes(CHOICE.operationPermanent));
 });
 
@@ -459,20 +726,38 @@ test("legacy protected-path and whole compound-command grants still work", async
 
 test("list distinguishes scopes without echoing command contents; clears revoke grants", async () => {
   const location = fixture();
-  const current = harness(location, [CHOICE.rulePermanent, CHOICE.operationPermanent, CHOICE.commandSession]);
+  const current = harness(location, [CHOICE.rulePermanent, CHOICE.operationPermanent, CHOICE.operationSession]);
   await current.call("git switch -c secret-branch-name");
   await current.call("git switch main");
   await current.call("git branch -d old");
   await current.control("allow-list");
   assert.match(current.notices.at(-1), /operation-rule Git branch creation/);
   assert.match(current.notices.at(-1), /operation git switch/);
-  assert.match(current.notices.at(-1), /exact git branch delete/);
+  assert.match(current.notices.at(-1), /operation git branch delete/);
   assert.ok(!current.notices.join("\n").includes("secret-branch-name"));
   await current.control("allow-clear-session");
   assert.equal((await current.call("git branch -d old")).block, true);
   await current.control("allow-clear-permanent");
   assert.deepEqual(entries(location), []);
   assert.equal((await current.call("git switch -c new")).block, true);
+});
+
+test("custom TUI dismissal, errors, unoffered options and late abort never save permissions", async () => {
+  for (const custom of [async () => undefined, async () => { throw new Error("UI disconnected"); }, async () => CHOICE.rulePermanent]) {
+    const location = fixture();
+    const current = harness(location);
+    current.ctx.ui.custom = custom;
+    assert.equal((await current.call("git switch --discard-changes main")).block, true);
+    assert.equal(current.prompts.length, 0);
+    assert.deepEqual(entries(location), []);
+  }
+  const location = fixture();
+  const controller = new AbortController();
+  const current = harness(location);
+  current.ctx.signal = controller.signal;
+  current.ctx.ui.custom = async () => { controller.abort(); return CHOICE.operationPermanent; };
+  assert.equal((await current.call("git switch main")).block, true);
+  assert.deepEqual(entries(location), []);
 });
 
 test("RPC uses the same single dialog and fails closed on dismissal, errors, or forged options", async () => {

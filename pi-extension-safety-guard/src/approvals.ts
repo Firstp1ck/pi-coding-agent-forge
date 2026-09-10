@@ -63,6 +63,10 @@ export function operationAllowKey(argv: readonly string[], cwd: string): string 
   return `operation:${JSON.stringify(["bash", path.resolve(cwd || process.cwd()), argv])}`;
 }
 
+export function globalOperationAllowKey(argv: readonly string[]): string {
+  return `operation-global:${JSON.stringify(["bash", argv])}`;
+}
+
 export function operationRuleAllowKey(id: string, cwd: string): string {
   return `operation-rule:${JSON.stringify(["bash", path.resolve(cwd || process.cwd()), id])}`;
 }

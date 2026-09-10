@@ -6,11 +6,11 @@ Adds confirmation and path protection around commands and edits that could cause
 
 ## What you can do
 
-- Recognizes commands that can delete data or rewrite history.
+- Prompts for matched risk patterns, not simply for unfamiliar shell syntax.
 - Protects important files from unexpected edits.
 - Shows all detected operations and risks in one confirmation for a compound command.
 - Can optionally request a second model review for risky actions.
-- Remembers exact commands, exact operations, or constrained Git operation types for a session or permanently.
+- Saves approvals with their scope: current directory, EVERYWHERE, or the current Pi session, including reload/resume.
 
 ## Install
 
@@ -26,17 +26,27 @@ Restart Pi if the package does not appear in your current session.
 
 Safety Guard works automatically.
 
-1. Read the complete command and its listed operations. The prompt distinguishes operations already approved from those needing approval.
-2. Choose `Allow once`, or an option that explicitly names both what to remember and for how long.
+1. Start with the **Trigger** section. It marks the triggering snippet with `>>> ... <<<` above the full command. Then read the risks and permission scope. The prompt distinguishes operations already approved from those needing approval. In the terminal, use Page Up / Page Down to read details that do not fit on screen.
+2. Choose `Allow once`, or an option that explicitly names both what to remember and for how long. A short note beneath the terminal selection list explains the highlighted option's scope and effect.
 3. Choose `Block` if any operation is unclear. Nothing in that invocation runs, and no new permissions are saved.
 
-For example, ask Pi to run `git switch -c feature/one && git branch -d old-feature`. One prompt shows both operations. `Allow listed exact operations for this session` remembers those argument lists for later supported commands and chains in the same working directory, called cwd. Different arguments still require approval.
+For example, ask Pi to run `git switch -c feature/one && git branch -d old-feature`. One prompt shows both operations. `Allow the command for the current session` remembers those argument lists for later supported commands and chains in the same working directory, called cwd. Different arguments still require approval.
 
-The broader `Allow listed operation types for this session` option covers new simple branch names for the eligible types shown in the prompt. These types are branch creation, non-forced switching, and merged-branch deletion. Read their scope warnings before choosing this option. The corresponding `Always allow ... in this cwd` options persist across sessions.
+`Always allow the command in the current directory` remembers the same programs and arguments in the current directory. Changes to their arguments still require approval. When operations cannot be reused safely, the prompt offers only `Block` and `Allow once`.
 
-`Always allow this exact command in this cwd` remains available when you want to remember only the complete original input, not its individual operations.
+The broader `Allow operation types this session` option appears for eligible branch creation, non-forced switching, and merged-branch deletion. It permits other simple branch names within those types. Read its warning before choosing it. `Always allow operation types here` makes that permission permanent in the current directory.
 
-Run `/safety-guard allow-list` to inspect remembered permissions or `/safety-guard allow-clear-permanent` to remove all permanent permissions.
+For the same exact operations across projects, choose `Always allow the command EVERYWHERE`. This saves only the pending argument lists, not all commands of that type. Read the warning under the selected option before confirming.
+
+Approvals are saved separately from Pi's general settings:
+
+| Choice | Location |
+| --- | --- |
+| This session | The current Pi session; survives reload/resume, not new or forked sessions |
+| Permanently in this cwd | `<cwd>/.pi/safety-guard-allow.json` |
+| Permanently EVERYWHERE | `~/.pi/agent/safety-guard-allow.json` |
+
+Run `/safety-guard allow-list` to inspect the current session, current directory, and global approvals. `/safety-guard allow-clear-session` revokes the current session's grants durably. `/safety-guard allow-clear-permanent` clears the current directory and EVERYWHERE grants, leaving other directories untouched.
 
 Run `/safety-guard-setup` to choose protected command groups and paths. Optional second-model review is available but remains off until you enable it.
 
@@ -44,9 +54,13 @@ Run `/safety-guard-setup` to choose protected command groups and paths. Optional
 
 No setup is required. Automatic review is off by default.
 
-Remembered approvals skip future prompts and model review within their scope. Git operations change your checkout or branches and may run hooks. Only grant repeat permission in a repository you trust.
+Existing directory approvals migrate when you next use that directory. The guard saves a private backup first and leaves old records intact if migration fails. Project approval files are Git-ignored and need a matching user-owned verification record; a file copied from a repository cannot grant permission on its own. Do not edit these files to add approvals. Use the prompt.
 
-Unsupported shell syntax requires whole-command approval, so commands with substitutions, redirections, wrappers, or directory changes may prompt more often. Pipelines containing matched SQL also need whole-command approval, including the receiving command. Existing permissions are not automatically broadened. Safety Guard checks command syntax and known risks; it is not a sandbox.
+Remembered approvals skip future prompts and model review within their scope. **EVERYWHERE applies across directories permanently.** The same relative path can target different files, and executables or hooks may differ between projects. Prefer directory-scoped approval unless you intend to trust those operations everywhere. Git operations change your checkout or branches and may run hooks.
+
+Commands without a matching enabled risk pattern run without a guard prompt. This includes routine Git checks, TypeScript checks, test logging, and diagnostic Node scripts, even when syntax analysis is unavailable. When a risk does match and individual operations cannot be analyzed, approval covers the complete command. Existing permissions are not automatically broadened.
+
+Safety Guard is a pattern checker, not a sandbox. Scripts, imported modules, and indirect execution can hide dangerous actions from its checks. Review unfamiliar code before running it.
 
 ## Technical details
 
