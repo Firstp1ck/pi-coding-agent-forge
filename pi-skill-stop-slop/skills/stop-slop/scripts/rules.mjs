@@ -1,6 +1,6 @@
 // Pattern vocabulary adapted from Hardik Pandya's MIT-licensed stop-slop.
 // See ../references/upstream/PROVENANCE.json and the package LICENSE.
-export const RULESET_VERSION = '1.0.0';
+export const RULESET_VERSION = '1.0.1';
 export const MAX_BYTES = 1024 * 1024;
 
 export const CATEGORIES = Object.freeze({

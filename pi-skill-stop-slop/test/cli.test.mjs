@@ -63,6 +63,31 @@ test('score threshold handles equality, failure, and null scores', () => {
   assert.equal(run(['--json'], '```\nreally\n```').status, 1);
 });
 
+test('an inline comment marker cannot produce a false zero-score gate pass', () => {
+  const source = 'Read the report. `<!--` It turns out this really works.';
+  const result = run(['--json', '--max-score', '0'], source);
+  assert.equal(result.status, 1, result.stderr);
+  const report = JSON.parse(result.stdout);
+  assert.equal(report.rulesetVersion, '1.0.1');
+  assert.equal(report.metrics.words, 9);
+  assert.ok(report.findings.some(finding => finding.ruleId === 'SLP001'));
+  assert.ok(report.findings.some(finding => finding.ruleId === 'SLP020'));
+});
+
+test('wrapping a blockquote does not count as a style improvement', t => {
+  const dir = temporary(t);
+  const baseline = join(dir, 'baseline.md');
+  writeFileSync(baseline, '> The report was written by Mara before lunch.');
+  const result = run(['--json', '--baseline', baseline, '--fail-on-regression'],
+    '> The report was\n> written by Mara before lunch.');
+  assert.equal(result.status, 0, result.stderr);
+  const report = JSON.parse(result.stdout);
+  assert.equal(report.comparison.outcome, 'unchanged');
+  assert.equal(report.comparison.overallDelta, 0);
+  assert.equal(report.comparison.sentenceCountDelta, 0);
+  assert.ok(Object.values(report.comparison.ruleCountDeltas).every(delta => delta === 0));
+});
+
 test('an empty baseline does not count as a successful comparison', t => {
   const dir = temporary(t);
   const path = join(dir, 'empty.md');

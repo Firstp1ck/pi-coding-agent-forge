@@ -93,6 +93,156 @@ test('unclosed fences exclude the remainder; shorter closing fences stay code', 
   assert.equal(count(analyze('```\nignored\n```\nreally'), 'SLP020'), 1);
 });
 
+test('comment markers inside inline code cannot hide subsequent prose', () => {
+  const visible = 'Read the report. It turns out this really works.';
+  const expected = analyze(visible);
+  for (const source of [
+    'Read the report. `<!--` It turns out this really works.',
+    'Read the report. `<!--` It turns out this really works. `-->`',
+    'Read the report. `` ` <!-- `` It turns out this really works.',
+  ]) {
+    const report = analyze(source);
+    assert.deepEqual(report.metrics, expected.metrics, source);
+    assert.deepEqual(report.scores, expected.scores, source);
+    assert.deepEqual(report.rules, expected.rules, source);
+    for (const finding of report.findings) {
+      assert.equal(source.slice(finding.start.offset, finding.end.offset), finding.text);
+    }
+  }
+});
+
+test('real comments retain precedence over backticks inside them', () => {
+  for (const comment of [
+    '<!-- ` really — -->',
+    '<!-- ` really\nreally ` — -->',
+    '<!-- `` <!-- really — -->',
+  ]) {
+    const report = analyze(`${comment} Read the report.`);
+    assert.equal(report.metrics.words, 3, comment);
+    assert.equal(report.findingsTotal, 0, comment);
+  }
+  assert.equal(analyze('Read the report. <!-- ` really —').metrics.words, 3);
+});
+
+test('blockquote soft wraps preserve phrase, passive and statistical measurements', () => {
+  const prose = 'It is important to note that the report was written by Mara. '
+    + 'Our team reads the report before lunch and writes clear notes. '
+    + 'Save the file before you leave the office for the day. '
+    + 'The new export contains the names and dates from the selected records. '
+    + 'Read those records before choosing which ones to send to your manager. '
+    + 'Ask Mara to check the totals against the previous report before sending it.';
+  const expected = analyze(prose);
+  for (const prefix of ['> ', '> > ']) {
+    for (const newline of ['\n', '\r\n']) {
+      const wrapped = prose.split(' ').map((word, i) => `${i % 4 === 0 ? newline + prefix : ' '}${word}`).join('').trimStart();
+      const source = `😀\n\n${wrapped}`;
+      const report = analyze(source);
+      assert.deepEqual(report.metrics, expected.metrics);
+      assert.deepEqual(report.scores, expected.scores);
+      assert.deepEqual(report.rules, expected.rules);
+      assert.equal(report.metrics.sentenceLength.rhythmAssessed, true);
+      for (const finding of report.findings) {
+        assert.equal(source.slice(finding.start.offset, finding.end.offset), finding.text);
+        const before = source.slice(0, finding.start.offset);
+        assert.equal(finding.start.line, before.split('\n').length);
+        assert.equal(finding.start.column, before.length - before.lastIndexOf('\n'));
+      }
+    }
+  }
+  const passive = analyze('> The report was\n> written by Mara before lunch.');
+  assert.deepEqual(passive.metrics, analyze('The report was written by Mara before lunch.').metrics);
+  assert.equal(count(passive, 'SLP060'), 1);
+});
+
+test('quote paragraphs and quoted headings remain sentence boundaries', () => {
+  assert.equal(count(analyze('> It is important\n>\n> to note this.'), 'SLP001'), 0);
+  assert.equal(analyze('Introduction\n> Read the report.').metrics.sentences, 2);
+  assert.equal(analyze('> > # Notes\n> > Read the report.').metrics.sentences, 2);
+  assert.equal(analyze('> - Read the file\n> - Save the report').metrics.sentences, 2);
+});
+
+test('fences in quotes and space-indented list containers exclude code', () => {
+  for (const source of [
+    '> ```js\n> const x = "really —";\n> ```\n\nRead the report.',
+    '> > ~~~text\n> > really —\n> > ~~~\n\nRead the report.',
+    '> - ```js\n>   really —\n>   ```\n\nRead the report.',
+    '- ```js\n  really —\n  ```\n\nRead the report.',
+    '- Item\n\n  ```js\n  really —\n  ```\n\nRead the report.',
+    '1. ```js\n   really —\n   ```\n\nRead the report.',
+  ]) {
+    const report = analyze(source);
+    assert.equal(report.findingsTotal, 0, source);
+    assert.equal(report.metrics.words, source.startsWith('- Item') ? 4 : 3, source);
+    assert.equal(maskProse(source, 'markdown').length, source.length);
+  }
+});
+
+test('fence content is not reinterpreted as a new quote container', () => {
+  for (const source of [
+    '```text\n> really —\n```\nRead the report.',
+    '> ```text\n> > really —\n> ```\nRead the report.',
+    '> ```text\n> really —\n\nRead the report.',
+    '- ```text\n  really —\n\nRead the report.',
+    '> ````text\n> ```\n> really —\n> ````\nRead the report.',
+  ]) {
+    const report = analyze(source);
+    assert.equal(report.metrics.words, 3, source);
+    assert.equal(report.findingsTotal, 0, source);
+  }
+});
+
+test('HTML masking preserves comparisons while excluding ordinary tags', () => {
+  for (const source of [
+    'Keep latency < 5 ms and throughput > 10 MB/s.',
+    'Read < really > now.',
+    'Check x < y and y > z before saving.',
+  ]) {
+    assert.deepEqual(analyze(source).metrics, analyze(source, { format: 'text' }).metrics, source);
+    assert.deepEqual(analyze(source).rules, analyze(source, { format: 'text' }).rules, source);
+  }
+  for (const source of [
+    '<strong>Read the report.</strong>',
+    '<img alt="really —" src="image.png">Read the report.',
+    "<span data-note='really —' hidden>Read the report.</span>",
+    '<br />Read the report.',
+    '<really@example.com>Read the report.',
+    '<mailto:really@example.com>Read the report.',
+    '<https://example.com/really>Read the report.',
+  ]) {
+    assert.equal(analyze(source).metrics.words, 3, source);
+    assert.equal(analyze(source).findingsTotal, 0, source);
+  }
+});
+
+test('resolved reference IDs are hidden while labels and unresolved references remain prose', () => {
+  for (const source of [
+    '[Read][really]\n\n[really]: https://example.com',
+    '[Read][REALLY]\n\n[really]: https://example.com',
+    '[Read][really  deeply]\n\n[ Really deeply ]: /report',
+    '[really]: /report\n\n[Read][really]',
+    '> [Read][really]\n>\n> [really]: /report',
+  ]) {
+    const report = analyze(source);
+    assert.equal(report.metrics.words, 1, source);
+    assert.equal(report.findingsTotal, 0, source);
+    assert.equal(maskProse(source, 'markdown').length, source.length);
+  }
+  const visible = analyze('[Really][report]\n\n[report]: /report');
+  assert.equal(count(visible, 'SLP020'), 1);
+  assert.equal(visible.findings[0].text, 'Really');
+  for (const suffix of ['', '\n\n<!-- [really]: /report -->', '\n\n```\n[really]: /report\n```']) {
+    const report = analyze(`[Read][really]${suffix}`);
+    assert.equal(report.metrics.words, 2);
+    assert.equal(count(report, 'SLP020'), 1);
+  }
+});
+
+test('text format does not apply Markdown block boundaries', () => {
+  const source = 'Read the file\n> before lunch.';
+  assert.equal(analyze(source, { format: 'text' }).metrics.sentences, 1);
+  assert.equal(maskProse(source, 'text'), source);
+});
+
 test('matches cannot bridge a masked inline code span', () => {
   assert.equal(count(analyze('It is `code` important to note this.'), 'SLP001'), 0);
 });

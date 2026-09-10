@@ -37,7 +37,7 @@ export function analyze(source, options = {}) {
   const masked = maskProse(source, settings.format);
   const normalized = normalize(masked);
   const words = tokenize(masked);
-  const sentences = splitSentences(masked, words);
+  const sentences = splitSentences(masked, words, source, settings.format);
   const findings = [];
   const seen = new Set();
   const add = (ruleId, start, end) => {

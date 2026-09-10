@@ -36,14 +36,18 @@ All runtime paths below are relative to `skills/stop-slop/`:
 ## Analysis flow
 
 1. Validate the source type, 1 MiB UTF-8 byte limit, format, ignored rule IDs, and finding limit.
-2. Mask excluded Markdown characters with NUL placeholders, preserving CR and LF and every UTF-16 offset. Plain-text mode skips masking.
+2. Mask excluded Markdown characters with NUL placeholders, preserving CR and LF and every UTF-16 offset. Replace blockquote prefixes with equal-length spaces so soft-wrapped prose still matches. Plain-text mode skips masking.
 3. Fold ASCII capitals, straight/curly apostrophes, and nonbreaking spaces without changing length. Avoid general Unicode lowercasing because it can expand characters. Phrase separators accept spaces, tabs, or one soft line break, but not blank paragraphs.
 4. Tokenize Unicode letters and numbers, internal apostrophes, and hyphens. Matching vocabulary remains English. This is not automatic language detection.
-5. Split prose on sentence punctuation and selected Markdown block boundaries. Soft wraps remain within sentences. A small abbreviation list suppresses some false splits. Headings and list items can count as sentence units.
+5. Split prose on sentence punctuation and, in Markdown mode, selected block boundaries. Use the original source to distinguish quote containers from soft wraps. A small abbreviation list suppresses some false splits. Headings and list items can count as sentence units.
 6. Collect phrase, rhetorical, punctuation, lexical, and sentence-statistic findings. Deduplicate identical rule/span pairs and sort by start offset, end offset, then rule ID using code-unit order, not locale sorting.
 7. Count all findings, calculate metrics and scores, then materialize the first `maxFindings` excerpts. Truncation does not change scores or counts.
 
-The Markdown masker is intentionally smaller than CommonMark. It covers fences, same-line code spans, indented lines, closed initial YAML frontmatter, comments, tags, ordinary links, reference definitions, and URLs. Inline destination scans are bounded to 2,047 characters after the opening delimiter. Code masks prevent phrase and rhetorical regexes from bridging hidden text. Tests cover exclusions and exact offsets; the user reference lists unsupported cases.
+The Markdown masker is intentionally smaller than CommonMark. It covers fences, same-line code spans, indented lines, closed initial YAML frontmatter, comments, ordinary tags and links, reference definitions, and URLs. Fence state records the quote depth and simple list indentation. Leaving that container ends an unclosed fence; quote-looking text inside a fence is still code.
+
+After block masking, comments and same-line backtick spans are consumed in source order. Delimiters inside a consumed span cannot open another construct. Full reference-link IDs are masked only when a visible single-line definition resolves them. Reference keys fold case and collapse whitespace. Ordinary HTML tags require a tag name and valid attribute syntax rather than an arbitrary angle-bracket pair. Inline destination scans are bounded to 2,047 characters after the opening delimiter.
+
+Code masks prevent phrase and rhetorical regexes from bridging hidden text. Quote prefixes use spaces instead, preserving soft-wrap matches and original source offsets. Findings across a quoted soft wrap include the original quote markers in their excerpts. Tests cover exclusions and exact offsets; the user reference lists unsupported cases.
 
 Inputs are data. No draft text is passed to a shell or evaluated as code. Human-readable output escapes terminal controls in excerpts and filenames. Runtime code uses only Node built-ins and performs no network calls. File handles are checked for regular-file status; POSIX nonblocking open avoids waiting on a FIFO before rejection. A timer bounds stream consumption, not an operating-system filesystem open/stat call. Stdin and file streams are destroyed on success and failure. CLI input decoding rejects malformed UTF-8 and preserves a BOM for source hashing and offsets.
 
@@ -165,7 +169,9 @@ To try the local skill in Pi, use `pi install ./pi-skill-stop-slop` from the rep
 
 Tests cover every rule, clean prose, source spans with CRLF and Unicode, Markdown exclusions, short and empty inputs, option validation, deterministic repeated runs, pinned fixture scores, comparisons and regressions, truncation independence, generated score bounds, UTF-8 and size errors, file immutability, stdin timeouts, special-file rejection on POSIX, copied-skill portability, provenance digests, skill discovery, package metadata, and local documentation links. Windows skips the POSIX FIFO case.
 
-The regression fixture measures a drop from 15.77 to 0.94 under ruleset 1.0.0. The remaining adverb candidate in the revision is "rather," retained for its contrast between saving and previewing. This fixture is not a claim that all lower scores preserve meaning.
+Ruleset 1.0.1 fixes inline-code/comment precedence, blockquote soft-wrap boundaries, quoted and simple list fences, angle-bracket comparisons, and resolved full reference-link IDs. Text mode no longer applies Markdown block-boundary rules. The schema and scoring formulas are unchanged. Regression tests cover each correction, including the CLI's formerly false zero-score pass, CRLF and Unicode spans, and unchanged comparison results after quote wrapping.
+
+The regression fixture still measures a drop from 15.77 to 0.94 under ruleset 1.0.1, unchanged from 1.0.0. The remaining adverb candidate in the revision is "rather," retained for its contrast between saving and previewing. This fixture is not a claim that all lower scores preserve meaning.
 
 Before release, inspect an actual tarball as well as the dry run. Confirm that it includes the CLI, all runtime modules, skill references, all three documentation layers, and the licenses. Tests and user drafts must not be bundled. Extract it to a temporary directory, run the CLI there, and confirm npm's bin entry points to an executable script. Publishing and global installation require separate authorization; creating the package does not publish it.
 

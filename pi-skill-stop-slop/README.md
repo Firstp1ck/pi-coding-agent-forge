@@ -23,7 +23,7 @@ Unslop is optional. To check an untouched draft, ask "Evaluate this draft with S
 ## What you’ll get
 
 - Eight category scores covering formulaic phrases, rhetoric, repetition, adverbs, em dashes, rhythm, passive voice, and vague emphasis.
-- Flagged text with line and column locations, counts, and suggested checks.
+- Flagged prose with line and column locations, counts, and suggested checks, while common Markdown code blocks and link targets stay out of the check.
 - A comparison showing which scores improved or worsened after editing.
 
 The bundled `slopcheck` command checks a file without changing it:
