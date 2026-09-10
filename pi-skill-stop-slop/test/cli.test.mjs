@@ -63,6 +63,15 @@ test('score threshold handles equality, failure, and null scores', () => {
   assert.equal(run(['--json'], '```\nreally\n```').status, 1);
 });
 
+test('an empty baseline does not count as a successful comparison', t => {
+  const dir = temporary(t);
+  const path = join(dir, 'empty.md');
+  writeFileSync(path, '');
+  const result = run([after, '--baseline', path, '--json']);
+  assert.equal(result.status, 1, result.stderr);
+  assert.equal(JSON.parse(result.stdout).comparison.outcome, 'not-comparable');
+});
+
 test('invalid arguments fail with JSON errors before consuming input', () => {
   const cases = [
     ['--format', 'html'], ['--max-score', 'NaN'], ['--max-score', 'Infinity'],

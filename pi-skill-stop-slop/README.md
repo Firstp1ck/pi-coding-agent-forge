@@ -6,7 +6,7 @@ Check prose with repeatable local style scores, then measure what changed after 
 
 - You used Unslop and want a measurable check of the result.
 - A draft repeats the same openings, transitions, or rhetorical patterns.
-- You need exact passages to review and a before/after comparison, not a vague instruction to “sound human.”
+- You need exact passages to review and a before/after comparison, not a vague instruction to "sound human."
 
 ## What to share with Pi
 
@@ -18,7 +18,7 @@ Check prose with repeatable local style scores, then measure what changed after 
 
 > Run Stop Slop on docs/launch.md after Unslop. Save the current text as the baseline, revise the flagged prose, and compare the result. Keep the performance figures and quotations unchanged. Stop after two passes and explain any findings you kept.
 
-Unslop is optional. To check an untouched draft, ask “Evaluate this draft with Stop Slop; do not edit it.” You can also start with `/skill:stop-slop`.
+Unslop is optional. To check an untouched draft, ask "Evaluate this draft with Stop Slop; do not edit it." You can also start with `/skill:stop-slop`.
 
 ## What you’ll get
 

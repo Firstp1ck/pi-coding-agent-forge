@@ -168,6 +168,7 @@ async function main() {
     process.stdout.write(`${text}\n`);
   }
   if (report.scores.overall === null
+    || output.before?.scores.overall === null
     || (options.maxScore !== undefined && report.scores.overall > options.maxScore)
     || (options.failOnRegression && (output.comparison.overallDelta === null || output.comparison.overallDelta > 0))) {
     process.exitCode = 1;
@@ -175,7 +176,7 @@ async function main() {
 }
 
 process.stdout.on('error', error => {
-  if (error.code === 'EPIPE') process.exit(0);
+  if (error.code === 'EPIPE') process.exit(process.exitCode ?? 0);
   process.stderr.write(`slopcheck: ${safe(error.message)}\n`);
   process.exit(2);
 });

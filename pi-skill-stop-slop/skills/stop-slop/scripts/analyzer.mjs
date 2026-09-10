@@ -13,7 +13,7 @@ const percent = (count, total) => total ? round(count / total * 100) : 0;
 const escapeRegex = value => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const phrasePatterns = RULES.flatMap(rule => rule.phrases.map(phrase => ({
   id: rule.id,
-  pattern: new RegExp(`(?<![\\p{L}\\p{N}_])${phrase.split(' ').map(escapeRegex).join('[ \\t]+')}(?![\\p{L}\\p{N}_])`, 'gu'),
+  pattern: new RegExp(`(?<![\\p{L}\\p{N}_])${phrase.split(' ').map(escapeRegex).join('(?:[ \\t]+|[ \\t]*\\r?\\n[ \\t]*)')}(?![\\p{L}\\p{N}_])`, 'gu'),
 })));
 
 function optionsFor(options) {

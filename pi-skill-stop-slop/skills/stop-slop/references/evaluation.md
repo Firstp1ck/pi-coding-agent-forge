@@ -13,7 +13,7 @@ Statistics describe the selected text. They do not set a writing ideal. Short sa
 ## What stays outside the score
 
 - Whether the text is true, sourced, safe, complete, or useful.
-- Authorship, authenticity, personality, and “sounding human.”
+- Authorship, authenticity, personality, and "sounding human."
 - Whether a passive sentence, question, three-item list, or repeated term fits the situation.
 - Whether the revision preserves the original meaning.
 

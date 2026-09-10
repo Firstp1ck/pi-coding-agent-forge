@@ -50,7 +50,7 @@ Omit the filename, or use `-`, to read UTF-8 text from stdin. Only one current i
 Exit codes:
 
 - `0`: evaluation completed and requested gates were met.
-- `1`: a gate failed, no prose was found, or all rules were ignored.
+- `1`: a gate failed, the input or baseline had no prose, or all rules were ignored.
 - `2`: invalid options, unreadable or oversized input, invalid UTF-8, a read timeout, or another execution error.
 
 Errors go to stderr. With `--json`, stderr errors are JSON too. Reports go to stdout. Redirection is optional; never redirect a report onto its input file because the shell would overwrite the draft before the checker reads it.
@@ -85,7 +85,7 @@ This is not a complete Markdown renderer. Nested-list text indented as code is e
 
 Sentence boundaries use punctuation and Markdown block boundaries, with a small abbreviation exception list. Soft line wraps do not normally create sentences, but headings and list items can. Abbreviations, unusual punctuation, and tables can distort rhythm and passive percentages.
 
-English is the only intended language; language is not detected automatically. A low score on another language is not meaningful. The evaluator does not judge authenticity, whether claims have evidence, every kind of false agency, arbitrary three-item lists, or whether a sentence “sounds human.” It makes no optional LLM calls.
+English is the only intended language; language is not detected automatically. A low score on another language is not meaningful. The evaluator does not judge authenticity, whether claims have evidence, every kind of false agency, arbitrary three-item lists, or whether a sentence "sounds human." It makes no optional LLM calls.
 
 ## Privacy and side effects
 

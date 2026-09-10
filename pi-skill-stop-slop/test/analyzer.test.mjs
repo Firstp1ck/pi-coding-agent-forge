@@ -112,6 +112,8 @@ test('spans are exact, with CRLF, emoji, Unicode case, and curly apostrophes', (
 
 test('case folding and whitespace matching do not match substrings', () => {
   has('IT IS\tIMPORTANT TO NOTE this.', 'SLP001');
+  has('It is important\r\nto note this.', 'SLP001');
+  assert.equal(count(analyze('It is important\n\nto note this.'), 'SLP001'), 0);
   assert.equal(count(analyze('unpackaged landscapeish impromptu'), 'SLP002'), 0);
   assert.equal(count(analyze('reallyish justified'), 'SLP020'), 0);
 });

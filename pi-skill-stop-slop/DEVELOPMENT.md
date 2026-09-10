@@ -18,7 +18,7 @@ The upstream snapshot is pinned to commit [`8da1f030185bdfe8471220585162991eaeb9
 
 The snapshot retains upstream's MIT license and copyright notice. The package license credits Hardik Pandya and Firstpick. `.gitattributes` preserves snapshot and fixture bytes across checkouts.
 
-The pattern vocabulary in `scripts/rules.mjs` derives from upstream's phrases and structures. A few supplemental phrases cover the requested general prose checks, such as “it is important to note,” “significantly improves,” and “seamlessly integrates.” The repeated-transition and repeated-opening statistics are additions. Not every upstream prohibition is implemented. Arbitrary false agency, vague claims beyond listed phrases, all three-item lists, narrator distance, punchy endings, and authenticity require judgment. Upstream examples are historical context, not semantic-preservation fixtures.
+The pattern vocabulary in `scripts/rules.mjs` derives from upstream's phrases and structures. A few supplemental phrases cover the requested general prose checks, such as "it is important to note," "significantly improves," and "seamlessly integrates." The repeated-transition and repeated-opening statistics are additions. Not every upstream prohibition is implemented. Arbitrary false agency, vague claims beyond listed phrases, all three-item lists, narrator distance, punchy endings, and authenticity require judgment. Upstream examples are historical context, not semantic-preservation fixtures.
 
 ## Source layout
 
@@ -37,7 +37,7 @@ All runtime paths below are relative to `skills/stop-slop/`:
 
 1. Validate the source type, 1 MiB UTF-8 byte limit, format, ignored rule IDs, and finding limit.
 2. Mask excluded Markdown characters with NUL placeholders, preserving CR and LF and every UTF-16 offset. Plain-text mode skips masking.
-3. Fold ASCII capitals, straight/curly apostrophes, and nonbreaking spaces without changing length. Avoid general Unicode lowercasing because it can expand characters.
+3. Fold ASCII capitals, straight/curly apostrophes, and nonbreaking spaces without changing length. Avoid general Unicode lowercasing because it can expand characters. Phrase separators accept spaces, tabs, or one soft line break, but not blank paragraphs.
 4. Tokenize Unicode letters and numbers, internal apostrophes, and hyphens. Matching vocabulary remains English. This is not automatic language detection.
 5. Split prose on sentence punctuation and selected Markdown block boundaries. Soft wraps remain within sentences. A small abbreviation list suppresses some false splits. Headings and list items can count as sentence units.
 6. Collect phrase, rhetorical, punctuation, lexical, and sentence-statistic findings. Deduplicate identical rule/span pairs and sort by start offset, end offset, then rule ID using code-unit order, not locale sorting.
@@ -65,12 +65,12 @@ Inputs are data. No draft text is passed to a shell or evaluated as code. Human-
 | SLP015 | rhetoric | Listed false-agency and narrator-distance phrases |
 | SLP020 | adverbs | An explicit word set plus ASCII `-ly` candidates with a common non-adverb exception set |
 | SLP021 | vague | Listed vague declaratives and intensifiers |
-| SLP022 | vague | Listed absolute words such as “always” and “everyone” |
+| SLP022 | vague | Listed absolute words such as "always" and "everyone" |
 | SLP030 | punctuation | Em-dash occurrences |
 | SLP040 | repetition | Repeated listed transition words at sentence starts, beyond the first occurrence |
 | SLP041 | repetition | Repeated first words in at least 40% of six or more sentences, with at least three occurrences; counts beyond the first |
 | SLP050 | rhythm | Low whole-text sentence-length coefficient of variation, when sample requirements are met |
-| SLP060 | passive | Forms of “be,” up to two optional modifiers, then an `-ed` word or listed irregular participle |
+| SLP060 | passive | Forms of "be," up to two optional modifiers, then an `-ed` word or listed irregular participle |
 
 Fragment runs do not bridge paragraph breaks or masked code. Their finding spans the first three sentences in the run. Rhythm has one finding spanning the first three sentences as an illustration; its statistics cover the whole evaluated text. Distinct rules may overlap, for example a vague-intensifier phrase and an adverb candidate in the same passage. Count those as separate measured patterns, not separate editorial defects.
 
@@ -165,7 +165,7 @@ To try the local skill in Pi, use `pi install ./pi-skill-stop-slop` from the rep
 
 Tests cover every rule, clean prose, source spans with CRLF and Unicode, Markdown exclusions, short and empty inputs, option validation, deterministic repeated runs, pinned fixture scores, comparisons and regressions, truncation independence, generated score bounds, UTF-8 and size errors, file immutability, stdin timeouts, special-file rejection on POSIX, copied-skill portability, provenance digests, skill discovery, package metadata, and local documentation links. Windows skips the POSIX FIFO case.
 
-The regression fixture measures a drop from 15.77 to 0.94 under ruleset 1.0.0. The remaining adverb candidate in the revision is “rather,” retained for its contrast between saving and previewing. This fixture is not a claim that all lower scores preserve meaning.
+The regression fixture measures a drop from 15.77 to 0.94 under ruleset 1.0.0. The remaining adverb candidate in the revision is "rather," retained for its contrast between saving and previewing. This fixture is not a claim that all lower scores preserve meaning.
 
 Before release, inspect an actual tarball as well as the dry run. Confirm that it includes the CLI, all runtime modules, skill references, all three documentation layers, and the licenses. Tests and user drafts must not be bundled. Extract it to a temporary directory, run the CLI there, and confirm npm's bin entry points to an executable script. Publishing and global installation require separate authorization; creating the package does not publish it.
 
