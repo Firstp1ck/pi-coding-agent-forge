@@ -37,7 +37,7 @@ function makeHarness(requestAutoReviewFn, { hasUI = true, select = async () => "
     on(name, handler) { handlers.set(name, handler); },
     registerCommand(name, command) { commands.set(name, command); },
   };
-  createSafetyGuardExtension({ requestAutoReviewFn })(pi);
+  createSafetyGuardExtension({ requestAutoReviewFn, allowStorePath: path.join(tempDir, "allow.json") })(pi);
   const ctx = {
     cwd: tempDir,
     hasUI,
@@ -80,7 +80,7 @@ test("RPC setup selects only an authenticated model and its supported thinking l
     on() {},
     registerCommand(name, command) { commands.set(name, command); },
   };
-  createSafetyGuardExtension()(pi);
+  createSafetyGuardExtension({ allowStorePath: path.join(tempDir, "allow.json") })(pi);
   const edited = {
     ...readSafetyGuardConfig(configFile),
     autoReview: { enabled: true, model: { provider: "", modelId: "", thinkingLevel: "off" } },
@@ -179,7 +179,7 @@ test("session allow-list bypass remains ahead of model review", async () => {
   const harness = makeHarness(async () => {
     reviewCalls += 1;
     throw new Error("use prompt");
-  }, { select: async () => "Allow for this session" });
+  }, { select: async () => "Allow this exact command for this session" });
 
   assert.equal(await harness.call(), undefined);
   assert.equal(await harness.call(), undefined);

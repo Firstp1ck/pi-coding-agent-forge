@@ -8,7 +8,7 @@ const AST_DEPTH_MAX = 64;
 const PARSE_TIMEOUT_MS = 50;
 const LOAD_TIMEOUT_MS = 5_000;
 
-export type ShellOperation = { text: string; argv: string[] };
+export type ShellOperation = { text: string; argv: string[]; inPipeline: boolean };
 export type ShellAnalysis =
   | { supported: true; operations: ShellOperation[] }
   | { supported: false; reason: string };
@@ -84,12 +84,15 @@ export async function analyzeShell(command: string): Promise<ShellAnalysis> {
     if (tree.rootNode.hasError) return fallback("Invalid or incomplete shell syntax");
     const operations: ShellOperation[] = [];
     let count = 0;
-    function visit(node: Node, depth: number): void {
+    function visit(node: Node, depth: number, inPipeline = false): void {
       if (++count > AST_NODES_MAX || depth > AST_DEPTH_MAX) throw new Error("Shell syntax exceeds analysis limits");
       if (node.type === "comment") return;
+      // Some mixed pipe/conditional chains nest a list under a pipeline in this grammar.
+      // Do not infer which commands share a pipe from that ambiguous grouping.
+      if (inPipeline && node.type === "list") throw new Error("Unsupported mixed pipeline grouping");
       if (["program", "list", "pipeline"].includes(node.type)) {
         for (const child of node.children) {
-          if (child.isNamed) visit(child, depth + 1);
+          if (child.isNamed) visit(child, depth + 1, inPipeline || node.type === "pipeline");
           else if (!["&&", "||", ";", "|"].includes(child.type)) throw new Error("Unsupported shell operator");
         }
         return;
@@ -104,7 +107,7 @@ export async function analyzeShell(command: string): Promise<ShellAnalysis> {
       }
       if (!argv.length || requiresWholeCommand(argv)) throw new Error("Wrapper, interpreter, or execution-context change");
       if (operations.length >= SHELL_OPERATIONS_MAX) throw new Error("Too many operations for reusable approval");
-      operations.push({ text: node.text, argv });
+      operations.push({ text: node.text, argv, inPipeline });
     }
     visit(tree.rootNode, 0);
     return { supported: true, operations };

@@ -16,7 +16,8 @@ Interactive safety prompts for high-risk operations in Pi.
 - Has persistent setup through `/safety-guard-setup`, including per-category toggles and independent preview lines before/after matches.
 - Optionally auto-reviews matched calls with one authenticated Pi model and supported thinking level; this is off by default.
 - Can be toggled globally with `/safety-guard on|off|status`.
-- Supports exact allow entries for the current session or permanently per cwd.
+- Supports session or permanent approvals per cwd for whole exact commands, listed exact operations, and constrained Git operation types.
+- Shows all recognized operations in one bash prompt and requires whole-command approval for unsupported syntax.
 
 ## Guarded command categories
 
@@ -101,7 +102,9 @@ Examples:
 - `UPDATE ... SET ...` without `WHERE`
 - `ALTER TABLE ... DROP COLUMN/CONSTRAINT`
 
-SQL rules are matched against the full bash command, including heredoc bodies, so database client calls like `psql <<SQL ... SQL` can still be guarded.
+SQL checks include literal command arguments and, for whole-command fallback, original text including heredoc bodies. Database client calls like `psql <<SQL ... SQL` can still be guarded. Standalone SQL text printed by `echo` or `printf` is not treated as execution, but piped output may be executed by its receiver.
+
+A pipeline containing matched SQL, such as `echo 'DROP TABLE sample;' | psql`, requires approval for the complete command. Existing exact-operation approvals do not bypass this check, and new reusable operation approvals are not offered. A whole-command approval remains exact, so changing the receiver requires approval again. This conservative rule also prompts when SQL is piped into a harmless receiver such as `cat`; the guard does not prove what receivers do.
 
 ### Secret file access
 
@@ -147,7 +150,7 @@ No configuration is required. Run `/safety-guard-setup` to edit all persistent g
 - command-preview lines before and after each matched line (`0`-`20`, default `3` each)
 - optional auto-review enablement, authenticated model, and model-supported thinking level
 
-Auto-review defaults off. When enabled, an allow verdict proceeds without a popup; a block verdict stops the tool and emits a notification. Missing models or authentication, timeouts, provider failures, and invalid verdicts fall back to the existing confirmation prompt. In non-interactive mode that existing fallback remains fail-closed.
+Auto-review defaults off. When enabled, one verdict covers the complete bash invocation and all its pending risk reasons. An allow verdict proceeds without a popup and never creates remembered permissions; a block verdict stops the tool and emits a notification. Bash input longer than 4,096 characters skips automatic review because the reviewer would not receive its complete text. Missing models or authentication, timeouts, provider failures, and invalid verdicts fall back to the existing confirmation prompt. In non-interactive mode that existing fallback remains fail-closed.
 
 While a review is awaited, the TUI/RPC surface shows a non-modal status and widget indicator. Overlapping reviews are counted independently, and successful allows are quiet after the indicator clears.
 
@@ -182,17 +185,55 @@ Permanent allows are stored separately in:
 ~/.pi/agent/safety-guard-allow.json
 ```
 
-Allow entries are exact matches scoped to the current working directory:
+### Approval scopes and lifetimes
 
-- bash: exact command string + cwd
-- write/edit: resolved protected path + cwd
+Every remembered permission is scoped to the current working directory. The bash prompt offers combinations of scope and lifetime, rather than making session approvals exact and permanent approvals broader.
 
-When a guard prompt appears, choose one of:
+| Scope | Session option | Permanent option | What it covers |
+| --- | --- | --- | --- |
+| Complete input | `Allow this exact command for this session` | `Always allow this exact command in this cwd` | Only the original full command string. Different spacing or arguments require approval. |
+| Listed exact operations | `Allow listed exact operations for this session` | `Always allow listed exact operations in this cwd` | The argument lists of the operations marked `NEEDS APPROVAL`, standalone or in later supported chains. Equivalent literal quoting and spacing are accepted; different arguments are not. |
+| Listed operation types | `Allow listed operation types for this session` | `Always allow listed operation types in this cwd` | The constrained Git types described in the prompt. Offered only when every pending operation qualifies. |
 
-- `Block`
-- `Allow once`
-- `Allow for this session`
-- `Always allow in this cwd`
+`Allow once` runs only the current invocation and remembers nothing. `Block`, dismissal, cancellation, or a UI error stops the complete invocation without saving new permissions. The guard never removes a rejected fragment and runs the rest. Existing approvals keep their previous lifetime; your choice applies only to newly remembered permissions.
+
+The single prompt lists recognized operations, all matching enabled risks, already-approved operations, and any reason whole-command approval is required. Multiple occurrences of the same command remain visible. One selection approves all remaining operations at the displayed scope and lifetime. There are no separate per-risk dialogs or shortest-duration aggregation anymore.
+
+Protected-path prompts retain `Allow for this session`, `Always allow write to this path in this cwd`, and `Always allow edit to this path in this cwd`. They cover the resolved path for that tool, including future contents, not just the current change.
+
+### Reusable Git operation types
+
+| Type | Supported command forms | Not covered |
+| --- | --- | --- |
+| Branch creation | `git switch -c NAME`, `git switch --create NAME` | Force creation, extra flags, start points |
+| Non-forced switching | `git switch NAME` | Discard/force flags, detach options, extra arguments |
+| Merged-branch deletion | `git branch -d NAME` | `-D`, multiple branch arguments, other flags |
+
+Each type permits any simple branch name in the same cwd. A simple name begins with an ASCII letter or digit and contains only ASCII letters, digits, `.`, `_`, `/`, or `-`. Git still validates names and whether `-d` is permitted. Quotes around a literal name do not broaden the allowed characters. Different types require separate grants. No type grants blanket permission for all Git commands.
+
+### Supported command syntax and fallback
+
+Operation permissions apply only to successfully analyzed literal simple commands and linear chains using `&&`, `||`, `;`, newlines, or `|`. Ordinary single/double quotes containing literal text and comments are supported. An allowed operation cannot cover another unapproved operation in the chain.
+
+Expansions, substitutions, globs, escaped/concatenated words, redirects, heredocs, control flow, background execution, environment assignments, interpreter/execution wrappers, directory-changing commands, executable paths, and Git global options require whole-command approval. This conservative fallback applies even when no known dangerous pattern matches. A previously saved operation permission never bypasses it. Syntax checks do not prove what an arbitrary executable will do.
+
+Mixed pipeline/conditional chains whose grouping cannot be safely analyzed also require whole-command approval.
+
+Risk excerpts use `!!!` for matched lines and `>>> pattern <<<` for matched text. Quoted arguments can prevent an exact text marker; the listed operation and its risk label still apply.
+
+Analysis also falls back when input exceeds 65,536 characters, contains unsupported control characters, contains more than 32 operations, or exceeds parser limits. Parser loading or parsing failures use the same path. Large prompts that cannot display the complete permission scope offer only `Block` and `Allow once`. Context-line settings still control risk excerpts; the complete invocation is also shown when it fits.
+
+Remembered approvals are checked before optional model review, including in non-interactive mode. With no applicable approval, model review is used if enabled and the full input fits its bound; otherwise non-interactive calls are blocked. Turning a category off disables its known-risk checks, but does not disable the unknown-syntax fallback. The master off switch disables both.
+
+### Safety, updates, and troubleshooting
+
+- Git operations may change your checkout, delete local branches, or execute hooks. Cwd scoping does not make a repository, executable, hook, or shell startup configuration trustworthy. This extension is not a sandbox.
+- Supported literal commands without a matching enabled risk can run without a prompt. Arbitrary executable behavior is not proven safe by syntax analysis.
+- Existing exact approvals remain whole-command/path approvals. Updating does not convert them into reusable operation permissions.
+- Permissions previously granted with `Always allow git switch branch creation in this cwd` remain standalone-only and keep their original restrictions. To use the new operation scopes in chains, explicitly approve them through the new options.
+- Old versions ignore new operation permissions. They may drop unfamiliar permissions when saving their allow store. Use `/safety-guard allow-clear-permanent` before downgrading if you want to remove all saved permissions.
+- If a supported command still asks for whole-command approval, check the cwd, syntax, and analysis-limit message. Reload Pi after correcting a missing or broken parser dependency. Do not work around parser failure with a blanket allow rule.
+- Mismatched entries produced by the issue's old local label-key patch are ignored rather than broadened. Approve the command again using the explicit options.
 
 ## Commands
 
@@ -210,18 +251,18 @@ When a guard prompt appears, choose one of:
 
 When disabled, the status bar shows `🔓!`. The `on` and `off` commands update the global setup file.
 
-`allow-list` shows both session and permanent entries. `allow-clear-session` clears only the in-memory list. `allow-clear-permanent` empties the persisted allow file.
+`allow-list` shows both session and permanent entries and distinguishes whole-command, legacy rule, exact-operation, and operation-type permissions without printing complete stored command contents. `allow-clear-session` clears only the in-memory list. `allow-clear-permanent` empties the persisted allow file.
 
 ## Example view
 
 ```text
-!git reset --hard
-Safety guard: high-risk git command detected
-Allow this command?  No / Yes
+git switch -c feature/two && npm uninstall example
+Safety Guard: bash approval
+1. ALREADY APPROVED: git switch -c feature/two
+2. NEEDS APPROVAL: npm uninstall example
+Risks: JS package removal
 
-edit .env
-Safety guard: protected path detected (.env)
-Allow edit?  No / Yes
+Choose Block, Allow once, or an available scope/lifetime option.
 ```
 
 The guard adds a pause before risky shell commands or sensitive file edits, while still letting you proceed intentionally.

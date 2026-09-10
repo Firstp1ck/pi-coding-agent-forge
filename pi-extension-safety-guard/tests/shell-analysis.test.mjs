@@ -23,9 +23,16 @@ test("all supported separators preserve every operation", async () => {
   assert.deepEqual(await analyzeShell(""), { supported: true, operations: [] });
 });
 
+test("pipeline membership is preserved without leaking to sequential siblings", async () => {
+  const result = await analyzeShell("echo first; echo second | cat | psql; echo last");
+  assert.equal(result.supported, true);
+  assert.deepEqual(result.operations.map((operation) => operation.inPipeline), [false, true, true, true, false]);
+});
+
 test("unsupported constructs never yield reusable partial operations", async () => {
   for (const command of [
     "git switch one &&", "git switch one ||", "git switch one &", "git switch one |& cat",
+    "echo first; echo second | cat | psql && echo last",
     "git switch $(echo one)", "git switch `echo one`", "git switch $BRANCH", 'git switch "$BRANCH"',
     "git switch ${BRANCH}", "git switch *", "git switch {one,two}", "git switch ~", "git sw\\itch one",
     "git switch one >out", "git switch one 2>&1", "git switch one <in", "cat <<<word",

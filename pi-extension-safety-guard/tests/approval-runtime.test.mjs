@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { after, test } from "node:test";
 import { createSafetyGuardExtension } from "../index.ts";
-import { ruleAllowKey, operationRule, operationRuleAllowKey } from "../src/approvals.ts";
+import { ruleAllowKey, operationRule, operationRuleAllowKey, operationAllowKey } from "../src/approvals.ts";
 import { BASH_CHOICES as CHOICE } from "../src/bash-prompt.ts";
 import { defaultSafetyGuardConfig, writeSafetyGuardConfig } from "../src/config.mjs";
 
@@ -204,6 +204,71 @@ test("quoted data and comments are not mistaken for executing risk commands", as
   }
   assert.equal(current.prompts.length, 0);
   assert.equal((await current.call('echo "$(rm -rf /)"')).block, true);
+});
+
+test("piped SQL requires whole-command approval without reusable operation choices", async () => {
+  for (const command of [
+    "echo 'DROP TABLE sample;' | psql",
+    "printf '%s' 'DROP DATABASE sample;' | mysql",
+    "echo 'DROP TABLE sample;' | cat | psql",
+    "echo 'DROP TABLE sample;' | cat",
+  ]) {
+    const location = fixture();
+    const current = harness(location);
+    assert.equal((await current.call(command))?.block, true, command);
+    assert.equal(current.prompts.length, 1);
+    assert.match(current.prompts[0].title, /SQL drop/);
+    assert.match(current.prompts[0].title, /WHOLE-COMMAND APPROVAL REQUIRED/);
+    assert.ok(!current.prompts[0].options.includes(CHOICE.operationPermanent));
+    assert.ok(!current.prompts[0].options.includes(CHOICE.rulePermanent));
+    assert.equal((await harness(location, [], { hasUI: false }).call(command))?.block, true);
+    assert.deepEqual(entries(location), []);
+  }
+});
+
+test("SQL pipeline context cannot reuse saved producer or client operation grants", async () => {
+  for (const [argv, command] of [
+    [["echo", "DROP TABLE sample;"], "echo 'DROP TABLE sample;' | psql"],
+    [["psql", "-c", "DROP TABLE sample;"], "psql -c 'DROP TABLE sample;' | cat"],
+  ]) {
+    const location = fixture();
+    seed(location, [{ ...legacy(location, command), matchType: "operation", argv,
+      key: operationAllowKey(argv, location.cwd) }]);
+    assert.equal((await harness(location).call(command))?.block, true, command);
+  }
+});
+
+test("whole-command pipeline approval stays exact; standalone printed SQL stays harmless", async () => {
+  const location = fixture();
+  const command = "echo 'DROP TABLE sample;' | psql";
+  const current = harness(location, [CHOICE.commandPermanent]);
+  assert.equal(await current.call(command), undefined);
+  assert.equal(entries(location)[0]?.matchType, "exact");
+  assert.equal(await harness(location).call(command), undefined);
+  assert.equal((await harness(location).call("echo 'DROP TABLE sample;' | mysql"))?.block, true);
+  const standalone = harness(location);
+  assert.equal(await standalone.call("echo 'DROP TABLE sample;'; echo ok | cat"), undefined);
+  assert.equal(await standalone.call("echo 'DROP TABLE sample;'; psql"), undefined);
+  assert.equal(standalone.prompts.length, 0);
+  writeSafetyGuardConfig({ categories: { database: false } }, configFile);
+  assert.equal(await harness(location).call("echo 'DROP TABLE other;' | mysql"), undefined);
+});
+
+test("automatic review sees SQL pipeline risks and the full invocation", async () => {
+  const location = fixture();
+  writeSafetyGuardConfig({ autoReview: { enabled: true } }, configFile);
+  const reviewed = [];
+  const current = harness(location, [], { requestAutoReviewFn: async (_registry, _config, request) => {
+    reviewed.push(request);
+    return { verdict: "block", reason: "test verdict" };
+  } });
+  const command = "echo 'DROP TABLE sample;' | psql";
+  assert.equal((await current.call(command)).block, true);
+  assert.equal(reviewed.length, 1);
+  assert.match(reviewed[0].label, /SQL drop table/);
+  assert.equal(reviewed[0].pendingText, command);
+  assert.equal(current.prompts.length, 0);
+  assert.deepEqual(entries(location), []);
 });
 
 test("fallback heredocs show all SQL risks in one prompt", async () => {

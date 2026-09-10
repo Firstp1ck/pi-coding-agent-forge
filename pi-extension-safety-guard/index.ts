@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import path from "node:path";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
@@ -19,10 +20,14 @@ import {
 import type { SafetyGuardCategory, SafetyGuardConfig, SafetyGuardConfigPatch } from "./src/config.mjs";
 import {
   requestAutoReview,
+  AUTO_REVIEW_INPUT_MAX_CHARS,
   supportedAutoReviewThinkingLevels,
   type AutoReviewRequest,
 } from "./src/auto-review.ts";
 import { matchingCommandExcerpt } from "./src/excerpt.ts";
+import { bashRuleGrant, isKnownBashRuleId, ruleAllowKey, isKnownOperationRuleId, operationRule, operationAllowKey, operationRuleAllowKey, type BashRuleGrant } from "./src/approvals.ts";
+import { analyzeShell, SHELL_INPUT_MAX } from "./src/shell-analysis.ts";
+import { buildBashPrompt, type BashChoice } from "./src/bash-prompt.ts";
 
 const STATUS_KEY = "safety-guard";
 const AUTO_REVIEW_STATUS_KEY = "safety-guard-auto-review";
@@ -43,6 +48,9 @@ type AllowScope = "session" | "permanent";
 type AllowDecision = { block: true; reason: string } | { allow: true; scope?: AllowScope } | undefined;
 type AllowEntry = {
   key: string;
+  matchType?: "exact" | "rule" | "operation" | "operation-rule";
+  ruleId?: string;
+  argv?: string[];
   kind: "bash" | "write" | "edit";
   value: string;
   cwd: string;
@@ -169,9 +177,9 @@ function allowKey(kind: AllowEntry["kind"], value: string, cwd: string): string 
   return `${kind}:${normalizeCwd(cwd)}:${value}`;
 }
 
-function readAllowStore(): AllowStore {
+function readAllowStore(fileName: string): AllowStore {
   try {
-    const raw = fs.readFileSync(ALLOW_STORE_PATH, "utf8");
+    const raw = fs.readFileSync(fileName, "utf8");
     const parsed = JSON.parse(raw) as Partial<AllowStore>;
     if (parsed.version !== 1 || !Array.isArray(parsed.entries)) return { version: 1, entries: [] };
     return {
@@ -184,6 +192,7 @@ function readAllowStore(): AllowStore {
         && typeof entry.cwd === "string"
         && typeof entry.label === "string"
         && typeof entry.createdAt === "string"
+        && validAllowIdentity(entry)
       )),
     };
   } catch {
@@ -191,20 +200,42 @@ function readAllowStore(): AllowStore {
   }
 }
 
-function writeAllowStore(store: AllowStore): void {
-  fs.mkdirSync(path.dirname(ALLOW_STORE_PATH), { recursive: true });
-  fs.writeFileSync(ALLOW_STORE_PATH, `${JSON.stringify(store, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
+function validAllowIdentity(entry: AllowEntry): boolean {
+  if (entry.matchType === "operation") {
+    return entry.kind === "bash" && entry.ruleId === undefined && Array.isArray(entry.argv)
+      && entry.argv.length > 0 && entry.argv.every((arg) => typeof arg === "string")
+      && entry.key === operationAllowKey(entry.argv, entry.cwd);
+  }
+  if (entry.argv !== undefined) return false;
+  if (entry.matchType === "operation-rule") return entry.kind === "bash" && isKnownOperationRuleId(entry.ruleId)
+    && entry.key === operationRuleAllowKey(entry.ruleId, entry.cwd);
+  if (entry.matchType === "rule") return entry.kind === "bash" && isKnownBashRuleId(entry.ruleId)
+    && entry.key === ruleAllowKey(entry.ruleId, entry.cwd);
+  return (entry.matchType === undefined || entry.matchType === "exact") && entry.ruleId === undefined
+    && entry.key === allowKey(entry.kind, entry.value, entry.cwd);
 }
 
-function addPermanentAllow(entry: Omit<AllowEntry, "createdAt">): void {
-  const store = readAllowStore();
-  const next: AllowEntry = { ...entry, createdAt: new Date().toISOString() };
-  store.entries = [...store.entries.filter((existing) => existing.key !== entry.key), next];
-  writeAllowStore(store);
+function writeAllowStore(store: AllowStore, fileName: string): void {
+  fs.mkdirSync(path.dirname(fileName), { recursive: true });
+  const temporary = `${fileName}.${randomUUID()}.tmp`;
+  try {
+    fs.writeFileSync(temporary, `${JSON.stringify(store, null, 2)}\n`, { encoding: "utf8", mode: 0o600, flag: "wx" });
+    fs.renameSync(temporary, fileName);
+  } finally {
+    if (fs.existsSync(temporary)) fs.unlinkSync(temporary);
+  }
+}
+
+function addPermanentAllows(entries: AllowEntry[], fileName: string): void {
+  const store = readAllowStore(fileName);
+  const combined = new Map(store.entries.map((entry) => [entry.key, entry]));
+  for (const entry of entries) combined.set(entry.key, entry);
+  writeAllowStore({ version: 1, entries: [...combined.values()] }, fileName);
 }
 
 function formatAllowEntry(entry: AllowEntry): string {
-  return `${entry.kind} ${entry.label} @ ${entry.cwd}`;
+  const target = `${entry.matchType ?? "exact"} ${entry.label}`;
+  return `${entry.kind} ${target} @ ${entry.cwd}`;
 }
 
 function allowedScope(decision: AllowDecision): AllowScope | undefined {
@@ -238,6 +269,7 @@ async function confirmOrBlock(
   title: string,
   message: string,
   nonInteractiveReason: string,
+  options: { kind: AllowEntry["kind"] } = { kind: "bash" },
 ): Promise<AllowDecision> {
   if (!ctx.hasUI) {
     return { block: true, reason: nonInteractiveReason };
@@ -261,11 +293,14 @@ async function confirmOrBlock(
       message,
     ].join("\n");
 
+    const exactChoice = options.kind === "bash"
+      ? "Always allow this exact command in this cwd"
+      : `Always allow ${options.kind} to this path in this cwd`;
     void ctx.ui.select(promptTitle, [
       "Block",
       "Allow once",
       "Allow for this session",
-      "Always allow in this cwd",
+      exactChoice,
     ]).then((choice) => {
       switch (choice) {
         case "Allow once":
@@ -274,7 +309,7 @@ async function confirmOrBlock(
         case "Allow for this session":
           finish({ allow: true, scope: "session" });
           break;
-        case "Always allow in this cwd":
+        case exactChoice:
           finish({ allow: true, scope: "permanent" });
           break;
         default:
@@ -304,37 +339,11 @@ function stripHeredocBodies(command: string): string {
   return kept.join("\n");
 }
 
-function formatRuleMessage(
-  rule: CommandRule,
-  commandForMatching: string,
-  config: SafetyGuardConfig,
-  highlight: (value: string) => string = (value) => value,
-): { title: string; message: string; nonInteractiveReason: string } {
-  const title = rule.level === "strong-confirm" ? "High-risk bash command" : "Dangerous bash command";
-  const impact = rule.level === "strong-confirm"
-    ? "This can be difficult to undo. Verify the target, branch, and scope before allowing."
-    : "Verify the target and scope before allowing.";
-  const excerpt = matchingCommandExcerpt(rule, commandForMatching, highlight, {
+function formatRuleContext(rule: CommandRule, command: string, config: SafetyGuardConfig): string {
+  return `${rule.label}\n${matchingCommandExcerpt(rule, command, (value) => value, {
     linesBefore: config.contextLines.before,
     linesAfter: config.contextLines.after,
-  });
-
-  return {
-    title,
-    message: [
-      `Reason: ${highlight(rule.label)} (${rule.category})`,
-      impact,
-      "",
-      "DANGEROUS LINE(S) AND CONTEXT",
-      `Lines marked with ${highlight("!!!")} triggered the safety rule; the matched pattern is wrapped as ${highlight(">>> pattern <<<")}.`,
-      "────────────────────────────────────────",
-      excerpt,
-      "────────────────────────────────────────",
-      "",
-      "Execute anyway?",
-    ].join("\n"),
-    nonInteractiveReason: `Blocked ${rule.category} command (${rule.label}) in non-interactive mode`,
-  };
+  })}`.replace(/[\u0000-\u0008\u000b-\u001f\u007f\u2028\u2029]/gu, (value) => `\\u${value.charCodeAt(0).toString(16).padStart(4, "0")}`);
 }
 
 function onOff(value: boolean): "on" | "off" {
@@ -504,15 +513,19 @@ function updateStatus(ctx: ExtensionContext, config: SafetyGuardConfig): void {
 
 export function createSafetyGuardExtension({
   requestAutoReviewFn = requestAutoReview,
+  allowStorePath = ALLOW_STORE_PATH,
+  analyzeShellFn = analyzeShell,
 }: {
   requestAutoReviewFn?: typeof requestAutoReview;
+  allowStorePath?: string;
+  analyzeShellFn?: typeof analyzeShell;
 } = {}) {
   return function safetyGuard(pi: ExtensionAPI) {
   let config = defaultSafetyGuardConfig();
   let lastConfigError = "";
   const sessionAllow = new Map<string, AllowEntry>();
   const activeReviewTokens = new Set<symbol>();
-  let permanentAllow = readAllowStore();
+  let permanentAllow = readAllowStore(allowStorePath);
 
   const renderAutoReviewIndicator = (ctx: ExtensionContext): void => {
     if (!ctx.hasUI) return;
@@ -571,7 +584,12 @@ export function createSafetyGuardExtension({
 
   refreshConfig();
 
-  const isAllowed = (key: string): boolean => sessionAllow.has(key) || permanentAllow.entries.some((entry) => entry.key === key);
+  const isAllowed = (key: string): boolean => sessionAllow.has(key)
+    || permanentAllow.entries.some((entry) => entry.key === key);
+
+  const isRuleAllowed = (rule: BashRuleGrant, cwd: string): boolean => permanentAllow.entries.some((entry) => (
+    entry.matchType === "rule" && entry.ruleId === rule.id && entry.key === ruleAllowKey(rule.id, cwd)
+  ));
 
   const autoReviewOrPrompt = async (
     ctx: ExtensionContext,
@@ -595,18 +613,20 @@ export function createSafetyGuardExtension({
     }
   };
 
-  const rememberAllow = (entry: Omit<AllowEntry, "createdAt">, scope: AllowScope, ctx: ExtensionContext): void => {
-    const next: AllowEntry = { ...entry, createdAt: new Date().toISOString() };
+  const rememberAllows = (entries: Omit<AllowEntry, "createdAt">[], scope: AllowScope, ctx: ExtensionContext): void => {
+    const next = entries.map((entry) => ({ ...entry, createdAt: new Date().toISOString() }));
     if (scope === "session") {
-      sessionAllow.set(entry.key, next);
-      if (ctx.hasUI) ctx.ui.notify(`Allowed for this session: ${formatAllowEntry(next)}`, "info");
-      return;
+      for (const entry of next) sessionAllow.set(entry.key, entry);
+    } else {
+      addPermanentAllows(next, allowStorePath);
+      permanentAllow = readAllowStore(allowStorePath);
     }
-
-    addPermanentAllow(entry);
-    permanentAllow = readAllowStore();
-    if (ctx.hasUI) ctx.ui.notify(`Permanently allowed: ${formatAllowEntry(next)}`, "info");
+    if (ctx.hasUI) {
+      try { ctx.ui.notify(`Allowed ${scope === "session" ? "for this session" : "permanently"}:\n${next.map(formatAllowEntry).join("\n")}`, "info"); }
+      catch { /* A notification failure must not change an already committed approval. */ }
+    }
   };
+  const rememberAllow = (entry: Omit<AllowEntry, "createdAt">, scope: AllowScope, ctx: ExtensionContext): void => rememberAllows([entry], scope, ctx);
 
   pi.registerCommand("safety-guard", {
     description: "Safety guard control: on | off | status | allow-list | allow-clear-session | allow-clear-permanent",
@@ -614,7 +634,7 @@ export function createSafetyGuardExtension({
       const cmd = args?.trim().toLowerCase();
       if (!cmd || cmd === "status") {
         refreshConfig(ctx);
-        permanentAllow = readAllowStore();
+        permanentAllow = readAllowStore(allowStorePath);
         if (ctx.hasUI) {
           ctx.ui.notify(`${safetyGuardConfigSummary(config)}\nAllows: ${sessionAllow.size} session, ${permanentAllow.entries.length} permanent.`, "info");
         }
@@ -630,12 +650,12 @@ export function createSafetyGuardExtension({
         return;
       }
       if (cmd === "allow-list") {
-        permanentAllow = readAllowStore();
+        permanentAllow = readAllowStore(allowStorePath);
         const lines = [
           "Session allows:",
           ...(sessionAllow.size ? [...sessionAllow.values()].map(formatAllowEntry) : ["(none)"]),
           "",
-          `Permanent allows (${ALLOW_STORE_PATH}):`,
+          `Permanent allows (${allowStorePath}):`,
           ...(permanentAllow.entries.length ? permanentAllow.entries.map(formatAllowEntry) : ["(none)"]),
         ];
         if (ctx.hasUI) ctx.ui.notify(lines.join("\n"), "info");
@@ -647,8 +667,8 @@ export function createSafetyGuardExtension({
         return;
       }
       if (cmd === "allow-clear-permanent") {
-        writeAllowStore({ version: 1, entries: [] });
-        permanentAllow = readAllowStore();
+        writeAllowStore({ version: 1, entries: [] }, allowStorePath);
+        permanentAllow = readAllowStore(allowStorePath);
         if (ctx.hasUI) ctx.ui.notify("Cleared safety guard permanent allow-list", "info");
         return;
       }
@@ -683,37 +703,81 @@ export function createSafetyGuardExtension({
     if (!config.enabled) return;
     if (isToolCallEventType("bash", event)) {
       const command = event.input.command ?? "";
-      const commandForMatching = stripHeredocBodies(command);
-      const shellMatch = DANGEROUS_BASH_RULES.find((entry) => config.categories[entry.category] && entry.pattern.test(commandForMatching));
-      const databaseMatch = config.categories.database
-        ? DATABASE_RULES.find((entry) => entry.pattern.test(command))
-        : undefined;
-      const match = shellMatch ?? databaseMatch;
-      const matchedCommandText = databaseMatch && !shellMatch ? command : commandForMatching;
-      if (!match) return;
+      if (ctx.signal?.aborted) return { block: true, reason: "Safety guard approval cancelled" };
+      const cwd = normalizeCwd(ctx.cwd);
+      const exactKey = allowKey("bash", command, cwd);
+      if (isAllowed(exactKey)) return;
+      const legacyRule = config.categories.git ? bashRuleGrant(command) : undefined;
+      if (legacyRule && isRuleAllowed(legacyRule, cwd)) return;
 
-      const entry = {
-        key: allowKey("bash", command, ctx.cwd),
-        kind: "bash" as const,
-        value: command,
-        cwd: normalizeCwd(ctx.cwd),
-        label: match.label,
-        category: match.category,
+      const analysis = await analyzeShellFn(command).catch(() => ({ supported: false as const, reason: "Shell parser unavailable" }));
+      if (ctx.signal?.aborted) return { block: true, reason: "Safety guard approval cancelled" };
+      const boundedCommand = command.slice(0, SHELL_INPUT_MAX);
+      const sourceOperations = analysis.supported ? analysis.operations : [{ text: command, argv: [] as string[], inPipeline: false }];
+      const operations = sourceOperations.map((operation) => {
+        const matchingText = analysis.supported ? operation.argv.join(" ") : stripHeredocBodies(boundedCommand);
+        const matches = DANGEROUS_BASH_RULES.filter((entry) => {
+          if (!config.categories[entry.category]) return false;
+          const match = entry.pattern.exec(matchingText);
+          return !!match && (!analysis.supported || match.index === 0);
+        });
+        // Printed SQL is harmless only outside pipelines. The receiver may execute it.
+        if (config.categories.database && (!analysis.supported || operation.inPipeline || !["echo", "printf"].includes(operation.argv[0]))) {
+          matches.push(...DATABASE_RULES.filter((entry) => entry.pattern.test(analysis.supported ? operation.argv.join(" ") : boundedCommand)));
+        }
+        const rule = analysis.supported && matches.length === 1 && matches[0].category === "git" ? operationRule(operation.argv) : undefined;
+        // Pipeline SQL permissions must include the receiver, not just the producer's argv.
+        const pipelineSql = operation.inPipeline && matches.some((match) => match.category === "database");
+        const approved = analysis.supported && !pipelineSql && (isAllowed(operationAllowKey(operation.argv, cwd))
+          || !!rule && isAllowed(operationRuleAllowKey(rule.id, cwd)));
+        const risks = matches.map((match) => match.label);
+        if (!analysis.supported) risks.push("Unverified shell execution");
+        return { ...operation, matches, risks, rule, approved, pipelineSql };
+      });
+      const pending = operations.filter((operation) => operation.risks.length && !operation.approved);
+      if (!pending.length) return;
+      const allMatches = pending.flatMap((operation) => operation.matches);
+      const labels = [...new Set(pending.flatMap((operation) => operation.risks))].join(", ");
+      const categories = [...new Set(allMatches.map((match) => match.category))].join(",") || "shell";
+      const first = allMatches[0];
+      const nonInteractiveReason = allMatches.length === 1 && analysis.supported
+        ? `Blocked ${first.category} command (${first.label}) in non-interactive mode`
+        : "Blocked bash command with unapproved operations in non-interactive mode";
+      let selected: BashChoice | undefined;
+      const context = [...new Map(allMatches.map((match) => [match.label, match])).values()]
+        .map((match) => formatRuleContext(match, boundedCommand, config)).join("\n\n");
+      const wholeCommandReason = !analysis.supported ? analysis.reason
+        : operations.some((operation) => operation.pipelineSql) ? "SQL in a pipeline requires approval of the complete command, including its receiver" : undefined;
+      const prompt = buildBashPrompt(command, operations, wholeCommandReason, context);
+      const fallback = async (): Promise<AllowDecision> => {
+        if (!ctx.hasUI) return { block: true, reason: nonInteractiveReason };
+        try {
+          const choice = await ctx.ui.select(`Safety Guard: bash approval\n\n${prompt.message}`, ["Block", ...prompt.choices.keys()], { signal: ctx.signal });
+          selected = choice ? prompt.choices.get(choice) : undefined;
+          return selected ? { allow: true } : { block: true, reason: "Blocked by safety-guard extension" };
+        } catch { return { block: true, reason: "Blocked by safety-guard extension" }; }
       };
-      if (isAllowed(entry.key)) return;
-
-      const prompt = formatRuleMessage(match, matchedCommandText, config, (value) => ctx.ui.theme.fg("warning", value));
-      const decision = await autoReviewOrPrompt(ctx, {
-        kind: "bash",
-        label: match.label,
-        category: match.category,
-        riskLevel: match.level,
-        cwd: normalizeCwd(ctx.cwd),
-        pendingText: command,
-      }, () => confirmOrBlock(ctx, prompt.title, prompt.message, prompt.nonInteractiveReason));
-      const scope = allowedScope(decision);
-      if (scope) rememberAllow(entry, scope, ctx);
-      if (decision && "block" in decision) return decision;
+      const request: AutoReviewRequest = {
+        kind: "bash", label: labels, category: categories,
+        riskLevel: allMatches.some((match) => match.level === "block-noninteractive") ? "block-noninteractive"
+          : allMatches.some((match) => match.level === "strong-confirm") ? "strong-confirm" : "prompt",
+        cwd, pendingText: command,
+      };
+      const decision = command.length > AUTO_REVIEW_INPUT_MAX_CHARS ? await fallback() : await autoReviewOrPrompt(ctx, request, fallback);
+      if (!decision || "block" in decision) return decision ?? { block: true, reason: "Blocked by safety-guard extension" };
+      if (ctx.signal?.aborted) return { block: true, reason: "Safety guard approval cancelled" };
+      if (selected?.lifetime) {
+        const base = { kind: "bash" as const, cwd, value: command, label: labels };
+        const entries: Omit<AllowEntry, "createdAt">[] = selected.scope === "command"
+          ? [{ ...base, key: exactKey, matchType: "exact" }]
+          : pending.map((operation) => selected!.scope === "operation-rule" && operation.rule
+            ? { ...base, value: operation.text, label: operation.rule.label, matchType: "operation-rule" as const,
+              ruleId: operation.rule.id, key: operationRuleAllowKey(operation.rule.id, cwd) }
+            : { ...base, value: operation.text, label: operation.risks.join(", "), matchType: "operation" as const,
+              argv: operation.argv, key: operationAllowKey(operation.argv, cwd) });
+        try { rememberAllows([...new Map(entries.map((entry) => [entry.key, entry])).values()], selected.lifetime, ctx); }
+        catch { return { block: true, reason: "Could not save safety guard approval; command was not allowed" }; }
+      }
       return;
     }
 
@@ -742,6 +806,7 @@ export function createSafetyGuardExtension({
         "Protected file write",
         `Write to protected path '${event.input.path}'?`,
         `Blocked write to protected path '${event.input.path}' in non-interactive mode`,
+        { kind: "write" },
       ));
       const scope = allowedScope(decision);
       if (scope) rememberAllow(entry, scope, ctx);
@@ -774,6 +839,7 @@ export function createSafetyGuardExtension({
         "Protected file edit",
         `Edit protected path '${event.input.path}'?`,
         `Blocked edit to protected path '${event.input.path}' in non-interactive mode`,
+        { kind: "edit" },
       ));
       const scope = allowedScope(decision);
       if (scope) rememberAllow(entry, scope, ctx);

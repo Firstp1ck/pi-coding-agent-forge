@@ -22,12 +22,20 @@
     ]
   },
   "scripts": {
-    "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types --test tests/*.test.mjs"
+    "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types --import ./tests/register-typescript.mjs --test tests/*.test.mjs"
   },
   "dependencies": {
-    "@firstpick/pi-utils": "^0.2.7"
+    "@firstpick/pi-utils": "^0.2.7",
+    "tree-sitter-bash": "0.25.1",
+    "web-tree-sitter": "0.27.0"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-ai": "0.85.1",
+    "@earendil-works/pi-coding-agent": "0.85.1",
+    "@earendil-works/pi-tui": "0.85.1"
   },
   "peerDependencies": {
+    "@earendil-works/pi-ai": "*",
     "@earendil-works/pi-coding-agent": "*",
     "@earendil-works/pi-tui": "*"
   },

@@ -24,3 +24,16 @@ test("extension registers persistent setup and applies every configurable guard"
   assert.match(source, /requestAutoReviewFn[\s\S]*confirmOrBlock/);
   assert.equal(pkg.peerDependencies?.["@earendil-works/pi-tui"], "*", "SettingsList UI should declare the bundled Pi TUI peer");
 });
+
+test("published dependencies exclude repository links and declare the shared Pi runtime peers", async () => {
+  const pkg = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
+  assert.equal(pkg.dependencies["pi-coding-agent-forge"], undefined);
+  for (const [name, spec] of Object.entries(pkg.dependencies)) {
+    assert.ok(!/^(?:file:|link:|workspace:|\.\.?[\\/])/.test(spec), `${name} must not depend on a local checkout`);
+  }
+  for (const name of ["@earendil-works/pi-ai", "@earendil-works/pi-coding-agent", "@earendil-works/pi-tui"]) {
+    assert.equal(pkg.peerDependencies[name], "*");
+    assert.match(pkg.devDependencies[name], /^\d+\.\d+\.\d+$/, `${name} has a reproducible test baseline`);
+  }
+  assert.match(pkg.scripts.test, /--import \.\/tests\/register-typescript\.mjs/);
+});
