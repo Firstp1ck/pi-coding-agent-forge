@@ -25,6 +25,7 @@ ROOT_DIR="${PI_NPM_PACKAGES_ROOT:-$(cd "$SCRIPT_DIR/../.." && pwd -P)}"
 DRY_RUN=0
 INSTALL_ALL=0
 FORCE_INSTALL=0
+NPM_STATUS_CONCURRENCY="${PI_NPM_STATUS_CONCURRENCY:-8}"
 
 usage() {
   cat <<'EOF'
@@ -39,6 +40,9 @@ Options:
   --dry-run          Print install commands without running them
   --force            Show and allow reinstalling packages already at the latest npm version
   -h, --help         Show this help
+
+Environment:
+  PI_NPM_STATUS_CONCURRENCY  Concurrent npm status queries (default: 8)
 
 Examples:
   ./dev/scripts/install-pi-add.sh
@@ -73,6 +77,11 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if [[ ! "$NPM_STATUS_CONCURRENCY" =~ ^[1-9][0-9]*$ ]]; then
+  echo "ERROR: PI_NPM_STATUS_CONCURRENCY must be a positive integer." >&2
+  exit 1
+fi
 
 if ! command -v pi >/dev/null 2>&1; then
   echo "ERROR: pi is required but not found in PATH." >&2
@@ -267,10 +276,56 @@ if [[ -t 1 ]]; then
   CHECK_PROGRESS_ENABLED=1
   render_check_progress 0 "$CHECK_PROGRESS_TOTAL" "$CHECK_PROGRESS_START_SECONDS"
 else
-  echo "Checking package statuses ($CHECK_PROGRESS_TOTAL packages)..."
+  echo "Checking package statuses ($CHECK_PROGRESS_TOTAL packages, up to $NPM_STATUS_CONCURRENCY concurrent npm queries)..."
 fi
 
+# npm lookups dominate this check. Resolve them concurrently and cache both the
+# npm result and local Pi state so the classification loop below does no network
+# work and does not repeatedly launch the state-inspection process.
+STATUS_CACHE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/install-pi-add.XXXXXX")"
+trap 'rm -rf "$STATUS_CACHE_DIR"' EXIT
+STATUS_CHECK_PIDS=()
+for status_cache_index in "${!PACKAGE_JSON_FILES[@]}"; do
+  package_json="${PACKAGE_JSON_FILES[$status_cache_index]}"
+  (
+    cached_package_name="$(node -p "require(process.argv[1]).name" "$package_json" 2>/dev/null || true)"
+    if [[ -n "$cached_package_name" && "$cached_package_name" != "undefined" ]]; then
+      npm_latest_version_for "$cached_package_name" > "$STATUS_CACHE_DIR/$status_cache_index.latest"
+      pi_user_package_state_for "$cached_package_name" > "$STATUS_CACHE_DIR/$status_cache_index.state"
+    else
+      : > "$STATUS_CACHE_DIR/$status_cache_index.latest"
+      : > "$STATUS_CACHE_DIR/$status_cache_index.state"
+    fi
+  ) &
+  STATUS_CHECK_PIDS+=("$!")
+
+  if (( ${#STATUS_CHECK_PIDS[@]} >= NPM_STATUS_CONCURRENCY )); then
+    for status_check_pid in "${STATUS_CHECK_PIDS[@]}"; do
+      wait "$status_check_pid"
+      CHECK_PROGRESS_COUNT=$((CHECK_PROGRESS_COUNT + 1))
+      if [[ $CHECK_PROGRESS_ENABLED -eq 1 ]]; then
+        render_check_progress "$CHECK_PROGRESS_COUNT" "$CHECK_PROGRESS_TOTAL" "$CHECK_PROGRESS_START_SECONDS"
+      fi
+    done
+    STATUS_CHECK_PIDS=()
+  fi
+done
+for status_check_pid in "${STATUS_CHECK_PIDS[@]}"; do
+  wait "$status_check_pid"
+  CHECK_PROGRESS_COUNT=$((CHECK_PROGRESS_COUNT + 1))
+  if [[ $CHECK_PROGRESS_ENABLED -eq 1 ]]; then
+    render_check_progress "$CHECK_PROGRESS_COUNT" "$CHECK_PROGRESS_TOTAL" "$CHECK_PROGRESS_START_SECONDS"
+  fi
+done
+if [[ $CHECK_PROGRESS_ENABLED -eq 1 ]]; then
+  echo
+fi
+CHECK_PROGRESS_ENABLED=0
+status_cache_index=0
+
 for package_json in "${PACKAGE_JSON_FILES[@]}"; do
+  current_status_cache_index="$status_cache_index"
+  status_cache_index=$((status_cache_index + 1))
   package_name="$(node -p "require(process.argv[1]).name" "$package_json" 2>/dev/null || true)"
   package_version="$(node -p "require(process.argv[1]).version" "$package_json" 2>/dev/null || true)"
   package_dir_name="$(basename "$(dirname "$package_json")")"
@@ -306,7 +361,7 @@ for package_json in "${PACKAGE_JSON_FILES[@]}"; do
     continue
   fi
 
-  npm_latest_version="$(npm_latest_version_for "$package_name")"
+  npm_latest_version="$(<"$STATUS_CACHE_DIR/$current_status_cache_index.latest")"
   if [[ -z "$npm_latest_version" ]]; then
     if [[ $CHECK_PROGRESS_ENABLED -eq 1 ]]; then
       echo
@@ -326,7 +381,7 @@ for package_json in "${PACKAGE_JSON_FILES[@]}"; do
   PACKAGE_NPM_LATEST_VERSIONS+=("$npm_latest_version")
   PACKAGE_KINDS+=("$package_kind")
 
-  package_state="$(pi_user_package_state_for "$package_name")"
+  package_state="$(<"$STATUS_CACHE_DIR/$current_status_cache_index.state")"
   IFS=$'\t' read -r package_configured installed_version <<< "$package_state"
   package_configured="${package_configured:-0}"
   installed_version="${installed_version:-}"
@@ -366,14 +421,7 @@ for package_json in "${PACKAGE_JSON_FILES[@]}"; do
     SELECTABLE_PACKAGE_INDEXES+=("$package_index")
   fi
 
-  CHECK_PROGRESS_COUNT=$((CHECK_PROGRESS_COUNT + 1))
-  if [[ $CHECK_PROGRESS_ENABLED -eq 1 ]]; then
-    render_check_progress "$CHECK_PROGRESS_COUNT" "$CHECK_PROGRESS_TOTAL" "$CHECK_PROGRESS_START_SECONDS"
-  fi
 done
-if [[ $CHECK_PROGRESS_ENABLED -eq 1 ]]; then
-  echo
-fi
 
 if [[ ${#PACKAGE_NAMES[@]} -eq 0 ]]; then
   echo "No packages with resolvable npm latest versions discovered."
@@ -436,12 +484,17 @@ else
       SELECTED_PACKAGES+=("${PACKAGE_NAMES[$package_index]}")
     done
   else
-    normalized_selection="${selection//,/ }"
+    # A pasted selection can contain a carriage return on Windows. Remove it
+    # before splitting, and avoid regex matching for this simple digit check.
+    normalized_selection="${selection//$'\r'/}"
+    normalized_selection="${normalized_selection//,/ }"
     for token in $normalized_selection; do
-      if [[ ! "$token" =~ ^[0-9]+$ ]]; then
-        echo "ERROR: invalid selection token '$token'." >&2
-        exit 1
-      fi
+      case "$token" in
+        ''|*[!0-9]*)
+          printf "ERROR: invalid selection token %q.\n" "$token" >&2
+          exit 1
+          ;;
+      esac
       if (( token < 1 || token > ${#SELECTABLE_PACKAGE_INDEXES[@]} )); then
         echo "ERROR: selection '$token' is out of range." >&2
         exit 1
@@ -461,6 +514,11 @@ UPDATED_PACKAGES=()
 REINSTALLED_PACKAGES=()
 REGISTERED_PACKAGES=()
 SKIPPED_UP_TO_DATE=()
+PREVIEWED_PACKAGES=()
+FAILED_PACKAGES=()
+FAILED_EXIT_CODES=()
+FAILED_INSTALL_LOGS=()
+install_attempt_index=0
 
 for package_name in "${SELECTED_PACKAGES[@]}"; do
   package_index=-1
@@ -493,28 +551,53 @@ for package_name in "${SELECTED_PACKAGES[@]}"; do
     repo_note=" (repo package.json $repo_version)"
   fi
 
+  result_category=""
+  result_entry=""
+  action_description=""
   if [[ "$package_configured" != "1" ]]; then
     installed_note=""
     if [[ -n "$installed_version" ]]; then
       installed_note="; files already present at $installed_version"
     fi
-    echo "Installing ${package_kind} $install_target (registering with Pi at $target_version$installed_note$repo_note)"
-    REGISTERED_PACKAGES+=("${package_name}@${target_version}")
+    result_category="registered"
+    result_entry="${package_name}@${target_version}"
+    action_description="registering with Pi at $target_version$installed_note$repo_note"
   elif [[ $FORCE_INSTALL -eq 1 && -n "$installed_version" && "$installed_version" == "$target_version" ]]; then
-    echo "Installing ${package_kind} $install_target (force reinstall version $target_version$repo_note)"
-    REINSTALLED_PACKAGES+=("${package_name}@${target_version}")
+    result_category="reinstalled"
+    result_entry="${package_name}@${target_version}"
+    action_description="force reinstall version $target_version$repo_note"
   elif [[ -n "$installed_version" ]]; then
-    echo "Installing ${package_kind} $install_target (updating $installed_version -> $target_version$repo_note)"
-    UPDATED_PACKAGES+=("${package_name} (${installed_version} -> ${target_version})")
+    result_category="updated"
+    result_entry="${package_name} (${installed_version} -> ${target_version})"
+    action_description="updating $installed_version -> $target_version$repo_note"
   else
-    echo "Installing ${package_kind} $install_target (target version $target_version$repo_note)"
-    NEWLY_INSTALLED+=("${package_name}@${target_version}")
+    result_category="new"
+    result_entry="${package_name}@${target_version}"
+    action_description="target version $target_version$repo_note"
   fi
 
   if [[ $DRY_RUN -eq 1 ]]; then
-    echo "  pi install $install_target"
+    printf "[DRY RUN] %-58s pi install %s\n" "$package_name" "$install_target"
+    PREVIEWED_PACKAGES+=("$result_entry")
+    continue
+  fi
+
+  install_log="$STATUS_CACHE_DIR/install-$install_attempt_index.log"
+  install_attempt_index=$((install_attempt_index + 1))
+  if pi install "$install_target" >"$install_log" 2>&1; then
+    printf "[PASS] %-61s %s\n" "$package_name" "$action_description"
+    case "$result_category" in
+      registered) REGISTERED_PACKAGES+=("$result_entry") ;;
+      reinstalled) REINSTALLED_PACKAGES+=("$result_entry") ;;
+      updated) UPDATED_PACKAGES+=("$result_entry") ;;
+      new) NEWLY_INSTALLED+=("$result_entry") ;;
+    esac
   else
-    pi install "$install_target"
+    install_exit_code=$?
+    printf "[FAILED] %-59s exit code %d\n" "$package_name" "$install_exit_code"
+    FAILED_PACKAGES+=("$package_name")
+    FAILED_EXIT_CODES+=("$install_exit_code")
+    FAILED_INSTALL_LOGS+=("$install_log")
   fi
 done
 
@@ -540,5 +623,24 @@ echo "  Skipped (already up to date): ${#SKIPPED_UP_TO_DATE[@]}"
 for entry in ${SKIPPED_UP_TO_DATE[@]+"${SKIPPED_UP_TO_DATE[@]}"}; do
   echo "    - $entry"
 done
+echo "  Dry-run previews: ${#PREVIEWED_PACKAGES[@]}"
+for entry in ${PREVIEWED_PACKAGES[@]+"${PREVIEWED_PACKAGES[@]}"}; do
+  echo "    - $entry"
+done
+echo "  Failed installs: ${#FAILED_PACKAGES[@]}"
+
+if [[ ${#FAILED_PACKAGES[@]} -gt 0 ]]; then
+  echo
+  echo "Failed package details (last 20 output lines each):"
+  for failed_index in "${!FAILED_PACKAGES[@]}"; do
+    echo "  - ${FAILED_PACKAGES[$failed_index]} (exit code ${FAILED_EXIT_CODES[$failed_index]})"
+    while IFS= read -r output_line; do
+      printf "      %s\n" "$output_line"
+    done < <(tail -n 20 "${FAILED_INSTALL_LOGS[$failed_index]}")
+  done
+  echo
+  echo "Completed with ${#FAILED_PACKAGES[@]} failed package(s)." >&2
+  exit 1
+fi
 
 echo "Done."

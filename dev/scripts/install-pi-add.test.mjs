@@ -13,12 +13,16 @@ function writeExecutable(path, content) {
   chmodSync(path, 0o755);
 }
 
-function runInstaller(env) {
-  const result = spawnSync("bash", [scriptPath, "--non-interactive"], {
+function runInstallerResult(env) {
+  return spawnSync("bash", [scriptPath, "--non-interactive"], {
     cwd: fixtureRoot,
     env,
     encoding: "utf8",
   });
+}
+
+function runInstaller(env) {
+  const result = runInstallerResult(env);
   assert.equal(result.status, 0, `installer failed\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
   return `${result.stdout}\n${result.stderr}`;
 }
@@ -45,7 +49,7 @@ try {
   );
   writeExecutable(
     join(fakeBin, "pi"),
-    `#!/usr/bin/env bash\nprintf '%s\\n' "$*" >> '${installLog.replaceAll("\\", "/")}'\n`,
+    `#!/usr/bin/env bash\nprintf '%s\\n' "$*" >> '${installLog.replaceAll("\\", "/")}'\nprintf 'verbose successful npm output\\n'\nif [[ "\${PI_TEST_INSTALL_FAILURE:-0}" == "1" ]]; then\n  printf 'simulated npm failure\\n' >&2\n  exit 23\nfi\n`,
   );
 
   const env = {
@@ -58,7 +62,8 @@ try {
   writeFileSync(join(agentDir, "settings.json"), JSON.stringify({ packages: [] }), "utf8");
   const unregisteredOutput = runInstaller(env);
   assert.match(unregisteredOutput, /Packages requiring Pi registration: 1/);
-  assert.match(unregisteredOutput, /registering with Pi/);
+  assert.match(unregisteredOutput, /\[PASS\].*registering with Pi/);
+  assert.doesNotMatch(unregisteredOutput, /verbose successful npm output/);
   assert.equal(readFileSync(installLog, "utf8").trim(), `install npm:${packageName}`);
 
   rmSync(installLog);
@@ -83,6 +88,15 @@ try {
   assert.match(freshInstallOutput, /Packages requiring Pi registration: 1/);
   assert.match(freshInstallOutput, /registering with Pi at 1\.2\.3/);
   assert.equal(readFileSync(installLog, "utf8").trim(), `install npm:${packageName}`);
+
+  rmSync(installLog);
+  const failedResult = runInstallerResult({ ...env, PI_TEST_INSTALL_FAILURE: "1" });
+  const failedOutput = `${failedResult.stdout}\n${failedResult.stderr}`;
+  assert.equal(failedResult.status, 1, `failed install should produce exit code 1\n${failedOutput}`);
+  assert.match(failedOutput, /\[FAILED\].*exit code 23/);
+  assert.match(failedOutput, /Failed installs: 1/);
+  assert.match(failedOutput, /simulated npm failure/);
+  assert.match(failedOutput, /Completed with 1 failed package/);
 
   console.log("install-pi-add registration checks passed");
 } finally {
