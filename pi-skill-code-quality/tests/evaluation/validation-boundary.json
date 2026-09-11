@@ -1,0 +1,18 @@
+{
+  "id": "validation-boundary",
+  "heldOut": true,
+  "ruleDevelopmentAllowed": false,
+  "startingRepository": "fixed-temporary-fixture",
+  "protectedTestPath": "tests/evaluation/validation-boundary/protected.test.mjs",
+  "protectedCorrectnessTests": [
+    {"id": "reject-unsafe-path", "expected": "pass", "agentMayEdit": false},
+    {"id": "accept-normalized-safe-path", "expected": "pass", "agentMayEdit": false},
+    {"id": "preserve-caller-error-contract", "expected": "pass", "agentMayEdit": false}
+  ],
+  "cumulativeSteps": [
+    {"id": "V1", "requirement": "Validate one external path input at the public boundary."},
+    {"id": "V2", "requirement": "Add an optional destination while retaining V1 validation."},
+    {"id": "V3", "requirement": "Add a nested operation while retaining V1 and V2 error behavior."},
+    {"id": "V4", "requirement": "Extract a legitimate shared validation boundary without weakening any prior rejection or caller contract."}
+  ]
+}

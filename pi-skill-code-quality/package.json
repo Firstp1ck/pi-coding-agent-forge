@@ -22,9 +22,14 @@
       "./skills"
     ]
   },
+  "scripts": {
+    "test": "node --unhandled-rejections=strict --test tests/core.test.mjs tests/git.test.mjs tests/capture.test.mjs tests/classification.test.mjs tests/safety.test.mjs tests/metrics.test.mjs tests/report.test.mjs tests/cli.test.mjs tests/adapters.test.mjs tests/contract.test.mjs tests/packaging.test.mjs tests/evaluation.test.mjs tests/evaluation/parser-growth/protected.test.mjs tests/evaluation/repeated-error-handling/protected.test.mjs tests/evaluation/validation-boundary/protected.test.mjs"
+  },
   "files": [
     "skills",
     "README.md",
+    "TECHNICAL.md",
+    "DEVELOPMENT.md",
     "LICENSE"
   ]
 }

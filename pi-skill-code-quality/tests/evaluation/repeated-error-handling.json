@@ -1,0 +1,18 @@
+{
+  "id": "repeated-error-handling",
+  "heldOut": true,
+  "ruleDevelopmentAllowed": false,
+  "startingRepository": "fixed-temporary-fixture",
+  "protectedTestPath": "tests/evaluation/repeated-error-handling/protected.test.mjs",
+  "protectedCorrectnessTests": [
+    {"id": "return-original-cause", "expected": "pass", "agentMayEdit": false},
+    {"id": "keep-operation-context", "expected": "pass", "agentMayEdit": false},
+    {"id": "release-partial-resource", "expected": "pass", "agentMayEdit": false}
+  ],
+  "cumulativeSteps": [
+    {"id": "E1", "requirement": "Handle the first failing storage operation with its existing cause and context."},
+    {"id": "E2", "requirement": "Add a second storage operation and retain E1 error behavior."},
+    {"id": "E3", "requirement": "Add a retryable transport failure while retaining E1 and E2 cleanup behavior."},
+    {"id": "E4", "requirement": "Add a batch operation whose individual failures retain all earlier error guarantees."}
+  ]
+}

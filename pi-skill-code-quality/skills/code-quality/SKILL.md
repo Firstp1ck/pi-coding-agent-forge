@@ -1,244 +1,105 @@
 ---
 name: code-quality
-description: Agents should invoke this skill for code reviews, linting/formatting setup, maintainability checks, complexity concerns, warning cleanup, coding standards, or quality gates in Rust, TypeScript, Python, shell, and mixed repos.
+description: Review a substantial code change or refactor for maintainability, duplication, complexity evidence, correctness risks, and useful project checks. Use for read-only review by default, or for one explicitly authorized focused cleanup pass.
+license: MIT
+compatibility: Requires repository read access. The optional local scanner needs Node.js; Git comparisons need Git. Optional structural evidence is Windows x64-validated only.
 ---
 
 # Code Quality
 
-Structured code review and quality enforcement across the user's tech stacks. Checklists, linting strategies, and metrics to keep codebases healthy.
+Review a change before proposing cleanup. Prefer a concrete maintenance or correctness problem over a style preference or a lower number.
 
-## Quick Start
+## Use this skill for
 
-### Run a Code Quality Check
+- a substantial implementation, refactor, or change that needs maintainability review;
+- duplication, growing functions, dependency changes, warnings, or unclear ownership in code;
+- a request to set up or review project quality checks without replacing repository policy;
+- one small behavior-preserving cleanup after the user authorizes it.
 
-1. **Run static analysis:** Linters, type checkers, formatters
-2. **Review against checklist:** Language-specific items below
-3. **Check complexity metrics:** Cyclomatic < 25, data flow < 25
-4. **Report findings:** Structured output with severity and recommendations
+Do not use this skill for prose editing, a simple code explanation, a non-code task, or an open-ended architecture redesign. Use an available architecture-review skill for a broader design boundary, an available refactoring-advisor skill for a planned refactor, or an available code-security skill for a dedicated security review. Those skills are optional related workflows, not requirements or automatic handoffs.
 
----
+## Default mode and authorization
 
-## Linting Configurations
+Start in **review-only** mode unless the request explicitly authorizes implementation or cleanup. Review-only work may inspect code and produce a report, but it does not edit reviewed files, apply fixes, run modifying formatters, write workspace memory, or persist a report automatically.
 
-### Rust — Clippy Config
+Project instructions and the user's authorization control every project check. Tests, builds, type checks, linters, and even check modes can execute code or write caches. Do not run a command only because a language example mentions it. Use an existing project command when it is relevant and authorized.
 
-the user's standard clippy configuration (in `Cargo.toml` or `.clippy.toml`):
+The local scanner collects evidence only. It does not run project checks, install tools, download tools, apply fixes, format files, commit, stash, reset, or publish.
 
-```toml
-[lints.clippy]
-cognitive_complexity = "warn"
-pedantic = { level = "deny", priority = -1 }
-nursery = { level = "deny", priority = -1 }
-unwrap_used = "deny"
-```
+## Workflow
 
-**Standard commands:**
+### 1. Establish scope and S0
+
+1. Read applicable repository instructions, the requested change, relevant architecture, package boundaries, and existing checks.
+2. Inspect staged, unstaged, and relevant untracked work before attributing a difference to this task. `HEAD` can be a review baseline, but it is not the task baseline in a dirty workspace.
+3. Record whether the request is review-only or authorizes edits. Discover available verification commands and missing tools without changing configuration.
+4. Choose fixed module or package roots. Capture or describe the initial observation as **S0** before task-owned edits when possible. If invocation happens after implementation, state that a pre-task S0 is unavailable instead of attributing all worktree differences to the task.
+
+For a Git review, the scanner requires an explicit baseline and at least one scope:
 
 ```bash
-cargo fmt
-cargo clippy --all-targets --all-features -- -D warnings
-cargo check
-cargo test -- --test-threads=1
+node <installed-skill-dir>/scripts/scan.mjs scan --base HEAD --scope src --format human
 ```
 
-**Key rules to enforce:**
-- No `.unwrap()` in non-test code (use `?` or `.expect("reason")`)
-- All public items have rustdoc (`#[warn(missing_docs)]`)
-- `#[must_use]` on functions that return values that should be checked
-- When using `#[allow(...)]`, always add a comment explaining why
-- If no good explanation exists for `#[allow(...)]`, fix the issue instead
+For a current-only observation, use `snapshot` with an explicit scope. It writes no saved report unless `--out` is supplied:
 
-### TypeScript — ESLint + Strict Mode
-
-**Recommended `tsconfig.json` strictness:**
-
-```json
-{
-  "compilerOptions": {
-    "strict": true,
-    "noUncheckedIndexedAccess": true,
-    "noImplicitReturns": true,
-    "noFallthroughCasesInSwitch": true,
-    "exactOptionalPropertyTypes": true
-  }
-}
+```bash
+node <installed-skill-dir>/scripts/scan.mjs snapshot --scope src --format human
 ```
 
-**Key rules to enforce:**
-- No `any` — use `unknown` and type guards instead
-- No `// @ts-ignore` — fix the type issue or use `// @ts-expect-error` with explanation
-- Prefer `const` over `let`, never use `var`
-- Use discriminated unions for state modeling
-- Explicit return types on exported functions
+### 2. Implement and verify S1
 
-### Python — Ruff + Mypy
+1. Make only the requested change using repository conventions. Do not reduce lines at the expense of clarity, safety, compatibility, or behavior.
+2. Run relevant, authorized correctness checks. Failed checks take priority over optional structural cleanup.
+3. Capture or describe the post-implementation observation as **S1** with the same scope and compatible settings. Separate feature cost from pre-existing work and from any later cleanup.
 
-**Recommended `pyproject.toml`:**
+### 3. Inspect and optionally clean up
 
-```toml
-[tool.ruff]
-target-version = "py312"
-line-length = 88
+Inspect changed functions and nearby code first. A measured increase starts an inspection; it is not a merge blocker or an automatic refactoring instruction.
 
-[tool.ruff.lint]
-select = ["E", "F", "W", "I", "N", "UP", "ANN", "B", "A", "C4", "DTZ", "ISC", "PIE", "PT", "RET", "SIM", "TCH", "ARG", "PTH", "ERA"]
+Look for:
 
-[tool.mypy]
-strict = true
-warn_return_any = true
-warn_unreachable = true
-```
+- repeated branches that implement the same behavior;
+- a function that acquired an unrelated responsibility;
+- an existing abstraction that should be reused before another one is added;
+- direct dependency changes, module direction, lifecycle ownership, and cohesion concerns;
+- guards, wrappers, temporary variables, validation, and error handling that protect a real trust or compatibility boundary.
 
-**Key rules to enforce:**
-- Type hints on all public functions and methods
-- Docstrings on all public classes, functions, and methods
-- Use `pathlib.Path` over `os.path`
-- Use `uv` as package manager
-- No bare `except:` — always catch specific exceptions
+When a cleanup is explicitly authorized, make **one focused pass** on at most **three confirmed findings** in the touched scope. Keep public behavior, error handling, security checks, and compatibility intact. Add characterization coverage first when it is needed. Do not extract helpers merely to lower a metric. A helper needs a meaningful responsibility boundary; many tiny helpers can make navigation worse.
 
----
+Ask before broad architectural work, a second cleanup pass, or edits outside the agreed scope. If a cleanup fails, do not use a blanket rollback. Undo only safe, isolated edits owned by that cleanup, or report the failure.
 
-## Code Review Checklists
+### 4. Recheck and report S2
 
-### Universal Checklist (All Languages)
+1. Rerun affected authorized correctness gates after cleanup, plus broader checks when risk warrants them.
+2. Capture or describe **S2** using the same scope, tools, and definitions as S0 and S1. Saved snapshots can be compared only when they are compatible:
 
-**Correctness:**
-- [ ] Does the code do what it claims to do?
-- [ ] Are edge cases handled (empty collections, null/None, zero, negative)?
-- [ ] Are error paths handled gracefully?
-- [ ] Are there any off-by-one errors?
+   ```bash
+   node <installed-skill-dir>/scripts/scan.mjs compare --before <saved-s0-or-s1.json> --after <saved-s2.json> --format human
+   ```
 
-**Clarity:**
-- [ ] Can you understand the code without the PR description?
-- [ ] Are variable/function names descriptive and consistent?
-- [ ] Are complex sections commented with "why" (not "what")?
-- [ ] Is the code self-documenting where possible?
+3. Classify each finding as fixed, accepted with a reason, deferred, false positive, or blocked by missing evidence. A larger metric can be the right outcome.
+4. Report scope, baseline, dirty-start attribution, evidence, checks run or not run, tool coverage, and unresolved risks. Write a persistent report only to a location the user explicitly requests.
 
-**Architecture:**
-- [ ] Does this change respect existing module boundaries?
-- [ ] Is the change at the right abstraction level?
-- [ ] Are dependencies reasonable (not pulling in a huge lib for one function)?
+## Use scanner evidence carefully
 
-**Testing:**
-- [ ] Are new functions/methods covered by tests?
-- [ ] Do tests cover edge cases and error paths?
-- [ ] Are tests readable and maintainable?
+The scanner has three operations: `scan`, `snapshot`, and `compare`. It requires explicit scope for capture and explicit baseline for `scan`. `--include-untracked`, `--git`, `--ast-grep`, `--jscpd`, `--format`, and `--out` are opt-in options where supported by the selected operation. See [scanner use and limits](../../TECHNICAL.md) before choosing optional tools or a saved output path.
 
-**Security (flag to Zero if concerns found):**
-- [ ] No hardcoded secrets or credentials
-- [ ] User input is validated before use
-- [ ] No SQL injection, XSS, or path traversal vectors
+Treat unavailable or partial evidence as a limitation, not a clean result. Current scanner reports physical lines and direct npm dependency changes where coverage permits. Callable complexity, analyzer-defined SLOC, erosion, and the combined verbosity proxy are intentionally unavailable until a complete callable-analysis contract exists. Optional AST-pattern and token-clone evidence has its own coverage limits.
 
-### Rust-Specific Checklist
+## Review prompts
 
-- [ ] `cargo fmt` applied
-- [ ] `cargo clippy` clean (pedantic + nursery)
-- [ ] No `.unwrap()` outside tests
-- [ ] Error handling uses `?` with proper error types
-- [ ] Public items have rustdoc comments
-- [ ] `#[allow(...)]` includes explanatory comment
-- [ ] New functions have unit tests
-- [ ] Cyclomatic complexity < 25 per function
-- [ ] Data flow complexity < 25 per function
+Ask for the scope and mode you need:
 
-### TypeScript/React-Specific Checklist
+> Review this change against its dirty-start baseline. Do not edit files or save a report. Focus on correctness and repeated error handling in `src/auth`.
 
-- [ ] No `any` types
-- [ ] Strict mode compliance
-- [ ] Components have clear prop types
-- [ ] Hooks follow rules of hooks
-- [ ] No unnecessary re-renders (check memo/callback usage)
-- [ ] Bundle impact considered for new dependencies
+> Inspect `src/parser` after this implementation. Run the project's authorized checks, then propose no more than three behavior-preserving cleanup candidates. Do not apply them yet.
 
-### Django/Python-Specific Checklist
+> Perform one authorized cleanup pass for the confirmed duplicate validation branches in `lib/import`. Preserve the existing error messages and rerun the affected tests.
 
-- [ ] Type hints present on public interfaces
-- [ ] Ruff + mypy clean
-- [ ] No N+1 queries (use `select_related`/`prefetch_related`)
-- [ ] Migrations are reviewed and reversible
-- [ ] No business logic in views (use service layer)
+## References
 
----
-
-## Complexity Metrics
-
-### Cyclomatic Complexity
-
-Measures the number of independent paths through code. the user's threshold: **< 25**.
-
-| Complexity | Risk Level | Action |
-|---|---|---|
-| 1-10 | Low | Simple, well-structured code |
-| 11-20 | Moderate | Consider simplification if growing |
-| 21-24 | High | Refactoring recommended |
-| 25+ | Violation | Must refactor before merge |
-
-**How to reduce:**
-- Extract helper functions for each branch
-- Use early returns / guard clauses
-- Replace complex conditionals with lookup tables or pattern matching
-- Use strategy pattern for variant-dependent behavior
-
-### Data Flow Complexity
-
-Measures how many variables interact within a function. the user's threshold: **< 25**.
-
-**How to reduce:**
-- Extract pure functions that take fewer parameters
-- Group related parameters into structs/objects
-- Split functions that transform data in multiple stages
-
-### Measurement Tools
-
-| Language | Tool | Command |
-|---|---|---|
-| Rust | `cargo clippy` (cognitive_complexity) | Built into clippy config |
-| TypeScript | `eslint-plugin-sonarjs` | Configure `complexity` rule |
-| Python | `radon` | `radon cc <file> -s -a` |
-| Python | `ruff` | Rule `C901` (mccabe complexity) |
-
----
-
-## Review Output Format
-
-When delivering a code review:
-
-```markdown
-## Code Review: [PR/File/Module]
-
-**Date:** YYYY-MM-DD
-**Reviewer:** Arc
-
-### Summary
-[1-2 sentences: overall quality assessment]
-
-### Findings
-
-| # | Severity | File | Line(s) | Finding | Suggestion |
-|---|---|---|---|---|---|
-| 1 | High | src/app.rs | 45-67 | Cyclomatic complexity 28 (limit: 25) | Extract match arms into helper functions |
-| 2 | Medium | src/ui.rs | 120 | Unwrap without context | Use `.expect("reason")` or `?` |
-
-### Positive Observations
-[What's well-written — acknowledge good code]
-
-### Metrics
-- Clippy: [clean / N warnings]
-- Tests: [pass / fail]
-- Complexity: [within limits / violations noted above]
-
-### Security Notes
-[Items to flag to Zero, if any]
-```
-
----
-
-## Integration
-
-- **Data:** Review results logged to `MEMORY.md` (Review History)
-- **Tools:** Can run linters, formatters, and type checkers without asking (see AGENTS.md execution policies)
-- **Cross-reference:** refactoring-advisor for fixing complexity violations, design-patterns for improving structure
-
----
-
-_Arc skill — Code quality and review checklists_
+- [Language and security review examples](references/language-checks.md)
+- [How to interpret measurements](references/measurement-guide.md)
+- [Scanner commands, optional tools, limits, privacy, and troubleshooting](../../TECHNICAL.md)
+- [Contributor contract and evaluation protocol](../../DEVELOPMENT.md)

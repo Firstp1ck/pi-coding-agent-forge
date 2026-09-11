@@ -1,0 +1,6 @@
+id: inspect-print
+language: Python
+rule:
+  pattern: print($$$ARGS)
+message: Inspect direct printing.
+severity: warning

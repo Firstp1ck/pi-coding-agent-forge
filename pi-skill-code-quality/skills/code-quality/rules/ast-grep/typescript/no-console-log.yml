@@ -1,0 +1,6 @@
+id: no-console-log-ts
+language: TypeScript
+rule:
+  pattern: console.log($$$ARGS)
+message: Inspect direct console logging.
+severity: warning

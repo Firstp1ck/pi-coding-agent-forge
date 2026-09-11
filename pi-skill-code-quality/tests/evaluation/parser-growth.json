@@ -1,0 +1,18 @@
+{
+  "id": "parser-growth",
+  "heldOut": true,
+  "ruleDevelopmentAllowed": false,
+  "startingRepository": "fixed-temporary-fixture",
+  "protectedTestPath": "tests/evaluation/parser-growth/protected.test.mjs",
+  "protectedCorrectnessTests": [
+    {"id": "parse-valid-record", "expected": "pass", "agentMayEdit": false},
+    {"id": "reject-invalid-record", "expected": "pass", "agentMayEdit": false},
+    {"id": "preserve-error-location", "expected": "pass", "agentMayEdit": false}
+  ],
+  "cumulativeSteps": [
+    {"id": "P1", "requirement": "Accept the initial record form and preserve the existing invalid-input result."},
+    {"id": "P2", "requirement": "Add one optional record field while retaining P1 behavior."},
+    {"id": "P3", "requirement": "Add a second record variant while retaining P1 and P2 behavior."},
+    {"id": "P4", "requirement": "Improve malformed-record diagnostics without changing successful P1 through P3 parsing."}
+  ]
+}

@@ -1,0 +1,37 @@
+{
+  "skill": "code-quality",
+  "should_trigger": [
+    "Review this feature branch for maintainability and duplicated error handling before I merge it",
+    "Compare this refactor with its baseline, keep it read-only, and identify the most useful cleanup candidates",
+    "Check the changed package for growing functions, direct dependency changes, and the project checks we should run"
+  ],
+  "should_not_trigger": [
+    "Rewrite this README so it is easier for new users to scan",
+    "Explain what this TypeScript function does without reviewing or changing it",
+    "Create a release note for the package version that was just published"
+  ],
+  "ambiguous": [
+    {
+      "prompt": "The new payment module crosses three layers. Should we redesign the boundaries before coding?",
+      "candidate_skills": ["code-quality", "architecture-review"],
+      "decision": "Use architecture-review for a proposed cross-layer design before implementation. Use code-quality after or during a scoped change to inspect concrete maintainability and correctness evidence.",
+      "reason": "Both can discuss module boundaries, but code-quality reviews an actual selected change and keeps cleanup bounded.",
+      "review_status": "reviewed-by-agent"
+    },
+    {
+      "prompt": "Extract this repeated parser branch without changing behavior.",
+      "candidate_skills": ["code-quality", "refactoring-advisor"],
+      "decision": "Use refactoring-advisor to plan a refactor. Use code-quality to review the existing duplication or to perform one explicitly authorized cleanup pass after the plan is chosen.",
+      "reason": "The request can be a design task or a concrete evidence-based review; the refactoring plan comes first when the change is not yet scoped.",
+      "review_status": "reviewed-by-agent"
+    },
+    {
+      "prompt": "Check this authentication change for injection and authorization flaws.",
+      "candidate_skills": ["code-quality", "code-security"],
+      "decision": "Use code-security for a dedicated security assessment. Use code-quality when security review is one concrete concern inside a broader maintainability and correctness review.",
+      "reason": "Code-quality reports risks directly but does not replace a focused security workflow.",
+      "review_status": "reviewed-by-agent"
+    }
+  ],
+  "notes": "Routes substantial change review and bounded cleanup, not prose edits, explanations, or release writing."
+}

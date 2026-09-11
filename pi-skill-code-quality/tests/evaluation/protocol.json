@@ -1,0 +1,34 @@
+{
+  "version": "code-quality-evaluation-v1",
+  "treatments": ["old-guidance", "revised-loop"],
+  "comparisonControls": [
+    "same-starting-repository",
+    "same-cumulative-requirements",
+    "same-model-settings",
+    "same-allowed-tools",
+    "same-protected-correctness-tests"
+  ],
+  "protectedTestPolicy": "Treatment agents cannot edit protected correctness tests or expected outcomes.",
+  "humanReview": {
+    "required": true,
+    "blindTreatmentLabels": true,
+    "materials": ["requirements", "diff", "protected-test-results", "time-and-cost-log"],
+    "modelJudgmentAloneAllowed": false
+  },
+  "budget": {
+    "maxRunsPerTreatmentPerScenario": 2,
+    "maxWallClockMinutesPerRun": 45,
+    "maxSpendUsd": 0,
+    "requiresApprovalForNonzeroSpend": true
+  },
+  "outcomes": [
+    "future-change-success",
+    "correctness-regressions",
+    "human-confirmed-review-findings",
+    "unnecessary-edits",
+    "maintenance-effort",
+    "elapsed-time",
+    "declared-cost"
+  ],
+  "claimPolicy": "This protocol does not establish effectiveness. Report small-sample and deferred-evaluation limits, and require approval before any nonzero spend or expanded campaign."
+}

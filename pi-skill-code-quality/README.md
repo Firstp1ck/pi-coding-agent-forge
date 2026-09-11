@@ -1,32 +1,32 @@
 # Code Quality
 
-Review code for clarity and maintainability, prioritizing practical problems over style-only recommendations.
+Review a code change for real maintenance risks, then make a small cleanup only when you authorize it.
 
 ## Helpful when
 
-- A change is difficult to review.
-- A project has duplication, warnings, or overly complicated parts.
-- You want practical cleanup priorities.
+- A feature or refactor is hard to review because several files or responsibilities changed together.
+- You want to inspect repeated logic, growing functions, dependencies, warnings, or unclear ownership without turning every style preference into a defect.
+- You want one bounded cleanup after behavior has been checked.
 
 ## What to share with Pi
 
-- The files, branch, or change to review
-- The project’s coding rules if it has any
-- Areas that are especially difficult to maintain
+- The change, files, package, or module roots to review.
+- Whether the request is review-only or permits implementation and one cleanup pass.
+- The baseline, repository rules, existing checks, and any behavior that must not change.
 
 ## Try asking
 
-> Review this change for clarity and maintainability. Focus on problems that could cause mistakes or make future work harder.
+> Review this change against its dirty-start baseline. Do not edit files or save a report. Focus on correctness, repeated error handling, and maintainability in `src/import`.
 
-## What you’ll get
+## What you'll get
 
-- The most useful improvements first
-- Examples tied to specific files
-- Suggested checks to keep the code healthy
+- Evidence-backed findings tied to the selected scope and available checks.
+- A clear distinction between confirmed issues, accepted trade-offs, missing evidence, and false positives.
+- At most three focused cleanup candidates when you authorize a cleanup pass.
 
 ## Keep in mind
 
-Not every style preference is a quality problem. Ask for a read-only review when you do not want formatters or fixes to modify files; persistence to workspace memory should also be explicitly approved.
+Review-only is the default. The skill does not automatically format, fix, save workspace memory, install tools, or persist scanner output. Existing project policy and correctness checks take priority over examples and measurements. The optional scanner's structural-tool support is verified on Windows only; unsupported or missing evidence stays visible as unavailable or partial.
 
 ## Install
 
@@ -38,4 +38,4 @@ Restart Pi if the skill does not appear in your current session.
 
 ## Technical details
 
-See [TECHNICAL.md](https://github.com/Firstp1ck/pi-coding-agent-forge/blob/main/pi-skill-code-quality/TECHNICAL.md) for advanced usage, configuration, compatibility, and limitations.
+See [TECHNICAL.md](TECHNICAL.md) for advanced usage, scanner options, optional tools, compatibility, privacy, and limitations.
