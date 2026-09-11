@@ -159,7 +159,7 @@ test("truncated cat-file responses are failures rather than empty blobs", async 
   }
 });
 
-test("configured Git process and output limits stop trusted synthetic Git", { skip: process.platform !== "win32" }, async () => {
+test("configured Git process and output limits stop trusted synthetic Git", async () => {
   const root = await temporaryDirectory();
   const emptyConfig = path.join(root, "empty-config");
   let client;
@@ -196,7 +196,7 @@ test("configured Git process and output limits stop trusted synthetic Git", { sk
   }
 });
 
-test("batch cancellation reaps a hanging trusted child without an unobserved request", { skip: process.platform !== "win32" }, async () => {
+test("batch cancellation reaps a hanging trusted child without an unobserved request", async () => {
   const root = await temporaryDirectory();
   const controller = new AbortController();
   let batch;

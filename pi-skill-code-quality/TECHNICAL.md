@@ -8,7 +8,7 @@ Advanced user commands, optional tools, compatibility, privacy, and troubleshoot
 
 The optional local scanner runs with Node.js. Git comparisons need a trusted Git executable. The current-only `snapshot` operation can collect a scoped filesystem observation when Git is unavailable, with limitations reported in its coverage.
 
-Windows is the verified platform for this release work. POSIX-specific process and pathname behavior is deferred, so do not treat this document as a POSIX support claim.
+Current verification distinguishes the Git-only scanner from optional structural tools. The Git-only capture and report path has current Linux evidence. That evidence does not establish general POSIX support or any structural-analyzer behavior. Earlier Windows evidence covered the pinned structural-tool contracts, but it is historical and was not rerun in the current Linux validation.
 
 The scanner never installs optional tools. It also does not run project tests, linters, formatters, builds, or repository scripts. Run those only through the skill workflow when the request authorizes them.
 
@@ -60,7 +60,7 @@ Callable complexity, analyzer-defined SLOC, callable trend deltas, erosion, and 
 
 ## Optional structural tools
 
-Provide an explicit direct executable path outside the reviewed checkout. The scanner does not search for, install, or run arbitrary local shims. Current pinned contracts are validated only on Windows x64:
+Provide an explicit direct executable path outside the reviewed checkout. The scanner does not search for, install, or run arbitrary local shims. The retained pins are Windows x64-only. No live optional analyzer ran in the current Linux validation, so their Windows-pinned paths remain unavailable there:
 
 | Tool | Tested version | What it supplies | Important limit |
 | --- | --- | --- | --- |

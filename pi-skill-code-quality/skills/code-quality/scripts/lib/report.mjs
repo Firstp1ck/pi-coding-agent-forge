@@ -459,7 +459,7 @@ export function createReport({ operation, compatibility, coverage, snapshot, com
 }
 
 function appendOmission(lines, label, metric) {
-  if (metric?.omittedRows > 0) lines.push(`${label}: ${metric.omittedRows} row(s) omitted by the declared cap. See JSON; unlisted contributors are not evidence of no regression.`);
+  if (metric?.omittedRows > 0) lines.push(`${label}: ${metric.omittedRows} row(s) omitted by the 1,000-row JSON cap. See --format json; unlisted contributors are not evidence of no regression.`);
 }
 
 /** A deterministic, source-free contributor summary. Full rows remain in JSON unless capped. */
@@ -469,31 +469,35 @@ export function renderHumanReport(report) {
   const lines = [`Code quality ${report.operation} report`];
   let remaining = REPORT_LIMITS.maxHumanContributors;
   const add = (label, rows, format) => {
+    if (rows.length === 0) return;
     const shown = rows.slice(0, remaining);
-    if (shown.length === 0) return;
-    lines.push(label);
-    for (const row of shown) lines.push(`- ${format(row)}`);
-    remaining -= shown.length;
+    if (shown.length > 0) {
+      lines.push(`${label}:`);
+      for (const row of shown) lines.push(`- ${format(row)}`);
+      remaining -= shown.length;
+    }
+    const omittedForDisplay = rows.length - shown.length;
+    if (omittedForDisplay > 0) lines.push(`${label}: ${omittedForDisplay} row(s) not shown by the ${REPORT_LIMITS.maxHumanContributors}-item human display cap. See --format json; unlisted contributors are not evidence of no regression.`);
   };
   if (["available", "partial"].includes(comparison.editChurn?.status)) {
-    add("Line-change contributors:", comparison.editChurn.changes ?? [], (row) => `${row.currentPath ?? row.beforePath}: +${row.added ?? "?"} -${row.deleted ?? "?"} (${row.kind})`);
+    add("Line-change contributors", comparison.editChurn.changes ?? [], (row) => `${row.currentPath ?? row.beforePath}: +${row.added ?? "?"} -${row.deleted ?? "?"} (${row.kind})`);
     appendOmission(lines, "Line-change contributors", comparison.editChurn);
   }
   if (["available", "partial"].includes(comparison.dependencyChanges?.status)) {
-    add("Direct dependency contributors:", comparison.dependencyChanges.changes ?? [], (row) => `${row.path} ${row.section}/${row.name}: ${row.beforeVersion ?? "absent"} -> ${row.afterVersion ?? "absent"} (${row.kind})`);
+    add("Direct dependency contributors", comparison.dependencyChanges.changes ?? [], (row) => `${row.path} ${row.section}/${row.name}: ${row.beforeVersion ?? "absent"} -> ${row.afterVersion ?? "absent"} (${row.kind})`);
     appendOmission(lines, "Direct dependency contributors", comparison.dependencyChanges);
   }
   if (["partial", "available"].includes(current.astPatterns.status)) {
-    add("AST review candidates:", current.astPatterns.findings ?? [], (row) => `${row.path}:${row.range.startLine}:${row.range.startColumn} ${row.ruleId} — ${row.message}`);
+    add("AST review candidates", current.astPatterns.findings ?? [], (row) => `${row.path}:${row.range.startLine}:${row.range.startColumn} ${row.ruleId} — ${row.message}`);
     appendOmission(lines, "AST review candidates", current.astPatterns);
   }
   if (["partial", "available"].includes(current.clones.status)) {
-    add("Token-clone contributors:", current.clones.rows ?? [], (row) => `${row.first.path}:${row.first.startLine}-${row.first.endLine} and ${row.second.path}:${row.second.startLine}-${row.second.endLine} (${row.kind}, ${row.tokens} tokens)`);
+    add("Token-clone contributors", current.clones.rows ?? [], (row) => `${row.first.path}:${row.first.startLine}-${row.first.endLine} and ${row.second.path}:${row.second.startLine}-${row.second.endLine} (${row.kind}, ${row.tokens} tokens)`);
     appendOmission(lines, "Token-clone contributors", current.clones);
   }
   const callableRows = comparison.matchedFunctionDeltas?.rows ?? [];
-  add("Growing callable contributors:", callableRows.filter((row) => row.delta.mass > 0), (row) => `${row.path} ${row.identity}: mass +${row.delta.mass.toFixed(2)}`);
-  add("Improving callable contributors:", callableRows.filter((row) => row.delta.mass < 0), (row) => `${row.path} ${row.identity}: mass ${row.delta.mass.toFixed(2)}`);
+  add("Growing callable contributors", callableRows.filter((row) => row.delta.mass > 0), (row) => `${row.path} ${row.identity}: mass +${row.delta.mass.toFixed(2)}`);
+  add("Improving callable contributors", callableRows.filter((row) => row.delta.mass < 0), (row) => `${row.path} ${row.identity}: mass ${row.delta.mass.toFixed(2)}`);
   appendOmission(lines, "Callable contributors", comparison.matchedFunctionDeltas);
   lines.push(`Capture coverage: ${report.coverage.status}`);
   lines.push(`Physical lines: ${current.physicalLines.total}`);

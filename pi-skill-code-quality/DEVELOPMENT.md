@@ -4,22 +4,29 @@ Contributor-only implementation, API, architecture, testing, and maintenance inf
 
 [Back to README](README.md) · [Advanced user technical reference](TECHNICAL.md)
 
-## Release status and contract ownership
+## Contract status and scope
 
-This document is the shipped scanner contract that replaces implementation detail from the planning design. It defines what implementation and tests must preserve. It is not a final-release claim: scanner integration acceptance remains pending the parent-owned serialized runtime fix and revalidation pass. In particular, contributor acceptance must not treat the contract as proof that all destination validation, saved-report validation, deadline/cancellation, adapter-failure, or human-summary requirements have passed.
+This document is the package's canonical scanner contract. It consolidates the normative requirements from the planning design so the implementation contract does not drift from a second copy. It defines what implementation and tests must preserve.
+
+The accepted F8-F12 hardening changes and C3 human-summary display-cap correction are implemented and have regression coverage: output-scope and ancestor guards, saved-report validation, command budget and cancellation propagation, analyzer failure-path integrity, actionable human contributors, and distinct disclosure for display-level truncation. Independent Anthropic and Moonshot reviews are complete, and the accepted fixes passed parent-run regression checks. This is implementation acceptance within the reduced scope below, not publication or a new version.
+
+The shared 20-item human-summary display limit now emits a per-category notice whenever it hides nonempty contributor rows, including a category fully hidden by earlier rows. That notice is distinct from the 1,000-row JSON-cap omission count and directs readers to `--format json`; unlisted contributors are not evidence of no regression.
 
 The package remains dependency-free for Git-only operation. It has no version bump and no runtime dependency for optional analyzers. The package must not install, download, upload, publish, configure Pi, commit, stash, reset, or modify a reviewed repository as part of scanner operation.
 
-### Available, partial, unavailable, and deferred work
+### Implemented, partial, unavailable, and deferred work
 
 | Area | Status | Contractual result |
 | --- | --- | --- |
-| Git-backed capture, physical lines, direct npm dependency changes, source-free reports | implemented, pending final integration acceptance | Report evidence with capture coverage and explicit limits. |
-| Current-only snapshots and compatible saved-report comparison | implemented, pending final integration acceptance | Compare current physical totals only; do not invent edit churn. |
-| ast-grep pattern candidates | optional and partial | Windows x64 pin only, explicit trusted executable, scanner-owned rule and frozen input. Empty output is still partial. |
-| jscpd token-clone evidence | optional and coverage-dependent | Windows x64 pin only, explicit trusted executable, scanner-owned settings and frozen input. |
+| Git-backed capture, physical lines, direct npm dependency changes, source-free reports | implemented and Linux regression-tested | Report evidence with capture coverage and explicit limits. |
+| Current-only snapshots and compatible saved-report comparison | implemented and Linux regression-tested | Compare current physical totals only; do not invent edit churn. |
+| F8-F12 output, report-validation, lifecycle, adapter-integrity, and contributor-summary safeguards | implemented and regression-tested | Retain the guards and source-free, bounded failure behavior. Independent review completed; future changes still require affected regression checks. |
+| ast-grep pattern candidates | optional and partial | Windows x64 pin only, explicit trusted executable, scanner-owned rule and frozen input. Empty output is still partial. The pin was not run in the current Linux validation. |
+| jscpd token-clone evidence | optional and coverage-dependent | Windows x64 pin only, explicit trusted executable, scanner-owned settings and frozen input. The pin was not run in the current Linux validation. |
 | Callable complexity, analyzer-defined SLOC, callable trend deltas, erosion, verbosity proxy | unavailable | Never infer, estimate, or report a clean zero state. Pure fixture algorithms do not enable live scanner measurement. |
-| POSIX-specific pathname, process-tree, and analyzer behavior | deferred | No POSIX support claim until separately verified. |
+| Linux Git-only behavior | current verification evidence | Current Linux tests cover the Git-only path. They do not establish Linux structural-analyzer support. |
+| Windows Git and pinned-adapter behavior | historical verification evidence | Retained Windows results support the pinned contracts only. They were not rerun in the current Linux validation and are not a general Windows support claim. |
+| POSIX structural-analyzer behavior | deferred | Do not claim it from Git-only or process-lifecycle evidence. |
 | Automatic lifecycle hooks, watchers, CI enforcement, automatic refactoring, history databases, generic plugins, full benchmark recreation, dependency graphs, and universal scoring | deferred | Do not add them through this package. |
 
 ## Package layout and publication boundary
@@ -48,7 +55,7 @@ The default format is human. Capture operations require explicit scope, and Git 
 
 Exit `0` means a report was produced. Exit `2` means invalid options, unsafe saved/output input, or a collection/analysis failure. Diagnostics must use stable redacted categories rather than source, absolute private paths, environment contents, or full tool stderr.
 
-`--out` is optional and create-only. Without it, the scanner writes no persistent report. A requested report path must be outside selected source scope, must not replace an existing file, and must have a safe non-symlink ancestor chain. Output validation must canonicalize Windows and POSIX forms before checking containment. This is a release requirement; final implementation acceptance is pending the recorded runtime fix and revalidation.
+`--out` is optional and create-only. Without it, the scanner writes no persistent report. A requested report path must be outside selected source scope, must not replace an existing file, and must have a safe non-symlink ancestor chain. Output validation canonicalizes Windows and POSIX forms before checking containment. This safeguard is implemented, regression-tested and independently reviewed.
 
 ## Capture, baseline, and Git contract
 
@@ -101,7 +108,7 @@ One monotonic 60,000 ms deadline includes enumeration, both possible capture att
 | Contributor and metric rows | 1,000 |
 | Human contributors | 20 |
 
-Timeout, cancellation, spawn error, output ceiling, malformed batch framing, close/abort failure, and failed termination must be bounded and observed. An analyzer runs only after Windows tree-termination capability is checked. Do not retry analyzers. Report unfinished work as partial or unavailable rather than multiplying timeouts. Final acceptance is pending the recorded full CLI deadline/cancellation and adapter failure-path integrity corrections.
+Timeout, cancellation, spawn error, output ceiling, malformed batch framing, close/abort failure, and failed termination must be bounded and observed. An analyzer runs only after Windows tree-termination capability is checked. Do not retry analyzers. Report unfinished work as partial or unavailable rather than multiplying timeouts. The command-wide budget, cancellation, and adapter failure-path corrections are implemented and regression-tested. Those checks do not replace required independent review or parent acceptance.
 
 ## Optional analyzer contract
 
@@ -120,7 +127,7 @@ The probe considered rust-code-analysis 0.0.25 and Lizard 1.24.0 for callable me
 
 Reports use `code-quality-report-v1` and compatibility version `scanner-compatibility-v1`. Canonical JSON sorts object keys while preserving array order. Compatibility equality is exact over the recorded scanner/schema versions, normalized scope, collection and ignore policy, Git version/policy, metric definitions, adapter pins/options/configuration/rule hashes, callable matching policy, classification/exclusion rules, and limits. It excludes changing content identities, membership, timestamps, source buffers, and observed coverage. Unknown versions are rejected; mismatches return a bounded list of differing paths.
 
-Reports retain report-safe capture identities, manifest digests, normalized relative metadata, counts, coverage, metric status, provenance, compatibility, and bounded diagnostics. They never retain frozen source bytes, raw analyzer output, full stderr, environment values, or absolute private paths. Saved-report validation must reject unsafe links, oversize/malformed JSON, source-bearing fields, unknown versions, non-finite or invalid measurement totals, and structurally shallow metric objects. This validation requirement is pending the parent-owned runtime correction.
+Reports retain report-safe capture identities, manifest digests, normalized relative metadata, counts, coverage, metric status, provenance, compatibility, and bounded diagnostics. They never retain frozen source bytes, raw analyzer output, full stderr, environment values, or absolute private paths. Saved-report validation rejects unsafe links, oversize or malformed JSON, source-bearing fields, unknown versions, non-finite or invalid measurement totals, and structurally shallow metric objects. The accepted validation correction is implemented, regression-tested and independently reviewed. Validation checks the supported report structure and known source-bearing fields; it is not a general sensitive-data detector for arbitrary strings in hand-authored reports.
 
 Physical line count is raw-byte LF-delimited physical lines, including a nonempty final line without LF. It is not SLOC. Direct npm dependency comparison covers only direct `dependencies`, `devDependencies`, `optionalDependencies`, and `peerDependencies` in captured `package.json`; lockfile-only churn is not inferred.
 
@@ -133,7 +140,7 @@ erosion = sum(mass(f) where CC(f) > 10) / sum(mass(f))
 
 The cutoff is a measurement parameter, not a merge threshold. An empty denominator is not applicable. Any future output must include numerator, denominator, high-CC count, maximum CC, per-callable before/after CC, SLOC, mass, added/removed/unmatched callables, and deterministic row caps. It must not let simple additions dilute a growing hotspot or omit rows while claiming no regression.
 
-All metric and contributor rows have a 1,000-row cap with total, reported, and omitted counts. Omission makes evidence partial and blocks a no-regression conclusion. Human output must lead with available actionable contributors, then coverage and checks, include growing contributors separately, and disclose omissions. This presentation requirement is pending the recorded runtime correction.
+All metric and contributor rows have a 1,000-row JSON cap with total, reported, and omitted counts. Omission makes evidence partial and blocks a no-regression conclusion. Human output presents available actionable contributors before coverage and checks, and separates growing callable contributors when such rows are available. Its shared 20-item display cap emits a distinct per-category omission notice whenever it hides nonempty rows, even when an earlier category exhausts the display budget; both notice types direct readers to `--format json` and state that unlisted contributors are not evidence of no regression. The contributor-summary and display-cap corrections are implemented and regression-tested, while independent review and parent acceptance remain outstanding.
 
 No combined quality score exists. Pattern, clone, and callable measurements remain separate. A combined verbosity proxy is unavailable until a complete compatible AST/clone line universe exists.
 
@@ -144,6 +151,8 @@ Run the package suite from the repository root:
 ```bash
 npm --prefix pi-skill-code-quality test
 ```
+
+For optional Windows x64 adapter fixtures, set `CODE_QUALITY_AST_GREP_EXE` and `CODE_QUALITY_JSCPD_EXE` to absolute paths of the already obtained pinned executables. Unset, relative or missing paths skip those fixtures. The CLI mutation fixture uses the same ast-grep variable. Tests never download tools; the adapters still enforce their exact hashes and versions.
 
 The suite covers contract documentation, packaging, evaluation fixtures, collection safety, Git isolation, bounds, classification, metrics, report validation, CLI behavior, optional adapters, and hardening. Tests must preserve the existing deterministic coverage for dirty/staged/untracked changes, raw path behavior, hostile Git configuration, capture instability, limits, missing Git/baselines, malformed tools, source mutation, and source-free report handling. New runtime defects require a minimal reproduction and parent escalation before a cross-boundary correction.
 
@@ -159,7 +168,18 @@ Validate packaging without lifecycle scripts:
 npm pack ./pi-skill-code-quality --dry-run --ignore-scripts
 ```
 
-Also check Markdown fences, frontmatter, relative links, documentation-layer boundaries, published file inclusion, and whitespace. Windows scanner validation is required. POSIX validation remains an explicit deferred item.
+Also check Markdown fences, frontmatter, relative links, documentation-layer boundaries, published file inclusion, and whitespace. Current Linux verification covers the Git-only scanner path and POSIX process-lifecycle regressions, but it does not run the Windows-pinned structural adapters. Earlier Windows results are historical evidence for those pins, not current cross-platform acceptance.
+
+## Research context and limits
+
+The feedback loop is an engineering hypothesis, not a demonstrated maintenance intervention. The [Earendil article on code sloppiness](https://earendil.com/posts/measuring-code-sloppiness/) motivates inspection of growth and concentrated complexity, but it does not validate this scanner or turn passing checks into proof of correctness.
+
+- [SlopCodeBench v1, section 4.3](https://arxiv.org/html/2603.24755v1) reports a 34.5% initial verbosity reduction for GPT 5.4 under `anti_slop`, without statistically significant slope differences or consistent correctness gains. The same section reports higher cost. That result supports a bounded cleanup budget, not a claim that prompts or scanning improve maintenance.
+- The v1 experiments use Python. They do not establish equivalent metric behavior for TypeScript, Rust, or shell. Appendix G reports a near-zero correlation between erosion and next-checkpoint pass rate, while LOC is the stronger raw cost correlate in that table. Erosion is not a validated predictor of extensibility. The paper also calls its human repositories an unmatched calibration panel, so this package must not repeat the comparison as proof that agents write universally lower-quality code.
+- The [arXiv submission history](https://arxiv.org/abs/2603.24755) records v2 on 7 May 2026. Its abstract describes 36 problems and 196 checkpoints, compared with v1's 20 and 93. This documentation deliberately cites v1 figures and does not mix v2 figures into v1 claims without rechecking the dependent evidence.
+- The [independent SlopCodeBench audit](https://github.com/kimjune01/slopcodebench-audit) and its [construct-validity finding](https://github.com/kimjune01/slopcodebench-audit/blob/main/findings/00-construct.md) raise relevant concerns. They are community-source audit material, not a rerun of the model campaign. Their panel count and coefficients differ from the requested v1 paper, so neither source is treated as definitive or combined with the other's figures.
+
+No peer-reviewed replication was established in the bounded planning search. The evaluation protocol below is a plan for collecting evidence, not evidence of effectiveness.
 
 ## Evaluation protocol
 

@@ -32,6 +32,20 @@ function unavailable(reason = "fixture") {
   return { status: "unavailable", reason };
 }
 
+function lineChangeRows(count, prefix = "src/change") {
+  return Array.from({ length: count }, (_, index) => ({
+    beforePath: null,
+    currentPath: `${prefix}-${index}.js`,
+    added: 1,
+    deleted: 0,
+    kind: "added",
+  }));
+}
+
+function callableRow(identity, mass) {
+  return { path: `src/${identity}.js`, identity, delta: { mass } };
+}
+
 function measurement(total = 1) {
   return {
     capture: { kind: "fixture", manifestDigest: digest, ignoreIdentity: null, captureIdentity: digest, files: [], coverageStatus: "complete", coverageComplete: true, coverage: { status: "complete", complete: true } },
@@ -125,6 +139,59 @@ test("human report leads with concrete available contributors and discloses omis
   assert.match(human, /Token-clone contributors:[\s\S]*src\/a\.js:1-2 and src\/b\.js:5-6/u);
   assert.match(human, /1 row\(s\) omitted/u);
   assert.equal(human.indexOf("Line-change contributors") < human.indexOf("Capture coverage"), true);
+});
+
+test("human report discloses display-only omissions for every nonempty hidden category", () => {
+  const value = report();
+  value.comparison = {
+    status: "available",
+    reason: null,
+    physicalLineDelta: { before: 1, after: 22, delta: 21 },
+    editChurn: { status: "available", reason: null, changes: lineChangeRows(21), totalRows: 21, reportedRows: 21, omittedRows: 0 },
+    dependencyChanges: { status: "available", reason: null, changes: [{ path: "package.json", section: "dependencies", name: "hidden", beforeVersion: "absent", afterVersion: "1.0.0", kind: "added" }], totalRows: 1, reportedRows: 1, omittedRows: 0 },
+    matchedFunctionDeltas: { status: "unavailable", reason: "fixture", rows: [], totalRows: 0, reportedRows: 0, omittedRows: 0 },
+  };
+
+  const human = renderHumanReport(value);
+  assert.equal((human.match(/src\/change-\d+\.js/gu) ?? []).length, 20);
+  assert.match(human, /Line-change contributors: 1 row\(s\) not shown by the 20-item human display cap\. See --format json; unlisted contributors are not evidence of no regression\./u);
+  assert.match(human, /Direct dependency contributors: 1 row\(s\) not shown by the 20-item human display cap\. See --format json; unlisted contributors are not evidence of no regression\./u);
+  assert.doesNotMatch(human, /dependencies\/hidden/u);
+  assert.doesNotMatch(human, /1,000-row JSON cap/u);
+});
+
+test("human report keeps growing and improving callable contributors separate", () => {
+  const value = report();
+  value.comparison = {
+    status: "available",
+    reason: null,
+    physicalLineDelta: { before: 1, after: 1, delta: 0 },
+    editChurn: { status: "unavailable", reason: "fixture", changes: [], totalRows: 0, reportedRows: 0, omittedRows: 0 },
+    dependencyChanges: { status: "not-applicable", reason: "fixture", changes: [], totalRows: 0, reportedRows: 0, omittedRows: 0 },
+    matchedFunctionDeltas: { status: "unavailable", reason: "fixture", rows: [callableRow("growing", 2), callableRow("improving", -3)], totalRows: 2, reportedRows: 2, omittedRows: 0 },
+  };
+
+  const human = renderHumanReport(value);
+  assert.match(human, /Growing callable contributors:\n- src\/growing\.js growing: mass \+2\.00/u);
+  assert.match(human, /Improving callable contributors:\n- src\/improving\.js improving: mass -3\.00/u);
+});
+
+test("human report keeps JSON and display caps distinct for callable contributors", () => {
+  const value = report();
+  const growing = Array.from({ length: 21 }, (_, index) => callableRow(`growing-${index}`, index + 1));
+  value.comparison = {
+    status: "partial",
+    reason: "fixture",
+    physicalLineDelta: { before: 1, after: 1, delta: 0 },
+    editChurn: { status: "unavailable", reason: "fixture", changes: [], totalRows: 0, reportedRows: 0, omittedRows: 0 },
+    dependencyChanges: { status: "not-applicable", reason: "fixture", changes: [], totalRows: 0, reportedRows: 0, omittedRows: 0 },
+    matchedFunctionDeltas: { status: "partial", reason: "callable-row-cap", rows: [...growing, callableRow("improving", -1)], totalRows: 23, reportedRows: 22, omittedRows: 1 },
+  };
+
+  const human = renderHumanReport(value);
+  assert.match(human, /Growing callable contributors: 1 row\(s\) not shown by the 20-item human display cap\. See --format json; unlisted contributors are not evidence of no regression\./u);
+  assert.match(human, /Improving callable contributors: 1 row\(s\) not shown by the 20-item human display cap\. See --format json; unlisted contributors are not evidence of no regression\./u);
+  assert.match(human, /Callable contributors: 1 row\(s\) omitted by the 1,000-row JSON cap\. See --format json; unlisted contributors are not evidence of no regression\./u);
 });
 
 test("saved report validation rejects invalid counts, paths, spans, status coverage, and shallow compatibility", () => {

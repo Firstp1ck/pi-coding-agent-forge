@@ -220,18 +220,43 @@ function killDirect(child) {
   }
 }
 
-async function terminateChild(child, { platform, tracker, deadline, requireTreeTermination, treeTerminator = null }) {
-  if (child.exitCode !== null || child.signalCode !== null) return;
+function hasChildPid(child) {
+  return Number.isSafeInteger(child?.pid) && child.pid > 0;
+}
+
+function waitForReap(closeResult, deadline, reason) {
+  const timeoutMs = Math.max(1, deadline.remainingMs());
+  let timer;
+  return Promise.race([
+    closeResult,
+    new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new CommandFailure("process", null, reason)), timeoutMs);
+    }),
+  ]).finally(() => clearTimeout(timer));
+}
+
+async function terminateChild(child, { platform, tracker, deadline, requireTreeTermination, treeTerminator = null, closeResult = null }) {
+  const leaderExited = child.exitCode !== null || child.signalCode !== null;
   if (platform !== "win32") {
-    try {
-      process.kill(-child.pid, "SIGKILL");
-      return;
-    } catch {
-      if (!killDirect(child) && requireTreeTermination) throw new CommandFailure("process", null, "tree-termination-failed");
+    if (!hasChildPid(child)) {
+      if (!leaderExited) killDirect(child);
       return;
     }
+    try {
+      // The detached process group remains owned by this child PID after its
+      // leader exits, while inherited stdio descendants can still keep close open.
+      process.kill(-child.pid, "SIGKILL");
+    } catch (error) {
+      if (leaderExited && error?.code === "ESRCH") return;
+      if (!leaderExited) killDirect(child);
+      if (requireTreeTermination) throw new CommandFailure("process", null, "tree-termination-failed");
+      return;
+    }
+    if (closeResult) await waitForReap(closeResult, deadline, "tree-termination-timeout");
+    return;
   }
 
+  if (leaderExited || !hasChildPid(child)) return;
   const executable = treeTerminator ?? await taskkillPath(platform);
   if (!executable) {
     killDirect(child);
@@ -329,6 +354,7 @@ export async function runBounded(executable, args, {
         deadline,
         requireTreeTermination: mustTerminateTree,
         treeTerminator,
+        closeResult: close,
       }).catch((error) => {
         terminationError = error;
       });
@@ -360,8 +386,11 @@ export async function runBounded(executable, args, {
     }, Math.max(1, deadline.remainingMs()));
   });
   let result;
+  let closeError = null;
   try {
     result = await Promise.race([close, boundedClose]);
+  } catch (error) {
+    closeError = error;
   } finally {
     clearTimeout(timer);
     clearTimeout(closeTimer);
@@ -369,6 +398,7 @@ export async function runBounded(executable, args, {
   }
   if (termination) await termination;
   if (terminationError) throw terminationError;
+  if (closeError) throw closeError;
   const response = {
     code: result.code,
     signal: result.signal,

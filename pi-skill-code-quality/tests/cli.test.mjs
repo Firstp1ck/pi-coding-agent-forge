@@ -122,8 +122,8 @@ test("one command budget cancels capture and compare without leaving persistent 
 });
 
 test("analyzer mutation returns a schema-valid inconsistent scan report for both sides", { concurrency: false, skip: process.platform !== "win32" }, async (t) => {
-  const astExecutable = "C:/Users/hdlea/AppData/Local/Temp/code-quality-probes-Z0BcLI/npm/node_modules/@ast-grep/cli-win32-x64-msvc/ast-grep.exe";
-  if (!(await fs.access(astExecutable).then(() => true, () => false))) {
+  const astExecutable = process.env.CODE_QUALITY_AST_GREP_EXE;
+  if (!astExecutable || !path.isAbsolute(astExecutable) || !(await fs.access(astExecutable).then(() => true, () => false))) {
     t.skip("retained pinned ast-grep candidate is unavailable");
     return;
   }

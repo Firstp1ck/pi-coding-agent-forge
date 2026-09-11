@@ -16,6 +16,30 @@ test("raw NUL metadata parsers retain path bytes and index stages", () => {
   assert.equal(stages[0].stage, 1);
 });
 
+test("Git collection retains literal tab and newline pathnames on POSIX", { skip: process.platform === "win32" }, async () => {
+  const pathname = "src/tab\tand\nnewline.js";
+  const root = await createGitRepository({ [pathname]: "export const value = 1;\n" });
+  let inputs;
+  try {
+    await writeFixture(root, pathname, "export const value = 2;\n");
+    inputs = await collectGitInputs({ cwd: root, base: "HEAD", scopeRoots: ["src"] });
+    assert.deepEqual(inputs.current.files.map((file) => file.path), [pathname]);
+    assert.deepEqual(inputs.lineChanges, [{
+      kind: "modified",
+      beforePath: pathname,
+      currentPath: pathname,
+      beforeCategory: "uncategorized",
+      currentCategory: "uncategorized",
+      added: 1,
+      deleted: 1,
+      binary: false,
+    }]);
+  } finally {
+    await inputs?.dispose();
+    await removeDirectory(root);
+  }
+});
+
 test("batched blob framing failures propagate instead of becoming empty content", async () => {
   const root = await createGitRepository({ "src/a.js": "export const value = 1;\n" });
   const scannerRoot = await temporaryDirectory();
@@ -205,13 +229,13 @@ test("frozen Git ignore evaluation honors directory, bracket, escape, and parent
   }
 });
 
-test("junctioned worktree ancestors are rejected before external bytes are captured", { skip: process.platform !== "win32" }, async () => {
+test("symlinked or junctioned worktree ancestors are rejected before external bytes are captured", async () => {
   const root = await createGitRepository({ "src/a.js": "export const inside = 1;\n" });
   const outside = await createGitRepository({ "a.js": "export const outside = 1;\n" });
   let inputs;
   try {
     await fs.rm(path.join(root, "src"), { recursive: true, force: true });
-    await fs.symlink(outside, path.join(root, "src"), "junction");
+    await fs.symlink(outside, path.join(root, "src"), process.platform === "win32" ? "junction" : "dir");
     inputs = await collectGitInputs({ cwd: root, base: "HEAD", scopeRoots: ["src"] });
     assert.equal(inputs.coverage.complete, false);
     assert.equal(inputs.current.coverage.reasons.includes("unsafe-path"), true);

@@ -17,7 +17,9 @@ function fencedBlockCount(markdown) {
 }
 
 function relativeMarkdownLinks(markdown) {
-  return [...markdown.matchAll(/\[[^\]]+\]\(([^)#]+)(?:#[^)]+)?\)/gu)].map((match) => match[1]);
+  return [...markdown.matchAll(/\[[^\]]+\]\(([^)#]+)(?:#[^)]+)?\)/gu)]
+    .map((match) => match[1])
+    .filter((target) => !/^[a-z][a-z\d+.-]*:/iu.test(target) && !target.startsWith("//"));
 }
 
 test("skill frontmatter and workflow keep review-only, dirty-baseline, and bounded-cleanup behavior", async () => {
@@ -76,22 +78,42 @@ test("documentation layers, fences, and relative links remain valid", async () =
   assert.match(readme, /## What to share with Pi/u);
   assert.match(readme, /## Technical details/u);
   assert.match(readme, /\[TECHNICAL\.md\]\(TECHNICAL\.md\)/u);
+  assert.match(readme, /Git-only scanner path has current Linux evidence/u);
   assert.doesNotMatch(readme, /npm pack|scripts\/scan|tests\//iu);
+  assert.match(technical, /Git-only capture and report path has current Linux evidence/u);
+  assert.match(technical, /Windows x64-only/u);
   assert.doesNotMatch(technical, /npm --prefix|node --test|tests\//iu);
   assert.match(development, /## Scanner interface contract/u);
+  assert.match(development, /F8-F12 hardening changes and C3 human-summary display-cap correction are implemented and have regression coverage/u);
+  assert.match(development, /per-category notice whenever it hides nonempty contributor rows/u);
+  assert.match(development, /Independent Anthropic and Moonshot reviews are complete/u);
+  assert.match(development, /CODE_QUALITY_AST_GREP_EXE/u);
+  assert.match(development, /CODE_QUALITY_JSCPD_EXE/u);
+  assert.doesNotMatch(development, /C3 follow-up/u);
+  assert.match(development, /## Research context and limits/u);
+  assert.match(development, /SlopCodeBench v1/u);
+  assert.doesNotMatch(development, /pending the recorded runtime fix|pending the parent-owned runtime correction/u);
   assert.match(development, /## Evaluation protocol/u);
 });
 
-test("opt-in examples retain Rust, shell, and direct security guidance without invented standards", async () => {
+test("opt-in examples retain language configuration profiles without invented standards", async () => {
   const examples = await read("skills/code-quality/references/language-checks.md");
   const measurements = await read("skills/code-quality/references/measurement-guide.md");
   assert.match(examples, /Repository policy comes first/u);
+  assert.match(examples, /## Optional configuration profiles/u);
+  assert.match(examples, /existing `Cargo\.toml`:/u);
+  assert.doesNotMatch(examples, /\.clippy\.toml/u);
+  assert.match(examples, /\[lints\.clippy\]/u);
+  assert.match(examples, /"noUncheckedIndexedAccess": true/u);
+  assert.match(examples, /\[tool\.ruff\]/u);
+  assert.match(examples, /not a universal Rust profile/u);
+  assert.match(examples, /not a generic Python baseline/u);
   assert.match(examples, /cargo fmt --check/u);
   assert.match(examples, /## Shell/u);
   assert.match(examples, /## Security concerns/u);
   assert.match(examples, /available code-security skill/u);
   assert.match(examples, /not the user's standards/u);
-  assert.doesNotMatch(examples, /Cyclomatic < 25|MEMORY\.md/iu);
+  assert.doesNotMatch(examples, /Cyclomatic < 25|MEMORY\.md|test-threads=1/iu);
   assert.match(measurements, /unavailable/u);
   assert.match(measurements, /never a clean result/u);
   assert.match(measurements, /do not make a quality score, a merge gate/u);

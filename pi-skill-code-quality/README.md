@@ -26,7 +26,7 @@ Review a code change for real maintenance risks, then make a small cleanup only 
 
 ## Keep in mind
 
-Review-only is the default. The skill does not automatically format, fix, save workspace memory, install tools, or persist scanner output. Existing project policy and correctness checks take priority over examples and measurements. The optional scanner's structural-tool support is verified on Windows only; unsupported or missing evidence stays visible as unavailable or partial.
+Review-only is the default. The skill does not automatically format, fix, save workspace memory, install tools, or persist scanner output. Existing project policy and correctness checks take priority over examples and measurements. The Git-only scanner path has current Linux evidence. Optional structural-tool pins have Windows x64 evidence only and were not rerun on Linux. Unsupported or missing evidence stays visible as unavailable or partial.
 
 ## Install
 

@@ -2,7 +2,7 @@
 name: code-quality
 description: Review a substantial code change or refactor for maintainability, duplication, complexity evidence, correctness risks, and useful project checks. Use for read-only review by default, or for one explicitly authorized focused cleanup pass.
 license: MIT
-compatibility: Requires repository read access. The optional local scanner needs Node.js; Git comparisons need Git. Optional structural evidence is Windows x64-validated only.
+compatibility: Requires repository read access. The optional local scanner needs Node.js; Git comparisons need Git. The Git-only path has current Linux evidence. Optional structural evidence remains Windows x64-pinned only.
 ---
 
 # Code Quality

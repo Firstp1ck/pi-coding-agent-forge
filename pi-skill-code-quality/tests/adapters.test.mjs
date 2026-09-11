@@ -11,9 +11,8 @@ import { removeDirectory, temporaryDirectory, writeFixture } from "./helpers/fix
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const rulesRoot = path.join(repositoryRoot, "skills", "code-quality", "rules", "ast-grep");
-const probeRoot = "C:/Users/hdlea/AppData/Local/Temp/code-quality-probes-Z0BcLI";
-const astExecutable = `${probeRoot}/npm/node_modules/@ast-grep/cli-win32-x64-msvc/ast-grep.exe`;
-const jscpdExecutable = `${probeRoot}/npm/node_modules/jscpd-windows-x64-msvc/bin/jscpd.exe`;
+const astExecutable = process.env.CODE_QUALITY_AST_GREP_EXE;
+const jscpdExecutable = process.env.CODE_QUALITY_JSCPD_EXE;
 
 function budget() {
   return {
@@ -24,6 +23,7 @@ function budget() {
 }
 
 async function hasCandidate(filename) {
+  if (!filename || !path.isAbsolute(filename)) return false;
   return fs.access(filename).then(() => true, () => false);
 }
 
