@@ -84,7 +84,7 @@ Skills give Pi a reusable workflow for a particular kind of work. You normally a
 - **[Architecture Review](pi-skill-architecture-review/README.md)** — Review a system design before implementation and spot coupling, layering, or boundary problems.
 - **[Backup Manager](pi-skill-backup-manager/README.md)** — Check backup health, test restore readiness, and find gaps before an emergency.
 - **[Bug Reporter](pi-skill-bug-reporter/README.md)** — Turn a defect or failed test into a clear, reproducible bug report.
-- **[Code Quality](pi-skill-code-quality/README.md)** — Review substantial code changes with a read-only default, scoped evidence, and an authorized small cleanup pass.
+- **[Code Quality](pi-skill-code-quality/README.md)** — Improve code whenever it is written or edited in permanent files, including small changes, while keeping explicit review-only requests read-only.
 - **[Code Security](pi-skill-code-security/README.md)** — Look for security flaws, leaked secrets, risky dependencies, and unsafe coding patterns.
 - **[Competitor Analysis](pi-skill-competitor-analysis/README.md)** — Compare products, tools, or approaches using clear criteria and practical trade-offs.
 - **[Deep Research](pi-skill-deep-research/README.md)** — Research complex or high-stakes questions with multiple sources and explicit verification.

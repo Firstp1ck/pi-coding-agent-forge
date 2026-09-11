@@ -1,37 +1,46 @@
 {
   "skill": "code-quality",
   "should_trigger": [
+    "Fix the one-line null check in src/import.ts and save the file",
+    "Write a permanent shell script that backs up this directory with clear error handling",
+    "Add a regression test for cancellation in tests/import.test.mjs",
+    "Save this Python example in examples/reader.py",
+    "Turn the temporary parser prototype into a maintained source file",
+    "Update the deployment configuration-as-code in infra/main.tf",
+    "Add a runnable JavaScript example to the retained README",
+    "Edit the analysis code cells in the saved notebook",
     "Review this feature branch for maintainability and duplicated error handling before I merge it",
-    "Compare this refactor with its baseline, keep it read-only, and identify the most useful cleanup candidates",
-    "Check the changed package for growing functions, direct dependency changes, and the project checks we should run"
+    "Compare this refactor with its baseline, keep it read-only, and identify useful cleanup candidates"
   ],
   "should_not_trigger": [
-    "Rewrite this README so it is easier for new users to scan",
+    "Rewrite only the prose in this README without changing its code examples",
     "Explain what this TypeScript function does without reviewing or changing it",
-    "Create a release note for the package version that was just published"
+    "Show me a Python example only in chat; do not save a file",
+    "Run a disposable scratch experiment in a temporary directory and retain no code",
+    "Create a prose release note for the package version that was just published"
   ],
   "ambiguous": [
     {
       "prompt": "The new payment module crosses three layers. Should we redesign the boundaries before coding?",
       "candidate_skills": ["code-quality", "architecture-review"],
-      "decision": "Use architecture-review for a proposed cross-layer design before implementation. Use code-quality after or during a scoped change to inspect concrete maintainability and correctness evidence.",
-      "reason": "Both can discuss module boundaries, but code-quality reviews an actual selected change and keeps cleanup bounded.",
+      "decision": "Use architecture-review for the design-only decision. Apply code-quality before and throughout any later permanent code writes, alongside the design workflow rather than instead of it.",
+      "reason": "Planning without code writes does not require the writing skill, but another specialist never exempts subsequent code from its quality practices.",
       "review_status": "reviewed-by-agent"
     },
     {
       "prompt": "Extract this repeated parser branch without changing behavior.",
       "candidate_skills": ["code-quality", "refactoring-advisor"],
-      "decision": "Use refactoring-advisor to plan a refactor. Use code-quality to review the existing duplication or to perform one explicitly authorized cleanup pass after the plan is chosen.",
-      "reason": "The request can be a design task or a concrete evidence-based review; the refactoring plan comes first when the change is not yet scoped.",
+      "decision": "Apply code-quality while writing the requested refactor. Use refactoring-advisor as well if the change needs a broader plan; do not wait for a separate quality-review request.",
+      "reason": "The request authorizes scoped code improvement. The writing skill always applies to the resulting permanent edits, including a small extraction.",
       "review_status": "reviewed-by-agent"
     },
     {
-      "prompt": "Check this authentication change for injection and authorization flaws.",
+      "prompt": "Check this authentication change for injection and authorization flaws without modifying it.",
       "candidate_skills": ["code-quality", "code-security"],
-      "decision": "Use code-security for a dedicated security assessment. Use code-quality when security review is one concrete concern inside a broader maintainability and correctness review.",
-      "reason": "Code-quality reports risks directly but does not replace a focused security workflow.",
+      "decision": "Use code-security for the dedicated assessment and code-quality if broader maintainability inspection helps. Keep this request read-only. Apply code-quality to permanent fixes only if those fixes are subsequently authorized.",
+      "reason": "Always applying quality practices to code writes does not turn an explicit review request into permission to edit.",
       "review_status": "reviewed-by-agent"
     }
   ],
-  "notes": "Routes substantial change review and bounded cleanup, not prose edits, explanations, or release writing."
+  "notes": "Always apply before and throughout writing or editing code in permanent files, even one-line changes. Improve authorized code directly; preserve explicit review-only requests. Prose-only, chat-only and disposable scratch tasks are not permanent code writes. Measurements remain optional. These fixtures validate routing examples, not model adherence."
 }

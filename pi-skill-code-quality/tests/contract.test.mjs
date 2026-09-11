@@ -22,10 +22,24 @@ function relativeMarkdownLinks(markdown) {
     .filter((target) => !/^[a-z][a-z\d+.-]*:/iu.test(target) && !target.startsWith("//"));
 }
 
-test("skill frontmatter and workflow keep review-only, dirty-baseline, and bounded-cleanup behavior", async () => {
+test("skill applies writing improvements to every permanent code change while honoring review-only requests", async () => {
   const skill = await read("skills/code-quality/SKILL.md");
   assert.match(skill, /^---\r?\nname: code-quality\r?\ndescription: .+/u);
-  assert.match(skill, /Start in \*\*review-only\*\* mode/u);
+  const description = skill.match(/^description: (.+)$/mu)[1];
+  assert.ok(description.length <= 1024);
+  assert.match(description, /whenever they write or edit code in permanent files/u);
+  assert.match(description, /regardless of language or change size/u);
+  assert.match(description, /Improve the code directly within the authorized task/u);
+  assert.doesNotMatch(description, /review-only by default/u);
+  assert.match(skill, /Load this skill before creating or editing code/u);
+  assert.match(skill, /A one-line fix is not exempt/u);
+  assert.match(skill, /whether tracked by Git or not/u);
+  assert.match(skill, /promoting a temporary prototype into a permanent file/u);
+  assert.match(skill, /direct writes, edits, patches, generated code and delegated implementation/u);
+  assert.match(skill, /do not ask for a separate cleanup approval/u);
+  assert.match(skill, /explicit \*\*review-only\*\* or \*\*do not edit\*\* request stays read-only/u);
+  assert.match(skill, /not a filesystem hook/u);
+  assert.match(skill, /writing process is mandatory for permanent code; measurement is optional/u);
   assert.match(skill, /dirty workspace/u);
   assert.match(skill, /\*\*S0\*\*/u);
   assert.match(skill, /\*\*S1\*\*/u);
@@ -33,10 +47,26 @@ test("skill frontmatter and workflow keep review-only, dirty-baseline, and bound
   assert.match(skill, /at most \*\*three confirmed findings\*\*/u);
   assert.match(skill, /one focused pass/u);
   assert.match(skill, /Failed checks take priority/u);
+  assert.match(skill, /at most \*\*three confirmed findings\*\* beyond the requested implementation/u);
+  assert.doesNotMatch(skill, /Start in \*\*review-only\*\* mode/u);
   assert.doesNotMatch(skill, /MEMORY\.md/iu);
   assert.doesNotMatch(skill, /\bArc\b|\bZero\b/u);
   assert.doesNotMatch(skill, /<\s*25|data flow complexity/u);
   assert.doesNotMatch(skill, /test-threads=1/u);
+});
+
+test("routing examples cover small permanent writes and preserve non-writing exceptions", async () => {
+  const fixturePath = path.resolve(packageRoot, "..", "tests", "routing", "code-quality.json");
+  const fixture = JSON.parse(await fs.readFile(fixturePath, "utf8"));
+  assert.equal(fixture.skill, "code-quality");
+  for (const marker of [/one-line/u, /shell script/u, /regression test/u, /examples\/reader\.py/u, /temporary parser prototype/u, /configuration-as-code/u, /retained README/u, /saved notebook/u, /keep it read-only/u]) {
+    assert.ok(fixture.should_trigger.some((prompt) => marker.test(prompt)), `missing positive routing case: ${marker}`);
+  }
+  for (const marker of [/only the prose/u, /only in chat/u, /retain no code/u]) {
+    assert.ok(fixture.should_not_trigger.some((prompt) => marker.test(prompt)), `missing negative routing case: ${marker}`);
+  }
+  const manifest = JSON.parse(await read("package.json"));
+  assert.match(manifest.description, /whenever they write or edit code in permanent files/u);
 });
 
 test("workflow documents only declared scanner operations and options", () => {

@@ -4,6 +4,16 @@ Advanced user commands, optional tools, compatibility, privacy, and troubleshoot
 
 [Back to the human-friendly README](README.md) · [Contributor and implementation guide](DEVELOPMENT.md)
 
+## Always-applied writing behavior
+
+When enabled, code-quality instructs Pi to apply its writing practices whenever it creates or edits code in permanent files. This includes one-line fixes, tests, scripts, notebook code, configuration-as-code and retained code examples. Permanent means intended to survive the task, whether tracked by Git or not. A scratch prototype enters this scope when it is saved for ongoing use.
+
+Code improvement is part of an authorized coding task, not a separate review requiring another cleanup approval. Pi should improve the code it writes within your requested scope, preserve existing work and verify affected behavior. Explicit review-only requests still prohibit edits. Prose-only work and code shown only in chat do not require this skill.
+
+Apply the practices on every code-writing task, but scale the effort. Small edits need a focused inspection and relevant verification, not mandatory snapshots, analyzers or a formal report. Extra cleanup beyond the requested implementation is limited to one focused pass on at most three confirmed findings. Broader work needs approval.
+
+This is an agent instruction, not runtime enforcement. The package registers no file-write hook and cannot guarantee model invocation. `/skill:code-quality` explicitly loads it when automatic selection misses it. Optional scanner execution is separate from applying the writing practices.
+
 ## Requirements and platform status
 
 The optional local scanner runs with Node.js. Git comparisons need a trusted Git executable. The current-only `snapshot` operation can collect a scoped filesystem observation when Git is unavailable, with limitations reported in its coverage.
@@ -14,7 +24,7 @@ The scanner never installs optional tools. It also does not run project tests, l
 
 ## Scanner commands
 
-These are command-line operations, not new Pi slash commands. `/skill:code-quality` remains the way to load the workflow in Pi. Replace `<installed-skill-dir>` with the installed `skills/code-quality` directory, run the command from the repository you want to inspect, and choose paths appropriate to that repository.
+These are command-line operations, not new Pi slash commands. `/skill:code-quality` explicitly loads the writing workflow in Pi; ordinary permanent-code tasks should invoke the skill without needing that command. Replace `<installed-skill-dir>` with the installed `skills/code-quality` directory, run the command from the repository you want to inspect, and choose paths appropriate to that repository.
 
 ### Compare a Git baseline with the current worktree
 

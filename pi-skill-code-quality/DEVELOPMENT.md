@@ -29,6 +29,16 @@ The package remains dependency-free for Git-only operation. It has no version bu
 | POSIX structural-analyzer behavior | deferred | Do not claim it from Git-only or process-lifecycle evidence. |
 | Automatic lifecycle hooks, watchers, CI enforcement, automatic refactoring, history databases, generic plugins, full benchmark recreation, dependency graphs, and universal scoring | deferred | Do not add them through this package. |
 
+## Skill invocation and writing contract
+
+`SKILL.md` requires invocation before and throughout every write or edit of code intended to remain in a permanent file, regardless of language, file type, Git tracking or change size. This includes code embedded in retained documentation or templates and prototypes promoted from scratch work. Direct writes, patches, generation and delegated implementation have the same applicability. Generated or vendored artifacts remain subject to repository ownership policy.
+
+The primary workflow is write-and-improve, not review-only by default. Authorization to implement a coding task includes justified improvements to task-owned code; it does not grant unrelated refactoring authority. Explicit review-only requests remain non-mutating. Quality practices apply to every write, while optional extra cleanup stays bounded to one pass on at most three confirmed findings. Scans, S0/S1/S2 snapshots and formal reports are not prerequisites for small edits.
+
+This change is guidance and routing only. The scanner stays read-only and gains no new operations or hooks. Routing fixtures include one-line changes, scripts, tests, retained examples and prototype promotion alongside negative prose/chat/scratch cases. Contract tests check writing-first activation, scoped authorization, the review-only exception and optional measurement. These static checks verify the instruction contract, not actual model adherence to every write.
+
+The prior scanner's implementation reviews and acceptance evidence above do not establish an evaluation of this revised writing policy. Longitudinal effectiveness remains unproven.
+
 ## Package layout and publication boundary
 
 Runtime content belongs under `skills/code-quality`; contributor tests remain at the package root. The package contains the skill workflow, references, scanner entry point, collection/report/metric modules, optional adapter modules, and packaged AST rules. Test fixtures, evaluation scenarios, and routing fixtures are development-only.

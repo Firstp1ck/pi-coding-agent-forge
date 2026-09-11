@@ -1,32 +1,36 @@
 # Code Quality
 
-Review a code change for real maintenance risks, then make a small cleanup only when you authorize it.
+Improve code as Pi writes it to permanent files, from a one-line fix to a larger implementation.
 
 ## Helpful when
 
-- A feature or refactor is hard to review because several files or responsibilities changed together.
-- You want to inspect repeated logic, growing functions, dependencies, warnings, or unclear ownership without turning every style preference into a defect.
-- You want one bounded cleanup after behavior has been checked.
+- You are creating or changing source, scripts, tests, saved examples or configuration-as-code.
+- You want clear control flow, meaningful abstractions and reliable error handling built into the change, not left for a later review.
+- You want to improve maintainability without sacrificing behavior, security checks or useful tests.
 
 ## What to share with Pi
 
-- The change, files, package, or module roots to review.
-- Whether the request is review-only or permits implementation and one cleanup pass.
-- The baseline, repository rules, existing checks, and any behavior that must not change.
+- The behavior to implement and the files or module you want changed.
+- Repository conventions, relevant checks and compatibility requirements.
+- Any protected files or existing work that must remain untouched.
 
 ## Try asking
 
-> Review this change against its dirty-start baseline. Do not edit files or save a report. Focus on correctness, repeated error handling, and maintainability in `src/import`.
+> Add retry cancellation to `src/import`. Improve the code as you write it, reuse existing error handling, and test cancellation without changing the public API.
+
+Once enabled, the skill instructs Pi to apply it to every permanent code write, including small edits. You do not need to request a separate quality review each time. Use `/skill:code-quality` to load it explicitly when needed.
 
 ## What you'll get
 
-- Evidence-backed findings tied to the selected scope and available checks.
-- A clear distinction between confirmed issues, accepted trade-offs, missing evidence, and false positives.
-- At most three focused cleanup candidates when you authorize a cleanup pass.
+- Code improved directly within the requested scope.
+- Relevant checks and a concise account of any unresolved risks.
+- Optional before/after evidence when a larger change warrants measurement.
 
 ## Keep in mind
 
-Review-only is the default. The skill does not automatically format, fix, save workspace memory, install tools, or persist scanner output. Existing project policy and correctness checks take priority over examples and measurements. The Git-only scanner path has current Linux evidence. Optional structural-tool pins have Windows x64 evidence only and were not rerun on Linux. Unsupported or missing evidence stays visible as unavailable or partial.
+An explicit review-only request stays read-only. The skill does not authorize unrelated rewrites, tool installations or automatic memory/report storage. Its always-apply instruction guides the agent; it is not a hook that intercepts every file write.
+
+The scanner is optional and remains read-only. The Git-only scanner path has current Linux evidence. Structural-tool pins have Windows x64 evidence only. Missing or partial measurements are not proof of clean code.
 
 ## Install
 
@@ -38,4 +42,4 @@ Restart Pi if the skill does not appear in your current session.
 
 ## Technical details
 
-See [TECHNICAL.md](TECHNICAL.md) for advanced usage, scanner options, optional tools, compatibility, privacy, and limitations.
+See [TECHNICAL.md](TECHNICAL.md) for activation, scope, scanner options, optional tools, compatibility, privacy and limitations.
