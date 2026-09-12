@@ -75,7 +75,7 @@ test("one prompt shows every operation and risk; block saves nothing", async () 
   assert.equal(current.prompts.length, 1);
   assert.match(current.prompts[0].title, /1\. NEEDS APPROVAL.*git switch/);
   assert.match(current.prompts[0].title, /2\. NEEDS APPROVAL.*rm -rf/);
-  assert.match(current.prompts[0].title, /recursive rm/);
+  assert.match(current.prompts[0].title, /recursive force rm/);
   assert.deepEqual(entries(location), []);
   assert.ok(!current.prompts[0].options.includes(CHOICE.rulePermanent));
 });
@@ -91,7 +91,9 @@ test("prompts mark the actual risk pattern, not the surrounding unsupported synt
     const title = current.prompts[0].title;
     assert.match(title, reason);
     assert.ok(title.includes(marker), title);
-    assert.ok(title.indexOf(marker) < title.indexOf("\n\nCommand\n"));
+    assert.ok(title.indexOf(marker) > title.indexOf("\n\nCommand\n"));
+    assert.ok(title.indexOf(marker) < title.indexOf("\n\nRisk\n"));
+    assert.ok(!title.includes("Risk excerpts"));
     assert.ok(!title.includes("Unverified shell execution"));
     assert.ok(!title.includes(">>> > /tmp/out <<<"));
     assert.ok(!title.includes(">>> <<SQL <<<"));
@@ -130,7 +132,7 @@ test("published pattern-driven behavior allows routine diagnostics even when par
 
 test("known risks still prompt with broken parsing and always have a matched snippet", async () => {
   for (const [command, label] of [
-    ["git reset --hard", "git reset --hard"], ["rm -rf ./data", "recursive rm"],
+    ["git reset --hard", "git reset --hard"], ["rm -rf ./data", "recursive force rm"],
     ["docker volume prune", "docker volume removal/prune"], ["npm uninstall example", "JS package removal"],
     ["sudo true", "sudo"], ["psql <<SQL\nDROP TABLE sample;\nSQL", "SQL drop table"],
     ["cat .env", "possible secret file access"],
@@ -149,7 +151,7 @@ test("masked heredoc bodies preserve source positions for real risks after the b
   const command = "node <<'JS'\n// git switch fake; rm -rf fake\nconsole.log('ok');\nJS\ngit switch real";
   assert.equal((await current.call(command)).block, true);
   const title = current.prompts[0].title;
-  assert.match(title, /L5:C1  >>> git switch <<< real/);
+  assert.match(title, /5 \| >>> git switch <<< real/);
   assert.ok(!title.includes(">>> rm -rf"));
   assert.ok(!title.includes("recursive rm"));
 });
@@ -467,6 +469,134 @@ test("quoted data and comments are not mistaken for executing risk commands", as
   assert.equal((await current.call('echo "$(rm -rf /)"')).block, true);
 });
 
+test("unlisted wrappers retain risk matches in interactive and noninteractive calls", async () => {
+  const commands = [
+    "busybox rm -rf ./data", "systemd-run -- rm -rf ./data", "setsid rm -rf ./data",
+    "script -qc 'rm -rf ./data' /dev/null", "tmux new -d rm -rf ./data", "ssh host rm -rf ./data",
+    "parallel rm -rf ./data", "custom-wrapper rm -rf ./data", "custom-wrapper 'rm' '-rf' ./data",
+    "systemd-run --unit x -- rm -rf ./data", "timeout 5 rm -rf ./data",
+    "find ./data -exec rm -rf {} +", "xargs rm -rf ./data", "/bin/rm -rf ./data",
+    "sudo rm -rf ./data", "bash -c 'rm -rf ./data'", "env rm -rf ./data",
+    "awk 'BEGIN { system(\"rm -rf ./data\") }'", "sed 'e rm -rf ./data'",
+    "rg --pre 'rm -rf ./data' pattern", "git submodule foreach 'rm -rf ./data'",
+  ];
+  for (const hasUI of [true, false]) for (const base of commands) {
+    for (const command of [base, `${base}; head -5`, `${base}; head -n 5`]) {
+      const location = fixture();
+      const current = harness(location, [], { hasUI });
+      assert.equal((await current.call(command))?.block, true, command);
+      assert.equal(current.prompts.length, hasUI ? 1 : 0, command);
+      if (hasUI) {
+        assert.match(current.prompts[0].title, /recursive force rm/, command);
+        assert.ok(current.prompts[0].title.includes(">>> "), command);
+      }
+      assert.deepEqual(entries(location), [], command);
+      assert.deepEqual(current.session.entries, [], command);
+    }
+  }
+});
+
+test("the screenshot pipeline has one highlighted command and one combined display risk", async () => {
+  const current = harness(fixture());
+  const command = "setsid rm -rf --help | head -5";
+  assert.equal((await current.call(command))?.block, true);
+  const { title, options } = current.prompts[0];
+  assert.equal(title.split("setsid").length - 1, 1);
+  assert.equal(title.split(">>> rm -rf <<<").length - 1, 1);
+  assert.equal(title.split("recursive force rm").length - 1, 1);
+  assert.ok(!title.includes("Risk excerpts"));
+  assert.ok(!title.includes("Operations\n"));
+  assert.match(title, /Whole-command approval required\nThis pipeline includes/);
+  assert.deepEqual(options, ["Block", CHOICE.once]);
+});
+
+test("numeric diagnostics and reviewed data commands retain false-positive suppression", async () => {
+  for (const hasUI of [true, false]) {
+    const current = harness(fixture(), [], { hasUI });
+    for (const command of [
+      'echo "=== music mount ==="', `grep -c '"sudo"' /home/USER/.bash_history`, "# reboot the box later",
+      ...["-5", "5", "+5", "-n 5", "--lines=5"].map((flags) => `journalctl -g "reboot" | head ${flags}`),
+      'journalctl -g "reboot" | tail -5', 'echo "rm -rf ./data" | head -5',
+      'grep "reboot" ./log | head -5', 'echo "rm -rf ./data"; custom-wrapper harmless',
+      'echo "rm -rf ./data"; echo harmless | custom-wrapper', "custom-wrapper harmless",
+    ]) assert.equal(await current.call(command), undefined, command);
+    assert.equal(current.prompts.length, 0);
+  }
+});
+
+test("numeric support preserves direct risk detection and enabled-category controls", async () => {
+  const location = fixture();
+  const current = harness(location);
+  for (const command of ["chmod 777 ./data", "truncate -s 0 ./data", "kill -9 12345", "rm -rf 5"]) {
+    assert.equal((await current.call(command))?.block, true, command);
+  }
+  writeSafetyGuardConfig({ categories: { filesystem: false } }, configFile);
+  assert.equal(await current.call("custom-wrapper rm -rf ./data; head -5"), undefined);
+  writeSafetyGuardConfig({ enabled: false }, configFile);
+  assert.equal(await current.call("custom-wrapper reboot; head -5"), undefined);
+});
+
+test("unknown pipeline receivers cannot hide executable text or reuse producer grants", async () => {
+  for (const hasUI of [true, false]) for (const command of [
+    "echo 'rm -rf ./data' | busybox sh", "printf '%s' 'rm -rf ./data' | custom-wrapper",
+    "echo 'rm -rf ./data' | cat | custom-wrapper", "echo 'reboot' | custom-wrapper",
+    "busybox rm -rf ./data | cat", "echo harmless | custom-wrapper rm -rf ./data",
+  ]) {
+    const location = fixture();
+    const current = harness(location, [], { hasUI });
+    assert.equal((await current.call(command))?.block, true, command);
+    if (hasUI) {
+      assert.deepEqual(current.prompts[0].options, ["Block", CHOICE.once], command);
+      assert.match(current.prompts[0].title, /Whole-command approval required/, command);
+    }
+  }
+  for (const argv of [["echo", "rm -rf ./data"], ["busybox", "rm", "-rf", "./data"]]) {
+    for (const matchType of ["operation", "operation-global"]) {
+      const location = fixture();
+      const command = argv[0] === "echo" ? "echo 'rm -rf ./data' | custom-wrapper" : "busybox rm -rf ./data | cat";
+      seed(location, [{ ...legacy(location, command), matchType, argv,
+        cwd: matchType === "operation-global" ? "" : location.cwd,
+        key: matchType === "operation-global" ? globalOperationAllowKey(argv) : operationAllowKey(argv, location.cwd) }]);
+      const current = harness(location, [], { hasUI: false });
+      assert.equal((await current.call(command))?.block, true, `${matchType}: ${command}`);
+    }
+  }
+});
+
+test("wrapper matches reach automatic review with the complete invocation", async () => {
+  for (const hasUI of [true, false]) for (const command of ["custom-wrapper rm -rf ./data", "custom-wrapper rm -rf ./data; head -5"]) {
+    const location = fixture();
+    writeSafetyGuardConfig({ autoReview: { enabled: true } }, configFile);
+    const reviewed = [];
+    const current = harness(location, [], { hasUI, requestAutoReviewFn: async (_registry, _config, request) => {
+      reviewed.push(request);
+      return { verdict: "block", reason: "test verdict" };
+    } });
+    assert.equal((await current.call(command))?.block, true);
+    assert.equal(reviewed.length, 1);
+    assert.equal(reviewed[0].pendingText, command);
+    assert.match(reviewed[0].label, /recursive rm/);
+    assert.equal(current.prompts.length, 0);
+    assert.deepEqual(entries(location), []);
+  }
+});
+
+test("wrapper detection falls back to whole-command matching on unavailable or throwing analysis", async () => {
+  for (const analyzeShellFn of [
+    async () => ({ supported: false, reason: "Shell parser unavailable" }),
+    async () => { throw new Error("test parser exception"); },
+  ]) for (const hasUI of [true, false]) {
+    const location = fixture();
+    const current = harness(location, [], { hasUI, analyzeShellFn });
+    for (const command of ["busybox rm -rf ./data", "custom-wrapper rm -rf ./data; head -5"]) {
+      assert.equal((await current.call(command))?.block, true, command);
+      if (hasUI) assert.deepEqual(current.prompts.at(-1).options, ["Block", CHOICE.once], command);
+    }
+    assert.equal(await current.call("custom-wrapper harmless"), undefined);
+    assert.deepEqual(entries(location), []);
+  }
+});
+
 test("piped SQL requires whole-command approval without reusable operation choices", async () => {
   for (const command of [
     "echo 'DROP TABLE sample;' | psql",
@@ -535,6 +665,81 @@ test("automatic review sees SQL pipeline risks and the full invocation", async (
   assert.equal(reviewed[0].pendingText, command);
   assert.equal(current.prompts.length, 0);
   assert.deepEqual(entries(location), []);
+});
+
+test("quoted fallback commands, global options and destructive flag variants remain guarded", async () => {
+  const commands = [
+    "env 'rm' '-rf' ./data", "env 'rm' '-f' ./data", "'rm' '-rf' ./data > /dev/null",
+    "git --no-pager reset --hard", "git -C . reset --hard", "git -C './two words' reset --hard",
+    "git --git-dir='./repo with spaces' reset --hard", "git '-C' '.' 'reset' '--hard'",
+    "docker --context default volume prune", "docker --context='two words' volume prune",
+    "docker -H unix:///var/run/docker.sock volume prune", "docker --config './two words' volume prune",
+    "rm -f ./important-file", "rm --force ./important-file", "rm -fv ./important-file",
+    "git checkout -f main", "git checkout --force main", "git checkout main -f",
+    "git branch --delete --force old", "git branch --force --delete old", "git branch -fD old",
+    "git -c 'alias.danger=!rm -rf ./data' danger",
+  ];
+  for (const hasUI of [true, false]) for (const failedParser of [false, true]) for (const command of commands) {
+    const location = fixture();
+    const current = harness(location, [], { hasUI,
+      ...(failedParser ? { analyzeShellFn: async () => { throw new Error("test unavailable parser"); } } : {}),
+    });
+    assert.equal((await current.call(command))?.block, true, command);
+    assert.equal(current.prompts.length, hasUI ? 1 : 0, command);
+    if (hasUI) assert.ok(current.prompts[0].title.includes(">>> "), command);
+    assert.deepEqual(entries(location), [], command);
+  }
+});
+
+test("normalizing command options for detection cannot broaden operation grants", async () => {
+  const location = fixture();
+  const current = harness(location, [CHOICE.operationPermanent, CHOICE.rulePermanent]);
+  await current.call("docker volume prune");
+  await current.call("git switch main");
+  for (const command of ["docker --context other volume prune", "git -C other switch main", "git --no-pager switch main"]) {
+    assert.equal((await current.call(command))?.block, true, command);
+  }
+  assert.equal(entries(location).length, 2);
+});
+
+test("heredoc and here-string risk detection covers shell input, expansions and false openers", async () => {
+  const commands = [
+    "bash <<'EOF'\nrm -rf ./data\nEOF", "bash <<'EOF'\n'rm' '-rf' ./data\nEOF",
+    "cat <<EOF\n$(rm -rf ./data)\nEOF", "cat <<EOF\n`rm -rf ./data`\nEOF",
+    "node <<EOF\n$(rm -rf ./data)\nEOF", "cat <<'EOF' | bash\nrm -rf ./data\nEOF",
+    "custom-wrapper <<'EOF'\nrm -rf ./data\nEOF", "cat <<'EOF' > ./script\nrm -rf ./data\nEOF",
+    "# <<EOF\nrm -rf ./data > /dev/null", "echo '<<EOF'\nrm -rf ./data > /dev/null",
+    "cat <<< harmless\nrm -rf ./data", "bash <<< 'rm -rf ./data'",
+    "bash <<-EOF\n\trm -rf ./data\n\tEOF",
+  ];
+  for (const hasUI of [true, false]) for (const failedParser of [false, true]) for (const command of commands) {
+    const location = fixture();
+    const current = harness(location, [], { hasUI,
+      ...(failedParser ? { analyzeShellFn: async () => { throw new Error("test unavailable parser"); } } : {}),
+    });
+    assert.equal((await current.call(command))?.block, true, command);
+    assert.equal(current.prompts.length, hasUI ? 1 : 0);
+    if (hasUI) {
+      assert.deepEqual(current.prompts[0].options, ["Block", CHOICE.once], command);
+      assert.ok(current.prompts[0].title.includes(">>> "), command);
+    }
+    assert.deepEqual(entries(location), []);
+  }
+});
+
+test("harmless heredoc content remains quiet only when syntax proves a data consumer", async () => {
+  for (const hasUI of [true, false]) {
+    const location = fixture();
+    const current = harness(location, [], { hasUI });
+    for (const command of [
+      "cat <<'EOF'\nrm -rf ./example\nEOF", "node <<'JS'\nconsole.log('rm -rf ./example');\nJS",
+      "cat <<< harmless\necho done", "# <<EOF\necho done > /dev/null",
+      "git --no-pager status", "docker --context default ps", "env 'echo' 'hello'",
+    ]) assert.equal(await current.call(command), undefined, command);
+    assert.equal(current.prompts.length, 0);
+    const unavailable = harness(location, [], { hasUI, analyzeShellFn: async () => { throw new Error("test unavailable parser"); } });
+    assert.equal((await unavailable.call("node <<'JS'\nconsole.log('rm -rf ./example');\nJS"))?.block, true);
+  }
 });
 
 test("fallback heredocs show all SQL risks in one prompt", async () => {
@@ -640,7 +845,7 @@ test("parser failure cannot reuse operation permissions", async () => {
   const current = harness(location, [], { analyzeShellFn: async () => { throw new Error("missing grammar"); } });
   assert.equal((await current.call("git switch main")).block, true);
   assert.match(current.prompts[0].title, />>> git switch <<</);
-  assert.ok(!current.prompts[0].title.includes("parser unavailable"));
+  assert.match(current.prompts[0].title, /Whole-command approval required\nShell parser unavailable/);
   assert.ok(!current.prompts[0].options.includes(CHOICE.operationPermanent));
 });
 
@@ -672,7 +877,7 @@ test("cancellation before, during parsing, or after the dialog never saves grant
   }
 });
 
-test("risk excerpts escape terminal controls and respect configured context lines", async () => {
+test("command previews escape controls and truncated excerpts respect configured context lines", async () => {
   const location = fixture();
   const escaped = harness(location);
   await escaped.call("git switch one\u001b[2J");
@@ -681,10 +886,17 @@ test("risk excerpts escape terminal controls and respect configured context line
   writeSafetyGuardConfig({ contextLines: { before: 0, after: 0 } }, configFile);
   const current = harness(location);
   await current.call("echo before\ngit switch one\necho after");
-  const excerpt = current.prompts[0].title;
-  assert.match(excerpt, /!!! 2 \|/);
-  assert.ok(!excerpt.includes("1 | echo before"));
-  assert.ok(!excerpt.includes("3 | echo after"));
+  const compact = current.prompts[0].title;
+  assert.match(compact, /2 \| >>> git switch <<< one/);
+  assert.ok(compact.includes("1 | echo before"));
+  assert.ok(compact.includes("3 | echo after"));
+  assert.ok(!compact.includes("Risk excerpts"));
+  await current.call(`echo ${"x".repeat(14_000)}\necho before\ngit switch one\necho after`);
+  const excerpt = current.prompts.at(-1).title.split("Risk excerpts\n")[1];
+  assert.ok(excerpt);
+  assert.match(excerpt, /!!! 3 \|/);
+  assert.ok(!excerpt.includes("2 | echo before"));
+  assert.ok(!excerpt.includes("4 | echo after"));
 });
 
 test("batch storage failure blocks and cleans temporary files", async () => {

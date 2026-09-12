@@ -11,9 +11,9 @@ export function patternMatchRange(text: string, pattern: RegExp): SourceRange | 
 }
 
 /** Map a risk match in normalized argv back to the original quoted source. */
-export function operationMatchRange(command: string, operation: Pick<ShellOperation, "argv"> & { argumentRanges?: SourceRange[] }, pattern: RegExp): SourceRange | undefined {
+export function operationMatchRange(command: string, operation: Pick<ShellOperation, "argv"> & { argumentRanges?: SourceRange[] }, pattern: RegExp, matchingText = operation.argv.join(" ")): SourceRange | undefined {
   pattern.lastIndex = 0;
-  const match = pattern.exec(operation.argv.join(" "));
+  const match = pattern.exec(matchingText);
   pattern.lastIndex = 0;
   if (!match?.[0] || !operation.argumentRanges) return undefined;
   const matchEnd = match.index + match[0].length;

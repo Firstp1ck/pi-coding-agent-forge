@@ -25,10 +25,13 @@ import { matchingCommandExcerpt } from "./src/excerpt.ts";
 import { bashRuleGrant, ruleAllowKey, operationRule, operationAllowKey, globalOperationAllowKey, operationRuleAllowKey, type BashRuleGrant } from "./src/approvals.ts";
 import { ApprovalPersistence, allowKey, normalizeCwd, projectApprovalFile, type AllowEntry, type AllowStore } from "./src/approval-store.ts";
 import { SessionApprovals } from "./src/session-approvals.ts";
-import { analyzeShell, type ShellAnalysis } from "./src/shell-analysis.ts";
+import { analyzeShell, hasDataOnlyArguments, type ShellAnalysis } from "./src/shell-analysis.ts";
 import { buildBashPrompt, type BashChoice } from "./src/bash-prompt.ts";
 import { showBashPrompt } from "./src/bash-dialog.ts";
 import { operationMatchRange, patternMatchRange, type CommandTrigger } from "./src/trigger.ts";
+import { inspectFileTarget } from "./src/protected-paths.ts";
+import { commandMatchTexts } from "./src/command-matching.ts";
+export { isProtectedPath } from "./src/protected-paths.ts";
 
 const STATUS_KEY = "safety-guard";
 const AUTO_REVIEW_STATUS_KEY = "safety-guard-auto-review";
@@ -70,7 +73,8 @@ const GIT_RULES: CommandRule[] = [
   { pattern: /\bgit\s+checkout\s+--\s+/i, label: "git checkout -- <path>", category: "git", level: "prompt" },
   { pattern: /\bgit\s+switch\b/i, label: "git switch", category: "git", level: "prompt" },
   { pattern: /\bgit\s+restore\b/i, label: "git restore", category: "git", level: "prompt" },
-  { pattern: /\bgit\s+branch\s+-(?:d|D)\b/i, label: "git branch delete", category: "git", level: "prompt" },
+  { pattern: /\bgit\s+branch\b[^\n;&|]*\s(?:-[A-Za-z]*[dD][A-Za-z]*|--delete)\b/i, label: "git branch delete", category: "git", level: "prompt" },
+  { pattern: /\bgit\s+checkout\b[^\n;&|]*\s(?:-[A-Za-z]*f[A-Za-z]*|--force)\b/i, label: "git checkout force", category: "git", level: "strong-confirm" },
   { pattern: /\bgit\s+tag\s+-d\b/i, label: "git tag delete", category: "git", level: "prompt" },
   { pattern: /\bgit\s+push\b[^\n;&|]*--force(?:-with-lease)?\b/i, label: "git push --force", category: "git", level: "strong-confirm" },
   { pattern: /\bgit\s+push\b[^\n;&|]*(?:--delete|:refs\/heads\/)/i, label: "git push delete branch", category: "git", level: "strong-confirm" },
@@ -87,6 +91,7 @@ const GIT_RULES: CommandRule[] = [
 ];
 
 const FILESYSTEM_RULES: CommandRule[] = [
+  { pattern: /(^|[^\w-])rm\s+[^\n;&|]*(?:-[A-Za-z]*f[A-Za-z]*|--force)\b/i, label: "force rm", category: "filesystem", level: "prompt" },
   { pattern: /(^|[^\w-])rm\s+[^\n;&|]*-[^\s;&|]*r[^\s;&|]*f?\b/i, label: "recursive rm", category: "filesystem", level: "prompt" },
   { pattern: /(^|[^\w-])rm\s+[^\n;&|]*-[^\s;&|]*f[^\s;&|]*r\b/i, label: "recursive force rm", category: "filesystem", level: "prompt" },
   { pattern: /(^|[^\w-])rm\s+[^\n;&|]*(?:-[^\s;&|]*(?:r|f)[^\s;&|]*(?:r|f)[^\s;&|]*\s+)?(?:\/|~|\$HOME|\.)(?:\s|$|[;&|])/i, label: "rm targeting root/home/current directory", category: "filesystem", level: "block-noninteractive" },
@@ -165,35 +170,12 @@ function allowedScope(decision: AllowDecision): AllowScope | undefined {
   return decision && "allow" in decision ? decision.scope : undefined;
 }
 
-export function isProtectedPath(targetPath: string, cwd: string): boolean {
-  const resolved = path.resolve(cwd, targetPath);
-  const lower = resolved.toLowerCase().replace(/\\/g, "/");
-
-  if (/(^|\/)safety-guard-allow\.json(?:\.receipts\.json|\.legacy-[^/]+\.bak)?$/.test(lower)) return true;
-  if (/(^|\/)\.ssh(\/|$)/.test(lower)) return true;
-  if (/(^|\/)\.git-credentials$/.test(lower)) return true;
-  if (/(^|\/)auth\.json$/.test(lower)) return true;
-  if (/(^|\/)id_(rsa|ed25519)(\.pub)?$/.test(lower)) return true;
-  if (/(^|\/)\.env(\..+)?$/.test(lower)) return true;
-  if (/(^|\/)\.envrc$/.test(lower)) return true;
-  if (/(^|\/)\.npmrc$/.test(lower)) return true;
-  if (/(^|\/)\.pypirc$/.test(lower)) return true;
-  if (/(^|\/)\.netrc$/.test(lower)) return true;
-  if (/(^|\/)\.kube\/config$/.test(lower)) return true;
-  if (/(^|\/)\.aws\/(credentials|config)$/.test(lower)) return true;
-  if (/(^|\/)\.config\/gh\/hosts\.yml$/.test(lower)) return true;
-  if (/(^|\/)\.config\/gcloud(\/|$)/.test(lower)) return true;
-  if (/\.(pem|key|p12|kdbx)$/.test(lower)) return true;
-
-  return false;
-}
-
 async function confirmOrBlock(
   ctx: ExtensionContext,
   title: string,
   message: string,
   nonInteractiveReason: string,
-  options: { kind: "write" | "edit" },
+  options: { kind: "write" | "edit"; remember?: boolean },
 ): Promise<AllowDecision> {
   if (!ctx.hasUI) {
     return { block: true, reason: nonInteractiveReason };
@@ -218,12 +200,9 @@ async function confirmOrBlock(
     ].join("\n");
 
     const exactChoice = `Always allow ${options.kind} to this path in this cwd`;
-    void ctx.ui.select(promptTitle, [
-      "Block",
-      "Allow once",
-      "Allow for this session",
-      exactChoice,
-    ]).then((choice) => {
+    const choices = ["Block", "Allow once", ...(options.remember === false ? [] : ["Allow for this session", exactChoice])];
+    void ctx.ui.select(promptTitle, choices).then((choice) => {
+      if (!choice || !choices.includes(choice)) { finish({ block: true, reason: "Blocked by safety-guard extension" }); return; }
       switch (choice) {
         case "Allow once":
           finish({ allow: true });
@@ -240,20 +219,6 @@ async function confirmOrBlock(
       }
     }).catch(() => finish({ block: true, reason: "Blocked by safety-guard extension" }));
   });
-}
-
-function maskHeredocBodies(command: string): string {
-  let terminator: string | undefined;
-  return command.split("\n").map((line) => {
-    if (terminator) {
-      if (line.trim() === terminator) terminator = undefined;
-      // Retain source offsets and line numbers for exact pattern highlighting.
-      return line.replace(/[^\r]/g, " ");
-    }
-    const match = line.match(/<<-?\s*(?:['"]?)([A-Za-z_][A-Za-z0-9_]*)(?:['"]?)/);
-    if (match) terminator = match[1];
-    return line;
-  }).join("\n");
 }
 
 function formatRuleContext(rule: CommandRule, command: string, config: SafetyGuardConfig): string {
@@ -652,27 +617,40 @@ export function createSafetyGuardExtension({
 
       const analysis = await analyzeShellFn(command).catch((): ShellAnalysis => ({ supported: false, reason: "Shell parser unavailable" }));
       if (ctx.signal?.aborted) return { block: true, reason: "Safety guard approval cancelled" };
-      const commandForMatching = analysis.supported ? command : maskHeredocBodies(command);
+      const commandForMatching = analysis.supported ? command : analysis.riskText ?? command;
       const sourceOperations = analysis.supported ? analysis.operations : [{ text: command, argv: [] as string[], inPipeline: false, argumentRanges: [] }];
+      // An unrecognized receiver may execute text produced elsewhere in a pipe.
+      // Without pipe-group identities, conservatively inspect every pipeline.
+      const executionPipeline = analysis.supported && sourceOperations.some((operation) => operation.inPipeline && !hasDataOnlyArguments(operation.argv));
       const operations = sourceOperations.map((operation) => {
         const matchingText = analysis.supported ? operation.argv.join(" ") : commandForMatching;
+        const suppressArgumentMatches = analysis.supported && hasDataOnlyArguments(operation.argv)
+          && !(operation.inPipeline && executionPipeline);
+        const views = commandMatchTexts(matchingText, analysis.supported ? operation.argv : undefined);
+        const matchTexts = new Map<CommandRule, string>();
         const matches = DANGEROUS_BASH_RULES.filter((entry) => {
           if (!config.categories[entry.category]) return false;
-          const match = entry.pattern.exec(matchingText);
-          return !!match && (!analysis.supported || match.index === 0);
+          const view = views.find((text) => {
+            const match = entry.pattern.exec(text);
+            return !!match && (!suppressArgumentMatches || match.index === 0);
+          });
+          if (view === undefined) return false;
+          matchTexts.set(entry, view);
+          return true;
         });
         // Printed SQL is harmless only outside pipelines. The receiver may execute it.
         if (config.categories.database && (!analysis.supported || operation.inPipeline || !["echo", "printf"].includes(operation.argv[0]))) {
           matches.push(...DATABASE_RULES.filter((entry) => entry.pattern.test(analysis.supported ? operation.argv.join(" ") : command)));
         }
         const rule = analysis.supported && matches.length === 1 && matches[0].category === "git" ? operationRule(operation.argv) : undefined;
-        // Pipeline SQL permissions must include the receiver, not just the producer's argv.
-        const pipelineSql = operation.inPipeline && matches.some((match) => match.category === "database");
-        const approved = analysis.supported && !pipelineSql && (isAllowed(operationAllowKey(operation.argv, cwd))
+        // A producer-only grant must not authorize a different execution receiver.
+        const pipelineRisk = operation.inPipeline && matches.length > 0
+          && (executionPipeline || matches.some((match) => match.category === "database"));
+        const approved = analysis.supported && !pipelineRisk && (isAllowed(operationAllowKey(operation.argv, cwd))
           || isAllowed(globalOperationAllowKey(operation.argv))
           || !!rule && isAllowed(operationRuleAllowKey(rule.id, cwd)));
         const risks = matches.map((match) => match.label);
-        return { ...operation, matches, risks, rule, approved, pipelineSql };
+        return { ...operation, matches, matchTexts, risks, rule, approved, pipelineRisk };
       });
       const pending = operations.filter((operation) => operation.risks.length && !operation.approved);
       if (!pending.length) return;
@@ -685,13 +663,18 @@ export function createSafetyGuardExtension({
         : "Blocked bash command with unapproved operations in non-interactive mode";
       let selected: BashChoice | undefined;
       const context = [...new Map(allMatches.map((match) => [match.label, match])).values()]
-        .map((match) => formatRuleContext(match, match.category === "database" ? command : commandForMatching, config)).join("\n\n");
-      const wholeCommandReason = !analysis.supported ? "Matched risk requires complete-command approval; reusable operation analysis is unavailable"
-        : operations.some((operation) => operation.pipelineSql) ? "SQL in a pipeline requires approval of the complete command, including its receiver" : undefined;
+        .map((match) => formatRuleContext(match, match.category === "database" ? command
+          : !analysis.supported ? pending[0].matchTexts.get(match) ?? commandForMatching : commandForMatching, config)).join("\n\n");
+      const wholeCommandReason = !analysis.supported ? analysis.reason
+        : operations.some((operation) => operation.pipelineRisk)
+          ? executionPipeline
+            ? "This pipeline includes an execution-capable or unrecognized command. Approval must cover the complete invocation and its receiver."
+            : "SQL in a pipeline must be approved together with its receiver."
+          : undefined;
       const triggers: CommandTrigger[] = pending.flatMap((operation) => operation.matches.map((match) => ({
         reason: match.label,
-        range: analysis.supported ? operationMatchRange(command, operation, match.pattern)
-          : patternMatchRange(match.category === "database" ? command : commandForMatching, match.pattern),
+        range: analysis.supported ? operationMatchRange(command, operation, match.pattern, operation.matchTexts.get(match))
+          : patternMatchRange(match.category === "database" ? command : operation.matchTexts.get(match) ?? commandForMatching, match.pattern),
       })));
       const prompt = buildBashPrompt(command, operations, wholeCommandReason, context, triggers);
       const fallback = async (): Promise<AllowDecision> => {
@@ -728,77 +711,42 @@ export function createSafetyGuardExtension({
       return;
     }
 
-    if (isToolCallEventType("write", event)) {
-      if (!config.protectedPaths.write || !isProtectedPath(event.input.path, ctx.cwd)) return;
-
-      const resolvedPath = path.resolve(ctx.cwd, event.input.path);
+    if (isToolCallEventType("write", event) || isToolCallEventType("edit", event)) {
+      const kind = event.toolName;
+      if (ctx.signal?.aborted) return { block: true, reason: "Safety guard approval cancelled" };
+      let target: ReturnType<typeof inspectFileTarget>;
+      try { target = inspectFileTarget(event.input.path, ctx.cwd); }
+      catch { return { block: true, reason: "Safety guard could not safely resolve the file path" }; }
+      const pathGuardEnabled = kind === "write" ? config.protectedPaths.write : config.protectedPaths.edit;
+      if (!target.isSettings && (!pathGuardEnabled || !target.protected)) return;
       const entry = {
-        key: allowKey("write", resolvedPath, ctx.cwd),
-        kind: "write" as const,
-        value: resolvedPath,
-        cwd: normalizeCwd(ctx.cwd),
-        label: resolvedPath,
+        key: allowKey(kind, target.resolved, ctx.cwd), kind, value: target.resolved,
+        cwd: normalizeCwd(ctx.cwd), label: target.resolved,
       };
-      if (isAllowed(entry.key)) return;
-
-      const decision = await autoReviewOrPrompt(ctx, {
-        kind: "write",
-        label: "protected file write",
-        category: "protected-path",
-        riskLevel: "prompt",
-        cwd: normalizeCwd(ctx.cwd),
-        pendingText: event.input.path,
-      }, () => confirmOrBlock(
-        ctx,
-        "Protected file write",
-        `Write to protected path '${event.input.path}'?`,
-        `Blocked write to protected path '${event.input.path}' in non-interactive mode`,
-        { kind: "write" },
-      ));
+      if (!target.isSettings && isAllowed(entry.key)) return;
+      const prompt = () => confirmOrBlock(ctx,
+        target.isSettings ? "Safety Guard settings change" : `Protected file ${kind}`,
+        `${kind} ${JSON.stringify(event.input.path)}\nResolved target: ${JSON.stringify(target.resolved)}`,
+        `Blocked ${kind} to protected path in non-interactive mode`,
+        { kind, remember: !target.isSettings });
+      // Guard settings require a fresh human decision, not a model or stored grant.
+      const decision = target.isSettings ? await prompt() : await autoReviewOrPrompt(ctx, {
+        kind, label: `protected file ${kind}`, category: "protected-path", riskLevel: "prompt",
+        cwd: entry.cwd, pendingText: target.resolved,
+      }, prompt);
+      if (!decision || "block" in decision) return decision ?? { block: true, reason: "Safety guard approval unavailable" };
       if (ctx.signal?.aborted || ctx.sessionManager.getSessionId() !== approvalSessionId || normalizeCwd(ctx.cwd) !== entry.cwd) {
         return { block: true, reason: "Safety guard approval cancelled or context changed" };
       }
-      const scope = allowedScope(decision);
+      try {
+        const current = inspectFileTarget(event.input.path, ctx.cwd);
+        if (current.resolved !== target.resolved || current.requested !== target.requested || current.isSettings !== target.isSettings) {
+          return { block: true, reason: "Safety guard file target changed during approval" };
+        }
+      } catch { return { block: true, reason: "Safety guard could not revalidate the file target" }; }
+      const scope = target.isSettings ? undefined : allowedScope(decision);
       try { if (scope) rememberAllow(entry, scope, ctx); }
       catch (error) { return { block: true, reason: `Could not save safety guard approval: ${String(error)}` }; }
-      if (decision && "block" in decision) return decision;
-      return;
-    }
-
-    if (isToolCallEventType("edit", event)) {
-      if (!config.protectedPaths.edit || !isProtectedPath(event.input.path, ctx.cwd)) return;
-
-      const resolvedPath = path.resolve(ctx.cwd, event.input.path);
-      const entry = {
-        key: allowKey("edit", resolvedPath, ctx.cwd),
-        kind: "edit" as const,
-        value: resolvedPath,
-        cwd: normalizeCwd(ctx.cwd),
-        label: resolvedPath,
-      };
-      if (isAllowed(entry.key)) return;
-
-      const decision = await autoReviewOrPrompt(ctx, {
-        kind: "edit",
-        label: "protected file edit",
-        category: "protected-path",
-        riskLevel: "prompt",
-        cwd: normalizeCwd(ctx.cwd),
-        pendingText: event.input.path,
-      }, () => confirmOrBlock(
-        ctx,
-        "Protected file edit",
-        `Edit protected path '${event.input.path}'?`,
-        `Blocked edit to protected path '${event.input.path}' in non-interactive mode`,
-        { kind: "edit" },
-      ));
-      if (ctx.signal?.aborted || ctx.sessionManager.getSessionId() !== approvalSessionId || normalizeCwd(ctx.cwd) !== entry.cwd) {
-        return { block: true, reason: "Safety guard approval cancelled or context changed" };
-      }
-      const scope = allowedScope(decision);
-      try { if (scope) rememberAllow(entry, scope, ctx); }
-      catch (error) { return { block: true, reason: `Could not save safety guard approval: ${String(error)}` }; }
-      if (decision && "block" in decision) return decision;
       return;
     }
   });

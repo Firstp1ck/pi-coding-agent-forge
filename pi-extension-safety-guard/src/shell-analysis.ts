@@ -12,7 +12,7 @@ export type SourceRange = { start: number; end: number };
 export type ShellOperation = { text: string; argv: string[]; inPipeline: boolean; argumentRanges: SourceRange[] };
 export type ShellAnalysis =
   | { supported: true; operations: ShellOperation[] }
-  | { supported: false; reason: string; trigger?: SourceRange };
+  | { supported: false; reason: string; trigger?: SourceRange; riskText?: string };
 
 const require = createRequire(import.meta.url);
 let runtime: Promise<typeof import("web-tree-sitter")> | undefined;
@@ -37,12 +37,21 @@ async function createParser(): Promise<Parser> {
 }
 
 function literal(node: Node): string | undefined {
+  if (node.type === "number" && node.childCount === 0) return node.text;
   if (node.type === "command_name" && node.namedChildCount === 1) return literal(node.namedChildren[0]);
   if (node.type === "word" && node.childCount === 0 && /^[A-Za-z0-9_./:@%+=,-]+$/.test(node.text)) return node.text;
   if (node.type === "raw_string") return node.text.slice(1, -1);
   if (node.type === "string" && node.namedChildren.every((child) => child.type === "string_content")
     && !/[\\$`]/.test(node.text)) return node.text.slice(1, -1);
   return undefined;
+}
+
+// Only reviewed data consumers may suppress risk words in arguments. Unknown
+// commands, including wrappers not listed below, must retain unanchored checks.
+const ARGUMENT_DATA_COMMANDS = new Set(["echo", "printf", "cat", "grep", "head", "tail", "wc", "ls", "journalctl", "true", "false"]);
+
+export function hasDataOnlyArguments(argv: readonly string[]): boolean {
+  return ARGUMENT_DATA_COMMANDS.has(argv[0]) && !(argv[0] === "printf" && argv[1]?.startsWith("-v"));
 }
 
 const OPAQUE_COMMANDS = new Set([
@@ -93,9 +102,50 @@ function syntaxErrorRange(root: Node): SourceRange | undefined {
   return undefined;
 }
 
+function riskTextForTree(root: Node, command: string): string | undefined {
+  const nodes: Node[] = [];
+  const pending = [{ node: root, depth: 0 }];
+  while (pending.length) {
+    const { node, depth } = pending.pop()!;
+    if (nodes.length >= AST_NODES_MAX || depth > AST_DEPTH_MAX) return undefined;
+    nodes.push(node);
+    for (const child of node.namedChildren) pending.push({ node: child, depth: depth + 1 });
+  }
+  const spans: SourceRange[] = nodes.filter((node) => node.type === "comment")
+    .map((node) => ({ start: node.startIndex, end: node.endIndex }));
+  // Redirected or piped output may become another program's input. Do not hide it.
+  const outputMayExecute = nodes.some((node) => ["pipeline", "file_redirect", "process_substitution"].includes(node.type));
+  if (!outputMayExecute) for (const redirect of nodes.filter((node) => node.type === "heredoc_redirect")) {
+    const receiver = redirect.parent?.namedChildren.find((node) => node.type === "command");
+    const argv = receiver?.namedChildren.map(literal);
+    if (!argv?.length || argv.some((value) => value === undefined)) continue;
+    const args = argv as string[];
+    // Node source text is not shell code. Other interpreters and unknown receivers
+    // stay visible; this does not attempt to prove arbitrary program behavior.
+    if (!hasDataOnlyArguments(args) && args[0] !== "node") continue;
+    const body = redirect.namedChildren.find((node) => node.type === "heredoc_body");
+    if (!body || body.namedChildren.some((node) => node.type !== "heredoc_content")) continue;
+    const delimiter = redirect.namedChildren.find((node) => node.type === "heredoc_start");
+    const quoted = delimiter && /['"\\]/.test(delimiter.text);
+    // The pinned grammar does not expose every backtick substitution in heredocs.
+    if (!quoted && /[$`\\]/.test(body.text)) continue;
+    spans.push({ start: body.startIndex, end: body.endIndex });
+    const end = redirect.namedChildren.find((node) => node.type === "heredoc_end");
+    if (end) spans.push({ start: end.startIndex, end: end.endIndex });
+  }
+  const text = command.split("");
+  for (const { start, end } of spans) for (let index = start; index < end; index++) {
+    if (text[index] !== "\n" && text[index] !== "\r") text[index] = " ";
+  }
+  return text.join("");
+}
+
 /** Parse syntax only. No command is executed, expanded, or reconstructed for execution. */
 export async function analyzeShell(command: string): Promise<ShellAnalysis> {
-  const fallback = (reason: string, trigger?: SourceRange): ShellAnalysis => ({ supported: false, reason, ...(trigger ? { trigger } : {}) });
+  let riskText: string | undefined;
+  const fallback = (reason: string, trigger?: SourceRange): ShellAnalysis => ({
+    supported: false, reason, ...(trigger ? { trigger } : {}), ...(riskText === undefined ? {} : { riskText }),
+  });
   if (command.length > SHELL_INPUT_MAX) return fallback("Command exceeds the analysis size limit");
   const control = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f\u2028\u2029]/u.exec(command);
   if (control) return fallback("Control characters require whole-command approval", { start: control.index, end: control.index + control[0].length });
@@ -118,6 +168,7 @@ export async function analyzeShell(command: string): Promise<ShellAnalysis> {
     tree = parser.parse(command, null, { progressCallback: () => performance.now() > deadline });
     if (!tree || performance.now() > deadline) return fallback("Shell parsing exceeded its time limit");
     if (tree.rootNode.hasError) return fallback("Invalid or incomplete shell syntax", syntaxErrorRange(tree.rootNode));
+    riskText = riskTextForTree(tree.rootNode, command);
     const operations: ShellOperation[] = [];
     let count = 0;
     function visit(node: Node, depth: number, inPipeline = false): void {

@@ -21,9 +21,10 @@ test("syntax diagnostics stay separate from the actual pattern highlighted in ap
   const prompt = buildBashPrompt(command, [{ text: command, risks: [reason], approved: false }], "Reusable operation analysis unavailable", "", [
     { reason, range: patternMatchRange(command, /DROP\s+TABLE/) },
   ]);
-  assert.match(prompt.message, /^Trigger\nSQL drop table/);
-  assert.ok(prompt.message.indexOf(">>> DROP TABLE <<<") < prompt.message.indexOf("\n\nCommand\n"));
-  assert.ok(!prompt.sections[0].body.includes("<<SQL"));
+  assert.match(prompt.message, /^Command\n1 \| psql <<SQL/);
+  assert.match(prompt.message, /2 \| >>> DROP TABLE <<< sample;/);
+  assert.ok(prompt.message.indexOf(">>> DROP TABLE <<<") < prompt.message.indexOf("\n\nRisk\n"));
+  assert.equal(prompt.sections.find(({ label }) => label === "Risk").body, "SQL drop table");
   assert.deepEqual([...prompt.choices.keys()], [BASH_CHOICES.once]);
   const styled = formatBashPrompt(prompt, theme);
   assert.ok(styled.includes(theme.bold(">>> DROP TABLE <<<")));

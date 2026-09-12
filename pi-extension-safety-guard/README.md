@@ -7,7 +7,7 @@ Adds confirmation and path protection around commands and edits that could cause
 ## What you can do
 
 - Prompts for matched risk patterns, not simply for unfamiliar shell syntax.
-- Protects important files from unexpected edits.
+- Protects important files and its own settings from unapproved edits.
 - Shows all detected operations and risks in one confirmation for a compound command.
 - Can optionally request a second model review for risky actions.
 - Saves approvals with their scope: current directory, EVERYWHERE, or the current Pi session, including reload/resume.
@@ -26,7 +26,7 @@ Restart Pi if the package does not appear in your current session.
 
 Safety Guard works automatically.
 
-1. Start with the **Trigger** section. It marks the triggering snippet with `>>> ... <<<` above the full command. Then read the risks and permission scope. The prompt distinguishes operations already approved from those needing approval. In the terminal, use Page Up / Page Down to read details that do not fit on screen.
+1. Read the **Command** section. It shows the full command with risky text marked as `>>> ... <<<`. Overlapping matches share one highlight and a concise risk summary. When reusable operation permissions are available, separate rows distinguish already-approved operations from those needing approval. Otherwise, the prompt explains why approval must cover the whole command. In the terminal, use Page Up / Page Down to read details that do not fit on screen.
 2. Choose `Allow once`, or an option that explicitly names both what to remember and for how long. A short note beneath the terminal selection list explains the highlighted option's scope and effect.
 3. Choose `Block` if any operation is unclear. Nothing in that invocation runs, and no new permissions are saved.
 
@@ -48,7 +48,7 @@ Approvals are saved separately from Pi's general settings:
 
 Run `/safety-guard allow-list` to inspect the current session, current directory, and global approvals. `/safety-guard allow-clear-session` revokes the current session's grants durably. `/safety-guard allow-clear-permanent` clears the current directory and EVERYWHERE grants, leaving other directories untouched.
 
-Run `/safety-guard-setup` to choose protected command groups and paths. Optional second-model review is available but remains off until you enable it.
+Run `/safety-guard-setup` to choose protected command groups and paths. Optional second-model review is available but remains off until you enable it. While the guard is enabled, direct `write`/`edit` changes to its active settings file always require a fresh human decision. Stored permissions and model review cannot approve those changes.
 
 ## Before you start
 
@@ -58,7 +58,11 @@ Existing directory approvals migrate when you next use that directory. The guard
 
 Remembered approvals skip future prompts and model review within their scope. **EVERYWHERE applies across directories permanently.** The same relative path can target different files, and executables or hooks may differ between projects. Prefer directory-scoped approval unless you intend to trust those operations everywhere. Git operations change your checkout or branches and may run hooks.
 
-Commands without a matching enabled risk pattern run without a guard prompt. This includes routine Git checks, TypeScript checks, test logging, and diagnostic Node scripts, even when syntax analysis is unavailable. When a risk does match and individual operations cannot be analyzed, approval covers the complete command. Existing permissions are not automatically broadened.
+Commands without a matching enabled risk pattern run without a guard prompt. This includes routine Git checks, TypeScript checks, test logging, and diagnostic Node scripts. When a risk does match and individual operations cannot be analyzed, approval covers the complete command. If parsing is unavailable, the complete input is checked, including heredocs; harmless examples containing dangerous command text may then prompt. Existing permissions are not automatically broadened.
+
+File prompts show the resolved destination. Paths such as `@.env`, symbolic links, and links in parent directories cannot disguise a protected target. A destination that changes while approval is open is blocked. The guard does not provide an operating-system-level guarantee against a concurrent filesystem change after its check.
+
+Commands launched through wrappers such as `busybox`, `setsid`, or `ssh` retain checks for dangerous arguments. Familiar text-output and search commands avoid treating quoted words as execution, including diagnostics such as `journalctl -g "reboot" | head -5`. When a pipeline or shell heredoc may execute matched text, approval covers the complete invocation, not just its producer. Common Git and Docker global options and quoted arguments retain risk checks. Force removal, forced Git checkout, and long-form Git branch deletion are also checked.
 
 Safety Guard is a pattern checker, not a sandbox. Scripts, imported modules, and indirect execution can hide dangerous actions from its checks. Review unfamiliar code before running it.
 

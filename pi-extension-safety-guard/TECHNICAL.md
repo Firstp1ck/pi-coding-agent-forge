@@ -29,8 +29,8 @@ Examples:
 - `git reset --soft`, `git reset --mixed`, `git reset --merge`, `git reset --keep`
 - `git reset HEAD~...`, `git reset HEAD^...`, `git reset <commit>`
 - `git clean -f`, including `git clean -fd` / `git clean -xdf`
-- `git checkout -- <path>`, `git switch ...`, and `git restore ...`
-- `git branch -d/-D`, `git tag -d`
+- `git checkout -- <path>`, `git checkout -f/--force`, `git switch ...`, and `git restore ...`
+- `git branch -d/-D/--delete`, including force flags, and `git tag -d`
 - `git push --force`, `git push --force-with-lease`
 - `git push --delete`, `git push :refs/heads/...`
 - `git rebase`, including interactive rebases
@@ -44,7 +44,7 @@ Examples:
 
 Examples:
 
-- recursive or force `rm`
+- recursive or force `rm`, including `rm -f` and `rm --force`
 - `rm` targeting `/`, `~`, `$HOME`, `.`, or globs
 - `find ... -delete`
 - `find ... -exec rm ...`
@@ -134,6 +134,12 @@ Examples of commands that may reveal or copy secrets are prompted when targeting
 - `.config/gcloud/`
 - `*.pem`, `*.key`, `*.p12`, `*.kdbx`
 
+The active Safety Guard settings file is also protected, including a custom location selected through `PI_SAFETY_GUARD_CONFIG_FILE`. While the master guard is enabled, direct tool changes to it offer only `Block` and `Allow once`. They cannot use stored grants or automatic model approval, even if ordinary protected-path guards are disabled. Use `/safety-guard-setup` or `/safety-guard on|off` for normal configuration changes.
+
+File checks handle Pi's leading `@`, home-directory expansion, file URLs, and existing or dangling symbolic links, including linked parent directories. Both the requested name and resolved destination are checked. The prompt displays the resolved destination; new file permissions apply to that destination for the selected tool and cwd. Older permissions stored under a symlink's name may need fresh approval. Resolution errors and link loops block the call. A destination change during confirmation also blocks it.
+
+These checks apply to direct `write`/`edit` calls, not every filesystem action a shell command or imported script can perform. They do not eliminate races caused by external filesystem changes between the final check and the actual write.
+
 ## Install
 
 ```bash
@@ -222,15 +228,15 @@ The remembered whole-command choices have been removed. Previously saved whole-c
 
 The single prompt lists recognized operations, all matching enabled risks, already-approved operations, and any reason whole-command approval is required. Multiple occurrences of the same command remain visible. One selection approves all remaining operations at the displayed scope and lifetime. There are no separate per-risk dialogs or shortest-duration aggregation anymore.
 
-Bash prompts start with a **Trigger** section. It names the matched risk rule and shows the actual matched text as `>>> ... <<<`, plus its source line and character column. Terminal prompts also highlight that text in bold warning colors. For example, a risky SQL heredoc marks `DROP TABLE`, not the heredoc opener. Parser failures, redirections, and interpreter names are not risk triggers by themselves.
+Bash prompts start with the complete **Command**, with matched text marked as `>>> ... <<<`. Multiline commands include line numbers. Overlapping matches share one highlight; for example, the force and recursive removal rules appear as one `recursive force rm` risk. Distinct occurrences remain highlighted separately. Terminal highlights also use bold warning colors. A risky SQL heredoc marks `DROP TABLE`, not the heredoc opener. Parser failures, redirections, and interpreter names are not risk triggers by themselves.
 
-In the terminal, bash prompts show command and risk details without a separate permission section. A short note under the selection list follows the highlighted option. It explains whether anything is saved, the exact scope, and whether future prompts and model review are skipped. Headings and warnings are highlighted; explanations use normal text. A single-operation command is shown once rather than repeated in the operation list. Lines wrap within 100 columns. On shorter screens, Page Up / Page Down scroll the details while the approval choices remain visible. These keys follow your Pi selection-page keybindings. Long selected option labels wrap below the list so you can read the full scope before confirming. RPC clients receive the command details as plain text, followed by compact guidance for the available choices immediately before the selection list.
+In the terminal, bash prompts show command and risk details without a separate permission section. A short note under the selection list follows the highlighted option. It explains whether anything is saved, the exact scope, and whether future prompts and model review are skipped. Headings and warnings are highlighted; explanations use normal text. Single-operation and whole-command-only prompts omit the redundant operation list. Eligible compound commands retain their operation rows to explain pending and already-approved scopes. The whole-command notice displays the actual reason operation reuse is unavailable. Lines wrap within 100 columns. On shorter screens, Page Up / Page Down scroll the details while the approval choices remain visible. These keys follow your Pi selection-page keybindings. Long selected option labels wrap below the list so you can read the full scope before confirming. RPC clients receive the command details as plain text, followed by compact guidance for the available choices immediately before the selection list.
 
 The EVERYWHERE option appears immediately after the directory-scoped permanent exact-operation option. Its highlighted warning states that relative paths can target different files, executables/hooks may differ, and covered calls skip future prompts and model review. RPC clients receive the same warning before the choices. Existing local approvals are not widened; only operations still marked `NEEDS APPROVAL` receive new global grants.
 
 Global approvals require successful operation analysis, just like directory-scoped operation approvals. They cannot cover another unmatched operation, a matched risk in unsupported syntax, or SQL in a pipeline. The option is absent when operation reuse is unavailable or the authorization preview is incomplete. It does not apply to `write` or `edit` tools.
 
-Protected-path prompts retain `Allow for this session`, `Always allow write to this path in this cwd`, and `Always allow edit to this path in this cwd`. They cover the resolved path for that tool, including future contents, not just the current change.
+Ordinary protected-path prompts retain `Allow for this session`, `Always allow write to this path in this cwd`, and `Always allow edit to this path in this cwd`. They cover the resolved destination for that tool, including future contents, not just the current change. Active Safety Guard settings are the exception: every direct tool change requires a fresh human decision.
 
 ### Reusable Git operation types
 
@@ -248,9 +254,13 @@ Operation permissions apply only to successfully analyzed literal simple command
 
 Expansions, substitutions, globs, escaped/concatenated words, redirects, heredocs, control flow, background execution, environment assignments, interpreter/execution wrappers, directory-changing commands, executable paths, and Git global options can prevent reusable operation analysis. Mixed pipeline/conditional chains can also exceed that analysis. None of these conditions prompts by itself.
 
-When operation analysis is unavailable, the guard falls back to the published pattern-driven behavior. It checks shell-command patterns outside heredoc bodies and SQL patterns across the complete input. If no enabled pattern matches, the call proceeds without a prompt or model review. If a pattern matches and no existing whole-command grant covers it, only `Block` and `Allow once` are offered; saved operation permissions do not cover it. Shell syntax and arbitrary executable behavior are not proven safe by these checks.
+When operation reuse is unavailable, the guard still checks risk patterns, including quoted command names and common Git/Docker global options such as `git -C`, `git --no-pager`, and `docker --context`. Options used for detection do not disappear from the operation's approval scope. Changing a repository or Docker context does not inherit an approval for another argument list.
 
-The Trigger section maps known risk matches back to the original command, including literal quoted arguments. Additional risk excerpts use `!!!` for matched lines and `>>> pattern <<<` for matched text. Their text-based matches can miss quoted spellings; use the source-mapped Trigger section to locate those matches.
+Heredoc handling distinguishes known data consumers from shell or unknown receivers. Shell input, unquoted expansions, and content that may be piped or redirected for later execution remain subject to risk checks. Here-strings, comments, and quoted `<<` text cannot hide later commands. Literal heredoc data for familiar data consumers and Node source can avoid shell-command false positives when parsing confirms its boundaries. This is not an analysis of JavaScript behavior or arbitrary scripts. SQL checks still see the complete input.
+
+If parsing fails or exceeds its limits, no heredoc body is hidden. The complete input is checked conservatively, so example command text may prompt. If no enabled pattern matches, the call proceeds without a prompt or model review. If a pattern matches and no existing whole-command grant covers it, only `Block` and `Allow once` are offered; saved operation permissions do not cover it. Shell syntax and arbitrary executable behavior are not proven safe by these checks.
+
+Inline highlights map known risk matches back to the original command, including literal quoted arguments. Separate risk excerpts are omitted when the complete command already has source highlights. They remain available for overlong commands or when source highlights are unavailable. These excerpts use `!!!` for matched lines and `>>> pattern <<<` for matched text; their context-line settings still apply. A complete command preview is never shortened merely because you selected fewer excerpt context lines.
 
 Operation analysis also falls back when input exceeds 65,536 characters, contains unsupported control characters, contains more than 32 operations, or exceeds parser limits. Parser loading and parsing failures use the same pattern-checking fallback, not a blanket approval prompt. Pattern checks still cover input beyond the operation-analysis size limit. Large risk prompts that cannot display the complete permission scope offer only `Block` and `Allow once`. Context-line settings still control risk excerpts; the complete invocation is also shown when it fits.
 
@@ -258,12 +268,16 @@ Remembered approvals are checked before optional model review, including in non-
 
 ### Safety, updates, and troubleshooting
 
+Commands that launch other commands, including unfamiliar wrappers, retain checks for dangerous argument text. A harmless argument containing a risky command can therefore still prompt outside the recognized text-output and diagnostic commands. For example, `journalctl -g "reboot" | head -5` does not trigger the reboot warning, but passing a destructive command to `busybox`, `setsid`, or `ssh` still requires approval unless an existing permission or model review allows it.
+
+If a pipeline contains a command that might execute its input, matched risk text requires approval of the complete invocation, including the receiver. Saved operation permissions cannot approve that pipeline, and new decisions offer only `Block` or `Allow once`. Existing exact whole-command permissions remain valid. Separate pipelines in one invocation are treated conservatively together, so an unfamiliar receiver can cause additional prompts for another pipeline's quoted text. SQL pipeline checks remain conservative even with familiar receivers such as `cat`.
+
 - Git operations may change your checkout, delete local branches, or execute hooks. Cwd scoping does not make a repository, executable, hook, or shell startup configuration trustworthy. This extension is not a sandbox.
 - Commands without a matching enabled risk run without a guard prompt, including when syntax analysis fails. Scripts, imports, dynamic execution, and unusual spellings can hide actions from pattern checks.
 - Existing exact approvals remain whole-command/path approvals. Updating does not convert them into reusable operation permissions.
 - Permissions previously granted with `Always allow git switch branch creation in this cwd` remain standalone-only and keep their original restrictions. To use the new operation scopes in chains, explicitly approve them through the new options.
 - Old versions ignore new operation permissions and do not read the new project/session stores. They may drop unfamiliar permissions when saving the global store. Review the migration guidance before downgrading; `allow-clear-permanent` now clears only the current cwd and EVERYWHERE grants.
-- If a command prompts, check the named rule and marked text in the Trigger section. Parser problems can remove reusable operation choices for matched risks, but must not trigger prompts for otherwise unmatched commands. Correcting the dependency and reloading Pi restores operation analysis.
+- If a command prompts, check the risk summary and the marked text in the Command section. Parser problems can remove reusable operation choices for matched risks, but must not trigger prompts for otherwise unmatched commands. Correcting the dependency and reloading Pi restores operation analysis.
 - Mismatched entries produced by the issue's old local label-key patch are ignored rather than broadened. Approve the command again using the explicit options.
 
 ## Commands

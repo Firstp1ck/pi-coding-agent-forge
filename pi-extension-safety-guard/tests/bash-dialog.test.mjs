@@ -30,15 +30,15 @@ function tuiContext(run, { rows = 50, signal } = {}) {
 
 const plain = (component, width) => component.render(width).map(stripVTControlCharacters).join("\n");
 
-test("pattern fallback is compact, does not duplicate input or explain unavailable scopes", () => {
+test("pattern fallback shows one highlighted command and its actual scope reason", () => {
   const prompt = fallback();
-  assert.equal(prompt.message.split(JSON.stringify(command)).length - 1, 1);
+  assert.equal(prompt.message.split(">>> git switch <<< main > /tmp/guard-preview.log").length - 1, 1);
   assert.ok(prompt.message.length < 800, prompt.message);
   assert.ok(!prompt.message.includes("\n\n\n"));
   assert.ok(!prompt.message.includes("Exact operations"));
   assert.ok(!prompt.message.includes("Risk excerpts"));
   assert.match(prompt.message, /Whole-command approval required/);
-  assert.match(prompt.message, /Operation reuse is unavailable/);
+  assert.match(prompt.message, /Reusable operation analysis unavailable/);
   assert.ok(!prompt.sections.some((section) => section.label === "Permissions"));
   const summary = bashSelectionSummary(prompt.choices);
   assert.match(summary, /save nothing/);
@@ -66,7 +66,7 @@ test("styled text highlights headings and risk states without changing the plain
   assert.ok(styled.includes(theme.fg("accent", theme.bold("Command"))));
   assert.ok(styled.includes(theme.fg("success", theme.bold("ALREADY APPROVED"))));
   assert.ok(styled.includes(theme.fg("muted", theme.bold("NO MATCHED RISK"))));
-  assert.ok(formatBashPrompt(fallback(), theme).includes(theme.fg("warning", theme.bold("NEEDS APPROVAL"))));
+  assert.ok(formatBashPrompt(fallback(), theme).includes(theme.fg("warning", theme.bold(">>> git switch <<<"))));
 });
 
 test("full input, repeated operations, scope limits and type descriptions remain available", () => {

@@ -1,5 +1,6 @@
 import type { OperationRule } from "./approvals.ts";
-import { formatCommandTrigger, type CommandTrigger } from "./trigger.ts";
+import type { CommandTrigger } from "./trigger.ts";
+import { displayRiskLabels, escapePromptText, formatPromptCommand, mergePromptTriggers } from "./prompt-format.ts";
 
 export type ApprovalLifetime = "session" | "permanent";
 export type BashApprovalScope = "operation" | "operation-rule" | "operation-global";
@@ -42,24 +43,24 @@ export type BashPromptSection = { label: string; body: string; warning?: boolean
 const PREVIEW_MAX = 12_000;
 
 export function buildBashPrompt(command: string, operations: PromptOperation[], fallbackReason?: string, context = "", triggers: CommandTrigger[] = []) {
-  const preview = (value: string) => JSON.stringify(value.length <= PREVIEW_MAX ? value
-    : `${value.slice(0, PREVIEW_MAX / 2)}\n... input truncated ...\n${value.slice(-PREVIEW_MAX / 2)}`);
+  const preview = (value: string) => value.length <= PREVIEW_MAX ? value
+    : `${value.slice(0, PREVIEW_MAX / 2)}\n... input truncated ...\n${value.slice(-PREVIEW_MAX / 2)}`;
   const pending = operations.filter((operation) => operation.risks.length && !operation.approved);
   const typesAvailable = !fallbackReason && pending.length > 0 && pending.every((operation) => operation.rule);
-  const singleCommand = operations.length === 1 && operations[0].text === command;
-  const shownTriggers = triggers.length ? triggers : fallbackReason ? [{ reason: fallbackReason }] : [];
+  const shownTriggers = mergePromptTriggers(command, triggers);
+  const hasHighlights = shownTriggers.some((trigger) => trigger.range);
+  const showOperations = !fallbackReason && operations.length > 1;
+  const risks = displayRiskLabels(pending.flatMap((operation) => operation.risks));
   let sections: BashPromptSection[] = [
-    ...(shownTriggers.length ? [{ label: "Trigger", warning: true, body: shownTriggers.map((trigger) => formatCommandTrigger(command, trigger)).join("\n\n") }] : []),
-    { label: "Command", body: preview(command) },
+    { label: "Command", body: preview(formatPromptCommand(command, shownTriggers)) },
+    ...(showOperations ? [{ label: "Operations", body: operations.map((operation, index) => [
+      `${index + 1}. ${operation.approved ? "ALREADY APPROVED" : operation.risks.length ? "NEEDS APPROVAL" : "NO MATCHED RISK"}: ${preview(JSON.stringify(operation.text))}`,
+      operation.risks.length ? `   Risks: ${displayRiskLabels(operation.risks).join(", ")}` : "",
+    ].filter(Boolean).join("\n")).join("\n") }] : risks.length ? [{ label: "Risk", warning: true, body: risks.map(escapePromptText).join("\n") }] : []),
     ...(fallbackReason ? [{
-      label: "Whole-command approval required", warning: true,
-      body: "Operation reuse is unavailable. Block or allow the complete command once.",
+      label: "Whole-command approval required", warning: true, body: escapePromptText(fallbackReason),
     }] : []),
-    { label: singleCommand ? "Risk" : "Operations", body: operations.map((operation, index) => [
-      `${index + 1}. ${operation.approved ? "ALREADY APPROVED" : operation.risks.length ? "NEEDS APPROVAL" : "NO MATCHED RISK"}${singleCommand ? "" : `: ${preview(operation.text)}`}`,
-      operation.risks.length ? `   Risks: ${operation.risks.join(", ")}` : "",
-    ].filter(Boolean).join("\n")).join("\n") },
-    ...(context ? [{ label: "Risk excerpts", body: `${context}\n!!! matched line; >>> matched text <<<. Quoting may hide text matches; risk labels still apply.` }] : []),
+    ...(context && (!hasHighlights || command.length > PREVIEW_MAX) ? [{ label: "Risk excerpts", body: context }] : []),
     ...(typesAvailable ? [{
       label: "Broader operation types", warning: true,
       body: ["Only in this working directory:", ...[...new Set(pending.map((operation) => operation.rule!.description))].map((description) => `- ${description}`)].join("\n"),
@@ -93,9 +94,9 @@ export function formatBashPrompt(prompt: BashPrompt, theme: {
 }): string {
   return prompt.sections.map(({ label, body, warning }) => {
     const heading = theme.fg(warning ? "warning" : "accent", theme.bold(label));
-    if (label === "Trigger") {
-      const highlighted = prompt.triggers.map((trigger) => formatCommandTrigger(prompt.command, trigger,
-        (text) => theme.fg("warning", theme.bold(text)))).join("\n\n");
+    if (label === "Command") {
+      const highlighted = formatPromptCommand(prompt.command, prompt.triggers,
+        (text) => theme.fg("warning", theme.bold(text)));
       return `${heading}\n${theme.fg("text", highlighted)}`;
     }
     const lines = body.split("\n").map((line) => {

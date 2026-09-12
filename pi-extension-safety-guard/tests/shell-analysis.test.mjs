@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { analyzeShell, SHELL_INPUT_MAX, SHELL_OPERATIONS_MAX } from "../src/shell-analysis.ts";
+import { analyzeShell, hasDataOnlyArguments, SHELL_INPUT_MAX, SHELL_OPERATIONS_MAX } from "../src/shell-analysis.ts";
 import { operationRule, operationAllowKey, operationRuleAllowKey, ruleAllowKey } from "../src/approvals.ts";
 
 test("real Bash grammar separates linear commands while retaining literal argv", async () => {
@@ -11,6 +11,33 @@ test("real Bash grammar separates linear commands while retaining literal argv",
     ["git", "switch", "-c", "feature/one"], ["echo", "rm -rf /"], ["git", "branch", "-d", "old"],
   ]);
   assert.equal(result.operations[0].text, `git 'switch' -c "feature/one"`);
+});
+
+test("numeric leaves preserve exact argv text and original source ranges", async () => {
+  for (const argument of ["5", "-5", "+5", "005", "9007199254740993", "-n 5", "--lines=5"]) {
+    const command = `head ${argument}`;
+    const result = await analyzeShell(command);
+    assert.equal(result.supported, true, command);
+    const operation = result.operations[0];
+    assert.deepEqual(operation.argv, ["head", ...argument.split(" ")], command);
+    assert.deepEqual(operation.argumentRanges.map(({ start, end }) => command.slice(start, end)), operation.argv, command);
+  }
+  const result = await analyzeShell('journalctl -g "reboot" | head -5');
+  assert.equal(result.supported, true);
+  assert.deepEqual(result.operations.map(({ argv }) => argv), [["journalctl", "-g", "reboot"], ["head", "-5"]]);
+  assert.ok(result.operations.every(({ inPipeline }) => inPipeline));
+});
+
+test("argument-risk suppression is explicit, case-sensitive, and excludes interpreters", () => {
+  for (const command of ["echo", "printf", "cat", "grep", "head", "tail", "wc", "ls", "journalctl", "true", "false"]) {
+    assert.equal(hasDataOnlyArguments([command, "rm -rf ./data"]), true, command);
+  }
+  for (const command of ["busybox", "systemd-run", "setsid", "script", "tmux", "ssh", "parallel", "custom-wrapper", "awk", "sed", "rg", "git", "psql", "Echo", "/bin/echo"]) {
+    assert.equal(hasDataOnlyArguments([command, "rm -rf ./data"]), false, command);
+  }
+  assert.equal(hasDataOnlyArguments([]), false);
+  assert.equal(hasDataOnlyArguments(["printf", "-v", "PATH", "%s", "./bin"]), false);
+  assert.equal(hasDataOnlyArguments(["printf", "-vPATH", "%s", "./bin"]), false);
 });
 
 test("all supported separators preserve every operation", async () => {
