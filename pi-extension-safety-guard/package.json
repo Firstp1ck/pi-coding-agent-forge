@@ -1,6 +1,6 @@
 {
   "name": "@firstpick/pi-extension-safety-guard",
-  "version": "0.2.9",
+  "version": "0.3.0",
   "description": "Interactive guardrails for dangerous bash commands and protected file edits in Pi.",
   "license": "MIT",
   "homepage": "https://github.com/Firstp1ck/pi-coding-agent-forge/tree/main/pi-extension-safety-guard#readme",
