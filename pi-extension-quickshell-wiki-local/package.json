@@ -1,0 +1,27 @@
+{
+  "name": "@firstpick/pi-extension-quickshell-wiki-local",
+  "version": "0.2.0",
+  "description": "Offline Quickshell guides, full published API and core Qt references for desktop-shell development, with newest-release setup and local citations.",
+  "license": "MIT",
+  "homepage": "https://github.com/Firstp1ck/pi-coding-agent-forge/tree/main/pi-extension-quickshell-wiki-local#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Firstp1ck/pi-coding-agent-forge.git",
+    "directory": "pi-extension-quickshell-wiki-local"
+  },
+  "keywords": ["pi-package", "pi", "extension", "skill", "quickshell", "qml", "wiki", "offline"],
+  "type": "module",
+  "pi": {
+    "extensions": ["./index.ts"],
+    "skills": ["./skills"]
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "typebox": "*"
+  },
+  "scripts": {
+    "test": "bun test tests/*.test.ts && python3 -m unittest discover -s tests -p 'test_*.py'",
+    "test:corpus": "bun run tests/evaluate.ts"
+  },
+  "files": ["index.ts", "snapshot.ts", "scripts/sync_docs.py", "skills", "references", "tests/*.ts", "tests/*.py", "README.md", "TECHNICAL.md", "DEVELOPMENT.md", "LICENSE"]
+}

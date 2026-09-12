@@ -59,6 +59,7 @@ Extensions add commands, tools, interface elements, or automatic behavior to Pi.
 - **[Notes for Pi](pi-extension-notes/README.md)** — Keep small local notes inside Pi and optionally use selected notes as operating rules.
 - **[Plan Executor for Pi](pi-extension-plan-executor/README.md)** — Works through a PLAN.md checklist and keeps going until the plan is complete or needs your input.
 - **[Plan Mode Toggle for Pi](pi-extension-plan-mode-toggle/README.md)** — Adds a planning mode for thinking through a change before code is written.
+- **[Quickshell Docs Local for Pi](pi-extension-quickshell-wiki-local/README.md)** lets Pi search the newest published Quickshell guides and API alongside core Qt references, with local citations and the `quickshell-local` skill.
 - **[Raspberry Pi Wiki Local for Pi](pi-extension-raspberrypi-wiki-local/README.md)** — Lets Pi search a local Raspberry Pi documentation collection.
 - **[Release AUR for Pi](pi-extension-release-aur/README.md)** — Guides AUR setup, review, and publishing with explicit safety checks and confirmation.
 - **[Release npm for Pi](pi-extension-release-npm/README.md)** — Guides this workspace’s npm release process and asks before publishing.
