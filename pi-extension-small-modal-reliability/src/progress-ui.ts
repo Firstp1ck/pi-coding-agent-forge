@@ -3,6 +3,7 @@ import type { ReliabilityConfig, TaskState } from "./types.ts";
 import { STATUS_KEY, WIDGET_KEY } from "./types.ts";
 import { scratchpadPathFor } from "./paths.ts";
 import { getStep, planProgress } from "./planner.ts";
+import { formatScopeStatus } from "./scope-state.ts";
 import { truncate } from "./utils.ts";
 import { computeVerification } from "./verification-state.ts";
 
@@ -25,13 +26,15 @@ export function formatStatus(state: TaskState | undefined, enabled: boolean, con
     lines.push(`Current step: ${current ? `${current.step_id} ${current.title} (${current.status})` : "none"}`);
     lines.push(`Plan progress: ${progress.done}/${progress.total}`);
   }
+  lines.push(formatScopeStatus(state));
+  lines.push(`Context: epoch ${state.context_epoch}; checkpoint/reset ${state.context_reset.status}; active ${state.active_checkpoint_id ?? "none"}${state.context_reset.mutation_blocked ? "; MUTATION BLOCKED" : ""}`);
   lines.push(`Scratchpad: ${scratchpadPathFor(state.cwd, state.task_id)}`);
   return lines.filter(Boolean).join("\n");
 }
 
 type ReliabilityUiState = {
   statusText: string | undefined;
-  statusColor?: string;
+  statusColor?: Parameters<ExtensionContext["ui"]["theme"]["fg"]>[0];
   widgetLines?: string[];
 };
 
@@ -57,7 +60,12 @@ function buildActiveUiState(ctx: ExtensionContext, state: TaskState, config: Rel
   }
 
   widgetLines.push(`Verify: ${passedVerificationCount}/${verification.length} passed`);
-  return { statusText, statusColor: hasUnpassedVerification ? "warning" : "accent", widgetLines };
+  const scope = state.scope_state.active_scope;
+  widgetLines.push(scope
+    ? `Scope: ${scope.lane} ${state.scope_state.usage.tool_calls_used}/${scope.max_tool_calls} calls`
+    : "Scope: required before supervised external actions");
+  widgetLines.push(`Context: E${state.context_epoch} · ${state.context_reset.status} · ${state.active_checkpoint_id ?? "no checkpoint"}`);
+  return { statusText, statusColor: hasUnpassedVerification || state.context_reset.mutation_blocked ? "warning" : "accent", widgetLines };
 }
 
 export function updateUi(ctx: ExtensionContext, enabled: boolean, state: TaskState | undefined, config: ReliabilityConfig): void {

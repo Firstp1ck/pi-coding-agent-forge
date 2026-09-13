@@ -1,0 +1,13 @@
+{
+  "skill": "bounded-code-repair",
+  "should_trigger": [
+    "Fix the failing unit test in src/parser.ts and keep the patch to two files.",
+    "Repair this named bug with a regression test and run the targeted check.",
+    "Make a behavior-preserving refactor in the specified function."
+  ],
+  "should_not_trigger": [
+    "Build a new cross-package feature.",
+    "Perform a security audit of the service.",
+    "Explain this repository without editing it."
+  ]
+}

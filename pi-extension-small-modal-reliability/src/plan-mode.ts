@@ -1,9 +1,12 @@
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync, lstatSync } from "node:fs";
+import { join } from "node:path";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { TaskState } from "./types.ts";
 import { taskDir } from "./paths.ts";
 import { nowIso, readJsonFile, truncate, writeJsonFile } from "./utils.ts";
+import { assessTaskCompletion } from "./completion-gate.ts";
+import { assertPlanStoragePath } from "./plan-mode-artifacts.ts";
+export { readPlanModeArtifact, writePlanModeArtifact } from "./plan-mode-artifacts.ts";
 
 export type PlanModePhase = "explore" | "plan" | "implement" | "summarize" | "verify" | "report" | "complete" | "stopped";
 
@@ -19,6 +22,9 @@ export type PlanModeRun = {
   updated_at: string;
   iteration: number;
   max_iterations: number;
+  /** Persisted token prevents duplicate queued continuations across reloads. */
+  next_continuation_nonce: number;
+  pending_continuation_token?: string;
   artifacts: PlanModeArtifacts;
   last_issue?: string;
 };
@@ -58,6 +64,7 @@ export const PLAN_MODE_WIDGET_KEY = "reliability-plan-mode";
 const MIN_ARTIFACT_CHARS = 80;
 
 export function planModeArtifacts(cwd: string, taskId: string): PlanModeArtifacts {
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(taskId)) throw new Error("Unsafe plan task identity.");
   const dir = join(taskDir(cwd, taskId), "plan-mode");
   return {
     dir,
@@ -73,6 +80,7 @@ export function planModeArtifacts(cwd: string, taskId: string): PlanModeArtifact
 
 export function createPlanModeRun(state: TaskState): PlanModeRun {
   const artifacts = planModeArtifacts(state.cwd, state.task_id);
+  assertPlanStoragePath(artifacts.state, true);
   mkdirSync(artifacts.failuresDir, { recursive: true });
   const now = nowIso();
   const run: PlanModeRun = {
@@ -87,6 +95,7 @@ export function createPlanModeRun(state: TaskState): PlanModeRun {
     updated_at: now,
     iteration: 0,
     max_iterations: 50,
+    next_continuation_nonce: 1,
     artifacts,
   };
   ensurePlanModeTemplates(run);
@@ -97,17 +106,23 @@ export function createPlanModeRun(state: TaskState): PlanModeRun {
 export function loadPlanModeRun(cwd: string, taskId: string | undefined): PlanModeRun | undefined {
   if (!taskId) return undefined;
   const statePath = planModeArtifacts(cwd, taskId).state;
+  if (!existsSync(statePath)) return undefined;
+  assertPlanStoragePath(statePath);
   const loaded = readJsonFile<PlanModeRun>(statePath);
-  if (loaded?.schema_version !== 1) return undefined;
+  if (loaded?.schema_version !== 1 || loaded.task_id !== taskId || loaded.run_id !== taskId || loaded.cwd !== cwd
+    || typeof loaded.enabled !== "boolean" || !["explore", "plan", "implement", "summarize", "verify", "report", "complete", "stopped"].includes(loaded.phase)
+    || !Number.isSafeInteger(loaded.iteration) || loaded.iteration < 0 || loaded.max_iterations !== 50) return undefined;
   return {
     ...loaded,
+    next_continuation_nonce: Number.isSafeInteger(loaded.next_continuation_nonce) && loaded.next_continuation_nonce > 0 ? loaded.next_continuation_nonce : 1,
     artifacts: planModeArtifacts(cwd, taskId),
   };
 }
 
 export function savePlanModeRun(run: PlanModeRun): void {
   run.updated_at = nowIso();
-  mkdirSync(run.artifacts.failuresDir, { recursive: true });
+  assertPlanStoragePath(run.artifacts.state, true);
+  assertPlanStoragePath(join(run.artifacts.failuresDir, "failure-1.md"), true);
   writeJsonFile(run.artifacts.state, run);
 }
 
@@ -135,16 +150,15 @@ export function persistedPlanModePointerFromSession(ctx: ExtensionContext): Plan
 }
 
 export function readTextFile(filePath: string): string {
-  try {
-    if (!existsSync(filePath)) return "";
-    return readFileSync(filePath, "utf8");
-  } catch {
-    return "";
-  }
+  assertPlanStoragePath(filePath);
+  if (!existsSync(filePath)) return "";
+  if (lstatSync(filePath).size > 32_768) throw new Error("Plan Markdown exceeds 32768 bytes.");
+  return readFileSync(filePath, "utf8");
 }
 
 function writeTextFile(filePath: string, content: string): void {
-  mkdirSync(dirname(filePath), { recursive: true });
+  if (Buffer.byteLength(content, "utf8") + (content.endsWith("\n") ? 0 : 1) > 32_768) throw new Error("Plan Markdown exceeds 32768 bytes.");
+  assertPlanStoragePath(filePath, true);
   writeFileSync(filePath, content.endsWith("\n") ? content : `${content}\n`, { encoding: "utf8", mode: 0o600 });
 }
 
@@ -153,7 +167,8 @@ function ensureFile(filePath: string, content: string): void {
 }
 
 export function ensurePlanModeTemplates(run: PlanModeRun): void {
-  mkdirSync(run.artifacts.failuresDir, { recursive: true });
+  assertPlanStoragePath(run.artifacts.state, true);
+  assertPlanStoragePath(join(run.artifacts.failuresDir, "failure-1.md"), true);
   ensureFile(run.artifacts.exploration, [
     "# Plan Mode Exploration",
     "",
@@ -183,8 +198,8 @@ export function ensurePlanModeTemplates(run: PlanModeRun): void {
     `Goal: ${run.goal}`,
     "Status: TODO",
     "",
-    "## Progress",
-    "- [ ] Replace this placeholder with concrete implementation steps.",
+    "## Proposed steps",
+    "Describe concrete steps here, then submit the canonical structured plan through reliability_set_plan. Markdown status markers are not completion evidence.",
     "",
     "## Step details",
     "TBD",
@@ -276,8 +291,9 @@ export function verificationLooksFailed(run: PlanModeRun): boolean {
 }
 
 export function ensureGenericVerificationFailure(run: PlanModeRun, reason: string): string {
-  const stamp = nowIso().replace(/[:.]/g, "-");
-  const failurePath = join(run.artifacts.failuresDir, `failure-${stamp}.md`);
+  const index = Array.from({ length: 12 }, (_, i) => i + 1).find(i => !existsSync(join(run.artifacts.failuresDir, `failure-${i}.md`)));
+  if (!index) throw new Error("Plan mode reached its 12 failure-artifact limit.");
+  const failurePath = join(run.artifacts.failuresDir, `failure-${index}.md`);
   writeTextFile(failurePath, [
     "# Verification Failure",
     "",
@@ -289,16 +305,13 @@ export function ensureGenericVerificationFailure(run: PlanModeRun, reason: strin
     reason,
     "",
     "## Required remediation",
-    "- Update the implementation plan with an open tracked item for this failure.",
-    "- Fix the issue in a fresh implementation session.",
+    "- Record the failure in the implementation-plan audit log and submit a canonical plan revision with a reachable remediation step.",
+    "- Fix the issue in the retained implementation session.",
     "- Mark this file Status: RESOLVED only after verification evidence passes.",
   ].join("\n"));
 
   const plan = readTextFile(run.artifacts.plan);
-  const progress = extractPlanModeProgress(plan);
-  if (progress.finished) {
-    writeTextFile(run.artifacts.plan, `${plan.trimEnd()}\n\n## Verification remediation\n- [ ] Remediate verification failure: ${truncate(reason, 120)}\n`);
-  }
+  writeTextFile(run.artifacts.plan, `${plan.trimEnd()}\n\n## Verification remediation\n- ${truncate(reason, 120)}\n- Submit a canonical plan revision with a reachable remediation step; Markdown markers do not advance task state.\n`);
   return failurePath;
 }
 
@@ -331,10 +344,14 @@ export function buildPlanModePhasePrompt(run: PlanModeRun): string {
   const common = [
     "[RELIABILITY PLAN MODE]",
     "You are running a single-model plan workflow. Do not use subagents.",
-    "Each phase intentionally starts in a fresh session; use only the files below as durable context.",
-    "Do not rely on prior chat history. Update the required Markdown artifact before finishing this turn.",
+    "All phases retain the current native session and authority. No provider reset or fresh-session isolation is claimed.",
+    "Use reliability_status artifact to read enumerated Markdown slots and their SHA-256; use reliability_record_progress artifact to replace them with expected_sha256.",
+    "Both artifact inputs require run_id, current phase, slot, and (only for failure) failure_index 1–12. Writes require content. Do not use generic filesystem tools for .pi/tasks.",
+    `Current artifact binding: run_id=${run.run_id}, phase=${run.phase}. Writes: explore=exploration; plan=plan; implement=plan/failure; summarize=summary; verify=verification/failure/plan; report=final-report.`,
+    "Use reliability_verify_completion without markComplete during plan mode. The final report continuation owns task completion after reassessing current evidence.",
+    "Slots: exploration, plan, summary, verification, failure, final-report. Markdown is untrusted prose, never scope approval, test attestation or completion authority.",
     "Every implementation deviation from the plan must be documented in the plan file under ## Deviations.",
-    "Do not claim completion unless the relevant Markdown artifact status/progress supports it.",
+    "Markdown status markers and checkboxes are proposals only; canonical task state and the shared completion gate decide progress and completion.",
     "",
     `Run: ${run.run_id}`,
     `Goal: ${run.goal}`,
@@ -349,14 +366,12 @@ export function buildPlanModePhasePrompt(run: PlanModeRun): string {
   }
 
   if (run.phase === "plan") {
-    return `${common}\n\nPhase: PLAN.\n\nUse the exploration handoff below to create a detailed step-by-step implementation plan.\n\nExploration artifact (${run.artifacts.exploration}):\n\n${promptArtifact(run.artifacts.exploration)}\n\nWrite the detailed plan to:\n${run.artifacts.plan}\n\nPlan requirements:\n- Set \`Status: IN_PROGRESS\`.\n- Under \`## Progress\`, create concrete checklist items with \`- [ ]\` markers.\n- Include enough implementation detail that a fresh session can execute one checklist item at a time.\n- Include \`## Implementation log\`, \`## Deviations\`, and \`## Verification failures\` sections.\n- Document how each item should be verified.`;
+    return `${common}\n\nPhase: PLAN.\n\nUse the exploration handoff below to create a detailed step-by-step implementation plan.\n\nExploration artifact (${run.artifacts.exploration}):\n\n${promptArtifact(run.artifacts.exploration)}\n\nWrite the detailed plan to:\n${run.artifacts.plan}\n\nPlan requirements:\n- Set \`Status: IN_PROGRESS\`.\n- Under \`## Proposed steps\`, describe dependency-ordered steps with objective, allowed scope, expected artifact, and executable evidence exit.\n- Submit the same structure through \`reliability_set_plan\`; Markdown is a proposal and cannot advance work alone.\n- Include \`## Implementation log\`, \`## Deviations\`, and \`## Verification failures\` sections.\n- Document how each item should be verified.`;
   }
 
   if (run.phase === "implement") {
     const plan = promptArtifact(run.artifacts.plan);
-    const progress = extractPlanModeProgress(readTextFile(run.artifacts.plan));
-    const next = progress.nextOpen ? `First open tracked item: ${progress.nextOpen}` : "No open tracked item could be parsed; repair the plan file first.";
-    return `${common}\n\nPhase: IMPLEMENT ONE STEP.\n\n${next}\n\nDetailed plan (${run.artifacts.plan}):\n\n${plan}\n\nUnresolved verification failure files:\n\n${unresolvedFailuresForPrompt(run)}\n\nInstructions:\n- Implement exactly the first open tracked item (or the highest-priority unresolved failure if one exists).\n- Update ${run.artifacts.plan}: mark the item \`[-]\` while working if useful, then \`[x]\` only when the step is actually complete.\n- Add an entry under \`## Implementation log\` with files changed, commands run, and evidence.\n- If you deviate from the plan, append the deviation and reason under \`## Deviations\`.\n- If a failure file is resolved, set its \`Status: RESOLVED\` and cite evidence.\n- Stop after this one step; the extension will clear context and launch the next step.`;
+    return `${common}\n\nPhase: IMPLEMENT ONE STEP.\n\nUse reliability_supervisor_decision to inspect the one canonical current step.\n\nDetailed plan proposal (${run.artifacts.plan}):\n\n${plan}\n\nUnresolved verification failure files:\n\n${unresolvedFailuresForPrompt(run)}\n\nInstructions:\n- Implement only the canonical current step (or the highest-priority unresolved failure if one exists).\n- Complete it only through reliability_record_progress or reliability_submit_worker_result with actual receipts/artifacts required by the step exit condition.\n- Add an entry under \`## Implementation log\` with files changed, commands run, and evidence; it is audit context, not completion authority.\n- If you deviate from the plan, append the deviation and reason under \`## Deviations\`, then submit a validated canonical plan revision if needed.\n- If a failure file is resolved, set its \`Status: RESOLVED\` and cite evidence.\n- Stop after this one step; the extension may launch the next continuation only after canonical state advances.`;
   }
 
   if (run.phase === "summarize") {
@@ -364,7 +379,7 @@ export function buildPlanModePhasePrompt(run: PlanModeRun): string {
   }
 
   if (run.phase === "verify") {
-    return `${common}\n\nPhase: VERIFY.\n\nVerify the implementation based on the summary file in a fresh context.\n\nSummary artifact (${run.artifacts.summary}):\n\n${promptArtifact(run.artifacts.summary)}\n\nPlan artifact (${run.artifacts.plan}):\n\n${promptArtifact(run.artifacts.plan, 12000)}\n\nWrite verification results to:\n${run.artifacts.verification}\n\nVerification requirements:\n- Run or inspect whatever is necessary to verify the summary.\n- Set \`Status: PASSED\` only if all relevant checks pass. Set \`Status: FAILED\` if any check fails or required evidence is missing.\n- For each failure, create a separate Markdown file in ${run.artifacts.failuresDir} with \`Status: OPEN\`, failure evidence, suspected affected plan item, and remediation instructions.\n- If verification fails, update ${run.artifacts.plan} so related progress is not fully done: add or reopen a \`- [ ]\` tracked item for the failure under progress or verification remediation.\n- Do not report final success to the user from this phase.`;
+    return `${common}\n\nPhase: VERIFY.\n\nVerify the implementation based on the summary file in this retained session.\n\nSummary artifact (${run.artifacts.summary}):\n\n${promptArtifact(run.artifacts.summary)}\n\nPlan artifact (${run.artifacts.plan}):\n\n${promptArtifact(run.artifacts.plan, 12000)}\n\nWrite verification results to:\n${run.artifacts.verification}\n\nVerification requirements:\n- Run or inspect whatever is necessary to verify the summary.\n- Set \`Status: PASSED\` only if all relevant checks pass. Set \`Status: FAILED\` if any check fails or required evidence is missing.\n- For each failure, create a separate Markdown file in ${run.artifacts.failuresDir} with \`Status: OPEN\`, failure evidence, suspected affected plan item, and remediation instructions.\n- If verification fails, update ${run.artifacts.plan} with remediation context and submit a canonical plan revision that leaves or creates a reachable pending step. Markdown checkboxes cannot reopen or complete work.\n- Do not report final success to the user from this phase.`;
   }
 
   if (run.phase === "report") {
@@ -374,20 +389,24 @@ export function buildPlanModePhasePrompt(run: PlanModeRun): string {
   return `${common}\n\nPlan mode is ${run.phase}. No model action is required.`;
 }
 
-export function nextPlanModePhaseAfterAgent(run: PlanModeRun): { phase: PlanModePhase; issue?: string; complete?: boolean } {
+export function nextPlanModePhaseAfterAgent(run: PlanModeRun, task?: TaskState): { phase: PlanModePhase; issue?: string; complete?: boolean } {
   ensurePlanModeTemplates(run);
   if (run.phase === "explore") {
     if (!artifactReady(run.artifacts.exploration)) return { phase: "explore", issue: "Exploration artifact is missing or still marked TODO." };
     return { phase: "plan" };
   }
   if (run.phase === "plan") {
-    const progress = extractPlanModeProgress(readTextFile(run.artifacts.plan));
-    if (!artifactReady(run.artifacts.plan) || progress.total === 0) return { phase: "plan", issue: "Implementation plan is missing concrete checklist progress." };
+    if (!artifactReady(run.artifacts.plan)) return { phase: "plan", issue: "Implementation plan proposal is missing or still marked TODO." };
+    if (!task?.plan.length) return { phase: "plan", issue: "A canonical structured plan must be present before implementation." };
     return { phase: "implement" };
   }
   if (run.phase === "implement") {
-    const progress = extractPlanModeProgress(readTextFile(run.artifacts.plan));
-    if (progress.finished) return { phase: "summarize" };
+    if (!task) return { phase: "implement", issue: "Canonical task state is unavailable; Markdown cannot choose the next step." };
+    const completed = task.plan.filter((step) => step.status === "complete" || step.status === "skipped").length;
+    if (completed === task.plan.length) return { phase: "summarize" };
+    if (!task.plan.some((step) => step.status === "pending" || step.status === "in_progress" || step.status === "blocked")) {
+      return { phase: "implement", issue: "Canonical plan has no reachable next step; record a blocked outcome or submit a valid plan revision." };
+    }
     return { phase: "implement" };
   }
   if (run.phase === "summarize") {
@@ -403,10 +422,14 @@ export function nextPlanModePhaseAfterAgent(run: PlanModeRun): { phase: PlanMode
       }
       return { phase: "implement", issue: "Verification failed; returning to implementation for remediation." };
     }
+    if (!task || assessTaskCompletion(task).decision !== "pass") return { phase: "verify", issue: "Verification Markdown cannot replace current evidence required by the shared completion gate." };
     return { phase: "report" };
   }
   if (run.phase === "report") {
     if (!artifactReady(run.artifacts.finalReport)) return { phase: "report", issue: "Final report artifact is missing or still marked TODO." };
+    if (!task || assessTaskCompletion(task, "plan-mode").decision !== "pass") {
+      return { phase: "verify", issue: "Plan-mode Markdown artifacts are not completion evidence; the shared completion gate remains unresolved." };
+    }
     return { phase: "complete", complete: true };
   }
   return { phase: run.phase, complete: run.phase === "complete" };

@@ -1,11 +1,15 @@
-# Cache-aware agent-directed context pruning
+# Cache-aware context pruning and validated phase continuation
 
 - **Status:** Proposed; implementation pending
 - **Classification:** Complex
 - **Feature slug:** `cache-aware-agent-context-pruning`
 - **Target package:** `pi-extension-context-curator/` *(new)*
 - **Integration owner:** Primary Pi session
-- **Last updated:** 2026-07-28
+- **Last updated:** 2026-09-13
+
+This companion remains unimplemented. Its trigger and integration contract now include automatic validated phase checkpoints from the [small-model reliability toolkit](../archive/small-model-reliability-toolkit.md). The toolkit owns checkpoint completeness and reset eligibility; this package owns provider-visible transformation, transport capability, continuation epochs and restoration. The frozen version-1 adapter contract is in the toolkit plan's section 30. No runtime installation or provider calls are authorized by this plan revision.
+
+The reliability-side implementation is completed and archived, with production checkpoint-only behavior, retained-session plan phases and narrowly verified live pre-transform recovery. This companion's provider transformation and continuation integration remain pending; the reliability report does not claim they were implemented.
 
 ## 1. Goal
 
@@ -77,7 +81,7 @@ A checkpoint may cause one cache miss/write transition. Once created, its transf
 | Decision | Working default | Rationale |
 |---|---|---|
 | Product form | New standalone extension | Keeps the behavior optional and avoids patching Pi core initially. |
-| Trigger | Explicit agent tool call | Makes the model's retention decision inspectable and prevents hidden per-call mutation. |
+| Trigger | Explicit agent tool call, or an automatic validated phase-boundary request from the reliability adapter | Both paths validate an inspectable checkpoint once; neither permits per-call relevance reclassification. |
 | Persistence | Append-only custom entries | Survives resume/branching without entering LLM context directly. |
 | Context behavior | Rewrite eligible tool-result content to a placeholder; inject one stable checkpoint summary | Preserves tool-call/result protocol integrity while removing most raw tokens. |
 | Curation unit | Explicit result handles, committed as one batch | Gives precise control and a single cache transition. |
@@ -199,7 +203,15 @@ Requirements:
 - Store no duplicate raw result content in the custom entry.
 - Treat malformed or unknown schema versions as non-operative and report diagnostics.
 
-### 8.3 Superseding/undo entry
+### 8.3 Automatic reliability checkpoint adapter
+
+Implement the version-1 request, capability, receipt, epoch and restoration contract frozen in [the toolkit plan, section 30](../archive/small-model-reliability-toolkit.md#frozen-checkpoint-adapter-contract). The explicit `context_checkpoint` workflow remains supported. Automatic requests require a durable validated reliability checkpoint, an eligible settled semantic boundary and verified provider/transport support.
+
+Reliability renders the canonical Markdown and seed, preserves requirements/evidence/scope/budgets, and validates the post-reset receipt. The curator rebuilds the supported provider-visible continuation, preserves the append-only session, and supplies exact seed/epoch/branch evidence. Unsupported or uncertain transports return checkpoint-only without changing context. A failed handshake restores the prior epoch when supported or leaves the task paused; mutation is forbidden during unresolved recovery.
+
+The explicit placeholder path in section 10 is not itself a fresh-continuation proof. Full automatic clearing needs transport-specific epoch reset tests. Faithful fake-adapter tests demonstrate only the contract and cannot unlock production reset support.
+
+### 8.4 Superseding/undo entry
 
 Custom entry type: `context-curator-control`.
 
@@ -296,7 +308,7 @@ Behavior:
 - Preview estimated token reduction in tool-result `details`.
 - Persist only after complete validation.
 - Return the checkpoint ID and state that pruning begins on the next LLM call.
-- Never automatically restore or remove previous checkpoints.
+- The explicit tool never automatically restores or removes previous checkpoints. A failed automatic-reset handshake may restore the prior provider-visible epoch through the validated adapter recovery contract; prior checkpoint and session records remain intact.
 
 The tool description should encourage batching all completed research results into one checkpoint. Avoid dynamic system-prompt modifications and active-tool toggling.
 
@@ -485,15 +497,16 @@ Deliver:
 - Measure deterministic token reduction and provider compatibility locally.
 - Do not alter outgoing context.
 
-### Phase B — explicit opt-in pruning
+### Phase B — explicit opt-in pruning and validated automatic boundaries
 
 - Enable `context_checkpoint` transformations only after an explicit session/user setting.
+- Accept automatic reliability phase-boundary requests only after the versioned adapter and real provider/transport suite pass. Preserve the toolkit's strict opt-in rollout, pressure/cooldown bounds, checkpoint-only fallback and mutation-blocking handshake.
 - Keep unsupported transports fail-open.
 - Collect local diagnostics; no telemetry leaves the machine.
 
 ### Phase C — default-on tool availability
 
-- Keep the tool registered and available by default, but pruning still requires an explicit agent checkpoint.
+- Keep the tool registered and available by default. Pruning requires either an explicit agent checkpoint or a validated reliability adapter request under an enabled opt-in profile; automatic requests cannot bypass transport, durability or handshake gates.
 - Consider broader eligible-tool configuration only after transport and branch tests pass.
 
 ## 21. Rollback and recovery

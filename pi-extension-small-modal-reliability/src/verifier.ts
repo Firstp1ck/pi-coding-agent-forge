@@ -106,12 +106,18 @@ export function parseVerificationResult(command: string, output: string, isError
   }
 
   if (/\b(npm|pnpm|yarn|bun)\s+(test|run\s+(test|check|lint|typecheck|build))/i.test(command)) {
-    const testsLine = clean.match(/Tests?:?\s+(?:(\d+)\s+failed[,\s|]+)?(?:(\d+)\s+passed)?/i);
-    const filesLine = clean.match(/Test Files?\s+(?:(\d+)\s+failed[,\s|]+)?(?:(\d+)\s+passed)?/i);
-    const failed = numberFromMatch(testsLine, 1) ?? numberFromMatch(filesLine, 1);
+    const testSummaries = [...clean.matchAll(/Tests?:?\s+(?:(\d+)\s+failed(?:[,\s|]+|$))?(?:(\d+)\s+passed)?/gi)];
+    const fileSummaries = [...clean.matchAll(/Test Files?\s+(?:(\d+)\s+failed(?:[,\s|]+|$))?(?:(\d+)\s+passed)?/gi)];
+    const testsLine = testSummaries[0] ?? null;
+    const filesLine = fileSummaries[0] ?? null;
+    const failures = [...testSummaries, ...fileSummaries].flatMap((match) => match[1] === undefined ? [] : [Number(match[1])]);
+    // Repeated and aggregate summaries may overlap; any failure wins without double-counting.
+    const failed = failures.length && failures.every(Number.isFinite)
+      ? failures.reduce((maximum, count) => Math.max(maximum, count), 0)
+      : undefined;
     const passed = numberFromMatch(testsLine, 2) ?? numberFromMatch(filesLine, 2);
     const looksFailed = /\b(failed|FAIL|ERR!|error)\b/i.test(clean);
-    return parsedResult(command, "JavaScript", (failed ?? 0) > 0 || (isError && looksFailed) ? "failed" : statusFromExit, testsLine || filesLine ? "test summary parsed" : isError ? "command failed" : "command passed", clean, { passed, failed });
+    return parsedResult(command, "JavaScript", failures.some((count) => count > 0) || (isError && looksFailed) ? "failed" : statusFromExit, testsLine || filesLine ? "test summary parsed" : isError ? "command failed" : "command passed", clean, { passed, failed });
   }
 
   return parsedResult(command, "verification", statusFromExit, isError ? "command failed" : "command passed", clean);

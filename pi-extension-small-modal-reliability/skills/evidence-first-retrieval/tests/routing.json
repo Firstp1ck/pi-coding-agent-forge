@@ -1,0 +1,14 @@
+{
+  "skill": "evidence-first-retrieval",
+  "should_trigger": [
+    "Answer this document question with exact cited passages and state what is unsupported.",
+    "Compare current configuration options from official documentation with a freshness limit.",
+    "Check whether this named service exists using a small attributable evidence pack."
+  ],
+  "should_not_trigger": [
+    "Map this unfamiliar repository before changing code.",
+    "Conduct a high-stakes systematic literature review.",
+    "Write a creative short story about a lost archive.",
+    "Reply with exactly READY."
+  ]
+}

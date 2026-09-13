@@ -1,227 +1,98 @@
-# Development guide: Small Modal Reliability for Pi
+# Development guide: Small Model Reliability for Pi
 
 Contributor-only implementation, API, architecture, testing, and maintenance information.
 
 [Back to README](README.md) · [Advanced user technical reference](TECHNICAL.md)
 
-## Model-facing tools
+## Development setup and checks
 
-- `reliability_status` — inspect current task state and scratchpad path.
-- `reliability_set_plan` — replace or extend the current plan.
-- `reliability_record_progress` — persist facts, decisions, errors, files, next action, and step status.
-- `reliability_verify_completion` — record Passed/Failed/Unknown evidence for success criteria.
-- `reliability_suggest_verification` — suggest verification commands from manifests (`package.json`, `Cargo.toml`, `pyproject.toml`, `go.mod`, etc.).
-- `reliability_supervisor_decision` — inspect the deterministic supervisor-selected worker step.
-- `reliability_submit_worker_result` — submit structured worker completion/block/fail output for the selected step.
-
-## Workflow diagrams
-
-These diagrams split the package into two views:
-
-- **Frontend / user-facing flow** — what the Pi user sees and controls in the terminal UI. This package does not ship a separate browser frontend.
-- **Backend / runtime flow** — how the extension stores state, intercepts Pi lifecycle events, supervises the assistant, and gates completion claims.
-
-### Frontend / user-facing workflow
-
-```mermaid
-flowchart TD
-  Start([You start Pi]) --> Enable{Reliability enabled?}
-  Enable -->|CLI flag or /reliability on| Armed[Harness is armed]
-  Enable -->|No| Normal[Normal Pi session]
-
-  Armed --> Goal{Did you provide a goal?}
-  Goal -->|Yes| Task[Task appears with goal,<br/>plan, progress, and scratchpad]
-  Goal -->|No| Wait[Wait for your next prompt]
-  Wait --> Task
-
-  Task --> Work[Assistant works one focused step at a time]
-  Work --> Screen[Pi screen stays updated:<br/>status badge + progress widget]
-  Screen --> Control{Need to inspect or steer it?}
-
-  Control -->|status / tasks / scratchpad| Inspect[Review task state,<br/>task list, or scratchpad path]
-  Control -->|profile / context| Tune[Adjust strictness<br/>or context detail]
-  Control -->|suggest / verify| Evidence[Get suggested checks<br/>or record verification evidence]
-  Control -->|resume / archive| Manage[Resume or archive<br/>saved reliability tasks]
-  Control -->|orchestrate| Roles[Preview or run<br/>supervisor, worker, verifier roles]
-
-  Inspect --> Work
-  Tune --> Work
-  Manage --> Work
-  Roles --> Work
-  Evidence --> DoneCheck{Assistant claims the work is done?}
-  Work --> DoneCheck
-
-  DoneCheck -->|Missing or failed evidence| Warn[Pi warns that criteria<br/>are still unknown or failed]
-  Warn --> Evidence
-  DoneCheck -->|Evidence passed| Final[Final answer includes<br/>what changed, checks run,<br/>and remaining risks]
-
-  classDef user fill:#e8f5e9,stroke:#2e7d32,color:#1b5e20;
-  classDef ui fill:#e3f2fd,stroke:#1565c0,color:#0d47a1;
-  classDef control fill:#fff8e1,stroke:#f9a825,color:#5d4037;
-  classDef warn fill:#ffebee,stroke:#c62828,color:#7f0000;
-  classDef final fill:#ede7f6,stroke:#5e35b1,color:#311b92;
-
-  class Start,Enable,Armed,Goal,Task,Wait,Work user;
-  class Normal,Screen,Inspect ui;
-  class Control,Tune,Evidence,Manage,Roles control;
-  class Warn warn;
-  class Final final;
-```
-
-### Backend / runtime workflow
-
-```mermaid
-flowchart TD
-  subgraph Startup[Startup and resume]
-    S1[session_start event] --> S2[Read trusted .pi/reliability.json<br/>and normalize profile]
-    S2 --> S3[Restore saved task pointer<br/>or load latest open task]
-    S3 --> S4[Update Pi status badge<br/>and progress widget]
-  end
-
-  subgraph Turn[Each user prompt]
-    T1[before_agent_start event] --> T2{Active task exists?}
-    T2 -->|No| T3[Create TaskState:<br/>goal, criteria, constraints,<br/>default plan, counters]
-    T2 -->|Yes| T4[Record user update<br/>as bounded known fact]
-    T3 --> T5[Select next plan step]
-    T4 --> T5
-    T5 --> T6[Build supervisor decision<br/>and worker contract]
-    T6 --> T7[(Save state.json,<br/>scratchpad.md,<br/>state-events.jsonl)]
-    T7 --> T8[Inject harness instructions<br/>into the system prompt]
-  end
-
-  subgraph Context[Context injection before each model call]
-    C1[context event] --> C2[Build full, compact,<br/>or delta reliability header]
-    C2 --> C3[Append header as a user message]
-    C3 --> C4[Model receives current goal,<br/>step, warnings, next action,<br/>and verification snapshot]
-  end
-
-  subgraph Tools[Tool loop and state updates]
-    L1[tool_call event] --> L2{Repeat limit exceeded<br/>or same failure repeated?}
-    L2 -->|Yes| L3[Block the tool call,<br/>mark task/step blocked,<br/>notify user]
-    L2 -->|No| L4[Record tool hash,<br/>arguments preview,<br/>current step]
-    L4 --> L5[tool_result event]
-    L5 --> L6[Summarize result,<br/>track read/modified files,<br/>redact optional raw logs]
-    L6 --> L7{Was it a verification command?}
-    L7 -->|Yes| L8[Parse test/check output<br/>and update verification records]
-    L7 -->|No| L9[Advance plan state<br/>from observed work]
-    L8 --> L10[(Save state and refresh UI)]
-    L9 --> L10
-    L3 --> L10
-  end
-
-  subgraph ReliabilityTools[Registered reliability tools]
-    R1[reliability_set_plan] --> RPlan[Replace or extend plan]
-    R2[reliability_record_progress] --> RProgress[Record facts, decisions,<br/>errors, files, next action]
-    R3[reliability_verify_completion] --> RVerify[Merge explicit evidence<br/>and optionally mark complete]
-    R4[reliability_supervisor_decision] --> RDecision[Expose current worker contract]
-    R5[reliability_submit_worker_result] --> RWorker[Apply worker status,<br/>files, errors, recommendation]
-    RPlan --> RSave[(Save state and refresh UI)]
-    RProgress --> RSave
-    RVerify --> RSave
-    RWorker --> RSave
-  end
-
-  subgraph Completion[Assistant response and completion gate]
-    M1[message_end event] --> M2[Record assistant summary<br/>as a bounded known fact]
-    M2 --> M3{Completion claim detected?}
-    M3 -->|No| M4[(Save state)]
-    M3 -->|Yes| M5[Compute criteria status:<br/>passed, failed, unknown]
-    M5 --> M6{Failed or unknown criteria remain?}
-    M6 -->|Yes| M7[Notify user and, in strict profile,<br/>send a follow-up gate prompt]
-    M6 -->|No| M8[agent_end marks task complete<br/>when all criteria pass]
-    M7 --> M4
-    M8 --> M4
-    M4 --> M9[session_shutdown saves<br/>last active state]
-  end
-
-  subgraph Orchestration[Optional separate-model orchestration]
-    O1["/reliability orchestrate"] --> O2{Mode is separate-model<br/>and --run was confirmed?}
-    O2 -->|No| O3[Show dry-run prompts<br/>for supervisor, worker, verifier]
-    O2 -->|Yes| O4[Run supervisor subprocess]
-    O4 --> O5[Run worker subprocess<br/>with allowed tools]
-    O5 --> O6[Run verifier subprocess]
-    O6 --> O7[Apply worker result<br/>and merge verifier evidence]
-    O7 --> RSave
-  end
-
-  S4 --> T1
-  T8 --> C1
-  C4 --> L1
-  L10 --> M1
-  RSave --> C1
-
-  classDef event fill:#e3f2fd,stroke:#1565c0,color:#0d47a1;
-  classDef state fill:#f1f8e9,stroke:#558b2f,color:#1b5e20;
-  classDef decision fill:#fff8e1,stroke:#f9a825,color:#5d4037;
-  classDef blocked fill:#ffebee,stroke:#c62828,color:#7f0000;
-  classDef optional fill:#ede7f6,stroke:#5e35b1,color:#311b92;
-
-  class S1,T1,C1,L1,L5,M1 event;
-  class S3,S4,T3,T4,T7,L4,L6,L8,L9,L10,RPlan,RProgress,RVerify,RWorker,RSave,M2,M4,M8,M9 state;
-  class T2,T5,T6,L2,L7,M3,M5,M6,O2 decision;
-  class L3,M7 blocked;
-  class RDecision,O1,O3,O4,O5,O6,O7 optional;
-```
-
-## What this MVP enforces
-
-- Persistent JSON `TaskState` survives reload/resume.
-- A deterministic initial plan exists for every active task.
-- A compact reliability header is appended to every LLM context.
-- Scratchpad is regenerated from state instead of letting the model grow it freely.
-- Identical tool calls are blocked at the repeat threshold.
-- Verification reports unknowns instead of inventing success.
-- Verification suggestions detect common project test/check commands.
-- Verification output parsers summarize common TypeScript, ESLint, Ruff, mypy, pytest, Cargo, Go test, JavaScript, Maven, and Gradle results.
-- Strict/balanced/relaxed profiles tune repeat blocking, verification pressure, and default context mode.
-- Context headers support `full`, `compact`, and `delta` modes to reduce repeated state injection.
-- Optional raw tool log storage writes redacted/truncated logs under `.pi/tasks/{task_id}/tool-logs/` only when `storeRawToolLogs` is enabled.
-- Strict profile queues a completion-gate follow-up if the assistant claims completion with failed/unknown criteria.
-- Supervisor/worker split uses deterministic supervisor decisions plus `reliability_submit_worker_result` for structured worker completion/block/fail results.
-- Optional separate-model orchestration can run supervisor, worker, and verifier roles as separate `pi --mode json --no-session` subprocesses.
-- Offline reliability evaluation reports deterministic harness metrics with `/reliability eval [--write]`.
-- Task list/resume/archive/eval UX is available from `/reliability` commands.
-- Plan mode can split exploration, planning, one-step implementation, summary, verification, failure remediation, and final reporting across fresh sessions using durable Markdown artifacts.
-
-## Development
-
-Source layout:
-
-```text
-index.ts                        # Pi extension registration, commands, tools, event wiring
-src/core.ts                     # Compatibility re-export facade
-src/completion-gate.ts          # Completion-claim detection and strict follow-up prompt
-src/config.ts                   # Config/profile/context/orchestration normalization
-src/context-builder.ts          # Full/compact/delta reliability context headers
-src/evaluation.ts               # Offline deterministic reliability evaluation metrics
-src/loop-detector.ts            # Repeated-tool-call loop detection
-src/orchestration.ts            # Separate-model role prompts, subprocess runner, and result parsing
-src/paths.ts                    # Task-local path helpers
-src/plan-mode.ts                # Fresh-session Markdown plan workflow orchestration
-src/planner.ts                  # Goal extraction, default plan, and step transitions
-src/progress-ui.ts              # Status text and widget updates
-src/redaction.ts                # Secret redaction and raw-log truncation helpers
-src/scratchpad.ts               # Scratchpad rendering
-src/supervisor.ts               # Deterministic supervisor decision and worker-result contract
-src/task-state.ts               # Persistent task state and task list/resume/archive helpers
-src/tool-normalizer.ts          # Tool path extraction, summaries, and optional raw-log writes
-src/types.ts                    # Shared task/config/result types and constants
-src/utils.ts                    # Shared JSON, time, text, hashing, and content helpers
-src/verification-state.ts       # Verification records and completion marking
-src/verifier.ts                 # Verification command output parsers
-src/verification-suggestions.ts # Project manifest verification command suggestions
-tests/                          # Node test runner mocks for Pi lifecycle events
-```
+For an explicitly authorized fresh checkout, run `npm ci --ignore-scripts` in this package to install its pinned local test dependencies. Routine verification reuses that setup; it must not publish, change active Pi settings, install globally, or invoke real providers.
 
 ```bash
+cd pi-extension-small-modal-reliability
+npm run typecheck
 npm test
-npm pack --dry-run --json
+node scripts/coverage.mjs
+for f in skills/*/tests/test_skill_contract.py; do python3 "$f"; done
+npm pack --dry-run
 ```
 
-The test suite mocks Pi extension lifecycle events and covers task creation, context injection, context modes, profile behavior, supervisor/worker contracts, orchestration dry-runs/parsers, offline evaluation metrics, completion gating, loop blocking, redacted raw-log storage, verification suggestions, parsed verification results/failures, and task list/resume/archive commands.
+The Node suite covers isolated state, receipts, scope, evidence, coding, checkpoint, output, advisor, evaluation, and installed `AgentSession` lifecycle cases. The Python suites verify each packaged skill's frontmatter, routing, and contract shape. Package-install behavior needs a separate actual-tarball isolated-fixture smoke; a dry run is not a substitute. `scripts/package-smoke.mjs <fixture-directory>` exercises the installed artifact using Pi's package manager, resource loader and bound AgentSession. The fixture must be under `dev/handoffs/`, with the tarball installed at `install/node_modules/@firstpick/pi-extension-small-modal-reliability`. Use offline installation with lifecycle scripts disabled when the required dependencies are already cached. It writes `smoke-results.json` and never changes active Pi settings.
 
-## Additional implementation details
+`scripts/coverage.mjs` runs the same test cases against an isolated TypeScript-to-CommonJS build under `dev/handoffs/`. It adapts module references and the fixture entry point, preloads existing peers through Jiti, then measures native emitted JavaScript with Node V8. It records source hashes, drift, test totals and coverage without installing anything. Compiler helpers are included; this is not source-mapped TypeScript line coverage. Keep the original `npm test` and strict typecheck as separate gates. The fixture and logs are retained for inspection. Direct V8 coverage of Jiti-transformed TypeScript has unreliable line mapping, even with source maps enabled.
 
-```bash
-pi -e ./pi-extension-small-modal-reliability/index.ts --reliability
-```
+Use `tests/fixtures/legacy-task-v1.json` for historical migration checks. Removing top-level v2 fields from a modern task can leave modern nested plan fields behind and falsely validate a broken migration. The static fixture intentionally contains only historical fields; migration must add the new exit-condition and evidence arrays.
+
+## Runtime surface and task state
+
+`index.ts` registers the reliability command plus ten model-facing tools: `reliability_status`, `reliability_scope`, `reliability_evidence`, `reliability_gate`, `reliability_suggest_verification`, `reliability_set_plan`, `reliability_record_progress`, `reliability_supervisor_decision`, `reliability_submit_worker_result`, and `reliability_verify_completion`. Commands retain authority-sensitive UI flows; tool schemas are deliberately separate from command parsing. Complete input contracts are exported by [evidence-contracts.ts](src/evidence-contracts.ts), [scope-contracts.ts](src/scope-contracts.ts), and [quality-gate.ts](src/quality-gate.ts); [types.ts](src/types.ts) defines stored records. The root registration schemas in [index.ts](index.ts) are revalidated by those action-specific parsers before mutation.
+
+`TaskState` is schema version 2. It combines the original task/plan/scratchpad fields with lanes, criteria, trusted mappings, execution receipts, criterion results, completion gates, coding baseline state, evidence summaries, structured-output state, advisor accounting, context checkpoints, recovery episodes, durable counters, and branch/session identity. IDs are monotonic task-local counters. Model statements, cited passages, structural validation, and fluent worker output are audit input, never completion authority.
+
+The state store writes task-local files beneath `.pi/tasks/<task-id>/`, keeps task artifacts outside Git by default, validates artifact paths and ancestors, and rejects symlink escapes. State identity binds the task, workspace revision, Pi session, and persisted branch anchors where the host exposes them. Missing lifecycle identity fails closed for authoritative completion.
+
+## Scope, normalization, and provenance
+
+`reliability_scope` accepts a bounded lane, tools, read/write paths, budgets, validation commands, stop/escalation conditions, approval requests, and preflight checks. Scope normalization canonicalizes paths and shell effects before evaluation. Existing-file writes require receipt-bound current reads: a partial read permits only a unique exact edit inside the read span; a full overwrite needs a full current read.
+
+A native-confirmed scope receipt is required for mutating authority. `bash` and `powershell` additionally require a current, exact, single-use native approval of the normalized effect. Criterion/check mappings only associate an observed command with coverage; they cannot grant shell authority. Tool-result normalization records host provenance, outcome, exit status, touched resources, workspace revisions, and batch settlement before a result can be used as execution evidence.
+
+Verification rechecks current task, branch, scope, session, workspace revision, receipt anchors, and declared criterion mappings. Receipt retention is bounded; retired support makes prior criterion results unknown and requires a fresh check. A completion gate reports pass, fail, or escalate rather than promoting model claims.
+
+## Evidence, coding, and microplans
+
+Evidence packs are versioned task/branch artifacts with sources, exact passages, claims, conflicts, freshness policy, dependency records, and package-owned receipts. Retrieval assessment validates deterministic reference coverage and explicit freshness/conflict requirements; it does not establish semantic truth.
+
+Dependency records bind an exact installed version to current full reads of the installed manifest, optional supported lockfile, source passage, and—when relevant—the project declaration. The coding completion guard independently parses changed code for static external imports. Each detected external package needs current verified dependency evidence even if no declared acceptance criterion named it. Dynamic, alias, unreadable, deleted, or non-code changes cannot silently claim a local-only exemption; they add an exact-diff local-only review requirement.
+
+Coding state records an immutable baseline before mutation, scoped actual changes, exact-diff review dispositions, and repair cycles. Test-integrity, security-path, and local-only reviews become current host criteria and need native user attestation for the exact current diff. Both coding and final gates require current user verification, not just a retained `attested` disposition: branch removal or reaffirmation requires a fresh attestation. Retiring an exact-diff host criterion removes its active mappings while preserving receipt/claim history and consumed counters. Two failed repair cycles following a failed trusted validation block a third repair mutation. Coding phase gates consume current mapped native validation, including optional per-receipt `validation_status`; manual-only coding validation is refused. Historical missing validation metadata is treated conservatively.
+
+Every declared coding command must have its own current receipt, even when commands share a criterion. `receiptFollowsCurrentInstructions` in `src/verification-state.ts` checks persisted native branch order: the result anchor must follow every current authoritative instruction anchor. Native reaffirmation requires settled tools, so a check cannot straddle an accepted correction. Wall-clock timestamps and unchanged workspace bytes cannot establish this ordering. Parsed historical outcomes remain unchanged; missing native ordering proof stays unknown. Reaffirming identical text with a new native receipt requires fresh checks again, including after reload.
+
+Executable microplans have explicit allowed scope and exit conditions. A step becomes complete only through `reliability_record_progress` or `reliability_submit_worker_result` with matching current receipts or artifacts; Markdown checklists are audit context only. Step completion checks the current contract, scope, workspace and branch. Completed historical stages retain their immutable exit-contract evidence through planned downstream edits; final behavioral criteria still require fresh verification. New authoritative requirements invalidate affected completed proofs.
+
+## Input authority and retained-session plan artifacts
+
+Pi 0.85.1 exposes no ingress/admission/delivery correlation. `input` handlers observe progressively transformed text; queued steering/follow-up delivery can skip `before_agent_start`, and direct queue APIs can bypass the input hook. `src/input-authority.ts` therefore consumes only current persisted command/native-confirmation receipts. Historical interactive/RPC queue guesses remain untrusted history. `message_start` user events detect ambiguity without reconstructing raw text. Reliability continuations use custom messages, not synthetic user instructions; internal continuation commands explicitly enable command dispatch.
+
+The optional v2 `input_pause` stores an observation UUID, SHA-256, and session/branch anchor without raw text. Pending candidate text is live-only, bounded to 8,192 bytes. `/reliability input confirm [text]` requires native UI and rechecks candidate/task/session/branch after awaiting it. Its `native-confirmation` receipt is new authority, never an ingress attestation. Exact duplicate text with a new receipt is a new correction; reusing the same receipt does not invalidate proof twice. Persist/reopen confirmation before clearing the pause. Missing live text after reload requires explicit new input. Command-origin instructions, including `/reliability on <goal>`, have real branch receipts as well.
+
+Plan phases retain session identity and native receipts. The existing continuation nonce, iteration ceiling, cancellation controls, and shared completion gate remain in use. Final task completion belongs to the report continuation; intermediate `markComplete` requests cannot finalize a plan run.
+
+`reliability_status` accepts optional `artifact: { run_id, phase, slot, failure_index? }`. `reliability_record_progress` accepts the same artifact object plus `expected_sha256` and `content`; an artifact write cannot be combined with canonical progress fields. Slots are `exploration`, `plan`, `summary`, `verification`, `failure`, and `final-report`. Failure indices are 1–12. Read returns content/SHA-256; write returns the new SHA-256. The 32,768-byte limit, current run/phase/task/session anchors, derived paths, symlink rejection, per-slot exclusive lock and compare-before-replace protect this narrow channel. Caller paths, state, checkpoints, policy, and receipt slots are not accepted.
+
+Writes are phase-bound: explore→exploration; plan→plan; implement→plan/failure; summarize→summary; verify→verification/failure/plan; report→final-report. Artifact text remains untrusted; it cannot alter scope or satisfy verification. Applicable active scope budgets count artifact accesses. Generic protected-directory denial is unchanged. Workspace revision inventory excludes these artifacts, so a final report does not invalidate checked code.
+
+`tests/rf2b-native-lifecycle.test.mjs` exercises actual faux-provider streaming queues, direct steering/follow-up bypass, both transformer positions, real templates/skills, handled/rejected input, queue clearing and native UI decisions. `tests/rf2b-plan-native.test.mjs` drives all retained phases through actual registered tool execution and native receipts, including verify→report→completion. Registered recovery/slot negatives are in `tests/reliability-harness.test.mjs`; coordinator durability and schema negatives are in `tests/rf2b-boundaries.test.mjs`.
+
+## Structured output and quality gates
+
+A structured-output contract is a bounded declarative JSON file for JSON, CSV, enum, bounded-string, or Markdown-checklist validation. Contract activation rereads the file after native confirmation, binds raw and canonical hashes to a Pi receipt, and rejects symlinks, oversized files, unknown schema fields, executable content, or unsupported schema features. Candidate validation is bounded to the original candidate plus two repairs.
+
+Structural success says only that a candidate matches the declared contract. Factual, extraction, interpretation, and behavioral claims remain subject to evidence or human review. Quality-gate claims and escalations record their own native resolutions and cannot resolve unrelated permissions or criteria.
+
+Native quality decisions disclose the task and exact target. Before awaiting confirmation, `captureQualityGateDecisionBinding` captures target contents, task/session/branch identity, instructions and the latest decision. Registration rechecks the same active owner and binding before appending a receipt; canceled, changed or superseded dialogs mint no authority. An escalation whose prior receipt left the current branch may receive a new decision, preserving the old resolution as history. Already-current escalation decisions are refused before append; sequential semantic-review decisions retain their existing latest-decision semantics.
+
+## Checkpoints, advisor, orchestration, and evaluation
+
+Checkpoint artifacts contain immutable handoff, snapshot, request, and receipt material. The coordinator validates state/evidence/scope continuity and freezes mutation on invalid or recovery-required transitions. The installed production host has no verified curator transport, so a checkpoint is recorded as checkpoint-only; it cannot replace or compress the active chat. Any future reset transport must prove provider reset, exact provider-visible continuation, session/branch continuity, rollback, and timeout handling before it can change the context epoch.
+
+The coordinator's live pre-transform recovery witness is a `WeakMap` keyed by the original task object, bound to checkpoint/snapshot identity, pre-reset epoch and native session/branch. It is created only at the initial validated-state durability failure, before discovery/reset/restore. Recovery validates actual workspace content and sealed artifacts; only the workspace observation timestamp refreshed by UI/scratchpad probes is normalized to its witnessed value. It saves a fresh unique recovery transition and rereads it before clearing the latch. Reloaded in-flight states freeze conservatively, and session navigation/compaction/shutdown invalidate the live witness. Neither editable persisted flags, absent receipts, error-message matching, generic resume nor a restore response can establish recovery eligibility.
+
+Automatic advisor calls are a separate bounded path. The configuration must admit one exact authenticated model, `diagnostic-summary` scope, and positive call, token, and cost limits. A durable reservation precedes dispatch; reported usage is reconciled after it. The request is a redacted data-only diagnostic packet triggered only by a current observed failure, unresolved conflict, or exhausted repair episode. It can recommend a next action but cannot modify scope, criteria, permissions, or verification.
+
+Manual separate-model orchestration uses direct native Pi data-only completions for supervisor, worker, and verifier roles. There are no subprocesses, role tools, extensions, or child continuations. It requires native confirmation, exact configured roles, bounded packets, trusted usage metadata, and per-role/cumulative resource limits. Role outputs are parsed as bounded JSON and applied only after current-state checks.
+
+Live evaluation runs frozen sanitized cases through an exact authenticated adapter only after native confirmation. Expected outcomes and independent oracles remain host-only. The evaluator bounds cases, output, timeout, cancellation, duplicate IDs, and result shape; it records unavailable or simulated execution honestly and never substitutes a provider or model.
+
+Redaction of diagnostics, summaries and optional logs is pattern-limited best effort. Do not describe it as preventing all secret storage or transmission. Confirmed instruction text is intentionally lossless; checkpoint snapshot creation refuses recognized unsafe credential copies rather than inventing a lossless redaction guarantee.
+
+## Migration and maintenance
+
+Well-formed v1 state migrates in memory to v2 and is backed up byte-for-byte to `state.v1.backup.json` before the v2 replacement is committed. Legacy completion is converted to blocked/unproven state and must receive current v2 receipts. Migration events are append-only and retryable. Malformed, unsupported, failed, or identity-mismatched state returns `recovery-required`; callers must preserve the file and block mutation/completion instead of overwriting it.
+
+Historical v2 recognizers must reject later-wave markers before supplying absent fields. Both absent and early pre-advisor shapes reject modern `input_pause` and `current_session.input_authority_receipts`, including paired advisor/counter omissions. Recovery preserves the original bytes rather than silently resetting advisor spending. Genuine historical/v1 migration remains supported without changing schema version 2.
+
+RF3 cases in `tests/scope-guard.test.mjs` exercise registered native commands and installed `SessionManager` branches for delayed quality decisions, re-resolution, review currency, per-command reaffirmation and mapping retirement. Coding result events in those fixtures are simulated host observations, not real shell executions. `tests/integration-release.test.mjs` covers mixed-modern advisor recovery and genuine historical spending preservation.
+
+Keep user commands, compatibility, and safe configuration in `TECHNICAL.md`; keep user outcomes and first-use guidance in `README.md`; keep state schemas, tool contracts, runtime algorithms, and test guidance here. Update the six packaged skill contracts with behavior changes. Package publication, dependency upgrades, schema migrations, global settings, and live-provider runs require separate authorization.

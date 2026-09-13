@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "task_id": "legacy-task",
+  "created_at": "2026-01-01T00:00:00.000Z",
+  "updated_at": "2026-01-01T00:00:00.000Z",
+  "cwd": ".",
+  "status": "executing",
+  "user_goal": "The legacy task must be verified.",
+  "normalized_goal": "The legacy task must be verified.",
+  "success_criteria": ["The legacy task must be verified."],
+  "constraints": [],
+  "current_phase": "Inspect",
+  "current_step_id": "S1",
+  "plan": [{
+    "step_id": "S1",
+    "title": "Inspect",
+    "description": "Inspect the source.",
+    "status": "pending",
+    "depends_on": [],
+    "expected_output": "Source evidence",
+    "verification": "Check the source."
+  }],
+  "completed_steps": [],
+  "blocked_steps": [],
+  "known_facts": ["An unproven legacy claim."],
+  "open_questions": [],
+  "decisions": [],
+  "tool_history": [],
+  "files_touched": [],
+  "read_files": [],
+  "modified_files": [],
+  "errors": [],
+  "loop_warnings": [],
+  "verification": [{
+    "criterion": "The legacy task must be verified.",
+    "status": "passed",
+    "evidence": "Legacy model assertion",
+    "remaining_work": "",
+    "source": "model",
+    "updated_at": "2026-01-01T00:00:00.000Z"
+  }],
+  "next_action": "Inspect the source.",
+  "final_answer_requirements": ["Disclose unresolved verification."],
+  "counters": {
+    "context_injections": 0,
+    "model_responses": 0,
+    "tool_calls": 0,
+    "repeated_action_limit": 3
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "skill": "bounded-agent-execution",
+  "should_trigger": [
+    "Investigate this failing job, stay within the named files, and stop if the repair needs a dependency change.",
+    "Perform this multi-step repository task with a ten-call budget and report any unapproved decision.",
+    "Use tools iteratively to diagnose the issue but ask before a side effect."
+  ],
+  "should_not_trigger": [
+    "Read this one source file and explain it.",
+    "Change the known typo in this exact line.",
+    "Assign parallel workers and decide their governance policy.",
+    "Reply with exactly OK."
+  ]
+}

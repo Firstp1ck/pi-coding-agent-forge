@@ -1,0 +1,13 @@
+{
+  "skill": "version-aware-docs",
+  "should_trigger": [
+    "Use the installed framework version to configure this API.",
+    "Check the resolved CLI version before choosing an option.",
+    "Repair this integration using the package's installed types."
+  ],
+  "should_not_trigger": [
+    "Explain a local helper function.",
+    "Teach a version-independent JavaScript syntax rule.",
+    "Write a general status update without dependency claims."
+  ]
+}
