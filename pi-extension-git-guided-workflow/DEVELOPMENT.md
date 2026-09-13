@@ -121,6 +121,8 @@ Stage → Message → Commit → Push → Finish
 
 Action screens use Pi TUI's native `SelectList`; optional TUI message generation uses `BorderedLoader`; manual entry uses the native editor; mutations use native confirmation dialogs. Screens do not overlap.
 
+Guided TUI generation acquires a `StagedGenerationContext` with `COMMIT_GENERATION_CAPTURE_MAX_BYTES`, matching the 16 MiB native commit cap. The existing direct prompt remains in use up to 1 MiB. Both commit entry points share `completeChunkedCommit` above that threshold, including ordered chunk validation, finite output-token limits, cancellation, and progress notifications. The guided TUI parses the final response into selectable candidates without artifact writes or correction requests. TUI regressions cover complete byte coverage above 1 MiB, sequential requests, provider and summary failures, cancellation, and rejection above 16 MiB.
+
 Git commands are argv arrays, never shell strings. Normal hooks and signing remain enabled. Timeouts wait for the direct child close barrier; unconfirmed termination and ambiguous commit or push outcomes stop without automatic retry. Push uses an explicit immutable object-ID refspec and no force option.
 
 ## Source layout

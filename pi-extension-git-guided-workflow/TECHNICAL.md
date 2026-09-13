@@ -104,7 +104,7 @@ Stage → Message → Commit → Push
 
 Press Escape to cancel the current action list. Choose **Finish** to stop without continuing. Stage all and every commit or push mutation require explicit confirmation. The workflow rejects conflicts, detached HEAD, bare repositories, and active merge, rebase, cherry-pick, revert, or bisect operations.
 
-Manual message entry uses Pi's native editor and needs no model. Optional TUI generation sends the complete stable staged diff only after you select generation. The workflow rechecks root, branch, HEAD, operation state, and staged content before commit.
+Manual message entry uses Pi's native editor and needs no model. Optional TUI generation sends the complete stable staged diff only after you select generation. It accepts up to 16 MiB, using one request at or below 1 MiB and sequential analysis of chunks up to 512 KiB followed by final synthesis above that threshold. It reports the request count before analysis starts. Large diffs can take longer and cost more, with at most 34 requests. Unlike `/git-staged-msg`, the guided TUI does not request a final correction or write message artifacts. Generation failures, cancellation, and diffs above 16 MiB leave manual entry available. The workflow rechecks root, branch, HEAD, operation state, and staged content before commit.
 
 Push is available only while HEAD still equals the commit created by the workflow. The exact remote, branch, and immutable object-ID refspec are shown before confirmation. Force options are never used and uncertain push outcomes are never retried automatically.
 

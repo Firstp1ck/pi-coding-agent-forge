@@ -21,6 +21,7 @@ import gitGuidedWorkflow, {
 import {
   BRANCH_OUTPUT_MAX_TOKENS,
   COMMIT_CHUNK_SUMMARY_OUTPUT_MAX_TOKENS,
+  COMMIT_GENERATION_CAPTURE_MAX_BYTES,
   COMMIT_OUTPUT_MAX_TOKENS,
 } from "../src/native-generation.ts";
 
@@ -391,9 +392,83 @@ test("generation sends the complete diff only after selection and accepts the pr
   assert.ok(harness.renders.some(({ normal }) => /complete staged diff is sent to its provider/u.test(normal.join(" ").replace(/\s+/gu, " "))));
 });
 
-test("an oversized generation input is not sent and manual entry remains available", async () => {
-  const root = await repository("oversized-generation");
+test("guided generation analyzes diffs above 1 MiB completely before choosing a message", async () => {
+  const root = await repository("large-guided-generation");
   await stageTracked(root, `${"private staged content ".repeat(52_000)}\n`);
+  const expectedDiff = execFileSync("git", ["diff", "--cached", "--binary", "--full-index", "--no-ext-diff", "--no-textconv", "--no-renames", "--"], { cwd: root, maxBuffer: COMMIT_GENERATION_CAPTURE_MAX_BYTES });
+  assert.ok(expectedDiff.length > 1024 * 1024);
+  const calls = [];
+  let inFlight = 0;
+  const short = "docs: describe a large staged change";
+  const { commands } = extensionRegistration();
+  const harness = createContext(root, {
+    model: { id: "active-test-model", provider: "test" },
+    modelRegistry: {
+      async complete(_model, request, options) {
+        inFlight += 1;
+        assert.equal(inFlight, 1);
+        calls.push({ request, options });
+        await new Promise((resolve) => setImmediate(resolve));
+        inFlight -= 1;
+        if (/Summarize only the supplied staged-diff chunk/u.test(request.systemPrompt)) {
+          return assistantResponse(`Chunk ${requestEvidence(request).chunk.index} changes tracked content.`);
+        }
+        assert.match(request.systemPrompt, /ordered chunk summaries/u);
+        return assistantResponse(`${short}\n\nDescribe the complete staged change.`);
+      },
+    },
+    actionMoves: [0, 0, 0, 0, 0, 0],
+  });
+  await commands.get(COMMAND_NAME).handler("", harness.ctx);
+  assert.equal(calls.length, 4);
+  const analyses = calls.slice(0, -1);
+  assert.deepEqual(Buffer.concat(analyses.map(({ request }) => Buffer.from(requestEvidence(request).diff))), expectedDiff);
+  assert.deepEqual(analyses.map(({ request }) => requestEvidence(request).chunk.index), [0, 1, 2]);
+  assert.ok(analyses.every(({ options }) => options.maxTokens === COMMIT_CHUNK_SUMMARY_OUTPUT_MAX_TOKENS));
+  assert.equal(calls.at(-1).options.maxTokens, COMMIT_OUTPUT_MAX_TOKENS);
+  assert.equal(requestEvidence(calls.at(-1).request).chunks.some((chunk) => Object.hasOwn(chunk, "diff")), false);
+  assert.ok(harness.notifications.some(({ message }) => /4 model requests.*3 sequential chunk analyses/u.test(message)));
+  assert.equal(git(root, "log", "-1", "--pretty=%s"), short);
+});
+
+test("guided large-diff failures and cancellation stop later requests and preserve manual entry", async (t) => {
+  for (const failure of ["provider", "empty-summary", "cancel"]) {
+    await t.test(failure, async () => {
+      const root = await repository(`large-guided-${failure}`);
+      await stageTracked(root, `${"private staged content ".repeat(52_000)}\n`);
+      let calls = 0;
+      let loader;
+      const { commands } = extensionRegistration();
+      const harness = createContext(root, {
+        model: { id: "active-test-model", provider: "test" },
+        modelRegistry: {
+          async complete(_model, _request, { signal }) {
+            calls += 1;
+            await new Promise((resolve) => setImmediate(resolve));
+            if (failure === "provider") throw new Error("chunk provider unavailable");
+            if (failure === "empty-summary") return assistantResponse(" ");
+            loader.handleInput("\x1b");
+            assert.equal(signal.aborted, true);
+            return assistantResponse("Late summary must not trigger another request.");
+          },
+        },
+        actionMoves: [0, 0, 1, 0, 3],
+        editorValues: ["docs: use manual after large-diff failure"],
+        onLoader(component) { loader = component; },
+      });
+      const before = git(root, "rev-parse", "HEAD");
+      await commands.get(COMMAND_NAME).handler("", harness.ctx);
+      await new Promise((resolve) => setImmediate(resolve));
+      assert.equal(calls, 1);
+      assert.ok(harness.notifications.some(({ message }) => /Manual entry is still available/u.test(message)));
+      assert.equal(git(root, "rev-parse", "HEAD"), before);
+    });
+  }
+});
+
+test("a guided diff above 16 MiB is not sent and manual entry remains available", async () => {
+  const root = await repository("oversized-generation");
+  await stageTracked(root, `${"x".repeat(COMMIT_GENERATION_CAPTURE_MAX_BYTES)}\n`);
   let completeCalls = 0;
   const { commands } = extensionRegistration();
   const harness = createContext(root, {

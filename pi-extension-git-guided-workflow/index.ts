@@ -9,7 +9,6 @@ import {
 import { Container, type SelectItem, SelectList, Text } from "@earendil-works/pi-tui";
 import {
   GuidedGitError,
-  acquireStableStagedSnapshot,
   classifyPostCommitHead,
   discoverPushDestination,
   parseGeneratedOutput,
@@ -55,7 +54,9 @@ import {
   writeCommitArtifacts,
   writePrArtifact,
   type CommitChunkSummary,
+  type CommitGenerationArgs,
   type NativeModelRequest,
+  type StagedGenerationContext,
 } from "./src/native-generation.ts";
 
 export const COMMAND_NAME = "git-guided-workflow";
@@ -410,12 +411,32 @@ function generationUserMessage(snapshot: StagedSnapshot) {
   };
 }
 
+async function completeChunkedCommit(
+  ctx: ExtensionCommandContext,
+  target: NativeGenerationTarget,
+  context: StagedGenerationContext,
+  args: CommitGenerationArgs,
+  signal: AbortSignal,
+  commandName: string,
+): Promise<{ output: string; summaries: CommitChunkSummary[] }> {
+  const chunks = partitionStagedDiff(context);
+  const summaries: CommitChunkSummary[] = [];
+  ctx.ui.notify(`/${commandName} will use ${chunks.length + 1} model requests for this large staged diff: ${chunks.length} sequential chunk analyses, then one final synthesis.`, "info");
+  for (const chunk of chunks) {
+    const chunkOutput = await completeNativeRequest(ctx, target, buildCommitChunkAnalysisModelRequest(context, chunk), signal, COMMIT_CHUNK_SUMMARY_OUTPUT_MAX_TOKENS);
+    summaries.push(parseCommitChunkSummaryOutput(chunkOutput, chunk));
+  }
+  ctx.ui.notify(`/${commandName} analyzed ${summaries.length}/${chunks.length} chunks; synthesizing the final commit message from the retained summaries.`, "info");
+  const output = await completeNativeRequest(ctx, target, buildCommitSynthesisModelRequest(context, args, summaries), signal, COMMIT_OUTPUT_MAX_TOKENS);
+  return { output, summaries };
+}
+
 type GenerationResult = { kind: "success"; output: string } | { kind: "cancelled" } | { kind: "failure"; message: string };
 
 async function generateMessages(
   ctx: ExtensionCommandContext,
   active: ActiveWorkflow,
-  snapshot: StagedSnapshot,
+  snapshot: StagedGenerationContext,
 ): Promise<GenerationResult> {
   if (!ctx.model) return { kind: "failure", message: "No active model is selected" };
   const controller = new AbortController();
@@ -439,20 +460,19 @@ async function generateMessages(
       controller.signal.addEventListener("abort", onControllerAbort, { once: true });
       loader.onAbort = () => controller.abort();
       const signal = AbortSignal.any([loader.signal, controller.signal]);
-      ctx.modelRegistry.complete(
-        ctx.model!,
-        { systemPrompt: GENERATION_SYSTEM_PROMPT, messages: [generationUserMessage(snapshot)] },
-        { signal },
-      ).then((response) => {
-        if (signal.aborted || response.stopReason === "aborted") return finish({ kind: "cancelled" });
-        const output = response.content
-          .filter((part): part is { type: "text"; text: string } => part.type === "text")
-          .map((part) => part.text)
-          .join("\n");
-        finish({ kind: "success", output });
-      }).catch((error) => finish(signal.aborted
+      const target = resolveNativeGenerationInvocation(ctx, "").target;
+      const generation = snapshot.byteLength <= COMMIT_GENERATION_DIRECT_MAX_BYTES
+        ? completeNativeRequest(ctx, target, {
+          systemPrompt: GENERATION_SYSTEM_PROMPT, messages: [generationUserMessage(snapshot)],
+        }, signal, COMMIT_OUTPUT_MAX_TOKENS)
+        : completeChunkedCommit(ctx, target, snapshot, { language: "en", scope: "auto" }, signal, COMMAND_NAME)
+          .then(({ output }) => output);
+      generation.then((output) => finish(signal.aborted
         ? { kind: "cancelled" }
-        : { kind: "failure", message: errorMessage(error) }));
+        : { kind: "success", output }))
+        .catch((error) => finish(signal.aborted || isCode(error, "GENERATION_CANCELLED")
+          ? { kind: "cancelled" }
+          : { kind: "failure", message: errorMessage(error) }));
       return loader;
     });
   } finally {
@@ -504,9 +524,9 @@ async function chooseMessage(
       continue;
     }
     if (choice === "generate") {
-      let snapshot: StagedSnapshot;
+      let snapshot: StagedGenerationContext;
       try {
-        snapshot = await acquireStableStagedSnapshot(state.root);
+        snapshot = await acquireStagedGenerationContext(state.root, { maxBytes: COMMIT_GENERATION_CAPTURE_MAX_BYTES });
         if (snapshot.fingerprint !== fingerprint) throw new GuidedGitError("STAGED_STATE_CHANGED", "Staged changes changed before generation");
       } catch (error) {
         if (isCode(error, "GENERATION_INPUT_TOO_LARGE") || isCode(error, "GENERATION_INPUT_ENCODING")) {
@@ -834,15 +854,7 @@ export default function gitGuidedWorkflow(pi: ExtensionAPI): void {
         if (context.byteLength <= COMMIT_GENERATION_DIRECT_MAX_BYTES) {
           output = await completeNativeRequest(ctx, invocation.target, buildCommitModelRequest(context, args), signal, COMMIT_OUTPUT_MAX_TOKENS);
         } else {
-          const chunks = partitionStagedDiff(context);
-          summaries = [];
-          ctx.ui.notify(`/${COMMIT_GENERATION_COMMAND_NAME} will use ${chunks.length + 1} model requests for this large staged diff: ${chunks.length} sequential chunk analyses, then one final synthesis.`, "info");
-          for (const chunk of chunks) {
-            const chunkOutput = await completeNativeRequest(ctx, invocation.target, buildCommitChunkAnalysisModelRequest(context, chunk), signal, COMMIT_CHUNK_SUMMARY_OUTPUT_MAX_TOKENS);
-            summaries.push(parseCommitChunkSummaryOutput(chunkOutput, chunk));
-          }
-          ctx.ui.notify(`/${COMMIT_GENERATION_COMMAND_NAME} analyzed ${summaries.length}/${chunks.length} chunks; synthesizing the final commit message from the retained summaries.`, "info");
-          output = await completeNativeRequest(ctx, invocation.target, buildCommitSynthesisModelRequest(context, args, summaries), signal, COMMIT_OUTPUT_MAX_TOKENS);
+          ({ output, summaries } = await completeChunkedCommit(ctx, invocation.target, context, args, signal, COMMIT_GENERATION_COMMAND_NAME));
         }
         let generated: { short: string; long: string };
         try {

@@ -29,7 +29,7 @@ Open Pi inside the repository you want to work with. To use the guided flow, run
 In Pi's native terminal interface:
 
 1. Choose the current staged set or confirm **Stage all changes**.
-2. Write a message manually, or choose generation when an active model is available.
+2. Write a message manually, or choose generation when an active model is available. Guided message generation accepts staged diffs up to 16 MiB.
 3. Review the exact message and staged summary, then confirm the commit.
 4. Push to the shown destination, or finish with the commit kept locally.
 
@@ -51,7 +51,7 @@ This extension runs Git with your user permissions. Review staged changes and di
 
 Manual message entry never needs a model. Model generation sends the required complete, bounded Git or repository context directly to the selected model provider only after you select generation or invoke a generation command. Direct commands use the active Pi model; browser-launched generation uses the model saved in Guided Git Setup without changing the parent tab's model or reasoning effort. That content may contain private code, commit text, filenames, or a pull-request template. Do not generate unless sharing that content with the selected provider is acceptable.
 
-Generation commands call the selected model directly. They do not expand prompt templates or ask a parent agent to run Git or file tools. `/git-staged-msg` uses one request for a staged diff at or below 1 MiB. Above 1 MiB, it sends every byte of the staged diff to the provider in bounded sequential chunks, then asks once for a final message using the retained summaries. This takes several requests, can cost more, and may take longer. The command reports the request count before analysis starts.
+Generation commands call the selected model directly. They do not expand prompt templates or ask a parent agent to run Git or file tools. Both `/git-staged-msg` and guided TUI message generation use one request for a staged diff at or below 1 MiB. Above 1 MiB, both send every byte of the staged diff to the provider in bounded sequential chunks, then ask once for a final message using the retained summaries. This takes several requests, can cost more, and may take longer. Both report the request count before analysis starts.
 
 `/git-staged-msg` applies staged-only language, scope, type, length, and body guidance. Those are quality guidelines, not reasons to discard safe generated text. Chunk summaries accept any non-empty bounded safe plain text; presentation and delimiters are not enforced. If the final commit response cannot be safely parsed into message artifacts, the command can send one final correction request. Large-diff final correction reuses the retained summaries and does not analyze the chunks again. A provider failure, empty or unsafe chunk summary, repository drift, cancellation, or unsafe artifact path writes no new artifact and produces no stale success.
 
