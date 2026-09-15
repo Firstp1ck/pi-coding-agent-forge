@@ -1,0 +1,26 @@
+{
+  "name": "@firstpick/pi-extension-image-generation",
+  "version": "0.1.0",
+  "description": "Choose an OpenRouter image model in Pi and generate images with user confirmation.",
+  "type": "module",
+  "license": "MIT",
+  "homepage": "https://github.com/Firstp1ck/pi-coding-agent-forge/tree/main/pi-extension-image-generation#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Firstp1ck/pi-coding-agent-forge.git",
+    "directory": "pi-extension-image-generation"
+  },
+  "keywords": ["pi-package", "pi", "pi-coding-agent", "extension", "openrouter", "image-generation"],
+  "pi": { "extensions": ["./index.ts"] },
+  "scripts": {
+    "test": "node --experimental-strip-types --test tests/*.test.ts",
+    "check": "node --experimental-strip-types --check index.ts && node --experimental-strip-types --check openrouter.ts && node --experimental-strip-types --check workflow.ts && node --experimental-strip-types --check command.ts && node --experimental-strip-types --check settings.ts && node --experimental-strip-types --check auth.ts && node --experimental-strip-types --check setup.ts"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-ai": "*",
+    "typebox": "*"
+  },
+  "files": ["index.ts", "openrouter.ts", "workflow.ts", "command.ts", "settings.ts", "auth.ts", "setup.ts", "README.md", "TECHNICAL.md", "DEVELOPMENT.md", "LICENSE"],
+  "engines": { "node": ">=22.19.0" }
+}
