@@ -287,6 +287,28 @@ export async function readStagedFingerprint(root: string, runner: GitRunner = ru
   };
 }
 
+export interface BoundStagedState {
+  state: RepositoryState;
+  fingerprint: string;
+}
+
+/** Capture status, root, branch, and HEAD between matching bounded staged fingerprints. */
+export async function captureBoundStagedState(
+  cwd: string,
+  runner: GitRunner = runGit,
+): Promise<BoundStagedState> {
+  const initial = await preflightRepository(cwd, runner);
+  const before = await readStagedFingerprint(initial.root, runner);
+  if (!before.fingerprint) throw new GuidedGitError("NOTHING_STAGED", "No staged changes are available");
+  const state = await preflightRepository(cwd, runner);
+  if (state.root !== initial.root) throw new GuidedGitError("REPOSITORY_CHANGED", "The repository root changed while staged state was being captured");
+  const after = await readStagedFingerprint(state.root, runner);
+  if (before.fingerprint !== after.fingerprint) {
+    throw new GuidedGitError("STAGED_STATE_CHANGED", "Staged changes changed while repository status was being captured");
+  }
+  return { state, fingerprint: before.fingerprint };
+}
+
 export interface StagedSnapshot {
   fingerprint: string;
   diff: Buffer;
@@ -325,6 +347,38 @@ export interface CommandPlan { command: "git"; args: string[] }
 
 export function planStageAll(): CommandPlan {
   return { command: "git", args: ["add", "--all", "--"] };
+}
+
+function validateRepositoryRelativePath(value: string): string {
+  if (typeof value !== "string" || !value || path.isAbsolute(value) || value.startsWith("-")
+    || value.split(/[\\/]/u).some((segment) => segment === "" || segment === "." || segment === "..")
+    || /\x00|[\u0001-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/u.test(value)) {
+    throw new GuidedGitError("INVALID_REPOSITORY_PATH", "A repository-relative path is unsafe");
+  }
+  return value;
+}
+
+/** Plan staging for an explicit, non-empty set of repository-relative paths. */
+export function planStagePaths(relativePaths: readonly string[]): CommandPlan {
+  if (!Array.isArray(relativePaths) || relativePaths.length === 0) {
+    throw new GuidedGitError("NO_STAGE_PATHS", "Select at least one path to stage");
+  }
+  const paths = relativePaths.map(validateRepositoryRelativePath);
+  if (new Set(paths).size !== paths.length) throw new GuidedGitError("DUPLICATE_STAGE_PATH", "A path was selected more than once");
+  return { command: "git", args: ["add", "--", ...paths] };
+}
+
+/** Read the complete configured remote-name list with bounded Git output. */
+export async function readRemotes(root: string, runner: GitRunner = runGit): Promise<string[]> {
+  const bytes = await requireGit(root, ["remote"], runner, { maxStdoutBytes: 64 * 1024 });
+  let text: string;
+  try { text = new TextDecoder("utf-8", { fatal: true }).decode(bytes); }
+  catch { throw new GuidedGitError("GIT_OUTPUT_ENCODING", "Git remote names are not valid UTF-8"); }
+  const remotes = text.split(/\r?\n/u).filter(Boolean);
+  if (remotes.some((remote) => remote.startsWith("-") || /\x00|[\u0001-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/u.test(remote))) {
+    throw new GuidedGitError("INVALID_REMOTE", "Git returned an unsafe remote name");
+  }
+  return remotes;
 }
 
 function assertNoUnsafeControls(message: string): void {

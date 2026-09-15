@@ -31,6 +31,7 @@ import {
   partitionStagedDiff,
   parsePrGenerationArgs,
   parsePrOutput,
+  readSafeOptionalRepositoryFile,
   resolveDefaultBase,
   writeBranchArtifact,
   writeCommitArtifacts,
@@ -471,6 +472,22 @@ test("PR context binds current branch, base, complete commits/diff, and optional
   assert.doesNotMatch(context.diff, /unstaged secret/u);
   assert.match(context.template, /\[describe changes\]/u);
   assert.equal(context.byteLength, Buffer.byteLength(context.commits) + Buffer.byteLength(context.diff) + Buffer.byteLength(context.template));
+});
+
+test("bounded repository-file reads expose complete UTF-8 hashes and reject unsafe relative paths", async () => {
+  const root = await repo("safe-repository-file");
+  await mkdir(path.join(root, "dev", "COMMIT"), { recursive: true });
+  const relative = "dev/COMMIT/evidence.txt";
+  const content = "bounded evidence\n";
+  await writeFile(path.join(root, relative), content);
+  const file = await readSafeOptionalRepositoryFile(root, relative, Buffer.byteLength(content));
+  assert.equal(file.text, content);
+  assert.equal(file.byteLength, Buffer.byteLength(content));
+  assert.equal(file.sha256, createHash("sha256").update(content).digest("hex"));
+  await assertCode(readSafeOptionalRepositoryFile(root, relative, Buffer.byteLength(content) - 1), "GENERATION_INPUT_TOO_LARGE");
+  await assertCode(readSafeOptionalRepositoryFile(root, "../outside.txt", 100), "ARTIFACT_PATH_ESCAPE");
+  await assertCode(readSafeOptionalRepositoryFile(root, "dev\\COMMIT\\evidence.txt", 100), "ARTIFACT_PATH_ESCAPE");
+  await assertCode(readSafeOptionalRepositoryFile(root, relative, 0), "INVALID_FILE_LIMIT");
 });
 
 test("branch artifact context reads only safe, paired, valid optional commit files", async () => {

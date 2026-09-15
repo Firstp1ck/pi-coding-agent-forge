@@ -7,8 +7,10 @@ Use native Pi commands to generate Git text safely, or start a careful commit-an
 - Generate validated Conventional Commit files from staged diffs up to 16 MiB with `/git-staged-msg`; large diffs are analyzed completely in bounded sequential requests before one final synthesis.
 - Generate a safe branch-name file with `/git-branch-name`.
 - Generate a reviewer-focused pull-request description with `/pr`.
-- Review staged changes, commit, and push through the existing `/git-guided-workflow` TUI flow.
-- Start the richer Guided Git browser flow from the same workflow command in a compatible WebUI.
+- Open a centered native overlay with direct Initialize, Stage, Message, Commit, and Push entry points.
+- Reuse generated commit files, choose a safe one-file default, initialize a repository on `main`, or publish a no-remote repository through authenticated `gh`.
+- Save native generation, language, scope, message, staging, entry, and verification defaults with `/git-guided-workflow-setup`.
+- Start the Guided Git browser flow from the same workflow command in a compatible WebUI.
 
 ## Install
 
@@ -28,10 +30,13 @@ Open Pi inside the repository you want to work with. To use the guided flow, run
 
 In Pi's native terminal interface:
 
-1. Choose the current staged set or confirm **Stage all changes**.
-2. Write a message manually, or choose generation when an active model is available. Guided message generation accepts staged diffs up to 16 MiB.
-3. Review the exact message and staged summary, then confirm the commit.
-4. Push to the shown destination, or finish with the commit kept locally.
+1. Choose a direct entry. A directory outside Git can be initialized on `main`; an existing repository is never renamed.
+2. Preserve the current index or confirm **Stage all changes**. Starter files are created and staged only when you select them.
+3. Write a message, generate candidates, explicitly reuse `dev/COMMIT/` files, or choose the one-file default when it is safe.
+4. Review the exact message and staged summary, then confirm the commit.
+5. Push the bound HEAD to the shown destination. When no remote exists, you may explicitly select Public or Private and publish once through system `gh`.
+
+Run `/git-guided-workflow-setup` to save native-only defaults. Saving does not switch Pi's active model or reasoning effort. Until setup is saved, generation uses the active model and manual entry remains available.
 
 In a compatible WebUI, the same command asks that WebUI to open its Guided Git workflow for the originating tab. The browser keeps its staging, isolated generation profile, artifact checks, commit, push, and optional pull-request controls. The saved generation model runs independently without changing the tab's active model or reasoning effort.
 
@@ -49,7 +54,7 @@ The commands write under `dev/COMMIT/` and `dev/PR/`; they do not stage, commit,
 
 This extension runs Git with your user permissions. Review staged changes and displayed destinations carefully. The guided TUI never force-pushes, but a normal push still changes a remote repository.
 
-Manual message entry never needs a model. Model generation sends the required complete, bounded Git or repository context directly to the selected model provider only after you select generation or invoke a generation command. Direct commands use the active Pi model; browser-launched generation uses the model saved in Guided Git Setup without changing the parent tab's model or reasoning effort. That content may contain private code, commit text, filenames, or a pull-request template. Do not generate unless sharing that content with the selected provider is acceptable.
+Manual, reused, and deterministic messages never need a model. Model generation sends the required complete, bounded Git or repository context directly to the selected model provider only after you select generation or invoke a generation command. Direct commands use the active Pi model. Native and browser setup profiles run independently without changing the parent session's model or reasoning effort. If native setup includes a fallback, the overlay identifies both providers and warns that one eligible provider failure will resend the same evidence once. Cancellation, invalid output, invalid settings, repository drift, Git errors, and artifact errors never trigger fallback. That content may contain private code, commit text, filenames, or a pull-request template. Do not generate unless sharing that content with the selected provider is acceptable.
 
 Generation commands call the selected model directly. They do not expand prompt templates or ask a parent agent to run Git or file tools. Both `/git-staged-msg` and guided TUI message generation use one request for a staged diff at or below 1 MiB. Above 1 MiB, both send every byte of the staged diff to the provider in bounded sequential chunks, then ask once for a final message using the retained summaries. This takes several requests, can cost more, and may take longer. Both report the request count before analysis starts.
 
@@ -57,7 +62,7 @@ Generation commands call the selected model directly. They do not expand prompt 
 
 Requesting the browser workflow sends no repository path, diff, preferences, or Git data in the activation signal. The WebUI then owns its browser workflow and passes the configured generation profile privately to the extension command.
 
-Git hooks and signing remain enabled for guided commits. Hooks can change the worktree or index while a commit is being created. A timed-out push can be uncertain; the workflow will not retry it automatically.
+Git hooks and signing remain enabled for guided commits. Hooks can change the worktree or index while a commit is being created. Generated files are labeled as unverified for the current index until you select and review one. Push and GitHub publication can have uncertain outcomes; the workflow will not retry or clean them up automatically.
 
 ## Technical details
 

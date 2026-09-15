@@ -28,7 +28,7 @@
   },
   "scripts": {
     "test": "node --test tests/*.test.mjs",
-    "check": "node --experimental-strip-types --check index.ts && node --experimental-strip-types --check src/core.ts && node --experimental-strip-types --check src/native-generation.ts"
+    "check": "node --experimental-strip-types --check index.ts && node --experimental-strip-types --check src/core.ts && node --experimental-strip-types --check src/native-generation.ts && node --experimental-strip-types --check src/preferences.ts && node --experimental-strip-types --check src/message-files.ts && node --experimental-strip-types --check src/repository-setup.ts && node --experimental-strip-types --check src/tui.ts"
   },
   "peerDependencies": {
     "@earendil-works/pi-ai": "*",
@@ -39,6 +39,10 @@
     "index.ts",
     "src/core.ts",
     "src/native-generation.ts",
+    "src/preferences.ts",
+    "src/message-files.ts",
+    "src/repository-setup.ts",
+    "src/tui.ts",
     "README.md",
     "TECHNICAL.md",
     "DEVELOPMENT.md",

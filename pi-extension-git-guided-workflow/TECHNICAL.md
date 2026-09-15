@@ -10,7 +10,8 @@ Advanced user guidance for native generation, the Pi TUI workflow, WebUI activat
 - Node.js 22.19 or newer
 - Git available on `PATH`
 - A normal, non-bare Git worktree on an attached branch
-- An active model for direct generation commands, or a valid configured model for browser-launched generation
+- An active model for direct generation commands, or a valid configured model for native or browser generation
+- Authenticated system `gh` only when publishing a repository that has no remote
 - A compatible WebUI RPC session for browser activation
 
 One extension provides the workflow launcher and all three generation commands. No additional prompt package is required.
@@ -19,6 +20,7 @@ One extension provides the workflow launcher and all three generation commands. 
 
 ```text
 /git-guided-workflow
+/git-guided-workflow-setup
 /git-staged-msg [en|de] [auto|never|required]
 /git-branch-name
 /pr [en|de]
@@ -35,7 +37,7 @@ Unknown or extra arguments are rejected before repository data is read or a mode
 
 `/pr` defaults to English and writes one file under `dev/PR/`. The current branch is encoded as a single safe filename, so `feat/example` becomes `dev/PR/feat%2Fexample.md`.
 
-The commands generate files only. They do not stage, commit, create or switch branches, push, or run GitHub CLI.
+The three generation commands generate files only. They do not stage, commit, create or switch branches, push, or run GitHub CLI. The guided workflow performs only the mutations you confirm.
 
 ## Native generation and privacy
 
@@ -99,16 +101,30 @@ The command does not invent a base. Detached HEAD, missing or ambiguous bases, u
 In Pi's native TUI, its stages are:
 
 ```text
-Stage → Message → Commit → Push
+Initialize → Stage → Message → Commit → Push
 ```
 
-Press Escape to cancel the current action list. Choose **Finish** to stop without continuing. Stage all and every commit or push mutation require explicit confirmation. The workflow rejects conflicts, detached HEAD, bare repositories, and active merge, rebase, cherry-pick, revert, or bisect operations.
+Every screen is a centered, width-bounded and height-bounded overlay. Lists and settings use Pi's native list components, and commit text uses the native editor. Press Escape to cancel without mutation. Choose **Finish** to stop. Stage all, initialization, starter creation and staging, commit, push, and publication have explicit confirmation boundaries. The workflow rejects conflicts, detached HEAD, bare repositories, and active merge, rebase, cherry-pick, revert, or bisect operations.
 
-Manual message entry uses Pi's native editor and needs no model. Optional TUI generation sends the complete stable staged diff only after you select generation. It accepts up to 16 MiB, using one request at or below 1 MiB and sequential analysis of chunks up to 512 KiB followed by final synthesis above that threshold. It reports the request count before analysis starts. Large diffs can take longer and cost more, with at most 34 requests. Unlike `/git-staged-msg`, the guided TUI does not request a final correction or write message artifacts. Generation failures, cancellation, and diffs above 16 MiB leave manual entry available. The workflow rechecks root, branch, HEAD, operation state, and staged content before commit.
+Manual message entry uses Pi's native editor and needs no model. Press `Shift+Enter` or `Ctrl+J` to insert a body newline; Enter submits the editor. If the terminal is too short for the native editor and its cursor, editing and submission pause until you resize it; Escape still cancels and the unchanged document regains focus after the terminal grows. Existing paired `dev/COMMIT/` files can be previewed and explicitly reused, but remain labeled unverified for the current index. One clean staged added, modified, or deleted file with no other changes can offer `created`, `updated`, or `deleted` plus the exact path. That status and repository identity are captured between matching staged fingerprints after your Stage or direct-entry selection. Mixed, renamed, conflicted, unsafe, and overlong paths get no automatic message. Every selected message is reviewed and rebound to a fresh staged fingerprint before commit.
 
-Push is available only while HEAD still equals the commit created by the workflow. The exact remote, branch, and immutable object-ID refspec are shown before confirmation. Force options are never used and uncertain push outcomes are never retried automatically.
+Optional TUI generation sends the complete stable staged diff only after you select generation. It accepts up to 16 MiB, using one request at or below 1 MiB and sequential analysis of chunks up to 512 KiB followed by final synthesis above that threshold. It reports the request count before analysis starts. Large diffs can take longer and cost more, with at most 34 requests. Unlike `/git-staged-msg`, the guided TUI does not request a final correction or write message artifacts. Generation failures, cancellation, and diffs above 16 MiB leave manual entry available. The workflow rechecks root, branch, HEAD, operation state, and staged content before commit.
+
+Push can bind either the commit created in this invocation or an existing HEAD chosen through direct Push entry. The workflow rechecks canonical root, branch, immutable HEAD, remote, and refspec after confirmation. Force options are never used and uncertain push outcomes are never retried automatically.
+
+For a directory outside Git, Initialize binds the directory identity, refuses parent or existing repositories, runs `git init --initial-branch=main --`, and never renames an existing branch. Optional root `README.md` and `.gitignore` starters never overwrite files or follow symlinks. Only selected newly created starter paths can be staged.
+
+When no remote exists, Push can offer publication through authenticated system `gh`. Public and Private have no preselected visibility. Before one invocation, the overlay shows and rechecks `github.com`, authenticated account, root-derived repository name, canonical root, branch, exact HEAD, visibility, and command. Session shutdown is checked again after asynchronous revalidation and immediately before initialization, starter creation or staging, and publication starts. Existing remotes, invalid names, missing authentication, drift, cancellation, and ambiguous results stop without retry or automatic cleanup.
 
 In a compatible WebUI RPC session, `/git-guided-workflow` emits a one-shot activation request for the originating tab. The activation runs no Git command, calls no model, and includes no repository path or Git data. Browser generation requires the three RPC-capable extension commands from this package; same-named prompt templates are not accepted as the native generation path. The WebUI passes its configured generation profile in a private extension-command argument. The extension validates that profile, invokes the selected provider independently, and writes the correlated artifact without switching or restoring the parent tab's active model or reasoning effort.
+
+## Native setup
+
+`/git-guided-workflow-setup` stores native preferences in `git-guided-workflow.json` under Pi's agent directory. This file is separate from WebUI settings and contains no secrets. Opening or cancelling setup does not write it. Press `Ctrl+S` on the settings overlay to save explicitly.
+
+You can select an available primary model and supported reasoning effort, an optional different fallback profile, English or German, automatic/never/required scope, short or long default variant, preserve or stage-all ordering, default entry stage, and an ask/none verification reminder. Unconfigured generation uses the active Pi model. A configured unavailable model or effort disables generation with a warning instead of substituting the active model; manual, saved-artifact, deterministic, initialization, and push flows remain available.
+
+Fallback is limited to one final eligible provider failure. The overlay identifies both profiles and warns before work that fallback resends the staged evidence. Cancellation, invalid output, invalid preferences, drift, Git failures, and artifact failures do not use fallback. Manual entry remains available without any model.
 
 ## Troubleshooting
 

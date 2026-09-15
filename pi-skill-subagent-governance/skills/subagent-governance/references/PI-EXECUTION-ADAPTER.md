@@ -43,10 +43,10 @@ These are **Pi-local defaults for this workstation**, not portable policy. They 
 
 | Slot | Local default | Notes |
 | --- | --- | --- |
-| Implementation worker | `openai-codex/gpt-5.6-terra` with xhigh thinking | Unless the task or the user requires another provider. |
-| Fix worker | `openai-codex/gpt-5.6-terra` with xhigh thinking | Or the implementation provider already selected for the feature. |
-| Tests and acceptance reviewer | `openai-codex/gpt-5.6-sol` with high thinking | For non-feature reviews. Feature reviews follow the feature provider-diversity requirement instead. |
-| Feature correctness reviewers | Strongest suitable available models from the required distinct provider families | Use high or greater thinking when supported. |
+| Implementation worker | `openai-codex/gpt-5.6-sol` with high thinking | Unless the task or the user requires another provider. |
+| Fix worker | `openai-codex/gpt-5.6-sol` with high thinking | Or the implementation provider already selected for the feature. |
+| Tests and acceptance reviewer | Most capable available review model, preferring the `openai-codex` provider | Select from the live model registry rather than pinning a model ID. Use high or greater thinking when supported. |
+| Feature correctness reviewers | Most capable available review models from the required distinct provider families | Prefer `openai-codex` for the primary reviewer when compatible with the feature provider-diversity requirement. Use high or greater thinking when supported. |
 
 Provider route preference: when a usable OpenAI Codex or Anthropic subscription is detected, prefer its subscription-backed provider route over the OpenRouter API for subagents. Use OpenRouter only when the matching subscription route is unavailable, unsuitable for the task, exhausted, or explicitly requested by the user.
 

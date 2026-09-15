@@ -6,22 +6,25 @@ Contributor-only implementation, API, architecture, testing, and maintenance inf
 
 ## Architecture
 
-`index.ts` owns four Pi command registrations, surface routing, active nested-model lifecycle, session-shutdown cancellation, native TUI orchestration, WebUI activation, and user notifications.
+`index.ts` owns five Pi command registrations, surface routing, active nested-model lifecycle, session-shutdown cancellation, native workflow orchestration, WebUI activation, and user notifications.
 
-`src/core.ts` owns shell-free bounded Git execution, repository preflight, status parsing, staged fingerprints and snapshots, commit-message validation, and commit/push plans.
+`src/core.ts` owns shell-free bounded Git execution, repository preflight, status parsing, staged fingerprints and snapshots, fingerprint-enclosed status capture, commit-message validation, and commit/push plans.
 
 `src/native-generation.ts` owns strict command argument parsing, staged/branch/PR generation contexts, commit capture and chunk bounds, UTF-8-safe partitioning, untrusted analysis/synthesis/correction requests, closed-output parsers, base resolution, artifact naming, snapshot revalidation, and secure transactional writes.
+
+`src/preferences.ts` owns the separate bounded native settings file and profile validation. `src/message-files.ts` owns safe commit-artifact previews and deterministic one-file defaults. `src/repository-setup.ts` owns bounded initialization, starter-file, and one-shot GitHub publication plans, with current-workflow guards immediately before mutations after asynchronous revalidation. `src/tui.ts` owns centered overlay options and native SelectList, SettingsList, and Editor wrappers, including resize-required editor gating when the native cursor viewport cannot fit.
 
 The registered commands are:
 
 ```text
+git-guided-workflow-setup
 git-staged-msg
 git-branch-name
 pr
 git-guided-workflow
 ```
 
-The three generation handlers parse arguments before repository or model work, require an interactive TUI or RPC surface, require an idle session, and share one active-generation slot. Normal invocations require the active model. WebUI invocations carry a private versioned generation profile that resolves a configured model independently. The existing guided TUI command retains its Stage → Message → Commit → Push state machine.
+The three generation handlers parse arguments before repository or model work, require an interactive TUI or RPC surface, require an idle session, and share one active-generation slot. Setup is TUI-only and does not mutate the session model or WebUI preferences. Normal invocations require the active model. WebUI invocations carry a private versioned generation profile that resolves a configured model independently. The existing guided TUI command retains its Stage → Message → Commit → Push state machine.
 
 ## Native model lifecycle
 
@@ -116,10 +119,10 @@ The PR filename contract is encoded as one path segment. WebUI and extension cod
 The TUI workflow state is ephemeral and command-owned:
 
 ```text
-Stage → Message → Commit → Push → Finish
+Initialize → Stage → Message → Commit → Push → Finish
 ```
 
-Action screens use Pi TUI's native `SelectList`; optional TUI message generation uses `BorderedLoader`; manual entry uses the native editor; mutations use native confirmation dialogs. Screens do not overlap.
+`src/tui.ts` gives every custom screen the same centered `78%` width, minimum 36-column width, `85%` maximum height, and one-cell margin. Action and confirmation screens use native `SelectList`, setup uses native `SettingsList` with model submenus, generation uses `BorderedLoader`, and commit entry uses native `Editor`. Detail previews are line-bounded so actions remain reachable. Escape never selects a mutation.
 
 Guided TUI generation acquires a `StagedGenerationContext` with `COMMIT_GENERATION_CAPTURE_MAX_BYTES`, matching the 16 MiB native commit cap. The existing direct prompt remains in use up to 1 MiB. Both commit entry points share `completeChunkedCommit` above that threshold, including ordered chunk validation, finite output-token limits, cancellation, and progress notifications. The guided TUI parses the final response into selectable candidates without artifact writes or correction requests. TUI regressions cover complete byte coverage above 1 MiB, sequential requests, provider and summary failures, cancellation, and rejection above 16 MiB.
 
@@ -130,6 +133,10 @@ Git commands are argv arrays, never shell strings. Normal hooks and signing rema
 - `index.ts` — four commands, direct completion integration, cancellation, TUI workflow, and WebUI activation
 - `src/core.ts` — Git/state/message core
 - `src/native-generation.ts` — native generation contexts, parsers, and artifact transactions
+- `src/preferences.ts` — extension-owned native settings
+- `src/message-files.ts` — artifact preview and one-file message defaults
+- `src/repository-setup.ts` — initialization, starters, and publication
+- `src/tui.ts` — centered native overlay components
 - `tests/core.test.mjs` — temporary-repository Git and commit/push coverage
 - `tests/native-generation.test.mjs` — context, parser, drift, path, and rollback coverage
 - `tests/tui.test.mjs` — command registration, direct and chunked request orchestration, provider failure, cancellation, drift, correction reuse, RPC behavior, shutdown, TUI transitions, and documentation contract
@@ -142,7 +149,7 @@ Run:
 ```bash
 npm test
 npm run check
-/usr/bin/tsc --noEmit --target ES2022 --module NodeNext --moduleResolution NodeNext --allowImportingTsExtensions --skipLibCheck index.ts src/core.ts src/native-generation.ts
+/usr/bin/tsc --noEmit --target ES2022 --module NodeNext --moduleResolution NodeNext --allowImportingTsExtensions --skipLibCheck index.ts src/*.ts
 npm pack --dry-run --json
 ```
 
@@ -156,4 +163,4 @@ git diff --check -- pi-extension-git-guided-workflow plans/handoffs/guided-git-n
 
 ## Package maintenance
 
-The npm tarball includes the extension entry point, both source modules, user documentation, contributor guide, and license. Tests are intentionally excluded. The manifest registers only `./index.ts` as an extension resource. Keep generation native: do not add a prompt dependency, bundled dependency, `pi.prompts` registration, copied prompt Markdown, or reverse dependency.
+The npm tarball includes the extension entry point, all source modules, user documentation, contributor guide, and license. Tests are intentionally excluded. The manifest registers only `./index.ts` as an extension resource. Keep generation native: do not add a prompt dependency, bundled dependency, `pi.prompts` registration, copied prompt Markdown, or reverse dependency.

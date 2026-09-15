@@ -10,6 +10,7 @@ import {
   GuidedGitError,
   STAGED_FINGERPRINT_DOMAIN,
   acquireStableStagedSnapshot,
+  captureBoundStagedState,
   classifyPostCommitHead,
   discoverPushDestination,
   parseGeneratedOutput,
@@ -17,8 +18,10 @@ import {
   planCommit,
   planPush,
   planStageAll,
+  planStagePaths,
   preflightRepository,
   prepareCommitPlan,
+  readRemotes,
   readStagedFingerprint,
   runGit,
   sanitizeDiagnostic,
@@ -140,6 +143,24 @@ test("Stage all uses argv only and stages tracked changes, deletion, and untrack
   assert.equal(status.untracked, 0);
 });
 
+test("explicit path staging and remote reads retain bounded argv contracts", async () => {
+  const root = await repository("explicit-stage-paths");
+  await writeFile(path.join(root, "one.txt"), "one\n");
+  await writeFile(path.join(root, "two.txt"), "two\n");
+  const plan = planStagePaths(["one.txt"]);
+  assert.deepEqual(plan, { command: "git", args: ["add", "--", "one.txt"] });
+  assert.equal(spawnSync(plan.command, plan.args, { cwd: root }).status, 0);
+  const state = await preflightRepository(root);
+  assert.equal(state.status.entries.find((entry) => entry.displayPath === "one.txt").staged, true);
+  assert.equal(state.status.entries.find((entry) => entry.displayPath === "two.txt").untracked, true);
+  for (const invalid of [[], ["-option"], ["../escape"], ["one.txt", "one.txt"], ["nested//file"]]) {
+    assert.throws(() => planStagePaths(invalid), GuidedGitError);
+  }
+  assert.deepEqual(await readRemotes(root), []);
+  git(root, "remote", "add", "origin", path.join(root, "unused.git"));
+  assert.deepEqual(await readRemotes(root), ["origin"]);
+});
+
 test("package-domain fingerprint detects staged path, mode, blob, and content changes, including unborn repositories", async () => {
   assert.equal(STAGED_FINGERPRINT_DOMAIN, "firstpick/git-guided-workflow/staged-content/v1\0");
   const root = await repository("fingerprint");
@@ -170,6 +191,31 @@ test("package-domain fingerprint detects staged path, mode, blob, and content ch
   git(unborn, "add", "--", "first.txt");
   assert.match((await readStagedFingerprint(unborn)).fingerprint, /^[0-9a-f]{64}$/);
   assert.equal((await preflightRepository(unborn)).headOid, null);
+});
+
+test("bound staged state encloses fresh status with matching fingerprints", async () => {
+  const root = await repository("bound-staged-state");
+  await writeFile(path.join(root, "a.txt"), "base a\n");
+  await writeFile(path.join(root, "b.txt"), "base b\n");
+  git(root, "add", "--", "a.txt", "b.txt");
+  git(root, "commit", "-m", "test: add bound-state fixtures");
+  await writeFile(path.join(root, "a.txt"), "changed a\n");
+  git(root, "add", "--", "a.txt");
+
+  const captured = await captureBoundStagedState(root);
+  assert.equal(captured.state.status.entries.find((entry) => entry.displayPath === "a.txt").staged, true);
+  assert.equal(captured.fingerprint, (await readStagedFingerprint(root)).fingerprint);
+
+  let statusReads = 0;
+  const racingRunner = async (cwd, args, options) => {
+    if (args[0] === "status" && ++statusReads === 2) {
+      git(root, "restore", "--staged", "--worktree", "--", "a.txt");
+      await writeFile(path.join(root, "b.txt"), "changed b\n");
+      git(root, "add", "--", "b.txt");
+    }
+    return await runGit(cwd, args, options);
+  };
+  await assertCode(captureBoundStagedState(root, racingRunner), "STAGED_STATE_CHANGED");
 });
 
 test("stable snapshots bind before/diff/after, refuse races, and refuse rather than truncate above the cap", async () => {

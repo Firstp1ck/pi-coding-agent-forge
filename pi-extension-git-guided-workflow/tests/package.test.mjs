@@ -9,7 +9,16 @@ test("the extension ships native generation without prompt-package registration 
   assert.equal(manifest.bundledDependencies, undefined);
   assert.equal(manifest.pi?.prompts, undefined);
   assert.deepEqual(manifest.pi?.extensions, ["./index.ts"]);
-  assert.ok(manifest.files.includes("src/native-generation.ts"));
-  assert.match(manifest.scripts.check, /src\/native-generation\.ts/u);
+  assert.deepEqual(manifest.files.filter((file) => file.startsWith("src/")), [
+    "src/core.ts",
+    "src/native-generation.ts",
+    "src/preferences.ts",
+    "src/message-files.ts",
+    "src/repository-setup.ts",
+    "src/tui.ts",
+  ]);
+  for (const source of manifest.files.filter((file) => file.startsWith("src/"))) {
+    assert.match(manifest.scripts.check, new RegExp(source.replace(".", "\\."), "u"));
+  }
   assert.doesNotMatch(JSON.stringify(manifest), /pi-prompts-git-pr/u);
 });
