@@ -1,11 +1,12 @@
 # Frontend design
 
-Give a new or existing web interface a visual direction that comes from its subject instead of a familiar AI template.
+Build web interfaces with a distinct visual identity and the everyday behavior people expect, even when the brief leaves it unstated.
 
 ## Helpful when
 
 - You are building a landing page, product interface, portfolio, or other web UI from a loose brief.
 - An existing design works but looks generic, overdecorated, or disconnected from its content.
+- Your screens look finished, but users still lose edits, hit dead controls, or cannot recover from errors.
 - You need firm choices for typography, palette, layout, motion, and interface copy before writing code.
 
 ## What to share with Pi
@@ -13,21 +14,26 @@ Give a new or existing web interface a visual direction that comes from its subj
 - The product, audience, and single job of the page.
 - Existing UI code, brand rules, content, screenshots, and technical constraints.
 - Anything that must stay, plus the parts where Pi may take a real design risk.
+- Whether this is a visual mockup or working application, and any fixed save, permission, payment, or data-storage rules. You do not need to list ordinary keyboard behavior or error recovery.
 
 ## Try asking
 
-> Redesign this independent cinema homepage. Keep the booking flow and existing content, avoid the usual cream-and-serif treatment, and make the film schedule the element people remember.
+> Redesign our cinema's seat-selection and checkout screens as a working flow. Keep the existing booking service, prices, and brand. Make the screening and selected seats easy to review. Do not change payment or refund policies.
 
 ## What you'll get
 
-- A compact plan for color, type, layout, and one signature element.
+- For a new visual direction, a compact plan for color, type, layout, and one signature element.
 - Visual choices tied to the brief rather than reusable design defaults.
 - A self-critique before implementation, with generic choices revised or removed.
-- UI work that accounts for mobile layouts, keyboard focus, reduced motion, and useful interface copy.
+- Working interactions with appropriate loading, empty, error, success, and recovery states.
+- Mobile and keyboard access, reduced-motion support, and useful interface copy.
+- Task-based checks and an honest report of what could and could not be verified.
 
 ## Keep in mind
 
-When the brief leaves the subject unclear, the skill chooses a concrete subject, audience, and page goal before designing. State fixed brand requirements and accessibility constraints up front if Pi must not fill those gaps.
+For an open-ended concept, the skill can choose a subject and state its assumptions. For an existing product, it follows your established conventions and implements ordinary usability without inventing business rules. It asks about unresolved choices that change permissions, costs, external effects, or data storage. A mockup remains a mockup; it must not pretend to save, charge, or send anything.
+
+Review generated work before release. Use test data for destructive or paid actions; a frontend control is not a substitute for server-side authorization or payment safeguards.
 
 The package contains instructions only. It does not add executable scripts or dependencies. Screenshot capture, browser testing, and code changes still depend on the tools available in your Pi session.
 

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { chmodSync, existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const scriptPath = resolve(dirname(fileURLToPath(import.meta.url)), "install-pi-add.sh");
@@ -25,6 +25,36 @@ function runInstaller(env) {
   const result = runInstallerResult(env);
   assert.equal(result.status, 0, `installer failed\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
   return `${result.stdout}\n${result.stderr}`;
+}
+
+function runInteractiveInstaller(env, input) {
+  return new Promise((resolve, reject) => {
+    // Wait for Readline's prompt so the terminal does not process editing keys first.
+    const child = spawn("bash", ["-c", `exec script -q -e -c 'bash "$PI_TEST_INSTALLER_SCRIPT" --dry-run' /dev/null`], {
+      env: {
+        ...env,
+        PI_TEST_INSTALLER_SCRIPT: scriptPath.replaceAll("\\", "/"),
+        INPUTRC: "/dev/null",
+        TERM: "xterm",
+      },
+      timeout: 30_000,
+    });
+    let output = "";
+    let sent = false;
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data", (chunk) => {
+      output += chunk;
+      if (!sent && /(?:^|\n|\x1b\[\?2004h)> /.test(output)) {
+        sent = true;
+        child.stdin.end(input);
+      }
+    });
+    child.stderr.on("data", (chunk) => { output += chunk; });
+    child.stdin.on("error", reject);
+    child.on("error", reject);
+    child.on("close", (status, signal) => resolve({ status, signal, output }));
+  });
 }
 
 try {
@@ -97,6 +127,37 @@ try {
   assert.match(failedOutput, /Failed installs: 1/);
   assert.match(failedOutput, /simulated npm failure/);
   assert.match(failedOutput, /Completed with 1 failed package/);
+
+  const scriptVersion = spawnSync("bash", ["-c", "script --version"], { encoding: "utf8" });
+  if (scriptVersion.status === 0 && /util-linux/.test(scriptVersion.stdout)) {
+    const cases = [
+      { name: "plain selection", input: "1\n", previews: 1 },
+      { name: "left arrow and Delete", input: "2\x1b[D\x1b[3~1\n", previews: 1 },
+      { name: "left/right arrows and Backspace", input: "12\x1b[D\x1b[C\x7f\n", previews: 1 },
+      { name: "space/comma selection", input: "1, 1\n", previews: 2 },
+      { name: "all selection", input: "ALL\n", previews: 1 },
+      { name: "empty selection", input: "\n", message: /No packages selected/ },
+      { name: "invalid selection", input: "x\n", status: 1, message: /invalid selection token/ },
+      { name: "out-of-range selection", input: "2\n", status: 1, message: /out of range/ },
+    ];
+    const installLogBefore = readFileSync(installLog, "utf8");
+    for (const testCase of cases) {
+      // util-linux script gives read a real TTY, including on MSYS2.
+      const result = await runInteractiveInstaller(env, testCase.input);
+      const { output } = result;
+      assert.equal(result.signal, null, `${testCase.name}: terminated by ${result.signal}\n${output}`);
+      assert.equal(result.status, testCase.status ?? 0, `${testCase.name}\n${output}`);
+      if (testCase.previews !== undefined) {
+        assert.match(output, new RegExp(`Dry-run previews: ${testCase.previews}`), testCase.name);
+        assert.match(output, /pi install npm:@fixture\/pi-extension-example/, testCase.name);
+      }
+      if (testCase.message) assert.match(output, testCase.message, testCase.name);
+    }
+    assert.equal(readFileSync(installLog, "utf8"), installLogBefore, "interactive dry runs must not install packages");
+    console.log("install-pi-add interactive selection checks passed");
+  } else {
+    console.log("SKIP install-pi-add interactive selection checks: util-linux script is required");
+  }
 
   console.log("install-pi-add registration checks passed");
 } finally {

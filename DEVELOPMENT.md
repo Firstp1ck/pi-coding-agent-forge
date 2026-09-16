@@ -290,6 +290,8 @@ Reusable scaffold for local documentation/wiki extensions analogous to the ArchW
 - `dev/scripts/sync-pi-package-symlinks.sh` – uses Pi's package resource resolver to symlink local development extensions, skills, prompts, and themes from top-level `pi-*` workspace packages into `~/.pi/agent/`; package-local `node_modules` resources referenced by Pi manifests are linked to top-level workspace packages first, so dev packages win over stale installed optional dependencies; index-based extensions are linked as directories, standalone package resources as files, and direct relative-import companion directories beside standalone files; local-only dev extensions use generated wrappers so their relative imports resolve from the source checkout; unrelated non-symlink conflicts are renamed to `.hardcoded.<timestamp>.bak`
 - `dev/scripts/validate-skill-routing-fixtures.mjs` – validates development-only `tests/routing/*.json`; schema-only by default, with optional `--settings` or `--skill-root` target coverage
 
+The installer selection prompt uses Bash Readline, so you can use arrow keys, Backspace, and Delete to edit package numbers before submitting. Run `node dev/scripts/install-pi-add.test.mjs` to check registration, install failures, and interactive selection. The interactive checks require the util-linux `script` command for a pseudo-terminal and report a skip when it is unavailable.
+
 ## Publish model
 
 - Registry: **npm**

@@ -95,7 +95,7 @@ Skills give Pi a reusable workflow for a particular kind of work. You normally a
 - **[Design Patterns](pi-skill-design-patterns/README.md)** — Choose an appropriate design pattern without adding unnecessary abstraction.
 - **[Dolt Database Version Control](pi-skill-dolt-database-version-control/README.md)** — Evaluate or use Dolt when database history, branching, merging, or rollback matters.
 - **[Feature Development Workflow](pi-skill-feature-development-workflow/README.md)** — Guide a feature from scope and planning through implementation, review, and completion.
-- **[Frontend Design](pi-skill-frontend-design/README.md)** gives web interfaces a brief-specific visual direction instead of a familiar AI template.
+- **[Frontend Design](pi-skill-frontend-design/README.md)** combines distinctive web design with expected interaction behavior, accessible controls, and failure recovery.
 - **[HTML Report](pi-skill-html-report/README.md)** — Create polished, self-contained HTML reports for complex explanations and investigations.
 - **[Lab QC Presentation Theme](pi-skill-lab-qc-presentation-theme/README.md)** — Create modern green presentations for chemical production and quality-control teams.
 - **[Network Diagnostics](pi-skill-network-diagnostics/README.md)** — Troubleshoot DNS, routing, ports, firewalls, TLS, and general connectivity problems.

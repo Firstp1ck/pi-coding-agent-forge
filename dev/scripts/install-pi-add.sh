@@ -469,8 +469,8 @@ else
     package_name="${PACKAGE_NAMES[$package_index]}"
     printf "  %2d) %-58s [%s] %s\n" "$((display_idx + 1))" "$package_name" "${PACKAGE_KINDS[$package_index]}" "${PACKAGE_STATUS_LABELS[$package_index]}"
   done
-  printf "> "
-  read -r selection
+  # Readline handles cursor movement and deletion instead of storing escape sequences.
+  read -e -r -p "> " selection
 
   trimmed_selection="${selection//[[:space:]]/}"
   if [[ -z "$trimmed_selection" ]]; then
