@@ -1254,7 +1254,7 @@ function buildGitStatusSections(snapshot: GitSnapshot, target: FooterVisibilityT
   if (visible("git-submodules") && snapshot.submoduleDirty > 0) extraSection.push({ text: `✖${snapshot.submoduleDirty}`, tone: "warning" });
   if (visible("git-worktrees") && snapshot.worktreeCount > 1) extraSection.push({ text: `📦${snapshot.worktreeCount}`, tone: "muted" });
   if (visible("git-tag") && snapshot.headTag) extraSection.push({ text: `🏷${snapshot.headTag}`, tone: "accent" });
-  if (visible("git-last-commit-age") && snapshot.lastCommitAge) extraSection.push({ text: `⏱${snapshot.lastCommitAge}`, tone: "dim" });
+  if (visible("git-last-commit-age") && snapshot.lastCommitAge) extraSection.push({ text: `⏱ ${snapshot.lastCommitAge}`, tone: "dim" });
   if (visible("git-signing-mismatch") && snapshot.signingMismatch) extraSection.push({ text: "⚠️!", tone: "warning" });
 
   const sections: GitStatusSection[] = [
