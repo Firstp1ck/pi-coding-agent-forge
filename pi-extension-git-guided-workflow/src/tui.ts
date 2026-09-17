@@ -1,5 +1,4 @@
 import {
-  DynamicBorder,
   getSelectListTheme,
   getSettingsListTheme,
   type ExtensionCommandContext,
@@ -16,6 +15,7 @@ import {
   SettingsList,
   Text,
   truncateToWidth,
+  wrapTextWithAnsi,
   type Focusable,
   type TUI,
 } from "@earendil-works/pi-tui";
@@ -69,7 +69,6 @@ function nativeVisibleRows(rowBudget: number, itemCount: number): number {
 }
 
 class ActionOverlay {
-  private readonly border: DynamicBorder;
   private readonly tui: TUI;
   private readonly theme: Theme;
   private readonly stage: StageName;
@@ -99,7 +98,6 @@ class ActionOverlay {
     this.detailText = sanitizeDiagnostic(detailText, 128 * 1024);
     this.items = items;
     this.done = done;
-    this.border = new DynamicBorder((text: string) => this.theme.fg("accent", text));
     this.list = this.createList(1);
   }
 
@@ -132,11 +130,12 @@ class ActionOverlay {
 
   render(width: number): string[] {
     const safeWidth = Math.max(1, width);
+    const contentWidth = safeWidth >= 5 ? safeWidth - 4 : safeWidth;
     const maxRows = overlayRowBudget(this.tui);
     const desiredActionRows = Math.max(1, Math.min(this.items.length + 1, maxRows <= 5 ? 2 : Math.max(2, Math.floor(maxRows * 0.3))));
     this.resizeList(nativeVisibleRows(desiredActionRows, this.items.length));
-    const listLines = this.list.render(safeWidth);
-    const detailLines = new Text(this.theme.fg("muted", this.detailText), 1, 0).render(safeWidth);
+    const listLines = this.list.render(contentWidth);
+    const detailLines = new Text(this.theme.fg("muted", this.detailText), 0, 0).render(contentWidth);
     const remainingRows = Math.max(0, maxRows - listLines.length);
     const hasPreview = remainingRows >= 2;
     let optionalRows = Math.max(0, remainingRows - (hasPreview ? 2 : 0));
@@ -149,22 +148,19 @@ class ActionOverlay {
     const maxOffset = Math.max(0, detailLines.length - this.detailPageSize);
     this.detailOffset = Math.min(this.detailOffset, maxOffset);
     const visibleDetails = hasPreview ? detailLines.slice(this.detailOffset, this.detailOffset + this.detailPageSize) : [];
-    const scroll = truncateToWidth(` ${this.theme.fg("dim", detailLines.length > this.detailPageSize
+    const scroll = this.theme.fg("dim", detailLines.length > this.detailPageSize
       ? `Preview lines ${this.detailOffset + 1}-${this.detailOffset + visibleDetails.length} of ${detailLines.length} · PgUp/PgDn`
-      : `Preview lines ${detailLines.length} of ${detailLines.length}`)}`, safeWidth);
+      : `Preview lines ${detailLines.length} of ${detailLines.length}`);
     const lines: string[] = [];
-    if (includeBorders) lines.push(this.border.render(safeWidth)[0] ?? "");
-    if (includeProgress) lines.push(truncateToWidth(` ${this.theme.fg("accent", this.theme.bold(progressText(this.stage)))}`, safeWidth));
-    if (includeTitle) lines.push(truncateToWidth(` ${this.theme.fg("text", this.theme.bold(sanitizeDiagnostic(this.title, 300)))}${includeHelp ? "" : " · Esc cancels"}`, safeWidth));
+    if (includeProgress) lines.push(this.theme.fg("accent", this.theme.bold(progressText(this.stage))));
+    if (includeTitle) lines.push(`${this.theme.fg("text", this.theme.bold(sanitizeDiagnostic(this.title, 300)))}${includeHelp ? "" : " · Esc cancels"}`);
     if (hasPreview) lines.push(scroll, ...visibleDetails);
     lines.push(...listLines);
-    if (includeHelp) lines.push(truncateToWidth(` ${this.theme.fg("dim", "PgUp/PgDn preview · ↑↓ actions · Enter select · Esc cancel")}`, safeWidth));
-    if (includeBorders) lines.push(this.border.render(safeWidth)[0] ?? "");
-    return lines;
+    if (includeHelp) lines.push(this.theme.fg("dim", "PgUp/PgDn preview · ↑↓ actions · Enter select · Esc cancel"));
+    return renderOverlayPanel(lines, safeWidth, this.theme, includeBorders);
   }
 
   invalidate(): void {
-    this.border.invalidate();
     this.list.invalidate();
   }
 }
@@ -294,11 +290,29 @@ function profileFromKey(key: string, choices: readonly SetupModelChoice[], curre
   return { provider: choice.provider, modelId: choice.modelId, thinkingLevel: levels.includes(currentEffort) ? currentEffort : levels[0]! };
 }
 
-function setupChromeRows(tui: TUI): { budget: number; header: number; footer: number; content: number } {
-  const budget = overlayRowBudget(tui);
-  const header = budget >= 8 ? 2 : budget >= 6 ? 1 : 0;
-  const footer = budget >= 2 ? 1 : 0;
-  return { budget, header, footer, content: Math.max(1, budget - header - footer) };
+function setupChromeRows(tui: TUI): { frame: boolean; header: number; footer: number; content: number } {
+  const budget = Math.max(1, Math.floor(overlayRowBudget(tui) / 1.8));
+  const frame = budget >= 8;
+  const innerRows = budget - (frame ? 2 : 0);
+  const header = innerRows >= 8 ? 2 : innerRows >= 6 ? 1 : 0;
+  const footer = innerRows >= 2 ? 1 : 0;
+  return { frame, header, footer, content: Math.max(1, innerRows - header - footer) };
+}
+
+function renderOverlayPanel(lines: string[], width: number, theme: Theme, frame: boolean): string[] {
+  const background = theme.getBgAnsi("customMessageBg");
+  const paint = (line: string) => theme.bg("customMessageBg",
+    // Native inputs and truncation can reset the background inside a row.
+    line.replace(/\x1b\[(?:0|49)?m/gu, (reset) => reset + background));
+  if (width < 5) return lines.map((line) => paint(truncateToWidth(line, width, "", true)));
+  const border = (text: string) => theme.fg("borderAccent", text);
+  const body = lines.map((line) => paint(`${border("│")} ${truncateToWidth(line, width - 4, "…", true)} ${border("│")}`));
+  if (!frame) return body;
+  return [
+    paint(border(`╭${"─".repeat(width - 2)}╮`)),
+    ...body,
+    paint(border(`╰${"─".repeat(width - 2)}╯`)),
+  ];
 }
 
 function modelSubmenu(tui: TUI, theme: Theme, choices: readonly SetupModelChoice[], allowNone: boolean, done: (value?: string) => void) {
@@ -347,25 +361,49 @@ async function showSetupSettingsScreen(
     const fallbackLevels = currentChoice(draft.generation.fallback)
       ? supportedGuidedGitThinkingLevels(currentChoice(draft.generation.fallback)!.model)
       : ["off"];
-    const items: SettingItem[] = [
+    const items: (SettingItem & { description: string })[] = [
       {
         id: "primary", label: "Primary generation model", currentValue: currentChoice(draft.generation.primary)?.label ?? "Active Pi model",
         description: "The active Pi model remains unchanged.",
         submenu: (_value, close) => modelSubmenu(tui, theme, choices, true, close),
       },
-      { id: "primaryEffort", label: "Primary reasoning effort", currentValue: draft.generation.primary?.thinkingLevel ?? "off", values: primaryLevels },
+      {
+        id: "primaryEffort", label: "Primary reasoning effort", currentValue: draft.generation.primary?.thinkingLevel ?? "off", values: primaryLevels,
+        description: "Reasoning effort for the configured primary model. Select a primary model first.",
+      },
       {
         id: "fallback", label: "One-shot fallback model", currentValue: currentChoice(draft.generation.fallback)?.label ?? "None",
         description: "Only eligible provider failures retry once. Evidence is sent again.",
         submenu: (_value, close) => modelSubmenu(tui, theme, choices, true, close),
       },
-      { id: "fallbackEffort", label: "Fallback reasoning effort", currentValue: draft.generation.fallback?.thinkingLevel ?? "off", values: fallbackLevels },
-      { id: "language", label: "Commit language", currentValue: draft.commit.language, values: ["en", "de"] },
-      { id: "scope", label: "Scope policy", currentValue: draft.commit.scope, values: ["auto", "never", "required"] },
-      { id: "variant", label: "Default message variant", currentValue: draft.commit.defaultVariant, values: [...GUIDED_GIT_MESSAGE_VARIANTS] },
-      { id: "staging", label: "Staging default", currentValue: draft.staging, values: [...GUIDED_GIT_STAGING_DEFAULTS] },
-      { id: "entry", label: "Default entry stage", currentValue: draft.defaultEntry, values: [...GUIDED_GIT_ENTRY_STAGES] },
-      { id: "verification", label: "Verification reminder", currentValue: draft.verification, values: [...GUIDED_GIT_VERIFICATION_POLICIES] },
+      {
+        id: "fallbackEffort", label: "Fallback reasoning effort", currentValue: draft.generation.fallback?.thinkingLevel ?? "off", values: fallbackLevels,
+        description: "Reasoning effort for the optional fallback model. Select a fallback model first.",
+      },
+      {
+        id: "language", label: "Commit language", currentValue: draft.commit.language, values: ["en", "de"],
+        description: "Generate commit messages in English or German.",
+      },
+      {
+        id: "scope", label: "Scope policy", currentValue: draft.commit.scope, values: ["auto", "never", "required"],
+        description: "Ask the model to choose a commit scope automatically, omit it, or always include it.",
+      },
+      {
+        id: "variant", label: "Default message variant", currentValue: draft.commit.defaultVariant, values: [...GUIDED_GIT_MESSAGE_VARIANTS],
+        description: "Offer the short or long commit message first when choosing generated or saved text.",
+      },
+      {
+        id: "staging", label: "Staging default", currentValue: draft.staging, values: [...GUIDED_GIT_STAGING_DEFAULTS],
+        description: "Prefer the current index or offer stage-all first. Staging all changes still requires confirmation.",
+      },
+      {
+        id: "entry", label: "Default entry stage", currentValue: draft.defaultEntry, values: [...GUIDED_GIT_ENTRY_STAGES],
+        description: "Offer this stage first when starting the workflow. You can still choose another stage.",
+      },
+      {
+        id: "verification", label: "Verification reminder", currentValue: draft.verification, values: [...GUIDED_GIT_VERIFICATION_POLICIES],
+        description: "Show or skip a reminder to review your checks before committing. This does not run checks.",
+      },
     ];
     const settings = new SettingsList(items, 1, getSettingsListTheme(), (id, value) => {
       if (id === "primary") {
@@ -392,14 +430,18 @@ async function showSetupSettingsScreen(
       render(width: number) {
         const safeWidth = Math.max(1, width);
         const layout = setupChromeRows(tui);
-        (settings as unknown as { maxVisible: number }).maxVisible = Math.max(1, layout.content - 5);
-        const settingsLines = settings.render(safeWidth).slice(0, layout.content);
+        const contentWidth = safeWidth >= 5 ? safeWidth - 4 : safeWidth;
+        const descriptionRows = Math.max(...items.map((item) => wrapTextWithAnsi(item.description, Math.max(1, contentWidth - 4)).length));
+        // Reserve search, scroll, description spacing, and native help rows before fitting settings.
+        (settings as unknown as { maxVisible: number }).maxVisible = Math.max(1, layout.content - 6 - descriptionRows);
+        const settingsLines = settings.render(contentWidth).slice(0, layout.content);
+        while (settingsLines.length < layout.content) settingsLines.push("");
         const lines: string[] = [];
-        if (layout.header >= 1) lines.push(truncateToWidth(theme.fg("accent", theme.bold("Guided Git setup")), safeWidth));
-        if (layout.header >= 2) lines.push(truncateToWidth(theme.fg("muted", "Changes remain unsaved until Ctrl+S."), safeWidth));
+        if (layout.header >= 1) lines.push(theme.fg("accent", theme.bold("Guided Git setup")));
+        if (layout.header >= 2) lines.push(theme.fg("muted", "Changes remain unsaved until Ctrl+S."));
         lines.push(...settingsLines);
-        if (layout.footer) lines.push(truncateToWidth(theme.fg("dim", "Ctrl+S save · Esc cancel · Enter change/search"), safeWidth));
-        return lines;
+        if (layout.footer) lines.push(theme.fg("dim", "Ctrl+S save · Esc cancel · Enter change/search"));
+        return renderOverlayPanel(lines, safeWidth, theme, layout.frame);
       },
       invalidate() { settings.invalidate(); },
       handleInput(data: string) {

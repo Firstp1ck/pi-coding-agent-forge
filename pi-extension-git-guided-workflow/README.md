@@ -7,9 +7,9 @@ Use native Pi commands to generate Git text safely, or start a careful commit-an
 - Generate validated Conventional Commit files from staged diffs up to 16 MiB with `/git-staged-msg`; large diffs are analyzed completely in bounded sequential requests before one final synthesis.
 - Generate a safe branch-name file with `/git-branch-name`.
 - Generate a reviewer-focused pull-request description with `/pr`.
-- Open a centered native overlay with direct Initialize, Stage, Message, Commit, and Push entry points.
+- Open a centered, bordered popup with its own background and direct Initialize, Stage, Message, Commit, and Push entry points.
 - Reuse generated commit files, choose a safe one-file default, initialize a repository on `main`, or publish a no-remote repository through authenticated `gh`.
-- Save native generation, language, scope, message, staging, entry, and verification defaults with `/git-guided-workflow-setup`.
+- Save native generation, language, scope, message, staging, entry, and verification defaults in a framed setup popup with `/git-guided-workflow-setup`.
 - Start the Guided Git browser flow from the same workflow command in a compatible WebUI.
 
 ## Install
@@ -36,7 +36,7 @@ In Pi's native terminal interface:
 4. Review the exact message and staged summary, then confirm the commit.
 5. Push the bound HEAD to the shown destination. When no remote exists, you may explicitly select Public or Private and publish once through system `gh`.
 
-Run `/git-guided-workflow-setup` to save native-only defaults. Saving does not switch Pi's active model or reasoning effort. Until setup is saved, generation uses the active model and manual entry remains available.
+Run `/git-guided-workflow-setup` to edit native-only defaults in a bordered popup with its own background. Press `Ctrl+S` to save or Escape to cancel. Saving does not switch Pi's active model or reasoning effort. Until setup is saved, generation uses the active model and manual entry remains available.
 
 In a compatible WebUI, the same command asks that WebUI to open its Guided Git workflow for the originating tab. The browser keeps its staging, isolated generation profile, artifact checks, commit, push, and optional pull-request controls. The saved generation model runs independently without changing the tab's active model or reasoning effort.
 

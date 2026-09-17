@@ -5,6 +5,7 @@ import { writeFileSync } from "node:fs";
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { stripVTControlCharacters } from "node:util";
 import { CURSOR_MARKER, visibleWidth } from "@earendil-works/pi-tui";
 import { initTheme } from "@earendil-works/pi-coding-agent";
 import gitGuidedWorkflow, {
@@ -27,12 +28,18 @@ import {
   COMMIT_OUTPUT_MAX_TOKENS,
 } from "../src/native-generation.ts";
 import { DEFAULT_GUIDED_GIT_PREFERENCES } from "../src/preferences.ts";
-import { showCommitEditor, showSetupOverlay } from "../src/tui.ts";
+import { showCommitEditor, showConfirmationOverlay, showSetupOverlay } from "../src/tui.ts";
 
 initTheme(undefined, false);
 
 const roots = [];
-test.after(async () => Promise.all(roots.map((root) => rm(root, { recursive: true, force: true }))));
+const originalAgentDir = process.env.PI_CODING_AGENT_DIR;
+test.before(async () => { process.env.PI_CODING_AGENT_DIR = await tempDir("agent"); });
+test.after(async () => {
+  if (originalAgentDir === undefined) delete process.env.PI_CODING_AGENT_DIR;
+  else process.env.PI_CODING_AGENT_DIR = originalAgentDir;
+  await Promise.all(roots.map((root) => rm(root, { recursive: true, force: true })));
+});
 
 function git(cwd, ...args) {
   return execFileSync("git", args, { cwd, encoding: "utf8", env: { ...process.env, LC_ALL: "C" } }).trim();
@@ -56,7 +63,7 @@ async function repository(label) {
 }
 
 function fakeTheme() {
-  return { fg: (_tone, text) => text, bold: (text) => text };
+  return { fg: (_tone, text) => text, bg: (_tone, text) => text, getBgAnsi: () => "", bold: (text) => text };
 }
 
 function extensionRegistration() {
@@ -133,13 +140,13 @@ function createContext(root, options = {}) {
               component.dispose?.();
               return;
             }
-            const normal = component.render(42);
+            const normal = component.render(44);
             const narrow = component.render(12);
             renders.push({ normal, narrow });
-            for (const [width, lines] of [[42, normal], [12, narrow]]) {
+            for (const [width, lines] of [[44, normal], [12, narrow]]) {
               for (const line of lines) assert.ok(visibleWidth(line) <= width, `rendered line exceeds ${width}: ${JSON.stringify(line)}`);
             }
-            const text = normal.join("\n");
+            const text = normal.map((line) => stripVTControlCharacters(line).replace(/^│ | │$/gu, "")).join("\n");
             options.onScreen?.({ text, component, customCount });
             if (/Generating with/u.test(text)) {
               options.onLoader?.(component, customCount);
@@ -298,8 +305,8 @@ test("action screens use a cancellable native list and stay within narrow widths
     ui: {
       custom: async (factory) => await new Promise((resolve) => {
         component = factory({ requestRender() {} }, fakeTheme(), {}, resolve);
-        for (const width of [8, 12, 40]) {
-          for (const line of component.render(width)) assert.ok(visibleWidth(line) <= width);
+        for (const width of [1, 2, 4, 5, 8, 12, 40]) {
+          for (const line of component.render(width)) assert.equal(visibleWidth(line), width);
         }
         component.handleInput("\x1b");
       }),
@@ -307,6 +314,52 @@ test("action screens use a cancellable native list and stay within narrow widths
   }, "Stage", "Unsafe\x1b[31m title", "odd\x00 details", [{ value: "go", label: "Continue" }]);
   assert.equal(await resultPromise, null, "Escape must cancel without selecting the highlighted action");
   assert.equal(typeof component.handleInput, "function");
+});
+
+test("workflow and confirmation popups have a complete filled frame", async () => {
+  const background = "\x1b[48;5;236m";
+  const theme = {
+    ...fakeTheme(),
+    fg: (_tone, text) => `\x1b[36m${text}\x1b[39m`,
+    bold: (text) => `\x1b[1m${text}\x1b[0m`,
+    getBgAnsi: () => background,
+    bg: (tone, text) => {
+      assert.equal(tone, "customMessageBg");
+      return `${background}${text}\x1b[49m`;
+    },
+  };
+  const ctx = {
+    ui: {
+      custom: async (factory) => await new Promise((resolve) => {
+        const component = factory({ terminal: { rows: 30, columns: 100 }, requestRender() {} }, theme, {}, resolve);
+        for (const input of ["", "\x1b[B", "\x1b[A"]) {
+          if (input) component.handleInput(input);
+          for (const width of [36, 72]) {
+            const lines = component.render(width);
+            const plain = lines.map(stripVTControlCharacters);
+            assert.equal(plain[0], `╭${"─".repeat(width - 2)}╮`);
+            assert.equal(plain.at(-1), `╰${"─".repeat(width - 2)}╯`);
+            for (const line of plain.slice(1, -1)) assert.match(line, /^│ .* │$/u);
+            assert.ok(plain.some((line) => /^│ +│$/u.test(line)), "blank preview rows retain the filled frame");
+            for (const line of lines) {
+              assert.equal(visibleWidth(line), width);
+              assert.ok(line.startsWith(background));
+              assert.ok(line.endsWith("\x1b[49m"));
+              for (const match of line.slice(0, -5).matchAll(/\x1b\[(?:0|49)?m/gu)) {
+                assert.ok(line.slice(match.index + match[0].length).startsWith(background));
+              }
+            }
+          }
+        }
+        component.handleInput("\x1b");
+      }),
+    },
+  };
+  assert.equal(await showActionScreen(ctx, "Stage", "Start Guided Git", "Repository\n\nChoose a direct entry.", [
+    { value: "stage", label: "Stage", description: "Review or change the index" },
+    { value: "finish", label: "Finish" },
+  ]), null);
+  assert.equal(await showConfirmationOverlay(ctx, "Commit", "Create this Git commit?", "Review\n\nExact changes", "Commit"), false);
 });
 
 test("long previews retain native selection, cancellation, and scrolling across 6-12-row resizes", async () => {
@@ -460,6 +513,137 @@ test("setup uses native model selection, plain search text does not save, Ctrl+S
   assert.equal(cancelled, null);
 });
 
+test("setup and its model picker render a padded, filled frame with current theme colors", async () => {
+  let background = "\x1b[48;5;236m";
+  const theme = {
+    ...fakeTheme(),
+    fg: (_tone, text) => `\x1b[36m${text}\x1b[39m`,
+    bold: (text) => `\x1b[1m${text}\x1b[0m`,
+    bg: (tone, text) => {
+      assert.equal(tone, "customMessageBg");
+      return `${background}${text}\x1b[49m`;
+    },
+    getBgAnsi: (tone) => {
+      assert.equal(tone, "customMessageBg");
+      return background;
+    },
+  };
+  const choices = [{ key: "fixture\u0000writer", provider: "fixture", modelId: "writer", label: "模型 writer", model: {} }];
+  const cancelled = await showSetupOverlay({
+    ui: {
+      custom: async (factory) => await new Promise((resolve) => {
+        const component = factory({ terminal: { rows: 30, columns: 80 }, requestRender() {} }, theme, {}, resolve);
+        const assertPanel = () => {
+          const lines = component.render(72);
+          const plain = lines.map(stripVTControlCharacters);
+          assert.equal(plain[0], `╭${"─".repeat(70)}╮`);
+          assert.equal(plain.at(-1), `╰${"─".repeat(70)}╯`);
+          for (const line of plain.slice(1, -1)) assert.match(line, /^│ .* │$/u);
+          for (const line of lines) {
+            assert.equal(visibleWidth(line), 72);
+            assert.ok(line.startsWith(background));
+            assert.ok(line.endsWith("\x1b[49m"));
+            for (const match of line.slice(0, -5).matchAll(/\x1b\[(?:0|49)?m/gu)) {
+              assert.ok(line.slice(match.index + match[0].length).startsWith(background), "restore panel background after native ANSI resets");
+            }
+          }
+          return plain.join("\n");
+        };
+        const setup = assertPanel();
+        assert.match(setup, /Guided Git setup/u);
+        assert.match(setup, /│ {70}│/u, "blank rows also cover the underlying transcript");
+        assert.match(setup, /Ctrl\+S save.*Esc cancel/u);
+        component.handleInput("\r");
+        assert.match(assertPanel(), /模型 writer/u);
+        background = "\x1b[48;5;252m";
+        component.invalidate();
+        assertPanel();
+        component.handleInput("\x1b");
+        assert.match(assertPanel(), /Primary generation model/u);
+        component.handleInput("\x1b");
+      }),
+    },
+  }, DEFAULT_GUIDED_GIT_PREFERENCES, choices);
+  assert.equal(cancelled, null);
+});
+
+test("every setup setting shows its description without changing popup height", async () => {
+  const descriptions = [
+    "The active Pi model remains unchanged.",
+    "Reasoning effort for the configured primary model. Select a primary model first.",
+    "Only eligible provider failures retry once. Evidence is sent again.",
+    "Reasoning effort for the optional fallback model. Select a fallback model first.",
+    "Generate commit messages in English or German.",
+    "Ask the model to choose a commit scope automatically, omit it, or always include it.",
+    "Offer the short or long commit message first when choosing generated or saved text.",
+    "Prefer the current index or offer stage-all first. Staging all changes still requires confirmation.",
+    "Offer this stage first when starting the workflow. You can still choose another stage.",
+    "Show or skip a reminder to review your checks before committing. This does not run checks.",
+  ];
+  const terminal = { rows: 24, columns: 80 };
+  const cancelled = await showSetupOverlay({
+    ui: {
+      custom: async (factory) => await new Promise((resolve) => {
+        const component = factory({ terminal, requestRender() {} }, fakeTheme(), {}, resolve);
+        for (const rows of [40, 72]) {
+          terminal.rows = rows;
+          for (const width of [36, 72, 100]) {
+            const initial = component.render(width);
+            for (const description of descriptions) {
+              const lines = component.render(width);
+              assert.equal(lines.length, initial.length, `stable height at ${width} columns and ${rows} rows`);
+              assert.equal(lines.at(-2), initial.at(-2), "save/cancel footer stays in place");
+              const text = lines.map((line) => stripVTControlCharacters(line).slice(2, -2).trim()).join(" ").replace(/\s+/gu, " ");
+              assert.ok(text.includes(description), `visible description: ${description}`);
+              component.handleInput("\x1b[B");
+            }
+          }
+        }
+        const height = component.render(72).length;
+        component.handleInput("\r");
+        assert.equal(component.render(72).length, height, "model picker keeps the same height");
+        component.handleInput("\x1b");
+        component.handleInput("zzzzzz");
+        const empty = component.render(72);
+        assert.match(empty.join("\n"), /No matching settings/u);
+        assert.equal(empty.length, height, "empty search keeps the same height");
+        for (let index = 0; index < 6; index += 1) component.handleInput("\x7f");
+        assert.equal(component.render(72).length, height, "clearing search keeps the same height");
+        component.handleInput("\x1b");
+      }),
+    },
+  }, DEFAULT_GUIDED_GIT_PREFERENCES, []);
+  assert.equal(cancelled, null);
+});
+
+test("setup frame remains width and height bounded on small terminals", async () => {
+  const terminal = { rows: 30, columns: 80 };
+  await showSetupOverlay({
+    ui: {
+      custom: async (factory) => await new Promise((resolve) => {
+        const component = factory({ terminal, requestRender() {} }, fakeTheme(), {}, resolve);
+        for (const rows of [1, 4, 6, 8, 10, 12, 24, 40]) {
+          terminal.rows = rows;
+          for (const width of [1, 2, 4, 5, 12, 36, 72]) {
+            const height = component.render(width).length;
+            for (let index = 0; index < 10; index += 1) {
+              const lines = component.render(width);
+              assert.equal(lines.length, height, "selection must not resize the popup");
+              const previousBudget = Math.max(1, Math.min(Math.floor(rows * 0.85), rows - 2));
+              const reducedBudget = Math.max(1, Math.floor(previousBudget / 1.8));
+              assert.ok(lines.length <= reducedBudget);
+              if (width >= 5) assert.equal(lines.length, reducedBudget, "setup height is reduced by 1.8x");
+              for (const line of lines) assert.equal(visibleWidth(line), width);
+              component.handleInput("\x1b[B");
+            }
+          }
+        }
+        component.handleInput("\x1b");
+      }),
+    },
+  }, DEFAULT_GUIDED_GIT_PREFERENCES, []);
+});
+
 test("setup and model submenu keep native controls visible across short-height resize", async () => {
   const choices = Array.from({ length: 16 }, (_, index) => ({
     key: `fixture\u0000writer-${index}`,
@@ -503,7 +687,7 @@ test("setup and model submenu keep native controls visible across short-height r
 
 test("action details rebuild themed content after invalidation", async () => {
   let palette = "old";
-  const theme = { fg: (_tone, text) => `${palette}:${text}`, bold: (text) => text };
+  const theme = { ...fakeTheme(), fg: (_tone, text) => `${palette}:${text}` };
   await showActionScreen({
     ui: {
       custom: async (factory) => await new Promise((resolve) => {
