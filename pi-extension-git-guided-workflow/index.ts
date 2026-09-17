@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { realpath } from "node:fs/promises";
 import {
-  BorderedLoader,
   getAgentDir,
   withFileMutationQueue,
   type ExtensionAPI,
@@ -79,6 +78,7 @@ import {
 import {
   GUIDED_GIT_OVERLAY_OPTIONS,
   progressText,
+  GenerationOverlay,
   showActionScreen,
   showCommitEditor,
   showConfirmationOverlay,
@@ -455,11 +455,10 @@ async function generateMessages(
       const fallbackNotice = config.fallback
         ? ` One eligible provider failure retries once with ${generationTargetName(config.fallback)} and resends the same evidence.`
         : " No fallback is configured.";
-      const loader = new BorderedLoader(
+      const loader = new GenerationOverlay(
         tui,
         theme,
         `Generating with ${primaryName}.${fallbackNotice} Esc cancels.`,
-        { cancellable: true },
       );
       let settled = false;
       const onControllerAbort = () => finish({ kind: "cancelled" });
@@ -958,11 +957,10 @@ export default function gitGuidedWorkflow(pi: ExtensionAPI): void {
         let paths: string[];
         if (ctx.mode === "tui") {
           const result = await ctx.ui.custom<{ paths?: string[]; error?: unknown }>((tui, theme, _keybindings, done) => {
-            const loader = new BorderedLoader(
+            const loader = new GenerationOverlay(
               tui,
               theme,
               `Generating with ${modelRole} ${model} for /${commandName}. Repository content is sent to ${provider}. Esc cancels.`,
-              { cancellable: true },
             );
             let settled = false;
             const finish = (value: { paths?: string[]; error?: unknown }) => {

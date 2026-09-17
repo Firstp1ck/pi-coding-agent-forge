@@ -28,7 +28,7 @@ import {
   COMMIT_OUTPUT_MAX_TOKENS,
 } from "../src/native-generation.ts";
 import { DEFAULT_GUIDED_GIT_PREFERENCES } from "../src/preferences.ts";
-import { showCommitEditor, showConfirmationOverlay, showSetupOverlay } from "../src/tui.ts";
+import { GenerationOverlay, showCommitEditor, showConfirmationOverlay, showSetupOverlay } from "../src/tui.ts";
 
 initTheme(undefined, false);
 
@@ -149,6 +149,8 @@ function createContext(root, options = {}) {
             const text = normal.map((line) => stripVTControlCharacters(line).replace(/^│ | │$/gu, "")).join("\n");
             options.onScreen?.({ text, component, customCount });
             if (/Generating with/u.test(text)) {
+              assert.ok(normal[0].startsWith("╭"), "generation command uses the framed loader");
+              assert.ok(normal.at(-1).endsWith("╯"));
               options.onLoader?.(component, customCount);
               return;
             }
@@ -360,6 +362,60 @@ test("workflow and confirmation popups have a complete filled frame", async () =
     { value: "finish", label: "Finish" },
   ]), null);
   assert.equal(await showConfirmationOverlay(ctx, "Commit", "Create this Git commit?", "Review\n\nExact changes", "Commit"), false);
+});
+
+test("generation popup keeps its frame, background, cancellation, and timer cleanup", () => {
+  let background = "\x1b[48;5;236m";
+  const theme = {
+    ...fakeTheme(),
+    fg: (_tone, text) => `\x1b[36m${text}\x1b[39m`,
+    getBgAnsi: () => background,
+    bg: (_tone, text) => `${background}${text}\x1b[49m`,
+  };
+  const terminal = { rows: 30, columns: 100 };
+  const message = "Generating with primary/model. One eligible provider failure retries once with fallback/model and resends the same evidence. Esc cancels.";
+  const loader = new GenerationOverlay({ terminal, requestRender() {} }, theme, message);
+  let cancelled = false;
+  loader.onAbort = () => { cancelled = true; };
+  try {
+    for (const color of ["\x1b[48;5;236m", "\x1b[48;5;252m"]) {
+      background = color;
+      loader.invalidate();
+      const lines = loader.render(72);
+      const plain = lines.map(stripVTControlCharacters);
+      assert.equal(plain[0], `╭${"─".repeat(70)}╮`);
+      assert.equal(plain.at(-1), `╰${"─".repeat(70)}╯`);
+      for (const line of plain.slice(1, -1)) assert.match(line, /^│ .* │$/u);
+      const text = plain.slice(1, -1).map((line) => line.slice(2, -2).trim()).join(" ").replace(/\s+/gu, " ");
+      assert.ok(text.includes(message), "primary/fallback disclosure remains visible");
+      assert.match(text, /escape\/ctrl\+c cancel/u);
+      for (const line of lines) {
+        assert.equal(visibleWidth(line), 72);
+        assert.ok(line.startsWith(color));
+        assert.ok(line.endsWith("\x1b[49m"));
+        for (const match of line.slice(0, -5).matchAll(/\x1b\[(?:0|49)?m/gu)) {
+          assert.ok(line.slice(match.index + match[0].length).startsWith(color));
+        }
+      }
+    }
+    for (const rows of [1, 4, 6, 12, 24]) {
+      terminal.rows = rows;
+      for (const width of [1, 2, 4, 5, 12, 36, 72]) {
+        const lines = loader.render(width);
+        assert.ok(lines.length <= Math.max(1, Math.min(Math.floor(rows * 0.85), rows - 2)));
+        for (const line of lines) assert.equal(visibleWidth(line), width);
+        if (rows >= 6 && width >= 36) assert.match(lines.map(stripVTControlCharacters).join("\n"), /escape\/ctrl\+c cancel/u);
+      }
+    }
+    assert.equal(loader.signal.aborted, false);
+    loader.handleInput("\x1b");
+    assert.equal(loader.signal.aborted, true);
+    assert.equal(cancelled, true);
+    assert.notEqual(loader.intervalId, null, "native spinner is running before disposal");
+  } finally {
+    loader.dispose();
+  }
+  assert.equal(loader.intervalId, null, "disposal stops the native spinner timer");
 });
 
 test("long previews retain native selection, cancellation, and scrolling across 6-12-row resizes", async () => {
@@ -1104,7 +1160,9 @@ test("generation sends the complete diff only after selection and accepts the pr
   assert.match(received.context.messages[0].content[0].text, /generated private content/u);
   assert.equal(received.signal.aborted, false);
   assert.equal(git(root, "log", "-1", "--pretty=%s"), short);
-  assert.ok(harness.renders.some(({ normal }) => /Generating with test\/active-test-model/u.test(normal.join(" ").replace(/\s+/gu, " "))));
+  assert.ok(harness.renders.some(({ normal }) => /Generating with test\/active-test-model/u.test(
+    normal.map((line) => stripVTControlCharacters(line).replace(/^│ | │$/gu, "")).join(" ").replace(/\s+/gu, " "),
+  )));
 });
 
 test("configured generation isolates the parent profile and retries one eligible provider failure once", async () => {

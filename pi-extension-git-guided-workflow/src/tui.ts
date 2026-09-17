@@ -1,10 +1,12 @@
 import {
   getSelectListTheme,
   getSettingsListTheme,
+  keyHint,
   type ExtensionCommandContext,
   type Theme,
 } from "@earendil-works/pi-coding-agent";
 import {
+  CancellableLoader,
   Editor,
   Key,
   matchesKey,
@@ -196,6 +198,31 @@ export async function showConfirmationOverlay(
     { value: "cancel", label: "Cancel", description: "Make no change" },
     { value: "confirm", label: confirmLabel },
   ]) === "confirm";
+}
+
+/** Native cancellable spinner inside the same panel used by workflow menus. */
+export class GenerationOverlay extends CancellableLoader {
+  private readonly overlayTui: TUI;
+  private readonly overlayTheme: Theme;
+
+  constructor(tui: TUI, theme: Theme, message: string) {
+    super(tui, (text) => theme.fg("accent", text), (text) => theme.fg("muted", text), message);
+    this.overlayTui = tui;
+    this.overlayTheme = theme;
+  }
+
+  override render(width: number): string[] {
+    const safeWidth = Math.max(1, width);
+    const contentWidth = safeWidth >= 5 ? safeWidth - 4 : safeWidth;
+    const maxRows = overlayRowBudget(this.overlayTui);
+    const frame = maxRows >= 4;
+    const bodyRows = maxRows - (frame ? 2 : 0);
+    const helpRows = bodyRows >= 2 ? 1 : 0;
+    // Omit the native loader's leading spacer so short terminals retain the provider notice.
+    const lines = super.render(contentWidth).slice(1, 1 + bodyRows - helpRows);
+    if (helpRows) lines.push(this.overlayTheme.fg("dim", keyHint("tui.select.cancel", "cancel")));
+    return renderOverlayPanel(lines, safeWidth, this.overlayTheme, frame);
+  }
 }
 
 class CommitEditorOverlay implements Focusable {
