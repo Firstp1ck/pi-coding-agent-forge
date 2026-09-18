@@ -1,0 +1,62 @@
+{
+  "name": "@firstpick/pi-extension-review",
+  "version": "0.1.0",
+  "description": "Deterministic frozen-snapshot code reviews for Pi.",
+  "type": "module",
+  "license": "MIT",
+  "homepage": "https://github.com/Firstp1ck/pi-coding-agent-forge/tree/main/pi-extension-review#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Firstp1ck/pi-coding-agent-forge.git",
+    "directory": "pi-extension-review"
+  },
+  "keywords": [
+    "pi-package",
+    "pi",
+    "pi-coding-agent",
+    "extension",
+    "code-review"
+  ],
+  "pi": {
+    "extensions": [
+      "./index.ts"
+    ]
+  },
+  "scripts": {
+    "test": "node --experimental-strip-types --test tests/*.test.mjs",
+    "typecheck": "tsc -p tsconfig.json",
+    "check": "node --experimental-strip-types --check index.ts && node --experimental-strip-types --check src/core.ts && node --experimental-strip-types --check src/snapshot.ts && node --experimental-strip-types --check src/storage.ts && node --experimental-strip-types --check src/git.ts && node --experimental-strip-types --check src/read-evidence.ts && node --experimental-strip-types --check src/report.ts && node --experimental-strip-types --check src/runner.ts && node --experimental-strip-types --check src/settings.ts && node --experimental-strip-types --check src/tui.ts && node --experimental-strip-types --check src/session-work.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.0",
+    "typescript": "^5.9.3"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-agent-core": ">=0.85.1",
+    "@earendil-works/pi-ai": ">=0.85.1",
+    "@earendil-works/pi-coding-agent": ">=0.85.1",
+    "@earendil-works/pi-tui": ">=0.85.1",
+    "typebox": "*"
+  },
+  "files": [
+    "index.ts",
+    "src/core.ts",
+    "src/snapshot.ts",
+    "src/storage.ts",
+    "src/git.ts",
+    "src/read-evidence.ts",
+    "src/report.ts",
+    "src/runner.ts",
+    "src/settings.ts",
+    "src/tui.ts",
+    "src/session-work.ts",
+    "tsconfig.json",
+    "README.md",
+    "TECHNICAL.md",
+    "DEVELOPMENT.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=22.19.0"
+  }
+}

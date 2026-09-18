@@ -1,0 +1,29 @@
+{
+  "name": "@firstpick/pi-package-writer",
+  "version": "0.1.0",
+  "description": "Fiction writing skills and a guided /writer workflow for books, chapters, series, and manga scripts in Pi.",
+  "type": "module",
+  "license": "MIT",
+  "homepage": "https://github.com/Firstp1ck/pi-coding-agent-forge/tree/main/pi-package-writer#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Firstp1ck/pi-coding-agent-forge.git",
+    "directory": "pi-package-writer"
+  },
+  "keywords": ["pi-package", "pi", "writing", "fiction", "novel", "light-novel", "manga", "skills"],
+  "pi": {
+    "extensions": ["./index.ts"],
+    "skills": ["./skills"]
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  },
+  "engines": { "node": ">=22.19.0" },
+  "scripts": {
+    "test": "node --experimental-strip-types --test tests/*.test.ts",
+    "smoke": "node --experimental-strip-types tests/pi-smoke.mjs",
+    "check": "node --experimental-strip-types --check index.ts && node --experimental-strip-types --check src/command.ts && node --experimental-strip-types --check src/store.ts && node --experimental-strip-types --check src/workflow.ts",
+    "prepack": "npm run check && npm test"
+  },
+  "files": ["index.ts", "src", "skills", "references", "README.md", "TECHNICAL.md", "DEVELOPMENT.md", "LICENSE"]
+}

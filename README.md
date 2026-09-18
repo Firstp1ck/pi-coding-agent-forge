@@ -33,6 +33,7 @@ Packages bundle larger features, prompt collections, themes, or related tools.
 - **[Theme bundle for Pi](pi-package-themes-bundle/README.md)** — Adds a collection of familiar color themes to Pi.
 - **[Qt WebUI](pi-package-qt-webui/README.md)** — Use Pi in a Linux desktop window built with Quickshell and Qt Quick, with Markdown output, tool cards, extension dialogs, and transcript search.
 - **[Pi Web UI](pi-package-webui/README.md)** — Use Pi from a local browser with tabs, streaming responses, uploads, model controls, Git helpers, and optional companion features.
+- **[Writer for Pi](pi-package-writer/README.md)** helps you plan, draft, revise, and resume novels, light novels, serial fiction, and manga scripts with reusable voices and saved project notes.
 
 ### Extensions
 
@@ -64,6 +65,7 @@ Extensions add commands, tools, interface elements, or automatic behavior to Pi.
 - **[Raspberry Pi Wiki Local for Pi](pi-extension-raspberrypi-wiki-local/README.md)** — Lets Pi search a local Raspberry Pi documentation collection.
 - **[Release AUR for Pi](pi-extension-release-aur/README.md)** — Guides AUR setup, review, and publishing with explicit safety checks and confirmation.
 - **[Release npm for Pi](pi-extension-release-npm/README.md)** — Guides this workspace’s npm release process and asks before publishing.
+- **[Deterministic review for Pi](pi-extension-review/README.md)** tracks which frozen file versions and line ranges a reviewer has read, resumes incomplete reviews, and saves findings with coverage reports.
 - **[Reverse Last for Pi](pi-extension-reverse-last/README.md)** — Undo the most recent changes made through Pi’s write and edit tools.
 - **[Safety Guard for Pi](pi-extension-safety-guard/README.md)** — Adds confirmation and path protection around commands and edits that could cause serious damage.
 - **[Setup Skills for Pi](pi-extension-setup-skills/README.md)** — Choose which local Pi skills are enabled from one interactive list.
