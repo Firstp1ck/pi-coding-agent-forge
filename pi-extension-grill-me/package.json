@@ -1,7 +1,7 @@
 {
   "name": "@firstpick/pi-extension-grill-me",
   "version": "0.1.5",
-  "description": "Deterministic design interview command and tools for Pi.",
+  "description": "Questionnaire-guided design interview command and persistence tools for Pi.",
   "type": "module",
   "license": "MIT",
   "homepage": "https://github.com/Firstp1ck/pi-coding-agent-forge/tree/main/pi-extension-grill-me#readme",
@@ -28,6 +28,12 @@
     "check": "node --experimental-strip-types --check index.ts",
     "smoke": "node --experimental-strip-types --input-type=module -e \"import('./index.ts')\""
   },
+  "dependencies": {
+    "@firstpick/pi-package-questionnaire": "0.1.1"
+  },
+  "bundledDependencies": [
+    "@firstpick/pi-package-questionnaire"
+  ],
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "*",
     "typebox": "*"

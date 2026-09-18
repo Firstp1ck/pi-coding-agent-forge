@@ -105,11 +105,44 @@ function safeOutputPath(cwd: string, input?: string): string {
 	return absolute;
 }
 
+const MISSING_PLAN = "(No plan supplied; collect it through questionnaire intake.)";
+
+function interviewPrompt(plan: string, needsPlanIntake: boolean): string {
+	const intake = needsPlanIntake
+		? `\nPlan intake:\n- The user did not supply a plan. Your first user-facing question must be a questionnaire start call with one single-select question. If this conversation or project contains a concrete plan, offer an option whose label names that plan, such as \"Use existing plan: <short description>\". Otherwise offer a choice to stop without starting. Keep allowOther true so the user can describe a plan. Do not ask for the plan in ordinary chat and do not invent one.\n- After intake completes, record the resolved plan-intake answer first with grill_record_turn and an explicit userAnswer, before recording any other turn. Until that answer is recorded, do not record codebase discoveries, open questions, or other decisions. Then use the selected or custom plan as the interview subject. If the user chose to stop, save partial results and end the interview.`
+		: "";
+
+	return `Run /grill-me for this plan:\n\n${plan}\n\nThis is a model-guided interview. During /grill-me, this protocol replaces generic questionnaire advice to ask in chat after cancellation or unavailability. Follow this protocol exactly:${intake}\n\nQuestion rounds:\n- Investigate codebase-answerable facts before asking the user. Record a discovered decision when useful, but do not ask the user to repeat facts the code establishes.\n- Gather every currently answerable, independent user decision into one questionnaire start call, up to 20 questions. Hold dependent questions for a later round. Every initial or follow-up user decision must use questionnaire, even when only one question remains. Never fall back to ordinary chat questions.\n- Give every questionnaire question stable IDs, usable choices, allowOther true, and a recommendation with a short reason in the question prompt. Do not request passwords, tokens, or other secrets.\n- Treat each questionnaire result by its status. If it needs clarification, answer the clarification request in normal text and immediately call questionnaire resume with the exact questionnaireId and revision from that result. Do not restart the questionnaire or infer the pending answer.\n- For completed, cancelled, or unavailable results, call grill_record_turn once for each newly returned explicit answer, in questionnaire order. Convert selected option IDs to their visible labels and include every selected label plus any custom Other value in userAnswer. Keep one question per call and include the recommendation that was shown. Do not record the same answer twice after a resume.\n- A completed questionnaire finishes only that round. Evaluate the answers for conflicts, changed assumptions, and remaining ambiguity before starting another round. Do not repeat resolved questions unless answers conflict or change.\n- If questionnaire returns cancelled or unavailable, do not reopen it and do not ask in chat. Save the answered decisions as partial results with remaining ambiguities in openRisks and nextDecisionNeeded, then stop. For unavailable, explain that Grill Me needs an interactive TUI or RPC questionnaire and can resume after that capability is restored.\n- When all identified ambiguities are resolved, call grill_save_results with the final shared understanding, agreed decisions, and any open risks. If the user asks to stop or save before then, save partial results and state what remains unresolved. Never claim full resolution after cancellation, unavailability, or a postponed decision.`;
+}
+
 export default function grillMeExtension(pi: ExtensionAPI) {
+	let registeredBundledQuestionnaire = false;
+	pi.on?.("session_start", async () => {
+		if (registeredBundledQuestionnaire || pi.getAllTools().some((tool) => tool.name === "questionnaire")) return;
+		const { default: questionnaireExtension } = await import("@firstpick/pi-package-questionnaire/index.ts");
+		if (pi.getAllTools().some((tool) => tool.name === "questionnaire")) return;
+		questionnaireExtension(pi);
+		registeredBundledQuestionnaire = true;
+	});
+
 	pi.registerCommand("grill-me", {
-		description: "Start a deterministic design interview and save results to Markdown",
+		description: "Start a questionnaire-based design interview and save results to Markdown",
 		handler: async (args, ctx) => {
-			const plan = args.trim() || "(No plan supplied yet. Ask the user to paste or describe the plan first.)";
+			if (!ctx.hasUI || (ctx.mode !== "tui" && ctx.mode !== "rpc")) {
+				ctx.ui.notify("Grill Me requires questionnaire UI in TUI or RPC mode. No grill session was started.", "error");
+				return;
+			}
+			if (!pi.getAllTools().some((tool) => tool.name === "questionnaire")) {
+				ctx.ui.notify("Grill Me could not find the questionnaire tool. Reinstall the package or enable its bundled questionnaire extension, reload Pi, and try again.", "error");
+				return;
+			}
+			if (!pi.getActiveTools().includes("questionnaire")) {
+				ctx.ui.notify("Grill Me needs the questionnaire tool, but it is disabled. Enable it, reload Pi, and try again.", "error");
+				return;
+			}
+
+			const suppliedPlan = args.trim();
+			const plan = suppliedPlan || MISSING_PLAN;
 			const state: GrillState = {
 				createdAt: new Date().toISOString(),
 				updatedAt: new Date().toISOString(),
@@ -120,7 +153,7 @@ export default function grillMeExtension(pi: ExtensionAPI) {
 			await writeState(ctx.cwd, state);
 			ctx.ui.notify(`Grill session initialized: ${statePath(ctx.cwd)}`, "info");
 
-			pi.sendUserMessage(`Start /grill-me for this plan:\n\n${plan}\n\nRules:\n- Interview me relentlessly about every aspect of this plan until we reach shared understanding.\n- Walk down each branch of the design tree, resolving dependencies between decisions one-by-one.\n- Ask exactly one question at a time.\n- For each question, provide your recommended answer.\n- If a question can be answered by exploring the codebase, explore the codebase instead.\n- Use grill_record_turn after each question/answer decision is captured.\n- For every resolved turn, include my explicit choice in userAnswer; do not leave the answer only in notes.\n- Use grill_save_results to save the results into a Markdown file in the project directory when enough understanding has been reached or when I ask to stop/save.`);
+			pi.sendUserMessage(interviewPrompt(plan, suppliedPlan.length === 0));
 		},
 	});
 
@@ -135,6 +168,7 @@ export default function grillMeExtension(pi: ExtensionAPI) {
 			"Do not use grill_record_turn for more than one question at a time.",
 		],
 		parameters: RecordTurnParams,
+		executionMode: "sequential",
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 			if (params.decisionStatus === "resolved" && !params.userAnswer?.trim()) {
 				return {
@@ -153,9 +187,13 @@ export default function grillMeExtension(pi: ExtensionAPI) {
 				plan: "(state was created by grill_record_turn; no plan recorded)",
 				turns: [],
 			};
+			const userAnswer = params.userAnswer?.trim() || undefined;
+			if (state.plan === MISSING_PLAN && state.turns.length === 0 && params.decisionStatus === "resolved" && userAnswer) {
+				state.plan = userAnswer;
+			}
 			state.turns.push({
 				...params,
-				userAnswer: params.userAnswer?.trim() || undefined,
+				userAnswer,
 			} as GrillTurn);
 			state.updatedAt = new Date().toISOString();
 			await writeState(ctx.cwd, state);
