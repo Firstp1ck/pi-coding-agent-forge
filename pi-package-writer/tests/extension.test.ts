@@ -74,6 +74,135 @@ test("new book plans first, then a new extension instance resumes the saved proj
   assert.match(await readFile(join(h.cwd, "writing", "ash-snow", "chapters", "chapter-0001.md"), "utf8"), /writer:planned/);
 });
 
+test("beginner menu accepts an empty title and idea without asking advanced questions", async (t) => {
+  const h = await harness(t);
+  h.replies.push("Help me begin a story", "", "", "Not sure yet, try prose", true);
+  await h.run("");
+  assert.equal(h.replies.length, 0);
+  assert.equal(h.messages.length, 1);
+  assert.match(h.messages[0], /writer-beginner/);
+  assert.match(h.messages[0], /ask at most one plain-language question/);
+  const root = join(h.cwd, "writing", "my-first-story");
+  assert.equal(JSON.parse(await readFile(join(root, "writer.json"), "utf8")).guidance, "beginner");
+  assert.match(await readFile(join(root, "learning.md"), "utf8"), /No exercises completed/);
+  assert.deepEqual(await readdir(join(root, "chapters")), []);
+  assert.ok(h.complete("start"));
+  assert.ok(h.complete("coa"));
+});
+
+test("beginner guidance survives restart and can be skipped for one task", async (t) => {
+  const h = await harness(t);
+  await h.run('start "Harbor" --brief "A child finds a stranded whale" --format light-novel --language Deutsch');
+  assert.equal(h.messages.length, 1);
+  assert.match(h.messages[0], /writer-beginner/);
+  assert.match(h.messages[0], /writer-light-novel/);
+  assert.doesNotMatch(h.messages[0], /writer-outline/);
+  const root = join(h.cwd, "writing", "harbor");
+  assert.match(await readFile(join(root, "brief.md"), "utf8"), /Deutsch/);
+  await writeFile(join(root, "learning.md"), "# Current exercise\nChoose what she wants to do before the tide rises.\n");
+  const before = await snapshot(h.cwd);
+  const resumed = await harness(t, h.cwd);
+  await resumed.run("continue");
+  assert.match(resumed.messages[0], /writer-beginner/);
+  assert.match(resumed.messages[0], /continue the recorded exercise/);
+  assert.deepEqual(await snapshot(h.cwd), before);
+  await resumed.run("continue --guidance standard");
+  assert.doesNotMatch(resumed.messages[1], /writer-beginner/);
+  assert.match(resumed.messages[1], /Standard guidance for this task/);
+  assert.deepEqual(await snapshot(h.cwd), before);
+  await resumed.run("new chapter");
+  assert.match(resumed.messages[2], /writer-beginner/);
+  assert.match(resumed.messages[2], /must not block a requested chapter/);
+});
+
+test("coach supports existing projects without changing their default or creating notes itself", async (t) => {
+  const h = await harness(t);
+  await createProject(h.cwd, { title: "Existing" });
+  await h.run("open existing");
+  const before = await snapshot(h.cwd);
+  await h.run('coach --project existing --brief "Help me make the opening clearer"');
+  assert.equal(h.messages.length, 1);
+  assert.match(h.messages[0], /writer-beginner/);
+  assert.match(h.messages[0], /do not restart the book/);
+  assert.match(h.messages[0], /missing learning notes are normal/);
+  assert.deepEqual(await snapshot(h.cwd), before);
+  await h.run("continue");
+  assert.doesNotMatch(h.messages[1], /writer-beginner/);
+  await h.run("continue --guidance beginner");
+  assert.match(h.messages[2], /writer-beginner/);
+});
+
+test("coaching review stays read-only even for a beginner project", async (t) => {
+  const h = await harness(t);
+  await h.run('start "Review practice"');
+  const before = await snapshot(h.cwd);
+  h.setTools(["read"]);
+  await h.run("review");
+  assert.match(h.messages[1], /writer-beginner/);
+  assert.match(h.messages[1], /This task is read-only/);
+  assert.doesNotMatch(h.messages[1], /Save brief learning notes/);
+  assert.deepEqual(await snapshot(h.cwd), before);
+});
+
+test("each beginner dialog can be cancelled without creating a project", async (t) => {
+  const h = await harness(t);
+  for (const replies of [[undefined], ["Working", undefined], ["Working", "A seed", undefined], ["Working", "A seed", "Novel / Roman", false]]) {
+    h.replies.push(...replies);
+    await h.run("start");
+    assert.equal(h.replies.length, 0);
+    assert.deepEqual(await readdir(h.cwd), []);
+    assert.equal(h.messages.length, 0);
+  }
+});
+
+test("beginner inputs are bounded and starting twice never overwrites the project", async (t) => {
+  const h = await harness(t);
+  h.replies.push("Working", "x".repeat(4001), "Novel / Roman");
+  await h.run("start");
+  assert.match(h.notices.at(-1)!, /4000/);
+  assert.deepEqual(await readdir(h.cwd), []);
+  await h.run('start "Working"');
+  const before = await snapshot(h.cwd);
+  await h.run('start "Working"');
+  assert.match(h.notices.at(-1)!, /already exists/);
+  assert.equal(h.messages.length, 1);
+  assert.deepEqual(await snapshot(h.cwd), before);
+});
+
+test("beginner start supports explicit headless requests and explains missing titles", async (t) => {
+  const h = await harness(t);
+  h.ctx.hasUI = false;
+  await h.run("start");
+  assert.match(h.notices.at(-1)!, /Working title/);
+  assert.deepEqual(await readdir(h.cwd), []);
+  await h.run('start "First attempt"');
+  assert.equal(h.messages.length, 1);
+  assert.match(h.messages[0], /writer-beginner/);
+});
+
+test("normal book wizard preserves an explicit beginner preference", async (t) => {
+  const h = await harness(t);
+  h.replies.push("First", "novel", "", "", "", "", true);
+  await h.run("new book --guidance beginner");
+  assert.equal(h.messages.length, 1);
+  assert.match(h.messages[0], /writer-beginner/);
+  assert.doesNotMatch(h.messages[0], /writer-outline/);
+});
+
+test("beginner confirmation rechecks busy state and session lifetime before writes", async (t) => {
+  const h = await harness(t);
+  h.replies.push("First", "A seed", "Novel / Roman");
+  h.ctx.ui.confirm = async () => { h.setIdle(false); return true; };
+  await h.run("start");
+  assert.deepEqual(await readdir(h.cwd), []);
+  h.setIdle(true);
+  h.replies.push("First", "A seed", "Novel / Roman");
+  h.ctx.ui.confirm = async () => { await h.shutdown(); return true; };
+  await h.run("start");
+  assert.deepEqual(await readdir(h.cwd), []);
+  assert.equal(h.messages.length, 0);
+});
+
 test("canceling the menu or book wizard leaves no files and sends no prompt", async (t) => {
   const h = await harness(t);
   await h.run("");

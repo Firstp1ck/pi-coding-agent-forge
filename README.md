@@ -33,7 +33,7 @@ Packages bundle larger features, prompt collections, themes, or related tools.
 - **[Theme bundle for Pi](pi-package-themes-bundle/README.md)** — Adds a collection of familiar color themes to Pi.
 - **[Qt WebUI](pi-package-qt-webui/README.md)** — Use Pi in a Linux desktop window built with Quickshell and Qt Quick, with Markdown output, tool cards, extension dialogs, and transcript search.
 - **[Pi Web UI](pi-package-webui/README.md)** — Use Pi from a local browser with tabs, streaming responses, uploads, model controls, Git helpers, and optional companion features.
-- **[Writer for Pi](pi-package-writer/README.md)** helps you plan, draft, revise, and resume novels, light novels, serial fiction, and manga scripts with reusable voices and saved project notes.
+- **[Writer for Pi](pi-package-writer/README.md)** helps you learn to write in small steps, then plan, draft, revise, and resume novels, light novels, serial fiction, and manga scripts with saved project notes.
 
 ### Extensions
 

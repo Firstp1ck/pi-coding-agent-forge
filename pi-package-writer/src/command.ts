@@ -1,18 +1,21 @@
 export const FORMATS = ["novel", "light-novel", "web-novel", "short-story", "manga", "webtoon"] as const;
 export type Format = typeof FORMATS[number];
-export const TASKS = ["continue", "outline", "style", "review", "revise", "adapt", "import", "brainstorm", "characters", "worldbuilding", "research"] as const;
+export type Guidance = "beginner" | "standard";
+export const TASKS = ["coach", "continue", "outline", "style", "review", "revise", "adapt", "import", "brainstorm", "characters", "worldbuilding", "research"] as const;
 export type Task = typeof TASKS[number];
 export type Unit = "chapter" | "scene" | "volume";
-export type Action = Task | "new" | "open" | "list" | "status" | "help" | "menu";
+export type Action = Task | "start" | "new" | "open" | "list" | "status" | "help" | "menu";
 export interface Request {
   action: Action;
   unit?: "book" | Unit;
   value?: string;
-  options: Partial<Record<"project" | "format" | "style" | "genre" | "language" | "brief" | "target" | "source", string>>;
+  options: Partial<Record<"project" | "format" | "style" | "genre" | "language" | "brief" | "target" | "source" | "guidance", string>>;
 }
 
 export const HELP = `Writer workflows
   /writer                                      Open the guided menu
+  /writer start ["Working title"] [options]     Begin with small steps; no experience needed
+  /writer coach [options]                      Get help learning with an existing project
   /writer new book "Title" [options]            Set up and plan a book
   /writer new chapter|scene|volume ["Title"]     Start one new unit
   /writer continue [project-id]                 Resume saved work
@@ -25,11 +28,13 @@ export const HELP = `Writer workflows
 Book options: --format novel|light-novel|web-novel|short-story|manga|webtoon
   --style "emotional, epic" --genre fantasy --language English --brief "Premise"
 Task options: --project <id> --brief "Instructions"
-  --target "chapters/chapter-0001.md" for continue/review/revise/adapt
+  --target "chapters/chapter-0001.md" for coach/continue/review/revise/adapt
   --source "path/to/manuscript.md" for import
   --format manga for adapt
   --style "restrained, melancholic" for style
-Quote multi-word values. A new book plans first; it does not draft a whole book.
+  --guidance beginner|standard for new book or writing tasks (except coach)
+Start accepts book options and always enables beginner guidance. Blank starter ideas are OK.
+Quote multi-word values. Start teaches one step at a time; new book normally plans first.
 Review is read-only. Continue reads saved progress before deciding what to write.`;
 
 export function tokenize(input: string): string[] {
@@ -68,13 +73,19 @@ export function format(value: string): Format {
   return normalized as Format;
 }
 
+export function guidance(value: unknown): Guidance {
+  if (value !== "beginner" && value !== "standard") throw new Error("Guidance must be beginner or standard.");
+  return value;
+}
+
 export function validateRequest(request: Request): Request {
-  const limits = { project: 64, format: 40, style: 240, genre: 160, language: 80, brief: 4000, target: 512, source: 512 };
+  const limits = { project: 64, format: 40, style: 240, genre: 160, language: 80, brief: 4000, target: 512, source: 512, guidance: 16 };
   const options = { ...request.options };
   for (const key of Object.keys(options) as Array<keyof Request["options"]>) {
     options[key] = text(options[key], `--${key}`, limits[key], key === "brief");
   }
   if (options.format) options.format = format(options.format);
+  if (options.guidance) options.guidance = guidance(options.guidance);
   return { ...request, ...(request.value !== undefined ? { value: text(request.value, "Title or project ID", 160) } : {}), options };
 }
 
@@ -82,7 +93,7 @@ export function parseRequest(input: string): Request {
   const tokens = tokenize(input);
   if (!tokens.length) return { action: "menu", options: {} };
   const action = tokens.shift()!;
-  if (!["new", "open", "list", "status", "help", ...TASKS].includes(action)) throw new Error(`Unknown writer action '${action}'. Use /writer help.`);
+  if (!["start", "new", "open", "list", "status", "help", ...TASKS].includes(action)) throw new Error(`Unknown writer action '${action}'. Use /writer help.`);
   const request: Request = { action: action as Action, options: {} };
   if (action === "new") {
     const unit = tokens.shift();
@@ -90,11 +101,13 @@ export function parseRequest(input: string): Request {
     request.unit = unit as Request["unit"];
   }
   const allowed = new Set<string>();
-  if (action === "new" && request.unit === "book") {
+  if (action === "start" || (action === "new" && request.unit === "book")) {
     for (const key of ["format", "style", "genre", "language", "brief"]) allowed.add(key);
+    if (action !== "start") allowed.add("guidance");
   } else if (action === "new" || (TASKS as readonly string[]).includes(action)) {
     allowed.add("project"); allowed.add("brief");
-    if (["continue", "review", "revise", "adapt"].includes(action)) allowed.add("target");
+    if (action !== "coach") allowed.add("guidance");
+    if (["coach", "continue", "review", "revise", "adapt"].includes(action)) allowed.add("target");
     if (action === "adapt") allowed.add("format");
     if (action === "style") allowed.add("style");
     if (action === "import") allowed.add("source");
@@ -109,7 +122,7 @@ export function parseRequest(input: string): Request {
       if (value === undefined || value.startsWith("--")) throw new Error(`Missing value for '${token}'.`);
       request.options[key] = value;
     } else {
-      if (!["new", "open", "continue", "status"].includes(action) || request.value !== undefined) {
+      if (!["start", "new", "open", "continue", "status"].includes(action) || request.value !== undefined) {
         throw new Error(`Unexpected argument '${token}'. Quote titles and put task instructions in --brief.`);
       }
       request.value = token;

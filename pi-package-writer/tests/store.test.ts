@@ -24,6 +24,47 @@ test("creates a portable project and restores it from disk without session memor
   assert.equal((await listProjects(cwd)).projects.length, 1);
 });
 
+test("beginner projects save guidance, a learning notebook, and a small next step", async (t) => {
+  const cwd = await workspace(t);
+  const p = await createProject(cwd, { title: "My first story", guidance: "beginner" });
+  assert.equal(p.book.guidance, "beginner");
+  assert.equal((await loadProject(cwd, p.book.id)).book.guidance, "beginner");
+  assert.match(await readFile(join(p.root, "learning.md"), "utf8"), /No exercises completed yet/);
+  assert.match(await readFile(join(p.root, "progress.md"), "utf8"), /one small first exercise/);
+  assert.match(await readFile(join(p.root, "brief.md"), "utf8"), /do not need a whole-book plan/);
+  assert.match(await status(cwd, p), /Guidance: beginner/);
+});
+
+test("standard and legacy projects do not require learning notes or migrate silently", async (t) => {
+  const cwd = await workspace(t);
+  const legacy = await createProject(cwd, { title: "Legacy" });
+  const original = await readFile(join(legacy.root, "writer.json"), "utf8");
+  assert.equal((await loadProject(cwd, "legacy")).book.guidance, undefined);
+  await assert.rejects(readFile(join(legacy.root, "learning.md")), { code: "ENOENT" });
+  assert.equal(await readFile(join(legacy.root, "writer.json"), "utf8"), original);
+  const standard = await createProject(cwd, { title: "Standard", guidance: "standard" });
+  assert.equal((await loadProject(cwd, "standard")).book.guidance, "standard");
+  await assert.rejects(readFile(join(standard.root, "learning.md")), { code: "ENOENT" });
+});
+
+test("invalid guidance fails before creation and invalid saved guidance is rejected", async (t) => {
+  const cwd = await workspace(t);
+  await assert.rejects(createProject(cwd, { title: "Invalid", guidance: "expert" }), /Guidance/);
+  assert.equal((await listProjects(cwd)).projects.length, 0);
+  const p = await createProject(cwd, { title: "Valid" });
+  for (const value of ["expert", null, true, {}]) {
+    await writeFile(join(p.root, "writer.json"), JSON.stringify({ ...p.book, guidance: value }));
+    await assert.rejects(loadProject(cwd, "valid"), /Guidance/);
+  }
+});
+
+test("learning notebooks have the same link protection as other project notes", async (t) => {
+  const cwd = await workspace(t);
+  const p = await createProject(cwd, { title: "Learning", guidance: "beginner" });
+  await link(join(p.root, "learning.md"), join(cwd, "linked-learning.md"));
+  await assert.rejects(loadProject(cwd, "learning"), /multiply linked/);
+});
+
 test("collisions and invalid options do not overwrite or partially create projects", async (t) => {
   const cwd = await workspace(t);
   const project = await createProject(cwd, { title: "Ash" });

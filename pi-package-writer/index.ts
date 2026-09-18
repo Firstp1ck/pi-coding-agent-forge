@@ -4,6 +4,7 @@ import { activeProject, createProject, createUnit, importSource, inventory, list
 import { buildPrompt } from "./src/workflow.ts";
 
 const MENU = {
+  "Help me begin a story": "start", "Learn with my current project": "coach",
   "New book": "book", "New chapter": "chapter", "New scene": "scene", "New volume": "volume",
   "Continue saved work": "continue", "Open another project": "open", "Outline": "outline",
   "Calibrate style": "style", "Review without changes": "review", "Revise a draft": "revise",
@@ -31,7 +32,7 @@ async function pickProject(ctx: ExtensionCommandContext, id?: string): Promise<P
   if (active) return active;
   const { projects, warnings } = await listProjects(ctx.cwd);
   if (warnings.length) ctx.ui.notify(warnings.slice(0, 5).join("\n"), "warning");
-  if (!projects.length) throw new Error('No writing projects found. Start with /writer new book "Title".');
+  if (!projects.length) throw new Error('No writing projects found. Use /writer start for beginner help, or /writer new book "Title".');
   if (!ctx.hasUI) throw new Error("Choose a project with --project <id> or /writer open <id>.");
   const labels = projects.map((p) => `${p.book.title} [${p.book.id}]`);
   const choice = await ctx.ui.select("Choose a writing project", labels);
@@ -43,10 +44,30 @@ async function openPicker(ctx: ExtensionCommandContext): Promise<string | undefi
   if (!ctx.hasUI) throw new Error("Use /writer open <project-id> outside interactive mode.");
   const { projects, warnings } = await listProjects(ctx.cwd);
   if (warnings.length) ctx.ui.notify(warnings.slice(0, 5).join("\n"), "warning");
-  if (!projects.length) throw new Error('No writing projects found. Start with /writer new book "Title".');
+  if (!projects.length) throw new Error('No writing projects found. Use /writer start for beginner help, or /writer new book "Title".');
   const labels = projects.map((p) => `${p.book.title} [${p.book.id}]`);
   const choice = await ctx.ui.select("Open a writing project", labels);
   return choice ? projects[labels.indexOf(choice)]?.book.id : undefined;
+}
+
+async function beginnerWizard(ctx: ExtensionCommandContext, request: Request): Promise<Request | undefined> {
+  if (request.value) return request;
+  if (!ctx.hasUI) throw new Error('Use /writer start "Working title" [--brief "Rough idea"] outside interactive mode.');
+  const title = await ctx.ui.input("A working title, not a final decision", "Leave empty to use My first story");
+  if (title === undefined) return undefined;
+  const idea = request.options.brief ?? await ctx.ui.input("What would you enjoy writing about?", "A person, place, feeling, or what-if. Leave empty if you are not sure yet.");
+  if (idea === undefined) return undefined;
+  const formats: Record<string, string> = {
+    "Not sure yet, try prose": "novel", "Novel / Roman": "novel", "Light novel": "light-novel",
+    "Web novel / serial story": "web-novel", "Short story": "short-story", "Manga script": "manga", "Webtoon script": "webtoon",
+  };
+  const chosen = request.options.format ?? await ctx.ui.select("What would you like to make? You can explore first.", Object.keys(formats));
+  if (!chosen) return undefined;
+  const result = validateRequest({ action: "start", value: title.trim() || "My first story", options: {
+    ...request.options, format: formats[chosen] ?? chosen, ...(idea.trim() ? { brief: idea } : {}),
+  } });
+  const accepted = await ctx.ui.confirm("Begin a guided writing project?", `Working title: ${result.value}\nStarting format: ${result.options.format}\n\nSave a new project under writing/ and begin with one small step. No final plot, technical terms, or whole-book outline needed. You can write yourself, write together, or ask for a short example.`);
+  return accepted ? result : undefined;
 }
 
 async function newBookWizard(ctx: ExtensionCommandContext, request: Request): Promise<Request | undefined> {
@@ -65,11 +86,13 @@ async function newBookWizard(ctx: ExtensionCommandContext, request: Request): Pr
   if (language === undefined) return undefined;
   const brief = request.options.brief ?? await ctx.ui.input("Premise and boundaries", "Who wants what, and what stands in the way?");
   if (brief === undefined) return undefined;
-  const accepted = await ctx.ui.confirm("Create writing project?", `Title: ${title}\nFormat: ${medium}\nStyle: ${style || "calibrate later"}\n\nCreate local files under writing/ and ask the active model to plan the opening? No whole-book drafting.`);
+  const kickoff = request.options.guidance === "beginner" ? "begin with one small learning step" : "plan the opening";
+  const accepted = await ctx.ui.confirm("Create writing project?", `Title: ${title}\nFormat: ${medium}\nStyle: ${style || "calibrate later"}\n\nCreate local files under writing/ and ask the active model to ${kickoff}? No whole-book drafting.`);
   if (!accepted) return undefined;
   return { action: "new", unit: "book", value: title, options: {
     format: format(medium), ...(style.trim() ? { style } : {}), ...(genre.trim() ? { genre } : {}),
     ...(language.trim() ? { language } : {}), ...(brief.trim() ? { brief } : {}),
+    ...(request.options.guidance ? { guidance: request.options.guidance } : {}),
   } };
 }
 
@@ -78,6 +101,7 @@ async function menuRequest(ctx: ExtensionCommandContext): Promise<Request | unde
   const choice = await ctx.ui.select("Writer: what would you like to work on?", Object.keys(MENU));
   if (!choice) return undefined;
   const action = MENU[choice as keyof typeof MENU];
+  if (action === "start") return beginnerWizard(ctx, { action: "start", options: {} });
   if (["book", "chapter", "scene", "volume"].includes(action)) {
     if (action === "book") return newBookWizard(ctx, { action: "new", unit: "book", options: {} });
     const title = await ctx.ui.input(`New ${action} title`, "Leave empty for a numbered title");
@@ -108,7 +132,9 @@ async function menuRequest(ctx: ExtensionCommandContext): Promise<Request | unde
     if (style === undefined) return undefined;
     if (style.trim()) request.options.style = style;
   }
-  const brief = await ctx.ui.input("Writing request", "Focus, constraints, or desired outcome");
+  const brief = action === "coach"
+    ? await ctx.ui.input("What would you like help with?", "For example: how to start a scene, or leave empty to find the next small step")
+    : await ctx.ui.input("Writing request", "Focus, constraints, or desired outcome");
   if (brief === undefined) return undefined;
   if (brief.trim()) request.options.brief = brief;
   return request;
@@ -125,7 +151,7 @@ export default function writerExtension(pi: ExtensionAPI): void {
   pi.registerCommand("writer", {
     description: "Plan, draft, revise, or resume a book, chapter, scene, or manga script",
     getArgumentCompletions(prefix) {
-      const choices = ["new book", "new chapter", "new scene", "new volume", ...TASKS, "open", "list", "status", "help"];
+      const choices = ["start", "new book", "new chapter", "new scene", "new volume", ...TASKS, "open", "list", "status", "help"];
       const matches = choices.filter((value) => value.startsWith(prefix.trimStart()));
       return matches.length ? matches.map((value) => ({ value, label: value })) : null;
     },
@@ -139,7 +165,8 @@ export default function writerExtension(pi: ExtensionAPI): void {
         if (!["list", "status"].includes(request.action)) ensureReady(ctx);
         if (request.action === "menu") request = await menuRequest(ctx);
         if (!request) return;
-        if (request.action === "new" && request.unit === "book") request = await newBookWizard(ctx, request);
+        if (request.action === "start") request = await beginnerWizard(ctx, request);
+        if (request?.action === "new" && request.unit === "book") request = await newBookWizard(ctx, request);
         if (!request) return;
         request = validateRequest(request);
         if (request.action === "list") {
@@ -177,8 +204,8 @@ export default function writerExtension(pi: ExtensionAPI): void {
           if (!request.options.source) throw new Error("Use /writer import --source \"path/to/manuscript.md\" [--project <id>]. Start or open a book first.");
           source = await importSource(ctx.cwd, request.options.source);
         }
-        if (request.action === "new" && request.unit === "book") {
-          project = await createProject(ctx.cwd, { title: request.value!, ...request.options });
+        if (request.action === "start" || (request.action === "new" && request.unit === "book")) {
+          project = await createProject(ctx.cwd, { title: request.value!, ...request.options, ...(request.action === "start" ? { guidance: "beginner" } : {}) });
         } else {
           project = await pickProject(ctx, request.options.project ?? (request.action === "continue" ? request.value : undefined));
         }

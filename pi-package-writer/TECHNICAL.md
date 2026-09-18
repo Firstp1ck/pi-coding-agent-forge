@@ -22,6 +22,8 @@ Use double or single quotes around multi-word values. Backslashes in Windows pat
 | --- | --- |
 | `/writer` | Guided menu |
 | `/writer help` | Usage reference without reading projects |
+| `/writer start ["Working title"]` | Create a beginner-guided project and work toward a small first scene |
+| `/writer coach` | Teach one useful next step in an existing project without changing its default guidance |
 | `/writer new book "Title"` | Create a project and ask Pi to plan the opening |
 | `/writer new chapter ["Title"]` | Reserve a chapter target and ask Pi to draft one chapter |
 | `/writer new scene ["Title"]` | Reserve a scene target and ask Pi to draft one scene |
@@ -48,17 +50,45 @@ New-book options:
 - `--genre`: independent of format and style.
 - `--language`: output language. Otherwise Pi is told to use the author's conversation language.
 - `--brief`: premise, constraints, or audience boundaries.
+- `--guidance beginner|standard`: choose the new project's default level of explanation. Omitted means standard.
+
+`start` accepts the same options except `--guidance`, since it always creates a beginner-guided project. A title supplied directly skips the starter dialogs. Without a title, interactive users can leave the working title and rough idea blank. Noninteractive callers must supply a title.
 
 Writing-task options, including new chapters, scenes, and volumes:
 
 - `--project <id>` selects the project for this task. Successful writing launches also make it active. Reviews do not change the active selection.
 - `--brief "Instructions"` defines the scope, target length, POV, or desired effect.
-- `--target "chapters/chapter-0001.md"` is supported for continue, review, revise, and adapt. It must name an existing Markdown file inside the selected project.
+- `--target "chapters/chapter-0001.md"` is supported for coach, continue, review, revise, and adapt. It must name an existing Markdown file inside the selected project.
 - `--format manga` selects the destination for adapt. It does not change the project's default format.
 - `--style "restrained, melancholic"` supplies a preference for the style workflow.
 - `--source "path/to/manuscript.md"` selects the original for import. Relative source paths resolve from Pi's current working directory, not the book directory. Absolute paths are accepted.
+- `--guidance beginner|standard` overrides the level of explanation for one task without changing the project's default. `coach` always uses beginner guidance and does not accept this option.
 
 If a target or scope is omitted, the model must inspect the saved state and clarify an ambiguous request. It must not assume permission to rewrite the entire project. Import requires an explicit source and an existing project. PDF, EPUB, and DOCX conversion are separate tasks.
+
+## Beginner guidance
+
+Use `/writer start` or choose **Help me begin a story** from the menu. The starter asks only for a working title, optional idea, and starting format. **Not sure yet, try prose** uses a novel as the starting format. It does not require you to commit to an entire book plan.
+
+Pi works from your idea toward a character, an immediate difficulty, and a small scene. It explains terms when needed, offers short examples, and asks one question or suggests one exercise at a time. Practice lengths are suggestions. You can ask Pi to draft for you, write together, or leave the writing to you.
+
+Beginner projects retain this guidance across restarts and `/writer continue`. Their `learning.md` notebook records the current question or exercise, actual attempts, helpful feedback, and a next step. The model updates it alongside the writing checkpoint; an interrupted run may leave either note stale. Suggested exercises are not treated as completed work.
+
+For an existing standard project, `/writer coach` adds teaching to that task without changing its default. Use it again to resume coaching, or use `/writer continue --guidance beginner`. Existing drafts and story decisions remain the starting point; coaching does not restart the book.
+
+To skip teaching for a task in a beginner project:
+
+```text
+/writer continue --guidance standard
+```
+
+To get simple, focused feedback without requesting edits:
+
+```text
+/writer review --guidance beginner --target "scenes/scene-0001.md"
+```
+
+Reviews remain read-only, including learning notes. Beginner guidance does not block an explicitly requested chapter draft or impose practice before every writing task. It is a model workflow, not an enforced course or a guarantee of teaching quality.
 
 ## Bundled skills
 
@@ -67,6 +97,7 @@ These are original Pi-ready skills covering the capabilities surveyed during dev
 | Skill | Focus |
 | --- | --- |
 | `writer-workflow` | Bounded tasks, saved state, continuation, author approval |
+| `writer-beginner` | Small-step coaching, plain explanations, practice scenes, and focused feedback |
 | `writer-brainstorm` | Creative alternatives and trade-offs |
 | `writer-outline` | Scene, chapter, volume, and series structure |
 | `writer-characters` | Motivation, relationships, voice, character exploration |
@@ -90,7 +121,7 @@ Skills can be invoked directly, for example `/skill:writer-style`, when skill co
 
 Projects live under `writing/<project-id>/` in the folder where `/writer` runs. There is no global manuscript database or cross-workspace search. Start Pi in the same workspace to resume, or copy the complete `writing/` directory to the new workspace.
 
-Each project contains editable brief, style, outline, continuity, and progress documents, plus folders for chapters, scenes, volumes, characters, worlds, revisions, scripts, and import notes. The progress document is a human-readable checkpoint with saved paths, the next step, and open decisions.
+Each project contains editable brief, style, outline, continuity, and progress documents. Beginner projects also start with a learning notebook; coaching may add one to an older project. All projects have folders for chapters, scenes, volumes, characters, worlds, revisions, scripts, and import notes. The progress document is a human-readable checkpoint with saved paths, the next step, and open decisions.
 
 The command creates project scaffolds and numbered placeholder files, including the supplied task brief so an interrupted start can be recovered. The model writes the actual manuscript and updates the checkpoint after saving. There is no background autosave, autonomous chapter loop, or guarantee that an interrupted model run updated its checkpoint.
 

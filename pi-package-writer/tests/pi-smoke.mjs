@@ -15,13 +15,14 @@ const cwd = join(temp, "workspace"), config = join(temp, "agent");
 await mkdir(cwd); await mkdir(config);
 await writeFile(join(config, "settings.json"), JSON.stringify({ packages: [root], enableSkillCommands: true, enableInstallTelemetry: false }));
 await createProject(cwd, { title: "Smoke Book", format: "light-novel" });
+await createProject(cwd, { title: "Learning Smoke", guidance: "beginner" });
 const env = { PI_CODING_AGENT_DIR: config, PI_CODING_AGENT_SESSION_DIR: join(temp, "sessions"), PI_OFFLINE: "1", PI_TELEMETRY: "0", HOME: temp, USERPROFILE: temp };
 for (const key of ["PATH", "Path", "SystemRoot", "SYSTEMROOT", "WINDIR", "COMSPEC", "PATHEXT", "TEMP", "TMP", "LANG"]) {
   if (process.env[key]) env[key] = process.env[key];
 }
 const child = spawn(process.execPath, [resolve(cli), "--mode", "rpc", "--no-session", "--no-context-files", "--approve"], { cwd, env, stdio: ["pipe", "pipe", "pipe"] });
 const pending = new Map();
-const notifications = [], events = [];
+const notifications = [], events = [], dialogs = [];
 let serial = 0, buffer = "", stderr = "";
 const exited = new Promise((resolveExit) => {
   child.once("exit", resolveExit);
@@ -43,6 +44,7 @@ child.stdout.on("data", (chunk) => {
     if (event.type === "extension_ui_request") {
       if (event.method === "notify") notifications.push(event.message);
       else if (["select", "input", "confirm", "editor"].includes(event.method)) {
+        dialogs.push(event);
         child.stdin.write(JSON.stringify({ type: "extension_ui_response", id: event.id, cancelled: true }) + "\n");
       }
     }
@@ -74,18 +76,21 @@ try {
   const names = response.data.commands.map((command) => command.name);
   assert.ok(names.includes("writer"));
   for (const name of SKILLS) assert.ok(names.includes(`skill:${name}`), name);
-  for (const message of ["/writer help", "/writer list", "/writer open smoke-book", "/writer status", "/writer"]) {
+  for (const message of ["/writer help", "/writer list", "/writer open smoke-book", "/writer status", "/writer", "/writer start", "/writer open learning-smoke", "/writer status"]) {
     assert.equal((await send("prompt", { message })).success, true, message);
   }
   assert.ok(notifications.some((message) => message.includes("Writer workflows")));
   assert.ok(notifications.some((message) => message.includes("Selected Smoke Book")));
   assert.ok(notifications.some((message) => message.includes("No manuscript has been drafted")));
   assert.ok(!notifications.some((message) => message.includes("Trust this workspace")));
+  assert.ok(dialogs.some((dialog) => dialog.options?.includes("Help me begin a story")));
+  assert.ok(dialogs.some((dialog) => dialog.title === "A working title, not a final decision"));
   assert.equal((await send("new_session")).success, true);
   assert.equal((await send("prompt", { message: "/writer status" })).success, true);
+  assert.match(notifications.at(-1), /Guidance: beginner/);
   assert.ok(!events.includes("agent_start"), "Read-only commands must not start a model call");
   assert.ok(!events.includes("extension_error"));
-  console.log(`Pi RPC smoke passed: /writer and ${SKILLS.length} skills discovered; help/list/open/status, menu cancellation, and session restart verified without a model call.`);
+  console.log(`Pi RPC smoke passed: /writer and ${SKILLS.length} skills discovered; help/list/open/status, beginner dialog cancellation, and guided-project restart verified without a model call.`);
 } finally {
   failPending(new Error("Smoke test finished"));
   child.kill();

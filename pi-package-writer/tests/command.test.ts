@@ -16,6 +16,20 @@ test("new unit titles can be combined with an explicit project", () => {
   assert.throws(() => parseRequest("continue ash-snow --project other"), /either/);
 });
 
+test("beginner start, coaching, and per-task guidance parse without advanced options", () => {
+  assert.deepEqual(parseRequest("start"), { action: "start", options: {} });
+  assert.deepEqual(parseRequest('start "A first attempt" --brief "A lonely lighthouse" --format roman'), {
+    action: "start", value: "A first attempt", options: { brief: "A lonely lighthouse", format: "novel" },
+  });
+  assert.equal(parseRequest('coach --project ash --target "scenes/scene-0001.md"').options.project, "ash");
+  assert.equal(parseRequest('new book "Ash" --guidance beginner').options.guidance, "beginner");
+  assert.equal(parseRequest("continue --guidance standard").options.guidance, "standard");
+  assert.equal(parseRequest("review --guidance beginner").options.guidance, "beginner");
+  for (const input of ["continue --guidance expert", "start --guidance standard", "coach --guidance standard", "start --project ash", "coach ash", "status --guidance beginner"]) {
+    assert.throws(() => parseRequest(input), undefined, input);
+  }
+});
+
 test("preserves Windows paths, apostrophes, and quoted escapes", () => {
   assert.deepEqual(tokenize(String.raw`import --source "C:\Books\first draft.md"`), ["import", "--source", String.raw`C:\Books\first draft.md`]);
   assert.equal(parseRequest('new book Author\'s-draft').value, "Author's-draft");

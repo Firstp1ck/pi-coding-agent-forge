@@ -5,7 +5,7 @@ Plan, write, and resume novels, light novels, serial fiction, and manga scripts 
 ## What you can do
 
 - Blend styles such as emotional, epic, intimate, lyrical, dark, humorous, or restrained.
-- Start a book, chapter, scene, or volume through one guided command.
+- Learn as you write, with beginner-friendly questions, short examples, and one small exercise at a time.
 - Resume from saved drafts, continuity notes, and a writing checkpoint across Pi sessions.
 - Develop characters and worlds, review drafts, and save revisions without replacing the originals by default.
 - Adapt prose into manga or webtoon scripts with panels, dialogue, and visual pacing.
@@ -22,15 +22,23 @@ The npm release is not published yet. For local setup, see [DEVELOPMENT.md](DEVE
 
 ## How to use it
 
-Start Pi in the folder where you want to keep your writing projects, then enter:
+Start Pi in the folder where you want to keep your writing projects.
+
+### New to writing? Start here
 
 ```text
-/writer
+/writer start
 ```
 
-Choose **New book**, give it a title, and choose its format, voice, genre, and language. Pi creates the project and helps you plan the opening. You review the direction before drafting begins.
+Give your project a working title and share anything that interests you: a character, a place, a feeling, or a rough idea. You can leave both blank. You do not need to know writing terminology or have a whole book planned.
 
-You can also start directly:
+Pi helps you turn that starting point into a person who wants something, a problem, and a small first scene. It explains one useful idea at a time. You can try writing yourself, write together, or ask for a short example. Feedback focuses on what works and one improvement to try next.
+
+Your learning notes and next step are saved with the project. Use `/writer continue` to pick up where you stopped. For help with a project you already have, use `/writer coach`.
+
+### Already have a direction?
+
+Use `/writer` and choose **New book** to select format, voice, genre, and language yourself. You can also start directly:
 
 ```text
 /writer new book "The Lantern Keeper" --format light-novel --style "emotional, epic" --genre fantasy --language English --brief "A keeper must choose which city receives the last light."
@@ -55,7 +63,7 @@ Other useful commands:
 | `/writer adapt --target "chapters/chapter-0001.md" --format manga` | Create a separate visual-script adaptation |
 | `/writer help` | Show all command forms |
 
-The 17 bundled skills can also respond to ordinary requests such as "Give these two characters different dialogue voices" or "Check who knows about the missing key."
+The 18 bundled skills can also respond to ordinary requests such as "Give these two characters different dialogue voices" or "Check who knows about the missing key."
 
 ## Before you start
 

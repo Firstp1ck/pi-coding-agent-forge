@@ -6,7 +6,7 @@ Use the author's selected project, never a similarly named project found elsewhe
 
 The author controls language, audience, content boundaries, genre, format, and voice. Ask only for missing decisions that change the next deliverable. Do not require a complete world encyclopedia to write a scene.
 
-A scene-sized request should produce a scene-sized result. A book request starts with a premise and plan, then proceeds through approved units. Do not promise a complete novel in one turn.
+A scene-sized request should produce a scene-sized result. A book request starts with a premise and plan, then proceeds through approved units. For a beginner, that plan may be just a few notes for one practice scene; do not require a whole-book outline before they can try writing. Do not promise a complete novel in one turn.
 
 ## Evidence and approval
 
@@ -27,12 +27,13 @@ The Pi adapter uses `writing/<project-id>/` in the workspace where `/writer` run
 
 | File or directory | Purpose |
 | --- | --- |
-| `writer.json` | Project identity and default format, maintained by the command |
+| `writer.json` | Project identity, default format, and optional guidance preference, maintained by the command |
 | `brief.md` | Premise, genre, language, audience, boundaries, author decisions |
 | `style.md` | Approved voice choices, samples, scene-specific exceptions |
 | `outline.md` | Proposed and approved structure, clearly distinguished |
 | `continuity.md` | Evidence-linked facts, character knowledge, timeline, setups/payoffs |
 | `progress.md` | Last saved work, current task, next step, open decisions |
+| `learning.md` | Optional coaching notebook with current exercise, actual attempts, feedback, and next small step |
 | `chapters/` | Numbered prose chapters or comic episode scripts |
 | `scenes/` | Numbered scene drafts |
 | `volumes/` | Numbered volume plans |
@@ -52,6 +53,8 @@ Do not edit `writer.json` or the workspace's `writing/.active.json` during draft
 4. Resume the unfinished work if the next step is clear. Ask a focused question if the saved state is stale or ambiguous.
 5. Never assume the highest numbered file is complete. A file marked `<!-- writer:planned -->` is only a reserved target.
 
+When beginner guidance is requested, also read the learning notebook if present. Resume its current question or exercise rather than repeating introductory questions. Missing notes are normal in older projects. Keep the next step consistent with the writing checkpoint and verify against the actual draft. Never mark a suggested exercise complete just because it was offered.
+
 For newly created units, replace the placeholder with the authorized content and remove the planned marker. If a command is interrupted, leave existing files intact. Do not claim success based on the placeholder.
 
 ## Saving and handoff
@@ -60,6 +63,6 @@ Use the host's file tools, not a generated program that emits manuscript text. C
 
 After actual saves, update the checkpoint with exact paths, what is planned/drafted/revised, a short recap, next action, and pending decisions. Read the saved result back. State where work stopped and which checks were performed. Avoid leaving the only copy of a continuation plan in chat.
 
-Reviews are read-only by default, including the checkpoint. Report findings in the conversation. Saving a review requires a separate explicit request.
+Reviews are read-only by default, including the checkpoint and learning notebook. Report findings in the conversation. Saving a review requires a separate explicit request.
 
 These are workflow instructions, not a filesystem sandbox or a guarantee that the model follows them. Keep backups or version control for manuscripts. Do not run simultaneous writing sessions against the same project.

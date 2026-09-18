@@ -18,8 +18,8 @@ Identify the project, current task, output format, language, audience, desired v
 
 1. Read [the project workflow](../../references/project-workflow.md) and inspect the saved project state.
 2. Separate format, genre, style, and unit of work. Read [format guidance](../../references/formats.md) and [style choices](../../references/styles.md) only as needed.
-3. Choose relevant specialist skills. Planning uses brainstorming and outlining. Drafting uses prose, the medium skill, and continuity. Revision uses critique and voice checks. Visual adaptation uses adaptation and manga guidance.
-4. Clarify only missing decisions that affect this deliverable. A new book starts with an agreed direction, not automatic whole-book generation.
+3. Choose relevant specialist skills. When the author asks to learn or the project uses beginner guidance, load [beginner coaching](../writer-beginner/SKILL.md) and start with one small step. Do not apply it to every new project. Planning uses brainstorming and outlining. Drafting uses prose, the medium skill, and continuity. Revision uses critique and voice checks. Visual adaptation uses adaptation and manga guidance.
+4. Clarify only missing decisions that affect this deliverable. A new book starts with an agreed direction, not automatic whole-book generation. For a beginner, a rough scene idea is enough to begin practicing; a full outline is not a prerequisite.
 5. Complete one bounded step. Save authorized outputs, verify them, and record the next step. Stop at an author decision rather than guessing approval.
 
 ## Safety and side effects
@@ -36,4 +36,4 @@ Confirm the requested scope was delivered, saved paths exist when saving was req
 
 ## Pi adapter
 
-Use `/writer` for the guided menu, `/writer new book "Title"` to start, and `/writer continue` to resume. The command uses the active model and saves projects under the invoking workspace's `writing/` directory. It does not need the separate workflows extension.
+Use `/writer` for the guided menu, `/writer start` for beginner help, `/writer coach` to learn with an existing project, `/writer new book "Title"` for standard setup, and `/writer continue` to resume. The command uses the active model and saves projects under the invoking workspace's `writing/` directory. It does not need the separate workflows extension.

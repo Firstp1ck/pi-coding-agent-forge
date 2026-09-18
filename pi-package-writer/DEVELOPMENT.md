@@ -22,7 +22,7 @@ There are no runtime npm dependencies. The extension imports Pi types only. Pi l
 - `src/command.ts` owns command parsing, option validation, supported formats, and help text.
 - `src/store.ts` handles scaffolding, manifests, active selection, safe paths, bounded metadata reads, and exclusive numbered-file creation.
 - `src/workflow.ts` maps tasks and formats to bundled skills and constructs the model handoff.
-- `skills/` contains 17 original portable Agent Skills. Host-specific command advice lives under each skill's Pi adapter section.
+- `skills/` contains 18 original portable Agent Skills. Host-specific command advice lives under each skill's Pi adapter section.
 - `references/` contains shared project, format, style, and review guidance.
 
 No model calls happen in extension code. `pi.sendUserMessage()` starts the normal agent turn after local preparation. The command does not change models, tools, or system prompts. No hooks inject writing guidance into unrelated turns.
@@ -51,7 +51,19 @@ Each project has `writing/<id>/writer.json`:
 
 IDs use a restricted ASCII slug. Titles that cannot form a valid slug receive a random `book-` ID. Reserved Windows device names are rejected. Directory identity and manifest identity must agree. Future schema versions are rejected without migration.
 
-The manifest owns identity and default format. Editable Markdown owns story content, genre, language, voice, canon, and progress. Adaptation format is a per-task choice, not an implicit manifest update.
+The manifest owns identity, default format, and the optional `guidance` preference, whose valid values are `beginner` and `standard`. Missing guidance in existing version-1 manifests means standard. Validation rejects other values; no automatic migration or manifest rewrite is needed. Editable Markdown owns story content, genre, language, voice, canon, and progress. Adaptation format is a per-task choice, not an implicit manifest update.
+
+## Beginner workflow contract
+
+`/writer start` creates a new project with `guidance: "beginner"`, a `learning.md` notebook, and an initial checkpoint aimed at a small exercise rather than a whole-book outline. The title and idea may be blank in the UI. A supplied title uses the explicit-command path without dialogs; headless starts require it. Creation still refuses collisions. The normal new-book wizard also accepts `--guidance beginner` and preserves that choice through its dialogs.
+
+`guidanceFor()` resolves the effective preference for each handoff. Start and coach always use beginner guidance; other tasks use an explicit `--guidance` override, then the saved preference, then standard. Task overrides and `/writer coach` do not rewrite the manifest. Skill selection adds `writer-beginner` only for beginner tasks. Beginner starts do not load the outline skill as a prerequisite; medium-specific guidance still loads.
+
+The teaching contract asks one question or gives one exercise per reply, explains concepts briefly through the author's story, and supports trying alone, writing together, or requesting a short example. It forbids completing the author's exercise without a request and avoids grading talent or pretending to measure mastery. Explicit drafting requests remain authoritative.
+
+The model creates or maintains `learning.md` and keeps its next action consistent with `progress.md`. Notes record actual attempts, chosen help preferences, and the next question, not assumed skill mastery. Older projects need no notebook until the model saves one during coaching. Managed-path checks cover this optional file too. Reviews do not update it. This is a prompt-and-skill contract, not a deterministic lesson engine or a write sandbox.
+
+## File creation
 
 The command writes the manifest last during scaffolding so an incomplete directory does not appear as a valid project. Setup failures preserve partial work. Active selection uses a same-directory exclusive temporary file followed by rename. Numbered targets use exclusive file creation and up to 32 bounded collision retries. Existing units are never truncated by reservation.
 
@@ -107,9 +119,9 @@ With Pi installed, run the offline RPC smoke test against its CLI entry:
 npm --prefix pi-package-writer run smoke -- /path/to/pi-coding-agent/dist/bundle/cli.js
 ```
 
-The smoke test creates disposable workspace and agent directories, disables startup network activity, excludes inherited credentials, and verifies discovery of the command and all 17 skills. It exercises help/list/open/status, menu cancellation, and session replacement without invoking a model or editing real Pi settings.
+The smoke test creates disposable workspace and agent directories, disables startup network activity, excludes inherited credentials, and verifies discovery of the command and all 18 skills. It exercises help/list/open/status, menu cancellation, and session replacement without invoking a model or editing real Pi settings.
 
-Tests cover parsing, Windows paths, limits, scaffolding, restart/resume, concurrent reservation, collisions, corrupt metadata, unsafe paths, junctions, hard links, cancellation, missing tools/model, busy handling, read-only review dispatch, import/adaptation routing, skill metadata, local documentation links, and package inclusion declarations.
+Tests cover parsing, Windows paths, limits, scaffolding, restart/resume, concurrent reservation, collisions, corrupt metadata, unsafe paths, junctions, hard links, cancellation, missing tools/model, busy handling, read-only review dispatch, import/adaptation routing, skill metadata, local documentation links, and package inclusion declarations. Beginner coverage includes empty-input onboarding, all dialog cancellations, persisted guidance, per-task overrides, older manifests, existing-project coaching, learning-file protection, invalid preferences, and preserving read-only review.
 
 `check` is a syntax check, not a full TypeScript typecheck. Command integration uses a mock Pi API and does not prove live model behavior or every RPC client's dialog support. Inspect the packed file list to ensure all referenced skill resources ship and tests/private manuscripts do not.
 
@@ -123,5 +135,8 @@ Use a scratch workspace and disposable fiction, not a private manuscript. Compar
 4. Seed two conflicting dates and a character who knows a secret too early. Ask for a review. Check evidence coverage and confirm no files changed.
 5. Adapt a prose scene into manga and then webtoon. Check drawable panels, dialogue density, reading direction, and page-turn versus scroll reveals.
 6. Import a manuscript containing a complete chapter and a fragment. Verify source preservation and explicit approval before inferred canon is adopted.
+7. Run `/writer start` with no idea. Check that the model offers a manageable starting point and asks one question, rather than presenting a course or lengthy outline. Ask what a scene is and check for a short explanation tied to the emerging story.
+8. Choose to write an exercise yourself. Confirm that the model waits rather than completing it. Submit a small attempt and look for specific feedback on one strength and one improvement, with no invented claims about your ability.
+9. Restart after saving a learning step, then run `/writer continue`. Verify it resumes that exercise. Try `/writer coach` on an older project and `--guidance standard` on a beginner project; check that neither changes the saved preference.
 
 Record the model, prompt, inspected files, results, and failures. Do not treat a passing routing test as evidence of good fiction or flawless continuity.

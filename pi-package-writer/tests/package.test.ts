@@ -3,7 +3,7 @@ import { readFile, readdir, stat } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
-import { SKILLS, skillsFor, buildPrompt } from "../src/workflow.ts";
+import { SKILLS, skillsFor, buildPrompt, guidanceFor } from "../src/workflow.ts";
 import { FORMATS, TASKS, type Request } from "../src/command.ts";
 import type { Project } from "../src/store.ts";
 
@@ -46,7 +46,8 @@ test("skills follow the portable profile and include specific workflows and veri
       assert.ok(content.includes(`## ${heading}\n`), `${name}: ${heading}`);
     }
     const core = content.split("## Pi adapter")[0];
-    assert.doesNotMatch(core, /\/writer\b|\/skill:|~\/\.pi/, name);
+    // Sibling skill links such as ../writer-beginner/SKILL.md are portable.
+    assert.doesNotMatch(core, /\/writer(?=$|[\s`])|\/skill:|~\/\.pi/m, name);
   }
 });
 
@@ -62,6 +63,27 @@ test("all workflow routes use existing skills and keep prompts bounded", () => {
       assert.match(prompt, /story data/);
       assert.match(prompt, /"totalUnitFiles": 1000/);
       assert.doesNotMatch(prompt, /chapter-0000\.md/);
+    }
+  }
+});
+
+test("guidance routing is opt-in, persisted, and overridable without changing story format", () => {
+  const guided: Project = { ...project, book: { ...project.book, guidance: "beginner" } };
+  assert.equal(guidanceFor({ action: "continue", options: {} }, project), "standard");
+  assert.equal(guidanceFor({ action: "continue", options: {} }, guided), "beginner");
+  assert.equal(guidanceFor({ action: "continue", options: { guidance: "standard" } }, guided), "standard");
+  for (const medium of FORMATS) {
+    const p = { ...guided, book: { ...guided.book, format: medium } };
+    for (const action of ["start", "coach", "continue", "review", "new"] as const) {
+      const request: Request = { action, ...(action === "new" ? { unit: "book" as const } : {}), options: {} };
+      assert.ok(skillsFor(request, p).includes("writer-beginner"));
+      const prompt = buildPrompt(request, p, []);
+      assert.match(prompt, /Teach one concept at a time/);
+      assert.match(prompt, /Never complete their exercise for them unless asked/);
+      assert.match(prompt, /learning\.md/);
+      assert.match(prompt, new RegExp(`"format": "${medium}"`));
+      if (action === "review") assert.doesNotMatch(prompt, /Save brief learning notes/);
+      if (medium === "manga" || medium === "webtoon") assert.ok(skillsFor(request, p).includes("writer-manga"));
     }
   }
 });
