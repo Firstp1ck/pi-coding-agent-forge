@@ -34,7 +34,7 @@ Completion criterion: the integrated result passes its applicable checks, and th
 
 ## 5. Independent review quorum and finding disposition
 
-After integration, obtain **two distinct, read-only, fresh-context reviewer-run outputs**. Each independently assesses architecture, correctness, security, edge cases, tests, maintainability, and compliance with the plan and acceptance criteria. The reviewers must use provider families distinct from each other and from the primary implementation provider when available. Worker self-checks, main-agent review, multiple roles in one run, and two outputs from one run do not count.
+After integration, obtain **two distinct, read-only, fresh-context reviewer-run outputs**. Each independently assesses architecture, correctness, security, edge cases, tests, maintainability, and compliance with the plan and acceptance criteria. Use provider families distinct from each other and, when feasible, from the primary implementation provider if suitable models are available, authorized, and unblocked. Check current availability and known authentication, quota, rate-limit, outage, model-scope, and policy restrictions rather than treating a catalog entry as proof of usability. If no usable different-provider alternative exists, or an attempted alternative fails, continue with the same provider, including the same model in separate reviewer runs if needed. Record the fallback reason and evidence; no user waiver is required for provider or model reuse. Do not retry known-blocked alternatives merely to obtain diversity, bypass restrictions, or replace a still-live reviewer run. Worker self-checks, main-agent review, multiple roles in one run, and two outputs from one run do not count.
 
 For every finding, record reviewer run identity and provider/model; affected file or symbol; violated requirement or failure mode; evidence and severity; and a disposition of `accepted`, `rejected`, `deferred`, or `needs verification`. The integration owner independently verifies every finding. Only verified, accepted findings may be implemented; accepted fixes require revalidation.
 
@@ -48,7 +48,7 @@ Completion criterion: the saved report is current, self-contained, evidence-base
 
 ## 7. Waiver and incomplete status
 
-If a required capability, provider, or other prerequisite prevents a mandatory outcome, stop at that gate. Report the exact limitation and affected gate, then ask the user to explicitly waive the gate or approve a named alternative. Do not silently substitute a weaker process, and do not mark the feature complete until the waiver or alternative is recorded and its conditions are satisfied.
+If a required capability or other prerequisite prevents a mandatory outcome, stop at that gate. Provider diversity alone is not a mandatory outcome; use the same-provider fallback in section 5 when needed. Report the exact limitation and affected gate, then ask the user to explicitly waive the gate or approve a named alternative. Do not silently substitute a weaker process, and do not mark the feature complete until the waiver or alternative is recorded and its conditions are satisfied.
 
 A waiver is explicit, scoped, and recorded; it is not inferred from time pressure, an unavailable tool, a worker claim, or a failed retry.
 

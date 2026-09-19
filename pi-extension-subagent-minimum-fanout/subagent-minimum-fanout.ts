@@ -1,4 +1,4 @@
-import { isToolCallEventType, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 export type SubagentExecutionMode = "direct" | "tasks" | "chain" | "indeterminate";
 export type SubagentAnalysisKind = SubagentExecutionMode | "scheduled" | "non-execution";
@@ -29,10 +29,13 @@ export interface ReviewerDiversityAnalysis {
 	violation: boolean;
 }
 
-export const REVIEWER_DIVERSITY_BLOCK_REASON = [
-	"Blocked by the reviewer-diversity policy: multiple reviewer launches in one execution must each declare an explicit provider/model route.",
-	"Reviewer provider prefixes and normalized model routes must both be pairwise distinct; count-based or dynamic reviewer fanout cannot prove that and is not allowed.",
-	"Use separate reviewer task entries with different provider families and models.",
+export const REVIEWER_DIVERSITY_GUIDANCE = [
+	"Reviewer provider selection: use different provider families when suitable models are available, authorized, and unblocked.",
+	"Check live availability and known authentication, quota, rate-limit, outage, model-scope, and policy restrictions; a catalog entry alone does not prove usability.",
+	"If no usable different-provider alternative exists or an attempted alternative fails, continue with the same provider, including the same model in separate fresh-context reviewer runs if needed.",
+	"Record the fallback reason and evidence; provider or model reuse needs no waiver. Do not retry known-blocked alternatives merely for diversity, bypass restrictions, or duplicate live reviewer runs.",
+	"Preserve the independent read-only reviewer-run quorum required by the active feature or project policy; two reviews require two separate runs and outputs.",
+	"With subagent_gate, keep the required success count and use requireDistinctProviders: false to allow fallback; do not exclude a provider solely for diversity.",
 ].join(" ");
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -282,7 +285,7 @@ function collectReviewerRoutes(input: Record<string, unknown>, mode: SubagentExe
 	};
 }
 
-/** Verifies that every same-call reviewer has a statically distinct provider and model route. */
+/** Reports static route diversity only; a violation is diagnostic, not a launch blocker or availability check. */
 export function analyzeReviewerDiversity(input: unknown): ReviewerDiversityAnalysis {
 	const execution = analyzeSubagentCall(input);
 	if (!execution.execution || !isRecord(input)) {
@@ -317,15 +320,10 @@ export function analyzeReviewerDiversity(input: unknown): ReviewerDiversityAnaly
 }
 
 export default function subagentMinimumFanout(pi: ExtensionAPI): void {
-	pi.on("tool_call", (event) => {
-		if (!isToolCallEventType<"subagent", Record<string, unknown>>("subagent", event)) return;
+	pi.on("before_agent_start", (event) => {
+		const tools = pi.getActiveTools();
+		if (!tools.includes("subagent") && !tools.includes("subagent_gate")) return;
 
-		try {
-			if (analyzeReviewerDiversity(event.input).violation) {
-				return { block: true, reason: REVIEWER_DIVERSITY_BLOCK_REASON };
-			}
-		} catch {
-			return { block: true, reason: REVIEWER_DIVERSITY_BLOCK_REASON };
-		}
+		return { systemPrompt: `${event.systemPrompt}\n\n${REVIEWER_DIVERSITY_GUIDANCE}` };
 	});
 }

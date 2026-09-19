@@ -1,7 +1,7 @@
 {
   "name": "@firstpick/pi-extension-subagent-minimum-fanout",
-  "version": "0.1.5",
-  "description": "Enforce Pi reviewer provider/model diversity without restricting child fanout.",
+  "version": "0.1.6",
+  "description": "Guide Pi reviewer provider diversity with same-provider fallback when alternatives are unavailable or blocked.",
   "type": "module",
   "license": "MIT",
   "homepage": "https://github.com/Firstp1ck/pi-coding-agent-forge/tree/main/pi-extension-subagent-minimum-fanout#readme",

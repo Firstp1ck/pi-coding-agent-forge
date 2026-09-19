@@ -215,6 +215,24 @@ class SubagentGovernanceContractTests(unittest.TestCase):
                     f"model id outside the Pi adapter: {path.relative_to(PACKAGE_ROOT)}",
                 )
 
+    def test_pi_reviewer_fallback_preserves_quorum_without_provider_gate(self):
+        adapter = PI_ADAPTER.read_text(encoding="utf-8")
+        for phrase in [
+            "different provider families when suitable alternatives are available, authorized, and unblocked",
+            "If alternatives are unavailable, blocked, or fail, continue with the same provider",
+            "including the same model in separate fresh-context runs if needed",
+            "Record fallback reasons and evidence",
+            "provider or model reuse needs no waiver",
+            "does not reduce the required independent reviewer-run count",
+            "Do not retry known-blocked alternatives",
+            "bypass restrictions, or duplicate live runs",
+            "`requiredSuccesses: 2`",
+            "`requireDistinctProviders: false`",
+            "preserve exclusions required by the user or policy",
+        ]:
+            self.assertIn(phrase, adapter)
+        self.assertNotIn("required distinct provider families", adapter)
+
     def test_pi_adapter_section_carries_the_pi_specific_mapping(self):
         adapter_section = SKILL.read_text(encoding="utf-8").split("## Pi Adapter", 1)[1]
         self.assertTrue(adapter_section.strip())

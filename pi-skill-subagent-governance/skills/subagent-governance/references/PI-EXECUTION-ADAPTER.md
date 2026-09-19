@@ -46,9 +46,11 @@ These are **Pi-local defaults for this workstation**, not portable policy. They 
 | Implementation worker | `openai-codex/gpt-5.6-sol` with high thinking | Unless the task or the user requires another provider. |
 | Fix worker | `openai-codex/gpt-5.6-sol` with high thinking | Or the implementation provider already selected for the feature. |
 | Tests and acceptance reviewer | Most capable available review model, preferring the `openai-codex` provider | Select from the live model registry rather than pinning a model ID. Use high or greater thinking when supported. |
-| Feature correctness reviewers | Most capable available review models from the required distinct provider families | Prefer `openai-codex` for the primary reviewer when compatible with the feature provider-diversity requirement. Use high or greater thinking when supported. |
+| Feature correctness reviewers | Most capable usable review models, selecting different provider families when suitable alternatives are available, authorized, and unblocked | Prefer `openai-codex` for the primary reviewer. If alternatives are unavailable, blocked, or fail, continue with the same provider, including the same model in separate fresh-context runs if needed. Use high or greater thinking when supported. |
 
 Provider route preference: when a usable OpenAI Codex or Anthropic subscription is detected, prefer its subscription-backed provider route over the OpenRouter API for subagents. Use OpenRouter only when the matching subscription route is unavailable, unsuitable for the task, exhausted, or explicitly requested by the user.
+
+For feature reviews, follow the feature contract's conditional provider-diversity policy. Check live availability and known authentication, quota, rate-limit, outage, model-scope, and policy restrictions. Record fallback reasons and evidence; provider or model reuse needs no waiver and does not reduce the required independent reviewer-run count. Do not retry known-blocked alternatives merely for diversity, bypass restrictions, or duplicate live runs. With `subagent_gate`, keep `requiredSuccesses: 2` for the two-reviewer quorum and `requireDistinctProviders: false` so a failed alternative can fall back to the same provider. Do not exclude the implementation provider solely for diversity; preserve exclusions required by the user or policy.
 
 A model choice never changes admissibility. An unavailable default is a provider problem to solve with an eligible fallback; it is not a reason to duplicate a live child, broaden a task, or lower an independent gate.
 

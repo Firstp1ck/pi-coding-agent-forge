@@ -78,7 +78,7 @@ class FeatureDevelopmentWorkflowContractTests(unittest.TestCase):
             "one-writer isolation",
             "Central integration and validation",
             "two distinct, read-only, fresh-context reviewer-run outputs",
-            "provider families distinct from each other and from the primary implementation provider",
+            "provider families distinct from each other and, when feasible, from the primary implementation provider",
             "`accepted`, `rejected`, `deferred`, or `needs verification`",
             "Only verified, accepted findings may be implemented",
             "Final HTML report",
@@ -89,6 +89,25 @@ class FeatureDevelopmentWorkflowContractTests(unittest.TestCase):
         ]
         for phrase in required:
             self.assertIn(phrase, text)
+
+    def test_provider_diversity_allows_unblocked_same_provider_fallback_without_waiver(self):
+        text = CONTRACT.read_text(encoding="utf-8")
+        for phrase in [
+            "if suitable models are available, authorized, and unblocked",
+            "authentication, quota, rate-limit, outage, model-scope, and policy restrictions",
+            "rather than treating a catalog entry as proof of usability",
+            "or an attempted alternative fails, continue with the same provider",
+            "including the same model in separate reviewer runs if needed",
+            "Record the fallback reason and evidence",
+            "no user waiver is required for provider or model reuse",
+            "Do not retry known-blocked alternatives",
+            "bypass restrictions, or replace a still-live reviewer run",
+            "Provider diversity alone is not a mandatory outcome",
+            "two distinct, read-only, fresh-context reviewer-run outputs",
+            "two outputs from one run do not count",
+        ]:
+            self.assertIn(phrase, text)
+        self.assertNotIn("The reviewers must use provider families distinct", text)
 
     def test_complex_contract_has_no_harness_mechanics_or_volatile_models(self):
         text = CONTRACT.read_text(encoding="utf-8").lower()

@@ -9,23 +9,31 @@ import subagentMinimumFanout, {
 	countStaticWorkers,
 	normalizeReviewerRoute,
 	positiveTaskCount,
-	REVIEWER_DIVERSITY_BLOCK_REASON,
+	REVIEWER_DIVERSITY_GUIDANCE,
 } from "../subagent-minimum-fanout.ts";
 
 type ToolCallHandler = (event: ToolCallEvent) => ToolCallEventResult | undefined;
 
-function createHarness() {
+type BeforeAgentStartHandler = (event: { systemPrompt: string }) => { systemPrompt: string } | undefined;
+
+function createHarness(activeTools = ["subagent"]) {
 	let handler: ToolCallHandler | undefined;
+	let beforeStart: BeforeAgentStartHandler | undefined;
 	subagentMinimumFanout({
+		getActiveTools: () => activeTools,
 		on(name: string, candidate: unknown) {
 			if (name === "tool_call") handler = candidate as ToolCallHandler;
+			if (name === "before_agent_start") beforeStart = candidate as BeforeAgentStartHandler;
 		},
 	} as unknown as ExtensionAPI);
-	if (!handler) throw new Error("tool_call handler was not registered");
+	if (!beforeStart) throw new Error("before_agent_start handler was not registered");
 
 	return {
 		call(toolName: string, input: unknown) {
-			return handler({ type: "tool_call", toolCallId: "test", toolName, input } as ToolCallEvent);
+			return handler?.({ type: "tool_call", toolCallId: "test", toolName, input } as ToolCallEvent);
+		},
+		start(systemPrompt = "Existing instructions") {
+			return beforeStart({ systemPrompt });
 		},
 	};
 }
@@ -34,10 +42,30 @@ function assertAllowed(input: Record<string, unknown>) {
 	assert.equal(createHarness().call("subagent", input), undefined);
 }
 
-function assertReviewerBlocked(input: Record<string, unknown>) {
-	const result = createHarness().call("subagent", input);
-	assert.deepEqual(result, { block: true, reason: REVIEWER_DIVERSITY_BLOCK_REASON });
-}
+test("review guidance is conditional on active delegation tools and preserves existing instructions", () => {
+	for (const tools of [["subagent"], ["subagent_gate"], ["read", "subagent", "subagent_gate"]]) {
+		assert.deepEqual(createHarness(tools).start(), {
+			systemPrompt: `Existing instructions\n\n${REVIEWER_DIVERSITY_GUIDANCE}`,
+		});
+	}
+	assert.equal(createHarness([]).start(), undefined);
+	assert.equal(createHarness(["read", "bash"]).start(), undefined);
+});
+
+test("guidance preserves conditional diversity, same-model fallback, and independent review quorum", () => {
+	for (const phrase of [
+		"different provider families when suitable models are available, authorized, and unblocked",
+		"a catalog entry alone does not prove usability",
+		"an attempted alternative fails, continue with the same provider",
+		"including the same model in separate fresh-context reviewer runs",
+		"Record the fallback reason and evidence",
+		"provider or model reuse needs no waiver",
+		"Do not retry known-blocked alternatives",
+		"bypass restrictions, or duplicate live reviewer runs",
+		"two reviews require two separate runs and outputs",
+		"requireDistinctProviders: false",
+	]) assert.ok(REVIEWER_DIVERSITY_GUIDANCE.includes(phrase), phrase);
+});
 
 test("positive task count defaults invalid values to one and sums top-level tasks", () => {
 	assert.equal(positiveTaskCount(2), 2);
@@ -189,7 +217,7 @@ test("reviewer routes normalize thinking suffixes and provider casing", () => {
 	assert.equal(normalizeReviewerRoute(undefined), undefined);
 });
 
-test("multiple reviewers require explicit pairwise-distinct providers and models", () => {
+test("same-provider, same-model, and implicit routes are diagnostic only and never block fallback", () => {
 	const duplicateModel = {
 		tasks: [
 			{ agent: "reviewer", task: "Review correctness", model: "openrouter/moonshotai/kimi-k3:high" },
@@ -197,7 +225,7 @@ test("multiple reviewers require explicit pairwise-distinct providers and models
 		],
 	};
 	assert.equal(analyzeReviewerDiversity(duplicateModel).failure, "duplicate-reviewer-model");
-	assertReviewerBlocked(duplicateModel);
+	assertAllowed(duplicateModel);
 
 	const duplicateProvider = {
 		tasks: [
@@ -206,7 +234,7 @@ test("multiple reviewers require explicit pairwise-distinct providers and models
 		],
 	};
 	assert.equal(analyzeReviewerDiversity(duplicateProvider).failure, "duplicate-reviewer-provider");
-	assertReviewerBlocked(duplicateProvider);
+	assertAllowed(duplicateProvider);
 
 	for (const input of [
 		{
@@ -224,7 +252,7 @@ test("multiple reviewers require explicit pairwise-distinct providers and models
 		{ tasks: [{ agent: "reviewer", task: "Review twice", model: "anthropic/claude-opus-5", count: 2 }] },
 	]) {
 		assert.equal(analyzeReviewerDiversity(input).violation, true);
-		assertReviewerBlocked(input);
+		assertAllowed(input);
 	}
 
 	assertAllowed({
@@ -242,7 +270,7 @@ test("multiple reviewers require explicit pairwise-distinct providers and models
 	});
 });
 
-test("reviewer diversity applies to static chains, schedules, aliases, and qualified reviewer names", () => {
+test("static chains, schedules, aliases, qualified names, and dynamic reviewers allow fallback", () => {
 	for (const input of [
 		{
 			chain: [
@@ -272,7 +300,7 @@ test("reviewer diversity applies to static chains, schedules, aliases, and quali
 			],
 		},
 	]) {
-		assertReviewerBlocked(input);
+		assertAllowed(input);
 	}
 
 	const dynamic = {
@@ -286,7 +314,7 @@ test("reviewer diversity applies to static chains, schedules, aliases, and quali
 		],
 	};
 	assert.equal(analyzeReviewerDiversity(dynamic).failure, "dynamic-reviewer-fanout");
-	assertReviewerBlocked(dynamic);
+	assertAllowed(dynamic);
 });
 
 test("management calls remain exempt from reviewer diversity", () => {

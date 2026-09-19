@@ -1,6 +1,6 @@
 {
   "name": "@firstpick/pi-extension-grill-me",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "Questionnaire-guided design interview command and persistence tools for Pi.",
   "type": "module",
   "license": "MIT",

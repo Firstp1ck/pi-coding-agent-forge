@@ -1,6 +1,6 @@
 {
   "name": "@firstpick/pi-skill-feature-development-workflow",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Portable Agent Skill for governing lightweight and complex feature-development workflows, including planning, delegated implementation, integration, review, reporting, and completion gates.",
   "license": "MIT",
   "homepage": "https://github.com/Firstp1ck/pi-coding-agent-forge/tree/main/pi-skill-feature-development-workflow#readme",

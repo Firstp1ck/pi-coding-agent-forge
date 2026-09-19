@@ -1,6 +1,6 @@
 {
   "name": "@firstpick/pi-skill-subagent-governance",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Portable Agent Skill that governs one or more delegated children through role fit, plan-backed workers, one-writer isolation, handoffs, bounded retry safety, and reviewer finding disposition.",
   "license": "MIT",
   "homepage": "https://github.com/Firstp1ck/pi-coding-agent-forge/tree/main/pi-skill-subagent-governance#readme",
