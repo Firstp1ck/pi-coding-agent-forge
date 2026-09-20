@@ -39,7 +39,7 @@ export function operationMatchRange(command: string, operation: Pick<ShellOperat
 }
 
 function escaped(text: string): string {
-  return JSON.stringify(text).slice(1, -1).replace(/[\u007f-\u009f\u2028\u2029]/gu,
+  return JSON.stringify(text).slice(1, -1).replace(/[\u007f-\u009f\u2028-\u202e\u2066-\u2069]/gu,
     (value) => `\\u${value.charCodeAt(0).toString(16).padStart(4, "0")}`);
 }
 

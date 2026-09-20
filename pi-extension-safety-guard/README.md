@@ -26,7 +26,7 @@ Restart Pi if the package does not appear in your current session.
 
 Safety Guard works automatically.
 
-1. Read the **Command** section. It shows the full command with risky text marked as `>>> ... <<<`. Overlapping matches share one highlight and a concise risk summary. When reusable operation permissions are available, separate rows distinguish already-approved operations from those needing approval. Otherwise, the prompt explains why approval must cover the whole command. In the terminal, use Page Up / Page Down to read details that do not fit on screen.
+1. For long or multiline commands, read the **Approval trigger** excerpt first. It shows the first matched risk and its line/column, or explains that no exact snippet is available. Then read the **Command** section. It shows the full command with risky text marked as `>>> ... <<<`. Overlapping matches share one highlight and a concise risk summary. When reusable operation permissions are available, separate rows distinguish already-approved operations from those needing approval. Otherwise, the prompt explains why approval must cover the whole command. In the terminal, use Page Up / Page Down to read details that do not fit on screen.
 2. Choose `Allow once`, or an option that explicitly names both what to remember and for how long. A short note beneath the terminal selection list explains the highlighted option's scope and effect.
 3. Choose `Block` if any operation is unclear. Nothing in that invocation runs, and no new permissions are saved.
 

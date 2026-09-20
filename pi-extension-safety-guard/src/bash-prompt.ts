@@ -1,5 +1,5 @@
 import type { OperationRule } from "./approvals.ts";
-import type { CommandTrigger } from "./trigger.ts";
+import { formatCommandTrigger, type CommandTrigger } from "./trigger.ts";
 import { displayRiskLabels, escapePromptText, formatPromptCommand, mergePromptTriggers } from "./prompt-format.ts";
 
 export type ApprovalLifetime = "session" | "permanent";
@@ -51,7 +51,14 @@ export function buildBashPrompt(command: string, operations: PromptOperation[], 
   const hasHighlights = shownTriggers.some((trigger) => trigger.range);
   const showOperations = !fallbackReason && operations.length > 1;
   const risks = displayRiskLabels(pending.flatMap((operation) => operation.risks));
+  // The full source can fill the viewport before the user sees any risk or highlight.
+  const summaryTrigger = command.includes("\n") || command.length > 160 || !hasHighlights
+    ? shownTriggers[0] ?? { reason: risks.join(", ") || fallbackReason || "Command requires approval" }
+    : undefined;
+  const remainingTriggers = shownTriggers.length > 1 ? `\n${shownTriggers.length - 1} more triggers; inspect the command and risk details below.` : "";
   let sections: BashPromptSection[] = [
+    ...(summaryTrigger ? [{ label: "Approval trigger", warning: true,
+      body: formatCommandTrigger(command, summaryTrigger) + remainingTriggers }] : []),
     { label: "Command", body: preview(formatPromptCommand(command, shownTriggers)) },
     ...(showOperations ? [{ label: "Operations", body: operations.map((operation, index) => [
       `${index + 1}. ${operation.approved ? "ALREADY APPROVED" : operation.risks.length ? "NEEDS APPROVAL" : "NO MATCHED RISK"}: ${preview(JSON.stringify(operation.text))}`,
@@ -83,7 +90,7 @@ export function buildBashPrompt(command: string, operations: PromptOperation[], 
       choices.set(BASH_CHOICES.rulePermanent, { scope: "operation-rule", lifetime: "permanent" });
     }
   }
-  return { message, sections, choices, command, triggers: shownTriggers };
+  return { message, sections, choices, command, triggers: shownTriggers, summaryTrigger, remainingTriggers };
 }
 
 export type BashPrompt = ReturnType<typeof buildBashPrompt>;
@@ -94,6 +101,11 @@ export function formatBashPrompt(prompt: BashPrompt, theme: {
 }): string {
   return prompt.sections.map(({ label, body, warning }) => {
     const heading = theme.fg(warning ? "warning" : "accent", theme.bold(label));
+    if (label === "Approval trigger" && prompt.summaryTrigger) {
+      const excerpt = formatCommandTrigger(prompt.command, prompt.summaryTrigger,
+        (text) => theme.fg("warning", theme.bold(text)));
+      return `${heading}\n${theme.fg("text", excerpt + prompt.remainingTriggers)}`;
+    }
     if (label === "Command") {
       const highlighted = formatPromptCommand(prompt.command, prompt.triggers,
         (text) => theme.fg("warning", theme.bold(text)));

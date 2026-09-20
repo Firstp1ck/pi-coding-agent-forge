@@ -74,6 +74,23 @@ test("multiline commands retain every line and escape controls without styling f
   assert.ok(!text.includes("\u001b"));
 });
 
+test("trigger summaries escape controls, retain other matches and survive preview truncation", () => {
+  const command = `echo '\u202e >>> fake <<<';\n${"# padding\n".repeat(1_500)}rm -rf example\ngit reset --hard`;
+  const triggers = [
+    { reason: "recursive force rm\u2066", range: { start: command.indexOf("rm -rf"), end: command.indexOf("rm -rf") + 6 } },
+    { reason: "git reset", range: { start: command.indexOf("git reset"), end: command.length } },
+  ];
+  const prompt = buildBashPrompt(command, [], "Whole command only", "", triggers);
+  assert.match(prompt.message, /^Preview truncated/);
+  assert.ok(prompt.message.indexOf(">>> rm -rf <<<") < prompt.message.indexOf("Command\n"));
+  assert.match(prompt.message, /1 more triggers; inspect the command and risk details below/);
+  assert.match(prompt.message, />>> git reset --hard <<</);
+  assert.ok(!/[\u202e\u2066]/u.test(prompt.message));
+  assert.ok(prompt.message.includes("\\u2066"));
+  assert.equal(stripVTControlCharacters(formatBashPrompt(prompt, theme)), prompt.message);
+  assert.deepEqual([...prompt.choices.keys()], [BASH_CHOICES.once]);
+});
+
 test("compact presentation preserves distinct approval states and choice identities", () => {
   const create = { text: "git switch -c one", risks: ["git switch"], approved: false, rule: operationRule(["git", "switch", "-c", "one"]) };
   const prompt = buildBashPrompt(`${create.text}; git branch -d old`, [

@@ -111,6 +111,47 @@ test("TUI wraps at narrow widths, limits wide lines and defaults to Block", asyn
   assert.equal(result, "Block");
 });
 
+test("long commands show a located warning before the command fills the viewport", async () => {
+  for (const command of [
+    ["python3 -B - <<'PY'", ...Array.from({ length: 60 }, (_, i) => `print(${i})`), "# rm -rf example", "PY"].join("\n"),
+    `echo '${"padding ".repeat(300)}'; rm -rf example`,
+  ]) {
+    const start = command.indexOf("rm -rf");
+    const prompt = buildBashPrompt(command, [{ text: command, risks: ["recursive force rm"], approved: false }],
+      "Reusable operation analysis unavailable", "", [{ reason: "recursive force rm", range: { start, end: start + 6 } }]);
+    assert.equal(stripVTControlCharacters(formatBashPrompt(prompt, theme)), prompt.message);
+    for (const width of [40, 100]) {
+      await showBashPrompt(tuiContext((component) => {
+        const lines = component.render(width);
+        const frame = lines.map(stripVTControlCharacters).join("\n");
+        assert.match(frame, /Approval trigger/);
+        assert.match(frame, /recursive force rm/);
+        assert.match(frame, /L\d+:C\d+/);
+        assert.match(frame.replace(/\s+/g, " "), />>> rm -rf <<</);
+        assert.ok(formatBashPrompt(prompt, theme).includes(theme.fg("warning", theme.bold(">>> rm -rf <<<"))));
+        assert.ok(lines.some((line) => /\x1b\[(?:\d+;)*33m/.test(line) && stripVTControlCharacters(line).includes("rm -rf")));
+        assert.ok(lines.length <= 24);
+        assert.ok(lines.every((line) => visibleWidth(line) <= width));
+        assert.match(frame, /→ Block/);
+        component.handleInput("\x1b");
+      }, { rows: 24 }), prompt);
+    }
+  }
+});
+
+test("unavailable source locations are explained before a long command", async () => {
+  const command = "print('example')\n".repeat(60);
+  const prompt = buildBashPrompt(command, [{ text: command, risks: ["unlocated risk"], approved: false }],
+    "Whole command only", "", [{ reason: "unlocated risk", range: { start: -1, end: 9 } }]);
+  await showBashPrompt(tuiContext((component) => {
+    const frame = plain(component, 100);
+    assert.match(frame, /unlocated risk/);
+    assert.match(frame, /No specific snippet identified/);
+    assert.ok(!frame.includes(">>>"));
+    component.handleInput("\x1b");
+  }, { rows: 24 }), prompt);
+});
+
 test("selection guidance follows the highlighted option and stays next to the list", async () => {
   const text = "git switch -c one";
   const prompt = buildBashPrompt(text, [{ text, risks: ["git switch"], approved: false, rule: operationRule(["git", "switch", "-c", "one"]) }]);
