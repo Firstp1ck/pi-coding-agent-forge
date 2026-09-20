@@ -11,7 +11,7 @@ Reusable prompt templates for commit messages, pull request descriptions, and br
 - `/check-pr` — audit PR commits by author/branch/URL and identify risks.
 - `/git-staged-msg` — generate short and long conventional commit messages from staged changes.
 - `/git-branch-name` — generate a `type/feature-name` PR branch name from staged changes.
-- `/pr` — generate a PR description from the current branch diff.
+- `/pr` — write a concise PR description from the current branch diff and save it under `dev/PR`.
 - `/pr-review-branch` — run a non-editing PR-style review against the base branch.
 - `/pr-review-implement` — safely implement valid PR review suggestions.
 - `/pr-update` — append new branch changes to an existing PR draft.
@@ -44,7 +44,13 @@ No required configuration. After installation, type `/` in Pi to autocomplete th
 /pr [language: en|de]
 ```
 
-Defaults remain English with automatic scope selection, so existing invocations without arguments continue to work. The prompt resolves the Git repository root before reading staged changes and always writes its output under the root-level `dev/COMMIT` directory, including when invoked from a nested subdirectory.
+If Guided Git Workflow is installed, its same-named extension commands take precedence over these templates. Its `/pr` has a separate native implementation; see its [technical reference](../pi-extension-git-guided-workflow/TECHNICAL.md) for behavior and input limits.
+
+This package's `/pr` template defaults to English. It follows the repository's contribution guidance and required PR template. Otherwise, it uses a few short paragraphs without mandatory headings or bullet lists. Small changes usually need no more than 100–200 words. Verification notes distinguish actual results from tests that were merely added or not run; relevant risks and limitations stay in the draft.
+
+The PR body is saved to `dev/PR/<current-branch>.md` under the repository root. `/pr` does not publish it and replies with the saved path. Review the draft before posting, including any required AI-assistance disclosure.
+
+`/git-staged-msg` defaults to English with automatic scope selection. It resolves the Git repository root before reading staged changes and always writes its output under the root-level `dev/COMMIT` directory, including when invoked from a nested subdirectory.
 
 ## Dependencies
 

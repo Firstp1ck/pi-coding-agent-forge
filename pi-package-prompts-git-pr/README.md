@@ -5,7 +5,7 @@ Adds ready-made prompts for commits, pull requests, and PR reviews.
 ## What you can do
 
 - Generates commit messages from staged changes.
-- Creates branch names and pull-request descriptions.
+- Creates branch names and short, plain-language pull-request descriptions.
 - Reviews pull requests without editing them.
 - Can help apply valid review suggestions safely.
 
@@ -26,10 +26,12 @@ Stage or prepare the relevant Git changes, then choose a prompt such as `/git-st
 - `/check-pr` — audit PR commits by author/branch/URL and identify risks.
 - `/git-staged-msg` — generate short and long conventional commit messages from staged changes.
 - `/git-branch-name` — generate a `type/feature-name` PR branch name from staged changes.
-- `/pr` — generate a PR description from the current branch diff.
+- `/pr` — write a concise PR description from the current branch diff and save it under `dev/PR`.
 - `/pr-review-branch` — run a non-editing PR-style review against the base branch.
 - `/pr-review-implement` — safely implement valid PR review suggestions.
 - `/pr-update` — append new branch changes to an existing PR draft.
+
+Run `/pr` on your feature branch, then review the saved draft before posting it. It explains the reason for the change, what changed, and what was verified without forcing a report-style layout. Required repository templates still take precedence. Use `/pr de` for German.
 
 ## Technical details
 

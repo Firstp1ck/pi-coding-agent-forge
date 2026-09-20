@@ -1,6 +1,6 @@
 {
   "name": "@firstpick/pi-extension-review",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Deterministic frozen-snapshot code reviews for Pi.",
   "type": "module",
   "license": "MIT",

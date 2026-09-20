@@ -1,6 +1,6 @@
 {
   "name": "@firstpick/pi-extension-cursor-composer",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "Pi extension and custom model provider for Cursor SDK Composer 2.5.",
   "license": "MIT",
   "homepage": "https://github.com/Firstp1ck/pi-coding-agent-forge/tree/main/pi-extension-cursor-composer#readme",

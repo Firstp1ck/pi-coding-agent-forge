@@ -33,6 +33,7 @@ import {
   COMMIT_GENERATION_DIRECT_MAX_BYTES,
   COMMIT_OUTPUT_MAX_TOKENS,
   PR_OUTPUT_MAX_TOKENS,
+  PR_GENERATION_INPUT_MAX_BYTES,
   acquireBranchGenerationContext,
   acquirePrGenerationContext,
   acquireStagedGenerationContext,
@@ -42,21 +43,28 @@ import {
   buildCommitModelRequest,
   buildCommitSynthesisModelRequest,
   buildPrModelRequest,
+  buildPrChunkAnalysisModelRequest,
+  buildPrSynthesisModelRequest,
+  buildPrVerificationCorrectionModelRequest,
   commitPresentationIssue,
   parseBranchGenerationArgs,
   parseBranchOutput,
   parseCommitChunkSummaryOutput,
   parseCommitGenerationArgs,
+  parseGenerationChunkSummaryOutput,
   parseNativeCommitOutput,
   parsePrGenerationArgs,
   parsePrOutput,
   partitionStagedDiff,
+  partitionPrContext,
+  revalidatePrGenerationContext,
   writeBranchArtifact,
   writeCommitArtifacts,
   writePrArtifact,
   type CommitChunkSummary,
   type CommitCorrectionEvidence,
   type CommitGenerationArgs,
+  type GenerationChunkSummary,
   type NativeModelRequest,
   type StagedGenerationContext,
 } from "./src/native-generation.ts";
@@ -1154,8 +1162,41 @@ export default function gitGuidedWorkflow(pi: ExtensionAPI): void {
       catch (error) { ctx.ui.notify(errorMessage(error), "error"); return; }
       await runNativeGeneration(PR_GENERATION_COMMAND_NAME, ctx, invocation.target, async (signal) => {
         const context = await acquirePrGenerationContext(ctx.cwd, { signal });
-        const output = await completeNativeRequest(ctx, invocation.target, buildPrModelRequest(context, args), signal, PR_OUTPUT_MAX_TOKENS);
-        const body = parsePrOutput(output);
+        let summaries: GenerationChunkSummary[] | undefined;
+        let output: string;
+        if (context.byteLength <= PR_GENERATION_INPUT_MAX_BYTES) {
+          output = await completeNativeRequest(ctx, invocation.target, buildPrModelRequest(context, args), signal, PR_OUTPUT_MAX_TOKENS);
+        } else {
+          const chunks = partitionPrContext(context);
+          summaries = [];
+          ctx.ui.notify(`/pr will use ${chunks.length + 1} model requests for this large PR context: ${chunks.length} sequential chunk analyses, then one final synthesis. This can take longer and cost more.`, "info");
+          for (const chunk of chunks) {
+            await revalidatePrGenerationContext(context, undefined, signal);
+            const chunkOutput = await completeNativeRequest(ctx, invocation.target, buildPrChunkAnalysisModelRequest(context, chunk), signal, COMMIT_CHUNK_SUMMARY_OUTPUT_MAX_TOKENS);
+            summaries.push(parseGenerationChunkSummaryOutput(chunkOutput, chunk));
+          }
+          await revalidatePrGenerationContext(context, undefined, signal);
+          ctx.ui.notify(`/pr analyzed ${summaries.length}/${chunks.length} chunks; writing the PR description from the retained summaries.`, "info");
+          output = await completeNativeRequest(ctx, invocation.target, buildPrSynthesisModelRequest(context, args, summaries), signal, PR_OUTPUT_MAX_TOKENS);
+        }
+        let body: string;
+        try {
+          body = parsePrOutput(output);
+        } catch (error) {
+          if (!isCode(error, "UNSUPPORTED_TEST_CLAIM")) throw error;
+          await revalidatePrGenerationContext(context, undefined, signal);
+          ctx.ui.notify("/pr flagged unsupported verification claims; correcting the draft once with the same model and retained evidence. Chunk analysis will not be repeated.", "warning");
+          let corrected: string;
+          try {
+            corrected = await completeNativeRequest(ctx, invocation.target, buildPrVerificationCorrectionModelRequest(context, args, output, summaries), signal, PR_OUTPUT_MAX_TOKENS);
+          } catch (correctionError) {
+            if (isCode(correctionError, "MODEL_GENERATION_FAILED")) {
+              throw new GuidedGitError("PR_VERIFICATION_CORRECTION_FAILED", `PR verification correction failed: ${errorMessage(correctionError)}`);
+            }
+            throw correctionError;
+          }
+          body = parsePrOutput(corrected);
+        }
         return (await writePrArtifact(context, body, { signal, queue: withFileMutationQueue })).paths;
       });
     },

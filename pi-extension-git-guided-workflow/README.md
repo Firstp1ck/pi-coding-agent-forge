@@ -6,7 +6,7 @@ Use native Pi commands to generate Git text safely, or start a careful commit-an
 
 - Generate short summaries and long commit messages with typed change lists from staged diffs up to 16 MiB with `/git-staged-msg`; large diffs are analyzed completely in bounded sequential requests before one final synthesis.
 - Generate a safe branch-name file with `/git-branch-name`.
-- Generate a reviewer-focused pull-request description with `/pr`.
+- Write a short, plain-language pull-request description with `/pr`, including branches with up to 16 MiB of context.
 - Open a centered, bordered popup with its own background and direct Initialize, Stage, Message, Commit, and Push entry points.
 - Reuse generated commit files, choose a safe one-file default, initialize a repository on `main`, or publish a no-remote repository through authenticated `gh`.
 - Save native generation, language, scope, message, staging, entry, and verification defaults in a framed setup popup with `/git-guided-workflow-setup`.
@@ -52,6 +52,8 @@ You can also generate artifacts directly:
 
 The commands write under `dev/COMMIT/` and `dev/PR/`; they do not stage, commit, switch branches, push, or create a pull request.
 
+Run `/pr` on your feature branch and review the saved draft before posting it. It explains why the change is needed and what changed in a few plain paragraphs, without mandatory report headings. A repository PR template can supply the structure instead. Verification is marked as not supplied because this command does not run checks or read your conversation. If the draft still claims checks ran, `/pr` makes one correction request using the same evidence, without repeating chunk analysis.
+
 ## Before you start
 
 This extension runs Git with your user permissions. Review staged changes and displayed destinations carefully. The guided TUI never force-pushes, but a normal push still changes a remote repository.
@@ -60,7 +62,9 @@ Manual, reused, and deterministic messages never need a model. Model generation 
 
 Generation commands call the selected model directly. They do not expand prompt templates or ask a parent agent to run Git or file tools. Both `/git-staged-msg` and guided TUI message generation start with one request for a staged diff at or below 1 MiB. Above 1 MiB, both send every byte of the staged diff to the provider in bounded sequential chunks, then ask once for a final message using the retained summaries. This takes several requests, can cost more, and may take longer. Both report the request count before analysis starts.
 
-If generation returns review prose or misses the summary and typed change list, both entry points ask the same model for one final presentation rewrite. This can add one model request. Large-diff rewriting reuses the retained summaries instead of analyzing the chunks again. If rewriting fails or still misses the layout, the original safe text remains available with a warning to review and edit it. Cancellation still stops the operation.
+`/pr` also handles larger context in several requests. It sends the complete commit list and diff for sequential analysis when the combined context exceeds 1 MiB, then writes a short description from the summaries and the full template. The combined capture limit is 16 MiB. It reports the request count before analysis starts; larger PRs can cost more and take longer. No context is silently truncated.
+
+If commit generation returns review prose or misses the summary and typed change list, both commit entry points ask the same model for one final presentation rewrite. This can add one model request. Large-diff rewriting reuses the retained summaries instead of analyzing the chunks again. If rewriting fails or still misses the layout, the original safe text remains available with a warning to review and edit it. Cancellation still stops the operation.
 
 Formatting is not a hard rejection rule. Chunk summaries accept any non-empty bounded safe text without formatting retries. `/git-staged-msg` also uses its single final correction allowance for empty, unsafe, or oversized responses. Initial provider failure, an empty or unsafe chunk summary, repository drift, cancellation, or an unsafe artifact path still prevents artifact publication.
 

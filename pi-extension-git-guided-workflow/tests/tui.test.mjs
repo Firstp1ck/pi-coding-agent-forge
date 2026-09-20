@@ -27,6 +27,9 @@ import {
   COMMIT_CHUNK_SUMMARY_OUTPUT_MAX_TOKENS,
   COMMIT_GENERATION_CAPTURE_MAX_BYTES,
   COMMIT_OUTPUT_MAX_TOKENS,
+  PR_OUTPUT_MAX_TOKENS,
+  PR_GENERATION_CAPTURE_MAX_BYTES,
+  acquirePrGenerationContext,
 } from "../src/native-generation.ts";
 import { DEFAULT_GUIDED_GIT_PREFERENCES } from "../src/preferences.ts";
 import { GenerationOverlay, showCommitEditor, showConfirmationOverlay, showSetupOverlay } from "../src/tui.ts";
@@ -1754,6 +1757,193 @@ test("session shutdown aborts direct generation and duplicate invocation is refu
   assert.equal(observedSignal.aborted, true);
 });
 
+test("large native PR generation covers every byte before writing a concise draft in TUI and RPC", async () => {
+  for (const mode of ["tui", "rpc"]) {
+    const root = await repository(`large-pr-${mode}`);
+    git(root, "switch", "-c", "feat/large-pr");
+    await stageTracked(root, oversizedStagedContent);
+    git(root, "commit", "--quiet", "-m", "feat: support large PRs");
+    await mkdir(path.join(root, ".github"));
+    await writeFile(path.join(root, ".github", "PULL_REQUEST_TEMPLATE.md"), "## Context\n\n[describe change]");
+    const context = await acquirePrGenerationContext(root);
+    const target = path.join(root, "dev", "PR", "feat%2Flarge-pr.md");
+    await mkdir(path.dirname(target), { recursive: true });
+    await writeFile(target, "previous draft\n");
+    const calls = [];
+    let concurrent = 0;
+    const body = "Large PRs previously failed before generation. This change analyzes the complete context in chunks before writing the description.\n\nVerification was not supplied.";
+    const model = { id: "pr-writer", provider: "test" };
+    const harness = createContext(root, {
+      mode, model,
+      modelRegistry: {
+        async complete(selected, request, options) {
+          assert.equal(selected, model);
+          assert.equal(concurrent++, 0, "analyses must be sequential");
+          assert.equal(await readFile(target, "utf8"), "previous draft\n", "no partial artifact is installed");
+          const evidence = requestEvidence(request);
+          calls.push({ request, evidence, maxTokens: options.maxTokens });
+          await new Promise((resolve) => setTimeout(resolve, 1));
+          concurrent--;
+          if (evidence.chunk) return assistantResponse(`Change notes ${evidence.chunk.index}`);
+          return assistantResponse(`<<<PR_BODY>>>\n${body}\n<<<END_PR_BODY>>>`);
+        },
+      },
+    });
+    const { commands } = extensionRegistration();
+    await commands.get(PR_GENERATION_COMMAND_NAME).handler("de", harness.ctx);
+    assert.equal(calls.length, 4);
+    const analyses = calls.slice(0, -1);
+    assert.equal(analyses.map(({ evidence }) => evidence.text).join(""), context.commits + context.diff);
+    assert.deepEqual(analyses.map(({ maxTokens }) => maxTokens), [COMMIT_CHUNK_SUMMARY_OUTPUT_MAX_TOKENS, COMMIT_CHUNK_SUMMARY_OUTPUT_MAX_TOKENS, COMMIT_CHUNK_SUMMARY_OUTPUT_MAX_TOKENS]);
+    const final = calls.at(-1);
+    assert.equal(final.maxTokens, PR_OUTPUT_MAX_TOKENS);
+    assert.equal(final.evidence.template, context.template);
+    assert.equal(final.evidence.diff, undefined);
+    assert.equal(final.evidence.commits, undefined);
+    assert.deepEqual(final.evidence.chunks.map((chunk) => chunk.summary), ["Change notes 0", "Change notes 1", "Change notes 2"]);
+    assert.match(final.request.systemPrompt, /German/u);
+    assert.match(final.request.systemPrompt, /No headings by default/u);
+    assert.equal(await readFile(target, "utf8"), `${body}\n`);
+    assert.ok(harness.notifications.some(({ message }) => /4 model requests.*3 sequential chunk analyses/u.test(message)));
+    assert.ok(harness.notifications.some(({ message }) => /analyzed 3\/3 chunks/u.test(message)));
+    assert.ok(harness.notifications.some(({ message }) => /\/pr completed/u.test(message)));
+    assert.equal(git(root, "rev-parse", "HEAD"), context.headOid);
+    assert.equal(git(root, "diff", "--cached"), "");
+  }
+});
+
+test("PR verification correction reuses evidence once for direct and chunked TUI/RPC generation", async () => {
+  for (const mode of ["tui", "rpc"]) for (const large of [false, true]) {
+    const root = await repository(`pr-correction-${mode}-${large}`);
+    git(root, "switch", "-c", "feature");
+    await stageTracked(root, large ? oversizedStagedContent : "small PR\n");
+    git(root, "commit", "--quiet", "-m", "fix: PR behavior");
+    const target = path.join(root, "dev", "PR", "feature.md");
+    await mkdir(path.dirname(target), { recursive: true });
+    await writeFile(target, "previous draft\n");
+    const requests = [];
+    const model = { id: "pr-writer", provider: "test" };
+    const body = "Adds branch checks before generation.\n\nVerification was not supplied.";
+    const harness = createContext(root, {
+      mode, model,
+      modelRegistry: {
+        async complete(selected, request, options) {
+          assert.equal(selected, model);
+          assert.equal(await readFile(target, "utf8"), "previous draft\n");
+          requests.push(request);
+          if (requestEvidence(request).chunk) return assistantResponse("Added change coverage.");
+          assert.equal(options.maxTokens, PR_OUTPUT_MAX_TOKENS);
+          if (request.systemPrompt.includes("single verification correction request")) return assistantResponse(`<<<PR_BODY>>>\n${body}\n<<<END_PR_BODY>>>`);
+          return assistantResponse("<<<PR_BODY>>>\nAdds branch checks. Tests passed.\n<<<END_PR_BODY>>>");
+        },
+      },
+    });
+    const { commands } = extensionRegistration();
+    await commands.get(PR_GENERATION_COMMAND_NAME).handler("", harness.ctx);
+    assert.equal(requests.length, large ? 5 : 2);
+    assert.equal(requests.filter((request) => requestEvidence(request).chunk).length, large ? 3 : 0);
+    assert.deepEqual(requestEvidence(requests.at(-1)), requestEvidence(requests.at(-2)));
+    assert.match(requests.at(-1).messages[0].content[1].text, /Tests passed/u);
+    assert.equal(await readFile(target, "utf8"), `${body}\n`);
+    assert.equal(harness.notifications.filter(({ message }) => /correcting the draft once/u.test(message)).length, 1);
+  }
+});
+
+test("PR correction failure, cancellation, or drift never installs a draft or retries analysis", async () => {
+  for (const failure of ["unsupported-again", "unsafe", "empty", "provider", "cancel", "drift-before", "drift-after"]) {
+    const root = await repository(`pr-correction-failure-${failure}`);
+    git(root, "switch", "-c", "feature");
+    await stageTracked(root, "small PR\n");
+    git(root, "commit", "--quiet", "-m", "fix: PR behavior");
+    const target = path.join(root, "dev", "PR", "feature.md");
+    await mkdir(path.dirname(target), { recursive: true });
+    await writeFile(target, "previous draft\n");
+    const { commands, handlers } = extensionRegistration();
+    let calls = 0;
+    const harness = createContext(root, {
+      mode: "rpc", model: { id: "pr-writer", provider: "test" },
+      modelRegistry: {
+        async complete() {
+          calls++;
+          if (calls === 1) {
+            if (failure === "drift-before") git(root, "commit", "--quiet", "--allow-empty", "-m", "test: drift before correction");
+            return assistantResponse("<<<PR_BODY>>>\nTests passed.\n<<<END_PR_BODY>>>");
+          }
+          if (failure === "unsupported-again") return assistantResponse("<<<PR_BODY>>>\nChecks passed.\n<<<END_PR_BODY>>>");
+          if (failure === "unsafe") return assistantResponse("unsafe\u202e");
+          if (failure === "empty") return assistantResponse("");
+          if (failure === "provider") throw new Error("correction provider unavailable");
+          if (failure === "cancel") await handlers.get("session_shutdown")({ reason: "reload" }, harness.ctx);
+          if (failure === "drift-after") git(root, "commit", "--quiet", "--allow-empty", "-m", "test: drift after correction");
+          return assistantResponse("<<<PR_BODY>>>\nAdds branch checks. Verification was not supplied.\n<<<END_PR_BODY>>>");
+        },
+      },
+    });
+    await assert.rejects(commands.get(PR_GENERATION_COMMAND_NAME).handler("", harness.ctx), (error) => {
+      assert.doesNotMatch(error.message, /FIRSTPICK_GUIDED_GIT_PROVIDER_FAILURE/u, "correction failure must not restart generation with a fallback provider");
+      return true;
+    });
+    assert.equal(calls, failure === "drift-before" ? 1 : 2, failure);
+    assert.equal(await readFile(target, "utf8"), "previous draft\n");
+    assert.ok(harness.notifications.every(({ message }) => !/\/pr completed/u.test(message)));
+  }
+});
+
+test("large PR failures stop subsequent requests and preserve the previous artifact", async () => {
+  for (const failure of ["empty-summary", "unsafe-summary", "provider", "cancel", "head-drift", "template-drift", "invalid-final"]) {
+    const root = await repository(`pr-failure-${failure}`);
+    git(root, "switch", "-c", "feature");
+    await stageTracked(root, oversizedStagedContent);
+    git(root, "commit", "--quiet", "-m", "feat: large PR");
+    const target = path.join(root, "dev", "PR", "feature.md");
+    await mkdir(path.dirname(target), { recursive: true });
+    await writeFile(target, "previous draft\n");
+    const { commands, handlers } = extensionRegistration();
+    let calls = 0;
+    const harness = createContext(root, {
+      mode: "rpc", model: { id: "pr-writer", provider: "test" },
+      modelRegistry: {
+        async complete(_model, request) {
+          calls++;
+          if (failure === "invalid-final" && !requestEvidence(request).chunk) return assistantResponse("invalid framing");
+          if (calls === 1) {
+            if (failure === "empty-summary") return assistantResponse("   ");
+            if (failure === "unsafe-summary") return assistantResponse("unsafe\u202e");
+            if (failure === "provider") throw new Error("provider unavailable");
+            if (failure === "cancel") await handlers.get("session_shutdown")({ reason: "reload" }, harness.ctx);
+            if (failure === "head-drift") git(root, "commit", "--quiet", "--allow-empty", "-m", "test: move HEAD");
+            if (failure === "template-drift") {
+              await mkdir(path.join(root, ".github"));
+              await writeFile(path.join(root, ".github", "PULL_REQUEST_TEMPLATE.md"), "New template");
+            }
+          }
+          return assistantResponse("Factual change notes");
+        },
+      },
+    });
+    await assert.rejects(commands.get(PR_GENERATION_COMMAND_NAME).handler("", harness.ctx));
+    assert.equal(calls, failure === "invalid-final" ? 4 : 1, failure);
+    assert.equal(await readFile(target, "utf8"), "previous draft\n");
+    assert.ok(harness.notifications.every(({ message }) => !/\/pr completed/u.test(message)));
+  }
+});
+
+test("PR context above 16 MiB is refused before any model request", async () => {
+  const root = await repository("pr-capture-ceiling");
+  git(root, "switch", "-c", "feature");
+  await stageTracked(root, "x".repeat(PR_GENERATION_CAPTURE_MAX_BYTES));
+  git(root, "commit", "--quiet", "-m", "feat: oversized PR");
+  let calls = 0;
+  const harness = createContext(root, {
+    mode: "rpc", model: { id: "unused", provider: "test" },
+    modelRegistry: { async complete() { calls++; return assistantResponse("must not run"); } },
+  });
+  const { commands } = extensionRegistration();
+  await assert.rejects(commands.get(PR_GENERATION_COMMAND_NAME).handler("", harness.ctx), /16777216-byte generation cap/u);
+  assert.equal(calls, 0);
+  await assert.rejects(readFile(path.join(root, "dev", "PR", "feature.md")));
+});
+
 test("native RPC generation invokes the active model directly and writes correlated commit and branch artifacts", async () => {
   const root = await repository("native-rpc-staged");
   await stageTracked(root, "native direct generation\n");
@@ -2171,7 +2361,7 @@ test("native PR RPC generation writes the encoded branch artifact without prompt
     modelRegistry: {
       async complete(_model, request) {
         completeCalls += 1;
-        assert.match(request.systemPrompt, /reviewer-focused pull request description in German/u);
+        assert.match(request.systemPrompt, /short pull request description in German/u);
         return assistantResponse(directBody);
       },
       find(providerId, modelId) {
