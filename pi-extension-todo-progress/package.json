@@ -34,6 +34,7 @@
   },
   "files": [
     "index.ts",
+    "goal-runtime.ts",
     "images",
     "README.md",
     "LICENSE"
