@@ -35,6 +35,8 @@ No shell, search, write, edit, extension, skill, or project-resource loader ente
 
 The `StreamFn` returns an event stream immediately. Authentication and provider setup run behind that stream, and every setup, malformed-stream, cancellation, and provider error becomes a terminal protocol error event. The function never rejects for those failures. Provider requests receive the Agent signal, registry-resolved API key, headers, base URL, and provider environment.
 
+The stream bridge accepts `TranscriptContext` from Pi 0.86's Agent loop and forwards it unchanged. Prompts and tool declarations live in system messages, not top-level context fields. The registry-adapter regression runs a real public Agent with a fake provider and verifies both through `getCurrentSystemPrompt()` and `getCurrentTools()`.
+
 ## Evidence observation
 
 Native reads use virtual paths under `__review_snapshot__/<target-id>/...`. Custom read operations resolve those paths to frozen buffers only. Coverage is admitted from the finalized `tool_execution_end` event, not from model text or a partial update.

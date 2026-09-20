@@ -1,4 +1,5 @@
 import type { SDKCustomTool } from "@cursor/sdk";
+import { getCurrentSystemPrompt, normalizeContext } from "@earendil-works/pi-ai";
 import { parseBooleanFlag } from "@firstpick/pi-utils/env";
 import { sha256Text as sha256 } from "@firstpick/pi-utils/hash";
 import { formatBytes } from "@firstpick/pi-utils/text";
@@ -438,8 +439,9 @@ export function serializeProviderContextWithMetadata(
 	};
 	const metadata: ProviderContextSerializationMetadata = { truncatedToolResults: [], toolResultRecoveryRecords: [] };
 	const includeSystemPrompt = options.includeSystemPrompt ?? true;
-	const systemPrompt = options.systemPrompt ?? contextObject.systemPrompt;
 	const messages = options.messages ?? contextObject.messages ?? [];
+	const transcript = normalizeContext({ systemPrompt: contextObject.systemPrompt, messages });
+	const systemPrompt = options.systemPrompt ?? getCurrentSystemPrompt(transcript.messages);
 	const taskLines = options.taskLines ?? [
 		"You are being called from Pi through the Cursor SDK Composer 2.5 provider wrapper.",
 		"Respond to the latest user request. If you modify files, summarize the exact changes and verification.",
@@ -450,6 +452,8 @@ export function serializeProviderContextWithMetadata(
 	}
 	lines.push("# Task", ...taskLines, "", options.conversationTitle ?? "# Conversation");
 	for (const message of messages as any[]) {
+		// System deltas have already been replayed into the current prompt above.
+		if (message?.role === "system") continue;
 		if (message?.role === "toolResult") {
 			const toolName = message.toolName ?? "tool";
 			lines.push(

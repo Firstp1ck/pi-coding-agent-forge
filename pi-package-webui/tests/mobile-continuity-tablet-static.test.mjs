@@ -47,9 +47,9 @@ assert.match(css, /html\[data-tablet-shell="v2"\] \.mobile-shell-nav[\s\S]*?widt
 assert.match(css, /html\[data-tablet-shell="v2"\] \.mobile-shell-surface[\s\S]*?width: min\(30rem, 72vw\)/, "tablet inspector must be a bounded right-side sheet");
 assert.match(css, /html\[data-tablet-shell="v2"\] \.file-viewer-pane[\s\S]*?position: fixed[\s\S]*?inset: 0/, "tablet files must default to full-screen replacement");
 assert.match(css, /and \(pointer: coarse\)[\s\S]*?min-height: 44px/, "coarse tablet pointers must retain the 44px target floor");
-assert.match(serviceWorker, /const CACHE_NAME = "pi-webui-pwa-v154"/, "continuity/tablet assets need a coherent cache identity");
-assert.match(html, /styles\.css\?v=152/, "tablet CSS must have a coherent HTML revision");
-assert.match(html, /app\.js\?v=183/, "continuity app logic must have a coherent HTML revision");
+assert.match(serviceWorker, /const CACHE_NAME = "pi-webui-pwa-v155"/, "continuity/tablet assets need a coherent cache identity");
+assert.match(html, /styles\.css\?v=154/, "tablet CSS must have a coherent HTML revision");
+assert.match(html, /app\.js\?v=184/, "continuity app logic must have a coherent HTML revision");
 assert.match(technical, /tabletShell=v2[\s\S]*tabletShell=legacy/, "technical reference should document tablet preview and rollback");
 
 console.log("mobile-continuity-tablet-static.test.mjs passed");

@@ -6,7 +6,7 @@ Contributor-only implementation, API, architecture, testing, and maintenance inf
 
 ## Architecture
 
-`index.ts` owns the command prompt, project-local persistence, and the two Grill Me tools. `/grill-me` checks the UI mode and questionnaire registration before it creates state or sends the kickoff message. This ordering prevents an unavailable command from replacing an existing interview.
+`index.ts` owns the command prompt, project-local persistence, and the three Grill Me tools. `/grill-me` checks the UI mode and questionnaire registration before it creates state or sends the kickoff message. This ordering prevents an unavailable command from replacing an existing interview.
 
 The interview loop remains model-guided. The command sends a protocol that tells the model how to build rounds, handle questionnaire results, record answers, and save complete or partial results. There is no deterministic interview state machine in this extension. Tests can verify the generated protocol and runtime boundaries, but they cannot prove that an arbitrary model will obey every instruction.
 
@@ -34,7 +34,8 @@ The kickoff prompt requires the model to:
 - use questionnaire for every initial and follow-up decision;
 - give each question stable IDs, choices, Other support, and a recommendation;
 - resume clarification with the exact questionnaire ID and revision;
-- record each explicit answer once and in questionnaire order;
+- record all newly returned explicit answers in one `grill_record_turns` call, in questionnaire order, with one question per entry;
+- skip empty batches and never replay already recorded answers after clarification;
 - convert option IDs to visible labels and retain all multi-select and custom values;
 - evaluate a completed round before opening another one;
 - stop after cancellation or unavailability and save answered decisions as partial results;
@@ -44,9 +45,9 @@ When `/grill-me` receives no plan, it writes a sentinel plan to state and asks t
 
 ## Tool contracts
 
-### `grill_record_turn`
+### `grill_record_turns`
 
-The tool records one question per call with these fields:
+The preferred questionnaire recording tool accepts `{ turns: [...] }` with 1–20 entries, matching the questionnaire round limit. Each entry has these fields:
 
 - `question`
 - `recommendedAnswer`
@@ -54,7 +55,17 @@ The tool records one question per call with these fields:
 - `decisionStatus`, one of `resolved`, `open`, or `needs-codebase-check`
 - optional `notes`
 
-A resolved turn requires a non-blank `userAnswer`. The tool uses sequential execution so multiple answer writes cannot race inside Pi's normal tool scheduler. It keeps the existing one-question storage format, which also accepts visible labels joined with custom Other text for multi-select answers.
+A resolved turn requires a non-blank `userAnswer`; notes are not an answer. Validation checks every entry before reading or changing state. Invalid batches throw an error for Pi to report as a tool failure, without saving any turns. The error identifies the entry when a resolved answer is missing. Answers are trimmed, and all optional notes and statuses are preserved.
+
+Both recording tools share `recordTurns`, which queues the entire read-modify-write window with Pi's `withFileMutationQueue` and writes state once per call. Both also declare sequential execution. This protects recording calls within one Pi process, not concurrent processes or an overlapping `/grill-me` state reset. File writes retain the existing persistence behavior; this is not crash-safe transactional storage.
+
+The batch response reports `Recorded N grill turns (#first–#last)`, with `details.path`, total `details.count`, and the newly `details.recorded` count. Each turn remains separate in state and Markdown. A one-entry batch supports plan intake and partial questionnaires. Empty batches are rejected.
+
+The model converts option IDs to visible labels and includes every selected label and custom Other value in `userAnswer`. It must submit only new answers after resume. Recording is append-only, without automatic retry deduplication.
+
+### `grill_record_turn`
+
+The existing single-question tool accepts the same fields directly and retains its successful response and count. Use it for individual answers or codebase discoveries. Questionnaire rounds should use `grill_record_turns` instead. Both tools apply the same validation; validation failures now throw rather than returning an `isError` field that Pi ignores on successful execute returns.
 
 ### `grill_save_results`
 
@@ -75,7 +86,10 @@ State lives at `.pi/grill-me/state.json` under the active project. It contains t
 - UI, mode, missing-tool, and inactive-tool guards without state replacement;
 - standalone bundled questionnaire registration, repeated hooks, and existing-tool coexistence;
 - exact dependency and bundling metadata;
-- sequential per-question persistence for multi-select and custom answers;
+- ordered batch persistence and Markdown export for multi-select, custom answers, notes, and mixed statuses;
+- schema and runtime batch limits, malformed entries, and invalid later answers without partial writes;
+- single-entry plan intake, mixed single/batch recording, and concurrent recording without lost turns;
+- prompt and tool guidance preferring batches, skipping empty results, and avoiding replay after resume;
 - the existing record and Markdown save behavior.
 
 Node's built-in TypeScript stripping normally rejects `.ts` files below `node_modules`. Pi itself loads extension TypeScript through jiti. The test-only `register-typescript.mjs` hook supplies equivalent type stripping so the bundled questionnaire factory can be exercised by the Node test runner.

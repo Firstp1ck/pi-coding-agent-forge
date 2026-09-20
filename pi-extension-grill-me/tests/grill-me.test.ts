@@ -7,15 +7,20 @@ import { join } from "node:path";
 import test from "node:test";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import grillMeExtension from "../index.ts";
+import { Check } from "typebox/value";
+import type { TSchema } from "typebox";
 
 type ToolResult = {
 	content: Array<{ type: string; text: string }>;
 	isError?: boolean;
+	details?: { path: string; count?: number; recorded?: number };
 };
 
 type Tool = {
 	name: string;
 	executionMode?: string;
+	parameters?: TSchema;
+	promptGuidelines?: string[];
 	execute: (
 		toolCallId: string,
 		params: Record<string, unknown>,
@@ -75,9 +80,10 @@ function createHarness(options: HarnessOptions = {}) {
 
 	const command = commands.get("grill-me");
 	const recordTurn = tools.get("grill_record_turn");
+	const recordBatch = tools.get("grill_record_turns");
 	const saveResults = tools.get("grill_save_results");
-	assert.ok(command && recordTurn && saveResults, "grill command and tools should be registered");
-	return { command, recordTurn, saveResults, tools, sessionHandlers, sentMessages, registrations };
+	assert.ok(command && recordTurn && recordBatch && saveResults, "grill command and tools should be registered");
+	return { command, recordTurn, recordBatch, saveResults, tools, sessionHandlers, sentMessages, registrations };
 }
 
 function questionnaireStub(): Tool {
@@ -142,7 +148,10 @@ test("the command emits the model-guided questionnaire round contract", async ()
 		assert.match(prompt, /Do not request passwords, tokens, or other secrets/i);
 		assert.match(prompt, /resume with the exact questionnaireId and revision/i);
 		assert.match(prompt, /Do not restart the questionnaire or infer the pending answer/i);
-		assert.match(prompt, /call grill_record_turn once for each newly returned explicit answer, in questionnaire order/i);
+		assert.match(prompt, /call grill_record_turns once with all newly returned explicit answers in its turns array, in questionnaire order/i);
+		assert.match(prompt, /Do not split a questionnaire round into separate grill_record_turn calls/i);
+		assert.match(prompt, /If no new explicit answers were returned, skip recording rather than sending an empty batch/i);
+		assert.match(prompt, /Do not record the same answer twice after a resume/i);
 		assert.match(prompt, /include every selected label plus any custom Other value in userAnswer/i);
 		assert.match(prompt, /A completed questionnaire finishes only that round/i);
 		assert.match(prompt, /Evaluate the answers for conflicts, changed assumptions, and remaining ambiguity/i);
@@ -186,7 +195,7 @@ test("a missing plan starts questionnaire intake and the first explicit answer b
 		assert.match(prompt, /offer an option whose label names that plan/i);
 		assert.match(prompt, /Keep allowOther true so the user can describe a plan/i);
 		assert.match(prompt, /Do not ask for the plan in ordinary chat and do not invent one/i);
-		assert.match(prompt, /record the resolved plan-intake answer first with grill_record_turn and an explicit userAnswer, before recording any other turn/i);
+		assert.match(prompt, /record the resolved plan-intake answer first with grill_record_turns containing one entry and an explicit userAnswer, before recording any other turn/i);
 		assert.match(prompt, /Until that answer is recorded, do not record codebase discoveries, open questions, or other decisions/i);
 		assert.match(prompt, /If the user chose to stop, save partial results and end the interview/i);
 		assert.equal((await readState(cwd)).plan, "(No plan supplied; collect it through questionnaire intake.)");
@@ -351,16 +360,13 @@ test("a resolved turn without a user answer is rejected instead of saving a plac
 	for (const userAnswer of [undefined, "   "]) {
 		await withTempProject(async (cwd) => {
 			const { recordTurn } = createHarness();
-			const result = await recordTurn.execute("test", {
+			await assert.rejects(recordTurn.execute("test", {
 				question: "How should results be displayed?",
 				recommendedAnswer: "A: Detailed",
 				...(userAnswer === undefined ? {} : { userAnswer }),
 				decisionStatus: "resolved",
 				notes: "User chose detailed display.",
-			}, undefined, undefined, { cwd });
-
-			assert.equal(result.isError, true);
-			assert.match(result.content[0]?.text ?? "", /userAnswer is required for resolved turns/i);
+			}, undefined, undefined, { cwd }), /userAnswer is required for resolved turns/i);
 			await assert.rejects(readFile(join(cwd, ".pi", "grill-me", "state.json"), "utf8"), { code: "ENOENT" });
 		});
 	}
@@ -384,4 +390,124 @@ test("an explicit user answer is preserved in saved results", async () => {
 		assert.match(markdown, /\*\*User answer:\*\* A: Detailed/);
 		assert.doesNotMatch(markdown, /\*\*User answer:\*\* _\(not recorded\)_/);
 	});
+});
+
+function answeredTurn(index: number) {
+	return {
+		question: `Question ${index}?`,
+		recommendedAnswer: `Recommendation ${index}`,
+		userAnswer: `Answer ${index}`,
+		decisionStatus: "resolved",
+	};
+}
+
+test("one batch preserves ordered answers, notes, and separate Markdown decisions", async () => {
+	await withTempProject(async (cwd) => {
+		const { recordBatch, saveResults } = createHarness();
+		assert.equal(recordBatch.executionMode, "sequential");
+		const turns = [
+			{ ...answeredTurn(1), userAnswer: "  Web; CLI; Other: IDE plugin  ", notes: "All targets selected." },
+			{ ...answeredTurn(2), userAnswer: "Other: After each accepted change" },
+			{ ...answeredTurn(3), userAnswer: undefined, decisionStatus: "open" },
+			{ ...answeredTurn(4), userAnswer: undefined, decisionStatus: "needs-codebase-check" },
+		];
+		const result = await recordBatch.execute("round", { turns }, undefined, undefined, { cwd });
+		assert.equal(result.content[0]?.text, "Recorded 4 grill turns (#1–#4)");
+		assert.deepEqual(result.details, {
+			path: join(cwd, ".pi", "grill-me", "state.json"), count: 4, recorded: 4,
+		});
+		assert.deepEqual((await readState(cwd)).turns, JSON.parse(JSON.stringify(
+			turns.map((turn) => ({ ...turn, userAnswer: turn.userAnswer?.trim() })),
+		)));
+		await saveResults.execute("save", {}, undefined, undefined, { cwd });
+		const markdown = await readFile(join(cwd, "GRILL-ME.md"), "utf8");
+		assert.deepEqual([...markdown.matchAll(/^### \d+\. (.+)$/gm)].map((match) => match[1]), turns.map((turn) => turn.question));
+		assert.match(markdown, /\*\*User answer:\*\* Web; CLI; Other: IDE plugin/);
+		assert.match(markdown, /\*\*Notes:\*\* All targets selected\./);
+		assert.match(markdown, /\*\*Status:\*\* needs-codebase-check/);
+	});
+});
+
+test("batch limits and entry shapes are enforced in schema and execution", async () => {
+	await withTempProject(async (cwd) => {
+		const { recordBatch } = createHarness();
+		assert.ok(recordBatch.parameters);
+		const valid = Array.from({ length: 20 }, (_, index) => answeredTurn(index + 1));
+		assert.equal(Check(recordBatch.parameters, { turns: valid }), true);
+		for (const turns of [
+			[], [...valid, answeredTurn(21)], null, "answers", [null],
+			[{ ...answeredTurn(1), question: undefined }],
+			[{ ...answeredTurn(1), recommendedAnswer: 3 }],
+			[{ ...answeredTurn(1), decisionStatus: "unknown" }],
+			[{ ...answeredTurn(1), userAnswer: 42 }],
+			[{ ...answeredTurn(1), notes: false }],
+		]) {
+			assert.equal(Check(recordBatch.parameters, { turns }), false);
+			await assert.rejects(recordBatch.execute("invalid", { turns }, undefined, undefined, { cwd }), /Expected 1–20 turns/);
+		}
+		await assert.rejects(readState(cwd), { code: "ENOENT" });
+		await recordBatch.execute("maximum", { turns: valid }, undefined, undefined, { cwd });
+		assert.deepEqual((await readState(cwd)).turns, valid);
+	});
+});
+
+test("a later invalid answer rejects the entire batch without creating or changing state", async () => {
+	for (const existing of [false, true]) {
+		for (const userAnswer of [undefined, "   "]) {
+			await withTempProject(async (cwd) => {
+				const { recordTurn, recordBatch } = createHarness();
+				const path = join(cwd, ".pi", "grill-me", "state.json");
+				if (existing) await recordTurn.execute("existing", answeredTurn(1), undefined, undefined, { cwd });
+				const before = existing ? await readFile(path, "utf8") : undefined;
+				await assert.rejects(recordBatch.execute("invalid", { turns: [
+					answeredTurn(2), { ...answeredTurn(3), userAnswer, notes: "Notes are not an answer." },
+				] }, undefined, undefined, { cwd }), /Turn #2: userAnswer is required.*No turns were recorded/);
+				if (existing) assert.equal(await readFile(path, "utf8"), before);
+				else await assert.rejects(readFile(path), { code: "ENOENT" });
+			});
+		}
+	}
+});
+
+test("batch plan intake sets the plan once and remains compatible with single recording", async () => {
+	await withTempProject(async (cwd) => {
+		const { command, recordBatch, recordTurn } = createHarness({ existingQuestionnaire: questionnaireStub() });
+		await command.handler("", commandContext(cwd).ctx);
+		await recordBatch.execute("intake", { turns: [{
+			...answeredTurn(1), userAnswer: "  Other: Add offline synchronization  ",
+		}] }, undefined, undefined, { cwd });
+		const single = await recordTurn.execute("discovery", answeredTurn(2), undefined, undefined, { cwd });
+		assert.equal(single.content[0]?.text, "Recorded grill turn #2");
+		const batch = await recordBatch.execute("follow-up", { turns: [answeredTurn(3), answeredTurn(4)] }, undefined, undefined, { cwd });
+		assert.equal(batch.content[0]?.text, "Recorded 2 grill turns (#3–#4)");
+		const state = await readState(cwd);
+		assert.equal(state.plan, "Other: Add offline synchronization");
+		assert.deepEqual(state.turns.map((turn) => turn.question), [1, 2, 3, 4].map((index) => `Question ${index}?`));
+	});
+});
+
+test("recording mutations share a queue so concurrent single and batch calls retain all turns", async () => {
+	await withTempProject(async (cwd) => {
+		const { recordTurn, recordBatch } = createHarness();
+		await Promise.all([
+			recordBatch.execute("first", { turns: [answeredTurn(1), answeredTurn(2)] }, undefined, undefined, { cwd }),
+			recordTurn.execute("single", answeredTurn(3), undefined, undefined, { cwd }),
+			recordBatch.execute("second", { turns: [answeredTurn(4), answeredTurn(5)] }, undefined, undefined, { cwd }),
+		]);
+		const questions = (await readState(cwd)).turns.map((turn) => turn.question);
+		assert.equal(questions.length, 5);
+		assert.deepEqual([...questions].sort(), [1, 2, 3, 4, 5].map((index) => `Question ${index}?`));
+		assert.equal(questions.indexOf("Question 2?"), questions.indexOf("Question 1?") + 1);
+		assert.equal(questions.indexOf("Question 5?"), questions.indexOf("Question 4?") + 1);
+	});
+});
+
+test("tool guidance prefers one batch per questionnaire result rather than repeated single calls", () => {
+	const { recordTurn, recordBatch } = createHarness();
+	assert.match(recordTurn.promptGuidelines?.join("\n") ?? "", /prefer grill_record_turns for questionnaire rounds/);
+	const guidance = recordBatch.promptGuidelines?.join("\n") ?? "";
+	assert.match(guidance, /completed, cancelled, or unavailable.*one grill_record_turns call/);
+	assert.match(guidance, /skip it if there are none/);
+	assert.match(guidance, /Do not repeat answers already recorded/);
+	assert.match(guidance, /preserve all selections and custom Other text/);
 });

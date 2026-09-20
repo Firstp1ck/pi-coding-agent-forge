@@ -6,7 +6,7 @@ Advanced user guidance for native generation, the Pi TUI workflow, WebUI activat
 
 ## Requirements
 
-- Pi with extension support
+- Pi 0.86.0 or newer
 - Node.js 22.19 or newer
 - Git available on `PATH`
 - A normal, non-bare Git worktree on an attached branch
@@ -53,11 +53,13 @@ Git content, filenames, commit text, templates, and generated chunk summaries ar
 
 `/git-staged-msg` requires a complete valid UTF-8 staged diff and captures at most 16 MiB. At or below 1 MiB, it sends one direct request. Above 1 MiB, it divides the complete diff into UTF-8-safe chunks of at most 512 KiB and analyzes them sequentially. Each accepted summary is limited to 16 KiB and may use any non-empty safe plain-text presentation; delimiters and layout are guidance only. Chunk-summary requests also carry a 4,096-token provider output ceiling; commit synthesis and correction use an 8,192-token ceiling, with the byte parser remaining authoritative. The final synthesis sends the ordered summaries, not the full diff again. At the 16 MiB ceiling, UTF-8 boundary handling permits at most 33 analysis requests, followed by one synthesis request. The command reports this multi-request work before it starts and reports when analysis is complete.
 
-Large-diff generation can therefore take longer and cost more than direct generation. A successful large-diff run uses one request per chunk plus one synthesis request. Chunk-summary formatting never adds a retry. An invalid final commit response can add one final correction request, for a maximum of 35 requests at the capture ceiling. A provider failure, cancellation, or empty, unsafe, or oversized summary stops later requests. A diff above 16 MiB or invalid UTF-8 is refused rather than truncated or sampled.
+Large-diff generation can therefore take longer and cost more than direct generation. A successful large-diff run uses one request per chunk plus one synthesis request. Chunk-summary formatting never adds a retry. An invalid final commit response or a response missing the requested commit layout can add one final correction or presentation-rewrite request, for a maximum of 35 requests at the capture ceiling. A provider failure, cancellation, or empty, unsafe, or oversized summary stops later requests. A diff above 16 MiB or invalid UTF-8 is refused rather than truncated or sampled.
 
 The 1 MiB all-or-nothing limit for `/git-branch-name` remains unchanged. PR commit, diff, and template context still has a combined 1 MiB cap; the optional template also has a 128 KiB cap.
 
-Chunk-summary presentation is not parsed as a response format. The command trims surrounding whitespace and accepts any remaining non-empty text that stays within the byte limit and contains no unsafe control or bidirectional characters. If the direct response or large-diff synthesis cannot be safely separated into final commit artifacts, `/git-staged-msg` makes exactly one final correction request to the same model. Direct final correction reuses the captured staged snapshot. Large-diff final correction reuses the retained summaries and does not resend or reanalyze the diff chunks. The request includes validation feedback and the failed response when it is safe and fits the 32 KiB correction bound. Oversized output and output containing unsafe control or bidirectional characters are omitted from final correction. A second unsafe or structurally invalid final response is terminal. Quality deviations do not start correction. Provider failures, cancellation, Git failures, source drift, and artifact-write failures do not start correction. Branch and PR generation do not use correction requests.
+Chunk-summary presentation is not parsed as a response format. The command trims surrounding whitespace and accepts any remaining non-empty text that stays within the byte limit and contains no unsafe control or bidirectional characters. If the direct response or large-diff synthesis cannot be safely separated into final commit artifacts, `/git-staged-msg` makes exactly one final correction request to the same model. Direct final correction reuses the captured staged snapshot. Large-diff final correction reuses the retained summaries and does not resend or reanalyze the diff chunks. The request includes validation feedback and the failed response when it is safe and fits the 32 KiB correction bound. Oversized output and output containing unsafe control or bidirectional characters are omitted from final correction. If the first response was unsafe or empty, a second unsafe or structurally invalid response is terminal. Initial provider failures, cancellation, Git failures, source drift, and artifact-write failures do not start correction. Branch and PR generation do not use correction requests.
+
+Both commit entry points also make one best-effort presentation rewrite when safe text lacks a Conventional Commit summary, a matching long-message summary, or typed change bullets. This shares the single final correction allowance rather than adding another retry. It uses the same model and retained evidence. A rewrite failure, unsafe rewritten response, or still-missing layout preserves the original safe text and displays a warning to edit it before use. Cancellation never falls back to publishing the original. Failure of this optional rewrite does not switch to a fallback provider.
 
 Only one native generation command can be active at a time, including its correction request. Session shutdown aborts the nested model request, including settling the command when a provider does not cooperate with cancellation. An aborted or failed command writes no new artifact and reports no stale success.
 
@@ -69,9 +71,20 @@ The commit model is asked to:
 - follow Conventional Commit syntax;
 - satisfy the requested scope policy;
 - keep the subject within 72 Unicode characters; and
-- begin the long message with the short subject and use typed body bullets.
+- begin the long message with the short subject, a blank line, and typed body bullets;
+- group related changes under their relevant types without inventing changes for empty categories; and
+- describe staged changes, not severity-ranked review findings or recommendations.
 
-These are quality guidelines. A deviation does not discard the generated message or start correction. Delimiters and layout are optional: framed output is separated directly, while other safe text uses its first content line as the short message and the complete text as the long message. Commit output is rejected only when it is empty, an artifact exceeds its byte limit, or the content contains unsafe control or bidirectional characters.
+Formatting remains advisory rather than a rejection rule. Missing summary/list structure triggers the single best-effort rewrite described above; scope preferences, the 72-character recommendation, and blank-line style are not hard validators. Delimiters remain optional: framed output is separated directly, while other safe text uses its first content line as the short message and the complete text as the long message. Commit output is rejected only when it is empty, an artifact exceeds its byte limit, or the content contains unsafe control or bidirectional characters.
+
+A typical long message is:
+
+```text
+fix(git): preserve complete commit evidence
+
+- fix: retain chunk summaries for final message generation
+- test: cover review-style output and cancellation
+```
 
 Generated branch names use an allowed type, `/`, and two to five lowercase kebab-case words. Traversal and invalid Git-ref forms are rejected.
 
@@ -104,11 +117,11 @@ In Pi's native TUI, its stages are:
 Initialize → Stage → Message → Commit → Push
 ```
 
-Every screen is a centered, width-bounded and height-bounded overlay. Workflow menus, confirmations, and generation-progress popups have an accented box frame, padding, and a theme-colored background that separates them from the conversation. Short terminals prioritize controls over top and bottom borders. Lists and settings use Pi's native list components, and commit text uses the native editor. Press Escape to cancel without mutation. Choose **Finish** to stop. Stage all, initialization, starter creation and staging, commit, push, and publication have explicit confirmation boundaries. The workflow rejects conflicts, detached HEAD, bare repositories, and active merge, rebase, cherry-pick, revert, or bisect operations.
+Every screen is a centered, width-bounded and height-bounded overlay. Workflow menus, confirmations, commit-message editing, and generation-progress popups have an accented box frame, padding, and a theme-colored background that separates them from the conversation. Short terminals prioritize controls over top and bottom borders. Lists and settings use Pi's native list components, and commit text uses the native editor. Press Escape to cancel without mutation. Choose **Finish** to stop. Stage all, initialization, starter creation and staging, commit, push, and publication have explicit confirmation boundaries. The workflow rejects conflicts, detached HEAD, bare repositories, and active merge, rebase, cherry-pick, revert, or bisect operations.
 
 Manual message entry uses Pi's native editor and needs no model. Press `Shift+Enter` or `Ctrl+J` to insert a body newline; Enter submits the editor. If the terminal is too short for the native editor and its cursor, editing and submission pause until you resize it; Escape still cancels and the unchanged document regains focus after the terminal grows. Existing paired `dev/COMMIT/` files can be previewed and explicitly reused, but remain labeled unverified for the current index. One clean staged added, modified, or deleted file with no other changes can offer `created`, `updated`, or `deleted` plus the exact path. That status and repository identity are captured between matching staged fingerprints after your Stage or direct-entry selection. Mixed, renamed, conflicted, unsafe, and overlong paths get no automatic message. Every selected message is reviewed and rebound to a fresh staged fingerprint before commit.
 
-Optional TUI generation sends the complete stable staged diff only after you select generation. It accepts up to 16 MiB, using one request at or below 1 MiB and sequential analysis of chunks up to 512 KiB followed by final synthesis above that threshold. It reports the request count before analysis starts. Large diffs can take longer and cost more, with at most 34 requests. Unlike `/git-staged-msg`, the guided TUI does not request a final correction or write message artifacts. Generation failures, cancellation, and diffs above 16 MiB leave manual entry available. The workflow rechecks root, branch, HEAD, operation state, and staged content before commit.
+Optional TUI generation sends the complete stable staged diff only after you select generation. It accepts up to 16 MiB, using one request at or below 1 MiB and sequential analysis of chunks up to 512 KiB followed by final synthesis above that threshold. It reports the request count before analysis starts. Large diffs can take longer and cost more, with at most 35 requests including one optional final presentation rewrite. The guided TUI does not write message artifacts and still rejects unsafe or empty first responses without a correction request. Safe responses missing the requested layout get the best-effort rewrite described above. Generation failures, cancellation, and diffs above 16 MiB leave manual entry available. The workflow rechecks root, branch, HEAD, operation state, and staged content before commit.
 
 Push can bind either the commit created in this invocation or an existing HEAD chosen through direct Push entry. The workflow rechecks canonical root, branch, immutable HEAD, remote, and refspec after confirmation. Force options are never used and uncertain push outcomes are never retried automatically.
 

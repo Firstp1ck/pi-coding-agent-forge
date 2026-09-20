@@ -19,19 +19,66 @@ export const DEFAULT_STREAM_PENDING_BYTE_LIMIT = 256 * 1024;
 
 export const TRANSCRIPT_STREAM_MESSAGE_UPDATE_TYPES = Object.freeze(Object.keys(MESSAGE_UPDATE_KINDS));
 
-/**
- * Keep the longer value when a final snapshot is only a prefix of the text
- * already streamed. Divergent snapshots still win so provider corrections or
- * redactions remain authoritative.
- */
+/** An explicit snapshot wins, including empty or shortened provider corrections. */
 export function reconcileTranscriptThinkingSnapshot(accumulated, snapshot) {
-  const previous = typeof accumulated === "string" ? accumulated : "";
-  const next = typeof snapshot === "string" ? snapshot : "";
-  if (!previous) return next;
-  if (!next) return previous;
-  if (next.startsWith(previous)) return next;
-  if (previous.startsWith(next)) return previous;
-  return next;
+  return typeof snapshot === "string" ? snapshot : typeof accumulated === "string" ? accumulated : "";
+}
+
+/** Reconstruct message-scoped tool calls without depending on cumulative RPC snapshots. */
+export function createToolCallStreamTracker({ isHiddenTool = () => false, maxCalls = 128, maxArgumentChars = 256 * 1024 } = {}) {
+  if (!Number.isSafeInteger(maxCalls) || maxCalls < 1 || !Number.isSafeInteger(maxArgumentChars) || maxArgumentChars < 1) {
+    throw new TypeError("Tool stream limits must be positive safe integers");
+  }
+  const calls = new Map();
+  const nonempty = (value) => typeof value === "string" ? value.trim() : "";
+  const argumentText = (value) => {
+    if (typeof value === "string") return value;
+    if (value === undefined) return undefined;
+    try { return JSON.stringify(value, null, 2); } catch { return undefined; }
+  };
+  return {
+    reset() { calls.clear(); },
+    ingest(event) {
+      const update = event?.assistantMessageEvent;
+      if (event?.type !== "message_update" || !["toolcall_start", "toolcall_delta", "toolcall_end"].includes(update?.type)) return null;
+      const contentIndex = update.contentIndex ?? event.contentIndex ?? 0;
+      if (!Number.isSafeInteger(contentIndex) || contentIndex < 0) return null;
+      const message = event.message?.role === "assistant" ? event.message : update.partial;
+      const candidate = update.toolCall ?? message?.content?.[contentIndex];
+      const part = candidate?.type === "toolCall" || candidate?.name ? candidate : null;
+      const name = nonempty(part?.name) || nonempty(update.toolName) || nonempty(update.name);
+      const id = nonempty(part?.id) || nonempty(update.id) || nonempty(update.toolCallId);
+      let call = calls.get(contentIndex);
+      if (!call || update.type === "toolcall_start" || (id && call.id && id !== call.id)) {
+        if (!call && calls.size >= maxCalls) return null;
+        call = { contentIndex, id: "", name: "", rawArguments: "", complete: false, truncated: false };
+        calls.set(contentIndex, call);
+      }
+      if (name) call.name = name;
+      if (id) call.id = id;
+      call.complete = update.type === "toolcall_end";
+      const visible = Boolean(call.name) && !isHiddenTool(call.name);
+      if (!visible) {
+        // Older RPC starts have no identity. Wait for a named snapshot or completed call.
+        call.rawArguments = "";
+        call.truncated = false;
+      } else {
+        const snapshot = argumentText(part?.arguments ?? update.arguments ?? update.args);
+        if (call.complete && snapshot !== undefined) {
+          call.rawArguments = snapshot.slice(0, maxArgumentChars);
+          call.truncated = snapshot.length > maxArgumentChars;
+        } else if (update.type === "toolcall_delta" && typeof update.delta === "string") {
+          const remaining = maxArgumentChars - call.rawArguments.length;
+          call.rawArguments += update.delta.slice(0, remaining);
+          call.truncated ||= update.delta.length > remaining;
+        } else if (snapshot !== undefined && snapshot !== "{}") {
+          call.rawArguments = snapshot.slice(0, maxArgumentChars);
+          call.truncated = snapshot.length > maxArgumentChars;
+        }
+      }
+      return { ...call, visible };
+    },
+  };
 }
 
 export function classifyTranscriptStreamEvent(event) {

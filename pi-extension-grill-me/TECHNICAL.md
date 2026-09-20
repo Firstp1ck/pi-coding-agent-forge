@@ -26,6 +26,8 @@ With a plan, the command creates project-local interview state and asks Pi to be
 
 Pi first checks the codebase for facts it can establish without asking you. It groups independent decisions into a questionnaire of up to 20 questions and leaves dependent questions for later rounds.
 
+Pi records the newly answered questions from a round together, with one recording confirmation. The saved results still list each question, recommendation, answer, and decision status separately and in order. If a resolved answer is missing, the whole batch is rejected before any answers are stored. Pi must correct the batch and retry.
+
 Each question should provide a recommendation, usable choices, and an Other field. A follow-up still uses a questionnaire when only one question remains. Completing one questionnaire ends that round, not the whole interview. Pi evaluates the answers before deciding whether another round is needed.
 
 If you ask Pi to clarify a question, Pi explains it in normal text and resumes the same pending questionnaire. Earlier answers stay in place. Cancelling the questionnaire stops the interview instead of reopening it or switching to chat questions.

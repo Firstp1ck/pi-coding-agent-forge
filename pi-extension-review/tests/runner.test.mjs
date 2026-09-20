@@ -9,7 +9,7 @@ import { registerTestSdk } from "./package-test-loader.mjs";
 
 registerTestSdk();
 
-const { createAssistantMessageEventStream } = await import("@earendil-works/pi-ai");
+const { createAssistantMessageEventStream, getCurrentSystemPrompt, getCurrentTools, normalizeContext } = await import("@earendil-works/pi-ai");
 const { Agent } = await import("@earendil-works/pi-agent-core");
 const { appendEvidence, createTextTarget, createManifest, createReviewState, sha256, startAttempt } = await import("../src/core.ts");
 const { finalizeReadObservation } = await import("../src/read-evidence.ts");
@@ -151,12 +151,36 @@ test("public Agent cancellation settles inside a tool loop", async () => {
   assert.equal(agent.state.isStreaming, false);
 });
 
+test("registry stream adapter preserves the Agent's normalized prompt and tool declarations", async () => {
+  let received;
+  const tool = { name: "inspect", label: "inspect", description: "read-only fixture", parameters: { type: "object", properties: {} }, async execute() { throw new Error("not called"); } };
+  const streamFn = createRegistryStreamFn({
+    getProvider: () => ({ streamSimple(_model, context) {
+      received = context;
+      const stream = createAssistantMessageEventStream();
+      queueMicrotask(() => {
+        stream.push({ type: "start", partial: { ...terminalMessage(), stopReason: "pending" } });
+        stream.push({ type: "done", reason: "stop", message: terminalMessage() });
+      });
+      return stream;
+    } }),
+    getApiKeyAndHeaders: async () => ({ ok: true }),
+  });
+  const agent = new Agent({ initialState: { model, thinkingLevel: "off", systemPrompt: "REVIEW_INSTRUCTIONS", tools: [tool] }, streamFn });
+  await agent.prompt("review the snapshot");
+  assert.equal(received.systemPrompt, undefined);
+  assert.equal(received.tools, undefined);
+  assert.equal(getCurrentSystemPrompt(received.messages), "REVIEW_INSTRUCTIONS");
+  assert.deepEqual(getCurrentTools(received.messages).map(({ name }) => name), ["inspect"]);
+  assert.equal(received.messages.at(-1).role, "user");
+});
+
 test("registry stream adapter translates auth failure, malformed streams, and cancellation without rejecting", async () => {
   const authFailure = createRegistryStreamFn({
     getProvider: () => ({ streamSimple() { throw new Error("must not run"); } }),
     getApiKeyAndHeaders: async () => ({ ok: false, error: "auth denied" }),
   });
-  const authEvents = await events(authFailure(model, { messages: [] }));
+  const authEvents = await events(authFailure(model, normalizeContext({ messages: [] })));
   assert.equal(authEvents.at(-1).type, "error");
   assert.match(authEvents.at(-1).error.errorMessage, /auth denied/u);
 
@@ -164,7 +188,7 @@ test("registry stream adapter translates auth failure, malformed streams, and ca
     getProvider: () => ({ streamSimple() { const stream = createAssistantMessageEventStream(); queueMicrotask(() => stream.push({ type: "done", reason: "stop", message: terminalMessage() })); return stream; } }),
     getApiKeyAndHeaders: async () => ({ ok: true }),
   });
-  const malformedEvents = await events(malformed(model, { messages: [] }));
+  const malformedEvents = await events(malformed(model, normalizeContext({ messages: [] })));
   assert.equal(malformedEvents.length, 1);
   assert.match(malformedEvents[0].error.errorMessage, /malformed|before starting/u);
 
@@ -175,7 +199,7 @@ test("registry stream adapter translates auth failure, malformed streams, and ca
     getApiKeyAndHeaders: () => new Promise((resolve) => { resolveAuth = resolve; }),
   });
   const controller = new AbortController();
-  const pending = events(cancelled(model, { messages: [] }, { signal: controller.signal }));
+  const pending = events(cancelled(model, normalizeContext({ messages: [] }), { signal: controller.signal }));
   controller.abort();
   const cancelledEvents = await pending;
   resolveAuth?.({ ok: true });
@@ -188,7 +212,7 @@ test("registry stream adapter translates auth failure, malformed streams, and ca
     getApiKeyAndHeaders: async () => ({ ok: true }),
   });
   const providerAbort = new AbortController();
-  const hangingEvents = events(hanging(model, { messages: [] }, { signal: providerAbort.signal }));
+  const hangingEvents = events(hanging(model, normalizeContext({ messages: [] }), { signal: providerAbort.signal }));
   await new Promise((resolve) => setImmediate(resolve));
   providerAbort.abort();
   assert.equal((await hangingEvents).at(-1).reason, "aborted", "an uncooperative active provider cannot hold the Agent open");

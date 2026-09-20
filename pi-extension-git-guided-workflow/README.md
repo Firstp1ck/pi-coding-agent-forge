@@ -4,7 +4,7 @@ Use native Pi commands to generate Git text safely, or start a careful commit-an
 
 ## What you can do
 
-- Generate validated Conventional Commit files from staged diffs up to 16 MiB with `/git-staged-msg`; large diffs are analyzed completely in bounded sequential requests before one final synthesis.
+- Generate short summaries and long commit messages with typed change lists from staged diffs up to 16 MiB with `/git-staged-msg`; large diffs are analyzed completely in bounded sequential requests before one final synthesis.
 - Generate a safe branch-name file with `/git-branch-name`.
 - Generate a reviewer-focused pull-request description with `/pr`.
 - Open a centered, bordered popup with its own background and direct Initialize, Stage, Message, Commit, and Push entry points.
@@ -13,6 +13,8 @@ Use native Pi commands to generate Git text safely, or start a careful commit-an
 - Start the Guided Git browser flow from the same workflow command in a compatible WebUI.
 
 ## Install
+
+Requires Pi 0.86.0 or newer.
 
 ```bash
 pi install npm:@firstpick/pi-extension-git-guided-workflow
@@ -32,7 +34,7 @@ In Pi's native terminal interface:
 
 1. Choose a direct entry. A directory outside Git can be initialized on `main`; an existing repository is never renamed.
 2. Preserve the current index or confirm **Stage all changes**. Starter files are created and staged only when you select them.
-3. Write a message, generate candidates, explicitly reuse `dev/COMMIT/` files, or choose the one-file default when it is safe.
+3. Write a message, generate candidates, explicitly reuse `dev/COMMIT/` files, or choose the one-file default when it is safe. The generated long candidate starts with the short summary, followed by `feat:`, `fix:`, and other relevant change bullets.
 4. Review the exact message and staged summary, then confirm the commit.
 5. Push the bound HEAD to the shown destination. When no remote exists, you may explicitly select Public or Private and publish once through system `gh`.
 
@@ -56,9 +58,11 @@ This extension runs Git with your user permissions. Review staged changes and di
 
 Manual, reused, and deterministic messages never need a model. Model generation sends the required complete, bounded Git or repository context directly to the selected model provider only after you select generation or invoke a generation command. Direct commands use the active Pi model. Native and browser setup profiles run independently without changing the parent session's model or reasoning effort. If native setup includes a fallback, the overlay identifies both providers and warns that one eligible provider failure will resend the same evidence once. Cancellation, invalid output, invalid settings, repository drift, Git errors, and artifact errors never trigger fallback. That content may contain private code, commit text, filenames, or a pull-request template. Do not generate unless sharing that content with the selected provider is acceptable.
 
-Generation commands call the selected model directly. They do not expand prompt templates or ask a parent agent to run Git or file tools. Both `/git-staged-msg` and guided TUI message generation use one request for a staged diff at or below 1 MiB. Above 1 MiB, both send every byte of the staged diff to the provider in bounded sequential chunks, then ask once for a final message using the retained summaries. This takes several requests, can cost more, and may take longer. Both report the request count before analysis starts.
+Generation commands call the selected model directly. They do not expand prompt templates or ask a parent agent to run Git or file tools. Both `/git-staged-msg` and guided TUI message generation start with one request for a staged diff at or below 1 MiB. Above 1 MiB, both send every byte of the staged diff to the provider in bounded sequential chunks, then ask once for a final message using the retained summaries. This takes several requests, can cost more, and may take longer. Both report the request count before analysis starts.
 
-`/git-staged-msg` applies staged-only language, scope, type, length, and body guidance. Those are quality guidelines, not reasons to discard safe generated text. Chunk summaries accept any non-empty bounded safe plain text; presentation and delimiters are not enforced. If the final commit response cannot be safely parsed into message artifacts, the command can send one final correction request. Large-diff final correction reuses the retained summaries and does not analyze the chunks again. A provider failure, empty or unsafe chunk summary, repository drift, cancellation, or unsafe artifact path writes no new artifact and produces no stale success.
+If generation returns review prose or misses the summary and typed change list, both entry points ask the same model for one final presentation rewrite. This can add one model request. Large-diff rewriting reuses the retained summaries instead of analyzing the chunks again. If rewriting fails or still misses the layout, the original safe text remains available with a warning to review and edit it. Cancellation still stops the operation.
+
+Formatting is not a hard rejection rule. Chunk summaries accept any non-empty bounded safe text without formatting retries. `/git-staged-msg` also uses its single final correction allowance for empty, unsafe, or oversized responses. Initial provider failure, an empty or unsafe chunk summary, repository drift, cancellation, or an unsafe artifact path still prevents artifact publication.
 
 Requesting the browser workflow sends no repository path, diff, preferences, or Git data in the activation signal. The WebUI then owns its browser workflow and passes the configured generation profile privately to the extension command.
 

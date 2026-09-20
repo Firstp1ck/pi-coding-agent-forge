@@ -57,10 +57,10 @@ assert.match(css, /\.sampling-parameter-control\.unsupported:hover:not\(\.sampli
 assert.match(css, /\.sampling-parameter-control\.unsupported:focus-visible:not\(\.sampling-tooltip-dismissed\) > \.sampling-parameter-unsupported-tooltip/, "keyboard focus should reveal dismissible unsupported reasons");
 assert.match(css, /\.sampling-parameter-unsupported-tooltip\.sampling-tooltip-below/, "bounded placement should support flipping below top-edge rows");
 assert.match(css, /pointer-events: auto;/, "a visible unsupported tooltip should remain pointer-hoverable");
-assert.match(serviceWorker, /const CACHE_NAME = "pi-webui-pwa-v154"/, "native-control assets should advance the cache identity");
+assert.match(serviceWorker, /const CACHE_NAME = "pi-webui-pwa-v155"/, "native-control assets should advance the cache identity");
 assert.match(serviceWorker, /"\/sampling-parameter-controls\.mjs"/, "the pure sampling module should be part of the offline app shell");
-assert.match(html, /styles\.css\?v=152/, "the changed stylesheet should have a new revision");
-assert.match(html, /app\.js\?v=183/, "the changed app module should have a new revision");
+assert.match(html, /styles\.css\?v=154/, "the changed stylesheet should have a new revision");
+assert.match(html, /app\.js\?v=184/, "the changed app module should have a new revision");
 
 // --- Browser state behavior -------------------------------------------------
 

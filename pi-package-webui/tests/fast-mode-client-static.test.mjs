@@ -96,7 +96,7 @@ assert.match(app, /applyToolExecutionUpdate: \(event\) => \{\s+if \(!compactOutp
 assert.doesNotMatch(app, /case "tool_execution_update":/, "raw tool updates should have only the controller-owned dispatch path");
 assert.match(app, /case "tool_execution_end":[\s\S]*?compactLiveScheduler\.flushNow\(\)[\s\S]*?renderCompactToolShell\(event, \{ complete: true \}\)[\s\S]*?finishCompactLiveOutput\(tabContext\)/, "compact tool completion should remain lightweight and request final reconciliation");
 assert.match(resetStream, /resetCompactLiveOutput\(\{ remove: !preserveCompact \}\)/, "reset and tab changes should cancel compact pending work while exact compact settlement may retain its adopted owner");
-assert.match(app, /case "message_end": \{\s+if \(compactOutputActive\(\)\) finishCompactLiveOutput\(tabContext\);/, "message ends should synchronously flush compact output before reconciliation");
+assert.match(app, /case "message_end": \{[\s\S]*?if \(compactOutputActive\(\)\) finishCompactLiveOutput\(tabContext\);/, "message ends should synchronously flush compact output before reconciliation");
 assert.match(app, /case "agent_end":\s+if \(compactOutputActive\(\)\) finishCompactLiveOutput\(tabContext\);/, "agent ends should synchronously flush compact output before reconciliation");
 assert.match(compactTranscript, /message\.role !== "assistant"[\s\S]*?appendMarkdown\(body, output \|\| "_\[non-text output omitted in compact mode\]_"\)[\s\S]*?classList\.add\("compact-transcript-text"\)/, "reconciled compact-mode assistant output should preserve Markdown and explain omitted non-text output");
 assert.doesNotMatch(compactTranscript, /appendText|renderToolExecution|normalizeToolExecution|JSON\.stringify|appendToolOutput|appendToolDiff|appendToolImages/, "fast-mode final output must not fall back to plain text or render tool details");
@@ -159,7 +159,7 @@ assert.match(worker, /pi-webui-pwa-v\d+[\s\S]*?"\/fast-output-live\.mjs"/, "PWA 
 assert.match(html, /<label for="fastOutputModeSelect">Compact mode \(Experimental\)<\/label>/, "the sidebar should mark compact mode as experimental");
 assert.match(html, /Lightweight browser rendering; Markdown final output; live thinking expanded; stored thinking grouped and collapsed/, "the sidebar should distinguish compact rendering from model inference");
 // Intent preserved: the guarded PWA entry point must advance whenever app wiring changes.
-assert.match(html, /id="webuiBootLoader"[^>]*data-app-src="\/app\.js\?v=183"/, "the guarded PWA entry point should cache-bust browser wiring");
+assert.match(html, /id="webuiBootLoader"[^>]*data-app-src="\/app\.js\?v=184"/, "the guarded PWA entry point should cache-bust browser wiring");
 assert.match(JSON.parse(packageRaw).scripts.check, /node --check public\/fast-output-live\.mjs/, "package checks should parse the compact helper");
 
 const events = createFastModeOutputEvents();

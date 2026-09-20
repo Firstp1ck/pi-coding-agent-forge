@@ -55,7 +55,7 @@ assert.match(app, /statusKey === CODEX_FAST_MODE_STATUS_KEY[\s\S]*?applyCodexFas
 assert.match(technical, /## Normal and compact output[\s\S]*?select \*\*Compact\*\*[\s\S]*?`compact-v1`/, "technical reference should document Compact mode with the stable identifier");
 assert.match(development, /### Codex subscription Fast mode[\s\S]*?service_tier: "priority"[\s\S]*?1\.5× faster[\s\S]*?2× Standard credits[\s\S]*?2\.5×/, "development guide should document Fast-mode integration and cost semantics");
 // Intent preserved: browser-asset changes must advance the coherent cache tuple.
-assert.match(serviceWorker, /pi-webui-pwa-v154/, "PWA cache identity should be bumped for changed browser assets");
-assert.match(html, /data-app-src="\/app\.js\?v=183"/, "browser module URL should be cache-busted for Fast-mode wiring");
+assert.match(serviceWorker, /pi-webui-pwa-v155/, "PWA cache identity should be bumped for changed browser assets");
+assert.match(html, /data-app-src="\/app\.js\?v=184"/, "browser module URL should be cache-busted for Fast-mode wiring");
 
 console.log("codex-fast-mode-static.test.mjs passed");

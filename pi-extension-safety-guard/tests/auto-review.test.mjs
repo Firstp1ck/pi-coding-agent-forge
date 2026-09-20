@@ -59,6 +59,7 @@ test("review prompt is bounded and contains only approved pending-call metadata"
 test("model execution resolves auth and disables retries, cache, and tools", async () => {
   const model = { provider: "provider-a", id: "model-a", reasoning: true, thinkingLevelMap: { max: null } };
   const calls = [];
+  const headers = { authorization: null, "x-fixture": "secret-header" };
   const registry = {
     find(provider, modelId) {
       assert.equal(`${provider}/${modelId}`, "provider-a/model-a");
@@ -66,7 +67,7 @@ test("model execution resolves auth and disables retries, cache, and tools", asy
     },
     async getApiKeyAndHeaders(selected) {
       assert.equal(selected, model);
-      return { ok: true, apiKey: "secret-key", headers: { authorization: "secret-header" }, env: { TOKEN: "secret-env" } };
+      return { ok: true, apiKey: "secret-key", headers, env: { TOKEN: "secret-env" } };
     },
   };
   const complete = async (...args) => {
@@ -89,6 +90,8 @@ test("model execution resolves auth and disables retries, cache, and tools", asy
   const [, context, options] = calls[0];
   assert.deepEqual(context.tools, []);
   assert.equal(options.apiKey, "secret-key");
+  assert.equal(options.headers, headers, "forward the provider headers without rebuilding them");
+  assert.equal(options.headers.authorization, null, "preserve credential-deletion markers");
   assert.equal(options.reasoning, "high");
   assert.equal(options.cacheRetention, "none");
   assert.equal(options.maxRetries, 0);

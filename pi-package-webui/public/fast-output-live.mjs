@@ -93,14 +93,16 @@ export function reduceFastOutputLiveEvent(state = createFastOutputLiveState(), e
     changed = true;
     kind = "toolcall";
   } else if (update.type === "text_end") {
-    const finalText = text(update.content) || text(update.text) || delta;
-    if (finalText) current.text = finalText;
-    changed = Boolean(finalText);
+    const finalText = typeof update.content === "string" ? update.content
+      : typeof update.text === "string" ? update.text : typeof update.delta === "string" ? delta : current.text;
+    changed = current.text !== finalText;
+    current.text = finalText;
     kind = "text-end";
   } else if (update.type === "thinking_end") {
-    const finalThinking = text(update.content) || text(update.thinking) || delta;
-    if (finalThinking) current.thinking = finalThinking;
-    changed = Boolean(finalThinking);
+    const finalThinking = typeof update.content === "string" ? update.content
+      : typeof update.thinking === "string" ? update.thinking : typeof update.delta === "string" ? delta : current.thinking;
+    changed = current.thinking !== finalThinking;
+    current.thinking = finalThinking;
     kind = "thinking-end";
   } else if (update.type === "toolcall_end" || update.type === "tool_call_end") {
     const argumentsText = toolCallArguments(update) || delta || current.toolCall.arguments;

@@ -8,7 +8,7 @@ import {
   type AssistantMessage,
   type AssistantMessageEvent,
   type AssistantMessageEventStream,
-  type Context,
+  type TranscriptContext,
   type Model,
   type SimpleStreamOptions,
 } from "@earendil-works/pi-ai";
@@ -148,7 +148,7 @@ function raceAbort<T>(operation: Promise<T>, signal?: AbortSignal): Promise<T> {
 
 /** Build a non-rejecting StreamFn over the host's current provider and authentication registry. */
 export function createRegistryStreamFn(registry: ReviewHost["modelRegistry"]): StreamFn {
-  return (requestModel: Model<any>, context: Context, options: SimpleStreamOptions = {}) => {
+  return (requestModel: Model<any>, context: TranscriptContext, options: SimpleStreamOptions = {}) => {
     const output = createAssistantMessageEventStream();
     void (async () => {
       let terminal = false;

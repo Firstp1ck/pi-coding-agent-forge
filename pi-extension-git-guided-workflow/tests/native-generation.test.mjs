@@ -22,6 +22,7 @@ import {
   buildCommitModelRequest,
   buildCommitSynthesisModelRequest,
   buildPrModelRequest,
+  commitPresentationIssue,
   encodeBranchArtifactName,
   parseBranchGenerationArgs,
   parseBranchOutput,
@@ -362,6 +363,39 @@ test("commit parser keeps presentation, type, scope, length, body, and subject c
     closedCommit({ ...validCommit, long: "   " }),
     closedCommit({ ...validCommit, long: `${validCommit.short}\nunsafe\u202e body` }),
   ]) assert.throws(() => parseNativeCommitOutput(output, "required"), GuidedGitError);
+});
+
+test("presentation advice catches review prose without making safe text a parser error", () => {
+  const review = "- **Medium - package.json / package-lock.json**: The Pi upgrade leaves direct dependencies behind. Align these dependencies and lockfile.";
+  const parsed = parseNativeCommitOutput(review, "auto");
+  assert.equal(parsed.long, review, "safe model output must remain recoverable");
+  assert.match(commitPresentationIssue(parsed), /review finding/u);
+  assert.equal(commitPresentationIssue(validCommit), undefined);
+  assert.equal(commitPresentationIssue({ short: "fix!: change compatibility", long: "fix!: change compatibility\n\n- fix!: update the contract\n- test: cover compatibility" }), undefined);
+  assert.match(commitPresentationIssue({ short: validCommit.short, long: `${validCommit.short}\n\nUncategorized explanation` }), /typed change bullets/u);
+  assert.match(commitPresentationIssue({ short: validCommit.short, long: "different subject\n- fix: actual change" }), /exact short summary/u);
+});
+
+test("direct and chunked final prompts request a summary and typed changes rather than a code review", () => {
+  const context = stagedContext("diff evidence");
+  const summaries = partitionStagedDiff(context).map((chunk) => parseCommitChunkSummaryOutput("A staged behavior changed.", chunk));
+  const args = { language: "en", scope: "auto" };
+  const requests = [
+    buildCommitModelRequest(context, args),
+    buildCommitSynthesisModelRequest(context, args, summaries),
+    buildCommitCorrectionModelRequest({ kind: "summaries", context, summaries }, args, {
+      code: "COMMIT_PRESENTATION", message: "Expected commit messages", previousOutput: "- **Medium**: review finding",
+    }),
+  ];
+  for (const request of requests) {
+    assert.match(request.systemPrompt, /writing commit messages, not reviewing code/u);
+    assert.match(request.systemPrompt, /exact same subject>\n\n- feat:/u);
+    assert.match(request.systemPrompt, /Do not turn a suggested fix into a claim that it was implemented/u);
+    assert.match(request.messages[0].content.at(-1).text, /summary, a blank line, and typed change bullets/u);
+  }
+  assert.match(requests[2].systemPrompt, /single final presentation rewrite/u);
+  assert.match(requests[2].systemPrompt, /Do not merely relabel review findings as completed fixes/u);
+  assert.match(buildCommitChunkAnalysisModelRequest(context, partitionStagedDiff(context)[0]).systemPrompt, /not code-review findings/u);
 });
 
 test("branch and PR parsers reject malformed output, unsafe names, placeholders, empty sections, and unsupported test claims", () => {

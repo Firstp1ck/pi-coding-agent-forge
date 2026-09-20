@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { normalizeContext } from "@earendil-works/pi-ai";
 import {
 	DEFAULT_PROVIDER_TOOL_RESULT_MAX_BYTES,
 	DEFAULT_PROVIDER_TOOL_RESULT_MAX_LINES,
@@ -24,6 +25,51 @@ function contextWithToolResult(toolText: string, toolName = "read", toolCallId =
 		],
 	};
 }
+
+test("normalized transcripts replay system sections and deltas without duplicating stale instructions", () => {
+	const context = normalizeContext({ messages: [
+		{ role: "system", content: "BASE_INSTRUCTIONS", sections: { rules: "OLD_RULES", temporary: "REMOVED_RULES" }, timestamp: 0 },
+		{ role: "user", content: "Inspect the file", timestamp: 1 },
+		{ role: "system", content: [{ type: "text", text: "ADDITIONAL_INSTRUCTIONS" }], sections: { rules: "CURRENT_RULES", temporary: null }, timestamp: 2 },
+		{ role: "toolResult", toolName: "read", toolCallId: "read-1", content: [{ type: "text", text: "file evidence" }], isError: false, timestamp: 3 },
+	] });
+	const before = structuredClone(context);
+	const prompt = serializeProviderContext(context);
+	assert.match(prompt, /# Pi system prompt\nBASE_INSTRUCTIONS/);
+	assert.match(prompt, /ADDITIONAL_INSTRUCTIONS/);
+	assert.match(prompt, /CURRENT_RULES/);
+	assert.doesNotMatch(prompt, /OLD_RULES|REMOVED_RULES|## system/);
+	assert.equal(prompt.match(/BASE_INSTRUCTIONS/g)?.length, 1);
+	assert.match(prompt, /## user\nInspect the file/);
+	assert.match(prompt, /## toolResult read\nfile evidence/);
+	assert.deepEqual(context, before, "serialization must not mutate the transcript");
+});
+
+test("system prompt overrides and exclusions also apply to normalized transcripts", () => {
+	const context = normalizeContext({ systemPrompt: "ORIGINAL_INSTRUCTIONS", messages: [
+		{ role: "system", content: "LATER_INSTRUCTIONS", sections: { rules: "SECTION_INSTRUCTIONS" }, timestamp: 1 },
+		{ role: "user", content: "user request", timestamp: 2 },
+	] });
+	const overridden = serializeProviderContext(context, { systemPrompt: "OVERRIDE_INSTRUCTIONS" });
+	assert.match(overridden, /# Pi system prompt\nOVERRIDE_INSTRUCTIONS/);
+	assert.doesNotMatch(overridden, /ORIGINAL_INSTRUCTIONS|LATER_INSTRUCTIONS|SECTION_INSTRUCTIONS|## system/);
+	for (const options of [{ includeSystemPrompt: false }, { systemPrompt: "" }]) {
+		const prompt = serializeProviderContext(context, options);
+		assert.doesNotMatch(prompt, /INSTRUCTIONS|# Pi system prompt|## system/);
+		assert.match(prompt, /user request/);
+	}
+});
+
+test("message overrides supply the system deltas to replay", () => {
+	const context = normalizeContext({ systemPrompt: "UNSELECTED_INSTRUCTIONS", messages: [] });
+	const prompt = serializeProviderContext(context, { messages: [
+		{ role: "system", content: "SELECTED_INSTRUCTIONS", sections: { rules: "SELECTED_RULES" }, timestamp: 0 },
+		{ role: "user", content: "selected request", timestamp: 1 },
+	] });
+	assert.match(prompt, /SELECTED_INSTRUCTIONS/);
+	assert.match(prompt, /SELECTED_RULES/);
+	assert.doesNotMatch(prompt, /UNSELECTED_INSTRUCTIONS|## system/);
+});
 
 test("small tool results remain intact", () => {
 	const small = "alpha\nbeta\ngamma";

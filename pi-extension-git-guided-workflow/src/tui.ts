@@ -229,6 +229,7 @@ class CommitEditorOverlay implements Focusable {
   private readonly editor: Editor;
   private readonly done: (value: string | null) => void;
   private readonly tui: TUI;
+  private readonly theme: Theme;
   private _focused = false;
   private resizeRequired = false;
 
@@ -240,7 +241,8 @@ class CommitEditorOverlay implements Focusable {
   ) {
     this.done = done;
     this.tui = tui;
-    this.editor = new Editor(tui, { borderColor: (text) => theme.fg("accent", text), selectList: getSelectListTheme() });
+    this.theme = theme;
+    this.editor = new Editor(tui, { borderColor: (text) => theme.fg("borderMuted", text), selectList: getSelectListTheme() });
     this.editor.setText(prefill);
     this.editor.onSubmit = (text) => this.done(text);
   }
@@ -256,21 +258,26 @@ class CommitEditorOverlay implements Focusable {
 
   render(width: number): string[] {
     const safeWidth = Math.max(1, width);
+    const contentWidth = safeWidth >= 5 ? safeWidth - 4 : safeWidth;
     const maxRows = overlayRowBudget(this.tui);
-    const heading = truncateToWidth("Commit message · Enter submits · Shift+Enter/Ctrl+J newline · Esc cancels", safeWidth);
+    const heading = this.theme.fg("accent", this.theme.bold("Commit message · Enter submits · Shift+Enter/Ctrl+J newline · Esc cancels"));
     this.editor.focused = this._focused;
-    const rendered = this.editor.render(safeWidth);
+    const rendered = this.editor.render(contentWidth);
     if (rendered.length + 2 > maxRows) {
       this.resizeRequired = true;
       this.editor.focused = false;
-      return [
-        truncateToWidth("Commit editor paused — resize terminal", safeWidth),
-        truncateToWidth("The native editor viewport cannot fit safely at this height.", safeWidth),
-        truncateToWidth("Input and submit are disabled · Esc cancels", safeWidth),
-      ].slice(0, maxRows);
+      const frame = safeWidth >= 5 && maxRows >= 5;
+      const lines = [
+        this.theme.fg("warning", "Commit editor paused · resize terminal"),
+        this.theme.fg("muted", "The native editor viewport cannot fit safely at this height."),
+        this.theme.fg("dim", "Input and submit are disabled · Esc cancels"),
+      ].slice(0, maxRows - (frame ? 2 : 0));
+      return renderOverlayPanel(lines, safeWidth, this.theme, frame);
     }
     this.resizeRequired = false;
-    return [heading, ...rendered, truncateToWidth("Subject: up to 72 characters. Separate a body with a blank line.", safeWidth)];
+    const lines = [heading, ...rendered, this.theme.fg("dim", "Subject: up to 72 characters. Separate a body with a blank line.")];
+    // Keep the native cursor viewport intact when only the side borders fit.
+    return renderOverlayPanel(lines, safeWidth, this.theme, lines.length + 2 <= maxRows);
   }
 
   invalidate(): void { this.editor.invalidate(); }

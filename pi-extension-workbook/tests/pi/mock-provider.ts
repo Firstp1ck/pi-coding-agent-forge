@@ -1,7 +1,7 @@
 import {
   createAssistantMessageEventStream,
   type AssistantMessage,
-  type Context,
+  type TranscriptContext,
   type Model,
   type SimpleStreamOptions,
 } from "@earendil-works/pi-ai";
@@ -29,7 +29,7 @@ function outputMessage(model: Model<any>): AssistantMessage {
   };
 }
 
-function streamWorkbookTest(model: Model<any>, context: Context, options?: SimpleStreamOptions) {
+function streamWorkbookTest(model: Model<any>, context: TranscriptContext, options?: SimpleStreamOptions) {
   const stream = createAssistantMessageEventStream();
   void (async () => {
     const output = outputMessage(model);
@@ -38,7 +38,9 @@ function streamWorkbookTest(model: Model<any>, context: Context, options?: Simpl
       if (options?.signal?.aborted) throw new Error("aborted");
       const hasWorkbookResult = context.messages.some((message: any) => message.role === "toolResult" && message.toolName === "workbook_inspect");
       if (!hasWorkbookResult) {
-        const args = { path: process.env.PI_WORKBOOK_TEST_PATH };
+        const path = process.env.PI_WORKBOOK_TEST_PATH;
+        if (!path?.trim()) throw new Error("PI_WORKBOOK_TEST_PATH must be set to a non-empty workbook path.");
+        const args = { path };
         const toolCall = { type: "toolCall" as const, id: "workbook-mode-call", name: "workbook_inspect", arguments: args };
         output.content.push(toolCall);
         output.stopReason = "toolUse";

@@ -60,6 +60,6 @@ assert.match(css, /data-mobile-presentation="essential"/, "Essential presentatio
 assert.match(css, /html\[data-mobile-shell="v2"\] body\.mobile-keyboard-open \.widget-area,[\s\S]*?\.composer-actions-button \{ display: block !important; \}/, "v2 keyboard mode must keep run widgets and the actions entry available");
 assert.match(css, /@media \(prefers-reduced-motion: reduce\)/, "reduced-motion behavior is required");
 assert.match(css, /@media \(forced-colors: active\)/, "forced-color affordances are required");
-assert.match(serviceWorker, /const CACHE_NAME = "pi-webui-pwa-v154"/, "browser asset changes need a coherent cache tuple");
+assert.match(serviceWorker, /const CACHE_NAME = "pi-webui-pwa-v155"/, "browser asset changes need a coherent cache tuple");
 
 console.log("mobile-phone-experience-static.test.mjs passed");

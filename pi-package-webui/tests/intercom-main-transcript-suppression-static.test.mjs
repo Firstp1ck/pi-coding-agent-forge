@@ -22,8 +22,8 @@ function functionSource(source, name) {
 assert.match(server, /import \{ filterIntercomTranscriptMessages \} from "\.\.\/lib\/intercom-transcript-filter\.mjs";/, "the server should use the dedicated transcript-boundary filter");
 assert.match(
   server,
-  /filterSessionSummaryTranscriptMessages\(filterIntercomTranscriptMessages\(tab\.thinkingStreamRecovery\.applyToMessages\(response\.data\.messages\)\)\)/,
-  "thinking recovery should complete before Intercom and session-summary records are removed from the normal transcript",
+  /filterSessionSummaryTranscriptMessages\(filterIntercomTranscriptMessages\(response\.data\.messages\)\)/,
+  "authoritative messages should be filtered without restoring discarded streamed thinking",
 );
 
 assert.match(filter, /message\?\.role === "custom" && message\.customType === INTERCOM_CUSTOM_TYPE/, "persisted intercom_message records should be excluded structurally");
@@ -35,15 +35,14 @@ assert.match(treeTextSource, /entry\.type === "custom_message" && entry\.customT
 assert.match(treeTextSource, /entry\.type === "custom_message"\) return extractSessionTextContent\(entry\.content\);/, "unrelated custom session-tree entries should retain their normal labels");
 
 const toolNameSource = functionSource(app, "isIntercomTransportToolName");
-const updateSource = functionSource(app, "isIntercomToolCallUpdate");
 const eventSource = functionSource(app, "handleEvent");
 assert.match(toolNameSource, /trim\(\)\.toLowerCase\(\) === "intercom"/, "live filtering should normalize only the explicit Intercom tool name");
-assert.match(updateSource, /assistantMessageEvent[\s\S]*assistantToolCallPartFromUpdate[\s\S]*isIntercomTransportToolName/, "streamed tool-call updates should be identified before their arguments render");
-assert.match(app, /applyToolCallUpdate: \(event\) => \{[\s\S]*isIntercomToolCallUpdate\(event\)[\s\S]*resetStreamingToolCallState\(\{ remove: true \}\)[\s\S]*handleMessageUpdate\(event\)/, "Intercom stream cards should be discarded while unrelated stream updates keep the normal path");
+assert.match(app, /createToolCallStreamTracker\(\{ isHiddenTool: isIntercomTransportToolName \}\)/, "tool identities must survive snapshot-free deltas by content index");
+assert.match(app, /applyToolCallUpdate: \(event\) => \{[\s\S]*streamToolCalls\.ingest\(event\)[\s\S]*!call\?\.visible[\s\S]*resetStreamingToolCallState\(\{ remove: true \}\)[\s\S]*updateStreamingToolCallFromState\(call\)/, "unknown and Intercom arguments must be withheld before either output mode can render them");
 assert.match(app, /applyToolExecutionUpdate: \(event\) => \{[\s\S]*!isIntercomTransportToolName\(event\?\.toolName\)[\s\S]*applyTranscriptToolExecutionUpdate\(event\)/, "partial Intercom execution output should never create a live transcript card");
 assert.match(eventSource, /case "tool_execution_start":[\s\S]*isIntercomTransportToolName\(event\.toolName\)[\s\S]*resetStreamingToolCallState\(\{ remove: true \}\)[\s\S]*break;[\s\S]*handleToolExecutionStart\(event\)/, "Intercom execution starts should bypass normal cards and event-log lines");
 assert.match(eventSource, /case "tool_execution_end":[\s\S]*isIntercomTransportToolName\(event\.toolName\)[\s\S]*scheduleSemanticReconcile\(\{ messages: true, footerData: true \}, tabContext\)[\s\S]*break;[\s\S]*handleToolExecutionEnd\(event\)/, "Intercom execution completion should refresh filtered messages and conversation tags without rendering results");
-assert.doesNotMatch(`${toolNameSource}\n${updateSource}`, /subagent_supervisor|contact_supervisor/, "unrelated supervisor tools should remain outside this narrowly approved filter");
+assert.doesNotMatch(toolNameSource, /subagent_supervisor|contact_supervisor/, "unrelated supervisor tools should remain outside this narrowly approved filter");
 assert.match(fakePi, /intercomLiveEnabled = process\.env\.FAKE_PI_INTERCOM_LIVE === "1"/, "the live Intercom fixture should be explicitly env-gated");
 const liveFixtureSource = functionSource(fakePi, "runIntercomLiveScript");
 assert.match(liveFixtureSource, /LIVE NORMAL OUTPUT VISIBLE/, "the live Intercom fixture should preserve unrelated normal output");

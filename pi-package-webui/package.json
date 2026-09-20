@@ -36,7 +36,7 @@
   },
   "dependencies": {
     "@earendil-works/pi-ai": "^0.83.0",
-    "@earendil-works/pi-coding-agent": "^0.85.0",
+    "@earendil-works/pi-coding-agent": "^0.86.0",
     "@earendil-works/pi-tui": "^0.83.0",
     "@firstpick/pi-utils": "^0.2.5",
     "mermaid": "^11.15.0",

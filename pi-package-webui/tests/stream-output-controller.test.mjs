@@ -56,9 +56,11 @@ assert.equal(DEFAULT_STREAM_PENDING_ENTRY_LIMIT, 128);
 assert.equal(DEFAULT_STREAM_PENDING_BYTE_LIMIT, 256 * 1024);
 assert.equal(
   reconcileTranscriptThinkingSnapshot("first\n\nsecond\n\nthird\n\nfourth", "first\n\nsecond\n\nthird"),
-  "first\n\nsecond\n\nthird\n\nfourth",
-  "a regressive final thinking snapshot must not remove an already-rendered tail",
+  "first\n\nsecond\n\nthird",
+  "a final thinking snapshot must remove a discarded streamed tail",
 );
+assert.equal(reconcileTranscriptThinkingSnapshot("draft", ""), "", "explicit empty thinking clears the draft");
+assert.equal(reconcileTranscriptThinkingSnapshot("draft", undefined), "draft", "missing snapshots retain the draft");
 assert.equal(reconcileTranscriptThinkingSnapshot("short", "shorter complete"), "shorter complete", "a longer compatible final snapshot should win");
 assert.equal(reconcileTranscriptThinkingSnapshot("draft reasoning", "provider correction"), "provider correction", "divergent provider corrections must remain authoritative");
 

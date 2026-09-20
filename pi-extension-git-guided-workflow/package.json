@@ -31,8 +31,8 @@
     "check": "node --experimental-strip-types --check index.ts && node --experimental-strip-types --check src/core.ts && node --experimental-strip-types --check src/native-generation.ts && node --experimental-strip-types --check src/preferences.ts && node --experimental-strip-types --check src/message-files.ts && node --experimental-strip-types --check src/repository-setup.ts && node --experimental-strip-types --check src/tui.ts"
   },
   "peerDependencies": {
-    "@earendil-works/pi-ai": "*",
-    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-ai": ">=0.86.0",
+    "@earendil-works/pi-coding-agent": ">=0.86.0",
     "@earendil-works/pi-tui": "*"
   },
   "files": [

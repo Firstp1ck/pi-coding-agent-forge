@@ -74,8 +74,8 @@ assert.match(technical, /working-directory picker accepts a direct path[\s\S]*\*
 assert.match(development, /virtual \*\*This PC\*\* response with an empty cwd and `selectable: false`/i, "the contributor guide should record the server/browser virtual-view contract");
 assert.ok(packageJson.files.includes("TECHNICAL.md"), "the published package should include its advanced user reference");
 assert.ok(packageJson.files.includes("DEVELOPMENT.md"), "the published package should include its contributor guide");
-assert.match(html, /styles\.css\?v=152/, "the existing picker layout should retain its stylesheet revision");
-assert.match(html, /app\.js\?v=183/, "the changed picker behavior should advance the app revision");
-assert.match(serviceWorker, /pi-webui-pwa-v154/, "the changed browser assets should advance the PWA cache identity");
+assert.match(html, /styles\.css\?v=154/, "the existing picker layout should retain its stylesheet revision");
+assert.match(html, /app\.js\?v=184/, "the changed picker behavior should advance the app revision");
+assert.match(serviceWorker, /pi-webui-pwa-v155/, "the changed browser assets should advance the PWA cache identity");
 
 console.log("windows-drive-cwd-picker-static.test.mjs passed");

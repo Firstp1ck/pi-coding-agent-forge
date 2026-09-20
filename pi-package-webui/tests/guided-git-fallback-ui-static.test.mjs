@@ -54,7 +54,7 @@ assert.match(readme, /fallback model and its own reasoning effort[\s\S]*tries th
 assert.match(technical, /## Guided Git generation profiles[\s\S]*strict one-retry policy[\s\S]*active model and reasoning effort remain unchanged[\s\S]*dead Pi process cannot run the fallback/i, "technical reference should document configuration and operational limits");
 assert.match(development, /### Fallback browser\/runtime contract[\s\S]*fallbackUsed: true[\s\S]*webui_git_workflow_generation_fallback_started[\s\S]*never sends a retry/, "development guide should preserve the response/event and browser ownership contract");
 
-assert.match(html, /data-app-src="\/app\.js\?v=183"/, "the changed browser app should use the next query revision");
-assert.match(serviceWorker, /const CACHE_NAME = "pi-webui-pwa-v154";/, "the PWA cache identity should advance with browser behavior");
+assert.match(html, /data-app-src="\/app\.js\?v=184"/, "the changed browser app should use the next query revision");
+assert.match(serviceWorker, /const CACHE_NAME = "pi-webui-pwa-v155";/, "the PWA cache identity should advance with browser behavior");
 
 console.log("guided-git-fallback-ui-static.test.mjs passed");

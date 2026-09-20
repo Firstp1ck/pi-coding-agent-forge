@@ -20,6 +20,10 @@ npm run pack:dry
 
 See `skills/workbook-editor/SKILL.md` for the agent workflow, `docs/ADR-0001-primary-backend.md` for backend scope, and `docs/IMPLEMENTATION-STATUS.md` for passed and deferred release gates.
 
+## Mock provider contract
+
+`tests/pi/mock-provider.ts` accepts normalized `TranscriptContext` values. Before emitting a tool call, it requires a non-empty `PI_WORKBOOK_TEST_PATH`; missing or blank values produce a terminal error event instead of an `undefined` tool argument. Valid paths are preserved exactly. `tests/mock-provider.test.mjs` checks missing and blank values, JSON-compatible arguments, and completion after a tool result without calling a model or opening a workbook.
+
 ## Additional implementation details
 
 The enabled engine is a bounded, cross-platform OOXML-surgical implementation with an explicit operation matrix. Native Excel mutation is disabled after strict no-op fidelity failures, and Aspose is an optional deferred tier. The declared implementation is complete, but publication remains blocked until a legally sourced signed-VBA fixture passes the supplied harness; see `docs/IMPLEMENTATION-STATUS.md`.

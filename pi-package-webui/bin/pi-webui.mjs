@@ -13201,7 +13201,7 @@ async function safeRpcResponse(tab, command, timeoutMs = REQUEST_TIMEOUT_MS) {
     if (command?.type === "get_messages" && Array.isArray(response?.data?.messages)) {
       response.data = {
         ...response.data,
-        messages: filterSessionSummaryTranscriptMessages(filterIntercomTranscriptMessages(tab.thinkingStreamRecovery.applyToMessages(response.data.messages))),
+        messages: filterSessionSummaryTranscriptMessages(filterIntercomTranscriptMessages(response.data.messages)),
       };
     }
     return response;

@@ -11,7 +11,7 @@ Connects Cursor Composer 2.5 to Pi as both a model provider and an explicitly re
 
 ## Install
 
-Install it through Pi:
+Requires Pi 0.86.0 or newer. Install it through Pi:
 
 ```bash
 pi install npm:@firstpick/pi-extension-cursor-composer

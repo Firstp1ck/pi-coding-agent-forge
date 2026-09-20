@@ -34,7 +34,7 @@ assert.match(html, /role="alert" hidden>[\s\S]*Replace this exact target\?/, "ov
 
 assert.match(app, /from "\.\/theme-contract\.mjs"/, "frontend should consume the shared browser-safe theme contract");
 assert.match(serviceWorker, /"\/theme-contract\.mjs"/, "the PWA app shell should cache the startup-critical theme contract");
-assert.match(serviceWorker, /const CACHE_NAME = "pi-webui-pwa-v154"/, "adding the theme contract to the startup graph should advance the PWA cache identity");
+assert.match(serviceWorker, /const CACHE_NAME = "pi-webui-pwa-v155"/, "adding the theme contract to the startup graph should advance the PWA cache identity");
 assert.match(pkg, /node --check public\/theme-contract\.mjs/, "the package check should syntax-check the startup-critical theme contract");
 assert.match(app, /function themeDraftFromCatalog\(theme, name = theme\?\.name\)[\s\S]*colors: cloneThemeDraft\(theme\?\.colors \|\| \{\}\)/, "catalog metadata should be projected into a schema-only editable draft");
 assert.match(app, /for \(const \{ name, label \} of group\.tokens\)/, "visual controls should render from the exact shared token inventory");

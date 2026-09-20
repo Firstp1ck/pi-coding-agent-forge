@@ -76,6 +76,15 @@ assert.equal(shouldConsumeFastOutputLiveEvent(emptyCompactTextEnd), true, "recog
 assert.equal(shouldConsumeFastOutputLiveEvent(emptyCompactThinkingEnd), true, "recognized empty thinking end variants should be consumed safely");
 assert.equal(shouldConsumeFastOutputLiveEvent({ changed: false, kind: "ignored" }), false, "unknown compact shapes should still fall through to normal diagnostics");
 
+for (const [kind, field] of [["text", "text"], ["thinking", "thinking"]]) {
+  const draft = { ...createFastOutputLiveState(), [field]: "draft removed tail" };
+  for (const content of ["draft", "", "provider correction"]) {
+    const corrected = reduceFastOutputLiveEvent(draft, { type: "message_update", assistantMessageEvent: { type: `${kind}_end`, content } });
+    assert.equal(corrected.state[field], content, "explicit final content wins over streamed text");
+    assert.equal(corrected.changed, true);
+  }
+}
+
 const clock = new FakeClock();
 const flushes = [];
 const scheduler = createSustainedFlushScheduler({

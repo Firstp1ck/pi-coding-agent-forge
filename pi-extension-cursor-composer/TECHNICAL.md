@@ -6,6 +6,8 @@ Advanced user setup, configuration, compatibility, security, and troubleshooting
 
 ## Install
 
+Requires Pi 0.86.0 or newer. Update Pi before installing or updating this extension.
+
 ```bash
 pi install npm:@firstpick/pi-extension-cursor-composer
 ```

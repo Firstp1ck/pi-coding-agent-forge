@@ -16,6 +16,14 @@ cursor-composer/composer-2.5
 
 This provider wraps Cursor SDK local-agent runs, so it behaves more like a delegated agent than a raw chat-completions model. While Cursor is doing long internal tool runs, the provider emits periodic thinking/progress heartbeats so Pi Web UI does not look silent.
 
+## Provider transcript contract
+
+The stream callback accepts Pi's normalized `TranscriptContext`. `context.ts` uses `normalizeContext()` and `getCurrentSystemPrompt()` to replay system text, named sections, replacements, and removals into one current prompt. It omits system messages from conversation replay so stale instructions are not duplicated. Explicit prompt overrides and `includeSystemPrompt: false` also apply to transcript system messages. Legacy shorthand contexts remain supported for smoke and benchmark scripts.
+
+Cursor executes its own SDK tools, not Pi's declared tools. The wrapper does not forward Pi tool declarations as executable Cursor tools. Its historical tool-result recovery tool remains separate.
+
+`tests/context-serialization.test.ts` covers normalized system deltas, non-mutation, prompt and message overrides, exclusions, legacy contexts, and tool-result truncation. Run `npm test` with Pi 0.86.0 or newer peers installed; these tests do not call Cursor.
+
 ## Install
 
 From npm after publish:

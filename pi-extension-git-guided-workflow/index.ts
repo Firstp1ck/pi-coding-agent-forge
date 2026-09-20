@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { realpath } from "node:fs/promises";
+import { normalizeContext } from "@earendil-works/pi-ai";
 import {
   getAgentDir,
   withFileMutationQueue,
@@ -41,6 +42,7 @@ import {
   buildCommitModelRequest,
   buildCommitSynthesisModelRequest,
   buildPrModelRequest,
+  commitPresentationIssue,
   parseBranchGenerationArgs,
   parseBranchOutput,
   parseCommitChunkSummaryOutput,
@@ -53,6 +55,7 @@ import {
   writeCommitArtifacts,
   writePrArtifact,
   type CommitChunkSummary,
+  type CommitCorrectionEvidence,
   type CommitGenerationArgs,
   type NativeModelRequest,
   type StagedGenerationContext,
@@ -212,7 +215,7 @@ async function completeIsolatedNativeRequest(
   if (!auth.ok) throw new GuidedGitError("MODEL_GENERATION_FAILED", auth.error);
   if (signal.aborted) throw abortError();
   const model = auth.baseUrl ? { ...target.model, baseUrl: auth.baseUrl } : target.model;
-  const stream = provider.streamSimple(model, request, {
+  const stream = provider.streamSimple(model, normalizeContext(request), {
     signal,
     maxTokens,
     apiKey: auth.apiKey,
@@ -427,6 +430,51 @@ function generationTargetName(target: NativeGenerationTarget): string {
   return `${target.model.provider}/${target.model.id} (${target.thinkingLevel})`;
 }
 
+async function finalizeCommitOutput(
+  ctx: ExtensionCommandContext,
+  target: NativeGenerationTarget,
+  evidence: CommitCorrectionEvidence,
+  args: CommitGenerationArgs,
+  output: string,
+  signal: AbortSignal,
+  commandName: string,
+  correctInvalidOutput: boolean,
+): Promise<string> {
+  let safeOriginal = false;
+  let feedback: { code: string; message: string };
+  try {
+    const generated = parseNativeCommitOutput(output, args.scope);
+    safeOriginal = true;
+    const issue = commitPresentationIssue(generated);
+    if (!issue) return output;
+    feedback = { code: "COMMIT_PRESENTATION", message: issue };
+  } catch (error) {
+    if (!correctInvalidOutput || !(error instanceof GuidedGitError)) throw error;
+    feedback = { code: error.code, message: errorMessage(error) };
+  }
+  if (signal.aborted) throw abortError();
+  ctx.ui.notify(safeOriginal
+    ? `/${commandName} received text without the requested summary and typed change list; sending one final presentation rewrite to the same model using retained evidence. The original safe text remains available if the rewrite fails.`
+    : `/${commandName} received invalid output (${feedback.code}); sending one final correction request to the same model using the retained evidence.`, "warning");
+  try {
+    const corrected = await completeNativeRequest(ctx, target, buildCommitCorrectionModelRequest(evidence, args, {
+      ...feedback,
+      previousOutput: output,
+    }), signal, COMMIT_OUTPUT_MAX_TOKENS);
+    const generated = parseNativeCommitOutput(corrected, args.scope);
+    if (commitPresentationIssue(generated)) {
+      ctx.ui.notify(`/${commandName} could not obtain the requested commit layout. ${safeOriginal ? "Keeping the original safe text" : "Keeping the safe corrected text"}; review and edit it before use. No further model request will be made.`, "warning");
+      return safeOriginal ? output : corrected;
+    }
+    return corrected;
+  } catch (error) {
+    if (signal.aborted || isCode(error, "GENERATION_CANCELLED")) throw abortError();
+    if (!safeOriginal) throw error;
+    ctx.ui.notify(`/${commandName} presentation rewrite failed. Keeping the original safe text for manual editing; no further model request will be made.`, "warning");
+    return output;
+  }
+}
+
 async function generateWithTarget(
   ctx: ExtensionCommandContext,
   target: NativeGenerationTarget,
@@ -435,10 +483,16 @@ async function generateWithTarget(
   signal: AbortSignal,
 ): Promise<string> {
   const args = { language: preferences.language, scope: preferences.scope };
+  let output: string;
+  let evidence: CommitCorrectionEvidence = snapshot;
   if (snapshot.byteLength <= COMMIT_GENERATION_DIRECT_MAX_BYTES) {
-    return await completeNativeRequest(ctx, target, buildCommitModelRequest(snapshot, args), signal, COMMIT_OUTPUT_MAX_TOKENS);
+    output = await completeNativeRequest(ctx, target, buildCommitModelRequest(snapshot, args), signal, COMMIT_OUTPUT_MAX_TOKENS);
+  } else {
+    const result = await completeChunkedCommit(ctx, target, snapshot, args, signal, COMMAND_NAME);
+    output = result.output;
+    evidence = { kind: "summaries", context: snapshot, summaries: result.summaries };
   }
-  return (await completeChunkedCommit(ctx, target, snapshot, args, signal, COMMAND_NAME)).output;
+  return await finalizeCommitOutput(ctx, target, evidence, args, output, signal, COMMAND_NAME, false);
 }
 
 async function generateMessages(
@@ -1062,22 +1116,9 @@ export default function gitGuidedWorkflow(pi: ExtensionAPI): void {
         } else {
           ({ output, summaries } = await completeChunkedCommit(ctx, invocation.target, context, args, signal, COMMIT_GENERATION_COMMAND_NAME));
         }
-        let generated: { short: string; long: string };
-        try {
-          generated = parseNativeCommitOutput(output, args.scope);
-        } catch (error) {
-          if (!(error instanceof GuidedGitError)) throw error;
-          ctx.ui.notify(`/${COMMIT_GENERATION_COMMAND_NAME} received invalid output (${error.code}); sending one final correction request to the same model using the retained evidence.`, "warning");
-          const evidence = summaries
-            ? { kind: "summaries" as const, context, summaries }
-            : context;
-          const correctedOutput = await completeNativeRequest(ctx, invocation.target, buildCommitCorrectionModelRequest(evidence, args, {
-            code: error.code,
-            message: errorMessage(error),
-            previousOutput: output,
-          }), signal, COMMIT_OUTPUT_MAX_TOKENS);
-          generated = parseNativeCommitOutput(correctedOutput, args.scope);
-        }
+        const evidence: CommitCorrectionEvidence = summaries ? { kind: "summaries", context, summaries } : context;
+        const finalOutput = await finalizeCommitOutput(ctx, invocation.target, evidence, args, output, signal, COMMIT_GENERATION_COMMAND_NAME, true);
+        const generated = parseNativeCommitOutput(finalOutput, args.scope);
         return (await writeCommitArtifacts(context, generated, { signal, scopePolicy: args.scope, queue: withFileMutationQueue })).paths;
       });
     },

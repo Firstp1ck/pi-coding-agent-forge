@@ -166,7 +166,7 @@ assert.match(functionSource("closeTerminalTabs"), /clearFeatureDecisionStateForT
 assert.match(app, /case "webui_connected":[\s\S]*clearFeatureDecisionStateForTab\(connectedTabId, \{ render: true \}\)[\s\S]*scheduleForegroundReconcile\("event stream reconnect", 0\)/, "reconnect should clear local state before authoritative replay");
 assert.match(app, /statusKey === FEATURE_DECISION_OUTPUT_STATUS_KEY[\s\S]*handleFeatureDecisionOutputStatus[\s\S]*return;[\s\S]*statusKey === FEATURE_CATEGORY_STATUS_KEY[\s\S]*return;[\s\S]*statusEntries\.set/, "both feature statuses should be intercepted before generic footer storage while preserving category handling");
 
-assert.match(html, /\/styles\.css\?v=152/, "integrated stylesheet changes should advance the cache query");
-assert.match(html, /\/app\.js\?v=183/, "integrated app changes should advance the cache query");
+assert.match(html, /\/styles\.css\?v=154/, "integrated stylesheet changes should advance the cache query");
+assert.match(html, /\/app\.js\?v=184/, "integrated app changes should advance the cache query");
 
 console.log("feature decision-output popup static checks passed");

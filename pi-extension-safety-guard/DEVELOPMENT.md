@@ -102,6 +102,8 @@ Prompts cap the authorization display at 12,000 characters. If the full scope do
 
 The request contains rule/category/risk metadata, cwd, and bounded command/path input, not conversation history, file contents, tool results, or credentials. Bash combines pending risk labels and categories and uses the highest matching risk level. Oversized bash input skips model review instead of approving from incomplete text.
 
+The auth adapter uses pi-ai's `ProviderHeaders` type and forwards the returned headers unchanged. Null values are header-deletion markers, not missing credentials. `tests/auto-review.test.mjs` verifies object identity and null preservation at the model-call boundary.
+
 Calls use the configured authenticated model without tools, retries, or cache retention. Bounds remain a 20-second timeout and a 256-token output budget. Accept exactly one JSON object containing only `verdict` (`allow` or `block`) and a one-line reason of at most 512 characters. Authentication failure, timeout, malformed output, and invalid responses fall back to confirmation.
 
 ## Verification

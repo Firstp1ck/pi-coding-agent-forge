@@ -60,8 +60,8 @@ assert.match(css, /\.optional-feature-title \{[\s\S]*?flex-direction: column;[\s
 assert.match(readme, /\+.*initial system prompt[\s\S]*?\+\.\.\..*session is running[\s\S]*?-.*no measured system-prompt text/i, "README should explain the symbols in user language");
 assert.match(technical, /prompt-impact indicators[\s\S]*?tool schemas and ordinary user or tool messages are not counted/i, "technical reference should state the measurement boundary");
 assert.match(development, /reports\/pi-default-system-prompt-evaluation\.md[\s\S]*?promptImpact/, "contributor guide should identify the evidence source and catalog field");
-assert.match(html, /styles\.css\?v=152/, "indicator styles should advance the stylesheet revision");
-assert.match(html, /app\.js\?v=183/, "indicator rendering should advance the app revision");
-assert.match(serviceWorker, /const CACHE_NAME = "pi-webui-pwa-v154"/, "browser asset changes should advance the PWA cache identity");
+assert.match(html, /styles\.css\?v=154/, "indicator styles should advance the stylesheet revision");
+assert.match(html, /app\.js\?v=184/, "indicator rendering should advance the app revision");
+assert.match(serviceWorker, /const CACHE_NAME = "pi-webui-pwa-v155"/, "browser asset changes should advance the PWA cache identity");
 
 console.log("optional-feature-prompt-impact-static.test.mjs passed");

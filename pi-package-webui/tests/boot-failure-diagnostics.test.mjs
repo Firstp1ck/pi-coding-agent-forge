@@ -65,7 +65,7 @@ function makeEnvironment({
     reload: new FakeElement(),
     copyStatus: new FakeElement(),
   };
-  const styleLink = new FakeElement({ href: "http://127.0.0.1:31415/styles.css?v=152", sheet: stylesheetLoaded ? {} : null });
+  const styleLink = new FakeElement({ href: "http://127.0.0.1:31415/styles.css?v=154", sheet: stylesheetLoaded ? {} : null });
   const listeners = new Map();
   const timers = new Map();
   let timerId = 0;
@@ -84,7 +84,7 @@ function makeEnvironment({
     removeEventListener(name) { listeners.delete(name); },
   };
   const document = {
-    currentScript: new FakeElement({ dataset: { appSrc: "/app.js?v=183" } }),
+    currentScript: new FakeElement({ dataset: { appSrc: "/app.js?v=184" } }),
     readyState: "complete",
     querySelector(selector) {
       return {
@@ -232,7 +232,7 @@ for (const moduleName of startupModuleNames) {
   assert.ok(serviceWorker.includes(`"/${moduleName}"`), `the PWA app shell should include every app.js startup module: ${moduleName}`);
 }
 assert.match(serviceWorker, /pi-webui-pwa-v\d+/, "the app-shell cache should retain a versioned identity");
-assert.ok(html.indexOf('id="webuiBootLoader"') < html.indexOf("/app.js?v=183"), "the inline loader should own app module startup");
+assert.ok(html.indexOf('id="webuiBootLoader"') < html.indexOf("/app.js?v=184"), "the inline loader should own app module startup");
 assert.doesNotMatch(html, /<script type="module" src="\/app\.js/, "the app module should not bypass the guarded loader");
 
 console.log("boot-failure-diagnostics.test.mjs passed");

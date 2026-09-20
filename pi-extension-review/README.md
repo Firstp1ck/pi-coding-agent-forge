@@ -12,6 +12,8 @@ Review Git changes, session work, or selected paths against a frozen snapshot wi
 
 ## Install
 
+Requires Pi 0.86.0 or newer.
+
 ```bash
 pi install npm:@firstpick/pi-extension-review
 ```

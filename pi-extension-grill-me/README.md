@@ -4,7 +4,7 @@ Turn an early idea into a questionnaire-guided design interview before implement
 
 ## What you can do
 
-- Work through related design decisions in short questionnaire rounds.
+- Work through related design decisions in short questionnaire rounds and record each round's answers together.
 - See a recommendation and practical choices for each question, with an Other field for your own answer.
 - Ask Pi to clarify a question, then continue the same questionnaire without losing earlier answers.
 - Keep resolved decisions and remaining risks in a Markdown summary.
@@ -26,6 +26,8 @@ Start with the plan or idea you want to examine:
 ```
 
 Pi checks the project for facts it can answer, then groups the decisions it still needs from you into questionnaire rounds. Choose the answers that fit, use Other when the listed choices do not, or ask for clarification before answering.
+
+After you finish a round, Pi records its answers in one batch instead of making a separate recording call for each question. Each question still has its own decision in the saved summary.
 
 You can also run `/grill-me` without a plan. The first questionnaire lets you choose a concrete plan already present in the conversation or project, when one exists, or describe one through Other. Grill Me does not invent a missing plan.
 

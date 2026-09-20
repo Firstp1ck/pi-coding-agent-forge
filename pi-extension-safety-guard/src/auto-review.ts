@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { completeSimple } from "@earendil-works/pi-ai/compat";
+import type { ProviderHeaders } from "@earendil-works/pi-ai";
 import type { SafetyGuardThinkingLevel } from "./config.mjs";
 
 export const AUTO_REVIEW_INPUT_MAX_CHARS = 4_096;
@@ -31,7 +32,7 @@ export type AutoReviewModelConfig = {
 type ModelRegistryLike = {
   find(provider: string, modelId: string): any;
   getApiKeyAndHeaders(model: any): Promise<
-    | { ok: true; apiKey?: string; headers?: Record<string, string>; env?: Record<string, string> }
+    | { ok: true; apiKey?: string; headers?: ProviderHeaders; env?: Record<string, string> }
     | { ok: false; error: string }
   >;
 };

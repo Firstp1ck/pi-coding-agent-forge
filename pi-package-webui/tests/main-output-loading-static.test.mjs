@@ -58,9 +58,9 @@ assert.match(css, /@media \(prefers-reduced-motion: reduce\)[\s\S]*?animation-du
 assert.match(css, /body\.terminal-tabs-left \.main-output-surface \{ grid-row: 4; \}[\s\S]*body\.terminal-tabs-left \.footer-status-host \{ grid-row: 7; \}[\s\S]*body\.terminal-tabs-left \.context-meter-bar \{ grid-row: 8; \}/, "sidebar tab placement should keep the loading overlay anchored to the footer host");
 assert.match(css, /body\.subagent-terminal-active \.main-output-surface,[\s\S]*body\.subagent-terminal-active \.main-output-loading,/, "dedicated subagent output should hide the main transcript and its loading status");
 
-assert.match(html, /styles\.css\?v=152/, "the stylesheet cache query should advance");
-assert.match(html, /app\.js\?v=183/, "the app cache query should advance");
-assert.match(serviceWorker, /const CACHE_NAME = "pi-webui-pwa-v154"/, "the PWA cache identity should advance with browser assets");
+assert.match(html, /styles\.css\?v=154/, "the stylesheet cache query should advance");
+assert.match(html, /app\.js\?v=184/, "the app cache query should advance");
+assert.match(serviceWorker, /const CACHE_NAME = "pi-webui-pwa-v155"/, "the PWA cache identity should advance with browser assets");
 assert.match(readme, /Loading conversation history/, "user documentation should describe the plain-language loading feedback");
 assert.match(development, /main output loading/i, "developer documentation should preserve the request-ownership contract");
 

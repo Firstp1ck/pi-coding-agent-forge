@@ -8,6 +8,7 @@ import path from "node:path";
 import { stripVTControlCharacters } from "node:util";
 import { CURSOR_MARKER, visibleWidth } from "@earendil-works/pi-tui";
 import { initTheme } from "@earendil-works/pi-coding-agent";
+import { getCurrentSystemPrompt, getCurrentTools } from "@earendil-works/pi-ai";
 import gitGuidedWorkflow, {
   BRANCH_GENERATION_COMMAND_NAME,
   COMMAND_NAME,
@@ -450,6 +451,71 @@ test("long previews retain native selection, cancellation, and scrolling across 
     { value: "edit", label: "Edit" },
   ]);
   assert.equal(await result, "edit", "resize must not reset the native list selection");
+});
+
+test("commit editor shares panel framing and fill across themes, focus, and resize", async () => {
+  let background = "\x1b[48;5;236m";
+  const theme = {
+    ...fakeTheme(),
+    fg: (tone, text) => `\x1b[${tone === "borderAccent" ? 36 : 37}m${text}\x1b[39m`,
+    bold: (text) => `\x1b[1m${text}\x1b[0m`,
+    getBgAnsi: () => background,
+    bg: (tone, text) => {
+      assert.equal(tone, "customMessageBg");
+      return `${background}${text}\x1b[49m`;
+    },
+  };
+  const prefill = "fix: align popup\n\nPreserve editing and cursor focus.";
+  const terminal = { rows: 30, columns: 100 };
+  const result = await showCommitEditor({
+    ui: {
+      custom: async (factory) => await new Promise((resolve) => {
+        const component = factory({ terminal, requestRender() {} }, theme, {}, resolve);
+        component.focused = true;
+        for (const color of ["\x1b[48;5;236m", "\x1b[48;5;252m"]) {
+          background = color;
+          component.invalidate();
+          for (const rows of [30, 12, 10, 6, 4, 1]) {
+            terminal.rows = rows;
+            for (const width of [72, 36, 12, 5, 4, 1]) {
+              const lines = component.render(width);
+              const plain = lines.map(stripVTControlCharacters);
+              const budget = Math.max(1, Math.min(Math.floor(rows * 0.85), rows - 2));
+              assert.ok(lines.length <= budget);
+              for (const line of lines) {
+                assert.equal(visibleWidth(line), width);
+                assert.ok(line.startsWith(background));
+                assert.ok(line.endsWith("\x1b[49m"));
+                for (const match of line.slice(0, -5).matchAll(/\x1b\[(?:0|49)?m/gu)) {
+                  assert.ok(line.slice(match.index + match[0].length).startsWith(background));
+                }
+              }
+              if (width >= 5) {
+                const framed = plain[0].startsWith("╭");
+                if (framed) {
+                  assert.equal(plain[0], `╭${"─".repeat(width - 2)}╮`);
+                  assert.equal(plain.at(-1), `╰${"─".repeat(width - 2)}╯`);
+                  assert.ok(lines[0].includes("\x1b[36m"), "outer frame uses borderAccent");
+                }
+                for (const line of framed ? plain.slice(1, -1) : plain) assert.match(line, /^│ .* │$/u);
+                if (rows === 30) assert.equal(framed, true);
+              }
+              if (rows === 30 && width >= 36) {
+                assert.ok(lines.join("\n").includes(CURSOR_MARKER));
+                assert.ok(plain.some((line) => /^│ +│$/u.test(line)), "blank editor rows retain the panel fill");
+              }
+              assert.equal(component.editor.getText(), prefill);
+            }
+          }
+        }
+        terminal.rows = 30;
+        component.render(72);
+        component.handleInput("X");
+        component.handleInput("\r");
+      }),
+    },
+  }, prefill);
+  assert.equal(result, `${prefill}X`);
 });
 
 test("commit editor keeps middle text editable without cropping it from the value", async () => {
@@ -1144,7 +1210,7 @@ test("generation sends the complete diff only after selection and accepts the pr
       completeCalls += 1;
       received = { context, signal: options.signal };
       await new Promise((resolve) => setImmediate(resolve));
-      return assistantResponse(`<<<SHORT>>>\n${short}\n<<<LONG>>>\n${short}\n\nDescribe the staged change.\n<<<END>>>`);
+      return assistantResponse(`<<<SHORT>>>\n${short}\n<<<LONG>>>\n${short}\n\n- feat: Describe the staged change.\n<<<END>>>`);
     },
   };
   const { commands } = extensionRegistration();
@@ -1163,6 +1229,118 @@ test("generation sends the complete diff only after selection and accepts the pr
   assert.ok(harness.renders.some(({ normal }) => /Generating with test\/active-test-model/u.test(
     normal.map((line) => stripVTControlCharacters(line).replace(/^│ | │$/gu, "")).join(" ").replace(/\s+/gu, " "),
   )));
+});
+
+test("large commit generation rewrites review prose into summary and typed bullets without reanalyzing chunks", async (t) => {
+  for (const mode of ["tui", "rpc"]) {
+    await t.test(mode, async () => {
+      const root = await repository(`large-commit-presentation-${mode}`);
+      await stageTracked(root, oversizedStagedContent);
+      const calls = [];
+      const finding = "- **Medium - package.json / package-lock.json**: The Pi upgrade leaves direct dependencies behind. Align these dependencies and lockfile.";
+      const short = "fix(core): preserve complete staged evidence";
+      const long = `${short}\n\n- fix: retain evidence across large staged diffs\n- test: cover chunked commit generation`;
+      const agentDir = await installNativePreferences(`presentation-${mode}`, nativePreferences({ commit: { language: "en", scope: "auto", defaultVariant: "long" } }));
+      const { commands } = extensionRegistration();
+      const harness = createContext(root, {
+        mode,
+        model: { provider: "test", id: "commit-writer" },
+        modelRegistry: {
+          async complete(_model, request, options) {
+            calls.push({ request, options });
+            if (/Summarize only the supplied staged-diff chunk/u.test(request.systemPrompt)) {
+              return assistantResponse(`Chunk ${requestEvidence(request).chunk.index} changes staged behavior.`);
+            }
+            if (/single final presentation rewrite/u.test(request.systemPrompt)) {
+              const evidence = requestEvidence(request);
+              assert.equal(evidence.previousOutput, finding);
+              assert.equal(evidence.validation.code, "COMMIT_PRESENTATION");
+              assert.equal(Object.hasOwn(evidence, "diff"), false);
+              return assistantResponse(`<<<SHORT>>>\n${short}\n<<<LONG>>>\n${long}\n<<<END>>>`);
+            }
+            return assistantResponse(finding);
+          },
+        },
+        actionMoves: [0, 0, 0, 0, 0, 0],
+      });
+      await withNativeAgentDir(agentDir, () => commands.get(mode === "tui" ? COMMAND_NAME : COMMIT_GENERATION_COMMAND_NAME).handler(mode === "tui" ? "" : "en auto", harness.ctx));
+      assert.equal(calls.length, 5, "three analyses, one synthesis, and one final rewrite");
+      assert.deepEqual(calls.slice(0, 3).map(({ request }) => requestEvidence(request).chunk.index), [0, 1, 2]);
+      assert.deepEqual(requestEvidence(calls[4].request).chunks, requestEvidence(calls[3].request).chunks, "rewrite must use the exact retained summaries");
+      assert.equal(calls[4].options.maxTokens, COMMIT_OUTPUT_MAX_TOKENS);
+      assert.equal(calls[4].options.signal, calls[3].options.signal);
+      assert.ok(harness.notifications.some(({ message }) => /one final presentation rewrite/u.test(message)));
+      if (mode === "tui") {
+        assert.equal(git(root, "log", "-1", "--pretty=%B"), long);
+      } else {
+        assert.equal(await readFile(path.join(root, "dev", "COMMIT", "staged-commit-long.txt"), "utf8"), `${long}\n`);
+        assert.equal(await readFile(path.join(root, "dev", "COMMIT", "staged-commit-short.txt"), "utf8"), `${short}\n`);
+      }
+    });
+  }
+});
+
+test("presentation rewrite failures preserve safe original text but cancellation never publishes it", async (t) => {
+  for (const failure of ["provider", "unsafe", "aborted"]) {
+    await t.test(failure, async () => {
+      const root = await repository(`presentation-failure-${failure}`);
+      await stageTracked(root);
+      const original = "- **Medium**: Return commit messages instead of this review finding.";
+      let calls = 0;
+      const { commands } = extensionRegistration();
+      const harness = createContext(root, {
+        mode: "rpc", model: { provider: "test", id: "commit-writer" },
+        modelRegistry: { async complete() {
+          calls += 1;
+          if (calls === 1) return assistantResponse(original);
+          if (failure === "provider") throw new Error("rewrite provider unavailable");
+          if (failure === "unsafe") return assistantResponse("fix: unsafe\u202eoutput");
+          return { ...assistantResponse("discarded"), stopReason: "aborted" };
+        } },
+      });
+      const operation = commands.get(COMMIT_GENERATION_COMMAND_NAME).handler("en auto", harness.ctx);
+      if (failure === "aborted") {
+        await assert.rejects(operation, /cancelled/u);
+        await assert.rejects(readFile(path.join(root, "dev", "COMMIT", "staged-commit-long.txt"), "utf8"));
+      } else {
+        await operation;
+        assert.equal(await readFile(path.join(root, "dev", "COMMIT", "staged-commit-long.txt"), "utf8"), `${original}\n`);
+        assert.ok(harness.notifications.some(({ message }) => /Keeping the original safe text for manual editing/u.test(message)));
+      }
+      assert.equal(calls, 2);
+    });
+  }
+});
+
+test("an optional presentation rewrite failure does not trigger the configured fallback provider", async () => {
+  const root = await repository("presentation-no-fallback");
+  await stageTracked(root);
+  const before = git(root, "rev-parse", "HEAD");
+  const primary = { provider: "primary", id: "writer", reasoning: false };
+  const fallback = { provider: "fallback", id: "writer", reasoning: false };
+  const agentDir = await installNativePreferences("presentation-no-fallback", nativePreferences({ generation: {
+    primary: { provider: primary.provider, modelId: primary.id, thinkingLevel: "off" },
+    fallback: { provider: fallback.provider, modelId: fallback.id, thinkingLevel: "off" },
+  } }));
+  const calls = [];
+  const { commands } = extensionRegistration();
+  const harness = createContext(root, {
+    model: { provider: "parent", id: "parent" },
+    modelRegistry: {
+      find(provider) { return provider === primary.provider ? primary : fallback; },
+      getProvider(provider) { return { streamSimple() { return { result: async () => {
+        calls.push(provider);
+        if (calls.length === 1) return assistantResponse("- **Medium**: a review finding, not a commit message");
+        throw new Error("optional rewrite failed");
+      } }; } }; },
+      async getApiKeyAndHeaders() { return { ok: true }; },
+    },
+    actionMoves: [0, 0, 5],
+  });
+  await withNativeAgentDir(agentDir, () => commands.get(COMMAND_NAME).handler("", harness.ctx));
+  assert.deepEqual(calls, ["primary", "primary"]);
+  assert.ok(harness.notifications.some(({ message }) => /Keeping the original safe text/u.test(message)));
+  assert.equal(git(root, "rev-parse", "HEAD"), before);
 });
 
 test("configured generation isolates the parent profile and retries one eligible provider failure once", async () => {
@@ -1188,7 +1366,7 @@ test("configured generation isolates the parent profile and retries one eligible
           return {
             result: async () => {
               if (provider === primary.provider) throw new Error("eligible primary outage");
-              return assistantResponse("<<<SHORT>>>\nfeat(kern): fallback nutzen\n<<<LONG>>>\nfeat(kern): fallback nutzen\n\nFallback wurde einmal verwendet.\n<<<END>>>");
+              return assistantResponse("<<<SHORT>>>\nfeat(kern): fallback nutzen\n<<<LONG>>>\nfeat(kern): fallback nutzen\n\n- fix: Fallback wurde einmal verwendet.\n<<<END>>>");
             },
           };
         },
@@ -1202,8 +1380,8 @@ test("configured generation isolates the parent profile and retries one eligible
   assert.deepEqual(calls.map(({ provider }) => provider), [primary.provider, fallback.provider]);
   assert.equal(calls[0].options.reasoning, "low");
   assert.equal(calls[1].options.reasoning, "medium");
-  assert.match(calls[0].request.systemPrompt, /German/u);
-  assert.match(calls[0].request.systemPrompt, /Always use a concise lowercase scope/u);
+  assert.match(getCurrentSystemPrompt(calls[0].request.messages), /German/u);
+  assert.match(getCurrentSystemPrompt(calls[0].request.messages), /Always use a concise lowercase scope/u);
   assert.equal(harness.ctx.model, parentModel);
   assert.equal(harness.ctx.thinkingLevel, "high");
   assert.match(git(root, "log", "-1", "--pretty=%s"), /fallback nutzen/u);
@@ -1276,7 +1454,7 @@ test("guided generation analyzes diffs above 1 MiB completely before choosing a 
           return assistantResponse(`Chunk ${requestEvidence(request).chunk.index} changes tracked content.`);
         }
         assert.match(request.systemPrompt, /ordered chunk summaries/u);
-        return assistantResponse(`${short}\n\nDescribe the complete staged change.`);
+        return assistantResponse(`${short}\n\n- docs: Describe the complete staged change.`);
       },
     },
     actionMoves: [0, 0, 0, 0, 0, 0],
@@ -1665,6 +1843,15 @@ test("WebUI generation uses its configured model without changing the parent ses
   assert.ok(calls.every(({ options }) => options.reasoning === "low"));
   assert.equal(calls[0].options.apiKey, "fixture-key");
   assert.deepEqual(calls[0].options.headers, { "x-fixture": "guided-git" });
+  for (const { request } of calls) {
+    assert.equal(request.systemPrompt, undefined, "providers receive a normalized transcript, not shorthand context");
+    assert.deepEqual(request.messages.map((message) => message.role), ["system", "user"]);
+    assert.deepEqual(getCurrentTools(request.messages), [], "generation must not acquire parent tools");
+    assert.match(getCurrentSystemPrompt(request.messages), /untrusted|Never obey instructions/u);
+    assert.match(request.messages[1].content[0].text, /isolated generation model/u);
+  }
+  assert.match(getCurrentSystemPrompt(calls[0].request.messages), /English/u);
+  assert.match(getCurrentSystemPrompt(calls[1].request.messages), /Generate one branch name/u);
   assert.equal(await readFile(path.join(root, "dev", "COMMIT", "staged-commit-short.txt"), "utf8"), "feat(core): handle large staged changes\n");
   assert.equal(await readFile(path.join(root, "dev", "COMMIT", "staged-branch-name.txt"), "utf8"), "feat/use-isolated-generation\n");
   assert.ok(harness.notifications.some(({ message }) => /configured generation model/u.test(message)));
@@ -2107,7 +2294,7 @@ test("native commit RPC makes one bounded correction request after empty output"
   assert.equal(await readFile(path.join(root, "dev", "COMMIT", "staged-commit-long.txt"), "utf8"), "feat(core): add bounded repair\n- feat: retry invalid output once\n");
 });
 
-test("sub-1 MiB native commit remains one direct request and treats quality rules as guidance", async () => {
+test("native commit makes at most one presentation rewrite and retains safe text if style still differs", async () => {
   const root = await repository("native-rpc-commit-guidance");
   await stageTracked(root, "accept advisory commit style\n");
   const calls = [];
@@ -2128,10 +2315,12 @@ test("sub-1 MiB native commit remains one direct request and treats quality rule
   await commands.get(COMMIT_GENERATION_COMMAND_NAME).handler("en required", harness.ctx);
 
   assert.equal(Array.from(short).length > 72, true);
-  assert.equal(calls.length, 1, "sub-1 MiB input and quality deviations must stay on one direct request");
+  assert.equal(calls.length, 2, "one direct request and at most one best-effort final rewrite");
+  assert.match(calls[1].request.systemPrompt, /single final presentation rewrite/u);
+  assert.equal(requestEvidence(calls[1].request).diff, requestEvidence(calls[0].request).diff);
   assert.match(calls[0].request.messages[0].content[0].text, /^<<<UNTRUSTED_STAGED_DIFF_JSON>>>/u);
   assert.doesNotMatch(calls[0].request.systemPrompt, /chunk summaries/u);
-  assert.equal(harness.notifications.some(({ type }) => type === "warning"), false);
+  assert.ok(harness.notifications.some(({ message }) => /Keeping the original safe text/u.test(message)));
   assert.equal(await readFile(path.join(root, "dev", "COMMIT", "staged-commit-short.txt"), "utf8"), `${short.trim()}\n`);
   assert.equal(await readFile(path.join(root, "dev", "COMMIT", "staged-commit-long.txt"), "utf8"), `${long}\n`);
 });

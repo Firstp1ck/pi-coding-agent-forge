@@ -12,7 +12,7 @@ import { createTranscriptRenderer, groupConsecutiveThinkingItems, groupConsecuti
 import { createStreamDerivedOutputState } from "./stream-derived-output.mjs";
 import { advanceStreamingMarkdownTail } from "./stream-markdown-tail.mjs";
 import { createLatestWinsRenderScheduler } from "./stream-render-scheduler.mjs";
-import { classifyTranscriptStreamEvent, createStreamOutputController, reconcileTranscriptThinkingSnapshot } from "./stream-output-controller.mjs";
+import { classifyTranscriptStreamEvent, createStreamOutputController, createToolCallStreamTracker, reconcileTranscriptThinkingSnapshot } from "./stream-output-controller.mjs";
 import { installMiddleButtonDragScroll } from "./middle-button-drag-scroll.mjs";
 import { tokenizeCode } from "./syntax-highlight.mjs";
 import { PI_THEME_EXPORT_FIELDS, THEME_TOKEN_GROUPS, canonicalizeTheme, serializeTheme, themeColorToRgb, validateTheme } from "./theme-contract.mjs";
@@ -697,6 +697,7 @@ let streamToolCallRawArguments = "";
 let streamToolCallName = "";
 let streamToolCallId = "";
 let streamToolCallContentIndex = null;
+const streamToolCalls = createToolCallStreamTracker({ isHiddenTool: isIntercomTransportToolName });
 let streamToolCallComplete = false;
 let streamThinkingBubble = null;
 let streamThinking = null;
@@ -942,7 +943,7 @@ const assistantStreamRenderScheduler = createLatestWinsRenderScheduler({
 });
 const thinkingStreamRenderScheduler = createLatestWinsRenderScheduler({
   render: (options = {}) => {
-    if (streamThinkingRawText) setStreamingThinkingText(streamThinkingRawText, options);
+    setStreamingThinkingText(streamThinkingRawText, options);
     if (options.complete) streamThinkingBubble?.classList.add("complete");
     completeNormalStreamScheduledRender();
   },
@@ -984,13 +985,18 @@ const streamOutputController = createStreamOutputController({
   applyTextUpdate: (event) => handleMessageUpdate(event),
   applyThinkingUpdate: (event) => handleMessageUpdate(event),
   applyToolCallUpdate: (event) => {
-    if (isIntercomToolCallUpdate(event)) {
-      streamToolCallSeen = true;
-      suppressStreamingAssistantTextBeforeToolCall();
+    const call = streamToolCalls.ingest(event);
+    streamToolCallSeen = true;
+    suppressStreamingAssistantTextBeforeToolCall();
+    if (!call?.visible) {
       resetStreamingToolCallState({ remove: true });
       return;
     }
-    handleMessageUpdate(event);
+    if (compactOutputActive()) {
+      handleCompactMessageUpdate(event);
+      return;
+    }
+    updateStreamingToolCallFromState(call);
   },
   applyToolExecutionUpdate: (event) => {
     if (!compactOutputActive() && !isIntercomTransportToolName(event?.toolName)) applyTranscriptToolExecutionUpdate(event);
@@ -37305,13 +37311,6 @@ function isIntercomTransportToolName(value) {
   return String(value || "").trim().toLowerCase() === "intercom";
 }
 
-function isIntercomToolCallUpdate(event) {
-  const update = event?.assistantMessageEvent || {};
-  const part = assistantToolCallPartFromUpdate(event, update);
-  const rawName = update.name || update.toolName || update.toolCall?.name || (part ? assistantToolCallName(part) : "");
-  return isIntercomTransportToolName(rawName);
-}
-
 function assistantToolCallArguments(part) {
   return part?.arguments || part?.args || part?.input || part?.toolCall?.arguments || {};
 }
@@ -45537,9 +45536,17 @@ function flushCompactLiveOutput() {
       });
       restoreChatTextSelection(selectionSnapshot);
     }
+  } else {
+    removeCompactLiveBubble(compactTextBubble);
+    compactTextBubble = null;
+    compactTextNode = null;
   }
   if (compactLiveState.thinking && ensureCompactThinkingBubble()) {
     if (compactThinkingNode?._rawThinkingText !== compactLiveState.thinking) renderThinkingMarkdown(compactThinkingNode, compactLiveState.thinking);
+  } else if (!compactLiveState.thinking) {
+    removeCompactLiveBubble(compactThinkingBubble);
+    compactThinkingBubble = null;
+    compactThinkingNode = null;
   }
   scheduleChatFollowScroll();
 }
@@ -45915,6 +45922,7 @@ function resetStreamBubble({ preserveCompact = false } = {}) {
   resetStreamDerivedOutputState("reset");
   streamBubbleVisibleSince = 0;
   streamToolCallSeen = false;
+  streamToolCalls.reset();
   resetStreamingToolCallState({ remove: true });
   streamThinkingBubble = null;
   streamThinking = null;
@@ -45992,54 +46000,18 @@ function assistantStreamingMessage(event) {
   return partial?.role === "assistant" ? partial : null;
 }
 
-function assistantToolCallPartFromUpdate(event, update = event?.assistantMessageEvent || {}) {
-  if (isAssistantToolCallPart(update.toolCall)) return update.toolCall;
-  const message = assistantStreamingMessage(event);
-  const content = message?.content;
-  if (!Array.isArray(content)) return null;
-  const contentIndex = Number(update.contentIndex);
-  if (Number.isInteger(contentIndex) && isAssistantToolCallPart(content[contentIndex])) return content[contentIndex];
-  for (let index = content.length - 1; index >= 0; index -= 1) {
-    if (isAssistantToolCallPart(content[index])) return content[index];
-  }
-  return null;
-}
-
-function streamToolCallNameFromUpdate(update, part) {
-  const rawName = update.name || update.toolName || update.toolCall?.name || assistantToolCallName(part);
-  const name = runIndicatorToolName(rawName);
-  return name === "unknown" ? "tool" : name;
-}
-
-function streamingToolCallContentIndexFromUpdate(update) {
-  const contentIndex = Number(update.contentIndex);
-  return Number.isInteger(contentIndex) ? contentIndex : null;
-}
-
-function updateStreamingToolCallFromEvent(event, { reset = false, appendDelta = false, complete = false, scroll = false } = {}) {
-  const update = event.assistantMessageEvent || {};
-  const part = assistantToolCallPartFromUpdate(event, update);
-  const contentIndex = streamingToolCallContentIndexFromUpdate(update);
-  if (reset || (contentIndex !== null && streamToolCallContentIndex !== null && contentIndex !== streamToolCallContentIndex)) {
+function updateStreamingToolCallFromState(call) {
+  if (!call?.visible) return;
+  if (call.contentIndex !== streamToolCallContentIndex || call.id !== streamToolCallId) {
     resetStreamingToolCallState({ remove: true });
   }
-  streamToolCallContentIndex = contentIndex ?? streamToolCallContentIndex;
-  streamToolCallName = streamToolCallNameFromUpdate(update, part) || streamToolCallName || "tool";
-  streamToolCallId = assistantToolCallId(update.toolCall || part) || streamToolCallId;
-  streamToolCallComplete = !!complete;
-
-  const partArgumentText = toolCallArgumentsText(assistantToolCallArguments(update.toolCall || part), { includeEmptyObject: false });
-  if (reset) streamToolCallRawArguments = partArgumentText || "";
-  if (appendDelta && update.delta !== undefined && update.delta !== null) streamToolCallRawArguments += typeof update.delta === "string" ? update.delta : String(update.delta);
-  if (!streamToolCallRawArguments && partArgumentText) streamToolCallRawArguments = partArgumentText;
-  if (complete) {
-    const finalArgumentText = toolCallArgumentsText(assistantToolCallArguments(update.toolCall || part), { includeEmptyObject: true });
-    if (finalArgumentText && (finalArgumentText !== "{}" || !streamToolCallRawArguments)) streamToolCallRawArguments = finalArgumentText;
-    if (!streamToolCallRawArguments) streamToolCallRawArguments = "{}";
-  }
-
-  renderStreamingToolCallCard({ scroll });
-  return streamToolCallName || "tool";
+  streamToolCallContentIndex = call.contentIndex;
+  streamToolCallName = call.name;
+  streamToolCallId = call.id;
+  streamToolCallComplete = call.complete;
+  streamToolCallRawArguments = call.rawArguments;
+  if (call.truncated) streamToolCallRawArguments += "\n[Live arguments truncated; see the completed tool card.]";
+  renderStreamingToolCallCard();
 }
 
 function assistantTextFromMessage(message, { streaming = false } = {}) {
@@ -46080,7 +46052,13 @@ function assistantThinkingTextFromMessage(message, { streaming = false } = {}) {
 
 function setStreamingThinkingText(text, { complete = false } = {}) {
   const thinking = visibleThinkingText(text);
-  if (!thinkingOutputVisible || !thinking) return false;
+  if (!thinkingOutputVisible) return false;
+  if (!thinking) {
+    removeLiveTranscriptBubble(streamThinkingBubble, "thinking-correction");
+    streamThinkingBubble = null;
+    streamThinking = null;
+    return true;
+  }
   showStreamingThinking("");
   if (streamThinking) renderThinkingMarkdown(streamThinking, thinking, { complete });
   return true;
@@ -46120,12 +46098,10 @@ function syncStreamingThinkingFromUpdate(event, update, { placeholder = "", rend
     return render ? setStreamingThinkingText(streamThinkingRawText || placeholder) : true;
   }
   if (update.type === "thinking_end") {
-    if (delta) setStreamThinkingRawText(delta, { reconcile: true });
-    else {
-      const fallback = streamingThinkingTextFallback(event);
-      if (fallback !== null) setStreamThinkingRawText(fallback, { reconcile: true });
-    }
-    return render ? setStreamingThinkingText(streamThinkingRawText || placeholder, { complete: true }) : true;
+    const snapshot = typeof update.content === "string" ? update.content
+      : typeof update.thinking === "string" ? update.thinking : streamingThinkingTextFallback(event);
+    if (snapshot !== null) setStreamThinkingRawText(snapshot, { reconcile: true });
+    return render ? setStreamingThinkingText(streamThinkingRawText, { complete: true }) : true;
   }
   const fallback = streamingThinkingTextFallback(event);
   if (fallback === null) return false;
@@ -46152,7 +46128,7 @@ function handleMessageUpdate(event) {
     if (thinkingOutputVisible && streamThinkingRawText) thinkingStreamRenderScheduler.request({ complete: false });
   } else if (update.type === "thinking_end") {
     syncStreamingThinkingFromUpdate(event, update, { render: false });
-    if (thinkingOutputVisible && streamThinkingRawText) {
+    if (thinkingOutputVisible) {
       thinkingStreamRenderScheduler.request({ complete: true });
       thinkingStreamRenderScheduler.flushNow("thinking_end");
     }
@@ -46161,18 +46137,6 @@ function handleMessageUpdate(event) {
     if (update.type === "text_end") fallbackStreamDerivedOutput("settlement:text_end");
     assistantStreamRenderScheduler.request({ complete: update.type === "text_end" });
     if (update.type === "text_end") assistantStreamRenderScheduler.flushNow("text_end");
-  } else if (update.type === "toolcall_start") {
-    streamToolCallSeen = true;
-    suppressStreamingAssistantTextBeforeToolCall();
-    updateStreamingToolCallFromEvent(event, { reset: true });
-  } else if (update.type === "toolcall_delta") {
-    streamToolCallSeen = true;
-    suppressStreamingAssistantTextBeforeToolCall();
-    updateStreamingToolCallFromEvent(event, { appendDelta: true });
-  } else if (update.type === "toolcall_end") {
-    streamToolCallSeen = true;
-    suppressStreamingAssistantTextBeforeToolCall();
-    updateStreamingToolCallFromEvent(event, { complete: true });
   } else if (update.type === "error") {
     streamProviderErrorText = assistantStreamErrorMessage(event, update);
     appendMessage({ role: "error", title: "assistant error", timestamp: Date.now(), content: streamProviderErrorText, level: "error" }, { streaming: true });
@@ -49271,6 +49235,7 @@ function handleEvent(event) {
       }
       break;
     case "message_end": {
+      if (event.message?.role === "assistant") streamToolCalls.reset();
       if (compactOutputActive()) finishCompactLiveOutput(tabContext);
       streamMessageActive = false;
       if (event.message?.role === "assistant" && event.message.stopReason === "error") {

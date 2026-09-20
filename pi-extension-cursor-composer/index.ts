@@ -3,7 +3,7 @@ import {
 	type Api,
 	type AssistantMessage,
 	type AssistantMessageEventStream,
-	type Context,
+	type TranscriptContext,
 	createAssistantMessageEventStream,
 	type Model,
 	type SimpleStreamOptions,
@@ -724,7 +724,7 @@ function formatElapsed(ms: number): string {
 
 function streamCursorComposerProvider(
 	model: Model<Api>,
-	context: Context,
+	context: TranscriptContext,
 	options?: SimpleStreamOptions,
 ): AssistantMessageEventStream {
 	const stream = createAssistantMessageEventStream();
