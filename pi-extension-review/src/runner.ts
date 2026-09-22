@@ -1,7 +1,7 @@
 import { randomUUID, createHash } from "node:crypto";
 import { lstat, readFile, realpath } from "node:fs/promises";
 import path from "node:path";
-import { Agent, type AgentEvent, type AgentMessage, type AgentTool, type StreamFn } from "@earendil-works/pi-agent-core";
+import { Agent, type AgentEvent, type AgentMessage, type AgentTool, type FinishTurn, type StreamFn } from "@earendil-works/pi-agent-core";
 import {
   createAssistantMessageEventStream,
   StringEnum,
@@ -63,7 +63,7 @@ export type ReviewerAgentFactory = (input: {
   tools: AgentTool<any>[];
   streamFn: StreamFn;
   sessionId: string;
-  shouldStopAfterTurn: () => boolean;
+  finishTurn: FinishTurn;
 }) => ReviewerAgent;
 
 export type ReviewRuntimeStore = {
@@ -223,7 +223,7 @@ function defaultAgentFactory(input: Parameters<ReviewerAgentFactory>[0]): Review
     initialState: { model: input.model, thinkingLevel: input.thinkingLevel, systemPrompt: input.systemPrompt, tools: input.tools },
     streamFn: input.streamFn,
     sessionId: input.sessionId,
-    shouldStopAfterTurn: input.shouldStopAfterTurn,
+    finishTurn: input.finishTurn,
     toolExecution: "sequential",
   });
 }
@@ -697,7 +697,13 @@ export class DeterministicReviewRuntime {
     const agent = this.agentFactory({
       model, thinkingLevel: this.record.model.thinkingLevel, systemPrompt: systemPrompt(this.record, this.state), tools: this.createTools(),
       streamFn: createRegistryStreamFn(host.modelRegistry), sessionId: `review-${this.state.reviewId}`,
-      shouldStopAfterTurn: () => Boolean(this.record?.finalReportSubmitted || activeRef && activeRef.turns >= this.record!.limits.maxTurns),
+      finishTurn: ({ message }) => {
+        if (message.stopReason === "error" || message.stopReason === "aborted") return;
+        // turn_end has not counted the current turn yet.
+        if (this.record?.finalReportSubmitted || activeRef && activeRef.turns + 1 >= this.record!.limits.maxTurns) {
+          return { action: "end" };
+        }
+      },
     });
     this.assertLifecycle(lifecycle, signal);
     if (this.state.reviewerContext.length) agent.state.messages = jsonClone(this.state.reviewerContext) as AgentMessage[];

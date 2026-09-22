@@ -73,7 +73,7 @@ Extensions add commands, tools, interface elements, or automatic behavior to Pi.
 - **[Stats for Pi](pi-extension-stats/README.md)** — See where your Pi tokens and model costs are going over time.
 - **[Subagent Review Diversity for Pi](pi-extension-subagent-minimum-fanout/README.md)** — Checks reviewer model diversity without restricting worker or workflow fanout.
 - **[Tech News for Pi](pi-extension-tech-news/README.md)** — Bring technology news from several sources into Pi for browsing and summaries.
-- **[Todo Progress for Pi](pi-extension-todo-progress/README.md)** — Shows a live checklist for prompts that contain several steps or goals.
+- **[Todo Progress for Pi](pi-extension-todo-progress/README.md)** — Tracks multi-step work with live checklists and durable goals started by you or Pi.
 - **[Tools for Pi](pi-extension-tools/README.md)** — Turn Pi tools on or off from an interactive selector.
 - **[Upgrade Extensions for Pi](pi-extension-upgrade-extensions/README.md)** — Check and update npm-installed Pi extensions from inside Pi.
 - **[Wiki Tools for Pi](pi-extension-wiki-tools/README.md)** — Create and maintain local documentation-search extensions from a reusable template.

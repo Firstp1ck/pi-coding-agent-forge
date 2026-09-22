@@ -6,7 +6,7 @@ Advanced user behavior, controls, limits, safety, and troubleshooting informatio
 
 ## Checklist behavior
 
-The extension asks Pi to state a concise goal before beginning multi-step work and to publish short Markdown checklists with these markers:
+The extension asks Pi to call the `goal` tool with a concise outcome before beginning multi-step work, then publish short Markdown checklists with these markers:
 
 - `- [ ]` — not started
 - `- [-]` — in progress
@@ -14,11 +14,21 @@ The extension asks Pi to state a concise goal before beginning multi-step work a
 
 The widget shows up to five rows. It keeps the current list through tool-use, aborted, failed, and length-limited endings so work can be recovered. A normal final response or a newly delivered ordinary user request clears stale display state. After compaction, one complete checklist may replace the previous list.
 
-Checklist tracking is available in ordinary chat and does not enable automatic continuation by itself.
+Checklist tracking alone does not enable automatic continuation. If the goal tools are unavailable or you request no automatic continuation, Pi uses a plain `Goal:` label instead. Writing that label never starts execution by itself.
 
-## Explicit goals
+## Durable goals
 
-`/goal` is an opt-in execution mode. It keeps the submitted goal separate from the temporary checklist and requires Pi to record a checkpoint before ending each goal run. Goal text is limited to 100,000 characters after whitespace normalization; larger submissions are rejected before starting.
+You can start a durable goal with `/goal`, or Pi can set one through the `goal` tool while handling your multi-step request. Both keep the goal separate from the temporary checklist and require Pi to record a checkpoint before ending each goal run. Goal text is limited to 100,000 characters after whitespace normalization; larger submissions are rejected before starting.
+
+An agent-created goal starts within the current run. There is no second kickoff that repeats your request. The goal text and automatic-continuation notice appear in the tool result; `/goal-status`, `/goal-pause`, and `/goal-resume` work for both entry points.
+
+Pi is instructed to derive the goal from your request, preserve your constraints, and skip goal creation for simple conversational replies or requests without automatic continuation. These scope rules rely on the agent following its instructions; the extension cannot judge whether a goal accurately represents your request.
+
+The `goal` tool cannot replace an unfinished goal, take precedence over a queued `/goal`, or resume a paused, blocked, or waiting goal. Repeating the same running goal preserves its progress and continuation limits. Use `/goal` yourself to replace an unfinished goal. After completion, another agent-created goal requires a new user request.
+
+To resume, say "Resume the goal" or "Continue where you stopped." Pi is instructed to use `goal_resume`, the tool equivalent of `/goal-resume`, before continuing work. It resumes within your current conversation turn without sending a duplicate request. The goal stays the same, but its continuation limits reset. Running and completed goals cannot be resumed.
+
+The resume tool requires a new user request delivered after the goal stopped. It refuses to resume while messages or a replacement `/goal` are pending. Cancellation, explicit pause, and session restoration clear any earlier opportunity to resume. Recognizing resume intent is the agent's responsibility, not a keyword filter. Status questions and clarifications alone are not permission to resume, and resuming does not prove a blocker is resolved or a waiting job succeeded. If the tool is unavailable, use `/goal-resume` yourself.
 
 A checkpoint can report that work should continue, has completed, is blocked, or is waiting for a native background notification. Completed goals stop automatic follow-ups. Blocked, waiting, paused, cancelled, and terminally failed goals do not continue automatically.
 
@@ -49,13 +59,14 @@ The controller pauses automatically after either limit is reached:
 - 3 consecutive runs with no new observable checklist or successful tool progress;
 - 20 automatic continuations in one explicit start or resume cycle.
 
-Repeated identical tool results do not repeatedly count as progress. Explicit `/goal-resume` starts a fresh bounded continuation cycle while preserving the durable goal.
+Repeated identical tool results do not repeatedly count as progress. Explicit `/goal-resume`, or `goal_resume` in response to your request, starts a fresh bounded continuation cycle while preserving the durable goal.
 
-Reloading a session, restoring a branch, or navigating the session tree pauses goals that were running or waiting. Completed and blocked goals keep their terminal state. Run `/goal-resume` after inspecting unfinished work. During an uninterrupted session, a native custom notification can wake a waiting goal for reassessment; the controller does not poll.
+Reloading a session, restoring a branch, or navigating the session tree pauses goals that were running or waiting. Completed and blocked goals keep their terminal state. After inspecting unfinished work, ask Pi to resume or run `/goal-resume`. During an uninterrupted session, a native custom notification can wake a waiting goal for reassessment; the controller does not poll.
 
 ## Safety and limitations
 
-- Pi’s normal cancellation and `/goal-pause` take precedence over late assistant, tool, or notification events.
+- Both manual and agent-created goals enable automatic follow-ups that can consume additional tokens and incur costs. Ask for no automatic continuation to keep a task checklist-only, or disable the `goal` tool to prevent agent-created goals.
+- Pi's normal cancellation and `/goal-pause` take precedence over late assistant, tool, or notification events.
 - Provider errors and response truncation are allowed to use Pi’s native retry or compaction recovery first. A final failed or truncated settled outcome pauses the goal.
 - Goal completion, plan coverage, verification evidence, blocker truth, and job identity are agent attestations. The extension checks required fields and exact goal/run identities but does not prove the underlying claims.
 - A waiting checkpoint records a job or receipt reference, but generic custom notifications are not independently verified against a background-job registry. Treat the resulting wake as a request to reassess, not proof that the named job succeeded.
@@ -70,7 +81,9 @@ State follows the active session branch. Old checklist-only sessions remain read
 
 ## Troubleshooting
 
-- **A restored goal does not restart:** This is expected. Check `/goal-status`, then run `/goal-resume` when Pi is idle and pending messages are clear.
+- **Pi only writes a goal label:** Confirm that both `goal` and `goal_checkpoint` are enabled. A label alone does not start the controller; you can still use `/goal` to start manually.
+- **Pi cannot create a new goal:** Check `/goal-status`. Ask Pi to resume an unfinished goal, run `/goal-resume`, or replace it with your `/goal` command.
+- **A restored goal does not restart:** This is expected. Check `/goal-status`, then ask Pi to resume, or run `/goal-resume` when Pi is idle and pending messages are clear.
 - **Resume says to wait:** Let the active run and queued messages settle before trying again.
 - **A goal paused after repeated turns:** Check whether the no-progress or 20-continuation limit was reached. Inspect the remaining work before resuming.
 - **A waiting goal did not wake:** Confirm that the native job mechanism emitted a Pi notification, or use `/goal-resume` to reassess manually. The extension does not poll external work.

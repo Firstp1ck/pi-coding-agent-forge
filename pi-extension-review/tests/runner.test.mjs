@@ -105,18 +105,33 @@ test("public Agent executes a fake-provider nested tool loop with isolated tools
   assert.deepEqual(agent.state.tools.map((tool) => tool.name), ["inspect"]);
 });
 
-test("public Agent turn-stop hook prevents another provider call after accepted mixed-tool submission", async () => {
+test("public Agent finishTurn stops mixed-tool submission before another request and runs before turn_end", async () => {
   let requests = 0; let submitted = false;
+  const boundaries = [];
   const streamFn = () => { const stream = createAssistantMessageEventStream(); queueMicrotask(() => {
-    requests += 1; const message = terminalMessage("toolUse"); message.content = [
-      { type: "toolCall", id: "normal", name: "inspect", arguments: {} },
-      { type: "toolCall", id: "submit", name: "submit", arguments: {} },
-    ]; stream.push({ type: "start", partial: { ...message, stopReason: "pending" } }); stream.push({ type: "done", reason: "toolUse", message });
+    requests += 1;
+    // Bound the fixture even if a future SDK silently ignores the stopping hook.
+    const message = terminalMessage(requests >= 3 ? "stop" : "toolUse");
+    if (message.stopReason === "toolUse") message.content = [
+      { type: "toolCall", id: `normal-${requests}`, name: "inspect", arguments: {} },
+      { type: "toolCall", id: `submit-${requests}`, name: "submit", arguments: {} },
+    ]; stream.push({ type: "start", partial: { ...message, stopReason: "pending" } }); stream.push({ type: "done", reason: message.stopReason, message });
   }); return stream; };
   const tool = (name, execute) => ({ name, label: name, description: name, parameters: { type: "object", properties: {}, additionalProperties: false }, execute });
-  const agent = new Agent({ initialState: { model, thinkingLevel: "off", systemPrompt: "isolated", tools: [tool("inspect", async () => ({ content: [{ type: "text", text: "ok" }], details: {} })), tool("submit", async () => { submitted = true; return { content: [{ type: "text", text: "accepted" }], details: {}, terminate: true }; })] }, streamFn, shouldStopAfterTurn: () => submitted });
+  const agent = new Agent({
+    initialState: { model, thinkingLevel: "off", systemPrompt: "isolated", tools: [tool("inspect", async () => ({ content: [{ type: "text", text: "ok" }], details: {} })), tool("submit", async () => { submitted = true; return { content: [{ type: "text", text: "accepted" }], details: {}, terminate: true }; })] },
+    streamFn,
+    finishTurn: ({ message, toolResults }) => {
+      if (message.stopReason === "error" || message.stopReason === "aborted") return;
+      boundaries.push("finishTurn");
+      assert.equal(toolResults.length, 2);
+      return submitted ? { action: "end" } : undefined;
+    },
+  });
+  agent.subscribe((event) => { if (event.type === "turn_end") boundaries.push("turn_end"); });
   await agent.prompt("review");
   assert.equal(requests, 1);
+  assert.deepEqual(boundaries, ["finishTurn", "turn_end"]);
 });
 
 test("public Agent cancellation settles inside a tool loop", async () => {
@@ -638,6 +653,95 @@ for (const stop of ["cancel", "shutdown"]) {
       assert.notEqual((await f.storage.readState(f.frozen.state.reviewId)).phase, "complete");
       assert.notEqual(JSON.parse(await f.storage.readArtifact(f.frozen.state.reviewId, "report.json")).phase, "complete");
     } finally { release.resolve(); fs.promises.rename = originalRename; syncBuiltinESMExports(); }
+  });
+}
+
+function installReviewProvider(ctx, response) {
+  const contexts = [];
+  ctx.modelRegistry.getApiKeyAndHeaders = async () => ({ ok: true });
+  ctx.modelRegistry.getProvider = () => ({ streamSimple(_model, context) {
+    contexts.push(structuredClone(context));
+    const stream = createAssistantMessageEventStream();
+    queueMicrotask(() => {
+      const message = contexts.length > 6
+        ? { ...terminalMessage("error"), errorMessage: "fixture request ceiling exceeded" }
+        : response(contexts.length);
+      if (message.stopReason === "error" || message.stopReason === "aborted") {
+        stream.push({ type: "error", reason: message.stopReason, error: message });
+      } else {
+        stream.push({ type: "start", partial: { ...message, stopReason: "pending" } });
+        stream.push({ type: "done", reason: message.stopReason, message });
+      }
+    });
+    return stream;
+  } });
+  return contexts;
+}
+
+for (const maxTurns of [1, 2]) {
+  test(`native reviewer enforces exactly ${maxTurns} tool turns per attempt and restores context on resume`, async () => {
+    const f = await lifecycleFixture(`native-limit-${maxTurns}`, { maxTurns });
+    const contexts = installReviewProvider(f.ctx, (request) => ({ ...terminalMessage("toolUse"), content: [
+      { type: "toolCall", id: `findings-${request}`, name: "record_review_findings", arguments: { findings: [] } },
+    ] }));
+    const runtime = new DeterministicReviewRuntime(f.runtimeStore, createReviewStatusPublisher());
+    try {
+      await runtime.startFrozen(f.ctx, f.frozen.state, f.frozen.record);
+      await waitFor(() => !runtime.isActive());
+      assert.equal(contexts.length, maxTurns);
+      let state = await f.storage.readState(f.frozen.state.reviewId);
+      assert.equal(state.phase, "paused");
+      assert.equal(state.continuation.turnsUsed, maxTurns);
+      assert.match(f.ctx.notifications.at(-1).message, /turn limit/);
+      await runtime.resume(f.ctx, f.frozen.state.reviewId);
+      await waitFor(() => !runtime.isActive());
+      assert.equal(contexts.length, maxTurns * 2);
+      assert.ok(contexts[maxTurns].messages.some(message => message.role === "toolResult" && message.toolCallId === "findings-1"), "standalone Agent restoration must preserve previous tool results");
+      state = await f.storage.readState(f.frozen.state.reviewId);
+      assert.equal(state.phase, "paused");
+      assert.equal(state.continuation.turnsUsed, maxTurns * 2);
+    } finally { await runtime.pauseForShutdown(); }
+  });
+}
+
+for (const maxTurns of [1, 3]) {
+  test(`native reviewer stops a mixed-tool final submission with turn limit ${maxTurns}`, async () => {
+    const f = await lifecycleFixture(`native-mixed-${maxTurns}`, { maxTurns });
+    const contexts = installReviewProvider(f.ctx, request => ({ ...terminalMessage("toolUse"), content: [
+      { type: "toolCall", id: `findings-${request}`, name: "record_review_findings", arguments: { findings: [] } },
+      { type: "toolCall", id: `submit-${request}`, name: "submit_review_report", arguments: { findings: [] } },
+    ] }));
+    const runtime = new DeterministicReviewRuntime(f.runtimeStore, createReviewStatusPublisher());
+    try {
+      await runtime.startFrozen(f.ctx, f.frozen.state, f.frozen.record);
+      await waitFor(() => !runtime.isActive());
+      assert.equal(contexts.length, 1);
+      const state = await f.storage.readState(f.frozen.state.reviewId);
+      assert.equal(state.phase, "complete");
+      assert.equal(state.continuation.turnsUsed, 1);
+      assert.equal(state.reviewerContext.filter(message => message.role === "toolResult").length, 2);
+      assert.equal(JSON.parse(await f.storage.readArtifact(state.reviewId, "report.json")).phase, "complete");
+    } finally { await runtime.pauseForShutdown(); }
+  });
+}
+
+for (const stopReason of ["error", "aborted"]) {
+  test(`review finishTurn leaves ${stopReason} responses to the native hard exit`, async () => {
+    const f = await lifecycleFixture(`finish-${stopReason}`, { maxTurns: 1 });
+    let decision = "not called";
+    const factory = input => new ScriptedAgent(input, async agent => {
+      const message = terminalMessage(stopReason);
+      agent.state.messages.push(message);
+      decision = await input.finishTurn({ message, toolResults: [], context: { messages: agent.state.messages, tools: input.tools }, newMessages: [message] });
+      await agent.emit({ type: "turn_end", message, toolResults: [] });
+    });
+    const runtime = new DeterministicReviewRuntime(f.runtimeStore, createReviewStatusPublisher(), factory);
+    try {
+      await runtime.startFrozen(f.ctx, f.frozen.state, f.frozen.record);
+      await waitFor(() => !runtime.isActive());
+      assert.equal(decision, undefined, "hard exits must bypass the reached turn limit predicate");
+      assert.equal((await f.storage.readState(f.frozen.state.reviewId)).phase, "paused");
+    } finally { await runtime.pauseForShutdown(); }
   });
 }
 

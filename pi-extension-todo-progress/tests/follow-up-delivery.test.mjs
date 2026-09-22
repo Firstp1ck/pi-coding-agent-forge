@@ -120,6 +120,22 @@ function createHarness(extension, options = {}) {
       for (const handler of handlers.get(type) || []) result = await handler(event, ctx);
       return result;
     },
+    async executeTool(name, id, params, { signal, siblings = [] } = {}) {
+      const message = assistantToolMessage([{ id, name, arguments: params }, ...siblings]);
+      await this.emit("message_start", { message });
+      await this.emit("message_end", { message });
+      for (const call of message.content) {
+        await this.emit("tool_execution_start", { toolCallId: call.id, toolName: call.name, args: call.arguments });
+      }
+      try {
+        const result = await tools.get(name).execute(id, params, signal, undefined, ctx);
+        await this.emit("tool_execution_end", { toolCallId: id, toolName: name, result, isError: false });
+        return result;
+      } catch (error) {
+        await this.emit("tool_execution_end", { toolCallId: id, toolName: name, result: { content: [{ type: "text", text: error.message }] }, isError: true });
+        throw error;
+      }
+    },
     async injectedContext() {
       const result = await this.emit("context", { messages: [] });
       return result?.messages?.find((message) => message.customType === "todo-progress-context")?.content || "";
@@ -207,6 +223,401 @@ async function startGoalRun(harness, goal) {
     runId: /Run identity: (.+)/.exec(context)?.[1],
   };
 }
+
+async function startToolGoal(harness, goal = "Implement and verify the requested change") {
+  await harness.emit("agent_start", {});
+  await harness.emit("message_start", { message: userMessage(goal) });
+  return harness.executeTool("goal", "create-goal", { goal });
+}
+
+function latestGoal(harness) {
+  return harness.entries.findLast((entry) => entry.customType === "todo-progress-goal-state")?.data;
+}
+
+test("goal tool activates /goal's controller in the current run without a synthetic user message", async () => {
+  const harness = createHarness(await loadExtension(), { hasUI: true });
+  const result = await startToolGoal(harness, "  Implement the change\nand verify it.  ");
+  const saved = latestGoal(harness);
+  assert.equal(saved.goal, "Implement the change and verify it.");
+  assert.equal(saved.status, "running");
+  assert.deepEqual(result.details, { goalId: saved.goalId, runId: saved.runId, status: "running" });
+  assert.match(result.content[0].text, /^Goal: Implement the change and verify it\./);
+  assert.equal(result.terminate, undefined);
+  assert.equal(harness.userMessages.length, 0);
+  assert.equal(harness.customMessages.length, 0);
+  assert.equal(saved.progressRevision, 0, "Controller calls do not count as work");
+  assert.match(await harness.goalContext(), new RegExp(`Goal identity: ${saved.goalId}`));
+  await harness.emit("message_end", { message: assistantMessage("- [-] Implement change\n- [ ] Verify result", "toolUse") });
+  assert.equal(harness.widgets.at(-1).lines[0], "Goal: Implement the change and verify it.");
+  await harness.command("goal-status");
+  assert.match(harness.notifications.at(-1).message, /status running/);
+
+  await harness.emit("agent_end", { messages: [assistantMessage("Partial result")] });
+  await harness.emit("agent_settled", {});
+  const continuation = customMessagesOfType(harness, "todo-progress-goal-continuation").at(-1);
+  assert.ok(continuation);
+  assert.equal(continuation.message.details.goalId, saved.goalId);
+  assert.notEqual(continuation.message.details.runId, saved.runId);
+  await harness.emit("agent_start", {});
+  await harness.emit("message_start", { message: deliveredCustomMessage(continuation) });
+  await executeCheckpoint(harness, "finish-tool-goal", {
+    ...continuation.message.details, status: "completed", summary: "Change verified",
+    coverage: ["Requested change"], verificationEvidence: ["Regression tests passed"],
+  });
+  await harness.emit("agent_end", { messages: [assistantMessage("", "toolUse")] });
+  await harness.emit("agent_settled", {});
+  assert.equal(latestGoal(harness).status, "completed");
+  assert.equal(harness.userMessages.length, 1, "Completion does not schedule another run");
+});
+
+test("goal tool reuses the running goal without resetting identities, checkpoints, checklist, or bounds", async () => {
+  const harness = createHarness(await loadExtension());
+  const identity = await startGoalRun(harness, "Keep the original scope");
+  await executeCheckpoint(harness, "continue-original", {
+    ...identity, status: "continue", summary: "Partially complete", remainingWork: ["Tests"], nextAction: "Run tests",
+  });
+  await harness.emit("agent_end", { messages: [assistantMessage("Tests remain")] });
+  await harness.emit("agent_settled", {});
+  const continuation = customMessagesOfType(harness, "todo-progress-goal-continuation").at(-1);
+  await harness.emit("agent_start", {});
+  await harness.emit("message_start", { message: deliveredCustomMessage(continuation) });
+  await harness.emit("message_end", { message: assistantMessage("- [x] Implement\n- [ ] Test", "toolUse") });
+  const before = structuredClone(latestGoal(harness));
+  const checklist = await harness.injectedContext();
+  const result = await harness.executeTool("goal", "repeat", { goal: "  Keep the original scope  " });
+  assert.equal(result.details.goalId, identity.goalId);
+  assert.deepEqual(latestGoal(harness), before);
+  assert.equal(await harness.injectedContext(), checklist);
+  await assert.rejects(harness.executeTool("goal", "replace", { goal: "Expand the scope" }), /unfinished goal already exists/);
+  assert.deepEqual(latestGoal(harness), before);
+});
+
+test("goal tool rejects empty, malformed, oversized, and parallel creation without side effects", async () => {
+  const harness = createHarness(await loadExtension());
+  await harness.emit("agent_start", {});
+  await harness.emit("message_start", { message: userMessage("Implement the change") });
+  for (const goal of [undefined, 42, "", " \n ", "**", "x".repeat(100_001)]) {
+    await assert.rejects(harness.executeTool("goal", "invalid", { goal }), /nonempty string|at most 100000/);
+    assert.equal(latestGoal(harness), undefined);
+  }
+  await assert.rejects(harness.executeTool("goal", "parallel", { goal: "Implement" }, {
+    siblings: [{ id: "sibling", name: "read", arguments: { path: "README.md" } }],
+  }), /sole tool call/);
+  assert.equal(latestGoal(harness), undefined);
+  assert.equal(harness.userMessages.length, 0);
+  const boundary = await harness.executeTool("goal", "boundary", { goal: "x".repeat(100_000) });
+  assert.equal(latestGoal(harness).goal.length, 100_000);
+  assert.ok(boundary.content[0].text.length < 2500);
+  assert.match(boundary.content[0].text, /preview truncated/);
+});
+
+test("goal tool rejects cancelled creation and /goal-pause before creation", async () => {
+  const harness = createHarness(await loadExtension());
+  await harness.emit("agent_start", {});
+  await harness.emit("message_start", { message: userMessage("Implement the change") });
+  const controller = new AbortController();
+  controller.abort();
+  await assert.rejects(harness.executeTool("goal", "cancelled", { goal: "Implement" }, { signal: controller.signal }), /cancelled/);
+  assert.equal(latestGoal(harness), undefined);
+  await harness.command("goal-pause");
+  await assert.rejects(harness.executeTool("goal", "paused-before-start", { goal: "Implement" }), /new user request/);
+  assert.equal(latestGoal(harness), undefined);
+  await harness.emit("message_start", { message: userMessage("Now implement the change") });
+  await harness.executeTool("goal", "new-request", { goal: "Implement" });
+  assert.equal(latestGoal(harness).status, "running");
+});
+
+for (const status of ["paused", "blocked", "waiting"]) {
+  test(`goal tool cannot bypass ${status} with the same or a different goal`, async () => {
+    const harness = createHarness(await loadExtension());
+    const result = await startToolGoal(harness, "Do not bypass controls");
+    if (status === "paused") await harness.command("goal-pause");
+    else await executeCheckpoint(harness, `stop-${status}`, {
+      ...result.details, status, summary: "Stop here", blockerCause: "Approval needed", requiredIntervention: "Owner approval",
+      waitingFor: "Native job", jobId: "job-1",
+    });
+    // A subsequent question must not authorize restarting the stopped goal.
+    await harness.emit("message_start", { message: userMessage("What is the status?") });
+    const before = structuredClone(latestGoal(harness));
+    for (const goal of ["Do not bypass controls", "A different goal"]) {
+      await assert.rejects(harness.executeTool("goal", `bypass-${goal}`, { goal }), new RegExp(`Goal is ${status}`));
+      assert.deepEqual(latestGoal(harness), before);
+    }
+  });
+}
+
+test("tool and context cancellation signals stop agent-created goals", async () => {
+  const extension = await loadExtension();
+  for (const source of ["tool", "context"]) {
+    const controller = new AbortController();
+    const harness = createHarness(extension, source === "context" ? { signal: controller.signal } : {});
+    await harness.emit("agent_start", {});
+    await harness.emit("message_start", { message: userMessage("Implement safely") });
+    await harness.executeTool("goal", "start-with-signal", { goal: "Implement safely" },
+      source === "tool" ? { signal: controller.signal } : {});
+    controller.abort();
+    assert.equal(latestGoal(harness).status, "paused");
+    await harness.emit("agent_end", { messages: [assistantMessage("Late response")] });
+    await harness.emit("agent_settled", {});
+    assert.equal(harness.userMessages.length, 0);
+  }
+});
+
+test("repeated goal tool calls cannot defeat the no-progress limit", async () => {
+  const harness = createHarness(await loadExtension());
+  await startToolGoal(harness, "Bound agent-created work");
+  for (let run = 0; run < 3; run += 1) {
+    await harness.executeTool("goal", `repeat-${run}`, { goal: "Bound agent-created work" });
+    assert.equal(latestGoal(harness).progressRevision, 0);
+    await harness.emit("agent_end", { messages: [assistantMessage("Still unfinished")] });
+    await harness.emit("agent_settled", {});
+    if (run < 2) {
+      const continuation = customMessagesOfType(harness, "todo-progress-goal-continuation").at(-1);
+      await harness.emit("agent_start", {});
+      await harness.emit("message_start", { message: deliveredCustomMessage(continuation) });
+    }
+  }
+  assert.equal(latestGoal(harness).status, "paused");
+  assert.match(latestGoal(harness).pauseReason, /No observable progress in 3 consecutive runs/);
+  assert.equal(harness.userMessages.length, 2);
+});
+
+test("goal tool respects queued user goals", async () => {
+  const harness = createHarness(await loadExtension(), { isIdle: false });
+  await harness.emit("agent_start", {});
+  await harness.emit("message_start", { message: userMessage("Original work") });
+  await harness.command("goal", "User's chosen goal");
+  await assert.rejects(harness.executeTool("goal", "queued-conflict", { goal: "Agent's goal" }), /user \/goal is queued/);
+  assert.equal(latestGoal(harness), undefined);
+  const kickoff = customMessagesOfType(harness, "todo-progress-goal-kickoff")[0];
+  await harness.emit("message_start", { message: deliveredCustomMessage(kickoff) });
+  assert.equal(latestGoal(harness).goal, "User's chosen goal");
+});
+
+test("tool-created goals restore paused and can be resumed with /goal-resume", async () => {
+  const harness = createHarness(await loadExtension());
+  const result = await startToolGoal(harness, "Restore agent-created goal");
+  harness.setBranch([harness.entries.findLast((entry) => entry.customType === "todo-progress-goal-state")]);
+  await harness.emit("session_start", { reason: "reload" });
+  assert.equal(latestGoal(harness).status, "paused");
+  await assert.rejects(harness.executeTool("goal", "restored", { goal: "Restore agent-created goal" }), /Goal is paused/);
+  await harness.command("goal-resume");
+  assert.equal(latestGoal(harness).goalId, result.details.goalId);
+  assert.notEqual(latestGoal(harness).runId, result.details.runId);
+  assert.equal(latestGoal(harness).status, "running");
+});
+
+test("goal tool cannot create work from a notification but can start a new user task after completion", async () => {
+  const harness = createHarness(await loadExtension());
+  await harness.emit("agent_start", {});
+  await harness.emit("message_start", { message: { role: "custom", customType: "notification", content: "News" } });
+  await assert.rejects(harness.executeTool("goal", "no-request", { goal: "Invented work" }), /new user request/);
+  const first = await startToolGoal(harness, "First task");
+  await executeCheckpoint(harness, "first-done", {
+    ...first.details, status: "completed", summary: "First task done", coverage: ["First task"], verificationEvidence: ["Tests passed"],
+  });
+  await harness.emit("agent_end", { messages: [assistantMessage("", "toolUse")] });
+  await harness.emit("agent_settled", {});
+  await harness.emit("agent_start", {});
+  await harness.emit("message_start", { message: { role: "custom", customType: "notification", content: "News" } });
+  await assert.rejects(harness.executeTool("goal", "no-restart", { goal: "More work" }), /new user request/);
+  assert.equal(latestGoal(harness).status, "completed");
+  const second = await startToolGoal(harness, "Second task");
+  assert.notEqual(second.details.goalId, first.details.goalId);
+  assert.equal(latestGoal(harness).goal, "Second task");
+});
+
+for (const status of ["paused", "blocked", "waiting"]) {
+  test(`goal_resume resumes a ${status} goal in the current run without synthetic messages`, async () => {
+    const harness = createHarness(await loadExtension(), { isIdle: false });
+    const first = await startToolGoal(harness, "Resume the original scope");
+    if (status === "paused") await harness.command("goal-pause");
+    else await executeCheckpoint(harness, "stop", {
+      ...first.details, status, summary: "Stop here", blockerCause: "Approval needed", requiredIntervention: "Owner approval",
+      waitingFor: "Native job", jobId: "job-1",
+    });
+    await harness.emit("agent_end", { messages: [assistantMessage("Stopped", "toolUse")] });
+    await harness.emit("agent_settled", {});
+    const stopped = structuredClone(latestGoal(harness));
+    await harness.emit("agent_start", {});
+    await harness.emit("message_start", { message: userMessage("Resume the goal") });
+    assert.match(await harness.goalContext(), /If the user asks to resume, call goal_resume/);
+    await harness.emit("message_end", { message: assistantMessage("- [x] Inspect\n- [ ] Verify", "toolUse") });
+    const checklist = await harness.injectedContext();
+    const result = await harness.executeTool("goal_resume", "resume", first.details);
+    const resumed = latestGoal(harness);
+    assert.equal(resumed.goalId, stopped.goalId);
+    assert.equal(resumed.goal, stopped.goal);
+    assert.notEqual(resumed.runId, stopped.runId);
+    assert.equal(resumed.status, "running");
+    assert.equal(resumed.checkpoint, undefined);
+    assert.equal(resumed.pauseReason, undefined);
+    assert.equal(resumed.continuationOutstanding, false);
+    assert.equal(resumed.progressRevision, stopped.progressRevision);
+    assert.deepEqual(resumed.seenProgress, stopped.seenProgress);
+    assert.equal(await harness.injectedContext(), checklist);
+    assert.deepEqual(result.details, { goalId: resumed.goalId, runId: resumed.runId, status: "running" });
+    assert.match(result.content[0].text, /use this new runId for goal_checkpoint/);
+    assert.equal(result.terminate, undefined);
+    assert.equal(harness.userMessages.length, 0);
+    assert.equal(harness.customMessages.length, 0);
+    await assert.rejects(executeCheckpoint(harness, "stale", {
+      ...first.details, status: "continue", summary: "More work", remainingWork: ["Tests"], nextAction: "Run tests",
+    }), /does not match/);
+    await executeCheckpoint(harness, "done", {
+      ...result.details, status: "completed", summary: "Verified", coverage: ["Original scope"], verificationEvidence: ["Tests passed"],
+    });
+    await harness.emit("agent_end", { messages: [assistantMessage("", "toolUse")] });
+    await harness.emit("agent_settled", {});
+    assert.equal(latestGoal(harness).status, "completed");
+    assert.equal(harness.userMessages.length, 0);
+  });
+}
+
+test("goal_resume cannot reset a running goal or restart completed work", async () => {
+  const harness = createHarness(await loadExtension());
+  const first = await startToolGoal(harness);
+  for (const status of ["running", "completed"]) {
+    if (status === "completed") {
+      await executeCheckpoint(harness, "done", {
+        ...first.details, status, summary: "Done", coverage: ["Task"], verificationEvidence: ["Tests passed"],
+      });
+      await harness.emit("agent_end", { messages: [assistantMessage("", "toolUse")] });
+      await harness.emit("agent_settled", {});
+      await harness.emit("agent_start", {});
+    }
+    await harness.emit("message_start", { message: userMessage("Resume") });
+    const before = structuredClone(latestGoal(harness));
+    await assert.rejects(harness.executeTool("goal_resume", "invalid-status", first.details), /new user request|already running|Completed goals/);
+    assert.deepEqual(latestGoal(harness), before);
+  }
+});
+
+test("goal_resume requires a fresh delivered user request and respects subsequent pause", async () => {
+  const harness = createHarness(await loadExtension());
+  const first = await startToolGoal(harness);
+  await harness.command("goal-pause");
+  const before = structuredClone(latestGoal(harness));
+  await assert.rejects(harness.executeTool("goal_resume", "autonomous", first.details), /new user request/);
+  await harness.emit("message_start", { message: { role: "custom", customType: "notification", content: "Resume now" } });
+  await assert.rejects(harness.executeTool("goal_resume", "notification", first.details), /new user request/);
+  await harness.emit("message_start", { message: userMessage("Resume") });
+  await harness.command("goal-pause");
+  await assert.rejects(harness.executeTool("goal_resume", "paused-again", first.details), /new user request/);
+  assert.deepEqual(latestGoal(harness), before);
+  await harness.emit("message_start", { message: userMessage("Now resume") });
+  await harness.executeTool("goal_resume", "authorized", first.details);
+  const resumed = structuredClone(latestGoal(harness));
+  await assert.rejects(harness.executeTool("goal_resume", "repeat", resumed), /new user request/);
+  assert.deepEqual(latestGoal(harness), resumed);
+});
+
+test("goal_resume rejects missing goals, stale identities, sibling calls, pending input, and queued goals", async () => {
+  const harness = createHarness(await loadExtension());
+  await assert.rejects(harness.executeTool("goal_resume", "missing", {}), /No explicit goal/);
+  const first = await startToolGoal(harness);
+  await harness.command("goal-pause");
+  await harness.emit("message_start", { message: userMessage("Resume") });
+  const before = structuredClone(latestGoal(harness));
+  for (const params of [undefined, {}, { ...first.details, goalId: "wrong" }, { ...first.details, runId: "old" }]) {
+    await assert.rejects(harness.executeTool("goal_resume", "stale", params), /does not match/);
+  }
+  await assert.rejects(harness.executeTool("goal_resume", "parallel", first.details, {
+    siblings: [{ id: "read", name: "read", arguments: { path: "README.md" } }],
+  }), /sole tool call/);
+  harness.setPending(true);
+  await assert.rejects(harness.executeTool("goal_resume", "pending", first.details), /pending messages/);
+  harness.setPending(false);
+  await harness.command("goal", "Replace old scope");
+  await assert.rejects(harness.executeTool("goal_resume", "queued", first.details), /user \/goal is queued/);
+  assert.deepEqual(latestGoal(harness), before);
+});
+
+for (const source of ["tool", "context"]) {
+  test(`goal_resume honors ${source} cancellation before and after resuming`, async () => {
+    const controller = new AbortController();
+    const harness = createHarness(await loadExtension(), source === "context" ? { signal: controller.signal } : {});
+    const first = await startToolGoal(harness);
+    await harness.command("goal-pause");
+    await harness.emit("message_start", { message: userMessage("Resume") });
+    const options = source === "tool" ? { signal: controller.signal } : {};
+    await harness.executeTool("goal_resume", "resume", first.details, options);
+    controller.abort();
+    assert.equal(latestGoal(harness).status, "paused");
+    const before = structuredClone(latestGoal(harness));
+    await harness.emit("message_start", { message: userMessage("Resume again") });
+    await assert.rejects(harness.executeTool("goal_resume", "aborted", before, options), /cancelled/);
+    assert.deepEqual(latestGoal(harness), before);
+    await harness.emit("agent_end", { messages: [assistantMessage("Late output")] });
+    await harness.emit("agent_settled", {});
+    assert.equal(harness.userMessages.length, 0);
+  });
+}
+
+test("goal_resume restores stopped work and resets bounds only once per user request", async () => {
+  const harness = createHarness(await loadExtension());
+  const first = await startToolGoal(harness);
+  const saved = structuredClone(harness.entries.findLast((entry) => entry.customType === "todo-progress-goal-state"));
+  Object.assign(saved.data, { continuations: 20, noProgressRuns: 3, progressRevision: 2, lastSettledProgressRevision: 1, seenProgress: ["tool:earlier"] });
+  harness.setBranch([saved]);
+  await harness.emit("session_start", { reason: "reload" });
+  await assert.rejects(harness.executeTool("goal_resume", "no-request", first.details), /new user request/);
+  await harness.emit("agent_start", {});
+  await harness.emit("message_start", { message: userMessage("Continue where you stopped") });
+  const result = await harness.executeTool("goal_resume", "resume-restored", first.details);
+  const resumed = latestGoal(harness);
+  assert.equal(resumed.continuations, 0);
+  assert.equal(resumed.noProgressRuns, 0);
+  assert.equal(resumed.progressRevision, 2);
+  assert.equal(resumed.lastSettledProgressRevision, 2);
+  assert.deepEqual(resumed.seenProgress, ["tool:earlier"]);
+  assert.equal(saved.data.continuations, 20, "Stored branch snapshots stay immutable");
+  assert.equal(harness.userMessages.length, 0);
+  await executeCheckpoint(harness, "continue", {
+    ...result.details, status: "continue", summary: "Tests remain", remainingWork: ["Tests"], nextAction: "Run tests",
+  });
+  await harness.emit("agent_end", { messages: [assistantMessage("Tests remain")] });
+  await harness.emit("agent_settled", {});
+  const continuation = customMessagesOfType(harness, "todo-progress-goal-continuation").at(-1);
+  assert.equal(continuation.message.details.goalId, first.details.goalId);
+  assert.notEqual(continuation.message.details.runId, result.details.runId);
+  assert.equal(latestGoal(harness).continuations, 1);
+  assert.equal(latestGoal(harness).noProgressRuns, 1, "Resuming does not count as progress");
+  await harness.emit("agent_start", {});
+  await harness.emit("message_start", { message: deliveredCustomMessage(continuation) });
+  assert.equal(latestGoal(harness).runId, continuation.message.details.runId);
+});
+
+test("goal_resume guidance interprets user resume intent without treating clarifications as approval", async () => {
+  const harness = createHarness(await loadExtension());
+  const tool = harness.tools.get("goal_resume");
+  assert.deepEqual(tool.parameters.required, ["goalId", "runId"]);
+  assert.equal(tool.parameters.additionalProperties, false);
+  assert.match(tool.promptGuidelines.join("\n"), /user indicates they want to resume or continue/);
+  assert.match(tool.promptGuidelines.join("\n"), /never for a status question, clarification alone/);
+  assert.match(tool.promptGuidelines.join("\n"), /sole tool call/);
+  const policy = await harness.emit("before_agent_start", { systemPrompt: "base" });
+  assert.match(policy.systemPrompt, /call goal_resume before continuing work/);
+  assert.match(policy.systemPrompt, /Status questions and clarifications alone do not authorize resuming/);
+  assert.doesNotMatch(harness.tools.get("goal").promptGuidelines.join("\n"), /user must use \/goal or \/goal-resume/);
+});
+
+test("agent goal policy requires the goal tool but preserves scope, controls, and label-only fallback", async () => {
+  const harness = createHarness(await loadExtension());
+  const result = await harness.emit("before_agent_start", { prompt: "Implement", systemPrompt: "base" });
+  assert.match(result.systemPrompt, /use the goal tool to set the work goal/);
+  assert.match(result.systemPrompt, /requests no automatic continuation/);
+  const guidelines = harness.tools.get("goal").promptGuidelines.join("\n");
+  assert.match(guidelines, /do not merely write Goal: text/);
+  assert.match(guidelines, /does not grant new authorization/);
+  assert.match(guidelines, /Reuse the injected active goal/);
+  await harness.emit("message_start", { message: userMessage("Explain this without automatic continuation") });
+  await harness.emit("message_end", { message: assistantMessage("Goal: Explain it\n- [ ] Read\n- [ ] Explain", "toolUse") });
+  await harness.emit("agent_end", { messages: [assistantMessage("Explanation")] });
+  await harness.emit("agent_settled", {});
+  assert.equal(latestGoal(harness), undefined);
+  assert.equal(harness.userMessages.length, 0, "Plain Goal: text never starts the controller");
+});
 
 test("/goal normalizes and activates a durable goal when its kickoff is delivered", async () => {
   const extension = await loadExtension();
@@ -885,6 +1296,10 @@ test("native Pi startup preserves hooks and pause cancels a delayed continuation
     _flushPendingBashMessages() {},
     _flushPendingCustomMessages() {},
     _findLastAssistantMessage() {},
+    async _normalizePromptImages(images) {
+      assert.equal(images, undefined, "This fixture exercises text-only startup");
+      return { images: [], hints: [] };
+    },
     getActiveToolNames: () => [],
     _preparePromptAndToolLoadout: () => undefined,
     async _runInputHandlers(text, images, source) {

@@ -59,17 +59,27 @@ const GOAL_CHECKPOINT_PARAMETERS = {
   },
 } as any;
 
+const GOAL_TOOL_GUIDELINES = [
+  "For multi-step work, call goal with a concise one-sentence goal derived from the user's request before creating a checklist or starting execution; do not merely write Goal: text.",
+  "Call goal as the sole tool call in its assistant batch. It starts durable execution with automatic follow-ups in the current run, just like /goal.",
+  "Reuse the injected active goal instead of calling goal for each checklist or continuation. Use goal_checkpoint before ending a goal run.",
+  "The goal tool does not grant new authorization: preserve the user's scope, approvals, and stop requests. Do not start goals for simple conversational replies or when the user requests no automatic continuation.",
+  "The goal tool cannot replace or resume an unfinished goal. Only the user can replace it with /goal; when the user asks to resume, use goal_resume instead.",
+];
+
 const TODO_POLICY = [
   "",
   "",
   "[TODO PROGRESS POLICY] For multi-step work:",
-  "- First formulate a concise one-sentence `Goal: ...` before creating a todo list or starting execution.",
+  "- When goal and goal_checkpoint are available, use the goal tool to set the work goal before creating a checklist or starting execution. Reuse an active goal; do not replace it for each checklist.",
+  "- When the user indicates they want to resume a paused, blocked, or waiting goal, call goal_resume before continuing work. Do not ask them to type /goal-resume when goal_resume is available. Status questions and clarifications alone do not authorize resuming.",
+  "- Without those tools, or if the user requests no automatic continuation, formulate a concise one-sentence `Goal: ...` as a checklist label only.",
   "- Create concise, agent-authored checklists with 2-6 short items. Keep the goal separate; the todo list does not need to contain the goal.",
   "- Emit markdown checklist lines exactly like `- [ ] item`, `- [-] item`, or `- [x] item` only when starting a list or when item status/text changes; do not re-emit unchanged checklist items before every tool call.",
   "- Do not copy raw user-prompt lines as todos; rewrite them into clear action items.",
   "- Update checklist markers as work changes. Mark the active/current step `[-]` when useful and completed steps `[x]`; emitting only the changed checklist line(s) is enough.",
   "- When every item in the current list is `[x]`, explicitly check whether the goal is reached before doing more work.",
-  "- If the goal is reached, stop creating todo lists and produce the final output. If the goal is not reached, create a new short checklist before the next execution step.",
+  "- If the goal is reached, stop creating todo lists. For a durable goal, call goal_checkpoint with completed and verification evidence; otherwise produce the final output. If the goal is not reached, create a new short checklist before the next execution step.",
   "- Multiple todo lists may be created during one session; each new list replaces the previous list in the progress widget.",
   "- Todo checklists are session progress: still emit `[x]` updates when possible; after a normal final assistant response the extension clears the widget automatically so stale partial lists do not persist.",
 ].join("\n");
@@ -243,6 +253,14 @@ function cleanGoalText(value: string | undefined): string | undefined {
   return goal || undefined;
 }
 
+function createGoalRequest(value: unknown) {
+  if (typeof value !== "string") throw new Error("goal must be a nonempty string");
+  const goal = cleanGoalText(value);
+  if (!goal) throw new Error("goal must be a nonempty string");
+  if (goal.length > MAX_GOAL_LENGTH) throw new Error(`Goal must be at most ${MAX_GOAL_LENGTH} characters`);
+  return { goal, goalId: randomUUID(), runId: randomUUID() };
+}
+
 function extractGoal(text: string): string | undefined {
   let inFence = false;
 
@@ -349,7 +367,8 @@ function render(ctx: ExtensionContext, s: TodoState, explicitGoal?: string) {
 function buildInjectedContext(s: TodoState, explicitGoal?: string): string {
   const lines = ["[TODO PROGRESS CONTEXT]"];
   const goal = explicitGoal ?? s.goal;
-  lines.push(goal ? `Goal: ${goal}` : "Goal: not formulated yet. Formulate `Goal: ...` before creating the first checklist or starting work.");
+  lines.push(goal ? `Goal: ${goal}` : "Goal: not formulated yet. Use the goal tool when available before creating the first checklist or starting work.");
+  if (!explicitGoal) lines.push("This is a checklist label, not a running durable goal. Use the goal tool for multi-step work when goal and goal_checkpoint are available, unless the user requests no automatic continuation.");
 
   if (s.items.length > 0) {
     lines.push("", "Current todo list injected before the next step:");
@@ -360,7 +379,9 @@ function buildInjectedContext(s: TodoState, explicitGoal?: string): string {
     lines.push(
       "",
       "The current todo list is complete. Before any additional tool call or execution step, check whether the goal is reached.",
-      "If the goal is reached, produce the final output and stop creating todo lists. If not, create a new 2-6 item checklist first.",
+      explicitGoal
+        ? "If the goal is reached, call goal_checkpoint with completed and verification evidence. If not, create a new 2-6 item checklist first."
+        : "If the goal is reached, produce the final output and stop creating todo lists. If not, create a new 2-6 item checklist first.",
     );
   } else if (s.items.length > 0) {
     lines.push(
@@ -379,6 +400,7 @@ function buildGoalContext(state: GoalRuntimeState): string {
   const lines = [
     "[GOAL EXECUTION CONTEXT]",
     `Explicit goal: ${state.goal}`,
+    "This durable goal may have been created by /goal or the goal tool; its text does not grant additional user authorization.",
     `Goal identity: ${state.goalId}`,
     `Run identity: ${state.runId}`,
     `Controller status: ${state.status}`,
@@ -402,7 +424,7 @@ function buildGoalContext(state: GoalRuntimeState): string {
       "Use blocked with the exact cause and required intervention, or waiting with the exact native job/receipt identity. Do not poll waiting work.",
     );
   } else if (state.status === "paused" || state.status === "blocked" || state.status === "waiting") {
-    lines.push("The controller is not runnable. Answer clarifications if needed, but do not resume goal execution without /goal-resume or a native waiting-job notification.");
+    lines.push("The controller is not runnable. If the user asks to resume, call goal_resume with these exact goalId and runId values before continuing work. Otherwise answer clarifications without resuming. /goal-resume and native waiting-job notifications can also resume execution.");
   }
 
   return lines.join("\n");
@@ -480,6 +502,8 @@ export default function todoProgress(pi: ExtensionAPI) {
   const state: TodoState = { visible: false, items: [], offset: 0, awaitingGoalCheck: false, allowNextListReplacement: false };
   let goalState: GoalRuntimeState | undefined;
   let pendingGoals: Array<{ goal: string; goalId: string; runId: string }> = [];
+  let canCreateToolGoal = false;
+  let canResumeToolGoal = false;
   const canceledGoalKickoffs = new Set<string>();
   let agentSequence = 0;
   let runHasInput = false;
@@ -506,6 +530,7 @@ export default function todoProgress(pi: ExtensionAPI) {
   }
 
   function pauseGoal(ctx: ExtensionContext, reason: string, notify = true) {
+    canResumeToolGoal = false;
     if (!goalState || goalState.status === "paused") return;
     pauseGoalRuntime(goalState, reason);
     persistGoalState();
@@ -556,6 +581,8 @@ export default function todoProgress(pi: ExtensionAPI) {
   }
 
   function activateGoal(ctx: ExtensionContext, pending: { goal: string; goalId: string; runId: string }) {
+    canCreateToolGoal = false;
+    canResumeToolGoal = false;
     clear(ctx, state);
     state.goal = pending.goal;
     goalState = createGoalRuntime(pending.goal, pending.goalId, pending.runId);
@@ -595,6 +622,8 @@ export default function todoProgress(pi: ExtensionAPI) {
     }
 
     goalState = savedGoal;
+    canCreateToolGoal = false;
+    canResumeToolGoal = false;
     pendingGoals = [];
     canceledGoalKickoffs.clear();
     goalAgentSequence = -1;
@@ -609,6 +638,26 @@ export default function todoProgress(pi: ExtensionAPI) {
     }
     if (goalState && goalState.status !== "completed") state.goal = goalState.goal;
     renderCurrent(ctx);
+  }
+
+  function resumeGoal(ctx: ExtensionContext, inCurrentRun: boolean) {
+    if (!goalState) throw new Error("No explicit goal to resume");
+    if (goalState.status === "running") throw new Error("Goal is already running");
+    if (goalState.status === "completed") throw new Error("Completed goals cannot be resumed; start a new /goal");
+    goalState = resumeGoalRuntime(goalState, randomUUID());
+    canCreateToolGoal = false;
+    canResumeToolGoal = false;
+    goalAgentSequence = inCurrentRun ? agentSequence : -1;
+    checkpointAssistantSequence = -1;
+    checkpointAgentSequence = -1;
+    lastAgentStopReason = undefined;
+    lastSettledAgentSequence = -1;
+    state.goal = goalState.goal;
+    if (inCurrentRun) captureAbortSignal(ctx);
+    persistState();
+    persistGoalState();
+    renderCurrent(ctx);
+    return goalState;
   }
 
   function continuationMessage(reason: "automatic" | "resume") {
@@ -658,12 +707,88 @@ export default function todoProgress(pi: ExtensionAPI) {
   }
 
   pi.registerTool({
+    name: "goal",
+    label: "Goal",
+    description: "Set a concise work goal and start the same durable execution controller as /goal in the current run. Enables bounded automatic continuation. Reuses an identical running goal without resetting progress; cannot replace or resume unfinished goals. Goal previews are limited to 2000 characters.",
+    promptSnippet: "Set the work goal and start durable execution with bounded automatic follow-ups",
+    promptGuidelines: GOAL_TOOL_GUIDELINES,
+    parameters: {
+      type: "object",
+      additionalProperties: false,
+      required: ["goal"],
+      properties: {
+        goal: { type: "string", minLength: 1, maxLength: MAX_GOAL_LENGTH, description: "One-sentence outcome derived from the user's request, preserving its scope and constraints" },
+      },
+    } as any,
+    async execute(toolCallId, params, signal, _onUpdate, ctx) {
+      if (signal?.aborted || ctx.signal?.aborted) throw new Error("Goal creation cancelled");
+      if (toolBatchSizes.get(toolCallId) !== 1) throw new Error("goal must be the sole tool call in its assistant batch");
+      const request = createGoalRequest((params as { goal?: unknown } | undefined)?.goal);
+      if (pendingGoals.length > 0) throw new Error("A user /goal is queued; wait for its delivery instead of creating another goal");
+      if (goalState && goalState.status !== "completed") {
+        if (goalState.status !== "running") throw new Error(`Goal is ${goalState.status}; use goal_resume if the user asked to resume, or let the user use /goal-resume or /goal`);
+        if (goalState.goal !== request.goal) throw new Error("An unfinished goal already exists; reuse it. Only the user can replace it with /goal");
+      } else {
+        if (!canCreateToolGoal) throw new Error("Goal creation requires a new user request; do not restart completed or cancelled work");
+        // Share /goal activation without queuing agent-authored text as a user request.
+        activateGoal(ctx, request);
+        captureAbortSignal(ctx, signal);
+      }
+      const current = goalState!;
+      const preview = current.goal.length > 2000 ? `${current.goal.slice(0, 2000)}... [preview truncated; full goal is in goal context]` : current.goal;
+      return {
+        content: [{ type: "text", text: `Goal: ${preview}\nStatus: ${current.status}\nGoal identity: ${current.goalId}\nRun identity: ${current.runId}\nContinue working in this run. Use goal_checkpoint before ending. Automatic follow-ups are enabled; /goal-pause stops them.` }],
+        details: { goalId: current.goalId, runId: current.runId, status: current.status },
+      };
+    },
+  });
+
+  pi.registerTool({
+    name: "goal_resume",
+    label: "Resume goal",
+    description: "Resume a paused, blocked, or waiting durable goal when the user asks to resume. Uses the same transition as /goal-resume within the current run, with a fresh bounded continuation cycle. Requires the exact goalId and runId from the stopped goal context.",
+    promptSnippet: "Resume an existing durable goal when the user asks to continue it",
+    promptGuidelines: [
+      "When the user indicates they want to resume or continue a paused, blocked, or waiting goal, call goal_resume rather than asking them to type /goal-resume.",
+      "Call goal_resume as the sole tool call in its assistant batch, using the exact injected goalId and runId. Continue in this run and use the returned runId for goal_checkpoint.",
+      "Use goal_resume only in response to the user's resume intent, never for a status question, clarification alone, notification, or to bypass a stop request or continuation limit. Preserve scope and approvals; resume does not prove a blocker is resolved or a waiting job succeeded.",
+    ],
+    parameters: {
+      type: "object",
+      additionalProperties: false,
+      required: ["goalId", "runId"],
+      properties: {
+        goalId: { type: "string", minLength: 1, maxLength: 200 },
+        runId: { type: "string", minLength: 1, maxLength: 200 },
+      },
+    } as any,
+    async execute(toolCallId, params, signal, _onUpdate, ctx) {
+      if (signal?.aborted || ctx.signal?.aborted) throw new Error("Goal resume cancelled");
+      if (toolBatchSizes.get(toolCallId) !== 1) throw new Error("goal_resume must be the sole tool call in its assistant batch");
+      if (!goalState) throw new Error("No explicit goal to resume");
+      const input = params as { goalId?: unknown; runId?: unknown } | undefined;
+      if (input?.goalId !== goalState.goalId || input?.runId !== goalState.runId) {
+        throw new Error("Resume goalId/runId does not match the stopped goal run");
+      }
+      if (pendingGoals.length > 0) throw new Error("A user /goal is queued; wait for its delivery instead of resuming another goal");
+      if (ctx.hasPendingMessages()) throw new Error("Wait for pending messages to be delivered before goal_resume");
+      if (!canResumeToolGoal) throw new Error("Goal resume requires a new user request after the goal stopped; do not resume autonomously");
+      const current = resumeGoal(ctx, true);
+      captureAbortSignal(ctx, signal);
+      return {
+        content: [{ type: "text", text: `Goal resumed.\nStatus: ${current.status}\nGoal identity: ${current.goalId}\nRun identity: ${current.runId}\nContinue in this run. Reassess remaining work and use this new runId for goal_checkpoint. Automatic follow-ups are enabled; /goal-pause stops them.` }],
+        details: { goalId: current.goalId, runId: current.runId, status: current.status },
+      };
+    },
+  });
+
+  pi.registerTool({
     name: "goal_checkpoint",
     label: "Goal checkpoint",
-    description: "Record a validated status checkpoint for the current explicit /goal run. Identity fields must exactly match the injected goal context.",
-    promptSnippet: "Checkpoint the current explicit /goal run as continue, completed, blocked, or waiting",
+    description: "Record a validated status checkpoint for the current durable goal started by /goal or the goal tool. Identity fields must exactly match the injected goal context.",
+    promptSnippet: "Checkpoint the current durable goal run as continue, completed, blocked, or waiting",
     promptGuidelines: [
-      "Call goal_checkpoint before ending work on an explicit /goal run; use the exact injected goalId and runId.",
+      "Call goal_checkpoint before ending work on a goal started by /goal or the goal tool; use the exact injected goalId and runId.",
       "Call goal_checkpoint with continue only when remainingWork and nextAction identify the unfinished work.",
       "Call goal_checkpoint with completed only after rereading the entire referenced plan and supplying plan-wide coverage plus verification evidence.",
       "Call goal_checkpoint with waiting only for a native job/receipt that will notify Pi; never poll waiting work.",
@@ -672,7 +797,7 @@ export default function todoProgress(pi: ExtensionAPI) {
     parameters: GOAL_CHECKPOINT_PARAMETERS,
     async execute(toolCallId, params, signal) {
       if (!goalState) throw new Error("No explicit goal is active");
-      if (goalState.status !== "running") throw new Error(`Goal is ${goalState.status}; use /goal-resume before checkpointing`);
+      if (goalState.status !== "running") throw new Error(`Goal is ${goalState.status}; use goal_resume on user request or /goal-resume before checkpointing`);
       if (signal?.aborted) {
         pauseGoalRuntime(goalState, "Native cancellation interrupted the goal checkpoint");
         persistGoalState();
@@ -684,6 +809,10 @@ export default function todoProgress(pi: ExtensionAPI) {
         throw new Error("A terminal goal_checkpoint must be the sole tool call in its assistant batch");
       }
       goalState.checkpoint = checkpoint;
+      if (checkpoint.status !== "continue") {
+        canCreateToolGoal = false;
+        canResumeToolGoal = false;
+      }
       goalState.continuationOutstanding = false;
       goalState.pauseReason = undefined;
       checkpointAssistantSequence = assistantSequence;
@@ -779,6 +908,7 @@ export default function todoProgress(pi: ExtensionAPI) {
     const firstInput = !runHasInput;
     if (delivered.role === "user" || delivered.role === "custom") runHasInput = true;
     if (delivered.role === "custom") {
+      canResumeToolGoal = false;
       if (delivered.customType === GOAL_KICKOFF_KEY) {
         const details = delivered.details as { goalId?: string; runId?: string } | undefined;
         const pendingIndex = pendingGoals.findIndex((pending) =>
@@ -819,6 +949,8 @@ export default function todoProgress(pi: ExtensionAPI) {
 
     if (event.message.role !== "user") return;
     const prompt = userText(event.message);
+    canCreateToolGoal = true;
+    canResumeToolGoal = Boolean(goalState && ["paused", "blocked", "waiting"].includes(goalState.status));
     // Pi can drain an external follow-up without a new agent_start. That prompt
     // is not late work owned by the preceding terminal checkpoint.
     if (goalState && goalState.status !== "running") {
@@ -918,14 +1050,14 @@ export default function todoProgress(pi: ExtensionAPI) {
   pi.on("tool_execution_start", async (event, ctx) => {
     captureAbortSignal(ctx);
     toolInputs.set(event.toolCallId, { name: event.toolName, args: event.args });
-    if (event.toolName !== "goal_checkpoint") invalidateTerminalCheckpoint();
+    if (!["goal_checkpoint", "goal", "goal_resume"].includes(event.toolName)) invalidateTerminalCheckpoint();
   });
 
   pi.on("tool_execution_end", async (event, ctx) => {
     captureAbortSignal(ctx);
     const input = toolInputs.get(event.toolCallId);
     toolInputs.delete(event.toolCallId);
-    if (event.toolName === "goal_checkpoint") return;
+    if (["goal_checkpoint", "goal", "goal_resume"].includes(event.toolName)) return;
     invalidateTerminalCheckpoint();
     if (!event.isError && goalState?.status === "running") {
       const observableResult = event.result?.content ?? event.result;
@@ -1032,11 +1164,13 @@ export default function todoProgress(pi: ExtensionAPI) {
         }
       }
 
-      if (goal.length > MAX_GOAL_LENGTH) {
-        ctx.ui.notify(`Goal must be at most ${MAX_GOAL_LENGTH} characters; nothing was started.`, "warning");
+      let pending: ReturnType<typeof createGoalRequest>;
+      try {
+        pending = createGoalRequest(goal);
+      } catch (error) {
+        ctx.ui.notify(`${error instanceof Error ? error.message : String(error)}; nothing was started.`, "warning");
         return;
       }
-      const pending = { goal, goalId: randomUUID(), runId: randomUUID() };
       pendingGoals.push(pending);
       const startsImmediately = ctx.isIdle();
       try {
@@ -1073,6 +1207,8 @@ export default function todoProgress(pi: ExtensionAPI) {
   pi.registerCommand("goal-pause", {
     description: "Pause the current explicit goal and cancel active work",
     handler: async (_args, ctx) => {
+      canCreateToolGoal = false;
+      canResumeToolGoal = false;
       const queued = pendingGoals.splice(0);
       for (const pending of queued) canceledGoalKickoffs.add(pending.goalId);
 
@@ -1111,10 +1247,7 @@ export default function todoProgress(pi: ExtensionAPI) {
         return;
       }
 
-      goalState = resumeGoalRuntime(goalState, randomUUID());
-      state.goal = goalState.goal;
-      persistState();
-      persistGoalState();
+      resumeGoal(ctx, false);
       dispatchContinuation(ctx, "resume");
       ctx.ui.notify(`Goal resumed with runId ${goalState.runId}`, "info");
     },

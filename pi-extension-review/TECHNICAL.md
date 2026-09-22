@@ -6,7 +6,7 @@ Advanced user guidance for commands, settings, storage, privacy, limits, and rec
 
 ## Requirements
 
-- Pi packages `@earendil-works/pi-coding-agent`, `pi-agent-core`, `pi-ai`, and `pi-tui` version 0.86.0 or newer
+- Pi packages `@earendil-works/pi-coding-agent`, `pi-agent-core`, `pi-ai`, and `pi-tui` version 0.87.0 or newer
 - Node.js 22.19 or newer
 - Git on `PATH` for Git mode
 - An authenticated model in the current Pi model scope

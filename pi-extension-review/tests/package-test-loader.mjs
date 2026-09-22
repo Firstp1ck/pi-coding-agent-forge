@@ -17,6 +17,13 @@ export function registerTestSdk() {
   };
   const map = {};
   for (const [specifier, candidates] of Object.entries(fallback)) {
+    if (process.env.PI_TEST_SDK_ROOT) {
+      // Prefer the selected SDK's nested peers over unrelated repository installations.
+      const candidate = [...candidates].reverse().find(existsSync);
+      if (!candidate) throw new Error(`Cannot resolve ${specifier} under PI_TEST_SDK_ROOT=${codingRoot}.`);
+      map[specifier] = pathToFileURL(candidate).href;
+      continue;
+    }
     try { map[specifier] = import.meta.resolve(specifier); }
     catch {
       const candidate = candidates.find(existsSync);
