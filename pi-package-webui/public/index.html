@@ -123,8 +123,8 @@
         <p id="updateNotificationMessage">A newer Pi version is available.</p>
         <p id="updateNotificationDetail" class="update-notification-detail muted"></p>
         <div class="update-notification-actions">
-          <button id="updateNotificationUpdateButton" class="primary" type="button">Update Pi &amp; restart</button>
-          <button id="updateNotificationUpdateAllButton" type="button">Update all &amp; restart</button>
+          <button id="updateNotificationUpdateButton" class="primary" type="button">Update Pi</button>
+          <button id="updateNotificationUpdateAllButton" type="button">Update Web UI</button>
           <button id="updateNotificationDismissButton" type="button">Later</button>
         </div>
       </div>
@@ -964,7 +964,7 @@
                         <option value="" selected>Choose action…</option>
                         <option value="restart">Restart Server</option>
                         <option value="update">Apply exact Pi update</option>
-                        <option value="update-all">Apply exact Pi + Web UI update</option>
+                        <option value="update-webui">Update Web UI</option>
                         <option value="stop">Stop Server</option>
                       </select>
                       <button id="runServerActionButton" type="button" disabled>Run</button>
@@ -1327,6 +1327,7 @@
         <p id="piReleaseNotesStatus" class="pi-release-notes-status muted" role="status" aria-live="polite"></p>
         <section class="component-update-panel" aria-label="Pi background update">
           <p id="piComponentUpdateStatus" class="component-update-status muted" role="status" aria-live="polite"></p>
+          <pre id="piComponentUpdateOutput" class="component-update-output" aria-label="Pi update command results" hidden></pre>
           <button id="piComponentUpdateButton" class="component-update-button primary" type="button">Update Pi</button>
         </section>
         <div id="piReleaseNotesBody" class="pi-release-notes-body markdown-body"></div>
@@ -1357,6 +1358,7 @@
           </div>
         </dl>
         <p id="webuiComponentUpdateStatus" class="component-update-status muted" role="status" aria-live="polite"></p>
+        <pre id="webuiComponentUpdateOutput" class="component-update-output" aria-label="Web UI update command results" hidden></pre>
         <menu>
           <button id="webuiPackageNpmButton" class="webui-package-npm-link" type="button">View on npm</button>
           <button id="webuiComponentUpdateButton" class="component-update-button primary" type="button">Update Web UI</button>

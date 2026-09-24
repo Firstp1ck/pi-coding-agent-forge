@@ -526,6 +526,7 @@ const elements = {
   piReleaseNotesGithubLink: $("#piReleaseNotesGithubLink"),
   piReleaseNotesCloseButton: $("#piReleaseNotesCloseButton"),
   piComponentUpdateStatus: $("#piComponentUpdateStatus"),
+  piComponentUpdateOutput: $("#piComponentUpdateOutput"),
   piComponentUpdateButton: $("#piComponentUpdateButton"),
   webuiPackageDialog: $("#webuiPackageDialog"),
   webuiPackageTitle: $("#webuiPackageTitle"),
@@ -534,6 +535,7 @@ const elements = {
   webuiPackageNpmButton: $("#webuiPackageNpmButton"),
   webuiPackageCloseButton: $("#webuiPackageCloseButton"),
   webuiComponentUpdateStatus: $("#webuiComponentUpdateStatus"),
+  webuiComponentUpdateOutput: $("#webuiComponentUpdateOutput"),
   webuiComponentUpdateButton: $("#webuiComponentUpdateButton"),
   dialog: $("#extensionDialog"),
   dialogTitle: $("#dialogTitle"),
@@ -1250,6 +1252,9 @@ let updateStatusRefreshTimer = null;
 let updateNotificationHideTimer = null;
 let componentUpdatePollTimer = null;
 let componentUpdateStartInProgress = false;
+const observedNativeJobs = { pi: null, webui: null };
+const uncertainApplyJobs = { pi: null, webui: null };
+let nativeJobPollError = "";
 let backendOfflineNoticeShown = false;
 let latestMessages = [];
 let latestMessagesSessionKey = "";
@@ -9216,17 +9221,14 @@ function renderUpdateNotification(status = latestUpdateStatus, { force = false }
     return;
   }
 
-  const canRunUpdate = latestUpdateStatus.canRunUpdate !== false;
+  const canRunUpdate = latestUpdateStatus.canRunUpdate !== false && !latestUpdateStatus.nativeJobDiscoveryError;
   const hasPiUpdate = !!latestUpdateStatus.pi?.updateAvailable;
   const hasPackageUpdate = !!latestUpdateStatus.webui?.updateAvailable;
   if (elements.updateNotificationTitle) elements.updateNotificationTitle.textContent = items.length === 1 ? `${items[0]} available` : "Pi updates available";
   if (elements.updateNotificationMessage) {
-    let message = "Updates are available. Direct Web UI updates are only enabled from localhost on the host machine.";
-    if (canRunUpdate) {
-      if (hasPiUpdate && hasPackageUpdate) message = "Create and confirm an exact combined update plan for eligible Pi, Web UI, and Pi-owned Optional Features; managed runtimes are staged, verified, activated, and restarted with rollback protection.";
-      else if (hasPackageUpdate) message = "Create and confirm an exact package update plan; managed Web UI runtimes are staged, verified, activated, and restarted with rollback protection.";
-      else message = "Create and confirm an exact Pi update plan; bundled Pi is staged with the Web UI, while an independent Pi executable is delegated to and verified.";
-    }
+    const message = canRunUpdate
+      ? "Choose Pi or Web UI separately. Confirm the exact native command and installation before it runs."
+      : "Updates must start locally, with no other update in progress. Open a version tag for status and recovery guidance.";
     elements.updateNotificationMessage.textContent = message;
   }
   const details = [
@@ -9238,13 +9240,13 @@ function renderUpdateNotification(status = latestUpdateStatus, { force = false }
   if (elements.updateNotificationUpdateButton) {
     elements.updateNotificationUpdateButton.hidden = !canRunUpdate || !hasPiUpdate;
     elements.updateNotificationUpdateButton.disabled = updateRequestInProgress || latestUpdateStatus.updateInProgress;
-    elements.updateNotificationUpdateButton.textContent = latestUpdateStatus.updateInProgress ? "Updating…" : "Update Pi & restart";
+    elements.updateNotificationUpdateButton.textContent = "Update Pi";
   }
   if (elements.updateNotificationUpdateAllButton) {
     elements.updateNotificationUpdateAllButton.hidden = !canRunUpdate || !hasPackageUpdate;
     elements.updateNotificationUpdateAllButton.disabled = updateRequestInProgress || latestUpdateStatus.updateInProgress;
     elements.updateNotificationUpdateAllButton.classList.toggle("primary", !hasPiUpdate);
-    elements.updateNotificationUpdateAllButton.textContent = latestUpdateStatus.updateInProgress ? "Updating…" : "Update all & restart";
+    elements.updateNotificationUpdateAllButton.textContent = "Update Web UI";
   }
   clearTimeout(updateNotificationHideTimer);
   panel.hidden = false;
@@ -9255,7 +9257,13 @@ async function refreshUpdateStatus({ force = false, notify = true } = {}) {
   const path = force ? "/api/update-status?refresh=1" : "/api/update-status";
   const response = await api(path, { scoped: false });
   latestUpdateStatus = response.data || null;
-  if (latestUpdateStatus?.pi?.currentVersion) setPiVersion(latestUpdateStatus.pi.currentVersion);
+  for (const target of COMPONENT_UPDATE_TARGETS) {
+    if (latestUpdateStatus?.nativeJobs && Object.hasOwn(latestUpdateStatus.nativeJobs, target)) {
+      if (latestUpdateStatus.nativeJobs[target] || !uncertainApplyJobs[target]) observedNativeJobs[target] = latestUpdateStatus.nativeJobs[target];
+    }
+  }
+  if (latestUpdateStatus?.nativeJobs && !latestUpdateStatus.nativeJobDiscoveryError) nativeJobPollError = "";
+  if (latestUpdateStatus?.pi?.activeRuntimeVersion && latestUpdateStatus.pi.activeRuntimeVersion !== "unknown") setPiVersion(latestUpdateStatus.pi.activeRuntimeVersion);
   if (notify) renderUpdateNotification(latestUpdateStatus);
   renderComponentUpdateIndicators();
   renderComponentUpdateDialogs();
@@ -9283,11 +9291,21 @@ function componentUpdateJob(target) {
   return job && typeof job === "object" ? job : null;
 }
 
+function nativeUpdateJob(target) {
+  return observedNativeJobs[target];
+}
+
+function nativeUpdateUnsettled(job) {
+  return job && !["success", "partial", "failed", "unchanged", "unknown"].includes(job.phase);
+}
+
 function componentUpdateTagState(target) {
-  const job = componentUpdateJob(target);
-  if (job?.state === "running") return "running";
-  if (job?.state === "failed") return "failed";
-  if (job?.state === "succeeded") return "succeeded";
+  const job = nativeUpdateJob(target);
+  if (job?.phase === "unknown" || latestUpdateStatus?.nativeJobDiscoveryError || nativeJobPollError) return "unknown";
+  if (job?.phase === "partial") return "partial";
+  if (job?.phase === "failed") return "failed";
+  if (job?.phase === "success") return "succeeded";
+  if (nativeUpdateUnsettled(job)) return "running";
   if (latestUpdateStatus?.[target]?.updateAvailable) return "available";
   return "";
 }
@@ -9296,6 +9314,8 @@ function componentUpdateTagStateText(state) {
   switch (state) {
     case "running": return "update running";
     case "failed": return "update failed";
+    case "partial": return "update partially succeeded";
+    case "unknown": return "update status unknown";
     case "succeeded": return "update succeeded";
     case "available": return "update available";
     default: return "";
@@ -9303,7 +9323,7 @@ function componentUpdateTagStateText(state) {
 }
 
 function anyComponentUpdateRunning() {
-  return COMPONENT_UPDATE_TARGETS.some((target) => componentUpdateJob(target)?.state === "running");
+  return COMPONENT_UPDATE_TARGETS.some((target) => nativeUpdateUnsettled(nativeUpdateJob(target)));
 }
 
 function renderComponentUpdateIndicators() {
@@ -9313,27 +9333,34 @@ function renderComponentUpdateIndicators() {
 
 function componentUpdateStatusText(target) {
   const label = componentUpdateLabel(target);
-  const job = componentUpdateJob(target);
+  const job = nativeUpdateJob(target);
   const pkg = latestUpdateStatus?.[target] || {};
-  const current = formatWebuiVersion(pkg.currentVersion || (target === "pi" ? piVersion : webuiVersion) || "");
+  if (latestUpdateStatus?.nativeJobDiscoveryError || nativeJobPollError) {
+    return { text: `Update status cannot be verified: ${latestUpdateStatus?.nativeJobDiscoveryError || nativeJobPollError}. Do not retry until the host is checked.`, level: "error" };
+  }
+  if (!job && latestUpdateStatus?.updateInProgress) {
+    return { text: "An update is in progress, but its job ID is not available. Do not retry until its status is known.", level: "warn" };
+  }
+  if (job) {
+    const id = `Job ${job.transactionId || "unknown"}`;
+    const error = job.error ? ` ${String(job.error).slice(0, 600)}` : "";
+    switch (job.phase) {
+      case "unknown": return { text: `${id}: completion is unknown.${error} Do not retry or restart; check the host and recover manually.`, level: "error" };
+      case "partial": return { text: `${id}: partial result. Some installations failed or were unverified.${error} Verified healthy active changes may have restarted; inspect each receipt before any retry.`, level: "warn" };
+      case "failed": return { text: `${id}: update failed or could not be verified.${error} Inspect receipts and installation health before retrying.`, level: "error" };
+      case "unchanged": return { text: `${id}: commands finished but no installation changed. No automatic restart was needed.`, level: "info" };
+      case "success": return { text: `${id}: changed installations verified. Any healthy changed active component was automatically restarted after idle; unchanged or separate PATH installations were not.`, level: "success" };
+      case "restart-authorized": return { text: `${id}: commands completed and healthy changed active components are waiting for idle before automatic restart.`, level: "warn" };
+      case "restart-in-progress": return { text: `${id}: automatic restart is in progress; reconnecting to the same job.`, level: "warn" };
+      case "restart-pending": return { text: `${id}: successor health and session restoration are not yet confirmed. Do not infer restart success.`, level: "warn" };
+      default: return { text: `${id}: ${job.phase || "status pending"}. Waiting for command completion and verification.`, level: "warn" };
+    }
+  }
+  const current = formatWebuiVersion((target === "pi" ? pkg.pathInstallationVersion : pkg.currentVersion) || (target === "pi" ? piVersion : webuiVersion) || "");
   const latest = formatWebuiVersion(pkg.latestVersion || "");
-  if (job?.state === "running") return { text: job.message || `Updating ${label}…`, level: "warn" };
-  if (job?.state === "succeeded") {
-    const activation = target === "pi"
-      ? "New or reloaded Pi sessions use the update; already-running tabs keep their current runtime until restarted."
-      : "The managed Web UI runtime was activated automatically; the browser reconnects after the verified restart.";
-    return { text: `${job.message || `${label} update completed.`} ${activation}`, level: "success" };
-  }
-  if (job?.state === "failed") {
-    const detail = job.error ? ` ${job.error}` : "";
-    return { text: `${job.message || `${label} update failed.`}${detail} You can retry the update.`, level: "error" };
-  }
-  const availability = pkg.updateAvailable
-    ? (latest ? `${label} ${current || "current"} → ${latest} is available.` : `${label} update is available.`)
-    : "";
-  if (job && job.canStart === false && job.unavailableReason) {
-    return { text: [availability, job.unavailableReason].filter(Boolean).join(" "), level: "warn" };
-  }
+  const availability = pkg.updateAvailable ? `${label} ${current || "current"} → ${latest || "new version"} is available.` : "";
+  const guidance = target === "pi" ? pkg.pathGuidance : (latestUpdateStatus?.webuiDev ? "Active source checkout stays unchanged; separately proven installations may be eligible." : "");
+  if (guidance) return { text: [availability, guidance].filter(Boolean).join(" "), level: "warn" };
   if (availability) return { text: availability, level: "info" };
   if (pkg.checked && latest) return { text: `${label} is up to date.`, level: "info" };
   if (pkg.skippedReason) return { text: `Update check skipped: ${pkg.skippedReason}.`, level: "info" };
@@ -9342,16 +9369,13 @@ function componentUpdateStatusText(target) {
 
 function componentUpdateButtonState(target) {
   const label = componentUpdateLabel(target);
-  const job = componentUpdateJob(target);
-  const pkg = latestUpdateStatus?.[target] || {};
-  if (job?.state === "running") return { disabled: true, label: "Updating…" };
-  if (job && job.canStart === false) return { disabled: true, label: `Update ${label}` };
+  const job = nativeUpdateJob(target);
   if (componentUpdateStartInProgress) return { disabled: true, label: "Starting…" };
-  if (updateRequestInProgress || latestUpdateStatus?.updateInProgress || anyComponentUpdateRunning()) {
+  if (nativeJobPollError || latestUpdateStatus?.nativeJobDiscoveryError || latestUpdateStatus?.canRunUpdate === false ||
+      latestUpdateStatus?.updateInProgress || anyComponentUpdateRunning() || job?.phase === "unknown" ||
+      updateRequestInProgress) {
     return { disabled: true, label: `Update ${label}` };
   }
-  if (job?.state === "failed") return { disabled: false, label: `Retry ${label} update` };
-  if (pkg.checked && !pkg.updateAvailable) return { disabled: true, label: "Up to date" };
   return { disabled: false, label: `Update ${label}` };
 }
 
@@ -9361,6 +9385,21 @@ function renderComponentUpdatePanel(target, statusElement, buttonElement) {
   statusElement.hidden = false;
   statusElement.textContent = text;
   statusElement.dataset.level = level;
+  if (nativeUpdateUnsettled(nativeUpdateJob(target))) statusElement.dataset.updateRunning = "";
+  else delete statusElement.dataset.updateRunning;
+  const output = target === "pi" ? elements.piComponentUpdateOutput : elements.webuiComponentUpdateOutput;
+  const job = nativeUpdateJob(target);
+  if (output) {
+    const lines = (job?.receipts || []).map((receipt) => [
+      `${receipt.id || "Installation"}: ${receipt.status || "unknown"}${receipt.afterVersion ? ` (installed ${receipt.afterVersion})` : ""}`,
+      receipt.stdout ? `stdout: ${String(receipt.stdout).slice(0, 2000)}` : "",
+      receipt.stderr ? `stderr: ${String(receipt.stderr).slice(0, 2000)}` : "",
+      receipt.error ? `error: ${String(receipt.error).slice(0, 600)}` : "",
+    ].filter(Boolean).join("\n"));
+    const verification = (job?.verifiedTargets || []).map((item) => `${item.id}: verification ${item.status || "unproven"}`);
+    output.textContent = [...lines, ...verification].join("\n\n").slice(0, 8000);
+    output.hidden = !output.textContent;
+  }
   const buttonState = componentUpdateButtonState(target);
   buttonElement.disabled = buttonState.disabled;
   buttonElement.textContent = buttonState.label;
@@ -9379,14 +9418,33 @@ function renderComponentUpdateDialogs() {
 }
 
 function syncComponentUpdatePolling() {
-  if (anyComponentUpdateRunning()) {
+  if (anyComponentUpdateRunning() || latestUpdateStatus?.updateInProgress) {
     if (componentUpdatePollTimer === null) {
-      componentUpdatePollTimer = setTimeout(() => {
+      componentUpdatePollTimer = setTimeout(async () => {
         componentUpdatePollTimer = null;
-        refreshUpdateStatus({ notify: false }).catch((error) => {
-          addEvent(`Component update status check failed: ${error.message || String(error)}`, "warn");
-          if (anyComponentUpdateRunning()) syncComponentUpdatePolling();
-        });
+        try {
+          for (const target of COMPONENT_UPDATE_TARGETS) {
+            const job = nativeUpdateJob(target);
+            if (nativeUpdateUnsettled(job) && job.transactionId) {
+              observedNativeJobs[target] = (await api(`/api/update/transactions/${encodeURIComponent(job.transactionId)}`, { scoped: false })).data;
+            }
+          }
+          await refreshUpdateStatus({ notify: false });
+          for (const target of COMPONENT_UPDATE_TARGETS) {
+            if (uncertainApplyJobs[target] && observedNativeJobs[target]?.phase === "planned" &&
+                latestUpdateStatus?.nativeJobs?.[target] === null && !latestUpdateStatus.updateInProgress) {
+              uncertainApplyJobs[target] = null;
+              observedNativeJobs[target] = null;
+            } else if (uncertainApplyJobs[target] && observedNativeJobs[target]?.phase !== "planned" &&
+                observedNativeJobs[target]?.phase !== "launching") uncertainApplyJobs[target] = null;
+          }
+          renderComponentUpdateDialogs();
+          syncComponentUpdatePolling();
+        } catch (error) {
+          nativeJobPollError = error.message || String(error);
+          renderComponentUpdateDialogs();
+          syncComponentUpdatePolling();
+        }
       }, COMPONENT_UPDATE_POLL_MS);
     }
   } else if (componentUpdatePollTimer !== null) {
@@ -9395,69 +9453,77 @@ function syncComponentUpdatePolling() {
   }
 }
 
-function separatePathPiPlanNotice(plan) {
-  const identities = Array.isArray(plan?.identities) ? plan.identities : [];
-  const activePi = identities.find((identity) => identity?.kind === "pi" && identity.source !== "path");
-  const pathPi = identities.find((identity) => identity?.kind === "pi" && identity.source === "path" && identity.canonicalId !== activePi?.canonicalId);
-  return pathPi ? `PATH Pi${pathPi.version ? ` v${pathPi.version}` : ""} is a separate installation and will remain untouched. Run pi update in a terminal to update it.` : "";
-}
-
-function componentUpdateConfirmationText(target) {
-  const pkg = latestUpdateStatus?.[target] || {};
-  const versionText = pkg.updateAvailable ? `\n\nDetected update: ${packageUpdateText(componentUpdateLabel(target), pkg)}.` : "";
-  if (target === "pi") {
-    return `Create and apply an exact Pi update plan now?${versionText}\n\nBundled Pi updates are staged with the current Web UI in a side-by-side managed runtime and activated with a health-gated restart. A verified independent Pi executable delegates to that exact executable and is rejected if it cannot reach the confirmed version.`;
-  }
-  return `Create and apply an exact Web UI update plan now?${versionText}\n\nThe confirmed Web UI and Pi versions are staged outside the live installation, probed, and activated through the stable launcher. Activation restarts the Web UI automatically and rolls back the runtime pointer if health verification fails.`;
+function componentUpdateConfirmationText(plan) {
+  const context = plan.context || {};
+  const active = plan.active || {};
+  const installations = (plan.targets || []).map((item) => [
+    `${item.id}: ${item.packageName} ${item.beforeVersion} at ${item.installedRoot}`,
+    `Affected root: ${item.effectRoot}`,
+    `Executable: ${item.command.command}`,
+    `Command argv: ${JSON.stringify(item.command.args)}`,
+  ].join("\n")).join("\n\n");
+  return [
+    `Update ${componentUpdateLabel(plan.requested)} with this exact plan?`,
+    `Active Pi: ${active.pi || "unknown"} at ${active.piRoot || "unknown"}.`,
+    plan.pathPi?.eligible
+      ? `Confirmed PATH Pi: ${plan.pathPi.version} at ${plan.pathPi.packageRoot}; executable ${plan.pathPi.executable}; CLI ${plan.pathPi.cli}. It may differ from active Pi.`
+      : `PATH Pi unproven: ${plan.pathPi?.guidance || "No verified PATH Pi version/root was returned; only confirmed commands below are eligible."}`,
+    `Active Web UI: ${active.webui || "unknown"} at ${active.webuiRoot || "unknown"}.`,
+    `Shell: ${context.shell || "unknown"}\nWorking directory: ${context.cwd || "unknown"}\nAgent directory: ${context.agentDir || "unknown"}\nNpm prefix: ${context.npmPrefix || "not applicable"}`,
+    installations,
+    plan.refusals?.length ? `Skipped/manual: ${plan.refusals.join(" · ")}` : "",
+    plan.warning || "Native package lifecycle scripts may run under your existing configuration; no automatic elevation or sandbox is provided.",
+    "Known affected work must be idle. Only changed, verified healthy active components restart automatically after all commands finish and work is idle. Native updates cannot be rolled back automatically.",
+    `Plan digest: ${plan.digest}`,
+  ].filter(Boolean).join("\n\n");
 }
 
 async function startComponentUpdate(target) {
   if (componentUpdateStartInProgress) return;
   const label = componentUpdateLabel(target);
-  const job = componentUpdateJob(target);
-  if (job?.state === "running" || anyComponentUpdateRunning() || updateRequestInProgress || latestUpdateStatus?.updateInProgress) return;
-  if (job && job.canStart === false) {
-    addEvent(job.unavailableReason || `${label} update is currently unavailable.`, "warn");
-    renderComponentUpdateDialogs();
-    return;
-  }
+  if (componentUpdateButtonState(target).disabled) return;
+  componentUpdateStartInProgress = true;
+  renderComponentUpdateDialogs();
   let plan;
   try {
     plan = (await api("/api/update/plan", { method: "POST", body: { targets: [target] }, scoped: false }))?.data?.plan;
   } catch (error) {
     addEvent(error.message || String(error), "error");
+    componentUpdateStartInProgress = false;
+    renderComponentUpdateDialogs();
     return;
   }
-  const planNotice = separatePathPiPlanNotice(plan);
-  const confirmed = await appConfirmText(`${componentUpdateConfirmationText(target)}${planNotice ? `\n\n${planNotice}` : ""}\n\nExact plan digest: ${plan.digest}`, {
-    affected: target === "pi" ? "The verified active Pi installation on the Web UI host" : "A side-by-side managed Web UI runtime",
-    confirmLabel: job?.state === "failed" ? `Retry ${label} update` : `Apply exact ${label} plan`,
+  if (plan?.requested !== target || !plan.transactionId || !plan.digest || !Array.isArray(plan.targets) || !plan.targets.length) {
+    addEvent("Update preview is incomplete; no command was launched.", "error");
+    componentUpdateStartInProgress = false;
+    renderComponentUpdateDialogs();
+    return;
+  }
+  const confirmed = await appConfirmText(componentUpdateConfirmationText(plan), {
+    affected: plan.targets.map((item) => `${item.id}: ${item.installedRoot}`).join(" · "),
+    confirmLabel: `Run ${label} update`,
     danger: false,
   });
-  if (!confirmed) return;
-  componentUpdateStartInProgress = true;
-  renderComponentUpdateDialogs();
-  setServerRestartOverlay(true, `Starting exact ${label} update…`, { phase: "updating" });
+  if (!confirmed) {
+    componentUpdateStartInProgress = false;
+    renderComponentUpdateDialogs();
+    return;
+  }
   try {
     const response = await api("/api/update/apply", { method: "POST", body: { transactionId: plan.transactionId, planDigest: plan.digest }, scoped: false });
-    const acceptedState = ["applying", "verifying", "activating"].includes(response?.data?.state)
-      ? "running"
-      : response?.data?.outcome === "success" ? "succeeded" : "failed";
-    const accepted = { target, state: acceptedState, canStart: false, message: `Exact ${label} update ${response?.data?.state || response?.data?.outcome || "accepted"}.`, receipts: response?.data?.receipts || [] };
-    if (accepted && typeof accepted === "object") {
-      latestUpdateStatus = {
-        ...(latestUpdateStatus || {}),
-        updateInProgress: true,
-        componentUpdates: { ...(latestUpdateStatus?.componentUpdates || {}), [target]: accepted },
-      };
-    }
-    addEvent(`${label} update started in the background`, "info");
+    if (response?.data?.transactionId !== plan.transactionId) throw new Error("Accepted job identity did not match the confirmed plan.");
+    uncertainApplyJobs[target] = null;
+    observedNativeJobs[target] = { transactionId: plan.transactionId, plan, phase: response.data.phase, receipts: [], verifiedTargets: [] };
+    latestUpdateStatus = { ...(latestUpdateStatus || {}), updateInProgress: true };
+    addEvent(`${label} job ${plan.transactionId} launched; watching its durable status`, "info");
   } catch (error) {
-    addEvent(error.message || String(error), "error");
-    if (error?.statusCode === 409) await refreshUpdateStatus({ notify: false }).catch(() => {});
+    nativeJobPollError = error.message || String(error);
+    uncertainApplyJobs[target] = plan.transactionId;
+    observedNativeJobs[target] = { transactionId: plan.transactionId, plan, phase: "launching", receipts: [], verifiedTargets: [] };
+    latestUpdateStatus = { ...(latestUpdateStatus || {}), updateInProgress: true };
+    addEvent(`${label} launch was not confirmed: ${nativeJobPollError}. Checking job ${plan.transactionId} before any retry.`, "error");
   } finally {
     componentUpdateStartInProgress = false;
-    setServerRestartOverlay(false);
     renderComponentUpdateIndicators();
     renderComponentUpdateDialogs();
     syncComponentUpdatePolling();
@@ -9481,109 +9547,6 @@ function initializeUpdateNotifications() {
     refreshUpdateStatus().catch((error) => addEvent(`Pi/Web UI update check failed: ${error.message || String(error)}`, "warn"));
     scheduleUpdateStatusRefresh();
   }, UPDATE_STATUS_INITIAL_DELAY_MS);
-}
-
-function piUpdateConfirmationText({ all = false, plan = null } = {}) {
-  const items = updateNotificationItems();
-  const workingWarning = hasWorkingTab() ? "\n\nOne or more Pi tabs look busy or blocked. Finish or abort in-flight work before updating if you need to preserve it." : "";
-  const versionText = items.length ? `\n\nDetected update: ${items.join(" · ")}.` : "";
-  const scope = all ? "the verified active Pi and Web UI targets" : "the verified active Pi target";
-  const refusals = Array.isArray(plan?.refusals) && plan.refusals.length ? `\n\nRefused automatic targets: ${plan.refusals.map((item) => `${item.id}: ${item.guidance}`).join(" · ")}` : "";
-  const separatePathPi = separatePathPiPlanNotice(plan);
-  const pathNotice = separatePathPi ? `\n\n${separatePathPi}` : "";
-  const digest = plan?.digest ? `\n\nExact immutable plan digest: ${plan.digest}` : "";
-  return `Apply ${scope} now?${versionText}${refusals}${pathNotice}${digest}\n\nThe server will use only this persisted exact-target plan; it will not re-resolve latest or scan package roots. Managed Web UI activation is health-gated and automatically rolls back on failure.${workingWarning}`;
-}
-
-async function runPiUpdateAndRestart({ all = false } = {}) {
-  if (updateRequestInProgress) return;
-  if (latestUpdateStatus?.canRunUpdate === false) {
-    addEvent("Pi updates can only be started from localhost on the Web UI host", "warn");
-    renderUpdateNotification(latestUpdateStatus, { force: true });
-    return;
-  }
-  let plan;
-  try {
-    plan = (await api("/api/update/plan", { method: "POST", body: { targets: all ? ["pi", "webui"] : ["pi"] }, scoped: false }))?.data?.plan;
-  } catch (error) {
-    const message = error.message || String(error);
-    setServerActionStatus(message, "error");
-    addEvent(message, "error");
-    renderUpdateNotification(latestUpdateStatus, { force: true });
-    return;
-  }
-  const planTargets = Array.isArray(plan?.targets) ? plan.targets : [];
-  if (planTargets.length === 0) {
-    const refused = Array.isArray(plan?.refusals) ? plan.refusals.map((item) => `${item.id}: ${item.guidance}`).join(" · ") : "";
-    const message = refused ? `No update targets were accepted. ${refused}` : "No update targets were accepted; nothing was changed.";
-    setServerActionStatus(message, "error");
-    addEvent(message, "error");
-    renderUpdateNotification(latestUpdateStatus, { force: true });
-    return;
-  }
-  if (!(await appConfirmText(piUpdateConfirmationText({ all, plan }), { affected: "Only targets accepted by the exact server-owned plan", confirmLabel: all ? "Apply exact update plan" : "Apply exact Pi plan" }))) return;
-
-  const updateLabel = all ? "Pi and Web UI exact updates" : "Pi exact update";
-  const plannedRestart = planTargets.some((target) => target?.metadata?.managedRuntime === true);
-  const progressMessage = plannedRestart
-    ? `Running ${updateLabel}. The server will restart after activation…`
-    : `Running ${updateLabel}…`;
-  updateRequestInProgress = true;
-  hideUpdateNotification();
-  setServerActionBusy("Updating…");
-  setServerActionStatus(progressMessage, "warn");
-  setServerRestartOverlay(true, progressMessage, { phase: "updating" });
-  try {
-    const applyData = (await api("/api/update/apply", { method: "POST", body: { transactionId: plan.transactionId, planDigest: plan.digest }, scoped: false }))?.data || null;
-    if (applyData?.state !== "activating") {
-      updateRequestInProgress = false;
-      setServerRestartOverlay(false);
-      resetServerActionControls();
-      const outcome = applyData?.outcome || applyData?.state || "failed";
-      const succeeded = outcome === "success";
-      const partial = outcome === "partial";
-      const message = succeeded
-        ? `${updateLabel} completed without a Web UI restart.`
-        : partial
-          ? `${updateLabel} completed partially; review the update receipts before retrying.`
-          : `${updateLabel} did not complete; no Web UI restart was requested.`;
-      const level = succeeded ? "success" : partial ? "warn" : "error";
-      setServerActionStatus(message, level);
-      addEvent(message, level === "success" ? "info" : level);
-      if (succeeded) hideUpdateNotification({ remember: true });
-      else renderUpdateNotification(latestUpdateStatus, { force: true });
-      refreshUpdateStatus({ force: true, notify: false }).catch(() => {});
-      return;
-    }
-    addEvent(`${updateLabel} verified; Pi Web UI server activation requested`, "warn");
-  } catch (error) {
-    if (!error?.backendOffline) {
-      updateRequestInProgress = false;
-      setServerRestartOverlay(false);
-      resetServerActionControls();
-      const message = error.message || String(error);
-      setServerActionStatus(message, "error");
-      addEvent(message, "error");
-      renderUpdateNotification(latestUpdateStatus, { force: true });
-      return;
-    }
-    addEvent("Pi Web UI server connection dropped during update activation", "warn");
-  }
-
-  setBackendOffline(true, new Error("update activation requested from side panel"));
-  const restarted = await waitForServerRestart(serverBootIdentity);
-  updateRequestInProgress = false;
-  resetServerActionControls();
-  if (restarted) {
-    hideUpdateNotification({ remember: true });
-    setServerActionStatus("Updated, restarted, and reconnected.", "success");
-    refreshUpdateStatus({ force: true, notify: false }).catch(() => {});
-  } else {
-    setServerRestartOverlay(false);
-    setBackendOffline(true, new Error("update restart reconnect timed out"));
-    setServerActionStatus("Update activation started, but the server did not reconnect automatically.", "error");
-    addEvent("Pi Web UI server did not come back online after update activation", "error");
-  }
 }
 
 function formatBytes(bytes) {
@@ -47750,11 +47713,11 @@ function updateServerActionButton() {
   const button = elements.runServerActionButton;
   if (!button) return;
   button.disabled = !action;
-  button.textContent = action === "restart" ? "Restart" : action === "update" || action === "update-all" ? "Update" : action === "stop" ? "Stop" : "Run";
+  button.textContent = action === "restart" ? "Restart" : action === "update" || action === "update-webui" ? "Update" : action === "stop" ? "Stop" : "Run";
   button.classList.toggle("danger", action === "stop");
   if (action === "restart") setServerActionStatus("Ready to restart the Web UI server.", "info");
-  else if (action === "update") setServerActionStatus("Ready to create and confirm an exact Pi-only update plan.", "info");
-  else if (action === "update-all") setServerActionStatus("Ready to create and confirm an exact combined update plan for eligible Pi, Web UI, and Pi-owned Optional Features.", "info");
+  else if (action === "update") setServerActionStatus("Ready to preview the verified PATH Pi update.", "info");
+  else if (action === "update-webui") setServerActionStatus("Ready to preview eligible Web UI installations separately from Pi.", "info");
   else if (action === "stop") setServerActionStatus("Ready to stop the Web UI server.", "info");
   else setServerActionStatus();
 }
@@ -47879,8 +47842,14 @@ async function stopServer() {
 async function runSelectedServerAction() {
   const action = elements.serverActionSelect?.value || "";
   if (action === "restart") await restartServer();
-  else if (action === "update") await runPiUpdateAndRestart();
-  else if (action === "update-all") await runPiUpdateAndRestart({ all: true });
+  else if (action === "update" || action === "update-webui") {
+    const target = action === "update" ? "pi" : "webui";
+    if (componentUpdateButtonState(target).disabled) {
+      setServerActionStatus(componentUpdateStatusText(target).text || "Update status is not safe to start. Check the version tag for details.", "warn");
+      return;
+    }
+    await startComponentUpdate(target);
+  }
   else if (action === "stop") await stopServer();
 }
 
@@ -50455,8 +50424,8 @@ elements.remoteQrDialog?.addEventListener("close", () => {
 });
 elements.serverActionSelect.addEventListener("change", updateServerActionButton);
 elements.runServerActionButton.addEventListener("click", () => runSelectedServerAction().catch((error) => addEvent(error.message || String(error), "error")));
-elements.updateNotificationUpdateButton?.addEventListener("click", () => runPiUpdateAndRestart().catch((error) => addEvent(error.message || String(error), "error")));
-elements.updateNotificationUpdateAllButton?.addEventListener("click", () => runPiUpdateAndRestart({ all: true }).catch((error) => addEvent(error.message || String(error), "error")));
+elements.updateNotificationUpdateButton?.addEventListener("click", () => startComponentUpdate("pi").catch((error) => addEvent(error.message || String(error), "error")));
+elements.updateNotificationUpdateAllButton?.addEventListener("click", () => startComponentUpdate("webui").catch((error) => addEvent(error.message || String(error), "error")));
 elements.updateNotificationDismissButton?.addEventListener("click", () => hideUpdateNotification({ remember: true }));
 updateServerActionButton();
 elements.agentDoneNotificationsToggle.addEventListener("change", () => {

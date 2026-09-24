@@ -130,6 +130,7 @@ function runGitFixture(args, cwd, message) {
 
 const cwd = await mkdtemp(path.join(tmpdir(), "pi-webui-http-harness-"));
 const harnessSideEffectsRoot = await mkdtemp(path.join(tmpdir(), "pi-webui-http-harness-side-effects-"));
+const coordinationHome = await mkdtemp(path.join(tmpdir(), "pi-webui-http-coordination-"));
 const settingsFile = path.join(harnessSideEffectsRoot, "webui-settings.json");
 const workflowPolicyAgentDir = path.join(harnessSideEffectsRoot, "agent");
 const agentRunStateHome = path.join(harnessSideEffectsRoot, "state");
@@ -283,6 +284,8 @@ const child = spawn(process.execPath, [serverScript, "--cwd", cwd, "--host", "0.
     GIT_COMMITTER_EMAIL: "pi-webui-test@example.invalid",
     PATH: `${fakeOpenBinDir}${path.delimiter}${process.env.PATH || ""}`,
     PI_CODING_AGENT_DIR: workflowPolicyAgentDir,
+    NODE_ENV: "test",
+    PI_WEBUI_UPDATE_TEST_HOME: coordinationHome,
     XDG_STATE_HOME: agentRunStateHome,
     PI_WEBUI_SETTINGS_FILE: settingsFile,
     PI_SESSION_SUMMARY_CONFIG_FILE: sessionSummaryConfigFile,
@@ -1018,18 +1021,26 @@ try {
   });
   assert.equal(crossOriginWorkflowPolicy.status, 403, "workflow policy saves must reject browser cross-origin requests");
 
+  const updateStatus = await request("127.0.0.1", "/api/update-status?refresh=1");
+  assert.equal(updateStatus.status, 200);
+  const expectedReleaseVersion = updateStatus.body?.data?.pi?.updateAvailable
+    ? latestPiVersion : updateStatus.body?.data?.pi?.currentVersion || updateStatus.body?.data?.pi?.activeRuntimeVersion;
+  assert.match(expectedReleaseVersion, /^\d+\.\d+\.\d+$/, "release identity must come from the confirmed PATH or active Pi installation");
   const releaseNotes = await request("127.0.0.1", "/api/pi-release-notes");
   assert.equal(releaseNotes.status, 200, `Pi release notes should load through the server: ${releaseNotes.body?.error || ""}`);
-  assert.equal(releaseNotes.body?.data?.version, latestPiVersion, "an available update should select the latest Pi release");
-  assert.equal(releaseNotes.body?.data?.tagName, `v${latestPiVersion}`);
-  assert.equal(releaseNotes.body?.data?.title, `Pi v${latestPiVersion} test release`);
+  assert.equal(releaseNotes.body?.data?.version, expectedReleaseVersion, "Pi release notes must follow the PATH-versus-active identity in update status");
+  assert.equal(releaseNotes.body?.data?.tagName, `v${expectedReleaseVersion}`);
+  assert.equal(releaseNotes.body?.data?.title, `Pi v${expectedReleaseVersion} test release`);
   assert.match(releaseNotes.body?.data?.body || "", /Release notes from the test GitHub endpoint/);
-  assert.equal(releaseNotes.body?.data?.url, `https://github.com/earendil-works/pi/releases/tag/v${latestPiVersion}`);
+  assert.equal(releaseNotes.body?.data?.url, `https://github.com/earendil-works/pi/releases/tag/v${expectedReleaseVersion}`);
   assert.equal(releaseNotes.headers.get("cache-control"), "private, no-store", "browser caches should not retain notes across Pi upgrades");
   const cachedReleaseNotes = await request("127.0.0.1", "/api/pi-release-notes");
-  assert.equal(cachedReleaseNotes.body?.data?.tagName, `v${latestPiVersion}`);
-  assert.equal(voiceProviderRequests.filter((item) => item.url === `/pi-releases/v${latestPiVersion}`).length, 1, "the server should fetch the available Pi release only once");
-  assert.equal(voiceProviderRequests.filter((item) => item.url === `/pi-releases/v${health.body.piVersion}`).length, 0, "the installed Pi release should not be fetched while a newer release is available");
+  assert.equal(cachedReleaseNotes.body?.data?.tagName, `v${expectedReleaseVersion}`);
+  assert.equal(voiceProviderRequests.filter((item) => item.url === `/pi-releases/v${expectedReleaseVersion}`).length, 1, "the selected Pi release should be fetched only once");
+  if (!updateStatus.body?.data?.pi?.updateAvailable) {
+    assert.equal(voiceProviderRequests.filter((item) => item.url === `/pi-releases/v${latestPiVersion}`).length, 0,
+      "an unproven PATH Pi must not be presented as updatable");
+  }
 
   // Static assets: brotli/gzip compression plus ETag revalidation (P0-2).
   const brotliResponse = await fetch(`http://127.0.0.1:${port}/app.js`, {
@@ -4005,6 +4016,17 @@ try {
   assert.equal(initialAuth.status, 200);
   assert.equal(initialAuth.body?.data?.auth?.enabled, false, "remote PIN auth should be off by default");
 
+  const combinedUpdatePlan = await request("127.0.0.1", "/api/update/plan", {
+    method: "POST", body: { targets: ["pi", "webui"] },
+  });
+  assert.equal(combinedUpdatePlan.status, 400, "a combined action must not reach native shell planning");
+  const missingNativeJob = await request("127.0.0.1", "/api/update/apply", {
+    method: "POST", body: { transactionId: "missing-fixture-job", planDigest: "a".repeat(64) },
+  });
+  assert.equal(missingNativeJob.status, 404, "native apply must require a server-owned confirmed job");
+  const nativeRollback = await request("127.0.0.1", "/api/update/rollback", { method: "POST", body: {} });
+  assert.equal(nativeRollback.status, 410, "native updates cannot claim managed-pointer rollback");
+
   const lan = lanAddress();
   if (lan) {
     const remoteHealthBeforeAuth = await request(lan, "/api/health");
@@ -4016,11 +4038,11 @@ try {
     const remoteUpdatePlan = await request(lan, "/api/update/plan", { method: "POST", body: { targets: ["pi"] } });
     assert.equal(remoteUpdatePlan.status, 403, "update plans must be localhost-only before target resolution");
     const remoteUpdateApply = await request(lan, "/api/update/apply", { method: "POST", body: { transactionId: "remote", planDigest: "a".repeat(64) } });
-    assert.equal(remoteUpdateApply.status, 403, "update apply must be localhost-only before journal lookup");
+    assert.equal(remoteUpdateApply.status, 403, "update apply must be localhost-only before native job lookup");
     const remoteUpdateTransaction = await request(lan, "/api/update/transactions/remote");
     assert.equal(remoteUpdateTransaction.status, 403, "update transaction receipts must be localhost-only");
     const remoteUpdateRollback = await request(lan, "/api/update/rollback", { method: "POST", body: { transactionId: "remote", planDigest: "a".repeat(64) } });
-    assert.equal(remoteUpdateRollback.status, 403, "update rollback must be localhost-only before pointer mutation");
+    assert.equal(remoteUpdateRollback.status, 403, "retired rollback must remain localhost-only before a 410 response");
 
     const remoteWorkflowPolicySave = await request(lan, "/api/workflow-policy", {
       method: "POST",
@@ -4257,6 +4279,7 @@ try {
   }
   await rmWithRetry(cwd);
   await rmWithRetry(harnessSideEffectsRoot);
+  await rmWithRetry(coordinationHome);
 }
 
 console.log("http-endpoints-harness.test.mjs passed");

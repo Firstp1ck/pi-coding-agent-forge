@@ -86,6 +86,14 @@ assert.throws(
 assert.deepEqual(sanitizeSupervisorData({ password: "no", nested: { Authorization: "no", safe: true } }), { nested: { safe: true } });
 assert.throws(() => validateClientFrame({ type: "command", requestId: "x", tabId: "t", command: { type: "prompt" }, unexpected: true }), RpcSupervisorProtocolError);
 assert.throws(() => validateClientFrame({ type: "create", requestId: "x", tabId: "t", metadata: {}, child: { command: "pi", args: [], cwd: "/tmp", env: {} } }), RpcSupervisorProtocolError);
+const updateRestart = { transactionId: "job-1", lockToken: "fence-1", effectRoot: "/global", nonce: "once-1" };
+const restartFrame = validateClientFrame({ type: "replace_update", requestId: "restart-request", tabId: "tab-1",
+  metadata: { title: "Restored" }, child: { command: "pi", args: [], cwd: "/tmp" }, restart: updateRestart });
+assert.deepEqual(restartFrame.restart, updateRestart);
+assert.throws(() => validateClientFrame({ type: "replace_update", requestId: "r", tabId: "t", metadata: {},
+  child: { command: "pi", args: [], cwd: "/tmp" }, restart: { ...updateRestart, bypass: true } }), /unsupported field/);
+assert.throws(() => validateClientFrame({ type: "replace", requestId: "r", tabId: "t", metadata: {},
+  child: { command: "pi", args: [], cwd: "/tmp" }, restart: updateRestart }), /only valid/);
 assert.throws(() => encodeFrame({ value: "x".repeat(RPC_SUPERVISOR_MAX_FRAME_BYTES) }), RpcSupervisorProtocolError);
 
 const frames = [];

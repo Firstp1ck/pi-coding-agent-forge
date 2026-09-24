@@ -3,7 +3,7 @@ import { spawn } from "node:child_process";
 import { homedir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { readRuntimePointer } from "../lib/update/supervisor.mjs";
+import { migrateLegacyBootstrap } from "../lib/update/migration.mjs";
 
 const bootstrapRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const bootstrapServer = path.join(bootstrapRoot, "bin", "pi-webui.mjs");
@@ -18,8 +18,11 @@ if (process.argv[2] === "agent") {
     process.exitCode = 1;
   }
 } else {
-  const pointer = await readRuntimePointer(agentDir, "current");
-  const serverEntry = pointer?.serverEntry || bootstrapServer;
+  const selection = await migrateLegacyBootstrap(agentDir, bootstrapRoot);
+  if (!selection.migrated && selection.reason !== "no-legacy-pointer") {
+    console.warn(`Pi Web UI retained the previous runtime: ${selection.reason}. Inspect the installed package and pointer backups before manual migration.`);
+  }
+  const serverEntry = selection.serverEntry || bootstrapServer;
   const child = spawn(process.execPath, [serverEntry, ...process.argv.slice(2)], {
     cwd: process.cwd(), env: process.env, stdio: "inherit", windowsHide: true,
   });

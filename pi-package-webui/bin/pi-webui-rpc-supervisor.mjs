@@ -1,10 +1,12 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { createServer } from "node:net";
-import { rm, realpath } from "node:fs/promises";
+import { lstat, readFile, rename, rm, realpath } from "node:fs/promises";
+import path from "node:path";
 import { StringDecoder } from "node:string_decoder";
 import { terminateProcessTree } from "../lib/process-tree.mjs";
+import { acknowledgeUpdateFence, assertEffectAdmission, effectLockForRoot, readSharedJob, registerUpdateParticipant, sharedUpdateRoot, unregisterUpdateParticipant } from "../lib/update/coordination.mjs";
 import {
   PI_RPC_JSONL_LINE_MAX_BYTES,
   RPC_SUPERVISOR_EVENT_RING_LIMIT,
@@ -38,6 +40,7 @@ const EMPTY_IDLE_GRACE_MS = 1_500;
 const CHILD_STOP_GRACE_MS = 3_000;
 const CHILD_STDIN_WRITE_TIMEOUT_MS = 2_000;
 const REQUEST_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+const READ_ONLY_RPC_COMMANDS = new Set(["get_state", "get_messages", "get_session_stats", "get_available_models", "get_commands"]);
 
 function requestIdForErrorFrame(frame) {
   return typeof frame?.requestId === "string" && REQUEST_ID_PATTERN.test(frame.requestId) ? frame.requestId : undefined;
@@ -103,6 +106,8 @@ class SupervisorHost {
     this.closing = false;
     this.idleTimer = null;
     this.persistQueue = Promise.resolve();
+    this.updateParticipant = null;
+    this.updateStateRoot = null;
   }
 
   async start() {
@@ -289,7 +294,9 @@ class SupervisorHost {
       this.sendError(client, request.requestId, Object.assign(new Error("RPC supervisor request dedupe capacity is occupied by unresolved work"), { code: "RPC_SUPERVISOR_DEDUPE_CAPACITY" }));
       return;
     }
-    const entry = { settled: false, promise: null };
+    const mutating = !["ack", "prepare_handoff", "detach", "shutdown"].includes(request.type) &&
+      !(request.type === "command" && READ_ONLY_RPC_COMMANDS.has(request.command?.type));
+    const entry = { settled: false, promise: null, mutating };
     entry.promise = Promise.resolve().then(() => this.perform(request));
     entry.promise.then(() => { entry.settled = true; }, () => { entry.settled = true; });
     this.requests.set(request.requestId, entry);
@@ -297,23 +304,25 @@ class SupervisorHost {
     catch (error) { this.sendError(client, request.requestId, error); }
   }
 
-  queueTabMutation(tabId, operation) {
+  queueTabMutation(tabId, operation, updateRestart = false) {
     const tab = this.requireTab(tabId);
     const previous = tab.mutationTail || Promise.resolve();
-    const result = previous.catch(() => {}).then(() => {
+    const result = previous.catch(() => {}).then(async () => {
       if (this.tabs.get(tabId) !== tab) throw new Error(`Managed tab is no longer available: ${tabId}`);
+      if (this.updateParticipant && !updateRestart) await assertEffectAdmission(this.updateStateRoot, this.updateParticipant.canonicalRoots);
       return operation();
     });
     tab.mutationTail = result.catch(() => {});
     return result;
   }
 
-  queueTabCommand(tabId, operation) {
+  queueTabCommand(tabId, operation, readOnly = false) {
     const tab = this.requireTab(tabId);
     const previous = tab.mutationTail || Promise.resolve();
     let response;
-    const admission = previous.catch(() => {}).then(() => {
+    const admission = previous.catch(() => {}).then(async () => {
       if (this.tabs.get(tabId) !== tab) throw new Error(`Managed tab is no longer available: ${tabId}`);
+      if (this.updateParticipant && !readOnly) await assertEffectAdmission(this.updateStateRoot, this.updateParticipant.canonicalRoots);
       // command() registers the pending response and writes to stdin
       // synchronously before returning its response promise. Release the FIFO
       // barrier at that point so extension-ui writes and later bounded probes
@@ -325,16 +334,20 @@ class SupervisorHost {
   }
 
   async perform(request) {
+    // Enter the tab's FIFO before any asynchronous fence check. Otherwise a
+    // later replacement can overtake a write while both inspect the filesystem.
     switch (request.type) {
       case "create": return this.create(request);
       case "update": return this.queueTabMutation(request.tabId, () => this.update(request));
       case "replace": return this.queueTabMutation(request.tabId, () => this.replace(request));
+      case "replace_update": return this.queueTabMutation(request.tabId, () => this.replaceUnderUpdate(request), true);
       case "close": return this.queueTabMutation(request.tabId, () => this.closeTab(request.tabId));
       // Commands take a FIFO admission position, but their full response must
       // not hold the queue: prompts can wait for extension-ui writes. Metadata
       // refreshes can also arrive continuously, so chasing a moving tail would
       // starve get_state and leave a CWD PATCH permanently in progress.
-      case "command": return this.queueTabCommand(request.tabId, () => this.command(request));
+      case "command": return this.queueTabCommand(request.tabId, () => this.command(request),
+        READ_ONLY_RPC_COMMANDS.has(request.command?.type));
       case "write": return this.queueTabMutation(request.tabId, () => this.write(request));
       case "ack": return { cursor: request.cursor };
       case "prepare_handoff": return { epoch: this.epoch, latestSeq: this.sequence.toString(), tabs: [...this.tabs.values()].map(tabSnapshot) };
@@ -349,9 +362,10 @@ class SupervisorHost {
   async create({ tabId, metadata, child }) {
     if (this.tabs.has(tabId)) throw new Error(`Managed tab already exists: ${tabId}`);
     if (this.tabs.size >= RPC_SUPERVISOR_TAB_LIMIT) throw new Error(`Managed tab limit is ${RPC_SUPERVISOR_TAB_LIMIT}`);
-    const tab = { id: tabId, metadata, child: null, pending: new Map(), startedAt: new Date().toISOString(), mutationTail: Promise.resolve() };
+    const tab = { id: tabId, metadata, child: null, pending: new Map(), working: true, startedAt: new Date().toISOString(), mutationTail: Promise.resolve() };
     this.tabs.set(tabId, tab);
     try {
+      if (this.updateParticipant) await assertEffectAdmission(this.updateStateRoot, this.updateParticipant.canonicalRoots);
       const candidate = await this.spawnChildCandidate(child);
       this.commitChild(tab, candidate);
     } catch (error) {
@@ -377,6 +391,39 @@ class SupervisorHost {
     this.commitChild(tab, candidate);
     await this.persist("replace");
     return tabSnapshot(tab);
+  }
+
+  async replaceUnderUpdate(request) {
+    if (!this.updateParticipant || !this.updateStateRoot) throw new Error("Update restart requires a registered RPC owner.");
+    const { tabId, restart, metadata, child } = request;
+    const tab = this.requireTab(tabId);
+    if (!tabRunning(tab) || tab.working !== false || tab.pending.size > 0) throw new Error("Affected Pi tab is not verified idle.");
+    const effectRoot = await realpath(restart.effectRoot);
+    if (effectRoot !== restart.effectRoot || !this.updateParticipant.canonicalRoots.includes(effectRoot)) throw new Error("Unowned update effect root.");
+    const lock = await effectLockForRoot(this.updateStateRoot, effectRoot);
+    if (!lock || lock.token !== restart.lockToken || lock.transactionId !== restart.transactionId) throw new Error("Update fence identity changed.");
+    const job = await readSharedJob(this.updateStateRoot, restart.transactionId);
+    if (!job || job.phase !== "restart-authorized" || job.lock?.token !== lock.token ||
+        !job.verifiedTargets?.some((item) => item.effectRoot === effectRoot && item.status === "healthy")) {
+      throw new Error("No durable healthy completed update authorizes this Pi restart.");
+    }
+    const completed = JSON.parse(await readFile(path.join(job.jobDir, "complete.json"), "utf8"));
+    if (completed.transactionId !== restart.transactionId || !completed.receipts?.some((item) =>
+      (item.status === "changed" || item.status === "unchanged" && job.verifiedTargets.some((verified) =>
+        verified.id === item.id && verified.piChanged === true)) && job.verifiedTargets.some((verified) =>
+      verified.id === item.id && verified.effectRoot === effectRoot && verified.status === "healthy"))) {
+      throw new Error("Command completion evidence does not match the authorized restart.");
+    }
+    const markerPath = path.join(job.jobDir, "restarts", `${restart.nonce}.json`);
+    const usedPath = `${markerPath}.used`;
+    const marker = JSON.parse(await readFile(markerPath, "utf8"));
+    const requestDigest = createHash("sha256").update(JSON.stringify({ tabId, metadata, child })).digest("hex");
+    if (marker.tabId !== tabId || marker.transactionId !== restart.transactionId || marker.lockToken !== lock.token ||
+        marker.effectRoot !== effectRoot || marker.requestDigest !== requestDigest) throw new Error("Restart authorization does not bind this tab and replacement.");
+    try { await lstat(usedPath); throw new Error("Restart authorization was already used."); }
+    catch (error) { if (error.code !== "ENOENT") throw error; }
+    await rename(markerPath, usedPath);
+    return this.replace(request);
   }
 
   async closeTab(tabId) {
@@ -495,6 +542,11 @@ class SupervisorHost {
       clearTimeout(pending.timer);
       pending.resolve(payload);
     }
+    if (payload?.type === "agent_start" || payload?.type === "compaction_start") tab.working = true;
+    if (payload?.type === "agent_settled" || payload?.type === "compaction_end") tab.working = false;
+    if (payload?.type === "response" && payload.command === "get_state" && payload.success !== false) {
+      tab.working = payload.data?.isStreaming === true || payload.data?.isCompacting === true;
+    }
     this.emit(tab.id, payload);
   }
 
@@ -605,6 +657,7 @@ class SupervisorHost {
     for (const client of this.clients) client.socket.destroy();
     await new Promise((resolve) => this.server?.close(() => resolve()) || resolve());
     await removeSupervisorState(this.paths, { removeSocket: true, instanceId: this.instanceId }).catch(() => {});
+    if (this.updateParticipant) await unregisterUpdateParticipant(this.updateParticipant).catch(() => {});
     process.exit(0);
   }
 }
@@ -612,4 +665,26 @@ class SupervisorHost {
 const options = cliOptions(process.argv.slice(2));
 const paths = await supervisorPaths(options);
 const host = new SupervisorHost(paths);
-await host.start();
+const effects = (() => {
+  try { return JSON.parse(process.env.PI_WEBUI_UPDATE_EFFECT_ROOTS || "[]"); } catch { return []; }
+})();
+if (Array.isArray(effects) && effects.length && effects.every((root) => typeof root === "string")) {
+  host.updateStateRoot = await sharedUpdateRoot();
+  host.updateParticipant = await registerUpdateParticipant(host.updateStateRoot, { kind: "rpc-supervisor", roots: effects });
+  setInterval(async () => {
+    try {
+      for (const effect of host.updateParticipant.canonicalRoots) {
+        const lock = await effectLockForRoot(host.updateStateRoot, effect);
+        if (!lock) continue;
+        const idle = ![...host.requests.values()].some((request) => request.mutating && !request.settled) &&
+          [...host.tabs.values()].every((tab) => tab.working === false && tab.pending.size === 0 && tab.child?.exitCode === null);
+        await acknowledgeUpdateFence(host.updateParticipant, { token: lock.token, effects: [effect] }, idle);
+      }
+    } catch (error) { console.warn(`Update admission acknowledgement failed: ${publicError(error)}`); }
+  }, 250).unref();
+}
+try { await host.start(); }
+catch (error) {
+  if (host.updateParticipant) await unregisterUpdateParticipant(host.updateParticipant).catch(() => {});
+  throw error;
+}

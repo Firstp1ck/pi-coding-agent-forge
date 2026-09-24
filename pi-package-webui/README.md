@@ -296,7 +296,7 @@ Use the optional Remote Web UI package when you need trusted-LAN access and PIN 
 
 ## Technical details
 
-Core updates use a persisted exact-target plan bound to a plan digest. The server verifies package ownership before mutation, supports npm-hoisted bundled Pi installs, and refuses plans with no accepted targets without entering the restart flow.
+To update, select **Update Pi** or **Update Web UI** in the Control Deck. Read the preview of installations and commands, including skipped installations, before confirming. Only localhost can start an update. Finish work in affected tabs first; native package updates may run lifecycle scripts under your existing configuration and cannot be automatically rolled back. The small activity indicator and command results remain available after reconnect. If the status is unknown, check the host before trying again.
 
 > **Before downgrading:** stop the Web UI and back up `~/.pi/webui/settings.json`. Older releases do not understand the two-sided Control Deck layout and can overwrite it. Re-upgrade before restoring the backup.
 

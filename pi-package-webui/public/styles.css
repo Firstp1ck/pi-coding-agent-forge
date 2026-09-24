@@ -1466,7 +1466,11 @@ body.embedded-split .side-panel-backdrop {
   color: var(--ctp-green);
 }
 .pi-version-button[data-update-state="failed"]::after,
-.webui-version-button[data-update-state="failed"]::after {
+.webui-version-button[data-update-state="failed"]::after,
+.pi-version-button[data-update-state="unknown"]::after,
+.webui-version-button[data-update-state="unknown"]::after,
+.pi-version-button[data-update-state="partial"]::after,
+.webui-version-button[data-update-state="partial"]::after {
   content: "!";
   color: var(--ctp-red);
 }
@@ -11917,6 +11921,30 @@ body:not(.mobile-keyboard-open) .composer-input-row:has(.composer-workflow-mode-
 .component-update-status[data-level="success"] { color: var(--ctp-green); }
 .component-update-status[data-level="warn"] { color: var(--ctp-yellow); }
 .component-update-status[data-level="error"] { color: var(--ctp-red); }
+.component-update-panel .component-update-output { flex-basis: 100%; }
+.component-update-output {
+  max-height: 12rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 0.78rem;
+}
+.component-update-output[hidden] { display: none; }
+.component-update-status[data-update-running]::before {
+  content: "";
+  display: inline-block;
+  width: 0.65rem;
+  height: 0.65rem;
+  margin-right: 0.45rem;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: component-update-spin 0.8s linear infinite;
+}
+@keyframes component-update-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .component-update-status[data-update-running]::before { animation: none; }
+}
 .component-update-button { flex-shrink: 0; }
 
 .extension-dialog.webui-package-dialog {

@@ -4,30 +4,30 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const [html, css, app, server, readme] = await Promise.all([
-  readFile(join(root, "public", "index.html"), "utf8"),
-  readFile(join(root, "public", "styles.css"), "utf8"),
-  readFile(join(root, "public", "app.js"), "utf8"),
-  readFile(join(root, "bin", "pi-webui.mjs"), "utf8"),
-  readFile(join(root, "README.md"), "utf8"),
+const [html, css, app, development] = await Promise.all([
+  readFile(join(root, "public/index.html"), "utf8"),
+  readFile(join(root, "public/styles.css"), "utf8"),
+  readFile(join(root, "public/app.js"), "utf8"),
+  readFile(join(root, "DEVELOPMENT.md"), "utf8"),
 ]);
-assert.match(html, /id="piComponentUpdateStatus"[^>]*aria-live="polite"/);
-assert.match(html, /id="webuiComponentUpdateStatus"[^>]*aria-live="polite"/);
-for (const state of ["available", "running", "succeeded", "failed"]) assert.match(css, new RegExp(`data-update-state="${state}"`));
-assert.match(app, /api\("\/api\/update\/plan", \{ method: "POST", body: \{ targets: \[target\] \}/);
-assert.match(app, /Exact plan digest: \$\{plan\.digest\}/);
-assert.match(app, /api\("\/api\/update\/apply", \{ method: "POST", body: \{ transactionId: plan\.transactionId, planDigest: plan\.digest \}/);
-assert.match(app, /function piUpdateConfirmationText\(\{ all = false, plan = null \} = \{\}\)[\s\S]*Exact immutable plan digest/);
-assert.match(app, /const planTargets = Array\.isArray\(plan\?\.targets\)[\s\S]*planTargets\.length === 0[\s\S]*No update targets were accepted/);
-assert.match(app, /applyData\?\.state !== "activating"[\s\S]*completed without a Web UI restart[\s\S]*did not complete; no Web UI restart was requested/);
-assert.match(html, /id="serverRestartPanel"[\s\S]*server-restart-spinner[\s\S]*id="serverRestartKicker"[\s\S]*id="serverRestartTitle"/);
-assert.match(app, /function setServerRestartOverlay\(active[\s\S]*phase = "restarting"[\s\S]*phase === "updating"[\s\S]*Applying exact update/);
-assert.match(app, /async function startComponentUpdate\(target\)[\s\S]*setServerRestartOverlay\(true, `Starting exact \$\{label\} update…`, \{ phase: "updating" \}\)[\s\S]*setServerRestartOverlay\(false\)/);
-assert.match(app, /async function runPiUpdateAndRestart[\s\S]*setServerRestartOverlay\(true, progressMessage, \{ phase: "updating" \}\)/);
-assert.match(app, /will not re-resolve latest or scan package roots/);
-assert.match(app, /function separatePathPiPlanNotice\(plan\)[\s\S]*PATH Pi[\s\S]*separate installation[\s\S]*will remain untouched/);
-assert.match(app, /async function waitForServerRestart\(previousBootIdentity = serverBootIdentity\)[\s\S]*Date\.now\(\) \+ 90_000[\s\S]*health\.bootIdentity === previousBootIdentity/);
-assert.match(server, /bootIdentity,[\s\S]*startupPhase:/);
-assert.match(server, /url\.pathname === "\/api\/update\/rollback"[\s\S]*assertUpdatePlanDigest/);
-assert.match(readme, /exact-target plan|plan digest/i);
+for (const target of ["pi", "webui"]) {
+  assert.match(app, new RegExp(`startComponentUpdate\\("${target}"\\)`));
+  assert.match(html, new RegExp(`id="${target}ComponentUpdateStatus"[^>]*aria-live="polite"`));
+  assert.match(html, new RegExp(`id="${target}ComponentUpdateOutput"[^>]*aria-label=`));
+}
+assert.match(html, /<option value="update-webui">Update Web UI<\/option>/);
+assert.doesNotMatch(html, /update-all|Update all|Pi \+ Web UI update/);
+assert.doesNotMatch(app, /runPiUpdateAndRestart|managed Web UI activation|side-by-side managed runtime/);
+assert.match(app, /body: \{ targets: \[target\] \}/);
+assert.match(app, /body: \{ transactionId: plan.transactionId, planDigest: plan.digest \}/);
+assert.match(app, /componentUpdateConfirmationText\(plan\)[\s\S]*installedRoot[\s\S]*effectRoot[\s\S]*command\.command[\s\S]*command\.args[\s\S]*context\.cwd[\s\S]*context\.agentDir[\s\S]*context\.npmPrefix[\s\S]*plan\.refusals[\s\S]*plan\.warning[\s\S]*plan\.digest/);
+assert.match(app, /nativeJobs[\s\S]*nativeJobDiscoveryError/);
+assert.match(app, /plan\.pathPi\?\.eligible[\s\S]*plan\.pathPi\.version[\s\S]*plan\.pathPi\.packageRoot[\s\S]*plan\.pathPi\.executable[\s\S]*plan\.pathPi\.cli/);
+assert.match(app, /uncertainApplyJobs\[target\] = plan\.transactionId[\s\S]*phase: "launching"/);
+assert.match(app, /if \(latestUpdateStatus\?\.nativeJobs && !latestUpdateStatus\.nativeJobDiscoveryError\) nativeJobPollError = ""/);
+assert.match(app, /api\/update\/transactions\/\$\{encodeURIComponent\(job\.transactionId\)\}/);
+assert.match(app, /case "unknown"[\s\S]*Do not retry or restart/);
+assert.match(app, /case "partial"[\s\S]*Verified healthy active changes may have restarted/);
+assert.match(css, /\.component-update-status\[data-update-running\]::before[\s\S]*component-update-spin/);
+assert.match(development, /Native Pi and Web UI updates[\s\S]*GET \/api\/update\/transactions\/.*[\s\S]*Native lifecycle scripts are not sandboxed/);
 console.log("control deck component update static tests passed");

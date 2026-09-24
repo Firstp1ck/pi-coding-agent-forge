@@ -1,19 +1,19 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { createServer as createHttpServer } from "node:http";
 import { createServer as createNetServer } from "node:net";
-import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { persistSharedJob } from "../lib/update/coordination.mjs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { validateUpdateApplyRequest, validateUpdatePlanRequest } from "../lib/component-update-state.mjs";
-import { exactNpmInstallArgs, exactPackageSpec, updatePlanConfirmationText } from "../lib/update-commands.mjs";
-import { createUpdateJournal } from "../lib/update/journal.mjs";
-import { createUpdatePlan } from "../lib/update/plan.mjs";
 
-assert.deepEqual(validateUpdatePlanRequest({ targets: ["pi", "webui"] }), { ok: true, targets: ["pi", "webui"] });
-for (const invalid of [{}, { targets: [] }, { targets: ["all"] }, { targets: ["pi", "pi"] }, { targets: ["pi"], registry: "https://evil.test" }]) {
+assert.deepEqual(validateUpdatePlanRequest({ targets: ["pi"] }), { ok: true, targets: ["pi"] });
+assert.deepEqual(validateUpdatePlanRequest({ targets: ["webui"] }), { ok: true, targets: ["webui"] });
+for (const invalid of [{}, { targets: [] }, { targets: ["all"] }, { targets: ["pi", "pi"] }, { targets: ["pi", "webui"] }, { targets: ["pi"], registry: "https://evil.test" }]) {
   assert.equal(validateUpdatePlanRequest(invalid).ok, false);
 }
 const digest = "a".repeat(64);
@@ -21,20 +21,13 @@ assert.deepEqual(validateUpdateApplyRequest({ transactionId: "tx-1", planDigest:
 for (const invalid of [{ transactionId: "tx-1" }, { transactionId: "../x", planDigest: digest }, { transactionId: "tx", planDigest: digest, command: "npm" }]) {
   assert.equal(validateUpdateApplyRequest(invalid).ok, false);
 }
-assert.equal(exactPackageSpec("@firstpick/pi-package-webui", "1.2.3"), "@firstpick/pi-package-webui@1.2.3");
-assert.throws(() => exactPackageSpec("pkg", "latest"), /exact version/);
-const installArgs = exactNpmInstallArgs({ installRoot: "/private/runtime", packageName: "pkg", version: "1.2.3", registry: "https://registry.example.test" });
-assert.deepEqual(installArgs.slice(-3), ["--registry", "https://registry.example.test/", "pkg@1.2.3"]);
-assert.doesNotMatch(installArgs.join(" "), /--all|--extensions|@latest/);
-assert.match(updatePlanConfirmationText({ transactionId: "tx", digest, targets: [{ id: "webui", currentVersion: "1.0.0", targetVersion: "1.1.0" }], refusals: [] }), new RegExp(digest));
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const server = await readFile(path.join(root, "bin", "pi-webui.mjs"), "utf8");
-assert.match(server, /\/api\/update\/plan[\s\S]*validateUpdatePlanRequest[\s\S]*createServerOwnedUpdatePlan/);
-assert.match(server, /\/api\/update\/apply[\s\S]*validateUpdateApplyRequest[\s\S]*applyServerOwnedUpdate/);
+assert.match(server, /\/api\/update\/plan[\s\S]*validateUpdatePlanRequest[\s\S]*createNativeServerPlan/);
+assert.match(server, /\/api\/update\/apply[\s\S]*validateUpdateApplyRequest[\s\S]*applyNativeServerPlan/);
 assert.match(server, /Legacy update mutation is disabled/);
-assert.match(server, /assertUpdatePlanDigest\(journal\.plan, planDigest\)/);
-assert.match(server, /acquireInstallLock\(agentDir\)[\s\S]*assertPlanIdentity/);
+assert.match(server, /validateNativePlan\(job\.plan, digest\)/);
 assert.match(server, /bootIdentity/);
 assert.doesNotMatch(server, /function resolveUpdateTasks|function projectPackageRootUpdateTasks|function npmGlobalPackageRootUpdateTask|function bunGlobalPackageRootUpdateTask/);
 
@@ -53,7 +46,8 @@ const registry = createHttpServer((req, res) => {
 });
 await new Promise((resolve) => registry.listen(registryPort, "127.0.0.1", resolve));
 const temp = await mkdtemp(path.join(tmpdir(), "pi-webui-update-api-"));
-const fakePi = path.join(temp, "fake-pi-with-version.mjs");
+const piFixture = await mkdtemp(path.join(tmpdir(), "pi-webui-update-api-pi-"));
+const fakePi = path.join(piFixture, "fake-pi-with-version.mjs");
 await writeFile(fakePi, `if (process.argv.includes("--version")) { console.log("0.84.0"); process.exit(0); } await import(${JSON.stringify(pathToFileURL(path.join(root, "tests", "fixtures", "fake-pi.mjs")).href)});\n`, "utf8");
 const child = spawn(process.execPath, [path.join(root, "bin", "pi-webui.mjs"), "--cwd", temp, "--host", "127.0.0.1", "--port", String(webuiPort), "--pi", fakePi], {
   stdio: ["ignore", "pipe", "pipe"],
@@ -64,6 +58,9 @@ const child = spawn(process.execPath, [path.join(root, "bin", "pi-webui.mjs"), "
     PI_WEBUI_SETTINGS_FILE: path.join(temp, "settings.json"),
     PI_WEBUI_PI_LATEST_VERSION_URL: `http://127.0.0.1:${registryPort}/pi-latest`,
     PI_WEBUI_NPM_REGISTRY_URL: `http://127.0.0.1:${registryPort}`,
+    PI_WEBUI_NPM_BIN: path.join(temp, "missing-npm"),
+    NODE_ENV: "test",
+    PI_WEBUI_UPDATE_TEST_HOME: temp,
   },
 });
 let output = "";
@@ -79,47 +76,57 @@ try {
     await delay(100);
   }
   assert.ok(health?.bootIdentity, output);
-  const planResponse = await fetch(`http://127.0.0.1:${webuiPort}/api/update/plan`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ targets: ["pi", "webui"] }) });
-  const planPayload = await planResponse.json();
-  assert.equal(planResponse.status, 201, JSON.stringify(planPayload));
-  const plan = planPayload.data.plan;
-  assert.equal(plan.targets.length, 1, "the exact explicit Pi executable should own its delegated update while source WebUI remains refused");
-  assert.equal(plan.targets[0].id, "pi");
-  assert.equal(plan.targets[0].strategy, "delegate-exact-pi");
-  assert.deepEqual(plan.targets[0].command.args.slice(-2), ["update", "--self"]);
-  assert.doesNotMatch(plan.targets[0].command.args.join(" "), /@latest/);
-  assert.deepEqual(plan.refusals.map((item) => item.id), ["webui"]);
-
-  const updatesDir = path.join(temp, "agent", "webui", "updates");
-  const journalsBeforeRefusal = await readdir(updatesDir);
-  const sourcePlanResponse = await fetch(`http://127.0.0.1:${webuiPort}/api/update/plan`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ targets: ["webui"] }) });
-  const sourcePlanPayload = await sourcePlanResponse.json();
-  assert.equal(sourcePlanResponse.status, 409, JSON.stringify(sourcePlanPayload));
-  assert.match(sourcePlanPayload.error || "", /no accepted targets/i, "a refused-only plan must fail before confirmation or persistence");
-  assert.deepEqual(await readdir(updatesDir), journalsBeforeRefusal, "a refused-only plan must not create an update journal");
-
-  const legacyRefusedPlan = await createUpdatePlan({
-    transactionId: "legacy-refused-only",
-    createdAt: "2026-08-14T00:00:00.000Z",
-    registry: `http://127.0.0.1:${registryPort}`,
-    identities: [],
-    candidates: [{ id: "pi", packageName: "@earendil-works/pi-coding-agent", owner: { manager: "unknown" } }],
-    resolveExactTarget: () => assert.fail("refused targets must not resolve"),
+  const request = (targets) => fetch(`http://127.0.0.1:${webuiPort}/api/update/plan`, {
+    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ targets }),
   });
-  await createUpdateJournal(path.join(temp, "agent"), legacyRefusedPlan);
-  const refusedApply = await fetch(`http://127.0.0.1:${webuiPort}/api/update/apply`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ transactionId: legacyRefusedPlan.transactionId, planDigest: legacyRefusedPlan.digest }) });
-  const refusedApplyPayload = await refusedApply.json();
-  assert.equal(refusedApply.status, 409, JSON.stringify(refusedApplyPayload));
-  assert.match(refusedApplyPayload.error || "", /no accepted targets/i, "persisted legacy empty plans must also fail before apply");
+  const combined = await request(["pi", "webui"]);
+  assert.equal(combined.status, 400, "combined actions must be rejected without shell execution");
+  const piPlan = await request(["pi"]);
+  const piData = await piPlan.json();
+  assert.equal(piPlan.status, 409, JSON.stringify(piData));
+  assert.match(piData.error || "", /PATH Pi|npm-global|manual/i, "explicit fake Pi is not the verified PATH Pi");
+  const webuiPlan = await request(["webui"]);
+  const webuiData = await webuiPlan.json();
+  assert.equal(webuiPlan.status, 409, JSON.stringify(webuiData));
+  assert.match(webuiData.error || "", /manual|unproven|missing/i);
 
-  const tampered = await fetch(`http://127.0.0.1:${webuiPort}/api/update/apply`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ transactionId: plan.transactionId, planDigest: "0".repeat(64) }) });
-  assert.equal(tampered.status, 500);
+  const refusedApply = await fetch(`http://127.0.0.1:${webuiPort}/api/update/apply`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ transactionId: "legacy-refused-only", planDigest: digest }) });
+  assert.equal(refusedApply.status, 404, "legacy per-agent journals must never authorize a native update");
+  const missingReceipt = await fetch(`http://127.0.0.1:${webuiPort}/api/update/transactions/legacy-refused-only`);
+  assert.equal(missingReceipt.status, 404);
+  const rollback = await fetch(`http://127.0.0.1:${webuiPort}/api/update/rollback`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+  assert.equal(rollback.status, 410);
   const legacy = await fetch(`http://127.0.0.1:${webuiPort}/api/update`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
   assert.equal(legacy.status, 410);
+
+  const getStatus = async () => (await (await fetch(`http://127.0.0.1:${webuiPort}/api/update-status`)).json()).data;
+  assert.deepEqual((await getStatus()).nativeJobs, { pi: null, webui: null });
+  const stateRoot = path.join(temp, process.platform === "win32" ? "AppData/Local/PiWebUI/updates" : ".local/state/pi-webui-updates");
+  const transactionId = randomUUID();
+  const jobDir = path.join(stateRoot, "jobs", transactionId);
+  await mkdir(jobDir, { recursive: true });
+  const receipt = { transactionId, id: "webui:npm-global", status: "failed", exitCode: 1, stderr: "fixture failure" };
+  await writeFile(path.join(jobDir, "0.receipt.json"), JSON.stringify(receipt));
+  await writeFile(path.join(jobDir, "complete.json"), JSON.stringify({ transactionId, receipts: [{ id: receipt.id, status: receipt.status }] }));
+  await persistSharedJob(stateRoot, { transactionId, jobDir, phase: "partial", outcome: "partial", lock: { token: "fixture-private-lock-token" },
+    plan: { schemaVersion: 2, transactionId, requested: "webui", createdAt: new Date().toISOString(), targets: [{ id: receipt.id }],
+      context: { agentDir: await realpath(path.join(temp, "agent")), ownerPackageRoot: await realpath(root), ownerBootIdentity: health.bootIdentity } } });
+  const discovered = await getStatus();
+  assert.equal(discovered.nativeJobs.webui.transactionId, transactionId, "a new browser can discover the durable job without local storage");
+  assert.equal(discovered.nativeJobs.webui.phase, "partial");
+  assert.equal(discovered.nativeJobs.webui.receipts[0].stderr, "fixture failure");
+  assert.equal(JSON.stringify(discovered).includes("fixture-private-lock-token"), false);
+  assert.equal((await getStatus()).nativeJobs.webui.transactionId, transactionId, "reconnection retains the same partial result");
+  await writeFile(path.join(stateRoot, "jobs", `${randomUUID()}.json`), "invalid private record");
+  const unverified = await getStatus();
+  assert.ok(unverified.nativeJobDiscoveryError);
+  assert.equal(unverified.canRunUpdate, false, "discovery failure cannot authorize another update");
+  assert.equal(unverified.nativeJobDiscoveryError.includes("invalid private record"), false, "corrupt record contents must not leak in the error");
 } finally {
   child.kill("SIGTERM");
   if (child.exitCode === null) await new Promise((resolve) => child.once("exit", resolve));
   await new Promise((resolve) => registry.close(resolve));
   await rm(temp, { recursive: true, force: true });
+  await rm(piFixture, { recursive: true, force: true });
 }
 console.log("update API harness passed");

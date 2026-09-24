@@ -1,0 +1,29 @@
+# Worker B UI and documentation handoff
+
+Status: worker B implementation completed after parent inspection corrections; checkout ownership is released on final response. Recovery slot run `85823fba-3258-43f0-a551-5f537405b72f`. Branch `main`; base and current HEAD are both `28252dfc96a9c41a7095159c63e46b82b24a023f`. No commit or staging. Worker A's server files, the parent's RPC FIFO fix, plan and interview remain intact.
+
+## Changed files
+
+- `public/app.js`, `public/index.html`, `public/styles.css`: separate Pi and Web UI actions in the notification, version dialogs and server-action menu. Removed combined update and old managed-activation/restart UI. Confirmation shows returned installation roots, exact executable and argv, shell, cwd, agent directory, npm prefix, active runtime identities, skips, native lifecycle warning and digest. Both actions show the separately confirmed PATH Pi version/root and exact driver via the parent-approved additive `plan.pathPi`; absent/unproven fields show explicit guidance instead of inferring from the active runtime. Small inline spinner without percentages; bounded command output and verification status. Job phase and same ID drive reconnect, partial and unknown results. Unknown or discovery errors disable new actions; only terminal healthy results describe completed restart. Pi version tag uses active runtime instead of substituting PATH version.
+- `README.md`, `TECHNICAL.md`, `DEVELOPMENT.md`: user flow and warnings, advanced command/scope/recovery limitations, and contributor API/lifecycle contract. Replaced native-update rollback/staging/combined claims while preserving legacy migration and unrelated layout downgrade guidance. Existing README images retained.
+- `tests/control-deck-component-updates-static.test.mjs`, `tests/browser/control-deck-component-updates.spec.mjs`, `tests/browser/update-reconnect.spec.mjs`: separate action, exact confirmation, receipts, partial, same-job reload and unknown recovery coverage. Browser fixtures isolate coordination with `PI_WEBUI_UPDATE_TEST_HOME` under their temporary roots and stub all update endpoints; no real update command is invoked.
+- `tests/mobile-static.test.mjs`: only B-owned UI/docs assertions changed; A's server assertions remain as received.
+
+## Parent integration dependency
+
+The backend currently does **not** expose authoritative native job discovery in `GET /api/update-status`. Supervisor approved an additive local-only contract for parent integration: `nativeJobs: { pi: jobOrNull, webui: jobOrNull }` and `nativeJobDiscoveryError: string`; each job uses the transaction GET public shape. Prioritize unsettled/unknown jobs over latest terminal result and omit unconfirmed plans; discovery failure must disable action, not imply no job. Also add `plan.pathPi: { version, packageRoot, executable, cli, eligible, guidance }` on both actions. UI consumes both approved future fields; absent PATH evidence displays unproven guidance. An unconfirmed apply keeps its transaction ID as a hint, observes the transaction before re-enabling retry, and clears polling errors only after successful authoritative discovery. Without parent integration the UI cannot recover job IDs after reload or reliably preserve partial results.
+
+## Validation
+
+All checks use fixture or static inspection; no install, live package update, dependency change, publication or destructive cleanup. `node --check public/app.js` and both touched browser spec syntax checks: exit 0. After inspection fixes, focused static/mobile and syntax checks were rerun and passed. `node tests/control-deck-component-updates-static.test.mjs`: exit 0. `node tests/mobile-static.test.mjs`: exit 0. `git diff --check -- .` and required Markdown diff check: exit 0. `git diff --cached --name-only`: empty. Browser command `npm run test:browser -- tests/browser/control-deck-component-updates.spec.mjs tests/browser/update-reconnect.spec.mjs`: exit 1 before any test because Playwright CLI is absent. No setup authorized, so browser specs were not run.
+
+`npm test`: exit 1, 8/203 files failed: `agent-run-registry`, `append-system-http`, `append-system-selection`, `http-endpoints-harness`, `intercom-conversations-http`, `rpc-supervisor-host`, `session-auth-harness`, `update-plan`. The last failed with Windows `EPERM` renaming a participant record under the **isolated temporary test coordination home**; no production-state cleanup was attempted. `npm run check`: syntax phase passed, runner exit 1, 6/203 files failed: `append-system-http`, `append-system-selection`, `http-endpoints-harness`, `intercom-conversations-http`, `rpc-supervisor-host`, `session-auth-harness`. Both full runs passed B static and mobile tests. Log files are `/tmp/pi-webui-ui-npm-test.log` and `/tmp/pi-webui-ui-check.log` in this shell environment. The known Windows EBUSY/EPERM, HTTP timeout and intermittent RPC host failures remain outside B ownership; parent should compare integrated reruns.
+
+## Risks and deviations
+
+- Browser behavior remains unverified without Playwright. The new browser specs use mocked HTTP jobs and temporary coordination, not production native execution.
+- Backend native job discovery and the additive `pathPi` plan field are pending parent integration; no backend response was invented as an existing implementation.
+- Native lifecycle scripts remain unsandboxed and output redaction is bounded, not complete; no native rollback is promised. Old Windows fixture participant records in the real OS-user coordinator predate B and were left untouched.
+- No unapproved files or dependencies changed. No staging, commits or live updates.
+
+Next step: parent implement the approved discovery and `pathPi` contracts, then integrated static/API checks and browser tests if setup becomes authorized. Independent reviews and final report remain parent-owned.

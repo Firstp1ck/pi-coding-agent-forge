@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import { inspectNativeJob } from "../lib/update/native-jobs.mjs";
+import { persistSharedJob } from "../lib/update/coordination.mjs";
 import path from "node:path";
 import {
   acquireInstallLock, createUpdateJournal, readUpdateJournal, reconcileInterruptedUpdates,
@@ -53,6 +55,12 @@ try {
   assert.equal(reconciled[0].reconciled, true);
   assert.match(reconciled[0].error, /Recovered tx-interrupted/);
   assert.doesNotMatch(await readFile(path.join(paths.updatesDir, "tx-interrupted.json"), "utf8"), /\.tmp/);
+  const privateJobDir = path.join(agentDir, "private-job");
+  await mkdir(privateJobDir);
+  await persistSharedJob(agentDir, { transactionId: "lost-receipt", phase: "running", jobDir: privateJobDir,
+    plan: { targets: [{ id: "pi" }] }, launchedAt: new Date(Date.now() - 30_000).toISOString() });
+  const interrupted = await inspectNativeJob(agentDir, "lost-receipt");
+  assert.equal(interrupted.phase, "unknown", "lost runner/receipt evidence must never become completion or unlock exclusion");
   console.log("update-journal-harness.test.mjs passed");
 } finally {
   await rm(agentDir, { recursive: true, force: true });

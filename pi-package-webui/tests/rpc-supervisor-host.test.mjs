@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { createConnection, createServer } from "node:net";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { acquireEffectLocks, persistSharedJob, releaseEffectLocks, sharedUpdateRoot } from "../lib/update/coordination.mjs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -26,6 +27,8 @@ import {
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const fakePi = path.join(root, "tests", "fixtures", "fake-pi.mjs");
 const work = await mkdtemp(path.join(tmpdir(), "pi-webui-rpc-supervisor-host-"));
+const effectRoot = path.join(work, "effect");
+await mkdir(effectRoot);
 const agentDir = path.join(work, "agent");
 const port = 35000 + Math.floor(Math.random() * 15000);
 const logFile = path.join(work, "commands.jsonl");
@@ -129,6 +132,9 @@ try {
       ...process.env,
       FAKE_PI_LOG_FILE: logFile,
       RAW_PI_LOG: rawLogFile,
+      NODE_ENV: "test",
+      PI_WEBUI_UPDATE_TEST_HOME: work,
+      PI_WEBUI_UPDATE_EFFECT_ROOTS: JSON.stringify([effectRoot]),
       PI_WEBUI_RECOVERY_URL: `http://127.0.0.1:${port}/api/recovery/plan`,
       PI_WEBUI_RECOVERY_TOKEN: "server-ephemeral-recovery-token",
     },
@@ -301,6 +307,47 @@ try {
   assert.equal(state.tabs.length, 2);
   assert.equal(state.tabs.find((tab) => tab.id === "tab-1").metadata.apiToken, undefined, "private metadata fields must not reach the state snapshot");
 
+  await client.command("tab-1", { type: "get_state" }, { requestId: "update-idle-state" });
+  const updateRoot = await sharedUpdateRoot({ home: work });
+  const updateLock = await acquireEffectLocks(updateRoot, [effectRoot], "verified-job");
+  const originalChild = { command: process.execPath, args: [fakePi], cwd: work };
+  const updatedMetadata = { title: "One", index: 0, cwd: work, sessionFile: path.join(work, "one.jsonl") };
+  const restart = { transactionId: "verified-job", lockToken: updateLock.token, effectRoot, nonce: "once-only" };
+  await assert.rejects(client.command("tab-1", { type: "prompt", message: "must not race" }), /fenced/i);
+  await assert.rejects(client.replaceTabUnderUpdate({ tabId: "tab-1", metadata: updatedMetadata, child: originalChild, restart }), /durable healthy/i);
+  const updateJobDir = path.join(updateRoot, "jobs", restart.transactionId);
+  await mkdir(path.join(updateJobDir, "restarts"), { recursive: true });
+  await writeFile(path.join(updateJobDir, "complete.json"), JSON.stringify({ transactionId: restart.transactionId, receipts: [{ id: "pi", status: "changed" }] }));
+  await persistSharedJob(updateRoot, { transactionId: restart.transactionId, phase: "restart-authorized", lock: updateLock,
+    jobDir: updateJobDir, verifiedTargets: [{ id: "pi", effectRoot, status: "healthy" }] });
+  const requestDigest = createHash("sha256").update(JSON.stringify({ tabId: "tab-1", metadata: updatedMetadata, child: originalChild })).digest("hex");
+  await writeFile(path.join(updateJobDir, "restarts", `${restart.nonce}.json`), JSON.stringify({ tabId: "tab-1", transactionId: restart.transactionId,
+    lockToken: updateLock.token, effectRoot, requestDigest }));
+  const restarted = await client.replaceTabUnderUpdate({ tabId: "tab-1", metadata: updatedMetadata, child: originalChild, restart }, { requestId: "one-restart" });
+  const deduped = await client.replaceTabUnderUpdate({ tabId: "tab-1", metadata: updatedMetadata, child: originalChild, restart }, { requestId: "one-restart" });
+  assert.equal(deduped.pid, restarted.pid, "deduplicated transport request must not launch another child");
+  await assert.rejects(client.replaceTabUnderUpdate({ tabId: "tab-1", metadata: updatedMetadata, child: originalChild, restart }, { requestId: "replayed-restart" }), /ENOENT|already used/i);
+  await writeFile(path.join(updateJobDir, "restarts", "wrong-tab.json"), JSON.stringify({ tabId: "raw-tab", transactionId: restart.transactionId,
+    lockToken: updateLock.token, effectRoot, requestDigest }));
+  await assert.rejects(client.replaceTabUnderUpdate({ tabId: "tab-1", metadata: updatedMetadata, child: originalChild, restart: { ...restart, nonce: "wrong-tab" } }), /authorization/i);
+  await releaseEffectLocks(updateLock, { completionVerified: true });
+  const dependencyLock = await acquireEffectLocks(updateRoot, [effectRoot], "webui-dependency-job");
+  const dependencyJobDir = path.join(updateRoot, "jobs", dependencyLock.transactionId);
+  await mkdir(path.join(dependencyJobDir, "restarts"), { recursive: true });
+  await writeFile(path.join(dependencyJobDir, "complete.json"), JSON.stringify({ transactionId: dependencyLock.transactionId,
+    receipts: [{ id: "webui:npm-global", status: "unchanged" }] }));
+  await persistSharedJob(updateRoot, { transactionId: dependencyLock.transactionId, phase: "restart-authorized", lock: dependencyLock,
+    jobDir: dependencyJobDir, verifiedTargets: [{ id: "webui:npm-global", effectRoot, status: "healthy", piChanged: true }] });
+  const dependencyRestart = { transactionId: dependencyLock.transactionId, lockToken: dependencyLock.token,
+    effectRoot, nonce: "webui-dependency-pi-reload" };
+  await writeFile(path.join(dependencyJobDir, "restarts", `${dependencyRestart.nonce}.json`), JSON.stringify({ tabId: "tab-1",
+    transactionId: dependencyRestart.transactionId, lockToken: dependencyRestart.lockToken, effectRoot,
+    requestDigest: createHash("sha256").update(JSON.stringify({ tabId: "tab-1", metadata: updatedMetadata, child: originalChild })).digest("hex") }));
+  const dependencyReload = await client.replaceTabUnderUpdate({ tabId: "tab-1", metadata: updatedMetadata, child: originalChild,
+    restart: dependencyRestart });
+  assert.notEqual(dependencyReload.pid, restarted.pid, "verified bundled Pi dependency changes must reload owned tabs despite unchanged WebUI version");
+  await releaseEffectLocks(dependencyLock, { completionVerified: true });
+
   const failedReplacementCwd = path.join(work, "failed-replacement-cwd");
   await mkdir(failedReplacementCwd);
   await assert.rejects(
@@ -426,9 +473,24 @@ try {
   await delay(20);
   await closeServer(attachTimeoutServer);
   console.log("rpc-supervisor-host.test.mjs passed");
+} catch (error) {
+  console.error("RPC supervisor fixture failed before shutdown:", error);
+  throw error;
 } finally {
+  // A failed assertion must not strand the detached fixture owner and mask the
+  // original failure with Windows EBUSY during temporary-directory removal.
+  for (const owner of [replayClient, replacement, client]) {
+    if (!owner?.isConnected()) continue;
+    try { await owner.shutdown(); break; } catch { /* Another controller may own this fixture. */ }
+  }
   replayClient?.close();
   replacement?.close();
   client?.close();
-  await rm(work, { recursive: true, force: true });
+  for (let attempt = 0; attempt < 25; attempt++) {
+    try { await rm(work, { recursive: true, force: true }); break; }
+    catch (error) {
+      if (error.code !== "EBUSY" || attempt === 24) throw error;
+      await delay(200);
+    }
+  }
 }

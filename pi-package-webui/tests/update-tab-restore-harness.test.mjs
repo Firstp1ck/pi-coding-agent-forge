@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
-import { access, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { createRestoreFile, readRestoreFileOnce } from "../lib/update/supervisor.mjs";
+import { fileURLToPath } from "node:url";
+import { createRestoreFile, probeStartupRestore, readRestoreFileOnce } from "../lib/update/supervisor.mjs";
 
 const root = await mkdtemp(path.join(tmpdir(), "pi-webui-restore-"));
 try {
@@ -18,6 +19,12 @@ try {
   await writeFile(outside, JSON.stringify({ schemaVersion: 1, tabs: [] }));
   await assert.rejects(() => readRestoreFileOnce(outside, root), /outside the private temp root/);
   await access(outside);
+  const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+  const version = JSON.parse(await readFile(path.join(packageRoot, "package.json"), "utf8")).version;
+  const probe = await probeStartupRestore(path.join(packageRoot, "bin", "pi-webui.mjs"), {
+    expectedVersion: version, timeoutMs: 20_000, piCommand: path.join(packageRoot, "tests", "fixtures", "fake-pi.mjs"),
+  });
+  assert.equal(probe.ok, true, JSON.stringify(probe));
 } finally {
   await rm(root, { recursive: true, force: true });
 }
