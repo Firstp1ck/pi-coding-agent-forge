@@ -279,11 +279,9 @@ Control-visibility setup has no second registry or persistence path. Its five fi
 
 Run focused validation with `node --check public/app.js`, the static tests above, and `npx playwright test --project=chromium tests/browser/control-deck-side-panels.spec.mjs tests/browser/persistent-ui-layout.spec.mjs tests/browser/control-visibility.spec.mjs`. Run `npm run check` and `npm test` before integration acceptance.
 
-1. `POST /api/update/plan` resolves moving release metadata once, records exact target versions, active runtime identities, proven owners, exact argument-array commands, refusals, and a SHA-256 plan digest in the private update journal.
-2. The confirmation names that exact plan digest. `POST /api/update/apply` accepts only its `transactionId` and `planDigest`; it never accepts paths, commands, registries, versions, or `latest` from the browser.
-3. Apply acquires the cross-process install lock, revalidates active identities, executes with whole-process-tree timeouts, re-reads every changed target, and records ordered receipts with `success`, `partial`, `failed`, or `rolled-back` outcomes.
+The native update API has two single-target planning requests, `{ "targets": ["pi"] }` and `{ "targets": ["webui"] }`. `POST /api/update/plan` returns an immutable plan with `transactionId`, `digest`, `requested`, `active`, `pathPi`, `context`, `targets`, `refusals` and `warning`. `pathPi` records the independently proven PATH driver's version, package root, executable and CLI, or eligibility/guidance when unproven. Each target carries `id`, `installedRoot`, `effectRoot`, `beforeVersion`, and an absolute `command` with argument array. `POST /api/update/apply` accepts only `{ transactionId, planDigest }` and returns `202` with a running job ID. It revalidates the bound context before launch. No release version or command originates in the browser. `GET /api/update/transactions/<id>` returns phase, bounded per-command receipts, verified targets, outcome and error; a missing completion receipt cannot establish success. A shared private state root fences affected work across server processes. The detached runner writes per-command receipts after native child close, and finalization selectively restarts only verified healthy changed active components after idle. Neither process exit alone nor an exit code alone certifies a healthy installation.
 The authenticated `GET /api/interface-preferences` response includes normalized `preferences`, versioned `layout`, and an opaque `layoutRevision`. `PUT /api/interface-preferences` remains compatible with width-only `{ "sidePanelWidth": 612 }` writes. Layout patches require the latest revision in `expectedLayoutRevision`, merge only named fields, and are limited to 32 KiB; stale revisions return `409`, unsupported media types `415`, oversized bodies `413`, and invalid or unknown fields `400`. Schema v3 adds `controlVisibility.hiddenIds`: `null` means package defaults, `[]` means explicit show-all, and a bounded sorted string list stores hidden stable catalog IDs while retaining unknown future IDs. The browser applies those IDs through a preference-only CSS class and never mutates capability-owned `hidden` state. The `terminalTabs` layout record owns tab placement, custom groups, and the bounded desktop `sidebarWidth`; the client journals those subfields independently so resizing cannot overwrite concurrent group or placement changes. Browser local storage remains a non-destructive compatibility cache. Semantic file moves, prompt attachments, and follow-up queue mutations are not stored in the interface-layout envelope.
-Pi Web UI normally runs Pi RPC tabs under a narrow detached supervisor. Restarting only the HTTP Web UI—through `/webui-start` on the same URL, **Restart**, a successful **Update & restart**, `POST /api/restart`, or a restart-safe service-manager `SIGTERM`—preserves each managed Pi PID, tab identity, cwd, session file, running state, and active model turn. Output produced while the HTTP server is absent is replayed in supervisor order. The browser rejects duplicate or older replay records; if the bounded live buffer has a gap, it refreshes tabs, state, and the durable transcript from Pi and warns that buffered live output may be incomplete.
+Pi Web UI normally runs Pi RPC tabs under a narrow detached supervisor. Restarting only the HTTP Web UI—through `/webui-start` on the same URL, **Restart**, a verified native update of an affected active component, `POST /api/restart`, or a restart-safe service-manager `SIGTERM`—preserves each managed Pi PID, tab identity, cwd, session file, running state, and active model turn. Output produced while the HTTP server is absent is replayed in supervisor order. The browser rejects duplicate or older replay records; if the bounded live buffer has a gap, it refreshes tabs, state, and the durable transcript from Pi and warns that buffered live output may be incomplete.
 - Use `/webui-status detailed`, `GET /api/health`, or `GET /api/webui-status?detailed=1` for diagnostics. Public supervisor diagnostics are limited to enabled/attached state and managed-tab count; private credentials and paths are intentionally omitted. A browser warning about incomplete buffered output means authoritative tabs/state/messages were requested, not that missing live deltas were reconstructed.
 - Use the side-panel **Stop** action or localhost-only `POST /api/shutdown` for an explicit full stop. Explicit tab close terminates only that managed Pi child; explicit shutdown and `SIGINT` terminate the scope's managed Pi children. Do not use restart/update when the intent is to terminate active work.
 - Normal authenticated shutdown removes the private scope state. Do not manually delete runtime files, sockets, pipes, journals, or PID records while managed tabs may be live. For cleanup, explicitly shut down first, verify the Web UI/scope has no managed tabs, and let normal startup clean stale empty state; removing private state for a live supervisor destroys the safe attachment path and can risk duplicate processes.
@@ -319,9 +317,9 @@ Compact mode keeps live output lightweight, coalesces sustained live DOM/scroll 
 - Detected app runner dropdown for the active tab cwd, including Cargo, Bun, npm/npx/pnpm, Python/uv, Go/Golang, Zig, C/C++, Docker Compose, root/dev/scripts shell scripts, and other common project runners with live output pinned at the top of the terminal. Stream chunks pass through a terminal-line reducer: LF/CRLF commit scrollback, bare CR replaces the current live line, backspace edits that line, and ANSI sequences remain intact for the browser's safe SGR renderer. This is line-oriented terminal behavior rather than a full VT100 cursor grid. Running app runners expose line-oriented stdin in the widget for interactive scripts. Projects can add browseable custom runners in `.pi-webui-runners.json` with a command (default `./`) plus a relative path to the file to run. The same dialog also configures project discovery paths: project-relative directories that are scanned one level deep (no subdirectories) for `.sh`, `.bash`, `.zsh`, `.fish`, and `.py` files plus extensionless files with a bash/sh, zsh, fish, or Python shebang. Python candidates use `uv run` and/or the available `python3`/`python` interpreter. Discovered scripts extend the built-in root, `dev/`, `scripts/`, and `dev/scripts/` detection and run from the resolved project root.
 - Extension-launched Guided Git workflow for existing repos and new repos with persistent model/reasoning preferences, review-first staging, an optional manual staged repository-review gate from `aur-review`, generated or typed commit messages, explicit push/PR confirmation, and optional PR worktrees. `/git-guided-workflow` emits a transient tab-scoped activation request that the browser validates and consumes before generic status rendering; the browser requires the extension-owned native generation commands and has no prompt-only launch fallback. The HTTP server authoritatively rejects the exact command admission while the tab is streaming, compacting, has pending messages, or already has a pending Guided Git launch, bypassing generic compaction queueing. A browser-generated UUID is stored in one short-lived server record and added only to the trusted live event envelope; the canonical four-field extension payload remains unchanged, and only the browser holding the matching one-shot permit can consume the event. When the review extension is loaded/enabled, both `git add .` and accepting the current staged set send `/aur-review start --scope staged --origin guided-git` to the same tab. Only its matching approval advances to message generation. The browser and server recheck the approved domain-separated staged-content hash before message generation, commit, and PR-worktree transfer; drift, missing hashes, or hash-check errors return to Stage and require a new review. A decline returns to staging and rejects an unchanged declined staged hash until corrected content is restaged. Guided Git never stages, commits, or pushes remediation automatically. The extension remains the decision authority; direct API callers are not granted an approval by this browser workflow.
 - Browser support for Pi extension UI prompts, widgets, status updates, `/btw` side-question output widgets with optional context transfer/live steering, browser notifications when a tab needs an extension UI response, and an optional side-panel toggle for agent-done notifications.
-- Localhost-only exact Pi/Web UI update plans with digest-bound confirmation, fail-closed owner refusals, cross-process locking, durable receipts, side-by-side managed Web UI candidates, stable pointer-aware launch, changed-boot-identity reconnect, and automatic health-gated rollback. Combined plans also include update-available Pi-registered optional packages and retain per-package partial receipts. A separate verified Pi executable delegates to that exact executable's self-updater and fails verification if it does not reach the confirmed version; managed targets remain strictly pinned. The former broad package-root scan and `pi update --all`/fallback mutation path is disabled.
+- Localhost-only separate Pi and Web UI native plans with digest-bound confirmation, fail-closed ownership checks, shared effect-root fencing, durable per-command receipts, partial/unknown results, and selective automatic restart after health verification. PATH Pi 0.87.1 is the initially proven command driver. Combined actions, optional-companion sweeps and managed-runtime activation are retired.
 - Feedback reactions (`👍`, `👎`, `?`) on final assistant output plus tool/bash action cards, which can ask Pi to create or update a LEARNING.
-- Mobile-friendly layout, PWA install support where the browser allows it, backend-offline recovery, and a dedicated server-restart overlay while confirmed restart/update actions run.
+- Mobile-friendly layout, PWA install support where the browser allows it, backend-offline recovery, and a dedicated server-restart overlay for ordinary server restart. Native updates use an inline spinner and durable per-job status.
 Web UI keeps a packaged parity matrix at `lib/WEBUI_TUI_NATIVE_PARITY.json` and exposes it at `GET /api/native-parity`.
 Discovery-path rules: at most 24 paths and direct children only (no recursive walk). Shell discovery supports `.sh`, `.bash`, `.zsh`, `.fish`, and matching extensionless shebang files. Python discovery supports `.py` and extensionless Python-shebang files, exposing `uv run` and/or the available `python3`/`python` interpreter. Required interpreters must be installed locally; duplicates and built-in overlaps do not duplicate menu entries. Absolute, drive/UNC, `..`, null-byte, missing, non-directory, or symlinked-outside-the-project paths are rejected. Stale or invalid stored paths surface diagnostics in the dialog instead of being scanned. `POST /api/app-runner-config` accepts either `{ "runner": { ... } }` or `{ "searchPaths": [...] }` (not both in one request) and preserves the other field.
 
@@ -363,7 +361,7 @@ Focused checks are `node tests/session-tree-event-targets.test.mjs`, `node tests
 - Localhost-only `POST /api/optional-feature-install-batch` for a bounded allowlisted `featureIds` batch. It requires the current audit `revision`, installs sequentially, reports ordered per-feature and aggregate results, and accepts `migration: true` for the combined restore flow.
 - Localhost-only `POST /api/optional-feature-migration/recheck` for a bounded read-only audit and `POST /api/optional-feature-migration/dismiss` for persisted **Later** state.
 - `GET /api/git-workflow/staged-content?tab=<tabId>` for the read-only bounded staged-content hash used by Guided Git approval binding.
-- `GET /api/update-status`, localhost-only `POST /api/update/plan`, `POST /api/update/apply`, `GET /api/update/transactions/<transactionId>`, and `POST /api/update/rollback` for exact planning, digest-bound apply, durable receipts/status, and confirmation-bound rollback. Legacy `POST /api/update` and `POST /api/component-update` mutation return `410 Gone`.
+- `GET /api/update-status`, localhost-only `POST /api/update/plan`, `POST /api/update/apply`, and `GET /api/update/transactions/<transactionId>` for exact planning, digest-bound apply, and durable receipts/status. The retired rollback route returns `410 Gone`; native package changes cannot be undone by switching a pointer. Legacy `POST /api/update` and `POST /api/component-update` mutation return `410 Gone`.
 - `GET /api/network`, localhost-only `POST /api/network/open`, localhost-only `POST /api/network/close`, `GET /api/remote-auth`, `POST /api/remote-auth`, and localhost-only `POST /api/remote-auth/settings` for trusted-LAN exposure and optional 4-digit PIN authentication when serving non-local browser clients.
 On hosts with WebKit's system libraries installed, provision it and include its project explicitly with `npx playwright install webkit && PI_WEBUI_TEST_WEBKIT=1 npm run test:browser`. The browser suite is intentionally separate from `npm test`; it covers browser-only geometry, flag/rollback, and scoped axe checks without making ordinary Node/static tests download browser engines.
 When enabled, each click obtains a fresh Turnstile token and UUID-v4, then posts only `{ schemaVersion, idempotencyKey, turnstileToken, issue }` to `POST /v1/submissions`. `issue` is the selected structured wizard state (`categoryId`, `componentId`, `templateId`, `summary`, and declared fields); editable canonical title/body, repository, labels, verdicts, callback URLs, and credentials are never sent. The returned status capability remains only in an opaque in-memory refresh handle for the open dialog. Nothing in this flow uses `localStorage`, `sessionStorage`, cookies, or draft persistence.
@@ -449,15 +447,13 @@ The extension launches its JavaScript bootstrap with the current Node executable
 
 `/webui-status` reports the URL, online state, network exposure, and Remote PIN auth state. `detailed` adds tabs, sessions, models/providers, and recent backend events.
 
-### Transactional Pi and Web UI updates
+### Native Pi and Web UI updates
 
-The **Pi** and **Web UI** version tags still show `available`, `running`, `succeeded`, or `failed`, but every mutation now uses one server-owned transaction path:
+The browser plans one `pi` or `webui` action, confirms the returned executable/argv, installation roots and frozen execution context, then applies only the ID and digest. It observes `GET /api/update/transactions/<id>` and uses local-only update-status discovery of native jobs after reconnect. Discovery errors block new action controls. Receipts expose `changed`, `unchanged`, `failed`, or `unknown` per command; verified targets and the final phase distinguish completed native commands from healthy active installations and completed restart. A `restart-authorized` phase is waiting for idle, and `restart-pending` has not confirmed successor health. `unknown` retains exclusion for manual recovery; no inferred retry or restart.
 
-Ownership is fail-closed. Source, linked, pnpm, Yarn, opaque, nested, and unknown installations produce bounded manual guidance and are not mutated. The removed legacy updater no longer scans agent, project, npm-global, or Bun-global roots. Only localhost may create, apply, or roll back a transaction.
+Only PATH Pi 0.87.1 has verified initial CLI semantics. npm-global Web UI and Pi user npm sources may update independently. Pi user scope excludes project settings with `--no-approve`; exact pins and unsupported owners are skipped. The detached native runner and receipts live outside mutable installations. Shells use exact bound interpreters and argument arrays, not browser-supplied command strings. On Windows a private detached Node guardian owns ordinary hidden PowerShell: detached PowerShell silently skipped its command on the tested host, and ordinary PowerShell alone did not survive initiator exit. The guardian records a verified pre-shell launch refusal separately from any uncertain post-spawn completion. The context fingerprint includes scoped registries and npm-reported user/global configuration paths. Shared physical-root fences include the selected active Pi root independently of PATH Pi and keep known work idle during mutation and selective restart. Ordinary server restart holds a counted admission lease through handoff; native restart requires bounded RPC readiness and matching saved session files before releasing the fence. Native lifecycle scripts are not sandboxed, and bounded redaction cannot guarantee removal of arbitrary secrets.
 
-The installed package is a stable bootstrap. A Web UI candidate installs side-by-side under `<PI_CODING_AGENT_DIR>/webui/runtimes`, runs a side-effect-free candidate probe, and is selected through private atomic `current.json`/`previous.json` pointers. A separate activation helper switches the pointer, restarts through the stable launcher, waits at least 90 seconds for the expected version and a changed per-boot identity, and automatically restores the previous pointer when health fails. The live RPC supervisor remains separate; an incompatible supervisor with healthy managed work still fails closed.
-
-Restart descriptors use a private owner-readable random file, are read and deleted once, and support up to 256 descriptors. Startup retries transient `EADDRINUSE` with bounded backoff. Retention preserves current, previous, locked, journal-referenced, and recent healthy runtimes; zero downtime is not promised, but automatic rollback restores the previous reachable runtime after a bounded interruption.
+The launcher can migrate legacy `current.json` and `previous.json` pointers only to a canonical compatible equal-or-newer installed candidate after an isolated real startup and restored-tab probe. A subsequent candidate upgrade must pass the same probe and advances the accepted version floor atomically without replacing the original pointer backups. Both pointers receive immutable backups; old files and runtimes remain for fallback. An incompatible, unhealthy or older candidate retains legacy startup and needs manual attention. This migration is not native-update rollback. Ordinary tab restoration still uses the retained restart descriptor. Startup retries transient `EADDRINUSE` with bounded backoff.
 
 ## Standalone CLI
 
@@ -933,9 +929,93 @@ Keep this browser configuration disabled until the gateway's exact-origin CORS p
 - **Remote browser asks for a PIN:** read it from the optional **Remote WebUI** side-panel controls, `/webui-status`, `/remote status`, or the local Web UI server log. Disable the toggle from localhost to remove the PIN gate.
 - **PWA install or notifications are unavailable:** use `localhost` or HTTPS; browser support varies on LAN HTTP URLs.
 
-## Update safety
+## Native update workflow
 
-Pi and Web UI updates are planned before they run. The confirmation identifies the exact planned versions, and the update is rejected if that plan becomes stale. Web UI updates keep the previous working version available and restore it automatically when the new version does not become healthy.
+This diagram describes the new native-command updater in the current working tree, not a released or fully accepted implementation. The [implementation plan](plans/planned/simplify-updates.md) still lists integrated validation, independent reviews, and the completion report as pending. The UI handoff reports browser tests blocked by missing Playwright. Durable job discovery and the separate PATH Pi preview fields are now present in the server, superseding the handoff's earlier integration-gap notes.
+
+```mermaid
+flowchart TD
+    Start([Choose Update Pi or Update Web UI]) --> Local{Localhost request?}
+    Local -->|No| Refuse[Refuse update execution]
+    Local -->|Yes| Discover[Check durable job history]
+    Discover -->|Unsettled job or discovery error| Observe[Observe existing job or show recovery guidance<br/>Do not launch another update]
+    Discover -->|No blocking job| Action{Which action?}
+
+    Action -->|Pi| Pi[Verified PATH Pi only<br/>pi update]
+    Action -->|Web UI| Web[Proven npm-global and Pi-user Web UI copies<br/>Global first, then user copy; deduplicate roots]
+    Pi --> Eligible{Any eligible target?}
+    Web --> Eligible
+    Eligible -->|No| Manual[Show skipped targets and manual guidance<br/>No command runs]
+    Eligible -->|Yes| Preview[Preview exact commands, roots and execution context<br/>Show active versus PATH versions and script warning]
+    Preview --> Confirm{Confirm this plan?}
+    Confirm -->|No| Cancel([No update])
+    Confirm -->|Yes| Guard[Revalidate confirmed context<br/>Lock affected roots and block new affected work<br/>Require known affected work to be idle]
+    Guard -->|Stale, busy, unsafe or known launch failure| Stop[No update command started<br/>Release any safely acquired fence and show reason]
+    Guard -->|Ready| Launch[Start detached runner outside updated package roots<br/>Background PowerShell on Windows or Bash on Linux]
+
+    Launch --> Command[Recheck target and driver identity<br/>Run the next fixed command]
+    Command --> Evidence{Command completion proven?}
+    Evidence -->|No or evidence lost| Unknown[Unknown: retain update fence<br/>No retry or automatic restart<br/>Manual host recovery required]
+    Evidence -->|Yes| Receipt[Persist bounded output and command receipt<br/>Changed, unchanged or failed]
+    Receipt --> More{Another target?}
+    More -->|Yes, even after a known failure| Command
+    More -->|No| Verify[Independently verify installed identity and health<br/>Also check changed active bundled Pi dependencies]
+    Verify --> Active{Healthy changed active component?}
+    Active -->|No| Done[Release fence and retain final result<br/>Success, partial, failed or unchanged]
+    Active -->|Yes, even with another target's failure| Idle[Wait for affected work to be idle<br/>Keep the fence through restart]
+    Idle --> Restart[Reload only affected managed Pi tabs<br/>Restart Web UI only when its active copy changed<br/>Preserve sessions; leave unrelated runtimes alone]
+    Restart --> Restored{Expected runtime and sessions verified?}
+    Restored -->|Yes| Done
+    Restored -->|Uncertain or failed| Unknown
+
+    Reconnect([Browser reload or reconnect]) -.-> Discover
+    Launch -.->|Launch outcome uncertain| Unknown
+    Verify -.->|Original finalizing owner lost| Unknown
+    Observe -.->|Completion or ownership cannot be proven| Unknown
+
+    classDef normal fill:#e8f1ff,stroke:#315d92,color:#142c48;
+    classDef caution fill:#fff4d6,stroke:#9b6b12,color:#513a0b;
+    classDef blocked fill:#fde8e8,stroke:#a63c3c,color:#651e1e;
+    classDef finished fill:#e5f5ea,stroke:#37794b,color:#1b4729;
+    class Preview,Guard,Launch,Command,Receipt,Verify,Idle,Restart normal;
+    class Observe,Manual caution;
+    class Refuse,Stop,Unknown blocked;
+    class Done,Cancel finished;
+```
+
+### Commands and scope
+
+These are readable command forms. Execution uses the preview's absolute, verified executable and driver, not a fresh shell PATH lookup.
+
+| Action | Command | Scope |
+| --- | --- | --- |
+| Update Pi | `pi update` | Verified PATH Pi installation only. Initial automatic support is limited to proven Pi 0.87.1 semantics and ownership. |
+| Update Web UI, npm-global | `npm -g update @firstpick/pi-package-webui` | Proven global npm prefix. |
+| Update Web UI, Pi-user | `pi update --extension npm:@firstpick/pi-package-webui --no-approve` | Verified PATH Pi drives the configured user installation. Preserve its npm range or tag and agent directory; exclude project settings. |
+
+- Project copies, exact pins, Git/local sources, linked or unproven installations, and unsupported command drivers receive skipped/manual guidance. There is no combined Pi/Web UI action or automatic optional-companion update.
+- A known failure does not prevent the next independent Web UI target from being attempted after revalidation. Unknown completion stops the sequence and retains exclusion.
+- Launch is not completion, and command exit is not health verification. An unchanged, failed or unverified active installation does not auto-restart. A Web UI dependency-only change can still require a verified active Pi reload.
+- Reconnect observes the same durable job; it never replays commands. Server discovery, not browser storage, selects relevant jobs. If the original server owner dies before finalization, another instance does not take over automatically.
+- Native lifecycle scripts run with existing configuration and without automatic elevation. Scripts are not sandboxed, dependencies may change, and bounded output redaction is not a guarantee that arbitrary script output contains no secrets.
+
+### Legacy startup migration
+
+Migration is a separate launcher decision, not a rollback stage in the native update job.
+
+```mermaid
+flowchart LR
+    Boot[Start through updated launcher] --> Legacy{Legacy pointer present?}
+    Legacy -->|No| Installed[Start installed Web UI]
+    Legacy -->|Yes| Check{Installed candidate is compatible,<br/>equal or newer, and passes<br/>isolated startup and session restoration?}
+    Check -->|Yes| Backup[Back up both pointer files<br/>Record migration; retain old pointers and runtimes]
+    Backup --> Installed
+    Check -->|No or interrupted| Fallback[Keep legacy launch path<br/>Show manual guidance]
+```
+
+The retired updater used exact-target staging, managed activation, and automatic rollback. Native package updates replace that flow and do not promise automatic rollback. Retaining legacy pointers and runtimes protects the migration fallback only.
+
+Source references: [plan and launch](lib/update/native-jobs.mjs), [detached runner](bin/pi-webui-native-update-runner.mjs), [cross-process admission](lib/update/coordination.mjs), [job discovery](lib/update/discovery.mjs), [server verification and restart](bin/pi-webui.mjs), and [legacy migration](lib/update/migration.mjs). For user instructions, see [Pi and Web UI updates](TECHNICAL.md#pi-and-web-ui-updates).
 
 ## Session continuity
 

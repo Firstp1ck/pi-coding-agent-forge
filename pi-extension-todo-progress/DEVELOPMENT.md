@@ -82,9 +82,9 @@ Status-specific fields are:
 
 A completion whose verification list consists only of skipped, absent, or unverified claims is rejected. This is shape and obvious-negative validation, not semantic proof.
 
-Terminal checkpoints return a user-readable summary, including completion evidence, blocker intervention, or waiting reference, and request early termination. A terminal checkpoint must be the only tool call in its assistant batch. Pi preflights sibling calls before concurrent execution, so validating the finalized assistant batch prevents a terminal checkpoint from racing with sibling work.
+Terminal checkpoints return a user-readable summary, including completion evidence, blocker intervention, or waiting reference, but do not terminate the tool turn. Pi makes one more model request so the assistant can give a normal final reply that carries useful conversation details beyond the checkpoint fields. A terminal checkpoint must be the only tool call in its assistant batch. Pi preflights sibling calls before concurrent execution, so validating the finalized assistant batch prevents a terminal checkpoint from racing with sibling work.
 
-Later assistant work or non-controller tool work in the same low-level run invalidates a terminal checkpoint. This invalidation cannot change a paused state and does not reopen a completed goal during a later unrelated run.
+A text-only assistant reply after the tool result leaves the terminal checkpoint intact. A later assistant tool call or non-controller tool work in the same low-level run invalidates it as fresh work. This invalidation cannot change a paused state and does not reopen a completed goal during a later unrelated run.
 
 ## Lifecycle integration
 
@@ -102,7 +102,7 @@ Repeated `agent_settled` events for the same agent sequence are ignored. Pending
 
 `pi.sendUserMessage()` has a void extension API. Synchronous dispatch failures pause immediately. An outstanding dispatch that reaches another settled boundary without starting is also paused. Asynchronous preflight failures cannot be observed directly through this API; `/goal-pause` then `/goal-resume` provides recovery.
 
-A user prompt or non-waking custom notification delivered after a terminal checkpoint retires that checkpoint's execution ownership, even when Pi drains the message in the same low-level run. Subsequent clarification replies cannot reopen a completed or blocked goal. Same-turn late tool work still invalidates terminal evidence.
+A user prompt or non-waking custom notification delivered after a terminal checkpoint retires that checkpoint's execution ownership, even when Pi drains the message in the same low-level run. Subsequent clarification replies cannot reopen a completed or blocked goal. Same-turn late tool work still invalidates terminal evidence, while the expected post-checkpoint assistant reply does not.
 
 ## Cancellation and waiting
 
@@ -142,7 +142,7 @@ npm pack --dry-run --json
 
 The lifecycle harness covers real checklist extraction, premature final output, duplicate settlement, run identity rollover, stale checkpoints, same-batch terminal rejection, late-work invalidation, cancellation dominance, completed-goal isolation from later aborts, pending input, native retries and compaction recovery, waiting notifications, exact kickoff correlation, canceled kickoff filtering, queued-goal pause, dispatch failure, restore and tree navigation, malformed state, the 100,000-character acceptance/restore boundary, ordinary chat, and both continuation limits.
 
-Native `AgentSession.prompt` and `sendUserMessage` methods are exercised with an in-memory transport to check input/startup hooks for kickoff and continuation. Native `SessionManager` verifies immutable branch snapshots. Set `PI_GOAL_TEST_RUNTIME` to a Pi runtime module file URL to repeat these tests against a different installed version. The lifecycle and state suites support repository Pi 0.84.2 and installed Pi 0.87.0. The text-only native startup fixture supplies the image-normalization hook required by Pi 0.87.0.
+Native `AgentSession.prompt` and `sendUserMessage` methods are exercised with an in-memory transport to check input/startup hooks for kickoff and continuation. The native checkpoint fixture asserts a third model request for the final reply, with one agent run and no duplicate continuation. Native `SessionManager` verifies immutable branch snapshots. Set `PI_GOAL_TEST_RUNTIME` to a Pi runtime module file URL to repeat these tests against a different installed version. The lifecycle and state suites support repository Pi 0.84.2 and installed Pi 0.87.0. The text-only native startup fixture supplies the image-normalization hook required by Pi 0.87.0.
 
 Agent-created goal regressions cover same-run activation without synthetic user messages, result identities and goal display, continuation and completion, identical-goal reuse, scope-replacement rejection, empty/malformed/oversized inputs, output preview bounds, sole-call enforcement, cancellation, queued user goal precedence, paused/blocked/waiting guards, reload/resume, fresh-request requirements, and label-only fallback.
 

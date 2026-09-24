@@ -30,7 +30,7 @@ To resume, say "Resume the goal" or "Continue where you stopped." Pi is instruct
 
 The resume tool requires a new user request delivered after the goal stopped. It refuses to resume while messages or a replacement `/goal` are pending. Cancellation, explicit pause, and session restoration clear any earlier opportunity to resume. Recognizing resume intent is the agent's responsibility, not a keyword filter. Status questions and clarifications alone are not permission to resume, and resuming does not prove a blocker is resolved or a waiting job succeeded. If the tool is unavailable, use `/goal-resume` yourself.
 
-A checkpoint can report that work should continue, has completed, is blocked, or is waiting for a native background notification. Completed goals stop automatic follow-ups. Blocked, waiting, paused, cancelled, and terminally failed goals do not continue automatically.
+A checkpoint can report that work should continue, has completed, is blocked, or is waiting for a native background notification. After a completed, blocked, or waiting checkpoint, Pi still has one normal assistant reply to summarize the outcome, relevant checks, risks, and next steps. That reply does not restart the goal; further tool activity in the same run can invalidate a premature terminal checkpoint. Completed goals stop automatic follow-ups. Blocked, waiting, paused, cancelled, and terminally failed goals do not continue automatically.
 
 A goal queued while Pi is busy does not affect the active turn. It becomes active only when its uniquely identified kickoff message is actually delivered. Pausing a queued goal cancels that kickoff and removes its instruction from model context without clearing or aborting unrelated Pi messages.
 

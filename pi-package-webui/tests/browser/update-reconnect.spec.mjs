@@ -22,7 +22,7 @@ async function freePort() {
 function startServer(port, temp) {
   const child = spawn(process.execPath, [serverEntry, "--cwd", temp, "--host", "127.0.0.1", "--port", String(port), "--pi", fakePi], {
     stdio: ["ignore", "pipe", "pipe"],
-    env: { ...process.env, PI_WEBUI_RPC_SUPERVISOR: "0", PI_CODING_AGENT_DIR: path.join(temp, "agent"), PI_WEBUI_SETTINGS_FILE: path.join(temp, "settings.json") },
+    env: { ...process.env, PI_WEBUI_RPC_SUPERVISOR: "0", PI_WEBUI_UPDATE_TEST_HOME: path.join(temp, "coordination"), PI_CODING_AGENT_DIR: path.join(temp, "agent"), PI_WEBUI_SETTINGS_FILE: path.join(temp, "settings.json") },
   });
   child.output = "";
   child.stdout.on("data", (chunk) => { child.output += chunk; });
@@ -87,6 +87,42 @@ test("reconnect ignores the old boot and accepts only a changed boot identity", 
   } finally {
     await stop(first);
     await stop(second);
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
+test("reload discovers the same partial job and unknown recovery blocks another update", async ({ page }) => {
+  const port = await freePort();
+  const temp = await mkdtemp(path.join(tmpdir(), "pi-webui-update-recovery-"));
+  const baseURL = `http://127.0.0.1:${port}`;
+  const server = startServer(port, temp);
+  let requests = 0;
+  const job = { transactionId: "durable-webui-job", phase: "partial", outcome: "partial", receipts: [
+    { id: "webui:npm-global", status: "changed", stdout: "completed" },
+    { id: "webui:pi-user", status: "failed", stderr: "install failed" },
+  ], verifiedTargets: [{ id: "webui:npm-global", status: "healthy" }] };
+  try {
+    await waitForHealth(baseURL, server);
+    await page.route("**/api/update-status*", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true, data: {
+      canRunUpdate: job.phase !== "unknown", updateInProgress: job.phase === "unknown", nativeJobs: { pi: null, webui: job },
+      nativeJobDiscoveryError: "", pi: { checked: true, currentVersion: "0.87.1" }, webui: { checked: true, currentVersion: "0.8.1", latestVersion: "0.8.2", updateAvailable: true },
+    } }) }));
+    await page.route("**/api/update/plan", (route) => { requests += 1; return route.abort(); });
+    await page.goto(baseURL);
+    await page.locator("#webuiVersionButton").click();
+    await expect(page.locator("#webuiComponentUpdateStatus")).toContainText("durable-webui-job");
+    await expect(page.locator("#webuiComponentUpdateOutput")).toContainText("install failed");
+    await page.reload();
+    await page.locator("#webuiVersionButton").click();
+    await expect(page.locator("#webuiComponentUpdateStatus")).toContainText("partial result");
+    job.phase = "unknown";
+    await page.reload();
+    await page.locator("#webuiVersionButton").click();
+    await expect(page.locator("#webuiComponentUpdateStatus")).toContainText("Do not retry or restart");
+    await expect(page.locator("#webuiComponentUpdateButton")).toBeDisabled();
+    assert.equal(requests, 0, "unknown jobs cannot create a second plan");
+  } finally {
+    await stop(server);
     await rm(temp, { recursive: true, force: true });
   }
 });

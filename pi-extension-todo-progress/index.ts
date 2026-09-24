@@ -792,7 +792,7 @@ export default function todoProgress(pi: ExtensionAPI) {
       "Call goal_checkpoint with continue only when remainingWork and nextAction identify the unfinished work.",
       "Call goal_checkpoint with completed only after rereading the entire referenced plan and supplying plan-wide coverage plus verification evidence.",
       "Call goal_checkpoint with waiting only for a native job/receipt that will notify Pi; never poll waiting work.",
-      "Call a terminal goal_checkpoint as the sole tool call in its assistant batch.",
+      "Call a terminal goal_checkpoint as the sole tool call in its assistant batch. After it returns, give the user a normal final reply with the useful outcome, relevant details, checks, and remaining risks or next steps. Do not treat the checkpoint result as the final answer or call more tools.",
     ],
     parameters: GOAL_CHECKPOINT_PARAMETERS,
     async execute(toolCallId, params, signal) {
@@ -823,10 +823,12 @@ export default function todoProgress(pi: ExtensionAPI) {
       else goalState.status = "running";
       persistGoalState();
 
+      const resultText = checkpointResultText(checkpoint);
       return {
-        content: [{ type: "text", text: checkpointResultText(checkpoint) }],
+        content: [{ type: "text", text: checkpoint.status === "continue"
+          ? resultText
+          : `${resultText}\n\nCheckpoint recorded. Write a normal final reply to the user now, with the important outcome and any remaining risks or next steps. Do not call more tools.` }],
         details: { checkpoint, goalStatus: goalState.status },
-        ...(checkpoint.status === "continue" ? {} : { terminate: true }),
       };
     },
   });
@@ -900,7 +902,8 @@ export default function todoProgress(pi: ExtensionAPI) {
 
     if (event.message.role === "assistant") {
       assistantSequence += 1;
-      if (checkpointAssistantSequence >= 0 && assistantSequence > checkpointAssistantSequence) invalidateTerminalCheckpoint();
+      // A post-checkpoint text reply is the expected final answer, not new work.
+      if (checkpointAssistantSequence >= 0 && assistantSequence > checkpointAssistantSequence && assistantHasToolCalls(event.message)) invalidateTerminalCheckpoint();
       return;
     }
 

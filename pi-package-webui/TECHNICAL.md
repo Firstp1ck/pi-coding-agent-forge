@@ -79,13 +79,15 @@ Common overrides:
 
 Private runtime and recovery files should not be edited or removed while Web UI tabs are active.
 
-## Updates and rollback
+## Pi and Web UI updates
 
-The Pi and Web UI update controls show a plan before making changes. The confirmed plan is rejected if it becomes stale or no longer matches the running installation.
+Use **Update Pi** and **Update Web UI** separately from localhost. Each action previews the exact executable, command, affected installation roots, working directory, Pi agent directory, npm prefix where relevant, and skipped installations. Confirm only after reviewing that list. If an executable, owner, or installation changes before launch, request a new preview. A small spinner means the job is still being checked, not a percentage estimate. Its ID, bounded command output and per-installation result remain visible after reconnect.
 
-Web UI updates keep the previous working version available. If the replacement does not become healthy, the launcher restores the previous version automatically. Installations that cannot be identified safely are left unchanged and receive manual guidance instead.
+**Update Pi** runs `pi update` with the verified PATH Pi, not necessarily the Pi currently running your tabs. Initial automatic support is proven only for PATH Pi 0.87.1; other versions get manual or unproven guidance. The separately selected, bundled, or explicit Pi runtime is not silently replaced. **Update Web UI** runs `npm -g update @firstpick/pi-package-webui` for a proven npm-global installation and `pi update --extension npm:@firstpick/pi-package-webui --no-approve` for a proven Pi user installation, using its configured npm range or tag. Eligible installations run in sequence. Project copies, exact pins, Git/local sources and unproven ownership need manual attention. No optional companion packages are included.
 
-A short interruption is possible during restart; zero downtime is not promised.
+Finish known affected Pi work before updating. PowerShell or Bash runs in the background; a desktop terminal is not needed. Native package lifecycle scripts run with your existing configuration and are not sandboxed. The updater does not elevate permissions. Native package updates may change dependencies and cannot be automatically rolled back. The displayed output is bounded and masks common credential patterns, but arbitrary script output may still expose secrets. Do not paste it into a public issue without checking it.
+
+A changed, verified healthy active component restarts automatically once all commands finish and affected work is idle, even when another installation failed. Unchanged, failed or unverified active installations do not auto-restart. Partial and unknown results stay visible after reconnect; unknown completion blocks retry and restart until you verify and recover on the host. A short interruption is possible; zero downtime is not promised. The launcher can migrate old managed-runtime pointers only to a validated, compatible equal-or-newer installed Web UI. It retains pointer backups and old runtimes. A failed validation or downgrade keeps the old launch path with manual guidance; this is not rollback of a native update.
 
 ## Session continuity
 

@@ -1,32 +1,22 @@
-const EXACT_VERSION = /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/;
+import { validateNativePlan } from "./update/native-jobs.mjs";
 
-export function exactPackageSpec(packageName, version) {
-  const name = String(packageName || "").trim();
-  const exact = String(version || "").trim().replace(/^v/i, "");
-  if (!name || !EXACT_VERSION.test(exact)) throw new TypeError("packageName and an exact version are required");
-  return `${name}@${exact}`;
+function invocation({ command, args }) {
+  return [command, ...args].map((part) => JSON.stringify(String(part))).join(" ");
 }
 
-export function exactNpmInstallArgs({ installRoot, packageName, version, registry } = {}) {
-  const root = String(installRoot || "").trim();
-  const registryUrl = new URL(String(registry || ""));
-  if (!root) throw new TypeError("installRoot is required");
-  if (!/^https?:$/.test(registryUrl.protocol) || registryUrl.username || registryUrl.password || registryUrl.hash) {
-    throw new TypeError("registry must be a credential-free HTTP(S) URL");
-  }
+/** Only confirmed native commands may be shown in an apply confirmation. */
+export function nativeUpdateConfirmationText(plan) {
+  validateNativePlan(plan, plan?.digest);
+  const targets = plan.targets.map((target) =>
+    `${target.id}: ${target.packageName} ${target.beforeVersion} at ${target.installedRoot}\n` +
+    `Effects: ${target.effectRoot}\nCommand: ${invocation(target.command)}`);
   return [
-    "install", "--prefix", root, "--ignore-scripts", "--no-save", "--package-lock=false",
-    "--registry", registryUrl.href, exactPackageSpec(packageName, version),
-  ];
-}
-
-export function updatePlanConfirmationText(plan) {
-  if (!plan?.transactionId || !/^[a-f0-9]{64}$/.test(String(plan.digest || ""))) throw new TypeError("persisted update plan is required");
-  const targets = (plan.targets || []).map((target) => `${target.id} ${target.currentVersion} → ${target.targetVersion}`);
-  const refusals = (plan.refusals || []).map((item) => `${item.id}: ${item.guidance}`);
-  return [
-    targets.length ? `Exact targets: ${targets.join(" · ")}` : "No automatic targets were accepted.",
-    refusals.length ? `Refused: ${refusals.join(" · ")}` : "",
-    `Plan digest: ${plan.digest}`,
-  ].filter(Boolean).join("\n");
+    ...targets,
+    `Working directory: ${plan.context.cwd}`,
+    `Pi agent directory: ${plan.context.agentDir}`,
+    ...(plan.context.npmPrefix ? [`npm prefix: ${plan.context.npmPrefix}`] : []),
+    ...(plan.refusals || []).map((item) => `Skipped: ${item}`),
+    plan.warning,
+    `Confirmation digest: ${plan.digest}`,
+  ].join("\n");
 }

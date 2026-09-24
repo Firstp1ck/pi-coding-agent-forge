@@ -1039,10 +1039,27 @@ test("terminal checkpoints require a sole tool call and later same-run work inva
   const result = await executeCheckpoint(harness, "terminal-only", completed);
   assert.match(result.content[0].text, /Goal completed: Everything is complete/);
   assert.match(result.content[0].text, /Verification:\nnpm test passed|Verification:\n- npm test passed/);
+  assert.equal(result.terminate, undefined, "The model must be able to reply after the checkpoint");
+  const finalReply = assistantMessage("Updated the goal flow. npm test passed; no known remaining risks.");
+  await harness.emit("message_start", { message: finalReply });
+  await harness.emit("message_end", { message: finalReply });
+  await harness.emit("agent_end", { messages: [finalReply] });
+  await harness.emit("agent_settled", {});
+  assert.equal(latestGoal(harness).status, "completed");
+  assert.equal(customMessagesOfType(harness, "todo-progress-goal-continuation").length, 0);
   await harness.emit("tool_execution_start", { toolCallId: "later", toolName: "bash", args: { command: "echo later" } });
   await harness.command("goal-status");
   assert.match(harness.notifications.at(-1).message, /status running/);
   assert.match(harness.notifications.at(-1).message, /checkpoint missing/);
+
+  const pendingToolCall = createHarness(extension);
+  const secondIdentity = await startGoalRun(pendingToolCall, "Verify late calls");
+  await executeCheckpoint(pendingToolCall, "complete-second", {
+    ...secondIdentity, status: "completed", summary: "Verified",
+    coverage: ["Entire goal"], verificationEvidence: ["Tests passed"],
+  });
+  await pendingToolCall.emit("message_start", { message: assistantToolMessage([{ id: "fresh-tool", name: "bash" }]) });
+  assert.equal(latestGoal(pendingToolCall).status, "running", "An attempted later tool call is new work even before execution");
 });
 
 test("completed goals stay terminal when later ordinary chat is aborted", async () => {
@@ -1220,7 +1237,11 @@ for (const status of ["completed", "blocked", "waiting"]) {
       blockerCause: "Missing permission", requiredIntervention: "Owner approval",
       waitingFor: "CI", jobId: "ci-123",
     });
-    // Pi drains follow-ups after terminating tools without a new agent_start.
+    const finalReply = assistantMessage("Here is the outcome, the verification, and what remains.");
+    await harness.emit("message_start", { message: finalReply });
+    await harness.emit("message_end", { message: finalReply });
+    assert.equal(latestGoal(harness).status, status, "The normal final reply must preserve the checkpoint");
+    // Pi may drain queued follow-ups without a new agent_start.
     await harness.emit("message_start", { message: userMessage("Explain the current status") });
     const reply = assistantMessage("Here is the current status.");
     await harness.emit("message_start", { message: reply });

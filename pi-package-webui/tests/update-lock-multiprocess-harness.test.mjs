@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
+import { acquireEffectLocks, acknowledgeUpdateFence, affectedParticipants, assertEffectAdmission, createUpdateAdmissionCounter, releaseEffectLocks, registerUpdateParticipant, sharedUpdateRoot, unregisterUpdateParticipant } from "../lib/update/coordination.mjs";
 import { spawn } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -40,6 +41,64 @@ try {
   assert.equal(first.code, 0, first.output);
   assert.equal(second.code, 2, second.output);
   assert.match(second.output, /UPDATE_LOCKED/);
+
+  const stateRoot = await sharedUpdateRoot({ home: root });
+  const effect = path.join(root, "global", "node_modules");
+  await mkdir(effect, { recursive: true });
+  const server = await registerUpdateParticipant(stateRoot, { kind: "server", roots: [effect] });
+  const supervisor = await registerUpdateParticipant(stateRoot, { kind: "rpc-supervisor", roots: [effect] });
+  const admitted = createUpdateAdmissionCounter();
+  const finishUnpublishedTab = admitted.begin();
+  const job = await acquireEffectLocks(stateRoot, [effect, effect], "one");
+  assert.equal((await affectedParticipants(stateRoot, job)).length, 2);
+  await acknowledgeUpdateFence(server, job, admitted.idle);
+  assert.equal((await affectedParticipants(stateRoot, job)).find((owner) => owner.token === server.token).ack.idle, false,
+    "a lock cannot admit the update while an admitted tab is still unpublished");
+  await assert.rejects(assertEffectAdmission(stateRoot, [effect]), { code: "UPDATE_FENCED" },
+    "the tab must recheck the fence before publishing its Pi child");
+  finishUnpublishedTab();
+  await acknowledgeUpdateFence(server, job, admitted.idle);
+  await acknowledgeUpdateFence(supervisor, job, false);
+  assert.equal((await affectedParticipants(stateRoot, job)).every((owner) => owner.ack.idle), false);
+  assert.equal(job.files.length, 1, "aliased declarations must not duplicate physical mutation");
+  await assert.rejects(acquireEffectLocks(stateRoot, [effect], "two"), { code: "UPDATE_FENCED" });
+  await assert.rejects(assertEffectAdmission(stateRoot, [effect]), { code: "UPDATE_FENCED" });
+  await assert.rejects(releaseEffectLocks(job), /completion/);
+  await releaseEffectLocks(job, { completionVerified: true });
+  await assertEffectAdmission(stateRoot, [effect]);
+  const nested = path.join(effect, "@firstpick", "pi-package-webui");
+  await mkdir(nested, { recursive: true });
+  const descendant = await registerUpdateParticipant(stateRoot, { kind: "server", roots: [nested] });
+  const parentLock = await acquireEffectLocks(stateRoot, [effect], "parent");
+  assert.equal((await affectedParticipants(stateRoot, parentLock)).length, 3, "nested consumers must acknowledge their ancestor effect");
+  await assert.rejects(assertEffectAdmission(stateRoot, [nested]), { code: "UPDATE_FENCED" });
+  await assert.rejects(acquireEffectLocks(stateRoot, [nested], "child"), { code: "UPDATE_FENCED" });
+  await releaseEffectLocks(parentLock, { completionVerified: true });
+  const childLock = await acquireEffectLocks(stateRoot, [nested], "child");
+  await assert.rejects(assertEffectAdmission(stateRoot, [effect]), { code: "UPDATE_FENCED" });
+  await assert.rejects(acquireEffectLocks(stateRoot, [effect], "parent-again"), { code: "UPDATE_FENCED" });
+  await releaseEffectLocks(childLock, { completionVerified: true });
+  const activePi = path.join(root, "explicit-active-pi");
+  const pathPi = path.join(root, "separate-path-pi");
+  await Promise.all([mkdir(activePi), mkdir(pathPi)]);
+  const explicitOwner = await registerUpdateParticipant(stateRoot, { kind: "server", roots: [activePi, pathPi] });
+  const pathOwner = await registerUpdateParticipant(stateRoot, { kind: "server", roots: [pathPi] });
+  const releaseRestart = admitted.begin();
+  const explicitLock = await acquireEffectLocks(stateRoot, [activePi], "explicit-pi-update");
+  assert.deepEqual((await affectedParticipants(stateRoot, explicitLock)).map(({ token }) => token), [explicitOwner.token],
+    "a different PATH Pi cannot stand in for an explicitly active installation");
+  await acknowledgeUpdateFence(explicitOwner, explicitLock, admitted.idle);
+  assert.equal((await affectedParticipants(stateRoot, explicitLock))[0].ack.idle, false,
+    "restart lease acquired before handoff must block idle acknowledgment during its await");
+  await assert.rejects(assertEffectAdmission(stateRoot, [activePi]), { code: "UPDATE_FENCED" },
+    "ordinary restart must recheck admission before launching the successor");
+  releaseRestart();
+  await releaseEffectLocks(explicitLock, { completionVerified: true });
+  await unregisterUpdateParticipant(explicitOwner);
+  await unregisterUpdateParticipant(pathOwner);
+  await unregisterUpdateParticipant(descendant);
+  await unregisterUpdateParticipant(server);
+  await unregisterUpdateParticipant(supervisor);
 } finally {
   await rm(root, { recursive: true, force: true });
 }

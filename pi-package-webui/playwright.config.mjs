@@ -1,4 +1,12 @@
 import { defineConfig, devices } from "@playwright/test";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+
+// Browser fixtures must not register update participants under the user's
+// production coordination root. Keep ambiguous fixture jobs for inspection.
+process.env.NODE_ENV = "test";
+process.env.PI_WEBUI_UPDATE_TEST_HOME ||= mkdtempSync(path.join(tmpdir(), "pi-webui-browser-coordination-"));
 
 export default defineConfig({
   testDir: "./tests/browser",

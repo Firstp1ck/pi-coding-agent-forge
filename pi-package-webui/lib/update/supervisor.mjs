@@ -1,6 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
-import { chmod, mkdir, open, readFile, readdir, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, open, readFile, readdir, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
+import { createServer as createNetServer } from "node:net";
+import { tmpdir } from "node:os";
+import { setTimeout as delay } from "node:timers/promises";
 import path from "node:path";
 import { updateStatePaths } from "./journal.mjs";
 
@@ -200,39 +203,57 @@ export async function probeCandidateRuntime(serverEntry, { expectedVersion, expe
   });
 }
 
-export async function collectManagedRuntimes(agentDir, { protectedRoots = [], keepHealthyForMs = 7 * 24 * 60 * 60_000, now = Date.now() } = {}) {
-  const paths = managedRuntimePaths(agentDir);
-  const statePaths = updateStatePaths(agentDir);
-  const current = await readRuntimePointer(agentDir, "current");
-  const previous = await readRuntimePointer(agentDir, "previous");
-  const protectedSet = new Set([current?.runtimeRoot, previous?.runtimeRoot, ...protectedRoots].filter(Boolean).map((item) => path.resolve(item)));
+async function freeLoopbackPort() {
+  const socket = createNetServer();
+  await new Promise((resolve, reject) => socket.once("error", reject).listen(0, "127.0.0.1", resolve));
+  const port = socket.address().port;
+  await new Promise((resolve) => socket.close(resolve));
+  return port;
+}
+
+/** Exercise real candidate startup and restoration in an isolated disposable agent directory. */
+export async function probeStartupRestore(serverEntry, { expectedVersion, spawnImpl = spawn, timeoutMs = 20_000, piCommand = "" } = {}) {
+  const temp = await mkdtemp(path.join(tmpdir(), "pi-webui-startup-probe-"));
+  const agentDir = path.join(temp, "agent");
+  const restore = await createRestoreFile(agentDir, [{ id: "probe-tab", title: "Temporary startup probe", cwd: temp }]);
+  const port = await freeLoopbackPort();
+  // Every verification probe needs its own coordination domain: an active
+  // update deliberately fences the real installation until this check passes.
+  const env = { ...process.env, PI_WEBUI_UPDATE_TEST_HOME: temp,
+    PI_CODING_AGENT_DIR: agentDir, PI_WEBUI_RESTORE_FILE: restore.file,
+    PI_WEBUI_STARTUP_PROBE: "1", PI_WEBUI_RPC_SUPERVISOR: "0", PI_WEBUI_NPM_BIN: path.join(temp, "absent-npm"),
+    PI_WEBUI_SETTINGS_FILE: path.join(temp, "webui-settings.json") };
+  const child = spawnImpl(process.execPath, [serverEntry, "--host", "127.0.0.1", "--port", String(port), "--cwd", temp, "--no-session", ...(piCommand ? ["--pi", piCommand] : [])],
+    { cwd: temp, env, windowsHide: true, stdio: "ignore" });
+  let exited = false;
+  child.once("error", () => { exited = true; });
+  child.once("exit", () => { exited = true; });
+  const deadline = Date.now() + timeoutMs;
+  let result = { ok: false, error: "Candidate did not complete isolated startup and restored-tab health check." };
   try {
-    for (const name of await readdir(statePaths.updatesDir)) {
-      if (!name.endsWith(".json")) continue;
+    while (Date.now() < deadline && !exited) {
       try {
-        const journal = JSON.parse(await readFile(path.join(statePaths.updatesDir, name), "utf8"));
-        for (const target of journal?.plan?.targets || []) {
-          const runtimeRoot = target?.metadata?.runtimeRoot;
-          if (runtimeRoot && inside(paths.runtimesDir, runtimeRoot)) protectedSet.add(path.resolve(runtimeRoot));
+        const response = await fetch(`http://127.0.0.1:${port}/api/update/startup-probe`, { signal: AbortSignal.timeout(600) });
+        const body = await response.json();
+        if (response.ok && body?.ok === true && body.data?.schemaVersion === 1 && body.data?.packageName === "@firstpick/pi-package-webui" &&
+            body.data?.version === expectedVersion && body.data?.restoredTabCount === 1 &&
+            body.data?.restoredProbeTabHealthy === true && body.data?.runningTabCount >= 1) {
+          result = { ok: true, version: body.data.version, bootIdentity: body.data.bootIdentity };
+          break;
         }
-      } catch {}
+      } catch { /* Wait only for this disposable local candidate. */ }
+      await delay(150);
     }
-  } catch (error) { if (error?.code !== "ENOENT") throw error; }
-  let entries = [];
-  try { entries = await readdir(paths.runtimesDir, { withFileTypes: true }); } catch (error) { if (error?.code === "ENOENT") return []; throw error; }
-  const removed = [];
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
-    const root = path.join(paths.runtimesDir, entry.name);
-    if (protectedSet.has(path.resolve(root))) continue;
-    try {
-      const info = await stat(root);
-      if (now - info.mtimeMs < keepHealthyForMs) continue;
-      await rm(root, { recursive: true, force: true });
-      removed.push(root);
-    } catch {}
+  } finally {
+    if (!exited) child.kill("SIGTERM");
+    const closed = exited || await Promise.race([
+      new Promise((resolve) => child.once("exit", () => resolve(true))),
+      delay(5_000, false),
+    ]);
+    if (closed) await rm(temp, { recursive: true, force: true });
+    else result = { ok: false, error: "Candidate probe did not stop; temporary session artifacts were retained for safe recovery." };
   }
-  return removed;
+  return Object.freeze(result);
 }
 
 export const UPDATE_RESTORE_LIMIT = MAX_RESTORE_TABS;

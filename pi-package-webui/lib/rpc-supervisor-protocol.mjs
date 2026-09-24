@@ -1,7 +1,7 @@
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import { StringDecoder } from "node:string_decoder";
 
-export const RPC_SUPERVISOR_PROTOCOL = Object.freeze({ major: 1, minor: 2 });
+export const RPC_SUPERVISOR_PROTOCOL = Object.freeze({ major: 1, minor: 3 });
 // Pi permits one bounded JSONL record this large. IPC envelopes need a small
 // additional allowance so a single valid Pi record can always be forwarded.
 export const PI_RPC_JSONL_LINE_MAX_BYTES = 32 * 1024 * 1024;
@@ -27,7 +27,7 @@ const REQUEST_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 const TAB_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 const SCOPE_ID = /^[a-f0-9]{64}$/;
 const SEQ = /^(?:0|[1-9][0-9]{0,19})$/;
-const OPERATION_TYPES = new Set(["create", "update", "replace", "close", "command", "write", "ack", "prepare_handoff", "detach", "shutdown"]);
+const OPERATION_TYPES = new Set(["create", "update", "replace", "replace_update", "close", "command", "write", "ack", "prepare_handoff", "detach", "shutdown"]);
 
 export class RpcSupervisorProtocolError extends Error {
   constructor(message, code = "RPC_SUPERVISOR_PROTOCOL") {
@@ -191,14 +191,27 @@ export function validateClientFrame(frame) {
     };
   }
   if (!OPERATION_TYPES.has(type)) fail(`unsupported operation: ${type}`);
-  const common = new Set(["type", "requestId", "tabId", "metadata", "child", "command", "timeoutMs", "cursor"]);
+  const common = new Set(["type", "requestId", "tabId", "metadata", "child", "command", "timeoutMs", "cursor", "restart"]);
   onlyKeys(value, common, type);
+  if (type !== "replace_update" && value.restart !== undefined) fail("restart authorization is only valid for replace_update");
   const requestId = string(value.requestId, "requestId", { pattern: REQUEST_ID });
   if (type === "create") {
     return { type, requestId, tabId: validateTabId(value.tabId), metadata: validateMetadata(value.metadata), child: validateChild(value.child) };
   }
   if (type === "update") return { type, requestId, tabId: validateTabId(value.tabId), metadata: validateMetadata(value.metadata) };
-  if (type === "replace") return { type, requestId, tabId: validateTabId(value.tabId), metadata: value.metadata === undefined ? undefined : validateMetadata(value.metadata), child: validateChild(value.child) };
+  if (type === "replace" || type === "replace_update") {
+    const commonReplace = { type, requestId, tabId: validateTabId(value.tabId),
+      metadata: value.metadata === undefined ? undefined : validateMetadata(value.metadata), child: validateChild(value.child) };
+    if (type === "replace") return commonReplace;
+    const restart = object(value.restart, "restart");
+    onlyKeys(restart, new Set(["transactionId", "lockToken", "effectRoot", "nonce"]), "restart");
+    return { ...commonReplace, restart: {
+      transactionId: string(restart.transactionId, "restart.transactionId", { pattern: REQUEST_ID }),
+      lockToken: string(restart.lockToken, "restart.lockToken", { pattern: REQUEST_ID }),
+      effectRoot: string(restart.effectRoot, "restart.effectRoot", { max: 4096 }),
+      nonce: string(restart.nonce, "restart.nonce", { pattern: REQUEST_ID }),
+    } };
+  }
   if (type === "close") return { type, requestId, tabId: validateTabId(value.tabId) };
   if (type === "command" || type === "write") {
     const command = object(value.command, "command");

@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
+import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
+import { resolveUpdatePathPi } from "../lib/update/path-pi.mjs";
 import { resolveCanonicalPiRuntime, resolveWebuiRuntimeIdentity, sameRuntimeIdentity } from "../lib/update/resolver.mjs";
 
 const bundledCli = "C:\\Agent\\npm\\node_modules\\@earendil-works\\pi-coding-agent\\dist\\cli.js";
@@ -53,4 +56,37 @@ assert.equal(webui.version, "0.8.6");
 assert.equal(sameRuntimeIdentity(webui, { canonicalId: webui.canonicalId }), true);
 assert.ok(calls.every((call) => Array.isArray(call.args)));
 assert.ok(calls.every((call) => call.options?.timeoutMs === 10_000), "runtime probes should use the fail-closed ten-second budget by default");
+const fixture = await mkdtemp(path.join(tmpdir(), "pi-update-path-"));
+try {
+  const bin = path.join(fixture, "bin");
+  const platform = process.platform;
+  const piRoot = path.join(platform === "win32" ? bin : path.join(fixture, "lib"), "node_modules", "@earendil-works", "pi-coding-agent");
+  const cli = path.join(piRoot, "dist", "bundle", "cli.js");
+  const node = path.join(bin, "node");
+  await mkdir(path.dirname(cli), { recursive: true });
+  await mkdir(bin, { recursive: true });
+  await writeFile(node, "test executable");
+  await writeFile(cli, "test cli");
+  if (platform === "win32") {
+    await writeFile(path.join(bin, "pi.cmd"), '@echo off\n"%dp0%\\node.exe" "%dp0%\\node_modules\\@earendil-works\\pi-coding-agent\\dist\\bundle\\cli.js" %*\n');
+  } else await symlink(path.relative(bin, cli), path.join(bin, "pi"));
+  const manifest = path.join(piRoot, "package.json");
+  await writeFile(manifest, JSON.stringify({ name: "@earendil-works/pi-coding-agent", version: "0.87.1", bin: { pi: "dist/bundle/cli.js" } }));
+  const version = async (command, args) => {
+    assert.equal(command, node);
+    assert.deepEqual(args, [cli, "--version"]);
+    return { exitCode: 0, stdout: "0.87.1" };
+  };
+  const updateRuntime = { env: { PATH: bin, PATHEXT: ".CMD" }, platform, node, runVersion: version };
+  const resolved = await resolveUpdatePathPi(updateRuntime);
+  assert.equal(resolved.eligible, true);
+  assert.deepEqual(resolved.invocation, { command: node, args: [cli] });
+  assert.equal(resolved.packageRoot, piRoot);
+  assert.equal((await resolveUpdatePathPi({ ...updateRuntime, env: { PATH: "" } })).eligible, false);
+  await writeFile(manifest, (await readFile(manifest, "utf8")).replace("0.87.1", "0.80.10"));
+  const older = await resolveUpdatePathPi(updateRuntime);
+  assert.equal(older.eligible, false, "an unproven Pi version must never be updated via PATH fallback");
+} finally {
+  await rm(fixture, { recursive: true, force: true });
+}
 console.log("update-resolver.test.mjs passed");

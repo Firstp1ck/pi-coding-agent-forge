@@ -82,18 +82,25 @@ nativeTest("native goal_resume continues restored work in the current run and ch
         goalId: resumed.goalId, runId: resumed.runId, status: "completed", summary: "Fixture verified", coverage: ["Original scope"], verificationEvidence: ["Offline fixture assertions passed"],
       } }, { stopReason: "toolUse" });
     },
+    context => {
+      f.requests.push(structuredClone(context));
+      assert.match(context.messages.map(textOf).join("\n"), /Checkpoint recorded/);
+      return f.fauxAssistantMessage("The original scope is verified. The offline fixture passed; no further work is needed.", { stopReason: "stop" });
+    },
     f.fauxAssistantMessage("Unexpected extra request", { stopReason: "error" }),
   ]);
   await f.session.prompt("Resume the goal");
   await f.session.waitForIdle();
   assert.deepEqual(f.errors, []);
-  assert.equal(f.provider.state.callCount, 2);
+  assert.equal(f.provider.state.callCount, 3, "The checkpoint must allow a final assistant reply, but not an extra run");
   assert.equal(starts, 1, "Tool resume must not dispatch a duplicate run");
   const entries = f.session.sessionManager.getEntries();
   const final = entries.findLast(entry => entry.customType === "todo-progress-goal-state").data;
   assert.equal(final.status, "completed");
   assert.equal(final.runId, resumed.runId);
   assert.equal(final.progressRevision, 0);
+  assert.equal(entries.filter(entry => entry.type === "message" && entry.message.role === "assistant").at(-1).message.content[0].text,
+    "The original scope is verified. The offline fixture passed; no further work is needed.");
   assert.deepEqual(entries.filter(entry => entry.type === "message" && entry.message.role === "user").map(entry => textOf(entry.message)), ["Resume the goal"]);
 });
 

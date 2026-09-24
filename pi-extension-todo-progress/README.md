@@ -9,6 +9,7 @@ Follow live checklist progress while Pi sets a work goal and continues unfinishe
 - Follow a compact checklist while Pi works through a multi-step request.
 - Let Pi set a durable goal from your multi-step request, or start one yourself with `/goal`.
 - Inspect or pause a goal with dedicated commands, then ask Pi to resume it.
+- Get a normal final reply after Pi records completion, a blocker, or a waiting job, with the details that matter to you.
 - Ask for checklist-only work without automatic continuation when you prefer.
 
 ## Install
@@ -27,7 +28,7 @@ Ask Pi as usual, for example:
 
 > Fix the failing parser tests and verify the change without modifying the public API.
 
-For multi-step work, Pi is instructed to use the `goal` tool to set an outcome from your request and start durable execution. You do not need to type `/goal`. Pi then updates the checklist as work progresses and records whether the goal is complete, blocked, waiting, or needs more work.
+For multi-step work, Pi is instructed to use the `goal` tool to set an outcome from your request and start durable execution. You do not need to type `/goal`. Pi then updates the checklist as work progresses and records whether the goal is complete, blocked, waiting, or needs more work. After recording a final status, Pi should still reply in its own words with the result, checks, and anything you need to do next.
 
 Simple conversational replies do not need a goal. To keep a task checklist-only, ask: "Do this without automatic continuation."
 

@@ -85,9 +85,12 @@ assert.match(
 
 assert.match(
   supervisor,
-  /queueTabCommand\(tabId, operation\)[\s\S]*?tab\.mutationTail = admission\.catch[\s\S]*?return admission\.then\(\(\) => response\)[\s\S]*?case "command": return this\.queueTabCommand[\s\S]*?case "write": return this\.queueTabMutation/,
+  /queueTabCommand\(tabId, operation, readOnly = false\)[\s\S]*?tab\.mutationTail = admission\.catch[\s\S]*?return admission\.then\(\(\) => response\)[\s\S]*?case "command": return this\.queueTabCommand[\s\S]*?case "write": return this\.queueTabMutation/,
   "commands should release their FIFO admission barrier before the full Pi response while writes remain serialized",
 );
+const dispatchBeforeQueue = supervisor.slice(supervisor.indexOf("  async perform(request) {"), supervisor.indexOf("    switch (request.type)", supervisor.indexOf("  async perform(request) {")));
+assert.doesNotMatch(dispatchBeforeQueue, /\bawait\b/, "asynchronous admission must not reorder requests before they enter the tab FIFO");
+assert.match(supervisor, /host\.requests\.values\(\)[\s\S]*request\.mutating && !request\.settled/, "an unpublished or queued mutation must prevent an idle update acknowledgement");
 assert.doesNotMatch(
   supervisor,
   /async afterTabMutation\(/,

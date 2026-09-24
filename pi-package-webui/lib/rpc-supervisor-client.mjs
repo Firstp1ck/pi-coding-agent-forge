@@ -218,6 +218,10 @@ export class RpcSupervisorClient {
     if (!this.isCurrentVersion()) return Promise.reject(supervisorRestartRequiredError(this.state, "replace a Pi tab"));
     return this.request("replace", { tabId, metadata, child }, options);
   }
+  replaceTabUnderUpdate({ tabId, metadata, child, restart }, options) {
+    if (!this.isCurrentVersion()) return Promise.reject(supervisorRestartRequiredError(this.state, "restart a Pi tab after an update"));
+    return this.request("replace_update", { tabId, metadata, child, restart }, options);
+  }
   closeTab(tabId, options) { return this.request("close", { tabId }, options); }
   command(tabId, command, { requestId = newRequestId(), timeoutMs } = {}) {
     return this.request("command", { tabId, command, ...(timeoutMs ? { timeoutMs } : {}) }, { requestId });
