@@ -29,7 +29,7 @@ Four whole-query keywords switch from filtering to sorting. Every row stays visi
 
 These keywords and Discovery comparisons ignore case, leading/trailing whitespace, and repeated whitespace. Names and descriptions do not affect this ordering. Both the preferred group and the remaining rows keep their original order. If nothing has the requested status or Discovery value, the original list stays visible. Partial keywords and keywords with extra terms use ordinary fuzzy search.
 
-Status sorting updates immediately when you toggle a tool, and the selection follows that tool to its new position. Searching or sorting does not change statuses or save anything. **Ctrl+A and Ctrl+X affect every tool in sort-only mode.** The footer identifies the sort column and reminds you that bulk actions affect all rows. With ordinary fuzzy search, those shortcuts still affect only matching tools.
+Status sorting updates immediately when you toggle a tool. With `enabled` or `disabled` in search, selection stays on a tool matching that status if one remains; otherwise it follows the toggled tool. Toggling a tool into the searched status also keeps it selected. Searching or sorting does not change statuses or save anything. **Ctrl+A and Ctrl+X affect every tool in sort-only mode.** The footer identifies the sort column and reminds you that bulk actions affect all rows. With ordinary fuzzy search, those shortcuts still affect only matching tools.
 
 The selector keeps saved names that are temporarily unavailable so reinstalling an extension does not silently erase a profile.
 

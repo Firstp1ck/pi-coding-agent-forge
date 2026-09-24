@@ -29,7 +29,7 @@ Four whole-query keywords switch from filtering to sorting. Every row stays visi
 
 These keywords and Discovery comparisons ignore case, leading/trailing whitespace, and repeated whitespace. Names and descriptions do not affect this ordering. Both the preferred group and the remaining rows keep their original order. If nothing has the requested status or Discovery value, the original list stays visible. Partial keywords and keywords with extra terms use ordinary fuzzy search.
 
-Status sorting updates immediately when you toggle a skill, and the selection follows that skill to its new position. Searching or sorting does not change statuses or save anything. **Ctrl+A and Ctrl+X affect every skill in sort-only mode.** The footer identifies the sort column and reminds you that bulk actions affect all rows. With ordinary fuzzy search, those shortcuts still affect only matching skills.
+Status sorting updates immediately when you toggle a skill. With `enabled` or `disabled` in search, selection stays on a skill matching that status if one remains; otherwise it follows the toggled skill. Toggling a skill into the searched status also keeps it selected. Searching or sorting does not change statuses or save anything. **Ctrl+A and Ctrl+X affect every skill in sort-only mode.** The footer identifies the sort column and reminds you that bulk actions affect all rows. With ordinary fuzzy search, those shortcuts still affect only matching skills.
 
 The selector keeps saved names that are temporarily unavailable so reinstalling a package does not silently erase a profile.
 

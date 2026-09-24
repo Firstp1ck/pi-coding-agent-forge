@@ -239,18 +239,50 @@ setKeybindings(new KeybindingsManager(TUI_KEYBINDINGS));
   }
 }
 
+for (const { query, enabled, preferred, remaining, afterToggle } of [
+  { query: "enabled", enabled: ["alpha", "gamma"], preferred: "alpha", remaining: "gamma", afterToggle: ["gamma", "alpha", "beta"] },
+  { query: "disabled", enabled: ["alpha"], preferred: "beta", remaining: "gamma", afterToggle: ["gamma", "alpha", "beta"] },
+]) {
+  const { selector } = createSelector(enabled);
+  selector.handleInput(query);
+  assert.equal(selector.filteredResources[selector.selectedIndex], preferred);
+  selector.handleInput("\r");
+  assert.deepEqual(selector.filteredResources, afterToggle, `${query}: toggling immediately re-sorts by status`);
+  assert.equal(selector.filteredResources[selector.selectedIndex], remaining,
+    `${query}: focus stays with a matching status instead of following the toggled resource`);
+
+  selector.handleInput("\r");
+  assert.equal(selector.filteredResources[selector.selectedIndex], remaining,
+    `${query}: when no matching rows remain, focus falls back to the toggled resource`);
+  selector.handleInput("\r");
+  assert.equal(selector.filteredResources[selector.selectedIndex], remaining,
+    `${query}: toggling a nonmatching row back into the preferred group follows it`);
+}
+
+for (const { query, enabled, lastPreferred, remaining } of [
+  { query: "enabled", enabled: ["alpha", "gamma"], lastPreferred: "gamma", remaining: "alpha" },
+  { query: "disabled", enabled: ["alpha"], lastPreferred: "gamma", remaining: "beta" },
+]) {
+  const { selector } = createSelector(enabled);
+  selector.handleInput(query);
+  selector.handleInput("\x1b[B");
+  assert.equal(selector.filteredResources[selector.selectedIndex], lastPreferred);
+  selector.handleInput("\r");
+  assert.equal(selector.filteredResources[selector.selectedIndex], remaining,
+    `${query}: toggling the last matching row selects the preceding match`);
+}
+
 {
-  const { selector, saved } = createSelector();
-  selector.handleInput("disabled");
-  assert.deepEqual(selector.filteredResources, ["beta", "alpha", "gamma"]);
-  selector.handleInput("\r");
-  assert.deepEqual(selector.filteredResources, ["alpha", "beta", "gamma"], "toggling immediately re-sorts by the updated status");
-  assert.equal(selector.filteredResources[selector.selectedIndex], "beta", "focus follows the toggled resource, not its previous row");
-  selector.handleInput("\r");
-  assert.deepEqual(selector.filteredResources, ["beta", "alpha", "gamma"]);
+  const { selector, saved } = createSelector(["alpha", "gamma"]);
+  selector.handleInput("enabled");
+  selector.handleInput("\x1b[B");
+  selector.handleInput("\x1b[B");
   assert.equal(selector.filteredResources[selector.selectedIndex], "beta");
+  selector.handleInput("\r");
+  assert.equal(selector.filteredResources[selector.selectedIndex], "beta",
+    "a toggled row entering the preferred group retains focus");
   selector.handleInput("\x13");
-  assert.deepEqual(saved.at(-1), ["alpha", "gamma"], "repeated Enter toggles the same identity and saves original identifiers");
+  assert.deepEqual(saved.at(-1), ["alpha", "beta", "gamma"], "saving retains original identifier order");
 }
 
 for (const query of ["enabled", "disabled", "auto", "Pi built-in"]) {

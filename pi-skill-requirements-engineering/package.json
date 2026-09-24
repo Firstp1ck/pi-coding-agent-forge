@@ -1,0 +1,41 @@
+{
+  "name": "@firstpick/pi-skill-requirements-engineering",
+  "version": "0.1.0",
+  "description": "Portable Agent Skill for starting, updating, and resuming evidence-based requirements engineering with traceable records and human approval boundaries.",
+  "license": "MIT",
+  "homepage": "https://github.com/Firstp1ck/pi-coding-agent-forge/tree/main/pi-skill-requirements-engineering#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Firstp1ck/pi-coding-agent-forge.git",
+    "directory": "pi-skill-requirements-engineering"
+  },
+  "keywords": [
+    "pi-package",
+    "pi",
+    "pi-coding-agent",
+    "skill",
+    "agent-skill",
+    "requirements-engineering",
+    "requirements",
+    "elicitation"
+  ],
+  "pi": {
+    "skills": [
+      "./skills"
+    ]
+  },
+  "scripts": {
+    "test": "node --test tests/*.test.mjs"
+  },
+  "files": [
+    "skills/requirements-engineering/SKILL.md",
+    "skills/requirements-engineering/references/EXAMPLES.md",
+    "skills/requirements-engineering/references/GLOSSARY.md",
+    "skills/requirements-engineering/references/RECORDS.md",
+    "skills/requirements-engineering/references/WORKING-DOCUMENTS.md",
+    "README.md",
+    "TECHNICAL.md",
+    "DEVELOPMENT.md",
+    "LICENSE"
+  ]
+}

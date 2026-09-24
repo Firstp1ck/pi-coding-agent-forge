@@ -1,6 +1,6 @@
 {
   "name": "@firstpick/pi-utils",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Shared utilities for Firstpick Pi extension packages.",
   "main": "index.ts",
   "exports": {

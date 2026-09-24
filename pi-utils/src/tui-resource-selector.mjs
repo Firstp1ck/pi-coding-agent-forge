@@ -206,7 +206,13 @@ export class TuiResourceSelectorComponent extends Container {
         if (this.enabled.has(name)) this.enabled.delete(name);
         else this.enabled.add(name);
         this.isDirty = true;
-        this.refresh(name);
+        const preference = this.getSortPreference(this.searchInput.getValue());
+        if (preference?.column === "Status" && !preference.matches(name)) {
+          const preferred = this.filterResources(this.searchInput.getValue()).filter(preference.matches);
+          this.refresh(preferred[Math.min(this.selectedIndex, preferred.length - 1)] ?? name);
+        } else {
+          this.refresh(name);
+        }
       }
       return;
     }
