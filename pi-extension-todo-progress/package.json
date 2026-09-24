@@ -1,6 +1,6 @@
 {
   "name": "@firstpick/pi-extension-todo-progress",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Aggressive automatic todo progress widget for multi-goal prompts in Pi.",
   "license": "MIT",
   "scripts": {
