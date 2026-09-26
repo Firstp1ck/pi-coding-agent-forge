@@ -268,7 +268,8 @@ class ProjectReadmeContractTests(unittest.TestCase):
         ]:
             self.assertIn(heading, readme)
         self.assertIn(f"pi install npm:{PACKAGE_NAME}", readme)
-        self.assertIn("[TECHNICAL.md](TECHNICAL.md)", readme)
+        # TECHNICAL.md is not in the npm tarball, so the README must link to the repository copy.
+        self.assertIn("[TECHNICAL.md](https://github.com/Firstp1ck/pi-coding-agent-forge/blob/main/pi-skill-project-readme/TECHNICAL.md)", readme)
         self.assertNotRegex(readme, r"(?mi)^##+\s+(?:Architecture|Technology|Project structure|Development|Testing|Publishing)\s*$")
         self.assertNotIn("npm test", readme)
 

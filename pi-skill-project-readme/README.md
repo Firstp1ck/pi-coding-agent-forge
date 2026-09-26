@@ -38,4 +38,4 @@ Restart Pi if the skill does not appear in your current session.
 
 ## Technical details
 
-See [TECHNICAL.md](TECHNICAL.md) for advanced usage, compatibility, safety, and limitations.
+See [TECHNICAL.md](https://github.com/Firstp1ck/pi-coding-agent-forge/blob/main/pi-skill-project-readme/TECHNICAL.md) for advanced usage, compatibility, safety, and limitations.
