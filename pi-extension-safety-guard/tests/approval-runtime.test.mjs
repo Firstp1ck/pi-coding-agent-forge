@@ -91,8 +91,10 @@ test("prompts mark the actual risk pattern, not the surrounding unsupported synt
     const title = current.prompts[0].title;
     assert.match(title, reason);
     assert.ok(title.includes(marker), title);
-    assert.ok(title.indexOf(marker) > title.indexOf("\n\nCommand\n"));
-    assert.ok(title.indexOf(marker) < title.indexOf("\n\nRisk\n"));
+    // Multi-line commands add an earlier trigger summary; the command listing must still mark the pattern.
+    const commandStart = title.indexOf("\n\nCommand\n");
+    const commandMarker = title.indexOf(marker, commandStart);
+    assert.ok(commandStart >= 0 && commandMarker > commandStart && commandMarker < title.indexOf("\n\nRisk\n"), title);
     assert.ok(!title.includes("Risk excerpts"));
     assert.ok(!title.includes("Unverified shell execution"));
     assert.ok(!title.includes(">>> > /tmp/out <<<"));

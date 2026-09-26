@@ -47,7 +47,9 @@ try {
     stdio: ["ignore", "pipe", "pipe"],
     env: { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH || ""}`,
       PI_CODING_AGENT_DIR: path.join(temp, "agent"), PI_WEBUI_NPM_BIN: path.join(npmRoot, "bin", "npm-cli.js"),
-      PI_WEBUI_UPDATE_TEST_HOME: temp, NODE_ENV: "test", PI_OFFLINE: "1" },
+      PI_WEBUI_UPDATE_TEST_HOME: temp, NODE_ENV: "test", PI_OFFLINE: "1",
+      // Supervised tabs are the only ones a fenced native restart can preserve; run-all disables the supervisor by default.
+      PI_WEBUI_RPC_SUPERVISOR: "1" },
   });
   child.stdout.on("data", (chunk) => { output += chunk; });
   child.stderr.on("data", (chunk) => { output += chunk; });
