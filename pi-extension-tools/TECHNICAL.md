@@ -37,6 +37,14 @@ The selector keeps saved names that are temporarily unavailable so reinstalling 
 
 The extension applies scoped tool choices in TUI mode. Model changes and session-tree navigation recompute inherited choices immediately. No reload is required after saving.
 
+A saved selection limits which tools the model can use, including tools registered later. Excluded tools are removed from model requests and their calls are blocked even if another extension reactivates them. Selected tools can still be held inactive by the extension that provides them. When every scope inherits Pi's runtime default, dynamic tool activation remains unrestricted.
+
+The selector shows the scope you are editing. A disabled tool in **Global default** can still be allowed by a higher-priority model or session selection. Save with **Ctrl+S** before testing the change.
+
+To disable model access through MCP, exclude every MCP gateway and direct tool, including `mcp`, `mcpScript`, and any individual server tools. Disabling only a direct tool does not prevent an enabled gateway from calling the same service. These choices do not unload extensions, stop background work, or disconnect servers. They are not a security sandbox.
+
+If reading defaults fails, Pi reports the error and retains the last successfully applied selection. If no selection has been loaded yet, runtime tools remain unchanged. Fix the settings error before relying on the exclusions.
+
 ## Storage and WebUI compatibility
 
 Global and model selections use the shared resource defaults in `~/.pi/webui/settings.json`. Session selections use `webui-tools-config` entries on the active session branch. WebUI reads and writes the same data, but it does not register the TUI `/tools` command.

@@ -571,6 +571,11 @@ export default function setupSkillsExtension(
     for (const skill of runtimeSkills) skillsByName.set(skill.name, skill);
     const allSkills = [...skillsByName.values()];
     const filtered = allSkills.filter((skill) => isSkillEnabled(skill.name) && !skill.disableModelInvocation);
+    if (event.systemPromptOptions) {
+      // Pi persists structured skills, not a returned full-prompt override, in the transcript.
+      event.systemPromptOptions.skills = filtered;
+      if (event.systemPromptOptions.forceSystemPrompt === undefined) return;
+    }
     const disabledNames = allSkills.filter((skill) => !isSkillEnabled(skill.name)).map((skill) => skill.name);
     const nextSection = formatSkillsForPrompt(filtered);
     let nextPrompt = event.systemPrompt;

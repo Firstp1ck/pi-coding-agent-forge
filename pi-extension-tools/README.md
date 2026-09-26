@@ -7,7 +7,7 @@ Choose which tools Pi can use for a session, by default, or with a specific mode
 ## What you can do
 
 - Lists available tools, searches names first, and sorts by status or discovery keywords.
-- Saves a selection for the current session branch.
+- Saves a session selection and blocks tools excluded by your effective selection.
 - Sets a global default or an exact provider/model profile.
 - Applies model profiles when the active model changes.
 - Keeps WebUI and TUI resource choices in sync.
@@ -33,6 +33,8 @@ The resource list has separate **Name**, **Discovery**, and **Status** columns. 
 To keep all tools visible but move a group to the top, enter `enabled`, `disabled`, `auto`, or `Pi built-in` as the whole search. The first two sort by Status; the others sort by Discovery. In these sort-only modes, **Ctrl+A and Ctrl+X affect all tools**, not just the group at the top.
 
 ## Before you start
+
+Disabling a tool does not unload its extension or disconnect its servers. An enabled gateway can still call services behind it. See [runtime behavior](TECHNICAL.md#runtime-behavior) for MCP guidance.
 
 This extension is the sole owner of the TUI `/tools` command. WebUI presents the same saved scopes in its browser interface without registering another command.
 

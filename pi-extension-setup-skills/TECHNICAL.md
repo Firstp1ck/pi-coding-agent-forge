@@ -39,7 +39,9 @@ The extension applies scoped skill choices in TUI mode. It updates the skill lis
 
 When Pi starts with `--no-skills` or `-ns`, `/skills` lists only the skills Pi loaded for that session, including explicit `--skill` paths. It does not scan the normal skill locations, so disabling discovery still has its intended effect.
 
-Model changes and session-tree navigation recompute inherited choices immediately. No reload is required after saving.
+Model changes and session-tree navigation recompute inherited choices immediately. No reload is required after saving. The next prompt applies the selection to both the model's skill list and the current skill list shown in a new HTML export.
+
+If an older export lists disabled skills, it may reflect an outdated stored skill list rather than the filtered prompt sent to the model. After updating this extension, run `/reload`, send a message, and export again. Existing export files and earlier transcript entries remain historical snapshots.
 
 ## Storage and WebUI compatibility
 
