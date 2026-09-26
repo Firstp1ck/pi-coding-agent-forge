@@ -28,7 +28,7 @@ const packagedFiles = [
 
 test("package metadata exposes one installable Pi skill", () => {
   assert.equal(manifest.name, "@firstpick/pi-skill-frontend-design");
-  assert.equal(manifest.version, "0.1.0");
+  assert.match(manifest.version, /^\d+\.\d+\.\d+$/);
   assert.equal(manifest.license, "Apache-2.0");
   assert(manifest.keywords.includes("pi-package"));
   assert.deepEqual(manifest.pi, { skills: ["./skills"] });

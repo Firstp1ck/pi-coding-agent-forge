@@ -140,7 +140,12 @@ function smokeTheme(name, accent) {
   };
 }
 
+// Quickshell renders offscreen by default so the suite never opens windows on the desktop.
+// Set QT_WEBUI_SMOKE_VISIBLE=1 to watch the scenarios on the current Wayland session instead.
+const smokeVisible = process.env.QT_WEBUI_SMOKE_VISIBLE === "1";
+
 function waylandUnavailableReason() {
+  if (!smokeVisible) return null;
   if (!process.env.WAYLAND_DISPLAY) return "no Wayland display: WAYLAND_DISPLAY is unset";
   if (!process.env.XDG_RUNTIME_DIR) return "no Wayland display: XDG_RUNTIME_DIR is unset";
   return null;
@@ -188,6 +193,7 @@ export function runLiveSmoke({ callerCwd, capturePath, statePath, configHome, ex
         PI_CODING_AGENT_DIR: path.join(path.dirname(configHome), "agent"),
         GIT_CONFIG_GLOBAL: "/dev/null",
         GIT_CONFIG_SYSTEM: "/dev/null",
+        ...(smokeVisible ? {} : { QT_QPA_PLATFORM: "offscreen" }),
         ...extraEnv,
         XDG_CACHE_HOME: path.join(path.dirname(configHome), "cache"),
         PI_WEBUI_SETTINGS_FILE: path.join(path.dirname(configHome), "webui-settings.json"),
@@ -330,11 +336,13 @@ test("real Quickshell completes the deterministic backend and Pi behavior scenar
   const skipReason = waylandUnavailableReason() ?? quickshellUnavailableReason();
   if (skipReason) return t.skip(skipReason);
 
-  const runtimeDir = path.join(process.env.XDG_RUNTIME_DIR, process.env.WAYLAND_DISPLAY);
-  try {
-    await access(runtimeDir);
-  } catch {
-    return t.skip(`no Wayland display socket at ${runtimeDir}`);
+  if (smokeVisible) {
+    const runtimeDir = path.join(process.env.XDG_RUNTIME_DIR, process.env.WAYLAND_DISPLAY);
+    try {
+      await access(runtimeDir);
+    } catch {
+      return t.skip(`no Wayland display socket at ${runtimeDir}`);
+    }
   }
 
   const workspace = await smokeWorkspace(t);

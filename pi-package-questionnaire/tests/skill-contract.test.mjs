@@ -13,6 +13,8 @@ const read = (relative) => readFileSync(new URL(relative, import.meta.url), "utf
 
 const SKILL = read("../skills/questionnaire/SKILL.md");
 const README = read("../README.md");
+const TECHNICAL = read("../TECHNICAL.md");
+const DEVELOPMENT = read("../DEVELOPMENT.md");
 const LICENSE = read("../LICENSE");
 const MANIFEST = JSON.parse(read("../package.json"));
 const RUNTIME_SOURCE = read("../src/runtime.ts");
@@ -51,11 +53,11 @@ test("skill frontmatter is valid and routes questionnaire work without unsupport
   assert.match(fields.description, /secrets/);
 });
 
-test("skill and README use the registered tool name, actions, and no unsupported UI primitive", () => {
+test("skill and development guide use the registered tool name, actions, and no unsupported UI primitive", () => {
   const tools = [];
   questionnaireExtension({ registerTool: (tool) => tools.push(tool) });
   const [tool] = tools;
-  for (const doc of [SKILL, README]) {
+  for (const doc of [SKILL, DEVELOPMENT]) {
     assert.ok(doc.includes(tool.name), "docs must name the registered tool");
     assert.ok(doc.includes('"action": "start"'), "docs must show the start action");
     assert.ok(doc.includes('"action": "resume"'), "docs must show the resume action");
@@ -70,7 +72,7 @@ test("skill and README use the registered tool name, actions, and no unsupported
 });
 
 test("documented start and resume examples satisfy the runtime contract", () => {
-  const examples = [...jsonBlocks(SKILL), ...jsonBlocks(README)].filter((value) => value && typeof value === "object" && "action" in value);
+  const examples = [...jsonBlocks(SKILL), ...jsonBlocks(DEVELOPMENT)].filter((value) => value && typeof value === "object" && "action" in value);
   const starts = examples.filter((value) => value.action === "start");
   const resumes = examples.filter((value) => value.action === "resume");
   assert.ok(starts.length >= 1, "docs must contain a start example");
@@ -143,43 +145,49 @@ test("documented statuses and markers match every runtime status", () => {
   assert.deepEqual(statuses.sort(), ["cancelled", "completed", "needs_clarification", "unavailable"]);
   for (const status of statuses) {
     const marker = `QUESTIONNAIRE_${status.toUpperCase()}`;
-    assert.ok(README.includes(marker), `README must document ${marker}`);
-    assert.ok(README.includes(`\`${status}\``), `README must document status ${status}`);
+    assert.ok(DEVELOPMENT.includes(marker), `DEVELOPMENT.md must document ${marker}`);
+    assert.ok(DEVELOPMENT.includes(`\`${status}\``), `DEVELOPMENT.md must document status ${status}`);
   }
   const reasons = /cancellationReason\?: ([^;]+);/.exec(RUNTIME_SOURCE);
   assert.ok(reasons, "runtime must declare cancellationReason values");
   for (const reason of [...reasons[1].matchAll(/"([a-z_]+)"/g)].map((match) => match[1])) {
-    assert.ok(README.includes(reason), `README must document cancellation reason ${reason}`);
+    assert.ok(DEVELOPMENT.includes(reason), `DEVELOPMENT.md must document cancellation reason ${reason}`);
   }
-  assert.ok(README.includes("CancellationReason") === false, "README should document values, not internal type names");
-  for (const reason of ["user_cancelled", "aborted"]) assert.ok(README.includes(reason));
+  assert.ok(DEVELOPMENT.includes("CancellationReason") === false, "DEVELOPMENT.md should document values, not internal type names");
+  for (const reason of ["user_cancelled", "aborted"]) assert.ok(DEVELOPMENT.includes(reason));
 });
 
 test("documented limits stay aligned with runtime LIMITS", () => {
   assert.match(SKILL, bounded(LIMITS.questions));
   assert.match(SKILL, bounded(LIMITS.options));
-  for (const doc of [SKILL, README]) {
+  for (const doc of [SKILL, DEVELOPMENT]) {
     for (const limit of [LIMITS.id, LIMITS.label, LIMITS.prompt, LIMITS.description]) {
       assert.match(doc, bounded(limit));
     }
   }
-  assert.match(README, bounded(LIMITS.questions));
-  assert.match(README, bounded(LIMITS.options));
-  assert.match(README, bounded(LIMITS.clarification));
+  for (const doc of [TECHNICAL, DEVELOPMENT]) {
+    assert.match(doc, bounded(LIMITS.questions));
+    assert.match(doc, bounded(LIMITS.options));
+  }
+  assert.match(DEVELOPMENT, bounded(LIMITS.clarification));
   assert.match(SKILL, bounded(LIMITS.clarification));
   const detailsVersion = /export const QUESTIONNAIRE_DETAILS_VERSION = (\d+)/.exec(RUNTIME_SOURCE);
   assert.ok(detailsVersion);
-  assert.ok(README.includes(`version: ${detailsVersion[1]}`), "README must document the current details version");
+  assert.ok(DEVELOPMENT.includes(`version: ${detailsVersion[1]}`), "DEVELOPMENT.md must document the current details version");
 });
 
-test("README documents install-as-separate-action, native cross-mode behavior, privacy, and validation", () => {
-  const requirements = [
-    /Installation is a \*\*separate, explicit action\*\*/,
+test("user docs cover install and keys; development guide covers install-as-separate-action, cross-mode behavior, privacy, and validation", () => {
+  assert.match(README, /pi install npm:@firstpick\/pi-package-questionnaire/);
+  assert.match(README, /\(TECHNICAL\.md\)|\/TECHNICAL\.md\)/, "README must link to the technical reference");
+  for (const requirement of [
     /pi install npm:@firstpick\/pi-package-questionnaire/,
     /pi remove npm:@firstpick\/pi-package-questionnaire/,
     /`Up` \/ `Down`/,
     /`Enter` \| Confirm/,
     /`Escape` \/ `Ctrl\+C`/,
+  ]) assert.match(TECHNICAL, requirement);
+  const requirements = [
+    /Installation is a \*\*separate, explicit action\*\*/,
     /\*\*mouse-clickable button\*\*/,
     /extension_ui_request` \/ `extension_ui_response/,
     /no secret-input guarantee/i,
@@ -189,8 +197,8 @@ test("README documents install-as-separate-action, native cross-mode behavior, p
     /active session branch/,
     /minSelections` defaults to `0`/,
   ];
-  for (const requirement of requirements) assert.match(README, requirement);
-  assert.ok(README.includes("ctx.ui.select()") && README.includes("ctx.ui.input()"));
+  for (const requirement of requirements) assert.match(DEVELOPMENT, requirement);
+  assert.ok(DEVELOPMENT.includes("ctx.ui.select()") && DEVELOPMENT.includes("ctx.ui.input()"));
 });
 
 test("manifest, license, and packaged assets stay consistent with the shipped docs and skill", () => {
@@ -202,11 +210,12 @@ test("manifest, license, and packaged assets stay consistent with the shipped do
   assert.match(LICENSE, /^MIT License/);
   assert.match(LICENSE, /Copyright \(c\) \d{4} Firstpick/);
   assert.ok(MANIFEST.keywords.includes("skill"));
-  assert.ok(README.startsWith(`# ${MANIFEST.name.split("/")[1]}\n`), "README title must match the package name");
+  assert.match(README, /^# \S/, "README must start with a title");
   assert.ok(README.includes(MANIFEST.name), "README must reference the published package name");
-  assert.ok(README.includes(MANIFEST.engines.node.replace(">=", ">= ")), "README must state the supported Node engine");
+  assert.ok(DEVELOPMENT.startsWith("# Development guide: "), "DEVELOPMENT.md must use the development guide title");
+  assert.ok(DEVELOPMENT.includes(MANIFEST.engines.node.replace(">=", ">= ")), "DEVELOPMENT.md must state the supported Node engine");
   for (const peer of Object.keys(MANIFEST.peerDependencies)) {
-    assert.ok(README.includes(peer), `README must mention peer dependency ${peer}`);
+    assert.ok(DEVELOPMENT.includes(peer), `DEVELOPMENT.md must mention peer dependency ${peer}`);
   }
 });
 

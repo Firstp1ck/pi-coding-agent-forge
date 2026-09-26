@@ -65,6 +65,8 @@ Item {
             tryCompare(icon, "visible", true)
             compare(icon.contentItem.color, theme.warning)
             compare(icon.accessibleDescription, workspaces.warningText)
+            // The first hover after the window appears is dropped until a frame has rendered.
+            waitForRendering(workspaces)
             mouseMove(icon, icon.width / 2, icon.height / 2)
             tryCompare(icon.ToolTip.toolTip, "visible", true)
             compare(icon.ToolTip.text, workspaces.warningText)

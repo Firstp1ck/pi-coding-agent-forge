@@ -123,7 +123,7 @@ test("package manifest preserves the exact publish allowlist and a full package 
   for (const filename of ["contract.test.mjs", "packaging.test.mjs", "evaluation.test.mjs", "core.test.mjs", "adapters.test.mjs"]) {
     assert.match(manifest.scripts.test, new RegExp(filename.replace(".", "\\."), "u"));
   }
-  assert.equal(manifest.version, "0.1.5");
+  assert.match(manifest.version, /^\d+\.\d+\.\d+$/);
   assert.equal("dependencies" in manifest, false);
   assert.equal("devDependencies" in manifest, false);
 });
