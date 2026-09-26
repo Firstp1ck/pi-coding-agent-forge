@@ -114,7 +114,7 @@ export async function runGit(cwd: string, args: readonly string[], options: GitR
       cwd,
       stdio: ["ignore", "pipe", "pipe"],
       windowsHide: true,
-      env: { ...process.env, GIT_OPTIONAL_LOCKS: "0", GIT_CONFIG_NOSYSTEM: "1" },
+      env: { ...process.env, GIT_OPTIONAL_LOCKS: "0", GIT_CONFIG_NOSYSTEM: "1", LC_ALL: "C" },
     });
     const stdout: Buffer[] = [];
     const stderr: Buffer[] = [];
