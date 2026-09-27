@@ -1,7 +1,7 @@
 {
   "name": "@firstpick/pi-prompts-code-workflows",
-  "version": "0.1.6",
-  "description": "Reusable Pi prompt templates for code review, bug fixing, recommendation implementation, issue analysis, and incident triage.",
+  "version": "0.1.7",
+  "description": "Reusable Pi prompt templates for code review, bug fixing, recommendation implementation, issue analysis, incident triage, and landing-page design concepts.",
   "license": "MIT",
   "homepage": "https://github.com/Firstp1ck/pi-coding-agent-forge/tree/main/pi-package-prompts-code-workflows#readme",
   "repository": {
@@ -17,7 +17,9 @@
     "prompts",
     "code-review",
     "debugging",
-    "issue-triage"
+    "issue-triage",
+    "frontend",
+    "landing-page"
   ],
   "pi": {
     "prompts": [

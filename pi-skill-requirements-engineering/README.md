@@ -43,13 +43,11 @@ Requirements records and interview notes may contain personal or commercially se
 
 ## Install
 
-Version 0.1.0 is currently unpublished. The command below applies only after this package is published:
-
 ```bash
 pi install npm:@firstpick/pi-skill-requirements-engineering
 ```
 
-After installation, restart Pi if the skill does not appear in your current session. Creating or reviewing this package does not install, enable, or publish it.
+After installation, restart Pi if the skill does not appear in your current session.
 
 ## Technical details
 

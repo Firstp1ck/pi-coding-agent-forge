@@ -34,8 +34,9 @@ Other first-pass responses showed source separation, priority-dependent shop gui
 
 ## Named deferrals
 
-- Live isolated start/update/resume with real file writes and rereads: not run. Transcript responses are proposals only.
-- Real questionnaire cancellation/clarification and Grill Me state preservation: not run; no interactive test session was driven.
+- Live isolated start/update/resume with real file writes and rereads: run on 2026-09-26; see [Live checks](#live-checks-2026-09-26).
+- Real questionnaire answer, cancellation, and unavailable-UI paths: run on 2026-09-26. Questionnaire clarification/resume was not exercised.
+- Grill Me interview and state preservation: manual check only. Grill Me is user-facing and must not be started or driven from scripted or background runs. The live checks covered only the skill offering it and not launching it.
 - Fresh-session-per-case, blind repeated model evaluation: not run. Batch simulations and targeted feedback runs have contamination and sampling limits.
 - Dedicated skill evaluator CLI: unavailable in the parent PATH; package contract tests and Pi discovery were used instead.
 
@@ -67,3 +68,19 @@ The user requested completion of the second review with GPT-6-Astra. Original fr
 The second reviewer checked all 16 criteria and verified the three accepted fixes. Its bounded PDF audit covered pages 20, 122-125 and 143-144. Its revised resume response retained the six-occupant answer, used the supplied unfinished draft, preserved the conflict question, and identified facilities without inventing confirmation. The rubric judgment was supported by the quoted response. This does not turn a self-assessed, informed transcript simulation into a blind or live test.
 
 Final checks: six package tests pass, including the added archive-link negative; Pi discovery returns one skill and no diagnostics; archive contents and local links/fences pass; Markdown whitespace and strict HTML validation pass. Local delivery is accepted under the implementation plan's observed-check-or-named-deferral rule. The live and evaluator deferrals above remain. The completed implementation plan is archived at `plans/archive/requirements-engineering-guidance-skill.md`. No installation, publication, or production-readiness claim is made.
+
+## Live checks, 2026-09-26
+
+Each case ran Pi 0.87.1 (`openai-codex/gpt-6-astra`, thinking `xhigh`) in a disposable Git fixture: a food-bank shift-scheduling prototype with a README, status notes, and one source file. Runs loaded only this skill with `--no-skills --skill`, no context files, and no prompt templates. RPC dialogs were answered by a script, so these checks cover mechanics and boundaries, not how useful the questions feel to a person. The owner granted writes only under `docs/requirements/`.
+
+| Case | Setup | Observed result |
+| --- | --- | --- |
+| Start with saving | Empty records, questionnaire available | Found no plans, asked via questionnaire before proceeding, saved one checkpoint with separated sources, inferences, and unknowns, claimed no approvals, and changed no file outside the write scope. |
+| Resume in a fresh session | Records from the start case | Reread the checkpoint, updated it instead of creating a parallel guide, labelled owner answers as owner-provided evidence, and added a draft interview guide. |
+| Update with preview | REQ-01 agreed by the owner, then a scope change | The preview changed no files (hashes identical before and after). It marked the earlier review stale for the new version only. After owner approval, it saved REQ-01 v2, kept v1 with its evidence, and left implementation unapproved. |
+| Write failure | Records folder and files read-only | Reported EACCES with the destination, kept the full unsaved checkpoint in the reply, did not change permissions or write elsewhere, and file hashes stayed unchanged. |
+| Questionnaire cancelled | First dialog cancelled | Did not guess answers or reopen the dialog, saved nothing, and returned the pending choice to the user. |
+| UI unavailable | `pi -p` print mode | Questionnaire returned `ui_unavailable`; the skill asked the same decisions in chat and saved nothing. |
+| Plan gate and Grill Me offer | One untracked candidate plan | Listed the plan with status and next step, asked before using it, offered Grill Me as optional after confirmation, recorded the choice to skip, and left the plan file unchanged (hash verified). |
+
+Not covered: questionnaire clarification/resume, the Grill Me interview itself, and multi-person review. These remain manual checks before claiming them.

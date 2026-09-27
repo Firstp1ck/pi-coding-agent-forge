@@ -52,7 +52,7 @@ npm pack --dry-run --json
 
 `tests/contracts.test.mjs` checks fixture structure, negative mutations, routing examples, package resources, local links, fences, and the dry-run archive. Tests and scenario fixtures are contributor resources in the source checkout, not included in the npm archive. `tests/scenarios/README.md` documents the semantic evaluation procedure for the 38 inputs and their separate rubrics. Static test counts do not measure conversational coverage.
 
-The installed Pi skill loader was also exercised directly against this package and returned one skill with no diagnostics. This checks discovery, not interactive invocation. Transcript simulations inspect answer quality without live project writes, questionnaire dialogs, or Grill Me state. Live persistence and interactive start/update/resume checks remain distinct from those simulations.
+The installed Pi skill loader was also exercised directly against this package and returned one skill with no diagnostics. This checks discovery, not interactive invocation. Transcript simulations inspect answer quality without live project writes, questionnaire dialogs, or Grill Me state. Live persistence, update, write-failure, and questionnaire checks were run separately on 2026-09-26; see the live-check section in `tests/scenarios/EVALUATION.md`. The Grill Me interview itself is a manual check: do not start or drive it from scripted or background runs.
 
 From the repository root:
 

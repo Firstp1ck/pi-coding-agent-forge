@@ -23,8 +23,7 @@ Packages bundle larger features, prompt collections, themes, or related tools.
 - **[Troubleshooting learnings for Pi](pi-package-learnings/README.md)** — Keep a durable, searchable record of troubleshooting lessons that Pi can reuse later.
 - **[Natural Conversation Mode for Pi](pi-package-natural-conversation/README.md)** — Adds a voice-friendly conversation mode with strict limits on what Pi can do while listening.
 - **[Agent memory prompts for Pi](pi-package-prompts-agent-memory/README.md)** — Adds a reusable prompt for keeping Pi’s long-term memory useful and tidy.
-- **[Code workflow prompts for Pi](pi-package-prompts-code-workflows/README.md)** — Adds ready-made prompts for reviews, bug fixes, issue work, and incident triage.
-- **[Frontend design prompts for Pi](pi-package-prompts-frontend/README.md)** let you build and compare five working landing-page directions in one frontend project.
+- **[Code workflow prompts for Pi](pi-package-prompts-code-workflows/README.md)** — Adds ready-made prompts for reviews, bug fixes, issue work, incident triage, and comparing five landing-page design directions.
 - **[Git and PR prompts for Pi](pi-package-prompts-git-pr/README.md)** — Adds ready-made prompts for commits, pull requests, and PR reviews.
 - **[Release documentation prompts for Pi](pi-package-prompts-release-docs/README.md)** — Adds ready-made prompts for release notes, announcements, README updates, and wiki updates.
 - **[Questionnaires for Pi](pi-package-questionnaire/README.md)** — Lets Pi ask clear single- and multiple-choice questions in the terminal and Web UI.

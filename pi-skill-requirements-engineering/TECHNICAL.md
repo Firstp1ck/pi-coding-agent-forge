@@ -8,7 +8,7 @@ This portable skill guides recurring requirements work. It does not impose a wat
 
 ## Install or enable
 
-Version 0.1.0 is currently unpublished and is not installed or enabled automatically. After publication, and only when installation is explicitly authorized, install it with:
+Pi does not install or enable this skill automatically. Install it with:
 
 ```bash
 pi install npm:@firstpick/pi-skill-requirements-engineering
