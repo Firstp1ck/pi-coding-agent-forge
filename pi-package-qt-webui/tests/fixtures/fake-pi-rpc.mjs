@@ -613,6 +613,9 @@ function handle(command) {
     case "__QT_WEBUI_FAIL__":
       response(command, false, { error: "deterministic prompt rejection" });
       break;
+    case "__QT_WEBUI_FAIL_DELAY__":
+      setTimeout(() => response(command, false, { error: "deterministic prompt rejection" }), 250);
+      break;
     case "__QT_WEBUI_DELAYED_ABORT__":
       runDelayedAbort(command);
       break;

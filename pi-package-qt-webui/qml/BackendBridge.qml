@@ -18,6 +18,7 @@ Scope {
     property var usage: null
     property var recentActions: []
     readonly property int maxPendingRequests: 64
+    property int maxAttachments: 8
     property int maxInboundFrameBytes: 262144
     property int maxDialogValueCharacters: 16384
     property int maxControlRequests: 8
@@ -33,7 +34,7 @@ Scope {
         "models_list": true, "model_set": true, "model_cycle": true, "thinking_levels": true,
         "thinking_set": true, "thinking_cycle": true, "resources_state": true, "tools_set": true,
         "skills_set": true, "sampling_set": true, "compact": true, "commands_list": true,
-        "attachment_add": true, "attachment_update": true, "attachment_remove": true, "attachment_read": true,
+        "attachment_add": true, "attachments_list": true, "attachment_update": true, "attachment_remove": true, "attachment_read": true,
         "path_complete": true, "session_stats": true, "sessions_list": true, "session_switch": true,
         "session_new": true, "worktrees_list": true, "worktree_plan": true
     })
@@ -99,6 +100,9 @@ Scope {
     // A reported but unpersisted runtime filename is not yet a saved-session draft key.
     readonly property string draftKey: !activeTabId || !draftId ? "" : draftFile.length > 0 ? draftFile : "draft:" + draftId
     property var attachments: []
+    property var attachmentViews: ({})
+    property var attachmentEpochs: ({})
+    property var attachmentWrites: ({})
     property var commands: []
     property bool commandsLoaded: false
     property bool syntaxHighlighting: true
@@ -417,6 +421,120 @@ Scope {
 
     // ---- public actions ------------------------------------------------------------------
 
+    function attachmentOwner(tab) {
+        const summary = tabById(tab)
+        return summary ? tab + ":" + String(summary.draftId || "") : ""
+    }
+
+    function setAttachmentView(owner, list) {
+        if (!owner || !Array.isArray(list)) return
+        const views = Object.assign({}, attachmentViews)
+        views[owner] = list
+        attachmentViews = views
+        if (owner === attachmentOwner(activeTabId)) attachments = list
+    }
+
+    function syncAttachments(tab, owner) {
+        if (!owner || owner !== attachmentOwner(tab) || !backendReady) return
+        if (attachmentWrites[owner] > 0) return
+        const epoch = attachmentEpochs[owner] || 0
+        request("attachments_list", { tab: tab }, null, true, response => {
+            if (response.ok && owner === attachmentOwner(tab) && epoch === (attachmentEpochs[owner] || 0)
+                    && !attachmentWrites[owner]) setAttachmentView(owner, response.data.attachments)
+            else if (!response.ok && response.error.code === "unknown_request" && tab === activeTabId
+                    && owner === attachmentOwner(tab) && epoch === (attachmentEpochs[owner] || 0)) {
+                // Previous backends can still snapshot the selected tab without a list request.
+                request("tab_select", { tab: tab }, null, true, snapshot => {
+                    if (snapshot.ok && owner === attachmentOwner(tab) && tab === activeTabId
+                            && epoch === (attachmentEpochs[owner] || 0) && !attachmentWrites[owner]) {
+                        setAttachmentView(owner, snapshot.data.attachments)
+                    }
+                })
+            }
+        })
+    }
+
+    function bumpAttachmentEpoch(owner) {
+        const epochs = Object.assign({}, attachmentEpochs)
+        epochs[owner] = (epochs[owner] || 0) + 1
+        attachmentEpochs = epochs
+    }
+
+    function attachmentChangeStarted(owner) {
+        bumpAttachmentEpoch(owner)
+        const writes = Object.assign({}, attachmentWrites)
+        writes[owner] = (writes[owner] || 0) + 1
+        attachmentWrites = writes
+    }
+
+    function attachmentChangeFinished(tab, owner, epoch, response) {
+        const writes = Object.assign({}, attachmentWrites)
+        writes[owner] = Math.max(0, (writes[owner] || 1) - 1)
+        attachmentWrites = writes
+        if (owner !== attachmentOwner(tab)) return
+        if (response.ok && !writes[owner] && epoch === (attachmentEpochs[owner] || 0)) setAttachmentView(owner, response.data.attachments)
+        // A list captured before this write or a concurrent prompt is not authoritative.
+        if (!writes[owner] && !response.local) syncAttachments(tab, owner)
+    }
+
+    function attachmentLocked(id) {
+        return promptSubmissions.some(entry => (entry.state === "admitted" || entry.state === "unknown")
+            && entry.tab === activeTabId && entry.owner === attachmentOwner(activeTabId)
+            && entry.attachmentIds.indexOf(String(id)) !== -1)
+    }
+
+    function reconcilePromptAttachments(submission, response) {
+        const sameOwner = submission.owner === attachmentOwner(submission.tab)
+            && submission.generation === sessionGenerationFor(submission.tab)
+        if (sameOwner && !response.local && submission.attachmentIds.length > 0) bumpAttachmentEpoch(submission.owner)
+        const consumed = response.consumedAttachmentIds
+        if (sameOwner && Array.isArray(consumed) && consumed.length <= maxAttachments
+                && consumed.every((id, index) => typeof id === "string" && consumed.indexOf(id) === index
+                    && submission.attachmentIds.indexOf(id) !== -1)) {
+            const current = submission.tab === activeTabId ? attachments : attachmentViews[submission.owner]
+            if (Array.isArray(current)) setAttachmentView(submission.owner, current.filter(item => consumed.indexOf(String(item.id)) === -1))
+        } else if (sameOwner && !response.local && submission.attachmentIds.length > 0) {
+            syncAttachments(submission.tab, submission.owner)
+        }
+        return sameOwner
+    }
+
+    function releasePreviousBackendPrompts() {
+        // Retain recovery text, but old in-memory attachment ids cannot belong to the new backend.
+        promptSubmissions = promptSubmissions.map(entry => {
+            if (entry.state === "unknown" || entry.state === "admitted") entry.state = "orphaned"
+            return entry
+        })
+    }
+
+    function settleTimedOutPrompt(event) {
+        if (!event || typeof event.requestId !== "string" || typeof event.tab !== "string") return
+        const submission = promptSubmissions.find(entry => entry.id === event.requestId && entry.tab === event.tab
+            && entry.state === "unknown")
+        if (!submission || typeof event.ok !== "boolean" || (!event.ok && (typeof event.errorCode !== "string"
+                || !event.errorCode.length || event.errorCode.length > maxErrorCharacters))) return
+        if (submission.generation !== sessionGenerationFor(submission.tab)) {
+            submission.state = "orphaned"
+            promptSubmissions = promptSubmissions.slice()
+            if (submission.owner === attachmentOwner(submission.tab)) syncAttachments(submission.tab, submission.owner)
+            return
+        }
+        const response = event.ok ? { ok: true, consumedAttachmentIds: event.consumedAttachmentIds }
+            : { ok: false, error: { code: event.errorCode, message: "Prompt failed after timeout (" + event.errorCode + ")" },
+                consumedAttachmentIds: event.consumedAttachmentIds }
+        submission.superseded = !reconcilePromptAttachments(submission, response)
+        submission.state = event.ok ? "accepted" : "rejected"
+        promptSubmissions = promptSubmissions.filter(entry => entry !== submission)
+        if (submission.onSettled) submission.onSettled(response, submission)
+        const pending = pendingRequests
+        if (pending[event.requestId] && pending[event.requestId].type === "prompt" && pending[event.requestId].timedOut) {
+            delete pending[event.requestId]
+            pendingRequests = pending
+            pendingRequestCount = Math.max(0, pendingRequestCount - 1)
+            if (pendingRequestCount === 0) pendingSweepTimer.stop()
+        }
+    }
+
     function sendPrompt(text, mode, settlement, draftText) {
         const message = typeof text === "string" ? text.trim() : ""
         if (!ready || message.length === 0 || message.length > maxMessageCharacters) return false
@@ -425,6 +543,11 @@ Scope {
         visibleError = ""
         const attachmentIds = attachments.map(attachment => String(attachment.id))
         const generation = sessionGenerationFor(activeTabId)
+        const owner = attachmentOwner(activeTabId)
+        if (attachmentIds.some(id => attachmentLocked(id))) {
+            showError("An attached file is still part of a pending prompt")
+            return false
+        }
         promptSubmissions = promptSubmissions.filter(entry => entry.generation === sessionGenerationFor(entry.tab))
         if (promptSubmissions.length >= maxPendingRequests) {
             showError("Too many submissions have unresolved outcomes")
@@ -435,18 +558,14 @@ Scope {
             showError("This submission is still pending or its outcome is unknown; it has not been sent again")
             return false
         }
-        const submission = { id: "", tab: activeTabId, generation: generation, draftKey: draftKey,
+        const submission = { id: "", tab: activeTabId, owner: owner, generation: generation, draftKey: draftKey,
             text: message, draftText: draftText === undefined ? text : draftText, mode: promptMode,
-            attachmentIds: attachmentIds, state: "admitted" }
+            attachmentIds: attachmentIds, state: "admitted", onSettled: settlement || null }
         const id = request("prompt", { "message": message, "mode": promptMode, "attachments": attachmentIds }, response => {
             if (!response.ok) showError(response.error.message)
-            // The backend consumes attachments once the prompt is accepted for delivery; only a
-            // refusal before that point (busy, not ready, backend gone) leaves them attached.
-            const kept = !response.ok && ["busy", "not_ready", "not_running"].indexOf(response.error.code) !== -1
-            if (attachmentIds.length > 0 && !kept) attachments = []
         }, true, response => {
+            submission.superseded = !reconcilePromptAttachments(submission, response)
             submission.state = response.ok ? "accepted" : !response.local && ["timeout", "not_running"].indexOf(response.error.code) !== -1 ? "unknown" : "rejected"
-            submission.superseded = submission.generation !== sessionGenerationFor(submission.tab)
             if (settlement) settlement(response, submission)
             if (submission.state !== "unknown") promptSubmissions = promptSubmissions.filter(entry => entry !== submission)
         })
@@ -477,9 +596,13 @@ Scope {
     }
 
     function addAttachment(path, granted, callback) {
-        request("attachment_add", { "path": String(path), "granted": granted === true }, response => {
+        const tab = activeTabId
+        const owner = attachmentOwner(tab)
+        attachmentChangeStarted(owner)
+        const epoch = attachmentEpochs[owner]
+        request("attachment_add", { "path": String(path), "granted": granted === true }, null, true, response => {
             if (!response.ok) postNotice("error", "Could not attach file: " + response.error.message)
-            else attachments = response.data.attachments
+            attachmentChangeFinished(tab, owner, epoch, response)
             if (callback) callback(response)
         })
     }
@@ -503,19 +626,33 @@ Scope {
     }
 
     function updateAttachment(attachmentId, text, callback) {
+        if (attachmentLocked(attachmentId)) {
+            if (callback) callback({ ok: false, error: { code: "busy", message: "This attachment belongs to a pending prompt" } })
+            return false
+        }
         const tab = activeTabId
-        const generation = sessionGenerationFor(tab)
-        return request("attachment_update", { "attachmentId": String(attachmentId), "text": String(text) }, response => {
+        const owner = attachmentOwner(tab)
+        attachmentChangeStarted(owner)
+        const epoch = attachmentEpochs[owner]
+        return request("attachment_update", { "attachmentId": String(attachmentId), "text": String(text) }, null, true, response => {
             if (!response.ok) postNotice("error", "Could not update attachment: " + response.error.message)
-            else if (generation === sessionGenerationFor(tab)) attachments = response.data.attachments
-        }, true, callback)
+            attachmentChangeFinished(tab, owner, epoch, response)
+            if (callback) callback(response)
+        })
     }
 
     function removeAttachment(attachmentId, callback) {
-        request("attachment_remove", { "attachmentId": String(attachmentId) }, response => {
+        if (attachmentLocked(attachmentId)) {
+            if (callback) callback({ ok: false, error: { code: "busy", message: "This attachment belongs to a pending prompt" } })
+            return false
+        }
+        const tab = activeTabId
+        const owner = attachmentOwner(tab)
+        attachmentChangeStarted(owner)
+        const epoch = attachmentEpochs[owner]
+        return request("attachment_remove", { "attachmentId": String(attachmentId) }, null, true, response => {
             if (!response.ok && response.error.code !== "stale_request") postNotice("error", "Could not remove attachment: " + response.error.message)
-            if (response.ok) attachments = response.data.attachments
-            // A definite rejection leaves the selected metadata unchanged.
+            attachmentChangeFinished(tab, owner, epoch, response)
             if (callback) callback(response)
         })
     }
@@ -1072,7 +1209,7 @@ Scope {
 
     // Applies a backend snapshot ({tab, session, attachments}); the transcript itself arrives as
     // transcript.reset and transcript.row events before the snapshot response.
-    function applySnapshot(data) {
+    function applySnapshot(data, attachmentEpoch) {
         if (!data || !data.session || !data.tab || data.tab.id !== activeTabId
                 || data.selectionGeneration !== selectionGeneration) return
         const snapshot = data.session
@@ -1099,7 +1236,13 @@ Scope {
         statusTexts = ({})
         extensionStatusText = ""
         for (const record of Array.isArray(snapshot.statusRecords) ? snapshot.statusRecords : []) handleExtensionStatus(record)
-        attachments = Array.isArray(data.attachments) ? data.attachments : []
+        const owner = attachmentOwner(activeTabId)
+        if (!attachmentWrites[owner] && (attachmentEpoch === undefined || attachmentEpoch === (attachmentEpochs[owner] || 0))) {
+            setAttachmentView(owner, Array.isArray(data.attachments) ? data.attachments : [])
+        } else {
+            attachments = attachmentViews[owner] || []
+            syncAttachments(activeTabId, owner)
+        }
         for (const dialog of Array.isArray(snapshot.dialogs) ? snapshot.dialogs : []) enqueueDialog(dialog, false)
         presentNextDialog()
         if (ready) {
@@ -1111,9 +1254,11 @@ Scope {
     function selectTab(tabId, callback) {
         const tab = tabById(tabId)
         if (!tab || tabId === activeTabId) return false
+        const owner = attachmentOwner(tabId)
+        const epoch = attachmentEpochs[owner] || 0
         request("tab_select", { "tab": tabId }, response => {
             if (!response.ok) postNotice("error", "Could not switch tabs: " + response.error.message)
-            else applySnapshot(response.data)
+            else applySnapshot(response.data, epoch)
             if (callback) callback(response)
         })
         return true
@@ -1676,6 +1821,7 @@ Scope {
 
     function handleEvent(event) {
         eventReceived(event)
+        if (event.type === "prompt.settled") { settleTimedOutPrompt(event); return }
         if (event.type === "pi.started" || (event.type === "session.replaced" && !event.rebind)) {
             const generations = sessionGenerations
             generations[event.tab] = (generations[event.tab] || 0) + 1
@@ -1694,6 +1840,7 @@ Scope {
         case "backend.ready":
             backendReady = true
             maxInboundFrameBytes = event.limits.maxInboundFrameBytes
+            maxAttachments = event.limits.maxAttachments
             maxDialogValueCharacters = event.limits.maxDialogValueCharacters
             maxCatalogRows = event.limits.maxCatalogRows
             maxControlRequests = event.limits.maxControlRequests
@@ -1999,7 +2146,11 @@ Scope {
         onStarted: {
             bridge.selectionGeneration = 0
             bridge.backendGeneration++
+            bridge.releasePreviousBackendPrompts()
             bridge.sessionGenerations = ({})
+            bridge.attachmentViews = ({})
+            bridge.attachmentEpochs = ({})
+            bridge.attachmentWrites = ({})
             bridge.dialogStates = ({})
             bridge.backendReady = false
             bridge.ready = false

@@ -886,6 +886,7 @@ ShellRoot {
     }
 
     function editAttachment(attachmentId) {
+        if (bridge.attachmentLocked(attachmentId)) return
         for (const attachment of bridge.attachments) {
             if (String(attachment.id) !== String(attachmentId) || attachment.kind !== "text") continue
             const tab = bridge.activeTabId
@@ -1659,7 +1660,9 @@ ShellRoot {
                                     processRunning: bridge.backendRunning
                                     theme: appTheme
                                     maxCharacters: bridge.maxMessageCharacters
+                                    maxAttachments: bridge.maxAttachments
                                     attachments: bridge.attachments
+                                    lockedAttachmentIds: bridge.attachments.filter(item => bridge.attachmentLocked(String(item.id))).map(item => String(item.id))
                                     onSendRequested: (text, mode) => root.submitComposer(text, mode)
                                     onAbortRequested: bridge.abortRun()
                                     onRestartRequested: bridge.restartProcess()

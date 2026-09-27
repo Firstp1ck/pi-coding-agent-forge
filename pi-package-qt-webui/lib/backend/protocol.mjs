@@ -54,6 +54,7 @@ export const LIMITS = Object.freeze({
     sequence_run: 30_000,
     commands_list: 10_000,
     attachment_add: 10_000,
+    attachments_list: 5_000,
     attachment_update: 5_000,
     attachment_read: 5_000,
     attachment_remove: 5_000,
@@ -165,6 +166,7 @@ export const LIMITS = Object.freeze({
   maxAttachmentLegacyListBytes: 256 * 1024,
   maxAttachmentNameCharacters: 128,
   maxAttachmentIdCharacters: 64,
+  maxPromptErrorCodeCharacters: 64,
   // Workspace paths and completion
   maxPathCharacters: 4096,
   maxWorkspaceEntries: 20_000,
@@ -389,6 +391,7 @@ export function validateRequest(frame) {
       if (!["send", "steer", "followUp"].includes(mode)) throw new ProtocolError("invalid_request", "prompt mode must be send, steer, or followUp");
       request.mode = mode;
       request.attachments = requireIdList(frame, "attachments", LIMITS.maxAttachments, LIMITS.maxAttachmentIdCharacters);
+      if (new Set(request.attachments).size !== request.attachments.length) throw new ProtocolError("invalid_request", "prompt attachment ids must be unique");
       break;
     }
     case "draft_get": {
@@ -634,12 +637,36 @@ export function encodeFrame(record) {
   return `${JSON.stringify(record)}\n`;
 }
 
-export function makeResponse(id, data = null) {
-  return { v: PROTOCOL_VERSION, kind: "response", id, ok: true, data };
+export function validateConsumedAttachmentIds(ids) {
+  if (!Array.isArray(ids)) throw new ProtocolError("invalid_request", "consumedAttachmentIds must be an array");
+  if (ids.length > LIMITS.maxAttachments) throw new ProtocolError("limit_exceeded", "Too many consumed attachment ids");
+  const seen = new Set();
+  for (const id of ids) {
+    if (typeof id !== "string" || !id.length || id.length > LIMITS.maxAttachmentIdCharacters || seen.has(id)) {
+      throw new ProtocolError("invalid_request", "Invalid or duplicate consumed attachment id");
+    }
+    seen.add(id);
+  }
+  return ids;
 }
 
-export function makeErrorResponse(id, code, message) {
-  return { v: PROTOCOL_VERSION, kind: "response", id, ok: false, error: { code, message: boundedError(message) } };
+export function validatePromptSettlement({ requestId, tab, ok, errorCode = "", consumedAttachmentIds }) {
+  validateRequestId(requestId);
+  if (typeof tab !== "string" || !tab.length || tab.length > LIMITS.maxTabIdCharacters) throw new ProtocolError("invalid_request", "prompt settlement requires a bounded tab id");
+  if (typeof ok !== "boolean" || (ok && errorCode) || (!ok && (typeof errorCode !== "string" || !errorCode || errorCode.length > LIMITS.maxPromptErrorCodeCharacters))) {
+    throw new ProtocolError("invalid_request", "prompt settlement needs an outcome and bounded error code");
+  }
+  return { requestId, tab, ok, ...(ok ? {} : { errorCode }), consumedAttachmentIds: validateConsumedAttachmentIds(consumedAttachmentIds) };
+}
+
+export function makeResponse(id, data = null, consumedAttachmentIds) {
+  return { v: PROTOCOL_VERSION, kind: "response", id, ok: true, data,
+    ...(consumedAttachmentIds === undefined ? {} : { consumedAttachmentIds: validateConsumedAttachmentIds(consumedAttachmentIds) }) };
+}
+
+export function makeErrorResponse(id, code, message, consumedAttachmentIds) {
+  return { v: PROTOCOL_VERSION, kind: "response", id, ok: false, error: { code, message: boundedError(message) },
+    ...(consumedAttachmentIds === undefined ? {} : { consumedAttachmentIds: validateConsumedAttachmentIds(consumedAttachmentIds) }) };
 }
 
 const RESERVED_FRAME_KEYS = ["v", "kind", "type", "id"];

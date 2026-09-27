@@ -281,6 +281,8 @@ The prompt control strip's model and thinking controls are disabled while Pi is 
 
 Resource changes require idle affected Pi sessions and complete capability information from the bundled helper. Wait for current runs or model changes to finish, then open **Resources** and choose **Refresh**. A disabled sampling field shows the provider-interface reason; its stored value is preserved and will become active again only on a model that declares support. Unknown provider interfaces fail closed and receive no optional sampling values. If the dialog says a session profile is not durable, the override is active only for that ephemeral session; use a persisted Pi session if it must survive restart. If the entire profile stays unavailable after refresh, restart Pi in that tab; core prompts and model changes remain usable without resource editing.
 
+Attachments added while a prompt is waiting for Pi remain attached for your next prompt. Only files actually consumed by the submitted prompt disappear; attachments in other tabs are unaffected. You can add more files while waiting, but cannot edit, remove, or send a pending prompt's files again until its outcome is known. If a prompt times out, the app checks which files remain; it does not assume they were sent or automatically resend the prompt.
+
 Unsent drafts are kept separately for each tab, even when two new tabs share a folder. Closing a tab removes its unsaved-session draft; saved-session drafts remain available when you reopen that conversation.
 
 ### Saved tabs did not come back

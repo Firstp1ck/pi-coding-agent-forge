@@ -8,11 +8,12 @@ import { composeMessageWithTexts, createAttachmentStore } from "../lib/backend/a
 import { HIGHLIGHT_LANGUAGES, highlightCode, highlightSupported, TOKEN_KINDS } from "../lib/backend/highlight.mjs";
 import { renderMarkdown } from "../lib/backend/markdown.mjs";
 import { normalizeCommands } from "../lib/backend/pi-session.mjs";
-import { LIMITS, REQUEST_TYPES, validateRequest } from "../lib/backend/protocol.mjs";
+import { LIMITS, REQUEST_TYPES, makeErrorResponse, makeResponse, validatePromptSettlement, validateRequest } from "../lib/backend/protocol.mjs";
 import { createSequenceStore, validateSequences } from "../lib/backend/sequences.mjs";
 import { createStateStore, temporaryDraftKey, validateState } from "../lib/backend/state.mjs";
 import { confinePath, createWorkspaceIndex, resolveInsideWorkspace } from "../lib/backend/workspace.mjs";
 import { startBackend } from "./helpers/backend-client.mjs";
+import { bridgeHarness } from "./helpers/qml-functions.mjs";
 
 const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", "base64");
 
@@ -69,6 +70,7 @@ test("validateRequest bounds drafts, sequences, attachments, and completion requ
   assert.deepEqual(valid("prompt", { message: "hi" }).attachments, []);
   assert.throws(() => valid("prompt", { message: "hi", attachments: Array.from({ length: LIMITS.maxAttachments + 1 }, () => "a") }), (error) => error.code === "limit_exceeded");
   assert.throws(() => valid("prompt", { message: "hi", attachments: [""] }), /non-empty strings/);
+  assert.throws(() => valid("prompt", { message: "hi", attachments: ["a", "a"] }), /must be unique/);
   assert.equal(valid("draft_set", { key: "/w", text: "x".repeat(LIMITS.maxDraftCharacters) }).text.length, LIMITS.maxDraftCharacters);
   assert.throws(() => valid("draft_set", { key: "/w", text: "x".repeat(LIMITS.maxDraftCharacters + 1) }), (error) => error.code === "limit_exceeded");
   assert.throws(() => valid("draft_get", { key: "" }), /requires a key/);
@@ -421,12 +423,14 @@ test("backend serves commands, drafts, sequences, completion, and attachments ov
   await backend.waitForEvent("pi.status", (event) => event.statusKind === "ready" && event.seq > backend.events.filter((entry) => entry.type === "message.user").at(-1).seq);
   const sent = await backend.send("prompt", { message: "__QT_WEBUI_IMMEDIATE__", attachments: [grantedAdd.data.attachment.id, imageAdd.data.attachment.id] });
   assert.equal(sent.ok, true, JSON.stringify(sent));
+  assert.deepEqual(sent.consumedAttachmentIds, [grantedAdd.data.attachment.id, imageAdd.data.attachment.id]);
   const userWithAttachments = backend.events.filter((event) => event.type === "message.user").at(-1);
   assert.deepEqual(userWithAttachments.attachments, [path.basename(outside), "pic.png"]);
   assert.equal(userWithAttachments.text, "__QT_WEBUI_IMMEDIATE__", "the transcript shows the typed prompt, not the appended file text");
   await backend.waitForEvent("pi.status", (event) => event.statusKind === "ready" && event.active === false && event.seq > userWithAttachments.seq);
   const stale = await backend.send("prompt", { message: "again", attachments: [grantedAdd.data.attachment.id] });
   assert.equal(stale.error.code, "stale_request");
+  assert.deepEqual(stale.consumedAttachmentIds, []);
   assert.equal((await backend.send("attachment_remove", { attachmentId: imageAdd.data.attachment.id })).error.code, "stale_request", "consumed attachments are gone");
   const captured = (await backend.readCapture()).filter((command) => command.type === "prompt");
   const withImages = captured.at(-1);
@@ -436,4 +440,123 @@ test("backend serves commands, drafts, sequences, completion, and attachments ov
   assert.equal(captured.filter((command) => command.images).length, 1);
   const followUps = (await backend.readCapture()).filter((command) => command.type === "follow_up").map((command) => command.message);
   assert.deepEqual(followUps, ["second step", "third step"]);
+});
+
+test("prompt responses report only ids taken, even across a later add and tab switch", async (t) => {
+  const cwd = await temporaryWorkspace(t);
+  await writeFile(path.join(cwd, "a.txt"), "A");
+  await writeFile(path.join(cwd, "b.txt"), "B");
+  const backend = await readyBackend(t, { cwd });
+  const first = (await backend.send("tabs_list")).data.tabs[0].id;
+  const a = (await backend.send("attachment_add", { path: path.join(cwd, "a.txt"), tab: first })).data.attachment.id;
+  const pending = backend.send("prompt", { message: "__QT_WEBUI_ACCEPT_DELAY__", attachments: [a], tab: first });
+  await backend.waitForEvent("message.user", event => event.tab === first && event.text === "__QT_WEBUI_ACCEPT_DELAY__");
+  const b = (await backend.send("attachment_add", { path: path.join(cwd, "b.txt"), tab: first })).data.attachment.id;
+  const second = (await backend.send("tab_open", { cwd })).data.tab.id;
+  const other = (await backend.send("attachment_add", { path: path.join(cwd, "a.txt"), tab: second })).data.attachment.id;
+  const result = await pending;
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.consumedAttachmentIds, [a]);
+  assert.deepEqual((await backend.send("attachments_list", { tab: first })).data.attachments.map(item => item.id), [b]);
+  assert.deepEqual((await backend.send("attachments_list", { tab: second })).data.attachments.map(item => item.id), [other]);
+  const captured = (await backend.readCapture()).filter(command => command.type === "prompt");
+  assert.equal(captured.length, 1);
+  assert.match(captured[0].message, /Attached file: a.txt/);
+  assert.doesNotMatch(captured[0].message, /Attached file: b.txt/);
+});
+
+test("rejection after take reports A; busy refusal reports no consumed ids and keeps B", async (t) => {
+  const cwd = await temporaryWorkspace(t);
+  await writeFile(path.join(cwd, "a.txt"), "A");
+  await writeFile(path.join(cwd, "b.txt"), "B");
+  const backend = await readyBackend(t, { cwd });
+  const a = (await backend.send("attachment_add", { path: path.join(cwd, "a.txt") })).data.attachment.id;
+  const b = (await backend.send("attachment_add", { path: path.join(cwd, "b.txt") })).data.attachment.id;
+  const rejected = await backend.send("prompt", { message: "__QT_WEBUI_FAIL__", attachments: [a] });
+  assert.equal(rejected.error.code, "pi_error");
+  assert.deepEqual(rejected.consumedAttachmentIds, [a]);
+  assert.deepEqual((await backend.send("attachments_list")).data.attachments.map(item => item.id), [b]);
+  await backend.send("prompt", { message: "__QT_WEBUI_DELAYED_ABORT__" });
+  const busy = await backend.send("prompt", { message: "second", attachments: [b] });
+  assert.equal(busy.error.code, "busy");
+  assert.deepEqual(busy.consumedAttachmentIds, []);
+  assert.deepEqual((await backend.send("attachments_list")).data.attachments.map(item => item.id), [b]);
+  assert.equal((await backend.readCapture()).filter(command => command.type === "prompt" && command.message.startsWith("second")).length, 0);
+});
+
+test("consumed id response field is optional, bounded, and unique", () => {
+  assert.equal(Object.hasOwn(makeResponse("x", {}), "consumedAttachmentIds"), false);
+  assert.deepEqual(makeErrorResponse("x", "busy", "wait", []).consumedAttachmentIds, []);
+  assert.throws(() => makeResponse("x", {}, Array(9).fill("a")), /Too many consumed/);
+  assert.throws(() => makeErrorResponse("x", "busy", "wait", ["a", "a"]), /duplicate/);
+});
+
+test("duplicate prompt attachment ids are rejected before take and never reach Pi", async t => {
+  const cwd = await temporaryWorkspace(t);
+  await writeFile(path.join(cwd, "a.txt"), "A");
+  const backend = await readyBackend(t, { cwd });
+  const id = (await backend.send("attachment_add", { path: path.join(cwd, "a.txt") })).data.attachment.id;
+  const response = await backend.send("prompt", { message: "duplicate", attachments: [id, id] });
+  assert.equal(response.error.code, "invalid_request");
+  assert.deepEqual(response.consumedAttachmentIds, []);
+  assert.deepEqual((await backend.send("attachments_list")).data.attachments.map(item => item.id), [id]);
+  assert.equal((await backend.readCapture()).filter(command => command.type === "prompt").length, 0);
+});
+
+test("timed-out preflight has unknown consumption, then emits one final scoped outcome", async t => {
+  const cwd = await temporaryWorkspace(t);
+  await writeFile(path.join(cwd, "a.txt"), "A");
+  const backend = await readyBackend(t, { cwd, env: {
+    QT_WEBUI_SMOKE_PROMPT_PREFLIGHT_DELAY_MS: "250",
+    QT_WEBUI_SMOKE_PROMPT_TIMEOUT_MS: "80",
+  } });
+  const tab = (await backend.send("tabs_list")).data.tabs[0].id;
+  const id = (await backend.send("attachment_add", { path: path.join(cwd, "a.txt") })).data.attachment.id;
+  const timedOut = await backend.send("prompt", { message: "__QT_WEBUI_IMMEDIATE__", attachments: [id], tab }, { id: "delayed-preflight" });
+  assert.equal(timedOut.error.code, "timeout");
+  assert.equal(Object.hasOwn(timedOut, "consumedAttachmentIds"), false, "the handler has not yet reached take");
+  const { context: view, frames } = await bridgeHarness();
+  view.activeTabId = tab;
+  view.tabs = [{ id: tab, draftId: "draft-origin" }];
+  view.attachments = [{ id }];
+  view.sendPrompt("__QT_WEBUI_IMMEDIATE__", "send");
+  view.settlePending(frames[0].id, timedOut);
+  assert.deepEqual(view.attachments.map(item => item.id), [id], "unknown consumption must not clear the view");
+  assert.deepEqual((await backend.send("attachments_list", { tab })).data.attachments.map(item => item.id), [id]);
+  const final = await backend.waitForEvent("prompt.settled", event => event.requestId === "delayed-preflight", 5_000);
+  assert.equal(final.tab, tab);
+  assert.equal(final.ok, true);
+  assert.deepEqual(final.consumedAttachmentIds, [id]);
+  view.settleTimedOutPrompt({ ...final, requestId: frames[0].id });
+  assert.deepEqual(view.attachments, [], "the final confirmed outcome reconciles the view");
+  assert.equal(view.attachmentLocked(id), false);
+  assert.equal(backend.events.filter(event => event.type === "prompt.settled" && event.requestId === "delayed-preflight").length, 1);
+  assert.deepEqual((await backend.send("attachments_list", { tab })).data.attachments, []);
+  assert.equal((await backend.readCapture()).filter(command => command.type === "prompt").length, 1);
+});
+
+test("prompt settlement event validates its bounded tab, request id, outcome and ids", () => {
+  const input = { requestId: "q-1", tab: "tab-1", ok: true, consumedAttachmentIds: ["att-a"] };
+  assert.deepEqual(validatePromptSettlement(input), input);
+  assert.throws(() => validatePromptSettlement({ ...input, consumedAttachmentIds: ["att-a", "att-a"] }), /duplicate/);
+  assert.throws(() => validatePromptSettlement({ ...input, tab: "x".repeat(LIMITS.maxTabIdCharacters + 1) }), /bounded tab/);
+  assert.throws(() => validatePromptSettlement({ ...input, ok: false, errorCode: "x".repeat(LIMITS.maxPromptErrorCodeCharacters + 1) }), /bounded error code/);
+});
+
+test("late Pi rejection reports consumed ids in one scoped settlement event", async t => {
+  const cwd = await temporaryWorkspace(t);
+  await writeFile(path.join(cwd, "a.txt"), "A");
+  const backend = await readyBackend(t, { cwd, env: { QT_WEBUI_SMOKE_PROMPT_TIMEOUT_MS: "80" } });
+  const tab = (await backend.send("tabs_list")).data.tabs[0].id;
+  const id = (await backend.send("attachment_add", { path: path.join(cwd, "a.txt") })).data.attachment.id;
+  const timedOut = await backend.send("prompt", { message: "__QT_WEBUI_FAIL_DELAY__", attachments: [id], tab }, { id: "late-reject" });
+  assert.equal(timedOut.error.code, "timeout");
+  assert.deepEqual(timedOut.consumedAttachmentIds, [id], "take already completed before timeout");
+  const final = await backend.waitForEvent("prompt.settled", event => event.requestId === "late-reject", 5_000);
+  assert.equal(final.tab, tab);
+  assert.equal(final.ok, false);
+  assert.equal(final.errorCode, "pi_error");
+  assert.deepEqual(final.consumedAttachmentIds, [id]);
+  assert.equal(backend.events.filter(event => event.type === "prompt.settled" && event.requestId === "late-reject").length, 1);
+  assert.deepEqual((await backend.send("attachments_list", { tab })).data.attachments, []);
 });

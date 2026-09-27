@@ -17,6 +17,7 @@ import {
   makeEvent,
   makeResponse,
   validateRequest,
+  validatePromptSettlement,
 } from "./protocol.mjs";
 import { createResourceStore, resolveEffective, resourceModelKey, updateProfile, validateProfile } from "./resources.mjs";
 import { SAMPLING_KEYS, supportedSamplingValues } from "./sampling.mjs";
@@ -71,6 +72,8 @@ export function createBackend({
   const piRequestTimeoutMs = smokeMode ? Number.parseInt(env.QT_WEBUI_PI_REQUEST_TIMEOUT_MS ?? "", 10) : Number.NaN;
   const helperTimeoutMs = smokeMode ? Number.parseInt(env.QT_WEBUI_HELPER_TIMEOUT_MS ?? "", 10) : Number.NaN;
   const smokeNowMs = smokeMode ? Number.parseInt(env.QT_WEBUI_SMOKE_NOW_MS ?? "", 10) : Number.NaN;
+  const promptPreflightDelayMs = smokeMode ? Number(env.QT_WEBUI_SMOKE_PROMPT_PREFLIGHT_DELAY_MS) : 0;
+  const promptTimeoutOverrideMs = smokeMode ? Number(env.QT_WEBUI_SMOKE_PROMPT_TIMEOUT_MS) : 0;
   const now = Number.isSafeInteger(smokeNowMs) && smokeNowMs >= 0 ? () => smokeNowMs : () => Date.now();
 
   let sequence = 0;
@@ -176,12 +179,12 @@ export function createBackend({
     return writeFrame(makeEvent(type, { seq: sequence, ...payload }), { essential });
   }
 
-  function respond(id, data) {
-    writeFrame(makeResponse(id, data), { essential: true });
+  function respond(id, data, consumedAttachmentIds) {
+    writeFrame(makeResponse(id, data, consumedAttachmentIds), { essential: true });
   }
 
-  function respondError(id, code, message) {
-    writeFrame(makeErrorResponse(id, code, message), { essential: true });
+  function respondError(id, code, message, consumedAttachmentIds) {
+    writeFrame(makeErrorResponse(id, code, message, consumedAttachmentIds), { essential: true });
   }
 
   const appearance = createPortalAppearanceMonitor({
@@ -764,13 +767,17 @@ export function createBackend({
         stats: transportSnapshot(),
       };
     },
-    async prompt(request) {
+    async prompt(request, reportConsumption) {
       const tab = tabFor(request);
+      if (Number.isInteger(promptPreflightDelayMs) && promptPreflightDelayMs > 0 && promptPreflightDelayMs <= 2_000) {
+        await new Promise(resolve => setTimeout(resolve, promptPreflightDelayMs));
+      }
       assertExclusiveTabOperationAvailable(tab);
       await registry.prepareMutation(tab.id);
       // Attachments are consumed only once stale-state reconciliation and prompt validation pass.
       tab.session.assertPromptAllowed(request.mode);
       const taken = request.attachments.length > 0 ? tab.attachments.take(request.attachments) : null;
+      reportConsumption(request.attachments);
       return tab.session.prompt({ message: request.message, mode: request.mode, attachments: taken });
     },
     async abort(request) {
@@ -957,6 +964,9 @@ export function createBackend({
       const tab = tabFor(request);
       return { attachment: tab.attachments.add({ path: request.path, granted: request.granted }, attachmentOptions(request, tab)), attachments: tab.attachments.list({ metadataOnly: attachmentMetadata }) };
     },
+    async attachments_list(request) {
+      return { attachments: tabFor(request).attachments.list({ metadataOnly: attachmentMetadata }) };
+    },
     async attachment_update(request) {
       const tab = tabFor(request);
       return { attachment: tab.attachments.update(request.attachmentId, request.text, attachmentOptions(request, tab)), attachments: tab.attachments.list({ metadataOnly: attachmentMetadata }) };
@@ -1127,24 +1137,28 @@ export function createBackend({
 
   function handleRequest(frame) {
     let request;
+    let consumedAttachmentIds = [];
+    let consumptionFinal = false;
+    const promptIds = () => (request?.type === "prompt" || frame?.type === "prompt") ? consumedAttachmentIds : undefined;
+    const promptError = (id, code, message) => respondError(id, code, message, promptIds());
     try {
       request = validateRequest(frame);
     } catch (error) {
       const id = frame && typeof frame.id === "string" ? frame.id.slice(0, LIMITS.maxRequestIdCharacters) : "";
-      if (id) respondError(id, error.code ?? "invalid_request", error.message);
+      if (id) promptError(id, error.code ?? "invalid_request", error.message);
       else emit("notice", { level: "error", message: `Rejected request: ${boundedError(error.message)}` });
       return;
     }
     const control = controlRequests.has(request.type);
-    if (backpressured && !control) { respondError(request.id, "busy", "The UI is not draining responses; ordinary work is paused"); return; }
+    if (backpressured && !control) { promptError(request.id, "busy", "The UI is not draining responses; ordinary work is paused"); return; }
     if (inflight.has(request.id)) {
-      respondError(request.id, "duplicate_request", `request id ${request.id} is already in flight`);
+      promptError(request.id, "duplicate_request", `request id ${request.id} is already in flight`);
       return;
     }
     const controls = [...inflight.values()].filter(entry => controlRequests.has(entry.type)).length;
     if ((!control && (inflight.size - controls >= LIMITS.maxPendingRequests || (inflight.size - controls + 1) * LIMITS.maxOutboundFrameBytes > LIMITS.maxAdmittedResponseBytes))
       || (control && controls >= LIMITS.maxControlRequests)) {
-      respondError(request.id, "busy", "too many requests are in flight");
+      promptError(request.id, "busy", "too many requests are in flight");
       return;
     }
     let reservation;
@@ -1157,15 +1171,24 @@ export function createBackend({
     const closingAutoResume = request.type === "tab_close" && requestedTab?.resumeInFlight === true;
     if ((SESSION_MUTATION_REQUESTS.has(request.type) || lifecycleMutation) && !compatibleControl && !closingAutoResume) {
       try { reservation = registry.reserveMutation(tabFor(request).id); }
-      catch (error) { respondError(request.id, error.code ?? "busy", error.message); return; }
+      catch (error) { promptError(request.id, error.code ?? "busy", error.message); return; }
     }
-    const timeoutMs = LIMITS.requestTimeoutMs[request.type];
+    const timeoutMs = request.type === "prompt" && Number.isInteger(promptTimeoutOverrideMs)
+      && promptTimeoutOverrideMs >= 10 && promptTimeoutOverrideMs <= 2_000
+      ? promptTimeoutOverrideMs : LIMITS.requestTimeoutMs[request.type];
     let settled = false;
+    const promptTabId = requestedTab?.id || request.tab || "";
+    const promptOutcome = (ok, errorCode) => {
+      if (request.type === "prompt" && promptTabId) emit("prompt.settled", validatePromptSettlement({
+        requestId: request.id, tab: promptTabId, ok, errorCode, consumedAttachmentIds,
+      }));
+    };
     const timer = setTimeout(() => {
       if (settled) return;
       settled = true;
       // Keep timed-out work admitted until its handler actually finishes.
-      respondError(request.id, "timeout", `${request.type} did not complete within ${timeoutMs} ms`);
+      respondError(request.id, "timeout", `${request.type} did not complete within ${timeoutMs} ms`,
+        request.type === "prompt" && !consumptionFinal ? undefined : promptIds());
     }, timeoutMs);
     inflight.set(request.id, { type: request.type, timer });
     peakAdmittedWork = Math.max(peakAdmittedWork, inflight.size);
@@ -1179,7 +1202,7 @@ export function createBackend({
           if ([...pendingSessionChanges.values()].some(change => tabForSessionPath(change.path)?.id === mutatingTabId)) registry.markForRebind(mutatingTabId);
           await registry.prepareMutation(mutatingTabId);
         }
-        return handlers[request.type](request);
+        return handlers[request.type](request, ids => { consumedAttachmentIds = ids; consumptionFinal = true; });
       }))
       .finally(() => {
         reservation?.release();
@@ -1193,15 +1216,16 @@ export function createBackend({
       .then((data) => {
         clearTimeout(timer);
         inflight.delete(request.id);
-        if (settled) return;
+        if (settled) { promptOutcome(true, ""); return; }
         settled = true;
-        respond(request.id, data ?? null);
+        respond(request.id, data ?? null, promptIds());
       }, (error) => {
         clearTimeout(timer);
         inflight.delete(request.id);
-        if (settled) return;
+        const errorCode = error instanceof ProtocolError ? error.code : "internal_error";
+        if (settled) { promptOutcome(false, errorCode); return; }
         settled = true;
-        respondError(request.id, error instanceof ProtocolError ? error.code : "internal_error", error?.message ?? String(error));
+        promptError(request.id, errorCode, error?.message ?? String(error));
       });
   }
 

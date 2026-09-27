@@ -916,10 +916,11 @@ test("composer completion, attachments, drafts, and sequences never send by acci
 
   // Attachments: ids travel with the prompt, chips expose names and removal, the picker grants outside paths.
   assert.match(functionBody(bridge, "sendPrompt"), /"attachments": attachmentIds/);
-  assert.match(functionBody(bridge, "sendPrompt"), /\["busy", "not_ready", "not_running"\]\.indexOf\(response\.error\.code\)/);
+  assert.match(functionBody(bridge, "reconcilePromptAttachments"), /Array\.isArray\(consumed\)/);
   assert.match(shell, /FileDialog\s*\{[\s\S]*fileMode:\s*FileDialog\.OpenFiles[\s\S]*bridge\.addAttachment\(root\.urlToPath\(url\), true\)/);
   assert.match(composer, /accessibleName:\s*"Remove attachment " \+ String\(chip\.modelData\.name\)/);
   assert.match(composer, /enabled:\s*composer\.attachments\.length < composer\.maxAttachments/);
+  assert.match(objectBodyWithId(shell, "Composer", "composer"), /maxAttachments:\s*bridge\.maxAttachments/);
   assert.equal(LIMITS.maxAttachments, 8);
   assert.match(row, /text:\s*"Attached: " \+ row\.attachments/);
   assert.match(textEditDialog, /function save\(\)[\s\S]*if \(answered \|\| overLimit \|\| submitting \|\| unknown\) return false/);
@@ -1230,4 +1231,22 @@ test("no QML file is left over from the direct-Pi design", async () => {
   assert(!names.includes("PiBridge.qml"));
   const componentNames = await readdir(path.join(qmlRoot, "components"));
   assert(!componentNames.includes("ChatMessage.qml"));
+});
+
+test("prompt attachment reconciliation uses consumed ids scoped to the originating owner", () => {
+  const send = functionBody(bridge, "sendPrompt");
+  assert.match(functionBody(bridge, "reconcilePromptAttachments"), /submission\.owner === attachmentOwner\(submission\.tab\)/);
+  assert.match(functionBody(bridge, "reconcilePromptAttachments"), /submission\.generation === sessionGenerationFor\(submission\.tab\)/);
+  const reconcile = functionBody(bridge, "reconcilePromptAttachments");
+  assert.match(reconcile, /Array\.isArray\(consumed\)/);
+  assert.match(reconcile, /current\.filter\(item => consumed\.indexOf\(String\(item\.id\)\) === -1\)/);
+  assert.match(reconcile, /syncAttachments\(submission\.tab, submission\.owner\)/);
+  assert.match(reconcile, /bumpAttachmentEpoch\(submission\.owner\)/);
+  assert.match(reconcile, /consumed\.length <= maxAttachments/);
+  assert.match(functionBody(bridge, "settleTimedOutPrompt"), /entry\.state === "unknown"/);
+  assert.match(functionBody(bridge, "applySnapshot"), /attachmentEpoch === \(attachmentEpochs\[owner\] \|\| 0\)/);
+  assert.doesNotMatch(send, /attachments = \[\]|\["busy", "not_ready", "not_running"\]/);
+  assert.match(functionBody(bridge, "removeAttachment"), /attachmentLocked\(attachmentId\)/);
+  assert.match(functionBody(bridge, "updateAttachment"), /attachmentLocked\(attachmentId\)/);
+  assert.match(composer, /enabled: composer\.lockedAttachmentIds\.indexOf\(String\(chip\.modelData\.id\)\) === -1/);
 });

@@ -17,6 +17,7 @@ Rectangle {
     property int maxCharacters: 8192
     property int maxAttachments: 8
     property var attachments: []
+    property var lockedAttachmentIds: []
     property var completions: []
     property string completionKind: ""
     property string completionQuery: ""
@@ -348,6 +349,7 @@ Rectangle {
 
                         AppButton {
                             visible: chip.modelData.kind === "text"
+                            enabled: composer.lockedAttachmentIds.indexOf(String(chip.modelData.id)) === -1
                             theme: composer.theme
                             variant: "ghost"
                             text: "Edit"
@@ -362,6 +364,7 @@ Rectangle {
                             theme: composer.theme
                             variant: "ghost"
                             text: "Remove"
+                            enabled: composer.lockedAttachmentIds.indexOf(String(chip.modelData.id)) === -1
                             accessibleName: "Remove attachment " + String(chip.modelData.name)
                             padding: 2
                             leftPadding: 6
