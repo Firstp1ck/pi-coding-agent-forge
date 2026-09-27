@@ -1,9 +1,11 @@
 import { existsSync, realpathSync, statSync } from "node:fs";
 import { AsyncLocalStorage } from "node:async_hooks";
+import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { createAttachmentStore } from "./attachments.mjs";
 import { resolveWorkspaceDirectory } from "./directories.mjs";
 import { LIMITS, ProtocolError, boundedString } from "./protocol.mjs";
+import { temporaryDraftKey } from "./state.mjs";
 import { createTranscriptMirror, rowsFromHistory } from "./transcript.mjs";
 import { createWorkspaceIndex } from "./workspace.mjs";
 
@@ -118,6 +120,8 @@ export function createTabRegistry({
       : tab.unacknowledgedCompletion ? "done" : "idle";
     return {
       id: tab.id,
+      draftId: tab.draftId,
+      draftFile: tab.durableSessionFile ? tab.sessionFile : "",
       selectionGeneration,
       cwd: tab.cwd,
       name: tab.name,
@@ -156,9 +160,9 @@ export function createTabRegistry({
     try {
       state.saveTabs(order.map((id) => {
         const tab = tabs.get(id);
-        return { cwd: tab.cwd, sessionFile: tab.durableSessionFile ? tab.sessionFile : "", name: tab.name,
+        return { cwd: tab.cwd, sessionFile: tab.durableSessionFile ? tab.sessionFile : "", name: tab.name, draftId: tab.draftId,
           ...(!tab.durableSessionFile && tab.pendingResume ? { pendingResume: tab.pendingResume } : {}) };
-      }), activeId ? order.indexOf(activeId) : -1);
+      }), activeId ? order.indexOf(activeId) : -1, order.flatMap(id => tabs.get(id).retiredDraftIds));
     } catch (error) {
       emit("notice", { level: "warning", message: `Could not save the tab layout: ${boundedString(error.message, 200)}` });
     }
@@ -208,7 +212,7 @@ export function createTabRegistry({
     for (const row of tab.mirror.rows()) emit("transcript.row", { tab: tab.id, selectionGeneration, row });
   }
 
-  function open({ cwd = callerCwd, sessionPath = "", name = "", select = true, notify = true, confirmedSession = false } = {}) {
+  function open({ cwd = callerCwd, sessionPath = "", name = "", select = true, notify = true, confirmedSession = false, draftId = "" } = {}) {
     const owner = sessionPath ? ownerOf(sessionPath) : null;
     if (owner) {
       if (closingTabs.has(owner.id)) throw new ProtocolError("busy", `That session is still closing in ${owner.id}`);
@@ -221,6 +225,8 @@ export function createTabRegistry({
     const id = `tab-${serial}`;
     const tab = {
       id,
+      draftId: draftId || randomUUID(),
+      retiredDraftIds: [],
       cwd: directory,
       name: boundedString(name, LIMITS.maxTabNameCharacters, ""),
       sessionFile: confirmedSession ? sessionPath : "",
@@ -256,6 +262,10 @@ export function createTabRegistry({
     }
     tabs.set(id, tab);
     order.push(id);
+    if (!sessionPath) {
+      try { state.adoptLegacyDraft(directory, temporaryDraftKey(tab.draftId)); }
+      catch (error) { emit("notice", { level: "warning", message: `Could not migrate the workspace draft: ${boundedString(error.message, 200)}` }); }
+    }
     if (select || !activeId) commitSelection(id);
     tab.session.start();
     if (notify) {
@@ -305,8 +315,14 @@ export function createTabRegistry({
       void tab.session.stop();
       return;
     }
+    try { state.moveDraft(temporaryDraftKey(tab.draftId), tab.sessionFile); }
+    catch (error) {
+      emit("notice", { tab: tab.id, level: "warning", message: `Could not migrate the draft: ${boundedString(error.message, 200)}` });
+      return;
+    }
     tab.durableSessionFile = true;
     refreshClaims(tab);
+    emitTabs();
     saveState();
     sessionPathsChanged();
   }
@@ -321,6 +337,11 @@ export function createTabRegistry({
       tab.resumeBlocked = false;
     }
     if (type === "session.replaced") {
+      if (!payload.rebind) {
+        tab.retiredDraftIds.push(tab.draftId);
+        tab.retiredDraftIds = tab.retiredDraftIds.slice(-8);
+        tab.draftId = randomUUID();
+      }
       tab.pendingResume = "";
       tab.resumeBlocked = false;
     }
@@ -341,14 +362,26 @@ export function createTabRegistry({
           void tab.session.stop();
           return;
         }
+        let draftMigrated = true;
+        if (type === "pi.runtime" && !tab.sessionFile && sessionFile && existsSync(sessionFile)) {
+          try { state.moveDraft(temporaryDraftKey(tab.draftId), sessionFile); }
+          catch (error) {
+            draftMigrated = false;
+            emit("notice", { tab: tab.id, level: "warning", message: `Could not migrate the draft: ${boundedString(error.message, 200)}` });
+          }
+        }
         tab.sessionFile = sessionFile;
-        tab.durableSessionFile = type === "session.replaced" ? Boolean(sessionFile) : Boolean(sessionFile && existsSync(sessionFile));
+        tab.durableSessionFile = type === "session.replaced" ? Boolean(sessionFile) : Boolean(sessionFile && existsSync(sessionFile) && draftMigrated);
         refreshClaims(tab);
         tab.sessionName = sessionName;
         tabsChanged = true;
         saveState();
         sessionPathsChanged();
       }
+    }
+    if (type === "session.replaced" && !payload.rebind) {
+      saveState();
+      tabsChanged = true;
     }
     if (type === "pi.status") {
       tabsChanged = true;
@@ -380,6 +413,7 @@ export function createTabRegistry({
     }
     const projectedStatus = type === "pi.status" ? summary(tab) : null;
     emit(type, { tab: tab.id, selectionGeneration, ...payload,
+      ...(type === "session.replaced" ? { draftId: tab.draftId } : {}),
       ...(projectedStatus ? { ready: projectedStatus.ready, canRecover: projectedStatus.canRecover, statusKind: projectedStatus.statusKind, text: projectedStatus.statusText } : {}) });
     if (tabsChanged) emitTabs();
   }
@@ -469,7 +503,7 @@ export function createTabRegistry({
         continue;
       }
       try {
-        open({ cwd: entry.cwd, sessionPath: entry.pendingResume || entry.sessionFile, name: entry.name, select: false, notify: false, confirmedSession: !entry.pendingResume });
+        open({ cwd: entry.cwd, sessionPath: entry.pendingResume || entry.sessionFile, name: entry.name, draftId: entry.draftId, select: false, notify: false, confirmedSession: !entry.pendingResume });
         restored += 1;
       } catch (error) {
         emit("notice", { level: "warning", message: `Could not restore the tab for ${boundedString(entry.cwd, 120)}: ${boundedString(error.message, 160)}` });
@@ -701,6 +735,10 @@ export function createTabRegistry({
     stopAll,
     children,
     saveState,
+    ownsTemporaryDraft(key) {
+      return [...tabs.values()].some(tab => !tab.durableSessionFile && temporaryDraftKey(tab.draftId) === key
+        || tab.retiredDraftIds.some(id => temporaryDraftKey(id) === key));
+    },
     get activeId() { return activeId; },
     get selectionGeneration() { return selectionGeneration; },
     get size() { return tabs.size; },

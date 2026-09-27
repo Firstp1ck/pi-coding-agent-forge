@@ -921,6 +921,9 @@ export function createBackend({
       return { key: request.key, text: state.getDraft(request.key) };
     },
     async draft_set(request) {
+      if (request.key.startsWith("draft:") && !registry.ownsTemporaryDraft(request.key)) {
+        throw new ProtocolError("stale_request", "That temporary draft owner is no longer open");
+      }
       return { key: request.key, text: state.setDraft(request.key, request.text, request.expectedText) };
     },
     async sequences_list() {

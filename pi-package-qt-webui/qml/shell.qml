@@ -37,6 +37,8 @@ ShellRoot {
     property var paletteModels: []
     property var paletteSessions: []
     property string draftKeyInUse: ""
+    property string draftOwnerInUse: ""
+    property int draftEditRevision: 0
     property string pickerKind: ""
     property int composerPickerGeneration: 0
     property int modelPickerGeneration: -1
@@ -721,8 +723,7 @@ ShellRoot {
         else if (context.action === "session-settle-days") bridge.setSessionSettleDays(text)
     }
 
-    // The composer belongs to the tab: save the unsent text under the previous key before the
-    // new tab's draft is loaded.
+    // The composer follows confirmed identity, not volatile runtime state.
     function boundedDraftRecords(records) {
         const keys = Object.keys(records)
         for (let i = 0; i < keys.length - 64; i++) delete records[keys[i]]
@@ -731,52 +732,66 @@ ShellRoot {
 
     function rememberDraft(text) {
         if (changingDraft || draftKeyInUse.length === 0) return
+        draftEditRevision++
         draftRestoreGeneration++
         const records = Object.assign({}, draftRecords)
         delete records[draftKeyInUse]
-        records[draftKeyInUse] = { text: text, revision: draftRestoreGeneration }
+        records[draftKeyInUse] = { text: text, revision: draftEditRevision }
         draftRecords = boundedDraftRecords(records)
     }
 
     function beginDraftReplacement() {
         draftRestoreGeneration++
         draftTimer.stop()
-        if (draftKeyInUse.length > 0) bridge.saveDraftFor(draftKeyInUse, composer.text)
+        if (draftKeyInUse.length > 0 && (!draftKeyInUse.startsWith("draft:")
+                || bridge.tabs.some(tab => tab.id === draftOwnerInUse.split(":")[0])))
+            bridge.saveDraftFor(draftKeyInUse, composer.text)
         changingDraft = true
         composer.text = ""
+        draftEditRevision++
     }
 
     function commitDraftReplacement() {
+        draftOwnerInUse = bridge.draftOwner
         draftKeyInUse = bridge.draftKey
         changingDraft = false
         restoreCurrentDraft()
     }
 
     function restoreCurrentDraft() {
-        if (!bridge.ready || changingDraft) return
+        if (!bridge.ready || changingDraft || !draftKeyInUse) return
         const generation = ++draftRestoreGeneration
+        const revision = draftEditRevision
+        const owner = draftOwnerInUse
         const key = draftKeyInUse
         const cached = draftRecords[key]
-        if (cached && cached.text.length > 0) { restoreDraft(key, cached.text); return }
+        if (cached) { restoreDraft(owner, key, cached.text); return }
         bridge.loadDraft(response => {
-            if (!response.ok || generation !== draftRestoreGeneration || key !== draftKeyInUse) return
-            restoreDraft(key, String(response.data.text || ""))
-        })
+            if (!response.ok || generation !== draftRestoreGeneration || revision !== draftEditRevision
+                    || owner !== draftOwnerInUse || key !== draftKeyInUse) return
+            restoreDraft(owner, key, String(response.data.text || ""))
+        }, key)
     }
 
     function handleDraftKeyChanged() {
-        if (changingDraft) return
+        if (changingDraft || !bridge.draftKey || draftKeyInUse === bridge.draftKey) return
+        if (draftOwnerInUse && draftOwnerInUse !== bridge.draftOwner) {
+            beginDraftReplacement()
+            commitDraftReplacement()
+            return
+        }
         draftTimer.stop()
-        // A first durable filename promotes the current draft; only a committed replacement clears it.
-        if (draftKeyInUse.length > 0 && draftKeyInUse !== bridge.draftKey) bridge.saveDraftFor(draftKeyInUse, composer.text)
-        const previous = draftRecords[draftKeyInUse]
-        draftKeyInUse = bridge.draftKey
+        const oldKey = draftKeyInUse
+        const previous = draftRecords[oldKey]
         draftRestoreGeneration++
-        if (previous && previous.text === composer.text) {
+        draftKeyInUse = bridge.draftKey
+        draftOwnerInUse = bridge.draftOwner
+        if (previous && previous.text === composer.text && composer.text.length > 0) {
             const records = Object.assign({}, draftRecords)
             records[draftKeyInUse] = previous
             draftRecords = boundedDraftRecords(records)
-        } else rememberDraft(composer.text)
+        }
+        // First filename assignment preserves the editor and moves its pending unsent text.
         if (composer.text.length > 0) bridge.saveDraftFor(draftKeyInUse, composer.text)
         else restoreCurrentDraft()
     }
@@ -891,12 +906,15 @@ ShellRoot {
         return true
     }
 
-    function restoreDraft(key, text) {
-        if (key !== bridge.draftKey || text.length === 0 || composer.text.trim().length > 0) return
+    function restoreDraft(owner, key, text) {
+        if (owner !== draftOwnerInUse || key !== draftKeyInUse || text.length === 0 || composer.text.length > 0) return
         changingDraft = true
         composer.setText(text)
         changingDraft = false
-        if (!draftRecords[key] || draftRecords[key].text !== text) rememberDraft(text)
+        draftEditRevision++
+        const records = Object.assign({}, draftRecords)
+        records[key] = { text: text, revision: draftEditRevision }
+        draftRecords = boundedDraftRecords(records)
     }
 
     // ---- links and dialogs ---------------------------------------------------------------
@@ -1051,7 +1069,12 @@ ShellRoot {
                 id: draftTimer
                 interval: 600
                 repeat: false
-                onTriggered: bridge.saveDraftFor(root.draftKeyInUse, composer.text)
+                property var pending: null
+                onTriggered: {
+                    const save = pending
+                    if (save && save.owner === root.draftOwnerInUse && save.key === root.draftKeyInUse
+                            && save.revision === root.draftEditRevision) bridge.saveDraftFor(save.key, save.text)
+                }
             }
 
             Timer {
@@ -1067,8 +1090,8 @@ ShellRoot {
                     if (!bridge.ready) {
                         root.invalidateComposerPickers()
                     } else {
-                        root.draftKeyInUse = bridge.draftKey
-                        root.restoreCurrentDraft()
+                        if (!root.changingDraft && !root.draftKeyInUse) root.handleDraftKeyChanged()
+                        else if (!root.changingDraft && root.draftOwnerInUse === bridge.draftOwner) root.restoreCurrentDraft()
                     }
                 }
                 function onActiveChanged() {
@@ -1647,6 +1670,8 @@ ShellRoot {
                                     onDraftEdited: text => {
                                         if (root.changingDraft) return
                                         root.rememberDraft(text)
+                                        draftTimer.pending = { owner: root.draftOwnerInUse, key: root.draftKeyInUse,
+                                            revision: root.draftEditRevision, text: text }
                                         draftTimer.restart()
                                     }
                                 }

@@ -12,6 +12,7 @@ Item {
     readonly property string testMode: String(Quickshell.env("QT_WEBUI_THEME_MODE") || "normal")
     readonly property bool remediationOnly: testMode === "remediation"
     readonly property bool recoveryOnly: testMode === "recovery"
+    readonly property bool draftOwnershipOnly: testMode === "draft-ownership"
     readonly property bool orderOnly: testMode === "order-only"
     RemediationChecks { id: remediation; driver: driver; bridge: driver.bridge; shell: driver.shell }
     readonly property bool screenshotOnly: testMode === "screenshot"
@@ -466,6 +467,79 @@ Item {
         const removed = list.deferredSessionOrder([initialRows[0]], stillHeld.committedByKey, now + 5 * minuteMs)
         if (Object.keys(removed.committedByKey).length !== 1) return fail("session ordering state pruning")
         return true
+    }
+
+    function startDraftOwnershipChecks() {
+        phase = "draft-ownership"
+        waitFor("saved draft owner", () => bridge.ready && bridge.draftKey.length > 0
+                && bridge.draftKey === bridge.tabs.find(tab => tab.id === bridge.activeTabId)?.draftFile
+                && bridge.tabs.find(tab => tab.id === bridge.activeTabId)?.mutating === false && waitTicks >= 8, () => {
+            const savedKey = bridge.draftKey
+            shell.composerItem.setText("saved edit just before close")
+            bridge.closeTab(bridge.activeTabId, false, response => {
+                if (!response.ok) return fail("saved tab close refused: " + JSON.stringify(response.error))
+                bridge.request("draft_get", { key: savedKey }, draft => {
+                    if (!draft.ok || draft.data.text !== "saved edit just before close") return fail("saved tab close lost pending edit")
+                    log("QT_WEBUI_DRAFT_SAVED_CLOSE")
+                    openFirstUnsavedDraft()
+                })
+            })
+        })
+    }
+
+    function openFirstUnsavedDraft() {
+        bridge.openTab("", "", response => {
+            if (!response.ok) return fail("first unsaved tab refused")
+            waitFor("first unsaved ready", () => bridge.ready && bridge.draftKey.startsWith("draft:"), () => {
+                const firstTab = bridge.activeTabId
+                const firstKey = bridge.draftKey
+                shell.composerItem.setText("unsaved A")
+                bridge.openTab("", "", second => {
+                    if (!second.ok) return fail("second unsaved tab refused")
+                    waitFor("second unsaved ready", () => bridge.ready && bridge.draftKey.startsWith("draft:")
+                            && bridge.activeTabId !== firstTab, () => {
+                        const secondKey = bridge.draftKey
+                        if (firstKey === secondKey) return fail("two unsaved tabs shared a draft owner")
+                        shell.composerItem.setText("unsaved B")
+                        bridge.selectTab(firstTab, selected => {
+                            if (!selected.ok) return fail("first unsaved selection refused")
+                            waitFor("first unsaved draft restored", () => shell.composerItem.text === "unsaved A", () => {
+                                bridge.selectTab(second.data.tab.id, back => {
+                                    if (!back.ok) return fail("second unsaved selection refused")
+                                    waitFor("second unsaved draft restored", () => shell.composerItem.text === "unsaved B", () => {
+                                        log("QT_WEBUI_DRAFT_TWO_UNSAVED")
+                                        promoteInactiveDraft(firstTab, firstKey, secondKey)
+                                    })
+                                })
+                            })
+                        })
+                    })
+                })
+            })
+        })
+    }
+
+    function promoteInactiveDraft(firstTab, firstKey, secondKey) {
+        const first = bridge.tabs.find(tab => tab.id === firstTab)
+        if (!first || !first.sessionFile || first.draftFile) return fail("inactive tab not temporary")
+        const file = first.sessionFile
+        bridge.request("draft_set", { key: file, text: "older file draft" }, saved => {
+            if (!saved.ok) return fail("older file draft refused")
+            bridge.request("prompt", { tab: firstTab, message: "__QT_WEBUI_SAVE_FIRST__", mode: "send" }, response => {
+                if (!response.ok) return fail("inactive save prompt refused")
+                waitFor("inactive filename promotion", () => bridge.tabs.find(tab => tab.id === firstTab)?.draftFile === file, () => {
+                    bridge.request("draft_get", { key: file }, draft => {
+                        if (!draft.ok || draft.data.text !== "unsaved A" || shell.composerItem.text !== "unsaved B"
+                                || bridge.draftKey !== secondKey) return fail("inactive promotion discarded or moved a draft")
+                        bridge.request("draft_get", { key: firstKey }, old => {
+                            if (!old.ok || old.data.text !== "") return fail("inactive promotion retained a duplicate temporary draft")
+                            log("QT_WEBUI_DRAFT_INACTIVE_PROMOTION")
+                            schedule("quit")
+                        })
+                    })
+                })
+            }, false)
+        })
     }
 
     function startRecoveryChecks() {
@@ -1098,6 +1172,7 @@ Item {
                 driver.piReadyOnce = true
                 driver.log("QT_WEBUI_SMOKE_READY")
                 if (driver.remediationOnly) remediation.run()
+                else if (driver.draftOwnershipOnly) driver.startDraftOwnershipChecks()
                 else if (driver.recoveryOnly) driver.startRecoveryChecks()
                 else if (driver.screenshotOnly) driver.startScreenshot()
                 else if (driver.orderOnly) driver.startModels()

@@ -10,7 +10,7 @@ import { renderMarkdown } from "../lib/backend/markdown.mjs";
 import { normalizeCommands } from "../lib/backend/pi-session.mjs";
 import { LIMITS, REQUEST_TYPES, validateRequest } from "../lib/backend/protocol.mjs";
 import { createSequenceStore, validateSequences } from "../lib/backend/sequences.mjs";
-import { createStateStore, validateState } from "../lib/backend/state.mjs";
+import { createStateStore, temporaryDraftKey, validateState } from "../lib/backend/state.mjs";
 import { confinePath, createWorkspaceIndex, resolveInsideWorkspace } from "../lib/backend/workspace.mjs";
 import { startBackend } from "./helpers/backend-client.mjs";
 
@@ -138,6 +138,42 @@ test("state store keeps bounded drafts, recents, and tabs under XDG_STATE_HOME w
   await writeFile(store.path, `{"drafts":{},"pad":"${"x".repeat(LIMITS.maxStateFileBytes)}"}`);
   assert.match(store.read().problems[0], /exceeds/);
   assert.deepEqual(validateState(null).value.tabs, []);
+});
+
+test("temporary draft owners stay distinct, restore, migrate once, and expire on tab close", async (t) => {
+  const home = await temporaryWorkspace(t);
+  const store = createStateStore({ env: { XDG_STATE_HOME: home } });
+  const a = "12886aa2-d379-45d6-921b-e760f139b002";
+  const b = "12886aa2-d379-45d6-921b-e760f139b003";
+  const keyA = temporaryDraftKey(a);
+  const keyB = temporaryDraftKey(b);
+  const tabs = [{ cwd: "/w", sessionFile: "", name: "A", draftId: a }, { cwd: "/w", sessionFile: "", name: "B", draftId: b }];
+  store.saveTabs(tabs, 0);
+  store.setDraft("/w", "legacy");
+  store.setDraft(keyA, "A pending");
+  store.adoptLegacyDraft("/w", keyA);
+  assert.equal(store.getDraft(keyA), "A pending", "an existing temporary draft wins over the legacy key");
+  assert.equal(store.getDraft("/w"), "legacy", "an occupied tab cannot consume the legacy draft");
+  store.adoptLegacyDraft("/w", keyB);
+  assert.equal(store.getDraft(keyB), "legacy", "the next empty tab adopts the legacy text");
+  assert.equal(store.getDraft("/w"), "", "legacy workspace text goes to at most one tab");
+  store.setDraft(keyB, "B pending");
+  store.setDraft(keyA, "A pending");
+  assert.deepEqual(store.read().value.tabs.map(tab => tab.draftId), [a, b], "owners survive state reload");
+  assert.equal(store.getDraft(keyA), "A pending");
+  assert.equal(store.getDraft(keyB), "B pending");
+  store.setDraft("/saved.jsonl", "older file draft");
+  store.moveDraft(keyA, "/saved.jsonl");
+  assert.equal(store.getDraft(keyA), "");
+  assert.equal(store.getDraft("/saved.jsonl"), "A pending", "the newly created file takes the tab's unsent text on collision");
+  store.saveTabs([{ ...tabs[0], sessionFile: "/saved.jsonl" }], 0);
+  assert.equal(store.getDraft(keyB), "", "closed tab's temporary draft is removed");
+  assert.equal(store.getDraft("/saved.jsonl"), "A pending", "saved-file keys remain readable");
+  assert.equal(store.setDraft("/saved.jsonl", ""), "", "an intentional clear removes the draft");
+  const invalid = validateState({ tabs: [{ ...tabs[0], draftId: "bad" }, tabs[0], tabs[0]] }).value.tabs;
+  assert.equal(invalid[0].draftId, undefined);
+  assert.equal(invalid[1].draftId, a);
+  assert.equal(invalid[2].draftId, undefined, "duplicate owners cannot be restored");
 });
 
 test("sequence store validates, bounds, orders, and removes sequences", async (t) => {
@@ -307,6 +343,36 @@ async function readyBackend(t, options = {}) {
   await backend.waitForEvent("pi.status", (event) => event.statusKind === "ready");
   return backend;
 }
+
+test("backend keeps two unsaved same-workspace draft keys separate through restart and close", async (t) => {
+  const cwd = await temporaryWorkspace(t);
+  const env = { XDG_STATE_HOME: path.join(cwd, ".state") };
+  const backend = await readyBackend(t, { cwd, env });
+  const first = (await backend.send("tabs_list")).data.tabs[0];
+  const second = (await backend.send("tab_open", { cwd })).data.tab;
+  const a = temporaryDraftKey(first.draftId);
+  const b = temporaryDraftKey(second.draftId);
+  assert.notEqual(a, b);
+  assert.equal((await backend.send("draft_set", { key: a, text: "first" })).ok, true);
+  assert.equal((await backend.send("draft_set", { key: b, text: "second" })).ok, true);
+  assert.equal((await backend.send("draft_get", { key: a })).data.text, "first");
+  assert.equal((await backend.send("draft_get", { key: b })).data.text, "second");
+  await backend.send("shutdown");
+  await backend.exitPromise;
+  const restarted = await readyBackend(t, { cwd, env });
+  const restored = (await restarted.send("tabs_list")).data.tabs;
+  assert.deepEqual(restored.map(tab => tab.draftId), [first.draftId, second.draftId]);
+  assert.equal((await restarted.send("draft_get", { key: a })).data.text, "first");
+  assert.equal((await restarted.send("draft_get", { key: b })).data.text, "second");
+  await restarted.waitForEvent("pi.status", event => event.tab === restored[1].id && event.ready === true);
+  assert.equal((await restarted.send("session_new", { tab: restored[1].id })).ok, true);
+  assert.equal((await restarted.send("draft_set", { key: b, text: "second flush" })).ok, true,
+    "a retired owner can finish its in-flight replacement flush");
+  assert.equal((await restarted.send("tab_close", { tab: restored[1].id })).ok, true);
+  assert.equal((await restarted.send("draft_set", { key: b, text: "late save" })).error.code, "stale_request");
+  assert.equal((await restarted.send("draft_get", { key: b })).data.text, "");
+  assert.equal((await restarted.send("draft_get", { key: a })).data.text, "first");
+});
 
 test("backend serves commands, drafts, sequences, completion, and attachments over the protocol", async (t) => {
   const root = await temporaryWorkspace(t);

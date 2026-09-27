@@ -54,7 +54,7 @@ test("draft settlement clears only the submitted revision, never a newer edit", 
   const saves = [];
   const editor = { text: "original", clearAndFocus() { this.text = ""; } };
   const bridge = { activeTabId: "A", saveDraftFor(...args) { saves.push(args); }, sendPrompt(_text, _mode, callback) { settle = callback; return true; } };
-  const s = await qmlFunctions("shell.qml", { bridge, composer: editor, changingDraft: false, draftRecords: {}, draftKeyInUse: "key-A", draftRestoreGeneration: 0, draftTimer: { stop() {} } });
+  const s = await qmlFunctions("shell.qml", { bridge, composer: editor, changingDraft: false, draftRecords: {}, draftKeyInUse: "key-A", draftEditRevision: 0, draftRestoreGeneration: 0, draftTimer: { stop() {} } });
   s.submitComposer("original", "send");
   editor.text = "newer";
   s.rememberDraft(editor.text);

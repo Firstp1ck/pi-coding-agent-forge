@@ -73,15 +73,22 @@ export function sessionSettlementKey(sessionIdentity) {
   return createHash("sha256").update(path.resolve(sessionIdentity)).digest("hex");
 }
 
+export const temporaryDraftKey = (id) => `draft:${id}`;
+const validDraftId = (id) => typeof id === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(id);
+
 function validateTabs(raw) {
   if (!Array.isArray(raw)) return [];
   const tabs = [];
+  const draftIds = new Set();
   for (const entry of raw) {
     if (!entry || typeof entry !== "object" || typeof entry.cwd !== "string" || entry.cwd.length === 0 || entry.cwd.length > LIMITS.maxStateKeyCharacters) continue;
     const sessionFile = typeof entry.sessionFile === "string" && entry.sessionFile.length <= LIMITS.maxStateKeyCharacters ? entry.sessionFile : "";
     const pendingResume = !sessionFile && typeof entry.pendingResume === "string" && entry.pendingResume.length <= LIMITS.maxStateKeyCharacters ? entry.pendingResume : "";
+    const draftId = validDraftId(entry.draftId) && !draftIds.has(entry.draftId) ? entry.draftId : "";
+    if (draftId) draftIds.add(draftId);
     tabs.push({
       cwd: entry.cwd,
+      ...(draftId ? { draftId } : {}),
       sessionFile,
       name: typeof entry.name === "string" ? entry.name.slice(0, LIMITS.maxRuntimeInfoCharacters) : "",
       ...(pendingResume ? { pendingResume } : {}),
@@ -128,6 +135,27 @@ export function createStateStore({ env = process.env, directory = stateDirectory
     }).value.drafts[key]?.text ?? "";
   }
 
+  function moveDraft(from, to) {
+    if (from === to) return;
+    store.update((state) => {
+      if (state.drafts[from]) {
+        state.drafts[to] = state.drafts[from];
+        delete state.drafts[from];
+      }
+      return state;
+    });
+  }
+
+  function adoptLegacyDraft(workspace, key) {
+    store.update((state) => {
+      if (state.drafts[workspace] && !state.drafts[key]) {
+        state.drafts[key] = state.drafts[workspace];
+        delete state.drafts[workspace];
+      }
+      return state;
+    });
+  }
+
   function pushRecent(listName, entry) {
     return store.update((state) => {
       state[listName] = [entry, ...state[listName].filter((item) => item !== entry)].slice(0, LIMITS.maxRecentEntries);
@@ -143,10 +171,12 @@ export function createStateStore({ env = process.env, directory = stateDirectory
     }).value.pinnedDirectories;
   }
 
-  function saveTabs(tabs, activeTab) {
+  function saveTabs(tabs, activeTab, retainedDraftIds = []) {
     return store.update((state) => {
       state.tabs = tabs;
       state.activeTab = activeTab;
+      const live = new Set([...tabs.map(tab => temporaryDraftKey(tab.draftId)), ...retainedDraftIds.map(temporaryDraftKey)]);
+      for (const key of Object.keys(state.drafts)) if (key.startsWith("draft:") && !live.has(key)) delete state.drafts[key];
       return state;
     }).value;
   }
@@ -211,6 +241,8 @@ export function createStateStore({ env = process.env, directory = stateDirectory
     update: store.update,
     getDraft,
     setDraft,
+    moveDraft,
+    adoptLegacyDraft,
     pushRecent,
     togglePinned,
     saveTabs,

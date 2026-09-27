@@ -5,6 +5,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { LIMITS, PROTOCOL_VERSION, REQUEST_TYPES } from "../lib/backend/protocol.mjs";
 import { SEMANTIC_PALETTE_ROLES } from "../lib/backend/themes.mjs";
+import { qmlFunctions } from "./helpers/qml-functions.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const qmlRoot = path.join(root, "qml");
@@ -924,10 +925,13 @@ test("composer completion, attachments, drafts, and sequences never send by acci
   assert.match(textEditDialog, /function save\(\)[\s\S]*if \(answered \|\| overLimit \|\| submitting \|\| unknown\) return false/);
   assert.doesNotMatch(functionBody(textEditDialog, "save"), /close\(\)/);
 
-  // Drafts: saved after typing stops, restored only into an empty editor for the same key.
-  assert.match(bridge, /readonly property string draftKey:\s*sessionFile\.length > 0 \? sessionFile : workspaceCwd/);
-  assert.match(shell, /Timer\s*\{[\s\S]*id:\s*draftTimer[\s\S]*interval:\s*600[\s\S]*bridge\.saveDraftFor\(root\.draftKeyInUse, composer\.text\)/);
-  assert.match(functionBody(shell, "restoreDraft"), /key !== bridge\.draftKey \|\| text\.length === 0 \|\| composer\.text\.trim\(\)\.length > 0\) return/);
+  // Drafts: saves and delayed loads keep the owner, key, and edit revision captured at scheduling.
+  assert.match(bridge, /readonly property string draftKey:.*draftFile\.length > 0 \? draftFile : "draft:" \+ draftId/);
+  assert.match(shell, /id:\s*draftTimer[\s\S]*interval:\s*600[\s\S]*save\.owner === root\.draftOwnerInUse[\s\S]*save\.revision === root\.draftEditRevision[\s\S]*saveDraftFor\(save\.key, save\.text\)/);
+  assert.match(functionBody(shell, "restoreDraft"), /owner !== draftOwnerInUse \|\| key !== draftKeyInUse \|\| text\.length === 0 \|\| composer\.text\.length > 0/);
+  assert.match(functionBody(shell, "restoreCurrentDraft"), /generation !== draftRestoreGeneration \|\| revision !== draftEditRevision[\s\S]*owner !== draftOwnerInUse \|\| key !== draftKeyInUse/);
+  assert.match(functionBody(shell, "handleDraftKeyChanged"), /composer\.text\.length > 0\) bridge\.saveDraftFor\(draftKeyInUse, composer\.text\)/);
+  assert.match(functionBody(bridge, "saveDraftFor"), /if \(!response\.ok\) postNotice\("error", "Could not save draft:/);
   assert.match(functionBody(bridge, "saveDraftFor"), /boundedText\(String\(text \|\| ""\), 8192\)/);
   assert.equal(LIMITS.maxDraftCharacters, 8192);
 
@@ -942,6 +946,45 @@ test("composer completion, attachments, drafts, and sequences never send by acci
   assert.equal(LIMITS.maxSequenceEntries, 16);
   assert.match(functionBody(bridge, "runSequence"), /if \(!ready \|\| active\)/);
   assert.match(shell, /SequencesDialog\s*\{[\s\S]*returnFocusItem:\s*composer/);
+});
+
+test("composer replacement, promotion, pending loads, edits, and failed transitions preserve their owner", async () => {
+  const saved = new Map();
+  const loads = [];
+  const bridgeState = { ready: true, activeTabId: "A", draftOwner: "A:one", draftKey: "draft:one", tabs: [{ id: "A" }, { id: "B" }],
+    saveDraftFor(key, text) { saved.set(key, text); }, loadDraft(callback, key) { loads.push({ callback, key }); } };
+  const editor = { text: "", setText(text) { this.text = text; } };
+  const timer = { pending: null, stop() { this.pending = null; } };
+  const s = await qmlFunctions("shell.qml", { bridge: bridgeState, composer: editor, draftTimer: timer,
+    draftOwnerInUse: "", draftKeyInUse: "", draftEditRevision: 0, draftRestoreGeneration: 0,
+    draftRecords: {}, changingDraft: false });
+  const type = text => { editor.text = text; s.rememberDraft(text); timer.pending = { owner: s.draftOwnerInUse,
+    key: s.draftKeyInUse, revision: s.draftEditRevision, text }; };
+  s.commitDraftReplacement();
+  type("A pending");
+  s.beginDraftReplacement();
+  bridgeState.draftOwner = "B:two"; bridgeState.draftKey = "draft:two"; bridgeState.activeTabId = "B";
+  s.commitDraftReplacement();
+  assert.equal(saved.get("draft:one"), "A pending", "replacement flushes the pending debounce to A");
+  loads[0].callback({ ok: true, data: { text: "late A" } });
+  assert.equal(editor.text, "", "late A cannot populate B");
+  type("B newer");
+  loads.at(-1).callback({ ok: true, data: { text: "B stale" } });
+  assert.equal(editor.text, "B newer", "typing during load wins");
+  s.beginDraftReplacement();
+  bridgeState.draftOwner = "A:one"; bridgeState.draftKey = "draft:one"; bridgeState.activeTabId = "A";
+  s.commitDraftReplacement();
+  assert.equal(editor.text, "A pending", "A-to-B-to-A restores the old text exactly");
+  bridgeState.draftKey = "/saved.jsonl";
+  s.handleDraftKeyChanged();
+  assert.equal(editor.text, "A pending", "first filename does not clear the editor");
+  assert.equal(saved.get("/saved.jsonl"), "A pending");
+  s.restoreCurrentDraft();
+  assert.equal(editor.text, "A pending", "same-session refresh leaves the editor alone");
+  // A failed or cancelled replacement emits no sessionReplacing/sessionReplaced signals.
+  assert.equal(s.draftOwnerInUse, "A:one");
+  type("");
+  assert.equal(s.draftRecords["/saved.jsonl"].text, "", "an explicit clear records an empty draft");
 });
 
 test("tabs isolate session state, replay from the backend, confirm busy closes, and worktrees confirm their path", () => {
@@ -959,7 +1002,7 @@ test("tabs isolate session state, replay from the backend, confirm busy closes, 
   assert.match(functionBody(bridge, "enqueueDialog"), /dialogQueue\.some\(entry => entry\.requestId === requestId\)\) return false/, "snapshots never duplicate queued dialogs");
   assert.match(functionBody(bridge, "closeTab"), /"force": force === true/);
   assert.match(functionBody(bridge, "createWorktree"), /"confirmed": true/);
-  assert.match(bridge, /readonly property string draftKey:\s*sessionFile\.length > 0 \? sessionFile : workspaceCwd/);
+  assert.match(bridge, /readonly property string draftOwner:\s*activeTabId \+ ":" \+ draftId/);
   assert.match(bridge, /case "tabs\.update":[\s\S]*beginTabSwitch\(event\.activeTab\)/);
   assert.match(bridge, /onExited:[\s\S]*bridge\.tabs = \[\][\s\S]*bridge\.activeTabId = ""/);
   assert.equal(LIMITS.maxTabs, 8);

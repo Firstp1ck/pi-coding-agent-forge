@@ -93,8 +93,11 @@ Scope {
     property bool compacting: false
     property string sessionName: ""
     property string sessionFile: ""
-    // Drafts follow the Pi session file when one exists and the tab's workspace otherwise.
-    readonly property string draftKey: sessionFile.length > 0 ? sessionFile : workspaceCwd
+    property string draftId: ""
+    property string draftFile: ""
+    readonly property string draftOwner: activeTabId + ":" + draftId
+    // A reported but unpersisted runtime filename is not yet a saved-session draft key.
+    readonly property string draftKey: !activeTabId || !draftId ? "" : draftFile.length > 0 ? draftFile : "draft:" + draftId
     property var attachments: []
     property var commands: []
     property bool commandsLoaded: false
@@ -517,8 +520,8 @@ Scope {
         })
     }
 
-    function loadDraft(callback) {
-        const key = draftKey
+    function loadDraft(callback, requestedKey) {
+        const key = requestedKey === undefined ? draftKey : requestedKey
         request("draft_get", { "key": key }, response => {
             if (response.ok) draftLoaded(key, String(response.data.text || ""))
             if (callback) callback(response)
@@ -533,7 +536,9 @@ Scope {
         if (typeof key !== "string" || key.length === 0) return ""
         const fields = { key: key, text: boundedText(String(text || ""), 8192) }
         if (expectedText !== undefined) fields.expectedText = expectedText
-        return request("draft_set", fields, () => {})
+        return request("draft_set", fields, response => {
+            if (!response.ok) postNotice("error", "Could not save draft: " + response.error.message)
+        })
     }
 
     function loadSequences(callback) {
@@ -1034,6 +1039,8 @@ Scope {
         if (tabId === activeTabId) return
         tabSwitching()
         activeTabId = tabId
+        draftId = tabById(tabId) ? String(tabById(tabId).draftId || "") : ""
+        draftFile = tabById(tabId) ? String(tabById(tabId).draftFile || "") : ""
         resetTabState()
         usage = null
         tabSwitched(tabId)
@@ -1042,6 +1049,10 @@ Scope {
     function applyTabSummary(tab, refreshOnReady = true) {
         if (!tab) return
         const wasReady = ready
+        if (!tab.mutating) {
+            if (tab.draftId && draftId !== tab.draftId) draftId = String(tab.draftId)
+            draftFile = String(tab.draftFile || "")
+        }
         ready = tab.ready === true
         canRecover = tab.canRecover === true
         statusKind = String(tab.statusKind || "stopped")
@@ -1748,6 +1759,8 @@ Scope {
         case "session.replaced":
             if (event.rebind) break
             sessionReplacing()
+            draftId = String(event.draftId || "")
+            draftFile = String(event.sessionFile || "")
             sessionName = ""
             sessionFile = String(event.sessionFile || "")
             sessionReplaced()

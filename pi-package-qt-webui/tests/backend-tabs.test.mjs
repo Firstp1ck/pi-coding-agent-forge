@@ -599,7 +599,8 @@ test("tabs run isolated sessions, badge inactive tabs, replay transcripts on sel
   assert.deepEqual({ name: renamed.data.tab.name, sessionRenamed: renamed.data.sessionRenamed }, { name: "Renamed tab", sessionRenamed: true });
   await backend.waitForEvent("pi.runtime", (event) => event.tab === firstTab && event.sessionName === "Renamed tab");
   const saved = JSON.parse(await readFile(path.join(stateHome, "qt-webui", "state.json"), "utf8"));
-  assert.deepEqual(saved.tabs, [{ cwd: await realpath(first), sessionFile: "", name: "Renamed tab" }], "the fixture's unsaved runtime filename is not a durable resume target");
+  assert.deepEqual(saved.tabs.map(({ draftId, ...tab }) => tab), [{ cwd: await realpath(first), sessionFile: "", name: "Renamed tab" }], "the fixture's unsaved runtime filename is not a durable resume target");
+  assert.equal(saved.tabs[0].draftId, reselected.data.tab.draftId, "the unsaved owner is saved with the tab");
   const lastClosed = await backend.send("tab_close", {});
   assert.equal(lastClosed.data.closed, firstTab);
   const emptyTabs = (await backend.send("tabs_list")).data;
@@ -848,7 +849,8 @@ test("persisted sessions can be listed, resumed with history and an interruption
   const backend = await readyBackend(t, { cwd, env: { PI_CODING_AGENT_DIR: agentDir } });
   const listed = await backend.send("sessions_list");
   assert.deepEqual(listed.data.sessions.map((session) => [session.id, session.name, session.messageCount]).sort(), [["cancel-me", "", 0], ["interrupted", "", 1], ["resume-me", "Resumable", 1]]);
-  assert.equal(listed.data.current, "/tmp/fixture-session.jsonl");
+  assert.equal(path.dirname(listed.data.current), backend.temporary);
+  assert.match(path.basename(listed.data.current), /^fixture-[0-9]+\.jsonl$/);
 
   const resumePath = path.join(directory, "one_resume-me.jsonl");
   const before = backend.events.length;
@@ -957,7 +959,9 @@ test("catalog-opened target survives exit before its first switch, explicit rest
   process.kill(opened.data.session.pid, "SIGKILL");
   await backend.waitForEvent("pi.exit", event => event.tab === id);
   await waitForAsync(async () => (await backend.send("tabs_list")).data.tabs.find(tab => tab.id === id).mutating === false, "failed switch settlement");
-  assert.deepEqual(JSON.parse(await readFile(stateFile, "utf8")).tabs.find(tab => tab.cwd === other),
+  const pendingTab = JSON.parse(await readFile(stateFile, "utf8")).tabs.find(tab => tab.cwd === other);
+  assert.equal(pendingTab.draftId, opened.data.tab.draftId);
+  assert.deepEqual((( { draftId, ...tab }) => tab)(pendingTab),
     { cwd: other, name: "", sessionFile: "", pendingResume: sessionPath });
   assert.equal((await backend.send("tabs_list")).data.tabs.find(tab => tab.id === id).sessionFile, sessionPath);
   const before = (await backend.readCapture()).length;

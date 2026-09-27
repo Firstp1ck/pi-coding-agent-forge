@@ -159,7 +159,7 @@ function quickshellUnavailableReason() {
   return null;
 }
 
-export function runLiveSmoke({ callerCwd, capturePath, statePath, configHome, extraEnv = {}, timeoutMs = 40_000, orderOnly = false, themeOnly = false, remediation = false, recovery = false }) {
+export function runLiveSmoke({ callerCwd, capturePath, statePath, configHome, extraEnv = {}, timeoutMs = 40_000, orderOnly = false, themeOnly = false, remediation = false, recovery = false, draftOwnership = false }) {
   const program = `
     import { launchQtWebUi } from ${JSON.stringify(launcherUrl)};
     const code = await launchQtWebUi({
@@ -173,7 +173,7 @@ export function runLiveSmoke({ callerCwd, capturePath, statePath, configHome, ex
         QT_WEBUI_SMOKE_MODE: "1",
         QT_WEBUI_SMOKE_CAPTURE_PATH: ${JSON.stringify(capturePath)},
         QT_WEBUI_SMOKE_STATE_PATH: ${JSON.stringify(statePath)},
-        QT_WEBUI_THEME_MODE: ${JSON.stringify(recovery ? "recovery" : remediation ? "remediation" : themeOnly ? "theme-only" : orderOnly ? "order-only" : "normal")},
+        QT_WEBUI_THEME_MODE: ${JSON.stringify(draftOwnership ? "draft-ownership" : recovery ? "recovery" : remediation ? "remediation" : themeOnly ? "theme-only" : orderOnly ? "order-only" : "normal")},
         QT_WEBUI_PI_STARTUP_TIMEOUT_MS: "1500",
         QT_WEBUI_PI_REQUEST_TIMEOUT_MS: "10000",
       },
@@ -414,6 +414,26 @@ test("real Quickshell preserves prompt, draft, and dialog intent under delayed s
   for (const name of ["PROMPTS", "DRAFTS", "DIALOGS", "ATTACHMENTS", "SELECTION", "SEARCH"]) assert.match(output, new RegExp(`QT_WEBUI_REMEDIATION_${name}`), output);
   const commands = (await readFile(workspace.capturePath, "utf8")).trim().split("\n").map(JSON.parse);
   assert.equal(commands.filter(command => command.message === "__QT_WEBUI_ACCEPT_DELAY__").length, 2, "timeouts never resend");
+});
+
+test("real Quickshell keeps saved close, unsaved tab, and inactive promotion drafts separate", { timeout: 40_000 }, async (t) => {
+  const skipReason = waylandUnavailableReason() ?? quickshellUnavailableReason();
+  if (skipReason) return t.skip(skipReason);
+  const workspace = await smokeWorkspace(t);
+  const savedFile = path.join(sessionDirectoryFor(workspace.callerCwd, { PI_CODING_AGENT_DIR: path.join(workspace.temporary, "agent") }), "2026-08-26_resume-me.jsonl");
+  const directory = path.join(workspace.temporary, "state", "qt-webui");
+  await mkdir(directory, { recursive: true });
+  await writeFile(path.join(directory, "state.json"), JSON.stringify({ tabs: [{ cwd: workspace.callerCwd, sessionFile: savedFile, name: "" }], activeTab: 0 }));
+  const result = await runLiveSmoke({ ...workspace, draftOwnership: true,
+    extraEnv: { QT_WEBUI_FIXTURE_INITIAL_SESSION_DIRECTORY: workspace.temporary } });
+  const output = `${result.stdout}\n${result.stderr}`;
+  assert.equal(result.code, 0, output);
+  assert.doesNotMatch(output, /QT_WEBUI_SMOKE_FAILURE|TypeError:|ReferenceError:|Cannot assign/, output);
+  for (const marker of ["QT_WEBUI_DRAFT_SAVED_CLOSE", "QT_WEBUI_DRAFT_TWO_UNSAVED", "QT_WEBUI_DRAFT_INACTIVE_PROMOTION", "QT_WEBUI_SMOKE_COMPLETE"]) {
+    assert.match(output, new RegExp(marker), output);
+  }
+  const state = JSON.parse(await readFile(path.join(directory, "state.json"), "utf8"));
+  assert.equal(state.drafts[savedFile]?.text, "saved edit just before close");
 });
 
 test("real bridge offers switch and new session when a resume file is missing", { timeout: 40_000 }, async (t) => {

@@ -5,6 +5,7 @@
 import { spawn } from "node:child_process";
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { StringDecoder } from "node:string_decoder";
+import path from "node:path";
 
 const capturePath = process.env.QT_WEBUI_SMOKE_CAPTURE_PATH;
 const statePath = process.env.QT_WEBUI_SMOKE_STATE_PATH;
@@ -30,7 +31,8 @@ let currentModel = MODELS[0];
 let currentThinkingLevel = "high";
 let compacting = false;
 let sessionSerial = 0;
-let currentSessionFile = process.env.QT_WEBUI_FIXTURE_INITIAL_SESSION_FILE || "/tmp/fixture-session.jsonl";
+let currentSessionFile = process.env.QT_WEBUI_FIXTURE_INITIAL_SESSION_FILE
+  || path.join(process.env.QT_WEBUI_FIXTURE_INITIAL_SESSION_DIRECTORY || (capturePath ? path.dirname(capturePath) : "/tmp"), `fixture-${process.pid}.jsonl`);
 let currentSessionName = "Fixture session";
 let helperSession = { tools: null, skills: null, sampling: {} };
 let helperEffective = { tools: null, skills: null, sampling: {} };
