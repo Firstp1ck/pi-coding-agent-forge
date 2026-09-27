@@ -51,7 +51,7 @@ AppDialog {
         font.pixelSize: 12
     }
 
-    RowLayout {
+    actions: RowLayout {
         Layout.fillWidth: true
         spacing: 8
 

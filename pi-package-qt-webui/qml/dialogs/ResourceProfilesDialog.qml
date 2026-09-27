@@ -366,7 +366,6 @@ AppDialog {
             theme: dialog.theme
             text: "Effective " + dialog.section + ": " + dialog.listSummary(dialog.effectiveList(dialog.section)) + " · source: " + dialog.effectiveSource(dialog.section)
             wrapMode: TextEdit.Wrap
-            maximumLineCount: 3
             color: dialog.theme.foreground
             font.pixelSize: 12
             Accessible.role: Accessible.StaticText
@@ -405,7 +404,7 @@ AppDialog {
         ListView {
             id: resourceList
             Layout.fillWidth: true
-            Layout.preferredHeight: Math.min(contentHeight, 220)
+            Layout.preferredHeight: Math.min(contentHeight, 220, Math.max(80, dialog.bodyViewportHeight * 0.65))
             model: dialog.visibleInventory
             clip: true
             keyNavigationEnabled: true
@@ -514,7 +513,6 @@ AppDialog {
                             + (samplingRow.supported ? "" : " · " + dialog.samplingReason(samplingRow.modelData))
                     }
                     wrapMode: TextEdit.Wrap
-                    maximumLineCount: 3
                     color: samplingRow.supported ? dialog.theme.muted : dialog.theme.warningPanelForeground
                     font.pixelSize: 10
                     Accessible.role: Accessible.StaticText
@@ -533,7 +531,7 @@ AppDialog {
         }
     }
 
-    RowLayout {
+    actions: RowLayout {
         Layout.fillWidth: true
         spacing: 8
         Item { Layout.fillWidth: true }

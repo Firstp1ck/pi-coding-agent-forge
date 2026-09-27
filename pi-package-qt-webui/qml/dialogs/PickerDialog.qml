@@ -136,7 +136,7 @@ AppDialog {
     ListView {
         id: optionList
         Layout.fillWidth: true
-        Layout.preferredHeight: Math.min(contentHeight, 320)
+        Layout.preferredHeight: Math.min(contentHeight, 320, Math.max(80, dialog.bodyViewportHeight * 0.65))
         visible: dialog.visibleCount > 0
         model: dialog.visibleItems
         clip: true
@@ -187,6 +187,7 @@ AppDialog {
                 ColumnLayout {
                     id: optionColumn
                     Layout.fillWidth: true
+                    Layout.minimumWidth: 0
                     spacing: dialog.theme.spaceXxs / 2
 
                     RowLayout {
@@ -207,6 +208,8 @@ AppDialog {
                             Layout.fillWidth: true
                             theme: dialog.theme
                             text: String(optionRow.modelData.label || "")
+                            Layout.minimumWidth: 0
+                            wrapMode: TextEdit.Wrap
                             color: optionRow.selected ? dialog.theme.selectionForeground : dialog.theme.foreground
                             font.pixelSize: dialog.theme.typeBody + 1
                             font.bold: optionRow.current
@@ -219,6 +222,8 @@ AppDialog {
                         visible: String(optionRow.modelData.detail || "").length > 0
                         theme: dialog.theme
                         text: String(optionRow.modelData.detail || "")
+                        Layout.minimumWidth: 0
+                        wrapMode: TextEdit.Wrap
                         color: dialog.theme.muted
                         font.pixelSize: dialog.theme.typeSmall
                         onTapped: optionRow.activateRow()
@@ -248,7 +253,7 @@ AppDialog {
         }
     }
 
-    RowLayout {
+    actions: RowLayout {
         Layout.fillWidth: true
         spacing: 8
 

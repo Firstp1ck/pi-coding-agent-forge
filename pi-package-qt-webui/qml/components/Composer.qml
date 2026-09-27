@@ -11,6 +11,7 @@ Rectangle {
 
     required property QtObject theme
     property alias text: prompt.text
+    readonly property Item runActionButton: primaryButton
     property bool active: false
     property bool ready: false
     property bool processRunning: false
@@ -28,6 +29,7 @@ Rectangle {
     property int completionResultGeneration: -1
     property bool completionLoading: false
     property string busyPromptMode: "steer"
+    readonly property bool compactActions: width < 450
     readonly property bool overLimit: prompt.text.length > maxCharacters
     readonly property bool hasText: prompt.text.trim().length > 0 && !overLimit
     readonly property bool completionOpen: completionLoading || completionPopup.visible
@@ -43,6 +45,7 @@ Rectangle {
     signal completionRequested(string kind, string query, int generation)
     signal draftEdited(string text)
 
+    readonly property real implicitMinimumWidth: Math.max(260, busyPromptActionButton.implicitWidth + primaryButton.implicitWidth + 2 * theme.controlHeight + 2 * theme.spaceXl + 3 * theme.spaceSm)
     implicitHeight: column.implicitHeight + theme.space4Xl
     radius: theme.radiusLarge
     color: theme.composerSurface
@@ -208,6 +211,14 @@ Rectangle {
         event.accepted = true
     }
 
+    function revealAttachment(button) {
+        const view = attachmentViewport.contentItem
+        const top = button.mapToItem(chipFlow, 0, 0).y
+        if (top < view.contentY) view.contentY = top
+        else if (top + button.height > view.contentY + view.height)
+            view.contentY = top + button.height - view.height
+    }
+
     function sizeLabel(bytes) {
         const size = Number(bytes) || 0
         if (size >= 1024 * 1024) return (size / (1024 * 1024)).toFixed(1) + " MiB"
@@ -294,82 +305,95 @@ Rectangle {
             }
         }
 
-        // Attachment chips: name, size, edit for text, remove --------------------------------
-        Flow {
+        // Keep the editor and run actions in view even with the full eight attachments.
+        ScrollView {
+            id: attachmentViewport
             Layout.fillWidth: true
+            Layout.preferredHeight: Math.min(chipFlow.childrenRect.height, composer.theme.controlHeight * 2 + composer.theme.spaceMd)
             visible: composer.attachments.length > 0
-            spacing: composer.theme.spaceSm
-            Accessible.role: Accessible.Grouping
-            Accessible.name: composer.attachments.length + " attachments"
+            clip: true
+            ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
 
-            Repeater {
-                model: composer.attachments
+            Flow {
+                id: chipFlow
+                width: attachmentViewport.availableWidth
+                height: childrenRect.height
+                spacing: composer.theme.spaceSm
+                Accessible.role: Accessible.Grouping
+                Accessible.name: composer.attachments.length + " attachments"
 
-                delegate: Rectangle {
-                    id: chip
-                    required property var modelData
-                    implicitWidth: chipRow.implicitWidth + composer.theme.spaceXl
-                    width: Math.min(implicitWidth, parent ? parent.width : implicitWidth)
-                    implicitHeight: chipRow.implicitHeight + composer.theme.spaceMd
-                    radius: composer.theme.radiusSmall
-                    color: composer.theme.surfaceRaised
-                    border.width: composer.theme.borderWidth
-                    border.color: composer.theme.border
-                    Accessible.role: Accessible.Grouping
-                    Accessible.name: "Attachment " + String(modelData.name) + ", " + String(modelData.kind) + ", " + composer.sizeLabel(modelData.size) + (modelData.edited ? ", edited" : "")
+                Repeater {
+                    model: composer.attachments
 
-                    RowLayout {
-                        id: chipRow
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        anchors.verticalCenter: parent.verticalCenter
-                        anchors.leftMargin: composer.theme.spaceSm
-                        anchors.rightMargin: composer.theme.spaceSm
-                        spacing: composer.theme.spaceSm
+                    delegate: Rectangle {
+                        id: chip
+                        required property var modelData
+                        implicitWidth: chipRow.implicitWidth + composer.theme.spaceXl
+                        width: Math.min(implicitWidth, parent ? parent.width : implicitWidth)
+                        implicitHeight: chipRow.implicitHeight + composer.theme.spaceMd
+                        radius: composer.theme.radiusSmall
+                        color: composer.theme.surfaceRaised
+                        border.width: composer.theme.borderWidth
+                        border.color: composer.theme.border
+                        Accessible.role: Accessible.Grouping
+                        Accessible.name: "Attachment " + String(modelData.name) + ", " + String(modelData.kind) + ", " + composer.sizeLabel(modelData.size) + (modelData.edited ? ", edited" : "")
 
-                        SelectableText {
-                            Layout.fillWidth: true
-                            Layout.minimumWidth: 48
-                            Layout.maximumWidth: 240
-                            theme: composer.theme
-                            text: String(chip.modelData.kind === "image" ? "🖼 " : "📄 ") + String(chip.modelData.name)
-                            color: composer.theme.foreground
-                            font.family: composer.theme.monospaceFamily
-                            font.pixelSize: composer.theme.typeBody
-                        }
+                        RowLayout {
+                            id: chipRow
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.verticalCenter: parent.verticalCenter
+                            anchors.leftMargin: composer.theme.spaceSm
+                            anchors.rightMargin: composer.theme.spaceSm
+                            spacing: composer.theme.spaceSm
 
-                        SelectableText {
-                            Layout.maximumWidth: 76
-                            theme: composer.theme
-                            text: composer.sizeLabel(chip.modelData.size) + (chip.modelData.edited ? " · edited" : "")
-                            color: composer.theme.muted
-                            font.family: composer.theme.monospaceFamily
-                            font.pixelSize: composer.theme.typeSmall
-                        }
+                            SelectableText {
+                                Layout.fillWidth: true
+                                Layout.minimumWidth: 48
+                                Layout.maximumWidth: 240
+                                theme: composer.theme
+                                text: String(chip.modelData.kind === "image" ? "🖼 " : "📄 ") + String(chip.modelData.name)
+                                color: composer.theme.foreground
+                                font.family: composer.theme.monospaceFamily
+                                font.pixelSize: composer.theme.typeBody
+                            }
 
-                        AppButton {
-                            visible: chip.modelData.kind === "text"
-                            enabled: composer.lockedAttachmentIds.indexOf(String(chip.modelData.id)) === -1
-                            theme: composer.theme
-                            variant: "ghost"
-                            text: "Edit"
-                            accessibleName: "Edit attachment " + String(chip.modelData.name)
-                            padding: 2
-                            leftPadding: 6
-                            rightPadding: 6
-                            onClicked: composer.attachmentEditRequested(String(chip.modelData.id))
-                        }
+                            SelectableText {
+                                visible: !composer.compactActions
+                                Layout.maximumWidth: 76
+                                theme: composer.theme
+                                text: composer.sizeLabel(chip.modelData.size) + (chip.modelData.edited ? " · edited" : "")
+                                color: composer.theme.muted
+                                font.family: composer.theme.monospaceFamily
+                                font.pixelSize: composer.theme.typeSmall
+                            }
 
-                        AppButton {
-                            theme: composer.theme
-                            variant: "ghost"
-                            text: "Remove"
-                            enabled: composer.lockedAttachmentIds.indexOf(String(chip.modelData.id)) === -1
-                            accessibleName: "Remove attachment " + String(chip.modelData.name)
-                            padding: 2
-                            leftPadding: 6
-                            rightPadding: 6
-                            onClicked: composer.attachmentRemoveRequested(String(chip.modelData.id))
+                            AppButton {
+                                visible: chip.modelData.kind === "text"
+                                enabled: composer.lockedAttachmentIds.indexOf(String(chip.modelData.id)) === -1
+                                theme: composer.theme
+                                variant: "ghost"
+                                text: "Edit"
+                                accessibleName: "Edit attachment " + String(chip.modelData.name)
+                                padding: 2
+                                leftPadding: 6
+                                rightPadding: 6
+                                onActiveFocusChanged: if (activeFocus) composer.revealAttachment(this)
+                                onClicked: composer.attachmentEditRequested(String(chip.modelData.id))
+                            }
+
+                            AppButton {
+                                theme: composer.theme
+                                variant: "ghost"
+                                text: "Remove"
+                                enabled: composer.lockedAttachmentIds.indexOf(String(chip.modelData.id)) === -1
+                                accessibleName: "Remove attachment " + String(chip.modelData.name)
+                                padding: 2
+                                leftPadding: 6
+                                rightPadding: 6
+                                onActiveFocusChanged: if (activeFocus) composer.revealAttachment(this)
+                                onClicked: composer.attachmentRemoveRequested(String(chip.modelData.id))
+                            }
                         }
                     }
                 }
@@ -383,6 +407,7 @@ Rectangle {
             SelectableText {
                 Layout.fillWidth: true
                 theme: composer.theme
+                wrapMode: TextEdit.Wrap
                 text: composer.overLimit ? "Prompt exceeds " + composer.maxCharacters + " characters"
                     : composer.active ? "Pi is working · Enter " + (composer.busyPromptMode === "steer" ? "steers" : "queues a follow-up") + " · Alt+Enter queues a follow-up · Shift+Enter new line"
                     : composer.ready ? "Enter to send · Shift+Enter for a new line" : "Pi is not available"
@@ -400,9 +425,17 @@ Rectangle {
                 font.pixelSize: composer.theme.typeSmall
             }
 
+        }
+
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: composer.theme.spaceSm
+
+            Item { Layout.fillWidth: true }
+
             AppButton {
                 id: busyPromptModeButton
-                visible: composer.ready
+                visible: composer.ready && !composer.compactActions
                 theme: composer.theme
                 variant: "ghost"
                 text: composer.busyPromptMode === "steer" ? "Steer mode" : "Follow-up mode"
@@ -415,7 +448,7 @@ Rectangle {
 
             AppButton {
                 id: busyPromptActionButton
-                visible: composer.active && composer.ready
+                visible: composer.active && composer.ready && !composer.compactActions
                 theme: composer.theme
                 variant: "primary"
                 text: composer.busyPromptMode === "steer" ? "Steer" : "Queue"
@@ -426,7 +459,7 @@ Rectangle {
 
             AppButton {
                 id: attachButton
-                visible: composer.ready
+                visible: composer.ready && !composer.compactActions
                 theme: composer.theme
                 variant: "ghost"
                 text: "📎"
@@ -437,6 +470,35 @@ Rectangle {
                 leftPadding: composer.theme.spaceXs + 1
                 rightPadding: composer.theme.spaceXs + 1
                 onClicked: composer.attachRequested()
+            }
+
+            AppButton {
+                visible: composer.compactActions && composer.ready
+                theme: composer.theme
+                variant: "ghost"
+                text: "More"
+                accessibleName: "More prompt actions"
+                onClicked: compactMenu.open()
+
+                Menu {
+                    id: compactMenu
+                    MenuItem {
+                        text: composer.busyPromptMode === "steer" ? "Use follow-up mode" : "Use steer mode"
+                        visible: composer.active
+                        onTriggered: composer.toggleBusyPromptMode()
+                    }
+                    MenuItem {
+                        text: composer.busyPromptMode === "steer" ? "Steer prompt" : "Queue follow-up"
+                        visible: composer.active
+                        enabled: composer.hasText
+                        onTriggered: composer.trySend(composer.busyPromptMode)
+                    }
+                    MenuItem {
+                        text: "Attach files"
+                        enabled: composer.attachments.length < composer.maxAttachments
+                        onTriggered: composer.attachRequested()
+                    }
+                }
             }
 
             AppButton {

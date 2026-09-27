@@ -84,25 +84,6 @@ AppDialog {
             }
         }
 
-        Item { Layout.fillWidth: true }
-
-        AppButton {
-            theme: dialog.theme
-            variant: "ghost"
-            text: "Copy"
-            accessibleName: "Copy the listed events"
-            enabled: dialog.count > 0
-            onClicked: dialog.copyAll()
-        }
-
-        AppButton {
-            theme: dialog.theme
-            variant: "ghost"
-            text: "Clear"
-            accessibleName: "Clear the event history"
-            enabled: dialog.bridge.noticeModel.count > 0
-            onClicked: dialog.clearAll()
-        }
     }
 
     TextField {
@@ -135,7 +116,7 @@ AppDialog {
     ListView {
         id: eventList
         Layout.fillWidth: true
-        Layout.preferredHeight: Math.min(contentHeight, 360)
+        Layout.preferredHeight: Math.min(contentHeight, 360, Math.max(80, dialog.bodyViewportHeight * 0.65))
         visible: dialog.count > 0
         model: dialog.entries
         clip: true
@@ -187,7 +168,6 @@ AppDialog {
                         theme: dialog.theme
                         text: eventRow.modelData.message
                         wrapMode: TextEdit.Wrap
-                        maximumLineCount: 4
                         color: eventRow.selected ? dialog.theme.selectionForeground : dialog.theme.foreground
                         font.pixelSize: dialog.theme.typeBody
                         onTapped: eventList.currentIndex = eventRow.index
@@ -217,7 +197,7 @@ AppDialog {
         }
     }
 
-    RowLayout {
+    actions: RowLayout {
         Layout.fillWidth: true
         spacing: 8
 
@@ -227,6 +207,24 @@ AppDialog {
             text: dialog.count + " of " + dialog.bridge.noticeModel.count + " events (last " + dialog.bridge.maxNotices + " are kept)"
             color: dialog.theme.muted
             font.pixelSize: 11
+        }
+
+        AppButton {
+            theme: dialog.theme
+            variant: "ghost"
+            text: "Copy"
+            accessibleName: "Copy the listed events"
+            enabled: dialog.count > 0
+            onClicked: dialog.copyAll()
+        }
+
+        AppButton {
+            theme: dialog.theme
+            variant: "ghost"
+            text: "Clear"
+            accessibleName: "Clear the event history"
+            enabled: dialog.bridge.noticeModel.count > 0
+            onClicked: dialog.clearAll()
         }
 
         AppButton {

@@ -118,7 +118,7 @@ AppDialog {
     ListView {
         id: optionList
         Layout.fillWidth: true
-        Layout.preferredHeight: Math.min(contentHeight, 280)
+        Layout.preferredHeight: Math.min(contentHeight, 280, Math.max(80, dialog.bodyViewportHeight * 0.65))
         visible: dialog.method === "select"
         model: dialog.options
         clip: true
@@ -126,6 +126,7 @@ AppDialog {
         keyNavigationWraps: true
         focus: visible
         activeFocusOnTab: true
+        onCurrentIndexChanged: if (currentIndex >= 0) positionViewAtIndex(currentIndex, ListView.Contain)
         Accessible.role: Accessible.List
         Accessible.name: "Options"
         Keys.onReturnPressed: dialog.selectCurrent()
@@ -236,7 +237,7 @@ AppDialog {
         }
     }
 
-    RowLayout {
+    actions: RowLayout {
         Layout.fillWidth: true
         spacing: 8
 

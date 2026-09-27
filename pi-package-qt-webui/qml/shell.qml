@@ -67,8 +67,11 @@ ShellRoot {
             && rowSearchText(bridge.transcriptModel.get(index)).toLowerCase().indexOf(searchQuery.trim().toLowerCase()) !== -1 ? index : -1
     }
     onSearchCurrentRowChanged: if (searchCurrentRow >= 0) searchAnchorIndex = searchCurrentRow
-    readonly property int workspaceRailMinimumWidth: 148
-    readonly property int workspaceRailMaximumWidth: Math.max(workspaceRailMinimumWidth, contentRoot.width - workspaceRailMinimumWidth)
+    readonly property int workspaceRailMinimumWidth: 200
+    readonly property int workspaceMinimumWidth: composer.implicitMinimumWidth + (contentRoot.width <= 640 ? 20 : 36) + 2 * appTheme.borderWidth
+    readonly property int workspaceRailMaximumWidth: Math.max(workspaceRailMinimumWidth, contentRoot.width - workspaceMinimumWidth)
+    property bool workspaceRailCollapsed: false
+    readonly property bool workspaceRailVisible: !workspaceRailCollapsed && contentRoot.width >= workspaceRailMinimumWidth + workspaceMinimumWidth
     property real workspaceRailRequestedWidth: 0
 
     // Metrics keep the publisher's sections inside the on-demand status overlay.
@@ -90,6 +93,16 @@ ShellRoot {
 
     function clampWorkspaceRailWidth(width) {
         return Math.min(workspaceRailMaximumWidth, Math.max(workspaceRailMinimumWidth, width))
+    }
+
+    function toggleWorkspaceRail() {
+        workspaceRailCollapsed = !workspaceRailCollapsed
+    }
+
+    function smokeGeometryItems() {
+        if (!smokeMode) return null
+        return { window: window, frame: contentRoot, rail: workspaceRail, abort: composer.runActionButton,
+            sessions: recoverySessionsButton, newSession: recoveryNewSessionButton }
     }
 
     function setWorkspaceRailWidth(width) {
@@ -940,8 +953,8 @@ ShellRoot {
         id: window
         visible: true
         title: bridge.windowTitle
-        implicitWidth: 860
-        implicitHeight: 760
+        implicitWidth: root.smokeMode && Quickshell.env("QT_WEBUI_THEME_MODE") === "layout-geometry" ? 560 : 860
+        implicitHeight: root.smokeMode && Quickshell.env("QT_WEBUI_THEME_MODE") === "layout-geometry" ? 520 : 760
         minimumSize: Qt.size(560, 520)
         color: appTheme.windowBackground
         surfaceFormat.opaque: true
@@ -954,6 +967,10 @@ ShellRoot {
             border.width: appTheme.borderWidth
             border.color: appTheme.frameBorder
 
+            Shortcut {
+                sequence: "Ctrl+Alt+B"
+                onActivated: root.toggleWorkspaceRail()
+            }
             Shortcut {
                 sequence: "Ctrl+F"
                 onActivated: root.openSearch()
@@ -1137,6 +1154,7 @@ ShellRoot {
                 // Persistent workspace rail: identity, current status, tabs, and workspace actions.
                 Rectangle {
                     id: workspaceRail
+                    visible: root.workspaceRailVisible
                     Layout.fillHeight: true
                     Layout.preferredWidth: root.workspaceRailRequestedWidth > 0
                         ? root.clampWorkspaceRailWidth(root.workspaceRailRequestedWidth)
@@ -1283,6 +1301,7 @@ ShellRoot {
                             spacing: 4
 
                             AppButton {
+                                id: recoverySessionsButton
                                 visible: bridge.ready || bridge.canRecover
                                 theme: appTheme
                                 variant: "ghost"
@@ -1297,6 +1316,7 @@ ShellRoot {
                             }
 
                             AppButton {
+                                id: recoveryNewSessionButton
                                 visible: bridge.canRecover
                                 theme: appTheme
                                 variant: "ghost"
@@ -1654,6 +1674,7 @@ ShellRoot {
                                 Composer {
                                     id: composer
                                     visible: root.hasActiveSession
+                                    Layout.minimumWidth: implicitMinimumWidth
                                     Layout.fillWidth: true
                                     active: bridge.active
                                     ready: bridge.ready

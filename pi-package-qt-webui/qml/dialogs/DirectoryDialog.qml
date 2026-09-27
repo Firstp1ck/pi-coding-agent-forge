@@ -340,7 +340,7 @@ AppDialog {
     ListView {
         id: entryList
         Layout.fillWidth: true
-        Layout.preferredHeight: Math.min(contentHeight, 260)
+        Layout.preferredHeight: Math.min(contentHeight, 260, Math.max(80, dialog.bodyViewportHeight * 0.65))
         visible: dialog.visibleEntries.length > 0
         model: dialog.visibleEntries
         clip: true
@@ -425,7 +425,7 @@ AppDialog {
         }
     }
 
-    RowLayout {
+    actions: RowLayout {
         Layout.fillWidth: true
         spacing: 8
 

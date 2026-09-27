@@ -80,7 +80,7 @@ AppDialog {
         font.pixelSize: 11
     }
 
-    RowLayout {
+    actions: RowLayout {
         Layout.fillWidth: true
         spacing: 8
 

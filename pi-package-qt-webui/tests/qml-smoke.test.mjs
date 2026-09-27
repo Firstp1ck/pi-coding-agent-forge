@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
-import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, rm, utimes, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -159,7 +159,7 @@ function quickshellUnavailableReason() {
   return null;
 }
 
-export function runLiveSmoke({ callerCwd, capturePath, statePath, configHome, extraEnv = {}, timeoutMs = 40_000, orderOnly = false, themeOnly = false, remediation = false, recovery = false, draftOwnership = false }) {
+export function runLiveSmoke({ callerCwd, capturePath, statePath, configHome, extraEnv = {}, timeoutMs = 40_000, orderOnly = false, themeOnly = false, remediation = false, recovery = false, draftOwnership = false, layoutGeometry = false }) {
   const program = `
     import { launchQtWebUi } from ${JSON.stringify(launcherUrl)};
     const code = await launchQtWebUi({
@@ -173,7 +173,7 @@ export function runLiveSmoke({ callerCwd, capturePath, statePath, configHome, ex
         QT_WEBUI_SMOKE_MODE: "1",
         QT_WEBUI_SMOKE_CAPTURE_PATH: ${JSON.stringify(capturePath)},
         QT_WEBUI_SMOKE_STATE_PATH: ${JSON.stringify(statePath)},
-        QT_WEBUI_THEME_MODE: ${JSON.stringify(draftOwnership ? "draft-ownership" : recovery ? "recovery" : remediation ? "remediation" : themeOnly ? "theme-only" : orderOnly ? "order-only" : "normal")},
+        QT_WEBUI_THEME_MODE: ${JSON.stringify(layoutGeometry ? "layout-geometry" : draftOwnership ? "draft-ownership" : recovery ? "recovery" : remediation ? "remediation" : themeOnly ? "theme-only" : orderOnly ? "order-only" : "normal")},
         QT_WEBUI_PI_STARTUP_TIMEOUT_MS: "1500",
         QT_WEBUI_PI_REQUEST_TIMEOUT_MS: "10000",
       },
@@ -257,11 +257,14 @@ async function smokeWorkspace(t) {
   }
   const sessionsDirectory = sessionDirectoryFor(callerCwd, { PI_CODING_AGENT_DIR: path.join(temporary, "agent") });
   await mkdir(sessionsDirectory, { recursive: true });
-  await writeFile(path.join(sessionsDirectory, "2026-08-26_resume-me.jsonl"), [
-    JSON.stringify({ type: "session", version: 3, id: "resume-me", timestamp: "2026-08-26T00:00:00.000Z", cwd: callerCwd }),
-    JSON.stringify({ type: "session_info", id: "info", parentId: null, timestamp: "2026-08-26T00:00:00.000Z", name: "Resumable smoke session" }),
-    JSON.stringify({ type: "message", id: "m1", parentId: null, timestamp: "2026-08-26T00:00:00.000Z", message: { role: "user", content: "earlier question", timestamp: 1 } }),
+  const sessionTime = new Date(Date.now() - 60 * 60 * 1000);
+  const sessionPath = path.join(sessionsDirectory, "2026-08-26_resume-me.jsonl");
+  await writeFile(sessionPath, [
+    JSON.stringify({ type: "session", version: 3, id: "resume-me", timestamp: sessionTime.toISOString(), cwd: callerCwd }),
+    JSON.stringify({ type: "session_info", id: "info", parentId: null, timestamp: sessionTime.toISOString(), name: "Resumable smoke session" }),
+    JSON.stringify({ type: "message", id: "m1", parentId: null, timestamp: sessionTime.toISOString(), message: { role: "user", content: "earlier question", timestamp: sessionTime.getTime() } }),
   ].join("\n") + "\n");
+  await utimes(sessionPath, sessionTime, sessionTime);
   t.after(() => rm(temporary, { recursive: true, force: true }));
   return { temporary, capturePath, statePath, configHome, callerCwd };
 }
@@ -450,6 +453,24 @@ test("real bridge offers switch and new session when a resume file is missing", 
   assert.equal(commands.filter(command => command.type === "switch_session").length, 3);
   assert.equal(commands.filter(command => command.type === "prompt" && command.message === "__QT_WEBUI_IMMEDIATE__").length, 0);
 });
+
+for (const [label, extraEnv] of [["default scale", {}], ["200% scaling", { QT_SCALE_FACTOR: "2" }]]) {
+  test(`real Quickshell keeps Abort and recovery actions in the 560x520 window at ${label}`, { timeout: 30_000 }, async (t) => {
+    const skipReason = waylandUnavailableReason() ?? quickshellUnavailableReason();
+    if (skipReason) return t.skip(skipReason);
+    const workspace = await smokeWorkspace(t);
+    for (let index = 0; index < 8; index++) {
+      await writeFile(path.join(workspace.callerCwd, `w6-attachment-${index}-${"long-name-".repeat(8)}.txt`), "Geometry fixture\n");
+    }
+    const result = await runLiveSmoke({ ...workspace, layoutGeometry: true, extraEnv, timeoutMs: 20_000 });
+    const combined = `${result.stdout}\n${result.stderr}`;
+    assert.equal(result.signal, null, combined);
+    assert.equal(result.code, 0, combined);
+    assert.match(combined, /QT_WEBUI_SMOKE_REAL_SHELL_GEOMETRY/, combined);
+    assert.match(combined, /QT_WEBUI_SMOKE_COMPLETE/, combined);
+    assert.doesNotMatch(combined, /QT_WEBUI_SMOKE_FAILURE|QQmlApplicationEngine failed|TypeError:|ReferenceError:|Cannot assign/i, combined);
+  });
+}
 
 test("real Quickshell completes the same scenarios at 200% scaling", { timeout: 60_000 }, async (t) => {
   const skipReason = waylandUnavailableReason() ?? quickshellUnavailableReason();

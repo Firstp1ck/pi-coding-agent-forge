@@ -640,6 +640,11 @@ function handle(command) {
     case "__QT_WEBUI_GRANDCHILD__":
       runGrandchild(command);
       break;
+    case "__QT_WEBUI_GEOMETRY_BUSY__":
+      response(command);
+      activeAbort = true;
+      emit({ type: "agent_start" });
+      break;
     case "__QT_WEBUI_SILENT__":
       // Accept the prompt but never answer: exercises client-side timeouts.
       break;

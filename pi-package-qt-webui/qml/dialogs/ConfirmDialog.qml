@@ -59,13 +59,12 @@ AppDialog {
         theme: dialog.theme
         text: dialog.detail
         wrapMode: TextEdit.Wrap
-        maximumLineCount: 8
         color: dialog.theme.foreground
         font.family: dialog.theme.monospaceFamily
         font.pixelSize: 12
     }
 
-    RowLayout {
+    actions: RowLayout {
         Layout.fillWidth: true
         spacing: 8
 
@@ -81,6 +80,7 @@ AppDialog {
 
         AppButton {
             id: confirmButton
+            Layout.maximumWidth: Math.max(80, dialog.width - 2 * dialog.padding - cancelButton.implicitWidth - 16)
             theme: dialog.theme
             variant: dialog.destructive ? "destructive" : "primary"
             text: dialog.confirmLabel

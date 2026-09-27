@@ -127,8 +127,14 @@ test("workspace shell keeps the approved rail, centered conversation, and small-
   const resizeHandle = objectBodyContaining(rail, "Item", "id: workspaceRailResizeHandle");
   const reloadPiButton = objectBodyContaining(shell, "AppButton", "id: reloadPiButton");
   assert.match(shell, /minimumSize:\s*Qt\.size\(560, 520\)/);
-  assert.match(shell, /readonly property int workspaceRailMinimumWidth:\s*148/);
-  assert.match(shell, /readonly property int workspaceRailMaximumWidth:\s*Math\.max\(workspaceRailMinimumWidth, contentRoot\.width - workspaceRailMinimumWidth\)/, "Shift and drag resizing can use the available window width instead of stopping at 320 px");
+  assert.match(shell, /readonly property int workspaceMinimumWidth:\s*composer\.implicitMinimumWidth \+ \(contentRoot\.width <= 640 \? 20 : 36\) \+ 2 \* appTheme\.borderWidth/);
+  assert.match(shell, /readonly property int workspaceRailMaximumWidth:\s*Math\.max\(workspaceRailMinimumWidth, contentRoot\.width - workspaceMinimumWidth\)/);
+  assert.match(shell, /readonly property bool workspaceRailVisible:\s*!workspaceRailCollapsed && contentRoot\.width >= workspaceRailMinimumWidth \+ workspaceMinimumWidth/);
+  assert.match(shell, /sequence:\s*"Ctrl\+Alt\+B"[\s\S]*onActivated:\s*root\.toggleWorkspaceRail\(\)/);
+  assert.match(functionBody(shell, "toggleWorkspaceRail"), /workspaceRailCollapsed = !workspaceRailCollapsed/);
+  assert.match(shell, /implicitWidth:\s*root\.smokeMode && Quickshell\.env\("QT_WEBUI_THEME_MODE"\) === "layout-geometry" \? 560 : 860/);
+  assert.match(shell, /implicitHeight:\s*root\.smokeMode && Quickshell\.env\("QT_WEBUI_THEME_MODE"\) === "layout-geometry" \? 520 : 760/);
+  assert.match(smoke, /function checkLayoutGeometry\(label, railShown\)[\s\S]*mapToItem\(frame, 0, 0\)/);
   assert.match(functionBody(shell, "clampWorkspaceRailWidth"), /Math\.min\(workspaceRailMaximumWidth, Math\.max\(workspaceRailMinimumWidth, width\)\)/);
   assert.match(rail, /Layout\.preferredWidth:\s*root\.workspaceRailRequestedWidth > 0[\s\S]*root\.clampWorkspaceRailWidth\(contentRoot\.width \* 0\.24\)/);
   assert.match(rail, /Layout\.minimumWidth:\s*root\.workspaceRailMinimumWidth/);
@@ -823,8 +829,9 @@ test("dialogs and interactive rows use PlainText selection without accidental ac
     assert.match(source, /SelectableText\s*\{/, `${name} exposes its readable text through the shared PlainText selector`);
     assert.doesNotMatch(source, /textFormat:\s*Text\.(RichText|StyledText|AutoText)/, `${name} does not widen its text format policy`);
   }
-  assert.match(appDialog, /SelectableText\s*\{[\s\S]*text:\s*dialog\.title[\s\S]*wrapMode:\s*TextEdit\.Wrap[\s\S]*maximumLineCount:\s*3/, "dialog titles stay bounded while their source is selectable");
-  assert.match(appDialog, /text:\s*dialog\.message[\s\S]*TextEdit\.Wrap[\s\S]*maximumLineCount:\s*12/, "dialog explanations remain plain selectable text");
+  assert.match(appDialog, /height:\s*Math\.min\(implicitHeight, parent \? Math\.max\(0, parent\.height - theme\.space4Xl - theme\.space2Xl\)/, "dialogs fit the actual overlay height");
+  assert.match(appDialog, /Flickable\s*\{[\s\S]*id:\s*bodyViewport[\s\S]*SelectableText\s*\{[\s\S]*text:\s*dialog\.title[\s\S]*SelectableText\s*\{[\s\S]*text:\s*dialog\.message/, "full plain-text titles and messages scroll in the body");
+  assert.match(appDialog, /property alias actions:\s*actionArea\.data/, "action controls do not scroll with the question");
   assert.match(linkDialog, /TextEdit\s*\{[\s\S]*textFormat:\s*TextEdit\.PlainText[\s\S]*readOnly:\s*true[\s\S]*selectByMouse:\s*true[\s\S]*selectByKeyboard:\s*true/, "link confirmation keeps its full address in a keyboard-copyable native PlainText editor");
   assert.match(composer, /SelectableText\s*\{[\s\S]*chip\.modelData\.name[\s\S]*SelectableText\s*\{[\s\S]*composer\.sizeLabel/, "attachment names and metadata remain readable without changing Edit or Remove actions");
 

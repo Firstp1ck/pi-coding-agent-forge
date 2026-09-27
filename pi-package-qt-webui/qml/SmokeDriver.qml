@@ -12,6 +12,7 @@ Item {
     readonly property string testMode: String(Quickshell.env("QT_WEBUI_THEME_MODE") || "normal")
     readonly property bool remediationOnly: testMode === "remediation"
     readonly property bool recoveryOnly: testMode === "recovery"
+    readonly property bool layoutGeometryOnly: testMode === "layout-geometry"
     readonly property bool draftOwnershipOnly: testMode === "draft-ownership"
     readonly property bool orderOnly: testMode === "order-only"
     RemediationChecks { id: remediation; driver: driver; bridge: driver.bridge; shell: driver.shell }
@@ -471,9 +472,11 @@ Item {
 
     function startDraftOwnershipChecks() {
         phase = "draft-ownership"
-        waitFor("saved draft owner", () => bridge.ready && bridge.draftKey.length > 0
-                && bridge.draftKey === bridge.tabs.find(tab => tab.id === bridge.activeTabId)?.draftFile
-                && bridge.tabs.find(tab => tab.id === bridge.activeTabId)?.mutating === false && waitTicks >= 8, () => {
+        waitFor("saved draft owner", () => {
+            const tab = bridge.tabs.find(entry => entry.id === bridge.activeTabId)
+            return bridge.ready && bridge.draftKey.length > 0 && tab !== undefined
+                && bridge.draftKey === tab.draftFile && tab.mutating === false && waitTicks >= 8
+        }, () => {
             const savedKey = bridge.draftKey
             shell.composerItem.setText("saved edit just before close")
             bridge.closeTab(bridge.activeTabId, false, response => {
@@ -527,7 +530,10 @@ Item {
             if (!saved.ok) return fail("older file draft refused")
             bridge.request("prompt", { tab: firstTab, message: "__QT_WEBUI_SAVE_FIRST__", mode: "send" }, response => {
                 if (!response.ok) return fail("inactive save prompt refused")
-                waitFor("inactive filename promotion", () => bridge.tabs.find(tab => tab.id === firstTab)?.draftFile === file, () => {
+                waitFor("inactive filename promotion", () => {
+                    const tab = bridge.tabs.find(entry => entry.id === firstTab)
+                    return tab !== undefined && tab.draftFile === file
+                }, () => {
                     bridge.request("draft_get", { key: file }, draft => {
                         if (!draft.ok || draft.data.text !== "unsaved A" || shell.composerItem.text !== "unsaved B"
                                 || bridge.draftKey !== secondKey) return fail("inactive promotion discarded or moved a draft")
@@ -540,6 +546,64 @@ Item {
                 })
             }, false)
         })
+    }
+
+    function startLayoutGeometryChecks() {
+        waitFor("real 560x520 window", () => {
+            const items = shell.smokeGeometryItems()
+            return items && items.window.width === 560 && items.window.height === 520
+                && items.frame.width === 560 && items.frame.height === 520
+        }, () => {
+            if (!bridge.sendPrompt("__QT_WEBUI_GEOMETRY_BUSY__", "send")) return fail("geometry busy prompt refused")
+            waitFor("geometry run active", () => bridge.active && shell.composerItem.active, () => addGeometryAttachment(0))
+        })
+    }
+
+    function addGeometryAttachment(index) {
+        if (index === 8) {
+            if (bridge.attachments.length !== 8) return fail("geometry attachments missing")
+            bridge.canRecover = true
+            shell.setWorkspaceRailWidth(9999)
+            waitFor("expanded real rail", () => shell.smokeGeometryItems().rail.visible && shell.smokeGeometryItems().rail.width > 200, () => {
+                if (!checkLayoutGeometry("expanded", true)) return
+                shell.toggleWorkspaceRail() // Same action as Ctrl+Alt+B.
+                waitFor("collapsed real rail", () => !shell.smokeGeometryItems().rail.visible, () => {
+                    if (!checkLayoutGeometry("collapsed", false)) return
+                    shell.toggleWorkspaceRail()
+                    waitFor("restored real rail", () => shell.smokeGeometryItems().rail.visible, () => {
+                        if (!checkLayoutGeometry("restored", true)) return
+                        log("QT_WEBUI_SMOKE_REAL_SHELL_GEOMETRY")
+                        bridge.abortRun()
+                        waitFor("geometry run aborted", () => !bridge.active, () => schedule("quit"))
+                    })
+                })
+            })
+            return
+        }
+        const name = "w6-attachment-" + index + "-" + "long-name-".repeat(8) + ".txt"
+        bridge.addAttachment(bridge.workspaceCwd + "/" + name, false, response => {
+            if (!response.ok) return fail("geometry attachment " + index + ": " + response.error.message)
+            addGeometryAttachment(index + 1)
+        })
+    }
+
+    function checkLayoutGeometry(label, railShown) {
+        const items = shell.smokeGeometryItems()
+        const frame = items.frame
+        function inside(item, name) {
+            if (!item.visible || item.width <= 0 || item.height <= 0) return fail(label + " " + name + " hidden")
+            const point = item.mapToItem(frame, 0, 0)
+            if (point.x < 0 || point.y < 0 || point.x + item.width > frame.width + 1 || point.y + item.height > frame.height + 1)
+                return fail(label + " " + name + " outside " + frame.width + "x" + frame.height + ": " + point.x + "," + point.y + " " + item.width + "x" + item.height)
+            return true
+        }
+        if (items.window.width !== 560 || items.window.height !== 520 || frame.width !== 560 || frame.height !== 520
+                || bridge.attachments.length !== 8 || !bridge.active)
+            return fail(label + " geometry fixture state")
+        if (!inside(items.abort, "Abort")) return false
+        if (items.rail.visible !== railShown) return fail(label + " rail visibility")
+        if (railShown && (!inside(items.sessions, "Sessions") || !inside(items.newSession, "New session"))) return false
+        return true
     }
 
     function startRecoveryChecks() {
@@ -1172,6 +1236,7 @@ Item {
                 driver.piReadyOnce = true
                 driver.log("QT_WEBUI_SMOKE_READY")
                 if (driver.remediationOnly) remediation.run()
+                else if (driver.layoutGeometryOnly) driver.startLayoutGeometryChecks()
                 else if (driver.draftOwnershipOnly) driver.startDraftOwnershipChecks()
                 else if (driver.recoveryOnly) driver.startRecoveryChecks()
                 else if (driver.screenshotOnly) driver.startScreenshot()

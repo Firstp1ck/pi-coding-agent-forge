@@ -1,6 +1,13 @@
 # Qt WebUI UX remediation plan
 
-Status: planned. No implementation work has started.
+Status: in progress (uncommitted working tree, 2026-09-27).
+
+- Done earlier in `7da10b5`: W1, plus parts of W3, W4, and W7.
+- Implemented and reviewed on 2026-09-27: W2, W3, the attachment part of W4 (tasks 3, 5, and 6, including a `prompt.settled` event for timed-out prompts), and W6. Each change had one independent gpt-6-sol review with fixes applied until it passed. The second (Claude Fable) reviewer was unavailable, so the supervisor did that pass. The full suite passes with 312 tests, and the live smoke suite passes 10/10 on three runs.
+- Still open: W4 tasks 7–10 (Restore prompt, full timeout reconciliation, durable pending records, and disabling send during compaction), W5, W7–W13, and the native pointer, keyboard, and assistive-technology checks for W6.
+- Accepted limitations:
+  - A temporary draft replaces an older draft stored under the same saved-file path. Pi session file names contain a timestamp and a UUID, so this only happens if that exact path is reused.
+  - Timed-out prompts release locked attachments only through `prompt.settled` or a backend restart. QML and the backend always ship in the same package.
 
 Source: [Qt WebUI UX review](../reviews/qt-webui-ux-review.md), directly re-reviewed on 2026-09-04 at `786ec7f`.
 

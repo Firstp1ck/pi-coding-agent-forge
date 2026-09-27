@@ -171,7 +171,7 @@ AppDialog {
     ListView {
         id: optionList
         Layout.fillWidth: true
-        Layout.preferredHeight: Math.min(contentHeight, 260)
+        Layout.preferredHeight: Math.min(contentHeight, 260, Math.max(80, dialog.bodyViewportHeight * 0.65))
         visible: dialog.mode === "list" && dialog.count > 0
         model: dialog.sequences
         clip: true
@@ -250,69 +250,6 @@ AppDialog {
         }
     }
 
-    Flow {
-        Layout.fillWidth: true
-        visible: dialog.mode === "list"
-        spacing: 8
-
-        AppButton {
-            theme: dialog.theme
-            variant: "primary"
-            text: "Run"
-            accessibleName: "Run the selected sequence"
-            enabled: dialog.current !== null && !dialog.busy && dialog.bridge.ready && !dialog.bridge.active
-            onClicked: dialog.runCurrent()
-        }
-        AppButton {
-            theme: dialog.theme
-            text: "Load into prompt"
-            accessibleName: "Load the selected sequence into the prompt editor"
-            enabled: dialog.current !== null
-            onClicked: dialog.loadCurrent()
-        }
-        AppButton {
-            theme: dialog.theme
-            text: "New"
-            accessibleName: "Create a new sequence"
-            onClicked: dialog.startNew("")
-        }
-        AppButton {
-            theme: dialog.theme
-            text: "Edit"
-            accessibleName: "Edit the selected sequence"
-            enabled: dialog.current !== null
-            onClicked: dialog.startEdit()
-        }
-        AppButton {
-            theme: dialog.theme
-            text: "Move up"
-            accessibleName: "Move the selected sequence up"
-            enabled: dialog.current !== null && optionList.currentIndex > 0 && !dialog.busy
-            onClicked: dialog.moveCurrent(-1)
-        }
-        AppButton {
-            theme: dialog.theme
-            text: "Move down"
-            accessibleName: "Move the selected sequence down"
-            enabled: dialog.current !== null && optionList.currentIndex < dialog.count - 1 && !dialog.busy
-            onClicked: dialog.moveCurrent(1)
-        }
-        AppButton {
-            theme: dialog.theme
-            variant: dialog.confirmingDelete ? "destructive" : "secondary"
-            text: dialog.confirmingDelete ? "Confirm delete" : "Delete"
-            accessibleName: dialog.confirmingDelete ? "Confirm deleting the selected sequence" : "Delete the selected sequence"
-            enabled: dialog.current !== null && !dialog.busy
-            onClicked: dialog.deleteCurrent()
-        }
-        AppButton {
-            theme: dialog.theme
-            text: "Close"
-            accessibleName: "Close sequences"
-            onClicked: dialog.close()
-        }
-    }
-
     // ---- edit view -------------------------------------------------------------------------
 
     TextField {
@@ -368,33 +305,102 @@ AppDialog {
         }
     }
 
-    RowLayout {
+    actions: ColumnLayout {
         Layout.fillWidth: true
-        visible: dialog.mode === "edit"
         spacing: 8
 
-        SelectableText {
+        Flow {
             Layout.fillWidth: true
-            theme: dialog.theme
-            text: dialog.splitEntries(entriesArea.text).length + " of " + dialog.maxEntries + " prompts"
-            color: dialog.theme.muted
-            font.pixelSize: 11
+            visible: dialog.mode === "list"
+            Layout.preferredHeight: childrenRect.height
+            spacing: 8
+
+            AppButton {
+                theme: dialog.theme
+                variant: "primary"
+                text: "Run"
+                accessibleName: "Run the selected sequence"
+                enabled: dialog.current !== null && !dialog.busy && dialog.bridge.ready && !dialog.bridge.active
+                onClicked: dialog.runCurrent()
+            }
+            AppButton {
+                theme: dialog.theme
+                text: "Load into prompt"
+                accessibleName: "Load the selected sequence into the prompt editor"
+                enabled: dialog.current !== null
+                onClicked: dialog.loadCurrent()
+            }
+            AppButton {
+                theme: dialog.theme
+                text: "New"
+                accessibleName: "Create a new sequence"
+                onClicked: dialog.startNew("")
+            }
+            AppButton {
+                theme: dialog.theme
+                text: "Edit"
+                accessibleName: "Edit the selected sequence"
+                enabled: dialog.current !== null
+                onClicked: dialog.startEdit()
+            }
+            AppButton {
+                theme: dialog.theme
+                text: "Move up"
+                accessibleName: "Move the selected sequence up"
+                enabled: dialog.current !== null && optionList.currentIndex > 0 && !dialog.busy
+                onClicked: dialog.moveCurrent(-1)
+            }
+            AppButton {
+                theme: dialog.theme
+                text: "Move down"
+                accessibleName: "Move the selected sequence down"
+                enabled: dialog.current !== null && optionList.currentIndex < dialog.count - 1 && !dialog.busy
+                onClicked: dialog.moveCurrent(1)
+            }
+            AppButton {
+                theme: dialog.theme
+                variant: dialog.confirmingDelete ? "destructive" : "secondary"
+                text: dialog.confirmingDelete ? "Confirm delete" : "Delete"
+                accessibleName: dialog.confirmingDelete ? "Confirm deleting the selected sequence" : "Delete the selected sequence"
+                enabled: dialog.current !== null && !dialog.busy
+                onClicked: dialog.deleteCurrent()
+            }
+            AppButton {
+                theme: dialog.theme
+                text: "Close"
+                accessibleName: "Close sequences"
+                onClicked: dialog.close()
+            }
         }
 
-        AppButton {
-            theme: dialog.theme
-            text: "Back"
-            accessibleName: "Back to the sequence list"
-            onClicked: dialog.cancelEdit()
-        }
+        RowLayout {
+            Layout.fillWidth: true
+            visible: dialog.mode === "edit"
+            spacing: 8
 
-        AppButton {
-            theme: dialog.theme
-            variant: "primary"
-            text: "Save"
-            accessibleName: "Save the sequence"
-            enabled: nameField.text.trim().length > 0 && dialog.splitEntries(entriesArea.text).length > 0 && !dialog.busy
-            onClicked: dialog.saveEdit()
+            SelectableText {
+                Layout.fillWidth: true
+                theme: dialog.theme
+                text: dialog.splitEntries(entriesArea.text).length + " of " + dialog.maxEntries + " prompts"
+                color: dialog.theme.muted
+                font.pixelSize: 11
+            }
+
+            AppButton {
+                theme: dialog.theme
+                text: "Back"
+                accessibleName: "Back to the sequence list"
+                onClicked: dialog.cancelEdit()
+            }
+
+            AppButton {
+                theme: dialog.theme
+                variant: "primary"
+                text: "Save"
+                accessibleName: "Save the sequence"
+                enabled: nameField.text.trim().length > 0 && dialog.splitEntries(entriesArea.text).length > 0 && !dialog.busy
+                onClicked: dialog.saveEdit()
+            }
         }
     }
 }
