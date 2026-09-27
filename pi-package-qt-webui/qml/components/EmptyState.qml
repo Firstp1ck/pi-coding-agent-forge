@@ -9,6 +9,7 @@ Item {
 
     required property QtObject theme
     property bool ready: false
+    property bool canRecover: false
     property bool backendReady: false
     property bool sessionOpen: true
 
@@ -64,7 +65,7 @@ Item {
             SelectableText {
                 Layout.fillWidth: true
                 theme: empty.theme
-                text: !empty.sessionOpen ? "NO SESSION OPEN" : empty.ready ? "SESSION READY" : "WORKSPACE STARTUP"
+                text: !empty.sessionOpen ? "NO SESSION OPEN" : empty.ready ? "SESSION READY" : empty.canRecover ? "SESSION RECOVERY" : "WORKSPACE STARTUP"
                 color: empty.theme.muted
                 font.family: empty.theme.monospaceFamily
                 font.pixelSize: empty.theme.typeCaption
@@ -76,7 +77,7 @@ Item {
             SelectableText {
                 Layout.fillWidth: true
                 theme: empty.theme
-                text: !empty.sessionOpen ? "Choose where to continue" : empty.ready ? "Start a conversation" : empty.backendReady ? "Starting Pi…" : "Starting Qt WebUI…"
+                text: !empty.sessionOpen ? "Choose where to continue" : empty.ready ? "Start a conversation" : empty.canRecover ? "Saved session unavailable" : empty.backendReady ? "Starting Pi…" : "Starting Qt WebUI…"
                 color: empty.theme.heading
                 font.family: empty.theme.monospaceFamily
                 font.pixelSize: empty.theme.typeDisplay
@@ -90,7 +91,7 @@ Item {
                 theme: empty.theme
                 text: !empty.sessionOpen
                     ? "Select a session from the workspace list, start a new one, or open another folder."
-                    : empty.ready ? "Ask about this workspace, resume earlier work, or open another folder." : "Your workspace will be ready shortly."
+                    : empty.ready ? "Ask about this workspace, resume earlier work, or open another folder." : empty.canRecover ? "Restore the saved file and restart Pi, resume another session, or start a new one." : "Your workspace will be ready shortly."
                 color: empty.theme.muted
                 font.family: empty.theme.monospaceFamily
                 font.pixelSize: empty.theme.typeBody
@@ -101,11 +102,11 @@ Item {
             Flow {
                 Layout.fillWidth: true
                 Layout.preferredHeight: childrenRect.height
-                visible: !empty.sessionOpen || empty.ready
+                visible: !empty.sessionOpen || empty.ready || empty.canRecover
                 spacing: empty.theme.spaceMd
 
                 AppButton {
-                    visible: !empty.sessionOpen
+                    visible: !empty.sessionOpen || empty.canRecover
                     theme: empty.theme
                     variant: "primary"
                     text: "New session"

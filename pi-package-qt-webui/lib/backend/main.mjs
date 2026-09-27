@@ -437,7 +437,11 @@ export function createBackend({
   }
 
   function tabSnapshot(tab) {
-    return { selectionGeneration: registry.selectionGeneration, tab: registry.list().tabs.find((entry) => entry.id === tab.id), session: tab.session.snapshot(), attachments: tab.attachments.list({ metadataOnly: attachmentMetadata }) };
+    const summary = registry.list().tabs.find((entry) => entry.id === tab.id);
+    const snapshot = tab.session.snapshot();
+    return { selectionGeneration: registry.selectionGeneration, tab: summary,
+      session: { ...snapshot, ready: summary.ready, statusKind: summary.statusKind, statusText: summary.statusText },
+      attachments: tab.attachments.list({ metadataOnly: attachmentMetadata }) };
   }
 
   function normalizedNames(value, known, field) {
@@ -750,7 +754,7 @@ export function createBackend({
         smokeMode,
         tabs: tabList,
         selectionGeneration,
-        session: active ? active.session.snapshot() : null,
+        session: active ? tabSnapshot(active).session : null,
         attachments: active ? active.attachments.list({ metadataOnly: attachmentMetadata }) : [],
         attachmentMetadata,
         settings: settings.read().settings,
@@ -1145,7 +1149,10 @@ export function createBackend({
     const requestedTab = registry.get(request.tab || registry.activeId);
     const compatibleControl = (request.type === "prompt" && request.mode !== "send" && requestedTab?.session.snapshot().active === true)
       || (request.type === "tab_close" && request.force);
-    if ((SESSION_MUTATION_REQUESTS.has(request.type) || lifecycleMutation) && !compatibleControl) {
+    // Closing an auto-resuming tab cancels that child and its pending switch; it must not wait
+    // behind the registry's internal resume reservation or silently fail as busy.
+    const closingAutoResume = request.type === "tab_close" && requestedTab?.resumeInFlight === true;
+    if ((SESSION_MUTATION_REQUESTS.has(request.type) || lifecycleMutation) && !compatibleControl && !closingAutoResume) {
       try { reservation = registry.reserveMutation(tabFor(request).id); }
       catch (error) { respondError(request.id, error.code ?? "busy", error.message); return; }
     }

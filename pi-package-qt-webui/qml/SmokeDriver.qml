@@ -11,6 +11,7 @@ Item {
     required property var shell
     readonly property string testMode: String(Quickshell.env("QT_WEBUI_THEME_MODE") || "normal")
     readonly property bool remediationOnly: testMode === "remediation"
+    readonly property bool recoveryOnly: testMode === "recovery"
     readonly property bool orderOnly: testMode === "order-only"
     RemediationChecks { id: remediation; driver: driver; bridge: driver.bridge; shell: driver.shell }
     readonly property bool screenshotOnly: testMode === "screenshot"
@@ -465,6 +466,41 @@ Item {
         const removed = list.deferredSessionOrder([initialRows[0]], stillHeld.committedByKey, now + 5 * minuteMs)
         if (Object.keys(removed.committedByKey).length !== 1) return fail("session ordering state pruning")
         return true
+    }
+
+    function startRecoveryChecks() {
+        waitFor("recovery catalog", () => bridge.sessionCatalog.some(session => session.id === "resume-me"), () => {
+            const target = bridge.sessionCatalog.find(session => session.id === "resume-me").path
+            const missing = bridge.workspaceCwd + "/missing-recovery.jsonl"
+            function blocked(action) {
+                bridge.switchSession(missing, response => {
+                    if (!response.ok || !bridge.restartProcess()) return driver.fail("could not prepare missing-session recovery")
+                    waitFor("missing-session recovery", () => bridge.canRecover && !bridge.ready, action)
+                })
+            }
+            blocked(() => {
+                if (bridge.sendPrompt("__QT_WEBUI_IMMEDIATE__", "send") || !shell.openSessionsPicker()) return driver.fail("blocked tab admitted a prompt or hid Sessions")
+                waitFor("recovery picker", () => shell.pickerDialog.opened, () => {
+                    shell.pickerDialog.close()
+                    bridge.switchSession(target, response => {
+                        if (!response.ok) return driver.fail("recovery switch refused")
+                        waitFor("recovered session ready", () => bridge.ready && !bridge.canRecover && !bridge.resourceLoading && !bridge.activeTab.mutating, () => {
+                            driver.log("QT_WEBUI_RECOVERY_SWITCH")
+                            blocked(() => {
+                                if (bridge.sendPrompt("__QT_WEBUI_IMMEDIATE__", "send")) return driver.fail("blocked tab sent a prompt")
+                                bridge.newSession(response => {
+                                    if (!response.ok) return driver.fail("recovery new session refused")
+                                    waitFor("new session ready", () => bridge.ready && !bridge.canRecover && bridge.sessionFile !== missing, () => {
+                                        driver.log("QT_WEBUI_RECOVERY_NEW")
+                                        driver.schedule("quit")
+                                    })
+                                })
+                            })
+                        })
+                    })
+                })
+            })
+        })
     }
 
     function startSessionCatalog() {
@@ -1062,6 +1098,7 @@ Item {
                 driver.piReadyOnce = true
                 driver.log("QT_WEBUI_SMOKE_READY")
                 if (driver.remediationOnly) remediation.run()
+                else if (driver.recoveryOnly) driver.startRecoveryChecks()
                 else if (driver.screenshotOnly) driver.startScreenshot()
                 else if (driver.orderOnly) driver.startModels()
                 else if (driver.themeOnly) driver.startThemeChecks()

@@ -30,7 +30,7 @@ let currentModel = MODELS[0];
 let currentThinkingLevel = "high";
 let compacting = false;
 let sessionSerial = 0;
-let currentSessionFile = "/tmp/fixture-session.jsonl";
+let currentSessionFile = process.env.QT_WEBUI_FIXTURE_INITIAL_SESSION_FILE || "/tmp/fixture-session.jsonl";
 let currentSessionName = "Fixture session";
 let helperSession = { tools: null, skills: null, sampling: {} };
 let helperEffective = { tools: null, skills: null, sampling: {} };
@@ -387,7 +387,9 @@ function handle(command) {
     const persisted = persistedSession(currentSessionFile);
     currentSessionId = persisted?.id ?? "fixture-session";
     currentSessionName = command.sessionPath.includes("resume-me") ? "Resumed session" : persisted?.name ?? "";
-    response(command, true, { data: { cancelled: false } });
+    const delay = Number(process.env.QT_WEBUI_FIXTURE_SWITCH_DELAY_MS) || 0;
+    if (delay > 0) setTimeout(() => response(command, true, { data: { cancelled: false } }), delay);
+    else response(command, true, { data: { cancelled: false } });
     return;
   }
 
@@ -636,6 +638,16 @@ function handle(command) {
     case "__QT_WEBUI_SILENT__":
       // Accept the prompt but never answer: exercises client-side timeouts.
       break;
+    case "__QT_WEBUI_SAVE_FIRST__":
+    case "__QT_WEBUI_SAVE_AND_EXIT__": {
+      writeFileSync(currentSessionFile, `${JSON.stringify({ type: "session", version: 3, id: "saved-first", cwd: process.cwd() })}\n`);
+      response(command);
+      if (command.message === "__QT_WEBUI_SAVE_FIRST__") {
+        emit({ type: "agent_start" });
+        emit({ type: "agent_settled" });
+      } else setTimeout(() => process.exit(23), 20);
+      break;
+    }
     case "__QT_WEBUI_EXIT__":
       response(command);
       if (statePath) writeFileSync(statePath, "failed-state\n");

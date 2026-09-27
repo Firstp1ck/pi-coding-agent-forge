@@ -78,10 +78,13 @@ function validateTabs(raw) {
   const tabs = [];
   for (const entry of raw) {
     if (!entry || typeof entry !== "object" || typeof entry.cwd !== "string" || entry.cwd.length === 0 || entry.cwd.length > LIMITS.maxStateKeyCharacters) continue;
+    const sessionFile = typeof entry.sessionFile === "string" && entry.sessionFile.length <= LIMITS.maxStateKeyCharacters ? entry.sessionFile : "";
+    const pendingResume = !sessionFile && typeof entry.pendingResume === "string" && entry.pendingResume.length <= LIMITS.maxStateKeyCharacters ? entry.pendingResume : "";
     tabs.push({
       cwd: entry.cwd,
-      sessionFile: typeof entry.sessionFile === "string" && entry.sessionFile.length <= LIMITS.maxStateKeyCharacters ? entry.sessionFile : "",
+      sessionFile,
       name: typeof entry.name === "string" ? entry.name.slice(0, LIMITS.maxRuntimeInfoCharacters) : "",
+      ...(pendingResume ? { pendingResume } : {}),
     });
     if (tabs.length >= 16) break;
   }

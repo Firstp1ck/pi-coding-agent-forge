@@ -85,6 +85,7 @@ Item {
                     editor.setText("B newer edit")
                     bridge.newSession(next => {
                         require(next.ok, "new session refused")
+                        require(bridge.sessionFile !== targetKey && bridge.draftKey !== targetKey, "new session retained its predecessor's draft owner")
                         wait("new draft blank", () => editor.text === "", () => {
                             bridge.switchSession(targetKey, back => {
                                 require(back.ok, "return to B refused")

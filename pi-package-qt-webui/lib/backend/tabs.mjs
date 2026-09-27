@@ -111,6 +111,8 @@ export function createTabRegistry({
   function summary(tab) {
     const snapshot = tab.session.snapshot();
     const representedSessionFile = tab.transitionSessionFile || tab.pendingResume || tab.sessionFile;
+    const awaitingResume = Boolean(tab.pendingResume || tab.resumeInFlight);
+    const resumeUnavailable = Boolean(tab.pendingResume && tab.resumeBlocked && !tab.transitionSessionFile);
     const activityState = snapshot.active
       ? snapshot.pendingDialogs > 0 ? "blocked" : "working"
       : tab.unacknowledgedCompletion ? "done" : "idle";
@@ -121,9 +123,10 @@ export function createTabRegistry({
       name: tab.name,
       sessionFile: representedSessionFile,
       sessionName: tab.sessionName,
-      statusKind: snapshot.statusKind,
-      statusText: snapshot.statusText,
-      ready: snapshot.ready,
+      statusKind: awaitingResume && snapshot.ready ? resumeUnavailable ? "error" : "stopped" : snapshot.statusKind,
+      statusText: awaitingResume && snapshot.ready ? resumeUnavailable ? "Session not resumed" : "Resuming session…" : snapshot.statusText,
+      ready: snapshot.ready && !awaitingResume,
+      canRecover: snapshot.ready && resumeUnavailable && !tab.mutationReservation && !snapshot.active,
       mutating: Boolean(tab.mutationReservation),
       active: snapshot.active,
       activityState,
@@ -153,7 +156,8 @@ export function createTabRegistry({
     try {
       state.saveTabs(order.map((id) => {
         const tab = tabs.get(id);
-        return { cwd: tab.cwd, sessionFile: tab.sessionFile, name: tab.name };
+        return { cwd: tab.cwd, sessionFile: tab.durableSessionFile ? tab.sessionFile : "", name: tab.name,
+          ...(!tab.durableSessionFile && tab.pendingResume ? { pendingResume: tab.pendingResume } : {}) };
       }), activeId ? order.indexOf(activeId) : -1);
     } catch (error) {
       emit("notice", { level: "warning", message: `Could not save the tab layout: ${boundedString(error.message, 200)}` });
@@ -204,7 +208,7 @@ export function createTabRegistry({
     for (const row of tab.mirror.rows()) emit("transcript.row", { tab: tab.id, selectionGeneration, row });
   }
 
-  function open({ cwd = callerCwd, sessionPath = "", name = "", select = true, notify = true } = {}) {
+  function open({ cwd = callerCwd, sessionPath = "", name = "", select = true, notify = true, confirmedSession = false } = {}) {
     const owner = sessionPath ? ownerOf(sessionPath) : null;
     if (owner) {
       if (closingTabs.has(owner.id)) throw new ProtocolError("busy", `That session is still closing in ${owner.id}`);
@@ -219,11 +223,14 @@ export function createTabRegistry({
       id,
       cwd: directory,
       name: boundedString(name, LIMITS.maxTabNameCharacters, ""),
-      sessionFile: "",
+      sessionFile: confirmedSession ? sessionPath : "",
+      durableSessionFile: confirmedSession && Boolean(sessionPath),
       sessionName: "",
       unread: 0,
       unacknowledgedCompletion: false,
-      pendingResume: sessionPath && existsSync(sessionPath) ? sessionPath : "",
+      pendingResume: sessionPath,
+      resumeBlocked: false,
+      resumeInFlight: false,
       transitionSessionFile: "",
       previousSessionFile: "",
       staleSessionFile: "",
@@ -259,22 +266,74 @@ export function createTabRegistry({
     return tab;
   }
 
+  function resumeWarning(tab, target, reason) {
+    emit("notice", { tab: tab.id, level: "warning", message: `Could not resume ${path.basename(target)}: ${reason}. Restore the saved file, then restart this tab, or explicitly choose another session` });
+  }
+
   function resumePending(tab) {
-    if (!tab.pendingResume || tab.mutationReservation || !tabs.has(tab.id) || !tab.session.snapshot().ready) return;
+    if (!tab.pendingResume || tab.resumeBlocked || tab.mutationReservation || !tabs.has(tab.id) || !tab.session.snapshot().ready) return;
     const target = tab.pendingResume;
-    tab.pendingResume = "";
-    switchSession(tab.id, target).catch(error => {
-      emit("notice", { tab: tab.id, level: "warning", message: `Could not resume ${path.basename(target)}: ${boundedString(error.message, 200)}` });
+    if (!existsSync(target)) {
+      tab.resumeBlocked = true;
+      resumeWarning(tab, target, "the saved session file is missing");
+      emitTabs();
+      return;
+    }
+    // Hold the target until Pi confirms the switch. A failed switch must not unlock mutations
+    // on the new child's empty session or cause an automatic retry loop.
+    tab.resumeBlocked = true;
+    tab.resumeInFlight = true;
+    switchSession(tab.id, target).then(() => {
+      tab.resumeInFlight = false;
+      emitTabs();
+      if (tabs.has(tab.id)) {
+        const effective = summary(tab);
+        emit("pi.status", { tab: tab.id, selectionGeneration, statusKind: effective.statusKind, text: effective.statusText, ready: effective.ready, canRecover: effective.canRecover, active: tab.session.snapshot().active });
+      }
+    }, error => {
+      tab.resumeInFlight = false;
+      if (tabs.has(tab.id) && tab.pendingResume === target) resumeWarning(tab, target, boundedString(error.message, 200));
+      emitTabs();
     });
+  }
+
+  function promoteSavedFile(tab) {
+    if (tab.durableSessionFile || tab.pendingResume || !tab.sessionFile || !existsSync(tab.sessionFile)) return;
+    try { claim(tab, tab.sessionFile); }
+    catch (error) {
+      emit("notice", { tab: tab.id, level: "error", message: error.message });
+      void tab.session.stop();
+      return;
+    }
+    tab.durableSessionFile = true;
+    refreshClaims(tab);
+    saveState();
+    sessionPathsChanged();
   }
 
   function handleSessionEvent(tab, type, payload) {
     if (type === "transcript.row" && payload.row) tab.mirror.replace([...tab.mirror.rows(), payload.row]);
     else tab.mirror.apply(type, payload);
     let tabsChanged = false;
-    if (type === "pi.runtime" || type === "session.replaced") {
+    if (type === "run.end" || type === "pi.exit") promoteSavedFile(tab);
+    if (type === "pi.exit") {
+      if (tab.durableSessionFile) tab.pendingResume = tab.sessionFile;
+      tab.resumeBlocked = false;
+    }
+    if (type === "session.replaced") {
+      tab.pendingResume = "";
+      tab.resumeBlocked = false;
+    }
+    // An empty/failed runtime is not an identity transition. While a child is awaiting a
+    // resume, even its successful startup get_state describes only its fresh temporary branch.
+    if (type === "session.replaced" || (type === "pi.runtime" && !tab.pendingResume && payload.sessionFile)) {
       const sessionFile = typeof payload.sessionFile === "string" ? payload.sessionFile : "";
       const sessionName = typeof payload.sessionName === "string" ? payload.sessionName : "";
+      if (sessionFile === tab.sessionFile && type === "session.replaced" && tab.durableSessionFile !== Boolean(sessionFile)) {
+        tab.durableSessionFile = Boolean(sessionFile);
+        saveState();
+      }
+      if (sessionFile === tab.sessionFile && type === "pi.runtime") promoteSavedFile(tab);
       if (sessionFile !== tab.sessionFile || sessionName !== tab.sessionName) {
         try { claim(tab, sessionFile); }
         catch (error) {
@@ -283,6 +342,7 @@ export function createTabRegistry({
           return;
         }
         tab.sessionFile = sessionFile;
+        tab.durableSessionFile = type === "session.replaced" ? Boolean(sessionFile) : Boolean(sessionFile && existsSync(sessionFile));
         refreshClaims(tab);
         tab.sessionName = sessionName;
         tabsChanged = true;
@@ -318,7 +378,9 @@ export function createTabRegistry({
     if (type === "extension.request" || type === "extension.cancelled" || type === "extension.answered") {
       tabsChanged = true;
     }
-    emit(type, { tab: tab.id, selectionGeneration, ...payload });
+    const projectedStatus = type === "pi.status" ? summary(tab) : null;
+    emit(type, { tab: tab.id, selectionGeneration, ...payload,
+      ...(projectedStatus ? { ready: projectedStatus.ready, canRecover: projectedStatus.canRecover, statusKind: projectedStatus.statusKind, text: projectedStatus.statusText } : {}) });
     if (tabsChanged) emitTabs();
   }
 
@@ -407,7 +469,7 @@ export function createTabRegistry({
         continue;
       }
       try {
-        open({ cwd: entry.cwd, sessionPath: entry.sessionFile, name: entry.name, select: false, notify: false });
+        open({ cwd: entry.cwd, sessionPath: entry.pendingResume || entry.sessionFile, name: entry.name, select: false, notify: false, confirmedSession: !entry.pendingResume });
         restored += 1;
       } catch (error) {
         emit("notice", { level: "warning", message: `Could not restore the tab for ${boundedString(entry.cwd, 120)}: ${boundedString(error.message, 160)}` });
@@ -462,6 +524,7 @@ export function createTabRegistry({
 
   function prepareMutation(id) {
     const tab = require(id);
+    if (tab.pendingResume) throw new ProtocolError("unavailable", `Resume ${path.basename(tab.pendingResume)} before changing this session; restore the file and restart this tab, or explicitly choose another session`);
     if (tab.preparationPromise) return tab.preparationPromise;
     if (!tab.staleSessionFile) return Promise.resolve(false);
     const current = tab.sessionFile;
@@ -536,6 +599,7 @@ export function createTabRegistry({
     const resolved = path.resolve(sessionPath);
     const tab = ownerOf(sessionPath) ?? order.map((id) => tabs.get(id)).find((candidate) => candidate.sessionFile && path.resolve(candidate.sessionFile) === resolved);
     if (!tab) return { applied: false, reason: "not-open" };
+    if (tab.sessionFile === sessionPath) promoteSavedFile(tab);
     if (tab.session.snapshot().active || tab.mutationReservation) return { applied: false, reason: "active" };
 
     const projected = rowsFromHistory(snapshot.messages);
@@ -593,7 +657,8 @@ export function createTabRegistry({
 
   async function restartReserved(id) {
     const tab = require(id);
-    tab.pendingResume = tab.sessionFile && existsSync(tab.sessionFile) ? tab.sessionFile : "";
+    tab.pendingResume = (tab.durableSessionFile ? tab.sessionFile : "") || tab.pendingResume;
+    tab.resumeBlocked = false;
     // The replacement child cannot deliver the previous run's output, so an unseen completion is void.
     tab.unacknowledgedCompletion = false;
     sessionPathsChanged();

@@ -283,7 +283,9 @@ Resource changes require idle affected Pi sessions and complete capability infor
 
 ### Saved tabs did not come back
 
-Tabs are restored from `state.json` when the backend starts. A tab whose folder was deleted is skipped with a notice, and a tab whose session file is gone starts a new session in the same folder. At most eight tabs are restored.
+Tabs are restored from `state.json` when the backend starts. A tab whose folder was deleted is skipped with a notice. If a saved session file is missing, its tab keeps the missing path and warns you to restore the file and restart the tab, or use **Sessions** to resume another saved conversation or **New session** to start fresh. Sending prompts and changing models or resources stay unavailable until you choose a conversation. At most eight tabs are restored.
+
+If Pi exits unexpectedly, restarting its tab tries to resume the last saved conversation before you continue working.
 
 ### A saved session is missing or will not move to Settled
 

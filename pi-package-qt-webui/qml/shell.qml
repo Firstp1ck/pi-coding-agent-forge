@@ -621,7 +621,7 @@ ShellRoot {
     }
 
     function openSessionsPicker() {
-        if (!bridge.ready || bridge.active || pickerDialogItem.opened) return false
+        if ((!bridge.ready && !bridge.canRecover) || bridge.active || pickerDialogItem.opened) return false
         return bridge.listSessions(response => {
             if (!response.ok) return
             const items = []
@@ -1259,7 +1259,7 @@ ShellRoot {
                             spacing: 4
 
                             AppButton {
-                                visible: bridge.ready
+                                visible: bridge.ready || bridge.canRecover
                                 theme: appTheme
                                 variant: "ghost"
                                 text: "Sessions"
@@ -1270,6 +1270,19 @@ ShellRoot {
                                 leftPadding: 8
                                 rightPadding: 8
                                 onClicked: root.openSessionsPicker()
+                            }
+
+                            AppButton {
+                                visible: bridge.canRecover
+                                theme: appTheme
+                                variant: "ghost"
+                                text: "New session"
+                                accessibleName: "Start a new session instead of the missing one"
+                                enabled: !bridge.active
+                                padding: 4
+                                leftPadding: 8
+                                rightPadding: 8
+                                onClicked: root.newSessionInTab()
                             }
 
                             AppButton {
@@ -1558,6 +1571,7 @@ ShellRoot {
                                         visible: !root.hasActiveSession || transcriptList.count === 0
                                         theme: appTheme
                                         ready: bridge.ready
+                                        canRecover: bridge.canRecover
                                         backendReady: bridge.backendReady
                                         sessionOpen: root.hasActiveSession
                                         onRestartRequested: bridge.restartProcess()

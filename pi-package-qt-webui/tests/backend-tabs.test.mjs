@@ -13,6 +13,14 @@ import { listSessions, sessionDirectoryFor } from "../lib/backend/sessions-index
 import { createTranscriptMirror, rowsFromHistory } from "../lib/backend/transcript.mjs";
 import { startBackend } from "./helpers/backend-client.mjs";
 
+async function waitForAsync(check, description) {
+  for (let attempt = 0; attempt < 200; attempt++) {
+    if (await check()) return;
+    await new Promise(resolve => setTimeout(resolve, 25));
+  }
+  assert.fail(`timed out waiting for ${description}`);
+}
+
 const GIT_ENV = { ...process.env, GIT_AUTHOR_NAME: "Test", GIT_AUTHOR_EMAIL: "test@example.invalid", GIT_COMMITTER_NAME: "Test", GIT_COMMITTER_EMAIL: "test@example.invalid", GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_SYSTEM: "/dev/null", HOME: os.tmpdir() };
 
 async function temporary(t, prefix = "qt-webui-tabs-") {
@@ -591,7 +599,7 @@ test("tabs run isolated sessions, badge inactive tabs, replay transcripts on sel
   assert.deepEqual({ name: renamed.data.tab.name, sessionRenamed: renamed.data.sessionRenamed }, { name: "Renamed tab", sessionRenamed: true });
   await backend.waitForEvent("pi.runtime", (event) => event.tab === firstTab && event.sessionName === "Renamed tab");
   const saved = JSON.parse(await readFile(path.join(stateHome, "qt-webui", "state.json"), "utf8"));
-  assert.deepEqual(saved.tabs, [{ cwd: await realpath(first), sessionFile: "/tmp/fixture-session.jsonl", name: "Renamed tab" }]);
+  assert.deepEqual(saved.tabs, [{ cwd: await realpath(first), sessionFile: "", name: "Renamed tab" }], "the fixture's unsaved runtime filename is not a durable resume target");
   const lastClosed = await backend.send("tab_close", {});
   assert.equal(lastClosed.data.closed, firstTab);
   const emptyTabs = (await backend.send("tabs_list")).data;
@@ -878,6 +886,291 @@ test("persisted sessions can be listed, resumed with history and an interruption
   const commands = await backend.readCapture();
   assert.deepEqual(commands.filter((command) => command.type === "switch_session").map((command) => path.basename(command.sessionPath)), ["one_resume-me.jsonl", "two_interrupted.jsonl", "three_cancel-me.jsonl"]);
   assert.equal(commands.filter((command) => command.type === "get_messages").length, 2, "history is read only after a switch Pi accepted");
+});
+
+test("explicit restart and unexpected exit retain the saved identity until the new child resumes", async (t) => {
+  const cwd = await temporary(t);
+  const agentDir = await temporary(t);
+  const stateHome = await temporary(t);
+  const env = { PI_CODING_AGENT_DIR: agentDir, XDG_STATE_HOME: stateHome };
+  const sessionPath = await writeSession(sessionDirectoryFor(cwd, env), "recovery.jsonl", { id: "recovery", cwd });
+  const original = await readFile(sessionPath, "utf8");
+  const backend = await readyBackend(t, { cwd, env });
+  const stateFile = path.join(stateHome, "qt-webui", "state.json");
+  assert.equal((await backend.send("session_switch", { sessionPath })).ok, true);
+
+  async function verifyRestart(trigger) {
+    const before = (await backend.readCapture()).length;
+    await trigger();
+    await waitForAsync(async () => (await backend.readCapture()).slice(before).some(command => command.type === "get_messages"), "resume command and history");
+    const resumed = (await backend.readCapture()).slice(before);
+    assert.deepEqual(resumed.slice(0, 3).map(command => command.type), ["get_state", "switch_session", "get_messages"]);
+    assert.equal(resumed[1].sessionPath, sessionPath);
+    await waitForAsync(async () => (await backend.send("tabs_list")).data.tabs[0].sessionFile === sessionPath
+      && (await backend.readCapture()).slice(before).filter(command => command.type === "get_state").length >= 2,
+    "resume readiness");
+    assert.equal((await backend.send("prompt", { message: "__QT_WEBUI_STREAM__" })).ok, true);
+    await waitForAsync(async () => (await backend.send("tabs_list")).data.tabs[0].active === false, "run completion");
+    assert.equal((await backend.readCapture()).slice(before).filter(command => command.type === "prompt").length, 1);
+    assert.equal(JSON.parse(await readFile(stateFile, "utf8")).tabs[0].sessionFile, sessionPath);
+  }
+
+  await verifyRestart(async () => { assert.equal((await backend.send("restart")).ok, true); });
+  assert((await backend.send("tabs_list")).data.tabs[0].needsInput > 0, "pending dialogs coexist with the saved identity");
+  const exitBefore = backend.events.length;
+  assert.equal((await backend.send("prompt", { message: "__QT_WEBUI_EXIT__" })).ok, true);
+  await waitUntil(() => backend.events.slice(exitBefore).some(event => event.type === "pi.exit"), { description: "unexpected Pi exit" });
+  assert.equal(JSON.parse(await readFile(stateFile, "utf8")).tabs[0].sessionFile, sessionPath);
+  assert.equal((await backend.send("tabs_list")).data.tabs[0].sessionFile, sessionPath);
+  await writeFile(backend.statePath, "recovered-state\n");
+  await verifyRestart(async () => { assert.equal((await backend.send("restart")).ok, true); });
+  assert.equal(await readFile(sessionPath, "utf8"), original, "recovery bookkeeping never rewrites Pi history");
+
+  await backend.send("shutdown");
+  await backend.exitPromise;
+  const restored = await readyBackend(t, { cwd, env });
+  await waitForAsync(async () => (await restored.readCapture()).some(command => command.type === "get_messages"), "saved-state resume");
+  const commands = await restored.readCapture();
+  assert.deepEqual(commands.slice(0, 3).map(command => command.type), ["get_state", "switch_session", "get_messages"]);
+  assert.equal(commands[1].sessionPath, sessionPath);
+  assert.equal((await restored.send("tabs_list")).data.tabs[0].sessionFile, sessionPath);
+  assert.equal(await readFile(sessionPath, "utf8"), original);
+});
+
+test("catalog-opened target survives exit before its first switch, explicit restart, and saved-state restore", async (t) => {
+  const cwd = await temporary(t);
+  const other = await temporary(t);
+  const agentDir = await temporary(t);
+  const stateHome = await temporary(t);
+  const env = { PI_CODING_AGENT_DIR: agentDir, XDG_STATE_HOME: stateHome, QT_WEBUI_FIXTURE_SWITCH_DELAY_MS: "700" };
+  const sessionPath = await writeSession(sessionDirectoryFor(other, env), "catalog-open.jsonl", { id: "catalog-open", cwd: other });
+  const backend = await readyBackend(t, { cwd, env });
+  const opened = await backend.send("tab_open", { cwd: other, sessionPath });
+  assert.equal(opened.ok, true);
+  const id = opened.data.tab.id;
+  const stateFile = path.join(stateHome, "qt-webui", "state.json");
+  await waitForAsync(async () => (await backend.readCapture()).some(command => command.type === "switch_session" && command.sessionPath === sessionPath), "first catalog switch");
+  assert.equal((await backend.send("tabs_list")).data.tabs.find(tab => tab.id === id).ready, false);
+  assert.equal((await backend.send("tab_select", { tab: id })).data.session.ready, false);
+  assert(["busy", "unavailable"].includes((await backend.send("resources_state", { tab: id })).error.code));
+  assert.equal((await backend.readCapture()).filter(command => command.type === "prompt").length, 0);
+  process.kill(opened.data.session.pid, "SIGKILL");
+  await backend.waitForEvent("pi.exit", event => event.tab === id);
+  await waitForAsync(async () => (await backend.send("tabs_list")).data.tabs.find(tab => tab.id === id).mutating === false, "failed switch settlement");
+  assert.deepEqual(JSON.parse(await readFile(stateFile, "utf8")).tabs.find(tab => tab.cwd === other),
+    { cwd: other, name: "", sessionFile: "", pendingResume: sessionPath });
+  assert.equal((await backend.send("tabs_list")).data.tabs.find(tab => tab.id === id).sessionFile, sessionPath);
+  const before = (await backend.readCapture()).length;
+  assert.equal((await backend.send("restart", { tab: id })).ok, true);
+  await waitForAsync(async () => (await backend.readCapture()).slice(before).some(command => command.type === "switch_session" && command.sessionPath === sessionPath), "restart switch");
+  const during = await backend.send("tab_select", { tab: id });
+  assert.equal(during.data.session.ready, false);
+  assert.equal(during.data.tab.ready, false);
+  assert(["busy", "unavailable"].includes((await backend.send("prompt", { tab: id, message: "__QT_WEBUI_IMMEDIATE__" })).error.code));
+  await waitForAsync(async () => (await backend.send("tabs_list")).data.tabs.find(tab => tab.id === id).ready === true, "confirmed resume readiness");
+  assert.equal((await backend.send("tab_select", { tab: id })).data.session.ready, true);
+  assert.equal((await backend.send("resources_state", { tab: id })).ok, true);
+  const commands = (await backend.readCapture()).slice(before);
+  assert.deepEqual(commands.slice(0, 4).map(command => command.type), ["get_state", "switch_session", "get_messages", "get_state"]);
+  assert.equal(commands[1].sessionPath, sessionPath);
+  assert.equal(commands.filter(command => command.type === "prompt" && command.message === "__QT_WEBUI_IMMEDIATE__").length, 0);
+  assert(backend.events.every(event => event.type !== "notice" || !/resource.*(?:unavailable|resume)/i.test(event.message)), "resume causes no resource error notice");
+
+  await backend.send("shutdown");
+  await backend.exitPromise;
+  const restored = await startBackend({ cwd, env, startupTimeoutMs: 1_000, t });
+  await waitForAsync(async () => (await restored.readCapture()).some(command => command.type === "switch_session" && command.sessionPath === sessionPath), "saved-state switch");
+  const restoredTabs = (await restored.send("tabs_list")).data.tabs;
+  assert.equal(restoredTabs.find(tab => tab.cwd === other).sessionFile, sessionPath);
+  assert.equal((await restored.readCapture()).find(command => command.type === "switch_session").sessionPath, sessionPath);
+});
+
+test("closing a catalog tab during its automatic resume or immediately afterwards succeeds", async (t) => {
+  const cwd = await temporary(t);
+  const agentDir = await temporary(t);
+  const env = { PI_CODING_AGENT_DIR: agentDir, QT_WEBUI_FIXTURE_SWITCH_DELAY_MS: "700" };
+  const sessionPath = await writeSession(sessionDirectoryFor(cwd, env), "closing-resume.jsonl", { id: "closing-resume", cwd });
+  const backend = await readyBackend(t, { cwd, env });
+  const first = await backend.send("tab_open", { cwd, sessionPath });
+  assert.equal(first.ok, true);
+  const firstId = first.data.tab.id;
+  await waitForAsync(async () => (await backend.readCapture()).some(command => command.type === "switch_session" && command.sessionPath === sessionPath), "pending catalog switch");
+  assert.equal((await backend.send("tabs_list")).data.tabs.find(tab => tab.id === firstId).mutating, true);
+  const closingPending = await backend.send("tab_close", { tab: firstId });
+  assert.equal(closingPending.ok, true, JSON.stringify(closingPending));
+  assert.equal((await backend.send("tabs_list")).data.tabs.some(tab => tab.id === firstId), false);
+  assert.equal((await backend.readCapture()).filter(command => command.type === "switch_session" && command.sessionPath === sessionPath).length, 1);
+  assert.equal(backend.events.filter(event => event.type === "notice" && /Could not resume/.test(event.message)).length, 0, "closing cancels its private resume without a spurious warning");
+
+  const second = await backend.send("tab_open", { cwd, sessionPath });
+  assert.equal(second.ok, true);
+  const secondId = second.data.tab.id;
+  await waitForAsync(async () => (await backend.send("tabs_list")).data.tabs.find(tab => tab.id === secondId)?.ready === true, "completed catalog resume");
+  const commands = (await backend.readCapture()).filter(command => command.type === "switch_session" && command.sessionPath === sessionPath);
+  assert.equal(commands.length, 2);
+  assert.equal((await backend.send("tab_close", { tab: secondId })).ok, true, "a completed resume closes without waiting for background work");
+  assert.equal((await backend.send("tabs_list")).data.tabs.some(tab => tab.id === secondId), false);
+});
+
+test("an unconfirmed catalog-open target is resumed after a backend restart", async (t) => {
+  const cwd = await temporary(t);
+  const other = await temporary(t);
+  const agentDir = await temporary(t);
+  const stateHome = await temporary(t);
+  const env = { PI_CODING_AGENT_DIR: agentDir, XDG_STATE_HOME: stateHome, QT_WEBUI_FIXTURE_SWITCH_DELAY_MS: "700" };
+  const sessionPath = await writeSession(sessionDirectoryFor(other, env), "unconfirmed.jsonl", { id: "unconfirmed", cwd: other });
+  const backend = await startBackend({ cwd, env, startupTimeoutMs: 1_000, t });
+  await backend.waitForEvent("pi.status", event => event.ready);
+  const opened = await backend.send("tab_open", { cwd: other, sessionPath });
+  assert.equal(opened.ok, true);
+  await waitForAsync(async () => (await backend.readCapture()).some(command => command.type === "switch_session" && command.sessionPath === sessionPath), "first unconfirmed switch");
+  assert.equal((await backend.send("tab_select", { tab: opened.data.tab.id })).data.session.ready, false);
+  backend.kill("SIGKILL");
+  await backend.exitPromise;
+  const stateFile = path.join(stateHome, "qt-webui", "state.json");
+  assert.equal(JSON.parse(await readFile(stateFile, "utf8")).tabs.find(tab => tab.cwd === other).pendingResume, sessionPath);
+  const restored = await startBackend({ cwd, env, startupTimeoutMs: 1_000, t });
+  await waitForAsync(async () => (await restored.readCapture()).some(command => command.type === "switch_session" && command.sessionPath === sessionPath), "restored unconfirmed switch");
+  const tab = (await restored.send("tabs_list")).data.tabs.find(entry => entry.cwd === other);
+  assert.equal(tab.ready, false);
+  await waitForAsync(async () => (await restored.send("tabs_list")).data.tabs.find(entry => entry.cwd === other).ready, "restored confirmed switch");
+  assert.equal(JSON.parse(await readFile(stateFile, "utf8")).tabs.find(entry => entry.cwd === other).sessionFile, sessionPath);
+  const commands = await restored.readCapture();
+  assert.equal(commands.find(command => command.type === "switch_session").sessionPath, sessionPath);
+  assert.equal(commands.filter(command => command.type === "prompt").length, 0);
+});
+
+test("a filename first saved by a prompt is persisted on run completion or exit and resumed before mutation", async (t) => {
+  for (const scenario of ["__QT_WEBUI_SAVE_FIRST__", "__QT_WEBUI_SAVE_AND_EXIT__"]) {
+    const cwd = await temporary(t);
+    const stateHome = await temporary(t);
+    const sessionPath = path.join(cwd, "first-saved.jsonl");
+    const backend = await readyBackend(t, { cwd, env: { XDG_STATE_HOME: stateHome, QT_WEBUI_FIXTURE_INITIAL_SESSION_FILE: sessionPath } });
+    assert.equal((await backend.send("tabs_list")).data.tabs[0].sessionFile, sessionPath);
+    assert.equal(JSON.parse(await readFile(path.join(stateHome, "qt-webui", "state.json"), "utf8")).tabs[0].sessionFile, "", "an unsaved filename is not a resume target yet");
+    const before = backend.events.length;
+    assert.equal((await backend.send("prompt", { message: scenario })).ok, true);
+    await backend.waitForEvent(scenario === "__QT_WEBUI_SAVE_FIRST__" ? "run.end" : "pi.exit", event => backend.events.indexOf(event) >= before);
+    const saved = await readFile(sessionPath, "utf8");
+    const stateFile = path.join(stateHome, "qt-webui", "state.json");
+    assert.equal(JSON.parse(await readFile(stateFile, "utf8")).tabs[0].sessionFile, sessionPath);
+    if (scenario === "__QT_WEBUI_SAVE_FIRST__") {
+      assert.equal((await backend.send("prompt", { message: "__QT_WEBUI_EXIT__" })).ok, true);
+      await backend.waitForEvent("pi.exit");
+      await writeFile(backend.statePath, "recovered-state\n");
+    }
+    const commandOffset = (await backend.readCapture()).length;
+    assert.equal((await backend.send("restart")).ok, true);
+    await waitForAsync(async () => (await backend.readCapture()).slice(commandOffset).some(command => command.type === "get_messages"), "saved-first resume history");
+    const resumed = (await backend.readCapture()).slice(commandOffset);
+    assert.deepEqual(resumed.slice(0, 3).map(command => command.type), ["get_state", "switch_session", "get_messages"]);
+    assert.equal(resumed[1].sessionPath, sessionPath);
+    await waitForAsync(async () => (await backend.send("tabs_list")).data.tabs[0].ready, "saved-first resume readiness");
+    assert.equal(JSON.parse(await readFile(stateFile, "utf8")).tabs[0].sessionFile, sessionPath);
+    assert.equal(await readFile(sessionPath, "utf8"), saved, "bookkeeping does not modify Pi's session file");
+  }
+});
+
+test("restore retains a missing saved session path instead of persisting the fresh child's identity", async (t) => {
+  const cwd = await temporary(t);
+  const stateHome = await temporary(t);
+  const sessionPath = path.join(cwd, "missing.jsonl");
+  const stateDirectory = path.join(stateHome, "qt-webui");
+  await mkdir(stateDirectory);
+  const stateFile = path.join(stateDirectory, "state.json");
+  await writeFile(stateFile, JSON.stringify({ tabs: [{ cwd, sessionFile: sessionPath, name: "Recovery" }], activeTab: 0 }));
+  const backend = await startBackend({ cwd, env: { XDG_STATE_HOME: stateHome }, startupTimeoutMs: 1_000, t });
+  await backend.waitForEvent("notice", event => /missing.jsonl.*missing.*Restore the saved file/.test(event.message));
+  const tab = (await backend.send("tabs_list")).data.tabs[0];
+  assert.equal(tab.sessionFile, sessionPath);
+  assert.equal(tab.ready, false);
+  assert.equal(tab.canRecover, true);
+  assert.equal(JSON.parse(await readFile(stateFile, "utf8")).tabs[0].sessionFile, sessionPath);
+  assert.equal((await backend.send("hello")).data.session.ready, false, "the active snapshot exposes effective readiness");
+  assert.deepEqual((await backend.readCapture()).map(command => command.type), ["get_state"], "missing target is never claimed resumed");
+  assert.equal((await backend.send("prompt", { message: "__QT_WEBUI_IMMEDIATE__" })).error.code, "unavailable");
+  assert.equal((await backend.send("resources_state")).error.code, "unavailable");
+  assert.equal((await backend.send("session_new")).ok, true, "the user can explicitly leave an unavailable session");
+  assert.equal((await backend.readCapture()).filter(command => command.type === "new_session").length, 1);
+  assert.equal((await backend.send("tabs_list")).data.tabs[0].canRecover, false);
+});
+
+test("a blocked missing-file tab can switch to another saved session without unlocking prompts first", async (t) => {
+  const cwd = await temporary(t);
+  const stateHome = await temporary(t);
+  const agentDir = await temporary(t);
+  const env = { XDG_STATE_HOME: stateHome, PI_CODING_AGENT_DIR: agentDir };
+  const target = await writeSession(sessionDirectoryFor(cwd, env), "replacement.jsonl", { id: "replacement", cwd });
+  const missing = path.join(cwd, "deleted.jsonl");
+  await mkdir(path.join(stateHome, "qt-webui"));
+  const stateFile = path.join(stateHome, "qt-webui", "state.json");
+  await writeFile(stateFile, JSON.stringify({ tabs: [{ cwd, sessionFile: missing, name: "Recovery" }], activeTab: 0 }));
+  const backend = await startBackend({ cwd, env, startupTimeoutMs: 1_000, t });
+  await backend.waitForEvent("notice", event => /deleted.jsonl.*missing/.test(event.message));
+  assert.equal((await backend.waitForEvent("pi.status", event => event.canRecover === true)).ready, false);
+  assert.equal((await backend.send("tabs_list")).data.tabs[0].canRecover, true);
+  assert.equal((await backend.send("prompt", { message: "__QT_WEBUI_IMMEDIATE__" })).error.code, "unavailable");
+  const switched = await backend.send("session_switch", { sessionPath: target });
+  assert.equal(switched.ok, true, JSON.stringify(switched));
+  const tab = (await backend.send("tabs_list")).data.tabs[0];
+  assert.equal(tab.canRecover, false);
+  assert.equal(tab.ready, true);
+  assert.equal(tab.sessionFile, target);
+  assert.equal(JSON.parse(await readFile(stateFile, "utf8")).tabs[0].sessionFile, target);
+  assert.deepEqual((await backend.readCapture()).filter(command => command.type === "switch_session").map(command => command.sessionPath), [target]);
+  assert.equal((await backend.readCapture()).filter(command => command.type === "prompt").length, 0);
+});
+
+test("cancelled replacement keeps the old identity; confirmed new session never resumes its predecessor", async (t) => {
+  const cwd = await temporary(t);
+  const agentDir = await temporary(t);
+  const stateHome = await temporary(t);
+  const env = { PI_CODING_AGENT_DIR: agentDir, XDG_STATE_HOME: stateHome };
+  const directory = sessionDirectoryFor(cwd, env);
+  const original = await writeSession(directory, "original.jsonl", { id: "original", cwd });
+  const cancelled = await writeSession(directory, "cancel-me.jsonl", { id: "cancel-me", cwd });
+  const backend = await readyBackend(t, { cwd, env });
+  assert.equal((await backend.send("session_switch", { sessionPath: original })).ok, true);
+  assert.equal((await backend.send("session_switch", { sessionPath: cancelled })).error.code, "pi_error");
+  assert.equal((await backend.send("tabs_list")).data.tabs[0].sessionFile, original);
+  assert.equal(JSON.parse(await readFile(path.join(stateHome, "qt-webui", "state.json"), "utf8")).tabs[0].sessionFile, original);
+  const newSession = await backend.send("session_new");
+  assert.equal(newSession.ok, true);
+  assert.notEqual(newSession.data.sessionFile, original);
+  const before = (await backend.readCapture()).length;
+  assert.equal((await backend.send("restart")).ok, true);
+  await waitForAsync(async () => (await backend.readCapture()).slice(before).some(command => command.type === "get_state"), "new child state");
+  assert((await backend.readCapture()).slice(before).every(command => command.type !== "switch_session" || command.sessionPath !== original));
+  assert.notEqual((await backend.send("tabs_list")).data.tabs[0].sessionFile, original);
+});
+
+test("failed readiness and missing resume files retain recovery context and fence fresh-child writes", async (t) => {
+  const cwd = await temporary(t);
+  const agentDir = await temporary(t);
+  const stateHome = await temporary(t);
+  const env = { PI_CODING_AGENT_DIR: agentDir, XDG_STATE_HOME: stateHome };
+  const sessionPath = await writeSession(sessionDirectoryFor(cwd, env), "lost.jsonl", { id: "lost", cwd });
+  const backend = await readyBackend(t, { cwd, env });
+  assert.equal((await backend.send("session_switch", { sessionPath })).ok, true);
+  await writeFile(backend.statePath, "failed-state\n");
+  assert.equal((await backend.send("restart")).ok, true);
+  await backend.waitForEvent("pi.error", event => /deterministic startup state failure/.test(event.message));
+  let tab = (await backend.send("tabs_list")).data.tabs[0];
+  assert.equal(tab.sessionFile, sessionPath);
+  assert.equal(tab.ready, false);
+  assert.equal(backend.events.filter(event => event.type === "pi.runtime").at(-1).modelId, "", "failed readiness clears volatile model data");
+  assert.equal((await backend.send("prompt", { message: "__QT_WEBUI_IMMEDIATE__" })).error.code, "unavailable");
+  assert.equal((await backend.readCapture()).at(-1).type, "get_state");
+
+  await rm(sessionPath);
+  await writeFile(backend.statePath, "recovered-state\n");
+  assert.equal((await backend.send("restart")).ok, true);
+  await backend.waitForEvent("notice", event => /lost.jsonl.*missing.*Restore the saved file/.test(event.message));
+  tab = (await backend.send("tabs_list")).data.tabs[0];
+  assert.equal(tab.sessionFile, sessionPath);
+  assert.equal((await backend.send("prompt", { message: "__QT_WEBUI_IMMEDIATE__" })).error.code, "unavailable");
+  assert.equal((await backend.readCapture()).at(-1).type, "get_state", "missing target never permits a fresh-session mutation");
+  assert.equal(JSON.parse(await readFile(path.join(stateHome, "qt-webui", "state.json"), "utf8")).tabs[0].sessionFile, sessionPath);
 });
 
 test("session settlement persists, reverses, and refuses to newly settle an active open session", async (t) => {

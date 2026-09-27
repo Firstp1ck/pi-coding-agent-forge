@@ -155,7 +155,7 @@ test("workspace shell keeps the approved rail, centered conversation, and small-
   assert.match(emptyState, /property bool sessionOpen:\s*true[\s\S]*signal newSessionRequested\(\)/);
   assert.match(emptyState, /text:\s*!empty\.sessionOpen \? "NO SESSION OPEN" : empty\.ready \? "SESSION READY"[\s\S]*font\.family:\s*empty\.theme\.monospaceFamily[\s\S]*font\.letterSpacing:\s*empty\.theme\.labelTracking/);
   assert.match(shell, /Layout\.fillHeight:\s*!root\.hasActiveSession \|\| transcriptList\.count > 0[\s\S]*Layout\.preferredHeight:\s*root\.hasActiveSession && transcriptList\.count === 0[\s\S]*Math\.min\(480, Math\.max\(260, contentRoot\.height \* 0\.42\)\)/);
-  assert.match(emptyState, /AppButton\s*\{[\s\S]*visible:\s*!empty\.sessionOpen[\s\S]*variant:\s*"primary"[\s\S]*text:\s*"New session"[\s\S]*accessibleName:\s*"Start a new session"[\s\S]*onClicked:\s*empty\.newSessionRequested\(\)/);
+  assert.match(emptyState, /AppButton\s*\{[\s\S]*visible:\s*!empty\.sessionOpen \|\| empty\.canRecover[\s\S]*variant:\s*"primary"[\s\S]*text:\s*"New session"[\s\S]*accessibleName:\s*"Start a new session"[\s\S]*onClicked:\s*empty\.newSessionRequested\(\)/);
   assert.doesNotMatch(emptyState, /Focus prompt|Focus the prompt|focusComposerRequested/);
   assert.match(shell, /EmptyState\s*\{[\s\S]*sessionOpen:\s*root\.hasActiveSession[\s\S]*onNewSessionRequested:\s*root\.newSessionInTab\(\)/);
   assert.doesNotMatch(shell, /onFocusComposerRequested/);
@@ -697,7 +697,11 @@ test("resource profiles expose explicit scopes, inheritance, enabled names, supp
   for (const name of ["selectModel", "cycleModel", "setThinkingLevel", "cycleThinkingLevel"]) {
     assert.match(functionBody(bridge, name), /applyResourceState\(response\.data\.resources\)/, `${name} applies the backend's freshly resolved resources`);
   }
-  assert.match(functionBody(bridge, "applySnapshot"), /resourceState = null[\s\S]*Qt\.callLater\(bridge\.refreshResources\)/, "tab snapshots clear then refresh resources");
+  assert.match(functionBody(bridge, "applySnapshot"), /resourceLoading = Object\.values\(pendingRequests\)\.some\(entry => entry\.type === "resources_state" && entry\.originTab === activeTabId\)/, "a selection snapshot retains its in-flight resource read");
+  assert.match(functionBody(bridge, "applySnapshot"), /applyTabSummary\(data\.tab, false\)[\s\S]*if \(ready\)[\s\S]*bridge\.refreshResources\(\)/, "tab snapshots refresh resources only with projected readiness");
+  assert.match(functionBody(bridge, "applyTabSummary"), /ready = tab\.ready === true[\s\S]*if \(refreshOnReady && !wasReady && ready\)/, "tab updates apply effective readiness before refreshing resources");
+  assert.match(functionBody(bridge, "applyTabSummary"), /if \(tab\.ready === true && tab\.mutating !== true\)[\s\S]*sessionFile =/, "transition targets cannot change the editor's conversation identity");
+  assert.match(bridge, /case "tabs\.update":[\s\S]*applyTabSummary\(tabById\(activeTabId\), !selectionChanged\)/, "resume completion updates active controls without duplicate selection refreshes");
   assert.match(functionBody(bridge, "resetTabState"), /resourceState = null/);
   assert.match(functionBody(bridge, "handleEvent"), /case "resources\.changed":[\s\S]*applyResourceState\(event\.state\)/);
   assert.match(bridge, new RegExp(`readonly property int maxResourceNames:\\s*${LIMITS.maxResourceNames}\\b`));
@@ -977,7 +981,14 @@ test("tabs isolate session state, replay from the backend, confirm busy closes, 
   assert.match(functionBody(worktreeDialog, "submit"), /if \(answered \|\| !valid\) return false[\s\S]*submitted\(branch\)/, "the split dialog only submits a valid combined branch");
   assert.match(shell, /WorktreeDialog\s*\{[\s\S]*onSubmitted:\s*branch => root\.planWorktree\(branch\)/);
   assert.match(functionBody(shell, "pickerPicked"), /kind === "session"[\s\S]*bridge\.switchSession\(value\)/);
-  assert.match(functionBody(shell, "openSessionsPicker"), /if \(!bridge\.ready \|\| bridge\.active \|\| pickerDialogItem\.opened\) return false/);
+  assert.match(functionBody(shell, "openSessionsPicker"), /if \(\(!bridge\.ready && !bridge\.canRecover\) \|\| bridge\.active \|\| pickerDialogItem\.opened\) return false/);
+  assert.match(functionBody(bridge, "listSessions"), /if \(!ready && !canRecover\) return false/, "the recovery picker can list saved sessions while prompts remain blocked");
+  for (const action of ["switchSession", "newSession"]) assert.match(functionBody(bridge, action), /if \(\(!ready && !canRecover\) \|\| active\) return false/, `${action} remains available only during explicit recovery`);
+  assert.match(functionBody(bridge, "applyTabSummary"), /canRecover = tab\.canRecover === true/);
+  assert.match(functionBody(bridge, "handleStatus"), /canRecover = event\.canRecover === true/, "status events cannot retain recovery actions after the child stops");
+  assert.match(shell, /text: "Sessions"[\s\S]*onClicked: root\.openSessionsPicker\(\)/);
+  assert.match(shell, /visible: bridge\.canRecover[\s\S]*text: "New session"[\s\S]*onClicked: root\.newSessionInTab\(\)/, "new session stays visible when a missing file blocks the composer");
+  assert.match(emptyState, /visible: !empty\.sessionOpen \|\| empty\.ready \|\| empty\.canRecover[\s\S]*text: "Resume session"/);
   assert.match(functionBody(shell, "handleDraftKeyChanged"), /bridge\.saveDraftFor\(draftKeyInUse, composer\.text\)/, "the previous tab's draft is saved before switching");
   assert.match(shell, /SessionList\s*\{[\s\S]*onSessionRequested:\s*session => root\.openCatalogSession\(session\)[\s\S]*onCloseRequested:\s*tabId => root\.closeTab\(tabId\)/);
   assert.match(shell, /DirectoryDialog\s*\{[\s\S]*onChosen:\s*path => bridge\.openTab\(path, ""\)/);

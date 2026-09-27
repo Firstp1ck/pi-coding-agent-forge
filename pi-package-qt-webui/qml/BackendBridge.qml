@@ -74,6 +74,7 @@ Scope {
     property bool backendRunning: backendProcess.running
     property bool backendReady: false
     property bool ready: false
+    property bool canRecover: false
     property bool active: false
     property bool quitting: false
     property string statusKind: "stopped"
@@ -999,6 +1000,7 @@ Scope {
         statusKind = "stopped"
         statusText = "Starting…"
         ready = false
+        canRecover = false
         active = false
         currentProvider = ""
         currentModelId = ""
@@ -1037,6 +1039,26 @@ Scope {
         tabSwitched(tabId)
     }
 
+    function applyTabSummary(tab, refreshOnReady = true) {
+        if (!tab) return
+        const wasReady = ready
+        ready = tab.ready === true
+        canRecover = tab.canRecover === true
+        statusKind = String(tab.statusKind || "stopped")
+        statusText = boundedText(tab.statusText || "", maxRuntimeInfoCharacters)
+        // A transition target in tabs.update is not yet the editor's confirmed conversation.
+        if (tab.ready === true && tab.mutating !== true) {
+            sessionName = boundedText(tab.sessionName || "", maxRuntimeInfoCharacters)
+            const previousSessionFile = sessionFile
+            sessionFile = typeof tab.sessionFile === "string" ? tab.sessionFile : ""
+            if (sessionFile !== previousSessionFile && sessionFile.length > 0) scheduleSessionCatalogRefresh()
+        }
+        if (refreshOnReady && !wasReady && ready) {
+            usageTimer.restart()
+            bridge.refreshResources()
+        }
+    }
+
     // Applies a backend snapshot ({tab, session, attachments}); the transcript itself arrives as
     // transcript.reset and transcript.row events before the snapshot response.
     function applySnapshot(data) {
@@ -1050,10 +1072,13 @@ Scope {
         compacting = snapshot.compacting === true
         modelActionPending = false
         resourceActionPending = false
-        resourceLoading = false
+        // A selection snapshot can arrive while its resource read is still admitted. Keep the
+        // busy indicator until that response settles instead of allowing a second read or close.
+        resourceLoading = Object.values(pendingRequests).some(entry => entry.type === "resources_state" && entry.originTab === activeTabId)
         resourceState = null
         restarting = false
         handleRuntime(snapshot.runtime || {})
+        applyTabSummary(data.tab, false)
         visibleError = typeof snapshot.error === "string" && snapshot.error.trim().length > 0 ? boundedError(snapshot.error) : ""
         if (visibleError.length === 0 && statusKind === "error") statusKind = "stopped"
         steeringQueue = snapshot.queues && Array.isArray(snapshot.queues.steering) ? snapshot.queues.steering : []
@@ -1068,7 +1093,7 @@ Scope {
         presentNextDialog()
         if (ready) {
             usageTimer.restart()
-            Qt.callLater(bridge.refreshResources)
+            bridge.refreshResources()
         }
     }
 
@@ -1187,7 +1212,7 @@ Scope {
 
     // Legacy workspace-only listing used by the existing resume picker and command palette.
     function listSessions(callback) {
-        if (!ready) return false
+        if (!ready && !canRecover) return false
         request("sessions_list", {}, response => {
             if (!response.ok) postNotice("error", "Could not list sessions: " + response.error.message)
             else sessionsLoaded(response.data)
@@ -1371,7 +1396,7 @@ Scope {
     }
 
     function switchSession(sessionPath, callback) {
-        if (!ready || active) return false
+        if ((!ready && !canRecover) || active) return false
         visibleError = ""
         request("session_switch", { "sessionPath": String(sessionPath) }, response => {
             if (!response.ok) postNotice("error", "Could not resume the session: " + response.error.message)
@@ -1382,7 +1407,7 @@ Scope {
     }
 
     function newSession(callback) {
-        if (!ready || active) return false
+        if ((!ready && !canRecover) || active) return false
         visibleError = ""
         request("session_new", {}, response => {
             if (!response.ok) postNotice("error", "Could not start a new session: " + response.error.message)
@@ -1555,6 +1580,7 @@ Scope {
         statusKind = String(event.statusKind || "stopped")
         statusText = boundedText(event.text || "", maxRuntimeInfoCharacters)
         ready = event.ready === true
+        canRecover = event.canRecover === true
         active = event.active === true
         if (restarting && (ready || statusKind === "error")) {
             restarting = false
@@ -1610,8 +1636,13 @@ Scope {
         currentModelName = boundedText(event.modelName || "", maxRuntimeInfoCharacters)
         currentModelReasoning = event.modelReasoning === true
         currentThinkingLevel = boundedText(event.thinkingLevel || "", maxRuntimeInfoCharacters)
-        sessionName = boundedText(event.sessionName || "", maxRuntimeInfoCharacters)
-        sessionFile = typeof event.sessionFile === "string" ? event.sessionFile : ""
+        // A fresh child's runtime cannot replace the tab's retained conversation while resuming.
+        const currentTab = tabById(activeTabId)
+        if (typeof event.sessionFile === "string" && event.sessionFile.length > 0
+                && (!currentTab || !currentTab.sessionFile || currentTab.ready || currentTab.sessionFile === event.sessionFile)) {
+            sessionName = boundedText(event.sessionName || "", maxRuntimeInfoCharacters)
+            sessionFile = event.sessionFile
+        }
         if (sessionFile !== previousSessionFile && sessionFile.length > 0) scheduleSessionCatalogRefresh()
         if (smokeMode && runtimeInfoText.length > 0) console.log("QT_WEBUI_SMOKE_RUNTIME_INFO")
     }
@@ -1686,7 +1717,9 @@ Scope {
             const dialogs = Object.assign({}, dialogStates)
             for (const key of Object.keys(dialogs)) if (liveTabs.indexOf(dialogs[key].originTab) === -1) delete dialogs[key]
             dialogStates = dialogs
-            if (typeof event.activeTab === "string" && event.activeTab !== activeTabId) beginTabSwitch(event.activeTab)
+            const selectionChanged = typeof event.activeTab === "string" && event.activeTab !== activeTabId
+            if (selectionChanged) beginTabSwitch(event.activeTab)
+            applyTabSummary(tabById(activeTabId), !selectionChanged)
             break
         case "sessions.changed":
             scheduleSessionCatalogRefresh()
@@ -1874,6 +1907,7 @@ Scope {
         if (backendProcess.running) return
         backendReady = false
         ready = false
+        canRecover = false
         active = false
         visibleError = ""
         statusKind = "stopped"
@@ -1956,6 +1990,7 @@ Scope {
             bridge.dialogStates = ({})
             bridge.backendReady = false
             bridge.ready = false
+            bridge.canRecover = false
             bridge.active = false
             bridge.statusKind = "stopped"
             bridge.statusText = "Starting…"
@@ -1971,6 +2006,7 @@ Scope {
             }
             bridge.backendReady = false
             bridge.ready = false
+            bridge.canRecover = false
             bridge.active = false
             bridge.backendExitCode = exitCode
             bridge.restarting = false
