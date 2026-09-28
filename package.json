@@ -9,6 +9,6 @@
   },
   "homepage": "https://github.com/Firstp1ck/pi-coding-agent-forge#readme",
   "dependencies": {
-    "@firstpick/pi-package-webui": "^0.8.9"
+    "@firstpick/pi-package-webui": "^0.10.9"
   }
 }
