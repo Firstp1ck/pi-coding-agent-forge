@@ -5,13 +5,16 @@
     "Update this library's project README with a minimal integration example and links to its public API documentation.",
     "Review the repository README for unsupported feature claims, broken reader paths, and documentation-layer violations.",
     "Harmonize this CLI project's README with the local AGENTS.md rules while preserving verified usage and warnings.",
-    "Restructure our existing project README for end users and move contributor detail only where an in-scope destination already exists."
+    "Restructure our existing project README for end users and move contributor detail only where an in-scope destination already exists.",
+    "Update this project's README and ask separately before creating TECHNICAL.md for advanced users or DEVELOPMENT.md for contributors."
   ],
   "should_not_trigger": [
     "Write a complete REST endpoint reference with request and response schemas.",
     "Implement the missing export feature and add integration tests.",
     "Draft release notes for version 2.0 from these merged pull requests.",
     "Create CONTRIBUTING.md with local development and test instructions.",
+    "Write a standalone TECHNICAL.md command reference without changing the project README.",
+    "Create a standalone DEVELOPMENT.md contributor guide without a README task.",
     "Review this pull request for architecture and security defects.",
     "Reformat every Markdown file in all sibling repositories.",
     "Publish this package and update the npm release metadata."
@@ -34,7 +37,7 @@
         "project-readme",
         "tech-deep-dive"
       ],
-      "decision": "Classify the primary README audience and use this skill for its reader-facing entry point; separately scope API, technical, or contributor documents instead of silently combining all documentation layers in the README.",
+      "decision": "Confirm that the primary README is in scope, classify its audience, and ask separately for exact-path creation decisions for missing TECHNICAL.md and DEVELOPMENT.md companions. Keep advanced user operations separate from implementation and preserve existing documents unless their edits are authorized. Route standalone reference work elsewhere.",
       "reason": "The request may span a project README and dedicated technical documents with different allowed content.",
       "review_status": "reviewed"
     },

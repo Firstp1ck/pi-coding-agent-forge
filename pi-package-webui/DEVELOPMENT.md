@@ -4,6 +4,12 @@ Contributor-only implementation, API, architecture, testing, and maintenance inf
 
 [Back to README](README.md) · [Advanced user technical reference](TECHNICAL.md)
 
+## Host-provided dependencies
+
+Declare `@earendil-works/pi-ai`, `@earendil-works/pi-coding-agent`, `@earendil-works/pi-tui`, and `typebox` as `peerDependencies` with a `"*"` range. Pi supplies them to extensions. Regular runtime dependencies can install duplicate Pi modules and trigger an extension warning. Keep versioned development dependencies for checkout tests and standalone CLI development, and regenerate the npm and Bun lockfiles after changing the manifest.
+
+Run `node tests/host-peer-dependencies.test.mjs` to check the peer declarations and npm lockfile root.
+
 ## Tool and skill command ownership
 
 WebUI does not register TUI `/tools` or `/skills` commands. The standalone `@firstpick/pi-extension-tools` and `@firstpick/pi-extension-setup-skills` packages own those commands and their Session, Global, and Model selector flow. Shared profile resolution, locking, and TUI selector components live in `@firstpick/pi-utils`. Browser-native tool and skill controls continue through `webui-rpc-helper.mjs` and the WebUI HTTP routes against the same saved state.

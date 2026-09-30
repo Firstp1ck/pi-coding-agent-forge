@@ -11,22 +11,28 @@ Create or improve a project README that matches its audience, uses verified repo
 ## What to share with Pi
 
 - The repository and whether you want to create, update, harmonize, or review its README
+- Whether you want advanced user or contributor documents alongside it
 - The primary audience and any repository-specific documentation rules
 - Important user workflows, safety constraints, and verified image paths
 
 ## Try asking
 
-> Review this desktop application's README for new users. Preserve verified instructions, use existing screenshots where possible, and tell me what evidence or images are missing before you rewrite it.
+> Update this CLI project's README for end users. Preserve its verified usage and safety warnings, and ask me separately whether to create TECHNICAL.md for advanced users and DEVELOPMENT.md for contributors before moving detailed content.
 
 ## What you’ll get
 
 - A README structure adapted to the project and its primary audience
 - Evidence-based wording that does not invent commands, features, compatibility, or visuals
 - Clear gaps, conditional-section decisions, and links to deeper documentation where appropriate
+- Separate advanced user and contributor documents when useful, created only after you approve each file
 
 ## Keep in mind
 
-Pi follows repository-local documentation rules first. For visual user products, it will ask for missing Main Window and common-feature images or an explicit choice to continue without them; it will not invent or capture visuals. Review proposed changes before applying them to important documentation. This package is not installed automatically and is not enabled automatically; installation requires explicit authorization, and there are no runtime package dependencies.
+Pi follows repository-local documentation rules first. A README request does not approve companion-file creation. You can approve either companion, both, or neither; existing documents are not overwritten without permission.
+
+For visual user products, Pi asks for missing Main Window and common-feature images or an explicit choice to continue without them. It does not invent or capture visuals. Review proposed changes before applying them to important documentation.
+
+This package is not installed automatically and is not enabled automatically. Installation requires explicit authorization. There are no runtime package dependencies.
 
 ## Install
 

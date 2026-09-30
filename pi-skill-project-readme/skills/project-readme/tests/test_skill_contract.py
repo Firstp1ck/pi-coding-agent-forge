@@ -9,6 +9,8 @@ PACKAGE_ROOT = SKILL_DIR.parents[1]
 REPO_ROOT = PACKAGE_ROOT.parent
 SKILL = SKILL_DIR / "SKILL.md"
 TEMPLATE = SKILL_DIR / "references" / "PROJECT-README-TEMPLATE.md"
+TECHNICAL_TEMPLATE = SKILL_DIR / "references" / "PROJECT-TECHNICAL-TEMPLATE.md"
+DEVELOPMENT_TEMPLATE = SKILL_DIR / "references" / "PROJECT-DEVELOPMENT-TEMPLATE.md"
 SECTION_DECISIONS = SKILL_DIR / "references" / "SECTION-DECISIONS.md"
 ROUTING = PACKAGE_ROOT / "tests" / "routing" / "project-readme.json"
 README = PACKAGE_ROOT / "README.md"
@@ -21,6 +23,8 @@ PACKAGE_NAME = "@firstpick/pi-skill-project-readme"
 EXPECTED_FILES = [
     "skills/project-readme/SKILL.md",
     "skills/project-readme/references/PROJECT-README-TEMPLATE.md",
+    "skills/project-readme/references/PROJECT-TECHNICAL-TEMPLATE.md",
+    "skills/project-readme/references/PROJECT-DEVELOPMENT-TEMPLATE.md",
     "skills/project-readme/references/SECTION-DECISIONS.md",
     "skills/project-readme/tests/test_skill_contract.py",
     "tests/routing/project-readme.json",
@@ -158,6 +162,110 @@ class ProjectReadmeContractTests(unittest.TestCase):
         ]:
             self.assertIn(phrase, update)
 
+    def test_companion_creation_requires_independent_file_specific_consent(self):
+        text = SKILL.read_text(encoding="utf-8")
+        consent = text.split("## Companion document consent and layers", 1)[1].split("## Portable Workflow", 1)[0]
+        for phrase in [
+            "A README request does not authorize creating companion files.",
+            "Ask the user separately whether to create `TECHNICAL.md` and whether to create `DEVELOPMENT.md`",
+            "exact target paths",
+            "each needs its own explicit answer",
+            "either file, both files, or neither",
+            "approval for one does not approve the other",
+            "approved, declined, or unanswered",
+            "prior explicit approval naming the same file and creation scope",
+            "Never infer consent",
+            "silence",
+            "Declined or unanswered means do not create that file.",
+            "Do not overwrite or edit an existing companion",
+            "If a file unexpectedly exists at creation time, stop and ask",
+            "Do not create empty documents.",
+            "Create and verify the destination before removing relocated content",
+            "link only to destinations that actually exist",
+            "In review-only mode",
+            "keep verified content reachable",
+            "report blocked relocation",
+        ]:
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, consent)
+
+        workflow = text.split("## Portable Workflow", 1)[1].split("## Output Contract", 1)[0]
+        self.assertIn("Apply the companion document consent step", workflow)
+        self.assertIn("Declined, unanswered, and review-only destinations must have no task-owned writes.", workflow)
+        self.assertIn("never leave a link to a declined or absent companion", workflow)
+        adapter = text.split("## Pi Adapter", 1)[1]
+        self.assertIn("separate single-select questions", adapter)
+        self.assertIn("Cancellation or an unavailable dialog grants no approval", adapter)
+
+    def test_companion_templates_keep_advanced_user_and_contributor_layers_separate(self):
+        expected_headings = {
+            TECHNICAL_TEMPLATE: [
+                "# Technical reference: {{PROJECT_NAME}}",
+                "## Requirements and compatibility",
+                "## Usage reference",
+                "## Configuration",
+                "## Data and storage",
+                "## Security and privacy",
+                "## Updates and recovery",
+                "## Limits and troubleshooting",
+            ],
+            DEVELOPMENT_TEMPLATE: [
+                "# Development guide: {{PROJECT_NAME}}",
+                "## Local development",
+                "## Source layout",
+                "## Architecture and control flow",
+                "## Interfaces and contracts",
+                "## State and failure handling",
+                "## Security implementation",
+                "## Validation",
+                "## Maintenance and migrations",
+                "## Packaging and releases",
+            ],
+        }
+        for path, headings in expected_headings.items():
+            with self.subTest(template=path.name):
+                text = path.read_text(encoding="utf-8")
+                canonical = text.split("````markdown\n", 1)[1].split("\n````", 1)[0]
+                for heading in headings:
+                    self.assertIn(heading, canonical)
+                self.assertIn("[Back to README](README.md)", canonical)
+                self.assertIn("../SKILL.md", text)
+                self.assertIn("destinations exist or are approved companion files", text)
+                self.assertIn("remove instructional comments", text)
+                self.assertIn("repository-local rules", text)
+
+        technical = TECHNICAL_TEMPLATE.read_text(encoding="utf-8")
+        technical_body = re.sub(r"<!--[\s\S]*?-->", "", technical.split("````markdown\n", 1)[1].split("\n````", 1)[0])
+        self.assertNotRegex(
+            technical_body,
+            r"(?mi)^##+\s+(?:Architecture.*|Source layout|Local development|Interfaces and contracts|Validation|Packaging.*|Tests?|Fixtures?|Benchmarks?)\s*$",
+        )
+        self.assertNotRegex(technical_body, r"npm\s+(?:test|pack|publish)|python3?\s+-m\s+unittest")
+        for category in ["endpoint catalogs", "payloads", "schemas", "tool contracts", "architecture", "tests", "publication internals"]:
+            self.assertIn(category, technical)
+        self.assertIn("user-facing health check is allowed", technical)
+
+        development = DEVELOPMENT_TEMPLATE.read_text(encoding="utf-8")
+        self.assertIn("Contributor-only implementation, API, architecture, testing, and maintenance information.", development)
+        self.assertIn("[Advanced user technical reference](TECHNICAL.md)", development)
+        self.assertIn("Approval for `TECHNICAL.md` does not approve this file.", development)
+        self.assertIn("omit its link", development)
+        self.assertIn("Do not install, publish, deploy, migrate real data, or change settings", development)
+
+    def test_companion_resources_are_referenced_and_readme_links_are_conditional(self):
+        skill = SKILL.read_text(encoding="utf-8")
+        decisions = SECTION_DECISIONS.read_text(encoding="utf-8")
+        for path in [TECHNICAL_TEMPLATE, DEVELOPMENT_TEMPLATE]:
+            relative = path.relative_to(SKILL_DIR).as_posix()
+            self.assertIn(relative, skill)
+            self.assertIn(path.name, decisions)
+            self.assertTrue((SKILL_DIR / relative).is_file())
+        readme_template = TEMPLATE.read_text(encoding="utf-8")
+        self.assertIn("Follow the consent step in ../SKILL.md", readme_template)
+        self.assertIn("Omit each missing or declined destination", readme_template)
+        self.assertIn("(TECHNICAL.md)", readme_template)
+        self.assertIn("(DEVELOPMENT.md)", readme_template)
+
     def test_portable_core_is_separate_from_pi_adapter(self):
         text = SKILL.read_text(encoding="utf-8")
         core, marker, adapter = text.partition("## Pi Adapter")
@@ -182,6 +290,8 @@ class ProjectReadmeContractTests(unittest.TestCase):
         expected_paths = [
             SKILL,
             TEMPLATE,
+            TECHNICAL_TEMPLATE,
+            DEVELOPMENT_TEMPLATE,
             SECTION_DECISIONS,
             ROUTING,
             README,
@@ -203,6 +313,8 @@ class ProjectReadmeContractTests(unittest.TestCase):
         self.assertEqual(package["files"], EXPECTED_FILES)
         self.assertNotIn("dependencies", package)
         self.assertRegex(package["scripts"]["test"], r"python3.*unittest.*skills/project-readme/tests")
+        # npm's default Windows shell treats single quotes as literal pattern characters.
+        self.assertIn('-p "test_*.py"', package["scripts"]["test"])
 
     def test_template_and_section_catalog_cover_approved_profiles(self):
         template = TEMPLATE.read_text(encoding="utf-8")
@@ -241,16 +353,18 @@ class ProjectReadmeContractTests(unittest.TestCase):
             "non-visual",
         ]:
             self.assertIn(phrase, lower)
-        self.assertEqual(template.count("<!--"), template.count("-->"), "unbalanced instructional comments")
-
-        without_comments = re.sub(r"<!--[\s\S]*?-->", "", template)
-        fence_counts = {}
-        for match in re.finditer(r"(?m)^(`{3,}|~{3,})", without_comments):
-            marker = match.group(1)
-            fence_counts[marker] = fence_counts.get(marker, 0) + 1
-        for marker, count in fence_counts.items():
-            self.assertEqual(count % 2, 0, f"unbalanced Markdown fence {marker!r}")
-        self.assertNotRegex(without_comments, r"(?m)^#{1,6}\s*$", "empty Markdown heading")
+        for path in [TEMPLATE, TECHNICAL_TEMPLATE, DEVELOPMENT_TEMPLATE]:
+            with self.subTest(template=path.name):
+                text = path.read_text(encoding="utf-8")
+                self.assertEqual(text.count("<!--"), text.count("-->"), "unbalanced instructional comments")
+                without_comments = re.sub(r"<!--[\s\S]*?-->", "", text)
+                fence_counts = {}
+                for match in re.finditer(r"(?m)^(`{3,}|~{3,})", without_comments):
+                    marker = match.group(1)
+                    fence_counts[marker] = fence_counts.get(marker, 0) + 1
+                for marker, count in fence_counts.items():
+                    self.assertEqual(count % 2, 0, f"unbalanced Markdown fence {marker!r}")
+                self.assertNotRegex(without_comments, r"(?m)^#{1,6}\s*$", "empty Markdown heading")
 
     def test_user_documents_obey_repository_layers(self):
         readme = README.read_text(encoding="utf-8")
@@ -317,6 +431,16 @@ class ProjectReadmeContractTests(unittest.TestCase):
             self.assertGreaterEqual(len(case["candidate_skills"]), 2)
             self.assertIn("project-readme", case["candidate_skills"])
             self.assertEqual(case["review_status"], "reviewed")
+
+    def test_routing_supports_companions_only_with_a_readme_task(self):
+        fixture = json.loads(ROUTING.read_text(encoding="utf-8"))
+        positives = " ".join(fixture["should_trigger"]).lower()
+        negatives = " ".join(fixture["should_not_trigger"]).lower()
+        self.assertIn("ask separately", positives)
+        self.assertIn("technical.md", positives)
+        self.assertIn("development.md", positives)
+        self.assertIn("standalone technical.md", negatives)
+        self.assertIn("standalone development.md", negatives)
 
     def test_package_has_no_private_paths_secrets_demo_passwords_or_model_ids(self):
         suffixes = {".md", ".json", ".py"}
