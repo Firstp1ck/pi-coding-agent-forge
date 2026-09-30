@@ -150,6 +150,12 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) or [DEVELOPMENT.md](DEVELOPMENT.md) for c
 
 See [the project roadmap]({{VERIFIED_ROADMAP_LINK}}).
 
+<!-- Conditional: link to existing companion documents or separately approved companions after they are created and verified. Follow the consent step in ../SKILL.md before creating TECHNICAL.md or DEVELOPMENT.md. Approval for one file does not approve the other. Omit each missing or declined destination; never leave a broken link. -->
+## Further reading
+
+- [Advanced usage, configuration, and troubleshooting](TECHNICAL.md)
+- [Contributor and implementation guide](DEVELOPMENT.md)
+
 ## Contributing and support
 
 <!-- Keep only links that exist and serve this audience. For a user-oriented README, support may be the heading if contribution is not relevant. -->
@@ -214,4 +220,4 @@ Keep internal algorithms, exhaustive source maps, fixtures, benchmark methods, p
 
 Lead with the outcome and the fastest verified path to success. Put configuration and warnings before their consequences. Place deeper orientation after normal use. Finish with support and legal information.
 
-Repository-local policy and existing security, contribution, license, and technical documents take precedence. In update mode, preserve useful verified material. Relocate detail only when policy calls for it and a destination exists or is within the authorized write scope. Record why conditional sections were included or omitted, and never infer absent project facts from this template.
+Repository-local policy and existing security, contribution, license, and technical documents take precedence. In update mode, preserve useful verified material. Ask the user separately before creating a missing `TECHNICAL.md` or `DEVELOPMENT.md`; creation requires an explicit decision for each exact path and substantive evidence for that file. Use the matching companion template only after approval. Relocate detail only when policy calls for it and a destination exists and is within the authorized write scope. Write and verify an approved new destination before removing original content. A declined or unanswered creation keeps the file absent, the content reachable, and the blocked move visible in the handoff. Record why conditional sections were included or omitted, and never infer absent project facts from this template.

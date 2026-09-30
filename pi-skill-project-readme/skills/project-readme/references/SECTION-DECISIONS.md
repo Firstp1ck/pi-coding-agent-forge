@@ -50,7 +50,7 @@ Exact headings vary while serving the same reader need. The inventory supports t
 
 - **Include:** part of the normal path for the selected audience when verified content exists.
 - **Conditional:** include only when project evidence, project type, reader needs, or risk makes it useful.
-- **Relocate:** link or move the detail to a more appropriate document, provided that destination exists or is within the authorized write scope.
+- **Relocate:** link or move the detail to a more appropriate document, provided that destination exists and is within the authorized write scope. A missing `TECHNICAL.md` or `DEVELOPMENT.md` must receive separate explicit creation approval and be written and verified before original content is removed.
 - **Exclude:** omit unsupported, irrelevant, misleading, empty, secret, or prohibited content.
 
 A decision applies to content, not merely a heading. Existing projects may use different clear headings while preserving the same reader outcome, except that qualifying visual user products use the exact **Main Window** heading.
@@ -90,8 +90,10 @@ A decision applies to content, not merely a heading. Existing projects may use d
 | Table of contents | Conditional | Both | Useful for a long README; unnecessary in a short, scannable document. Do not add by habit. |
 | FAQ | Conditional | Both | Include only for repeated user questions supported by evidence. Merge isolated first-run issues into troubleshooting when clearer. |
 | Changelog or release history | Relocate | Both | Link a changelog or releases page. Avoid duplicating volatile release history in the README. |
-| Full API endpoint/call catalog, payloads, and schemas | Relocate or exclude | Both; prohibited inline for user-oriented | Belongs in API or technical documentation. A developer/library README may show only a minimal public integration example and link the complete contract. |
-| Architecture and internal algorithms | Relocate | Both | Belongs in technical or contributor documentation; omit from user-oriented READMEs and avoid architecture dumps in developer/library READMEs. |
+| TECHNICAL.md companion | Conditional, with creation consent | Advanced users | Use for complete user commands, settings, runtime requirements, compatibility, storage, privacy controls, updates, recovery, and troubleshooting. Ask before creating a missing file; omit empty or duplicate documents and broken links. |
+| DEVELOPMENT.md companion | Conditional, with creation consent | Contributors and implementers | Use for architecture, source layout, contracts, schemas, state, development, tests, and maintenance. Ask independently before creating a missing file; the technical-file answer does not approve this file. |
+| Full API endpoint/call catalog, payloads, and schemas | Relocate or exclude | Both; prohibited inline for user-oriented | Belongs in `DEVELOPMENT.md` or an existing canonical API reference, not the advanced user `TECHNICAL.md`. A developer/library README may show only a minimal public integration example and link the complete contract. |
+| Architecture and internal algorithms | Relocate | Both | Belongs in `DEVELOPMENT.md` or existing canonical contributor documentation, not `TECHNICAL.md`; omit from user-oriented READMEs and avoid architecture dumps in developer/library READMEs. |
 | Exhaustive source-file maps | Relocate | Both | Detailed source layout is contributor material. A concise orientation is conditional only for developer/library projects. |
 | Test fixtures, benchmark methods, and contributor test matrices | Relocate | Both | These are contributor details. Developer/library READMEs may retain one concise verification command when useful; user-oriented READMEs exclude them. |
 | Contributor setup and local linking | Relocate | Both | Belongs in contribution or development documentation, never the user-oriented README. |
@@ -110,6 +112,16 @@ The root README is for choosing, installing, configuring, using, updating, recov
 
 The root README helps a reader integrate or extend reusable code. Include install, supported runtimes, a minimal working example on the public integration surface, compatibility, verification when useful, and links to complete API or contributor documentation. Concise technology or structure orientation is conditional; internal algorithms and exhaustive maintenance detail remain relocated.
 
+## Companion document decisions
+
+Use `PROJECT-TECHNICAL-TEMPLATE.md` for the advanced user reference and `PROJECT-DEVELOPMENT-TEMPLATE.md` for the contributor guide only after the consent step in `../SKILL.md`. These templates draw on this repository's package documentation, but repository-local rules and verified target-project evidence determine the actual content.
+
+For each missing companion, explain the proposed content and ask for its exact-path creation decision. Each answer is independent; allow both, either, or neither. A prior explicit same-file approval may be recorded without repeating the question. Do not infer approval from README scope, local policy, silence, or a link. Declined or unanswered means no creation. An existing document may be linked without edit authority, but edits still require scope. Review-only work recommends rather than creates.
+
+Do not create an empty or duplicate companion. If creation is declined or unsupported, keep verified content reachable and report the blocked move. Remove missing companion links. If preserving the content would conflict with local policy, ask for a decision rather than silently deleting it.
+
+`TECHNICAL.md` contains advanced user operations, not endpoint catalogs, payloads, schemas, tool contracts, architecture, algorithms, source maps, development setup, tests, fixtures, benchmarks, or publication internals. Those details belong in `DEVELOPMENT.md` or an existing canonical implementation reference. Essential first-use and safety information stays in the README.
+
 ## Evidence and adaptation record
 
 For each README task, the workflow should be able to state:
@@ -118,7 +130,8 @@ For each README task, the workflow should be able to state:
 2. the repository-local rules consulted;
 3. the evidence used for project claims and visuals;
 4. which conditional sections were included or omitted and why;
-5. what verified content was preserved or relocated in update mode; and
-6. unresolved evidence gaps, visual requests, or explicit opt-outs.
+5. what verified content was preserved or relocated in update mode;
+6. the independent creation decisions and paths for companion documents, including unchanged existing files and blocked moves; and
+7. unresolved evidence gaps, visual requests, or explicit opt-outs.
 
 This catalog does not claim that any section is universal or statistically common. It is a policy-driven starting point approved for this package and must yield to verified project needs.
