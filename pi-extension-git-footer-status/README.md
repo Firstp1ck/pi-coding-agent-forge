@@ -7,7 +7,7 @@ Shows Git state, token use, context use, and model information in Pi’s footer.
 ## What you can do
 
 - Shows the current Git branch and changed-file state.
-- Displays model, context, token, cost, and every available provider subscription-usage window.
+- Displays model, context, token, cost, average token output speed, and every available provider subscription-usage window.
 - Warns about ongoing Git operations, sync state, and Codex Auto transport that can hide subscription usage.
 - Refreshes automatically and can also be refreshed on demand.
 
@@ -30,6 +30,8 @@ The footer appears automatically and updates as you work. In the Web UI, click *
 - `/git-footer-refresh` — refresh the Git and usage information now.
 - `/git-footer-visibility` — choose which footer items are shown.
 - `/git-footer-visibility status` — review the current visibility choices.
+
+The `⚡ 6.2k tok @ 42.5 tok/s` item shows cumulative output tokens and average output speed across live samples from the session. The average stays visible while Pi is idle.
 
 The visibility screen lets you change the terminal and Web UI separately. Command-line shortcuts for changing several items at once are in the technical reference.
 

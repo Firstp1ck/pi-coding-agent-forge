@@ -43,7 +43,8 @@ let activeBash = 0;
 let peakBash = 0;
 let thinkingLevel = "off";
 let conversationEnabled = false;
-let codexFastModeEnabled = false;
+let codexSpeedMode = "normal";
+let codexFixtureModel = null;
 let rejectNextCodexFastModeMutation = false;
 const fakeTools = [
   { name: "read", description: "Read files", sourceInfo: { source: "builtin", scope: "temporary", origin: "top-level" } },
@@ -667,12 +668,20 @@ function emitCodexFastModeStatus() {
     id: randomUUID(),
     method: "setStatus",
     statusKey: "codex-fast-mode",
-    statusText: codexFastModeEnabled ? "on" : "off",
+    statusText: codexSpeedMode === "ultrafast" ? "ultrafast" : codexSpeedMode === "fast" ? "on" : "off",
   });
 }
 
 function handleCodexFastModePrompt(command, base) {
   const message = String(command.message || "").trim();
+  if (message === "fixture codex astra" || message === "fixture codex reset") {
+    codexFixtureModel = message.endsWith("astra")
+      ? { provider: "openai-codex", api: "openai-codex-responses", id: "gpt-6-astra" } : null;
+    emitEvent({ type: "agent_start" });
+    emitEvent({ type: "agent_settled" });
+    respond({ ...base, data: { output: "Codex model fixture updated" } });
+    return true;
+  }
   if (message === "fixture reject next codex fast mode mutation") {
     rejectNextCodexFastModeMutation = true;
     // Prompt routing marks the tab active before RPC dispatch; settle this control-only fixture
@@ -682,7 +691,7 @@ function handleCodexFastModePrompt(command, base) {
     respond({ ...base, data: { output: "next Codex Fast mode mutation will be rejected" } });
     return true;
   }
-  const match = message.match(/^\/fast-mode(?:\s+(on|off|status))?$/i);
+  const match = message.match(/^\/fast-mode(?:\s+(on|off|normal|fast|ultrafast|status))?$/i);
   if (!match) return false;
   const subcommand = String(match[1] || "").toLowerCase();
   if (subcommand !== "status" && rejectNextCodexFastModeMutation) {
@@ -690,11 +699,12 @@ function handleCodexFastModePrompt(command, base) {
     respond({ ...base, data: { output: "Fast mode mutation rejected while busy" } });
     return true;
   }
-  if (!subcommand) codexFastModeEnabled = !codexFastModeEnabled;
-  else if (subcommand === "on") codexFastModeEnabled = true;
-  else if (subcommand === "off") codexFastModeEnabled = false;
+  if (!subcommand) codexSpeedMode = codexSpeedMode === "normal" ? "fast" : "normal";
+  else if (subcommand === "on" || subcommand === "fast") codexSpeedMode = "fast";
+  else if (subcommand === "off" || subcommand === "normal") codexSpeedMode = "normal";
+  else if (subcommand === "ultrafast") codexSpeedMode = "ultrafast";
   emitCodexFastModeStatus();
-  respond({ ...base, data: { output: `Fast mode ${codexFastModeEnabled ? "on" : "off"}.` } });
+  respond({ ...base, data: { output: `Codex speed ${codexSpeedMode}.` } });
   return true;
 }
 
@@ -1565,7 +1575,7 @@ rl.on("line", (line) => {
       respond({
         ...base,
         data: {
-          model: { provider: "fake", id: "fake-model" },
+          model: codexFixtureModel || { provider: "fake", id: "fake-model" },
           thinkingLevel,
           isStreaming: scriptedStreaming || guidedGitStateMode === "streaming",
           isCompacting: guidedGitStateMode === "compacting",

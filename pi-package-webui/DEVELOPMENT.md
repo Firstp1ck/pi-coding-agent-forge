@@ -588,9 +588,13 @@ The included compact-mode metric measures deterministic post-parse serialized JS
 
 ### Codex subscription Fast mode
 
-The optional `@firstpick/pi-extension-codex-fast-mode` companion adds `/fast-mode` and a **Normal / Fast** selector under **Codex Usage**. Fast mode is off by default and scoped to the active Pi session branch. The browser asks the extension to change mode and renders the extension-published `codex-fast-mode` status; it does not inspect ChatGPT credentials or rewrite provider requests itself.
+The optional `@firstpick/pi-extension-codex-fast-mode` companion adds `/fast-mode` and a **Normal / Fast / Ultrafast** selector under **Codex Usage**. Normal is the default and state is scoped to the active Pi session branch. The browser asks the extension to change mode and renders the extension-published `codex-fast-mode` status; it does not inspect ChatGPT credentials or rewrite provider requests itself.
 
-When enabled, the extension marks only subscription-backed `openai-codex` requests using `openai-codex-responses` with `service_tier: "priority"`. Supported models may respond about 1.5× faster while spending 2× Standard credits for GPT-5.4 or 2.5× for GPT-5.5/5.6. Upstream account and model eligibility remains authoritative. Mode changes are blocked while the active tab is busy, and disabling the optional feature turns Fast mode off before hiding its integration.
+Fast marks subscription-backed `openai-codex` / `openai-codex-responses` requests with `service_tier: "priority"`. Ultrafast uses `service_tier: "ultrafast"` only for matching `gpt-6-astra` model metadata and serialized requests. Upstream account and model eligibility remain authoritative. Ultrafast costs 8× Standard included usage or 6× purchased-credit/pay-as-you-go usage, subject to workspace terms; the browser asks for cost confirmation before selecting it.
+
+The extension status values are `off`, `on`, and `ultrafast`. `public/codex-speed-mode.mjs` normalizes them to `normal`, `fast`, and `ultrafast`. `GET /api/codex-fast-mode` adds `mode` and `ultrafastModelEligible` while retaining `enabled`. `PUT` accepts `{ mode }` or the legacy `{ enabled }`, rejecting invalid or contradictory intent. Legacy true selects Fast and false selects Normal. Mutation completion requires an exact extension-published mode, not just an enabled boolean, so rejected Fast/Ultrafast transitions cannot look successful.
+
+Mode changes are blocked while the active tab is busy. Server and browser checks gate Ultrafast on the exact subscription provider, API, and Astra ID without inferring plan access. Disabling the optional feature turns either enabled override off before hiding its integration. The offline HTTP harness and browser-state tests cover legacy writes, invalid intent, model gating, exact mode confirmation, cancellation of the cost prompt, and disable-off-first handling.
 
 ## Main features
 

@@ -234,11 +234,12 @@ Plan-only recovery assistance for narrowly classified Anthropic compatibility er
 - supports explicit authenticated RPC/WebUI recovery endpoints and secure local fallback
 
 ### `@firstpick/pi-extension-codex-fast-mode`
-Session-scoped Fast mode for subscription-backed Codex requests.
+Session-scoped Fast and Ultrafast modes for subscription-backed Codex requests.
 
-- `/fast-mode` toggle with `on`, `off`, and `status` forms
-- applies `service_tier: "priority"` only to `openai-codex` / `openai-codex-responses` requests
-- defaults off, persists per session branch, and rejects mutations while busy
+- `/fast-mode` toggle with `on`, `off`, `normal`, `fast`, `ultrafast`, and `status` forms
+- applies `service_tier: "priority"` for Fast and `service_tier: "ultrafast"` only for matching GPT-6 Astra requests through `openai-codex` / `openai-codex-responses`
+- defaults to Normal, migrates legacy boolean snapshots, persists per session branch, and rejects mutations while busy
+- preserves on/off status values and adds `ultrafast` for updated consumers
 
 ### `@firstpick/pi-extension-conditional-system-prompts`
 Conditionally appends the local Windows policy and a governance-skill routing bridge.

@@ -244,9 +244,11 @@ Ask a quick side question without derailing the main agent flow, then transfer u
 
 ![Pi Web UI Codex usage widget showing subscription usage windows and reset timers](https://raw.githubusercontent.com/Firstp1ck/pi-coding-agent-forge/main/pi-package-webui/images/Webui_CodexUsage_v0.4.8.png)
 
-**Optional feature needed:** None for usage reporting — included in Pi Web UI core for supported Codex authentication. The Normal/Fast selector requires `@firstpick/pi-extension-codex-fast-mode`.
+**Optional feature needed:** None for usage reporting, which is included in Pi Web UI core for supported Codex authentication. The Normal/Fast/Ultrafast selector requires `@firstpick/pi-extension-codex-fast-mode`.
 
-Monitor subscription usage windows and reset times for supported Codex models.
+Monitor subscription usage windows and reset times. With the companion enabled, choose a speed under Codex Usage and click Apply. Ultrafast is offered only for subscription-backed GPT-6 Astra and asks for cost confirmation.
+
+**Ultrafast costs more:** it requires Pro $500 or eligible Enterprise/Edu access and uses 8× Standard included usage or 6× purchased-credit/pay-as-you-go usage. Workspace terms may differ. The selector shows your preference, not confirmation of upstream acceptance.
 
 #### Pi stats
 

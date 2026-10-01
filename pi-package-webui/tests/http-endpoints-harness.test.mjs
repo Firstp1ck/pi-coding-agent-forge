@@ -3856,6 +3856,15 @@ try {
   assert.equal(codexFastModeOn.status, 200, `Codex Fast mode on should succeed: ${codexFastModeOn.body?.error || ""}`);
   assert.equal(codexFastModeOn.body?.data?.statusKnown, true);
   assert.equal(codexFastModeOn.body?.data?.enabled, true, "PUT should return only extension-confirmed on state");
+  assert.equal(codexFastModeOn.body?.data?.mode, "fast", "legacy enabled=true should select Fast");
+  for (const body of [{ mode: "turbo" }, { mode: "ultrafast", enabled: false }, { mode: "normal", enabled: true }]) {
+    const invalidMode = await request("127.0.0.1", "/api/codex-fast-mode", { method: "PUT", body: { ...body, tab: tabId } });
+    assert.equal(invalidMode.status, 400, "invalid or contradictory mode intent must fail closed");
+  }
+  const unsupportedUltrafast = await request("127.0.0.1", "/api/codex-fast-mode", {
+    method: "PUT", body: { mode: "ultrafast", tab: tabId },
+  });
+  assert.equal(unsupportedUltrafast.status, 400, "Ultrafast should reject non-Astra models before dispatch");
 
   const rejectNextCodexFastMode = await request("127.0.0.1", "/api/prompt", {
     method: "POST",
@@ -3899,6 +3908,49 @@ try {
   assert.equal(codexFastModeOff.status, 200, `Codex Fast mode off should succeed after the tab settles: ${codexFastModeOff.body?.error || ""}`);
   assert.equal(codexFastModeOff.body?.data?.enabled, false);
   assert.equal(codexFastModeOff.body?.data?.statusKnown, true, "off response should be extension-confirmed");
+  assert.equal(codexFastModeOff.body?.data?.mode, "normal");
+
+  const astraFixture = await request("127.0.0.1", "/api/prompt", {
+    method: "POST", body: { message: "fixture codex astra", tab: tabId },
+  });
+  assert.equal(astraFixture.status, 200);
+  const astraSpeed = await request("127.0.0.1", `/api/codex-fast-mode?tab=${encodeURIComponent(tabId)}`);
+  assert.equal(astraSpeed.body?.data?.ultrafastModelEligible, true);
+  const ultrafast = await request("127.0.0.1", "/api/codex-fast-mode", {
+    method: "PUT", body: { mode: "ultrafast", tab: tabId },
+  });
+  assert.equal(ultrafast.status, 200, `Ultrafast should confirm: ${ultrafast.body?.error || ""}`);
+  assert.equal(ultrafast.body?.data?.mode, "ultrafast");
+  assert.equal(ultrafast.body?.data?.enabled, true);
+  assert.equal(ultrafast.body?.data?.requested, "ultrafast");
+
+  await request("127.0.0.1", "/api/prompt", {
+    method: "POST", body: { message: "fixture reject next codex fast mode mutation", tab: tabId },
+  });
+  const rejectedFastFromUltra = await request("127.0.0.1", "/api/codex-fast-mode", {
+    method: "PUT", body: { mode: "fast", tab: tabId },
+  });
+  assert.equal(rejectedFastFromUltra.status, 409, "enabled=true alone must not confirm Fast when Ultrafast is still selected");
+  const stillUltra = await request("127.0.0.1", `/api/codex-fast-mode?tab=${encodeURIComponent(tabId)}`);
+  assert.equal(stillUltra.body?.data?.mode, "ultrafast");
+
+  const legacyOnFromUltra = await request("127.0.0.1", "/api/codex-fast-mode", {
+    method: "PUT", body: { enabled: true, tab: tabId },
+  });
+  assert.equal(legacyOnFromUltra.status, 200);
+  assert.equal(legacyOnFromUltra.body?.data?.mode, "fast", "legacy on must explicitly leave Ultrafast");
+  await request("127.0.0.1", "/api/codex-fast-mode", { method: "PUT", body: { mode: "ultrafast", tab: tabId } });
+  const legacyOffFromUltra = await request("127.0.0.1", "/api/codex-fast-mode", {
+    method: "PUT", body: { enabled: false, tab: tabId },
+  });
+  assert.equal(legacyOffFromUltra.status, 200);
+  assert.equal(legacyOffFromUltra.body?.data?.mode, "normal", "legacy off must disarm Ultrafast too");
+  const explicitNormal = await request("127.0.0.1", "/api/codex-fast-mode", {
+    method: "PUT", body: { mode: "normal", tab: tabId },
+  });
+  assert.equal(explicitNormal.status, 200);
+  assert.equal(explicitNormal.body?.data?.mode, "normal");
+  await request("127.0.0.1", "/api/prompt", { method: "POST", body: { message: "fixture codex reset", tab: tabId } });
 
   // Natural Conversation shell: /talk availability drives per-tab status and safety guards.
   const conversationFeature = await request("127.0.0.1", `/api/features/natural-conversation?tab=${encodeURIComponent(tabId)}`);

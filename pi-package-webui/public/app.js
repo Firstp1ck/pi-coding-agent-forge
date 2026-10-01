@@ -2,6 +2,7 @@ import { aurReviewSafePath as parsedAurReviewSafePath, parseAurReviewPayload as 
 import { GUIDED_GIT_START_STATUS_KEY, createGuidedGitActivationController, createGuidedGitLaunchPermitController, guidedGitLaunchBlockedReason, guidedGitLaunchModeForTabCatalog, guidedGitReviewAvailableForTabCatalog, guidedGitWorkflowCommandForTabCatalog, resolveCommandForTabCatalog, resolveRpcSlashCommandForTabCatalog } from "./guided-git-command-state.mjs";
 import { guidedGitReviewCanRequestStagedContent, guidedGitReviewHasApprovedBinding, guidedGitReviewProcessNavigationAllowed, guidedGitReviewProcessSelectionPatch, guidedGitReviewTransition, guidedGitReviewWidgetRemovalTransition } from "./guided-git-review-state.mjs";
 import { createFastOutputLiveState, createSustainedFlushScheduler, fastOutputLiveTextAndThinking, reduceFastOutputLiveEvent, seedFastOutputLiveState, shouldConsumeFastOutputLiveEvent } from "./fast-output-live.mjs";
+import { codexSpeedModeFromData, codexSpeedModeFromStatus, codexSpeedModeLabel, isCodexSpeedMode } from "./codex-speed-mode.mjs";
 import { addLaunchSlot, cloneLaunchSlotRoles, launchSlotRolesEqual, removeLaunchSlot, subagentLaunchSlotSaveState, updateLaunchSlot } from "./subagent-launch-slot-state.mjs";
 import { pruneDismissedSubagentGateKeys, subagentGateIsTerminal, subagentGateKey, ungatedSubagentRuns, visibleSubagentGates } from "./subagent-gate-visibility.mjs";
 import { groupConsecutiveWorkflowStatusItems, isCompletedWorkflowStatusExecution, workflowStatusSnapshot } from "./workflow-status-stack.mjs";
@@ -11396,7 +11397,7 @@ function setOptionalFeatureDisabled(featureId, disabled) {
   if (featureId === "codexFastMode") {
     if (disabled) {
       statusEntries.delete(CODEX_FAST_MODE_STATUS_KEY);
-      codexFastModeState = { ...codexFastModeState, available: false, enabled: false, statusKnown: false, busy: false };
+      codexFastModeState = { ...codexFastModeState, available: false, enabled: false, mode: null, statusKnown: false, busy: false };
       codexFastModeNotice = "";
       renderCodexFastModeControl();
     } else {
@@ -19130,7 +19131,10 @@ function applyOptimisticModelSelection(model, tabContext = activeTabContext()) {
   const changed = modelStateKey(currentState.model) !== modelStateKey(nextModel);
   currentState = { ...currentState, model: nextModel };
   renderStatus();
-  if (changed) requestGitFooterWebuiPayload(tabContext, { force: true });
+  if (changed) {
+    requestGitFooterWebuiPayload(tabContext, { force: true });
+    refreshCodexFastMode(tabContext).catch(() => null);
+  }
   return nextModel;
 }
 
@@ -25414,7 +25418,7 @@ async function refreshCodexUsage({ forceAuthRefresh = false } = {}) {
 // Codex subscription Fast mode is owned by the optional pi-extension-codex-fast-mode package. The
 // browser only reads the sanitized tab-scoped server snapshot and asks the server to run the
 // package-owned /fast-mode command; it never sees ChatGPT credentials or request payloads.
-let codexFastModeState = { available: false, enabled: false, statusKnown: false, busy: false, model: null, modelEligible: false, unavailableReason: "", creditNotice: "" };
+let codexFastModeState = { available: false, enabled: false, mode: null, statusKnown: false, busy: false, model: null, modelEligible: false, ultrafastModelEligible: false, unavailableReason: "", creditNotice: "" };
 let codexFastModeLoaded = false;
 let codexFastModeBusy = false;
 let codexFastModeNotice = "";
@@ -25434,23 +25438,28 @@ function codexFastModeStatusText() {
   if (!codexFastModeLoaded) return "Checking…";
   if (!codexFastModeState.available) return codexFastModeState.unavailableReason || optionalFeatureUnavailableMessage("codexFastMode");
   if (!codexFastModeState.statusKnown) return "Status unknown · This tab";
-  if (codexFastModeState.busy) return `${codexFastModeState.enabled ? "Fast" : "Normal"} · Busy`;
-  if (codexFastModeState.enabled && codexFastModeState.model && !codexFastModeState.modelEligible) {
-    return "Fast · Inactive for current model";
+  const label = codexSpeedModeLabel(codexFastModeState.mode);
+  if (codexFastModeState.busy) return `${label} · Busy`;
+  const eligible = codexFastModeState.mode === "ultrafast" ? codexFastModeState.ultrafastModelEligible : codexFastModeState.modelEligible;
+  if (codexFastModeState.enabled && codexFastModeState.model && !eligible) {
+    return `${label} · Inactive for current model`;
   }
-  return `${codexFastModeState.enabled ? "Fast" : "Normal"} · This tab`;
+  return `${label} · This tab`;
 }
 
 function renderCodexFastModeControl({ syncSelection = true } = {}) {
   if (!elements.codexFastModeSelect || !elements.setCodexFastModeButton || !elements.codexFastModeStatus) return;
   if (syncSelection) {
-    codexFastModeSelection = codexFastModeState.enabled ? "fast" : "normal";
+    codexFastModeSelection = codexFastModeState.mode || "normal";
     elements.codexFastModeSelect.value = codexFastModeSelection;
   }
   const controlDisabled = codexFastModeControlDisabled();
+  const ultrafastOption = elements.codexFastModeSelect.querySelector('option[value="ultrafast"]');
+  if (ultrafastOption) ultrafastOption.disabled = !codexFastModeState.ultrafastModelEligible;
   elements.codexFastModeSelect.disabled = controlDisabled;
   elements.setCodexFastModeButton.disabled = controlDisabled
-    || elements.codexFastModeSelect.value === (codexFastModeState.enabled ? "fast" : "normal");
+    || elements.codexFastModeSelect.value === codexFastModeState.mode
+    || (elements.codexFastModeSelect.value === "ultrafast" && !codexFastModeState.ultrafastModelEligible);
   elements.setCodexFastModeButton.textContent = codexFastModeBusy ? "Applying…" : "Apply";
   elements.codexFastModeStatus.textContent = codexFastModeStatusText();
   const warn = !!codexFastModeNotice
@@ -25461,13 +25470,16 @@ function renderCodexFastModeControl({ syncSelection = true } = {}) {
 }
 
 function applyCodexFastModeData(data) {
+  const mode = codexSpeedModeFromData(data);
   codexFastModeState = {
     available: data?.available === true,
-    enabled: data?.enabled === true,
+    mode,
+    enabled: mode !== null && mode !== "normal",
     statusKnown: data?.statusKnown === true,
     busy: data?.busy === true,
     model: data?.model || null,
     modelEligible: data?.modelEligible === true,
+    ultrafastModelEligible: data?.ultrafastModelEligible === true,
     unavailableReason: data?.unavailableReason || "",
     creditNotice: data?.creditNotice || "",
   };
@@ -25475,22 +25487,23 @@ function applyCodexFastModeData(data) {
 }
 
 function codexFastModeConfirmedOff(data) {
-  return data?.statusKnown === true && data?.enabled !== true;
+  return data?.statusKnown === true && codexSpeedModeFromData(data) === "normal";
 }
 
 function applyCodexFastModeStatus(statusText) {
-  const status = String(statusText || "").trim().toLowerCase();
-  if (status !== "on" && status !== "off") return false;
+  const mode = codexSpeedModeFromStatus(statusText);
+  if (mode === null) return false;
   codexFastModeState = {
     ...codexFastModeState,
     available: true,
-    enabled: status === "on",
+    mode,
+    enabled: mode !== "normal",
     statusKnown: true,
   };
   codexFastModeLoaded = true;
   codexFastModeNotice = "";
   renderCodexFastModeControl();
-  if (status === "on" && !isOptionalFeatureEnabled("codexFastMode")) {
+  if (mode !== "normal" && !isOptionalFeatureEnabled("codexFastMode")) {
     const tabContext = activeTabContext();
     queueMicrotask(() => refreshCodexFastMode(tabContext).catch((error) => {
       if (isCurrentTabContext(tabContext)) addEvent(`Disabled Codex Fast mode could not be disarmed: ${error.message || String(error)}`, "error");
@@ -25530,21 +25543,32 @@ async function refreshCodexFastMode(tabContext = activeTabContext()) {
 }
 
 async function applyCodexFastMode() {
-  if (!elements.codexFastModeSelect || codexFastModeBusy) return;
+  if (!elements.codexFastModeSelect || codexFastModeControlDisabled()) return;
   const tabContext = activeTabContext();
   if (!tabContext.tabId) return;
-  const enabled = elements.codexFastModeSelect.value === "fast";
-  if (enabled === codexFastModeState.enabled) return;
+  const mode = elements.codexFastModeSelect.value;
+  if (!isCodexSpeedMode(mode) || mode === codexFastModeState.mode) return;
+  if (mode === "ultrafast" && !codexFastModeState.ultrafastModelEligible) return;
   codexFastModeBusy = true;
   codexFastModeNotice = "";
   renderCodexFastModeControl({ syncSelection: false });
   try {
-    const response = await api("/api/codex-fast-mode", { method: "PUT", body: { enabled }, tabId: tabContext.tabId });
+    if (mode === "ultrafast") {
+      const confirmed = await appConfirm({
+        title: "Use Codex Ultrafast?",
+        summary: "Ultrafast uses 8x Standard included usage or 6x purchased-credit/pay-as-you-go usage. It requires GPT-6 Astra and Pro $500 or eligible Enterprise/Edu access; workspace terms may differ.",
+        affected: "This tab's session branch. Future requests may cost more.",
+        undoable: true,
+        confirmLabel: "Use Ultrafast",
+      });
+      if (!confirmed || !isCurrentTabContext(tabContext) || !isOptionalFeatureEnabled("codexFastMode")) return;
+    }
+    const response = await api("/api/codex-fast-mode", { method: "PUT", body: { mode }, tabId: tabContext.tabId });
     if (!isCurrentTabContext(tabContext)) return;
     applyCodexFastModeData(response.data);
-    addEvent(enabled
-      ? "Codex Fast mode requested for this session. It asks supported Codex models for about 1.5x faster responses and may spend 2x credits on GPT-5.4 or 2.5x on GPT-5.5/5.6."
-      : "Codex Fast mode turned off for this session; requests return to the standard tier.", "info");
+    addEvent(mode === "normal"
+      ? "Codex speed override turned off for this session; requests keep their existing service tier."
+      : `Codex ${codexSpeedModeLabel(mode)} requested for this session. ${codexFastModeState.creditNotice} This preference does not confirm upstream acceptance.`, "info");
   } catch (error) {
     if (!isCurrentTabContext(tabContext)) return;
     codexFastModeNotice = `Failed to change Codex Fast mode: ${error.message || String(error)}. You can retry.`;
@@ -46134,10 +46158,10 @@ async function refreshState(tabContext = activeTabContext()) {
   renderStatus();
   if (mobilePhoneExperienceInstalled && isMobileShellV2Active()) renderMobilePhoneExperience();
   requestGitFooterWebuiPayload(tabContext, { force: shouldRefreshGitFooter });
-  // Sampling support and effective values depend on the active model, so refresh
-  // them whenever the session reports a different model.
+  // Sampling support and speed-tier eligibility depend on the active model.
   if (modelStateKey(previousState?.model) !== modelStateKey(currentState?.model)) {
     refreshSamplingParametersForTabContext(tabContext);
+    refreshCodexFastMode(tabContext).catch(() => null);
   }
 }
 

@@ -1051,14 +1051,15 @@
               <div id="codexUsageBox" class="codex-usage-box muted">Checking Codex usage…</div>
               <div class="control-field codex-fast-mode-control" aria-labelledby="codexFastModeLabel">
                 <div class="codex-fast-mode-row">
-                  <label id="codexFastModeLabel" for="codexFastModeSelect" title="Fast mode for subscription-backed Codex requests on this tab">Fast mode</label>
-                  <select id="codexFastModeSelect" title="Codex subscription request tier for this tab" aria-describedby="codexFastModeStatus" disabled>
+                  <label id="codexFastModeLabel" for="codexFastModeSelect" title="Normal, Fast, or Ultrafast for subscription-backed Codex requests on this tab">Speed mode</label>
+                  <select id="codexFastModeSelect" title="Ultrafast requires GPT-6 Astra and eligible plan access; it uses 8x included usage or 6x purchased credits" aria-describedby="codexFastModeStatus" disabled>
                     <option value="normal">Normal</option>
                     <option value="fast">Fast</option>
+                    <option value="ultrafast" disabled>Ultrafast</option>
                   </select>
-                  <button id="setCodexFastModeButton" class="control-apply-button" type="button" aria-label="Apply selected Codex Fast mode" disabled>Apply</button>
+                  <button id="setCodexFastModeButton" class="control-apply-button" type="button" aria-label="Apply selected Codex speed mode" disabled>Apply</button>
                 </div>
-                <div id="codexFastModeStatus" class="toggle-control-hint" role="status" aria-live="polite">Checking Codex Fast mode…</div>
+                <div id="codexFastModeStatus" class="toggle-control-hint" role="status" aria-live="polite">Checking Codex speed mode…</div>
               </div>
             </div>
           </section>
@@ -1897,7 +1898,7 @@
       </form>
     </dialog>
 
-    <script id="webuiBootLoader" data-app-src="/app.js?v=184">
+    <script id="webuiBootLoader" data-app-src="/app.js?v=185">
       (() => {
         "use strict";
 

@@ -186,7 +186,13 @@ Behavior and limits:
 
 ## Codex subscription Fast mode
 
-The optional `@firstpick/pi-extension-codex-fast-mode` companion adds a **Normal / Fast** selector under **Codex Usage**. Fast mode is off by default and applies only to the active Pi session branch. Eligible subscription-backed models may respond about 1.5× faster while using 2× Standard credits for GPT-5.4 or 2.5× for GPT-5.5/5.6. Account and model eligibility remain controlled by the provider.
+The optional `@firstpick/pi-extension-codex-fast-mode` companion adds a **Normal / Fast / Ultrafast** selector under **Codex Usage**. Normal is the default. The preference belongs to the active Pi session branch, and changes are blocked while that tab is busy. The displayed mode is a preference, not proof that OpenAI accepted the tier.
+
+Fast increases usage. Current Codex documentation lists 2.5× Standard included subscription usage and 2× purchased-credit or Enterprise pay-as-you-go usage for supported models.
+
+Ultrafast is offered only for subscription-backed GPT-6 Astra. Click Apply and confirm the cost warning to select it. It requires Pro $500 or eligible Enterprise/Edu access and uses 8× Standard included usage or 6× purchased-credit/pay-as-you-go usage. Workspace terms, permissions, spend controls, and inference residency can limit access. Other self-serve plans do not qualify at launch, even with purchased credits.
+
+Update both the extension and Web UI for the third mode. If you switch models, a restored Ultrafast preference can remain selected but inactive. Choose Normal to remove either override. Turning off the optional integration disarms both enabled modes before hiding the control. See the [extension technical reference](../pi-extension-codex-fast-mode/TECHNICAL.md) for commands, migration, rollback, and eligibility details.
 
 ## Footer scoped-model layouts
 

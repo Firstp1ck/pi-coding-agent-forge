@@ -1000,7 +1000,7 @@ Recognized companion packages are:
 | `@firstpick/pi-package-natural-conversation` | conversation mode and voice shell |
 | `@firstpick/pi-extension-git-footer-status` | richer footer and Claude usage evidence |
 | `@firstpick/pi-extension-stats` | browser usage dashboard |
-| `@firstpick/pi-extension-codex-fast-mode` | Normal and Fast subscription mode |
+| `@firstpick/pi-extension-codex-fast-mode` | Normal, Fast, and GPT-6 Astra Ultrafast subscription modes |
 | `@firstpick/pi-themes-bundle` | additional Pi and Web UI themes |
 
 The audit also reports prompt impact. `+` means initial system-prompt text, `+...` means conditional text can appear during a session, and `-` means no measured system-prompt text. Bundled skills count. Tool schemas and normal tool messages do not.

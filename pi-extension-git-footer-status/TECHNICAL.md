@@ -45,6 +45,14 @@ For Codex subscriptions, select SSE transport in `/settings` and send another mo
 
 The check uses global settings and trusted project overrides without changing them. It skips the warning if settings cannot be read reliably. SDK-only in-memory transport overrides are not visible to this check.
 
+## Token output speed
+
+In `⚡ 6.2k tok @ 42.5 tok/s`, `6.2k tok` is cumulative session output, including estimated output while streaming. `42.5 tok/s` is the average output speed across live samples collected since the session was loaded, not the latest streaming speed. Both the native footer and Web UI use this average and keep it visible while idle.
+
+A new or reloaded session starts collecting fresh speed samples. Until samples are available, the footer uses the last measured response speed or an estimate from session history. It shows `— tok/s` if neither is available. Historical estimates include response latency and can differ from live streaming measurements.
+
+Optional inline statistics remain hidden by default. Show them with `/git-footer-visibility show all speed-avg speed-low speed-max`. `speed-avg` repeats the main average, `speed-low` shows the 1% low speed, and `speed-max` shows the highest sampled speed.
+
 ## Git sync safety
 
 The Web UI always uses the pull-first workflow when it knows incoming and outgoing commits both exist. If a direct **Push** is rejected because the remote gained commits after the footer last refreshed, the action releases its push lock and enters that same pull-first workflow. It does not offer a force-push from the footer. Diverged histories require you to confirm merge or rebase, or you can review the incoming changes without integrating them.
@@ -69,4 +77,4 @@ The Web UI always uses the pull-first workflow when it knows incoming and outgoi
 ~/pi-coding-agent-forge (main) │ ✎15 │ ⏱15m · Agent
 ```
 
-At a glance you can see token flow, cache reads, prompt-injection size, streaming speed, cost/subscription state, context pressure, model/reasoning level, current repo/branch, dirty-file count, and session time without running `git status`.
+At a glance you can see token flow, cache reads, prompt-injection size, average output speed, cost/subscription state, context pressure, model/reasoning level, current repo/branch, dirty-file count, and session time without running `git status`.

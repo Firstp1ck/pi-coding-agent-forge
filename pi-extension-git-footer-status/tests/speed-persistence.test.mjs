@@ -1,4 +1,4 @@
-// Regression coverage for the always-visible, cumulative Speed card.
+// Regression coverage for cumulative output and average speed in both footers.
 //
 // Run with:
 //   node --test pi-extension-git-footer-status/tests/speed-persistence.test.mjs
@@ -79,7 +79,8 @@ registerHooks({
 const { default: gitFooterStatus } = await import("../index.ts");
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-const createHarness = () => {
+const createHarness = (entries = []) => {
+  let nativeFooter = null;
   const handlers = new Map();
   const commands = new Map();
   const statuses = [];
@@ -107,12 +108,23 @@ const createHarness = () => {
     modelRegistry: { isUsingOAuth: () => false },
     getContextUsage: () => ({ contextWindow: 128_000, percent: 0 }),
     sessionManager: {
-      getEntries: () => [],
+      getEntries: () => entries,
       getSessionDir: () => testRoot,
       getSessionId: () => "speed-test",
     },
     ui: {
-      setFooter() {},
+      setFooter(factory) {
+        nativeFooter = factory?.(
+          { requestRender() {} },
+          { fg: (_tone, text) => text },
+          {
+            onBranchChange: () => () => {},
+            getGitBranch: () => null,
+            getAvailableProviderCount: () => 1,
+            getExtensionStatuses: () => new Map(),
+          },
+        ) ?? null;
+      },
       notify() {},
       setStatus(key, value) {
         statuses.push({ key, value });
@@ -137,7 +149,15 @@ const createHarness = () => {
     await command.handler(args, ctx);
   };
 
-  return { ctx, emit, latestSpeedCard, runVisibility };
+  const nativeSpeedValue = () => {
+    assert.ok(nativeFooter, "expected a native footer component");
+    const line = nativeFooter.render(400)[0];
+    const match = line.match(/⚡ (\d+ tok @ (?:—|[\d.]+) tok\/s(?: · (?:avg|1%|max) [\d.]+)*)/);
+    assert.ok(match, `expected a native speed item in ${line}`);
+    return match[1];
+  };
+
+  return { ctx, emit, latestSpeedCard, nativeSpeedValue, runVisibility };
 };
 
 const assistantMessage = (output, timestamp) => ({
@@ -159,7 +179,7 @@ test.after(async () => {
   await rm(testRoot, { recursive: true, force: true });
 });
 
-test("Speed stays visible while idle and keeps cumulative output and the latest measured speed", async () => {
+test("Speed stays visible while idle and keeps cumulative output and average speed", async () => {
   const harness = createHarness();
   await harness.emit("session_start");
   await sleep(20);
@@ -191,6 +211,7 @@ test("Speed stays visible while idle and keeps cumulative output and the latest 
     await harness.runVisibility("show webui speed-avg");
     const avgOnlySpeed = harness.latestSpeedCard().value;
     assert.match(avgOnlySpeed, / · avg \S+$/, "the selected average speed should be shown");
+    assert.equal(avgOnlySpeed, "12 tok @ 120 tok/s · avg 120");
     assert.doesNotMatch(avgOnlySpeed, / · 1% | · max /, "unselected speed stats should remain hidden");
 
     await harness.runVisibility("show webui speed-low speed-max");
@@ -250,6 +271,138 @@ test("Speed stays visible while idle and keeps cumulative output and the latest 
     );
   } finally {
     Date.now = realDateNow;
+    await harness.emit("session_shutdown");
+  }
+});
+
+test("main Speed uses the session sample average in both footers, including while idle", async () => {
+  const harness = createHarness();
+  await harness.emit("session_start");
+  await harness.runVisibility("reset all speed-avg speed-low speed-max");
+
+  const realDateNow = Date.now;
+  let nowMs = realDateNow();
+  Date.now = () => nowMs;
+
+  const assertSpeed = (expected) => {
+    assert.equal(harness.latestSpeedCard().value, expected);
+    assert.equal(harness.nativeSpeedValue(), expected);
+  };
+
+  try {
+    assertSpeed("0 tok @ — tok/s");
+
+    const first = assistantMessage(10, 10);
+    await harness.emit("message_start", { message: first });
+    nowMs += 1_000;
+    await harness.emit("message_update", {
+      message: first,
+      assistantMessageEvent: { type: "text_delta", delta: "first", partial: first },
+    });
+    await harness.emit("message_end", { message: first });
+    assertSpeed("10 tok @ 10.0 tok/s");
+
+    const second = assistantMessage(30, 20);
+    await harness.emit("message_start", { message: second });
+    assertSpeed("10 tok @ 10.0 tok/s");
+    nowMs += 1_000;
+    await harness.emit("message_update", {
+      message: second,
+      assistantMessageEvent: { type: "text_delta", delta: "second", partial: second },
+    });
+    await sleep(280);
+    assertSpeed("40 tok @ 20.0 tok/s");
+    assert.match(harness.latestSpeedCard().title, /average speed from 2 live samples/);
+
+    // Final message latency produces 7.5 tok/s, not the sampled session mean.
+    nowMs += 3_000;
+    await harness.emit("message_end", { message: second });
+    await harness.emit("turn_end", { message: second });
+    await harness.emit("agent_end");
+    assertSpeed("40 tok @ 20.0 tok/s");
+
+    await harness.runVisibility("show all speed-avg speed-low speed-max");
+    assertSpeed("40 tok @ 20.0 tok/s · avg 20.0 · 1% 10.0 · max 30.0");
+    await harness.runVisibility("reset all speed-avg speed-low speed-max");
+    assertSpeed("40 tok @ 20.0 tok/s");
+
+    await harness.emit("session_start", { reason: "new" });
+    await sleep(20);
+    assertSpeed("0 tok @ — tok/s");
+
+    const third = assistantMessage(40, 30);
+    await harness.emit("message_start", { message: third });
+    nowMs += 1_000;
+    await harness.emit("message_update", {
+      message: third,
+      assistantMessageEvent: { type: "text_delta", delta: "third", partial: third },
+    });
+    await harness.emit("message_end", { message: third });
+    assertSpeed("40 tok @ 40.0 tok/s");
+  } finally {
+    Date.now = realDateNow;
+    await harness.emit("session_shutdown");
+  }
+});
+
+test("Speed keeps the measured fallback when no live samples are available", async () => {
+  const harness = createHarness();
+  await harness.emit("session_start");
+
+  const realDateNow = Date.now;
+  let nowMs = realDateNow();
+  Date.now = () => nowMs;
+
+  try {
+    const message = assistantMessage(50, 40);
+    await harness.emit("message_start", { message });
+    nowMs += 1_000;
+    await harness.emit("message_end", { message });
+    assert.equal(harness.latestSpeedCard().value, "50 tok @ 50.0 tok/s");
+    assert.equal(harness.nativeSpeedValue(), "50 tok @ 50.0 tok/s");
+
+    await harness.emit("session_start", { reason: "new" });
+    await sleep(20);
+    assert.equal(harness.latestSpeedCard().value, "0 tok @ — tok/s");
+    assert.equal(harness.nativeSpeedValue(), "0 tok @ — tok/s");
+  } finally {
+    Date.now = realDateNow;
+    await harness.emit("session_shutdown");
+  }
+});
+
+test("Speed retains the session-history estimate until live samples are available", async () => {
+  const timestamp = Date.now() - 10_000;
+  const entries = [
+    { type: "message", message: { role: "user", timestamp } },
+    { type: "message", message: assistantMessage(60, timestamp + 2_000) },
+  ];
+  const harness = createHarness(entries);
+  await harness.emit("session_start", { reason: "resume" });
+
+  try {
+    await sleep(1_100);
+    assert.equal(harness.latestSpeedCard().value, "60 tok @ 30.0 tok/s");
+    assert.equal(harness.nativeSpeedValue(), "60 tok @ 30.0 tok/s");
+
+    const realDateNow = Date.now;
+    let nowMs = realDateNow();
+    Date.now = () => nowMs;
+    try {
+      const message = assistantMessage(20, nowMs);
+      await harness.emit("message_start", { message });
+      nowMs += 1_000;
+      await harness.emit("message_update", {
+        message,
+        assistantMessageEvent: { type: "text_delta", delta: "live", partial: message },
+      });
+      await harness.emit("message_end", { message });
+      assert.equal(harness.latestSpeedCard().value, "80 tok @ 20.0 tok/s");
+      assert.equal(harness.nativeSpeedValue(), "80 tok @ 20.0 tok/s");
+    } finally {
+      Date.now = realDateNow;
+    }
+  } finally {
     await harness.emit("session_shutdown");
   }
 });

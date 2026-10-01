@@ -45,7 +45,7 @@ Extensions add commands, tools, interface elements, or automatic behavior to Pi.
 - **[Brave Search for Pi](pi-extension-brave-search/README.md)** — Lets Pi search the current web through the Brave Search API.
 - **[BTW for Pi](pi-extension-btw/README.md)** — Ask a quick side question without derailing the main conversation.
 - **[cd for Pi](pi-extension-cd/README.md)** — Makes changing directories in Pi faster with suggestions, history, and aliases.
-- **[Codex Fast Mode for Pi](pi-extension-codex-fast-mode/README.md)** — Adds an easy on/off switch for subscription-backed Codex Fast mode.
+- **[Codex Fast Mode for Pi](pi-extension-codex-fast-mode/README.md)** — Selects Normal, Fast, or GPT-6 Astra Ultrafast for subscription-backed Codex sessions.
 - **[Conditional System Prompts for Pi](pi-extension-conditional-system-prompts/README.md)** — Loads only the extra system guidance that matches the current platform and enabled tools.
 - **[Cursor Composer for Pi](pi-extension-cursor-composer/README.md)** — Connects Cursor Composer 2.5 to Pi as both a model provider and an explicitly requested coding agent.
 - **[DOCX for Pi](pi-extension-docx/README.md)** — Lets Pi inspect and carefully edit Word documents while keeping validation and rollback in the workflow.

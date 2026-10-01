@@ -505,7 +505,7 @@ assert.match(css, /\.questionnaire-options button\s*\{\s*min-height:\s*3\.35rem/
 assert.match(css, /@media \(prefers-reduced-motion: reduce\)\s*\{[\s\S]*?\*, \*::before, \*::after[\s\S]*?transition-duration:\s*1ms !important/, "global reduced-motion rules must cover questionnaire transitions");
 
 assert.match(html, /styles\.css\?v=154/, "questionnaire CSS needs the current stylesheet revision");
-assert.match(html, /app\.js\?v=184/, "questionnaire behavior needs the current app revision");
-assert.match(serviceWorker, /const CACHE_NAME = "pi-webui-pwa-v155"/, "questionnaire public assets need a coherent PWA cache revision");
+assert.match(html, /app\.js\?v=185/, "questionnaire behavior needs the current app revision");
+assert.match(serviceWorker, /const CACHE_NAME = "pi-webui-pwa-v156"/, "questionnaire public assets need a coherent PWA cache revision");
 
 console.log("questionnaire-dialog.test.mjs passed");

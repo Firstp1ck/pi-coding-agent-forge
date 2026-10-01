@@ -1,7 +1,7 @@
 {
   "name": "@firstpick/pi-extension-codex-fast-mode",
   "version": "0.1.1",
-  "description": "Session-scoped Codex subscription Fast mode for Pi requests.",
+  "description": "Session-scoped Codex subscription Fast and Ultrafast modes for Pi requests.",
   "type": "module",
   "license": "MIT",
   "homepage": "https://github.com/Firstp1ck/pi-coding-agent-forge/tree/main/pi-extension-codex-fast-mode#readme",
@@ -34,6 +34,8 @@
   "files": [
     "index.ts",
     "README.md",
+    "TECHNICAL.md",
+    "DEVELOPMENT.md",
     "LICENSE"
   ],
   "engines": {

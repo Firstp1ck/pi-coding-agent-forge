@@ -700,7 +700,7 @@ type FooterTelemetry = {
   totalCacheWrite: number;
   totalCost: number;
   speedOutputTokens: number;
-  latestTokenSpeed: number | null;
+  averageTokenSpeed: number | null;
   speedStats: SessionSpeedStats | null;
   promptInjectionTokens: number | null;
   promptInjectionCalibrationSamples: number;
@@ -1468,7 +1468,7 @@ function buildWebuiVisibilityRecord(): Record<FooterVisibilityKey, boolean> {
 }
 
 function buildWebuiFooterPayload(ctx: ExtensionContext, snapshot: GitSnapshot | null, telemetry: FooterTelemetry, fetchState: GitFetchState, providerUsage: ProviderUsageSnapshot | null): WebuiFooterPayload {
-  const speed = telemetry.latestTokenSpeed;
+  const speed = telemetry.averageTokenSpeed;
   const speedValue = speed === null ? "— tok/s" : `${formatTokenSpeed(speed)} tok/s`;
   const speedStats = telemetry.speedStats;
   const speedStatParts: string[] = [];
@@ -1479,8 +1479,8 @@ function buildWebuiFooterPayload(ctx: ExtensionContext, snapshot: GitSnapshot | 
   }
   const speedStatsSuffix = speedStatParts.length > 0 ? ` · ${speedStatParts.join(" · ")}` : "";
   const speedTitle = speedStats
-    ? `Session speed stats from ${speedStats.sampleCount} live sample${speedStats.sampleCount === 1 ? "" : "s"}: avg ${formatTokenSpeed(speedStats.avg)} tok/s · 1% low ${formatTokenSpeed(speedStats.onePercentLow)} tok/s · max spike ${formatTokenSpeed(speedStats.max)} tok/s. Toggle inline stats via /git-footer-visibility (speed-avg, speed-low, speed-max).`
-    : undefined;
+    ? `Cumulative session output at the average speed from ${speedStats.sampleCount} live sample${speedStats.sampleCount === 1 ? "" : "s"}: avg ${formatTokenSpeed(speedStats.avg)} tok/s · 1% low ${formatTokenSpeed(speedStats.onePercentLow)} tok/s · max spike ${formatTokenSpeed(speedStats.max)} tok/s. Toggle inline stats via /git-footer-visibility (speed-avg, speed-low, speed-max).`
+    : "Cumulative session output. Average speed is shown once live samples are available; until then, the last measured speed or a session-history estimate is used.";
   const providerPrefix = telemetry.showModelProvider && telemetry.modelProvider ? `(${telemetry.modelProvider}) ` : "";
   const thinkingSuffix = telemetry.thinkingLevel
     ? telemetry.thinkingLevel === "off"
@@ -1776,8 +1776,8 @@ export default function gitFooterStatus(pi: ExtensionAPI) {
     } = footerUsageSnapshot;
     const activeOutputTokens = currentAssistantStartMs !== null ? currentAssistantEstimatedOutputTokens : 0;
     const speedOutputTokens = totalOutput + activeOutputTokens;
-    const latestTokenSpeed = currentAssistantLiveTokenSpeed ?? latestMeasuredTokenSpeed ?? historicalTokenSpeed;
     const speedStats = computeSessionSpeedStats(sessionSpeedSamples);
+    const averageTokenSpeed = speedStats?.avg ?? currentAssistantLiveTokenSpeed ?? latestMeasuredTokenSpeed ?? historicalTokenSpeed;
 
     const promptInjectionEstimate = getFooterPromptInjectionEstimate(ctx);
     const contextUsage = ctx.getContextUsage();
@@ -1794,7 +1794,7 @@ export default function gitFooterStatus(pi: ExtensionAPI) {
       totalCacheWrite,
       totalCost,
       speedOutputTokens,
-      latestTokenSpeed,
+      averageTokenSpeed,
       speedStats,
       promptInjectionTokens: promptInjectionEstimate?.total ?? null,
       promptInjectionCalibrationSamples: promptInjectionEstimate?.calibrationSamples ?? 0,
@@ -2148,6 +2148,8 @@ export default function gitFooterStatus(pi: ExtensionAPI) {
     footerUsageSnapshot = emptyFooterUsageSnapshot();
     latestProviderUsage = null;
     accountedAssistantUsageKeys = new Set<string>();
+    resetLiveAssistantState();
+    latestMeasuredTokenSpeed = null;
     sessionSpeedSamples = [];
     lastSessionSpeedSampleMs = 0;
     promptCalibrationCache = null;
@@ -2205,9 +2207,9 @@ export default function gitFooterStatus(pi: ExtensionAPI) {
           if (cacheItems.length > 0) segments.push(`${theme.fg("muted", "💾")} ${cacheItems.join(` ${itemSep} `)}`);
           if (nativeFooterItemVisible("pi")) segments.push(telemetry.promptInjectionTokens === null ? "PI: …" : `PI: ${formatTokens(telemetry.promptInjectionTokens)} tok`);
           if (nativeFooterItemVisible("speed")) {
-            const speedValue = telemetry.latestTokenSpeed === null
+            const speedValue = telemetry.averageTokenSpeed === null
               ? "— tok/s"
-              : `${formatTokenSpeed(telemetry.latestTokenSpeed)} tok/s`;
+              : `${formatTokenSpeed(telemetry.averageTokenSpeed)} tok/s`;
             const stats = telemetry.speedStats;
             const statParts: string[] = [];
             if (stats) {
