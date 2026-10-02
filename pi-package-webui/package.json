@@ -1,6 +1,6 @@
 {
   "name": "@firstpick/pi-package-webui",
-  "version": "0.10.9",
+  "version": "0.11.0",
   "description": "Pi Web UI companion package with a local browser UI CLI plus /webui-start and /webui-status commands.",
   "license": "MIT",
   "homepage": "https://github.com/Firstp1ck/pi-coding-agent-forge/tree/main/pi-package-webui#readme",
@@ -75,7 +75,7 @@
   "devDependencies": {
     "@axe-core/playwright": "4.12.1",
     "@earendil-works/pi-ai": "^0.83.0",
-    "@earendil-works/pi-coding-agent": "^0.99.2",
+    "@earendil-works/pi-coding-agent": "^1.0.0",
     "@earendil-works/pi-tui": "^0.83.0",
     "@playwright/test": "1.62.1",
     "typebox": "^1.3.6"

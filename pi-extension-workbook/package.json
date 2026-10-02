@@ -1,6 +1,6 @@
 {
   "name": "@firstpick/pi-extension-workbook",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "High-fidelity, fail-closed XLSX/XLSM inspection, rendering, editing, diffing, and validation tools for Pi agents.",
   "type": "module",
   "license": "MIT",

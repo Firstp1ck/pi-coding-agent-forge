@@ -1,6 +1,6 @@
 {
   "name": "@firstpick/pi-extension-docx",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Fail-closed DOCX inspection, rendering, transactional editing, diffing, validation, and commit tools for Pi agents.",
   "type": "module",
   "license": "MIT",
