@@ -13,7 +13,7 @@ npm run smoke
 npm pack --dry-run --json
 ```
 
-Tests cover taxonomy and strict decision parsing, bounded classifier input and reasons, continuation decision reuse, feature-only bridge injection without reason interpolation, parent fail-closed language, child-session bypass, lifecycle resets, structured RPC statuses, and inert registration.
+Tests cover taxonomy and strict decision parsing, bounded classifier input and reasons, continuation decision reuse, feature-only bridge injection without reason interpolation, T3 delegation compatibility without gate waivers, parent fail-closed language, child-session bypass, lifecycle resets, structured RPC statuses, and inert registration.
 
 ## Additional implementation details
 
@@ -61,6 +61,8 @@ If no active model is available, the classifier fails, times out, or returns mal
 A successfully classified parent feature receives the bridge only after the availability check passes. If the enabled skill is missing from the parent system prompt or a required file is unavailable, unreadable, or empty, the extension injects a configuration-error policy directing the parent not to implement the feature until configuration is restored. Child subagent processes skip this parent-only route instead of misclassifying an intentionally stripped child prompt as broken configuration.
 
 The availability check is machine-enforced; following the loaded policy remains an agent instruction rather than an authorization system.
+
+The routing bridge recognizes an available T3 `delegate_task`, including harness-prefixed tool names, as the skill's Pi delegation capability. This is conditional prompt guidance, not tool detection or an authorization bypass. The skill's Pi adapter owns provider/model preflight and the unchanged worker, independent-review and completion requirements.
 
 ## License
 

@@ -24,6 +24,8 @@ Guide a new capability from a clear idea through implementation, review, and a v
 - Implementation matched to the agreed outcome
 - Verification, review results, and remaining risks
 
+When Pi runs inside T3 Code, the workflow can use T3 Code's own agents for implementation and review. You do not need a separate Pi subagent integration when T3 delegation is available.
+
 ## Keep in mind
 
 Pi may pause for a decision when the request leaves an important product or safety choice unresolved. This package is not installed or enabled automatically; installation requires explicit authorization. It has no npm runtime dependencies.

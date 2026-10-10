@@ -209,6 +209,7 @@ export function isPiSubagentChild(env: Record<string, string | undefined> = proc
 export const FEATURE_SKILL_ROUTING_BRIDGE = [
 	`Before feature implementation, use read to load and follow the enabled \`${FEATURE_SKILL_NAME}\` skill from its path in <available_skills>.`,
 	"For a complex feature, also read its references/COMPLEX-FEATURE-CONTRACT.md before implementation.",
+	"Inside T3 Code, an available `delegate_task` capability, including harness-prefixed tool names, satisfies the skill's Pi `subagent` requirement; use T3 delegation and do not request a waiver or extra implementation approval solely because Pi's native `subagent` tool is absent. If required delegation is unavailable, stop at the affected gate; do not lower worker or independent-review requirements.",
 	"If the skill or required reference is unavailable or unreadable, stop feature implementation and report the configuration error; do not silently weaken a required gate.",
 ].join(" ");
 

@@ -421,6 +421,20 @@ test("a successful classified feature injects a fail-closed skill-routing bridge
 	assert.match(FEATURE_SKILL_CONFIGURATION_ERROR, /Do not implement feature work until the skill configuration is restored/);
 });
 
+test("feature routing accepts available T3 delegation without waiving mandatory outcomes", async () => {
+	for (const kind of ["feature_lightweight", "feature_complex"] as const) {
+		const harness = createFeaturePromptHarness({ classifyRequest: async () => classifierDecision(kind) });
+		const result = await harness.runInRpcMode("Add a capability in T3 Code");
+		assert.ok(result);
+		assert.match(result.systemPrompt, /Inside T3 Code, an available `delegate_task` capability/);
+		assert.match(result.systemPrompt, /including harness-prefixed tool names/);
+		assert.match(result.systemPrompt, /satisfies the skill's Pi `subagent` requirement/);
+		assert.match(result.systemPrompt, /do not request a waiver or extra implementation approval solely because Pi's native `subagent` tool is absent/);
+		assert.match(result.systemPrompt, /If required delegation is unavailable, stop at the affected gate/);
+		assert.match(result.systemPrompt, /do not lower worker or independent-review requirements/);
+	}
+});
+
 test("feature skill availability checks prompt discovery and required files", () => {
 	const agentDir = mkdtempSync(join(tmpdir(), "pi-feature-skill-check-"));
 	try {

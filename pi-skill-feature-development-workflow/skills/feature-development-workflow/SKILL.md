@@ -114,7 +114,10 @@ For feature work, success means the classification, decisions, implementation, v
 ## Pi Adapter
 
 - In Pi, read the active feature policy and the repository plan before beginning a governed feature workflow. The active policy owns feature outcomes and completion gates; delegation mechanics remain separate.
-- Before a Pi phase that requires delegated workers or reviewers, verify the `subagent` capability is active. If it is unavailable, stop before the mandatory phase and ask the user to waive that exact gate or approve an alternative.
+- Before a Pi phase that requires delegated workers or reviewers, verify the delegation capability for the current harness.
+- Outside T3 Code, verify the `subagent` capability is active. Inside T3 Code, use its app-owned `delegate_task` capability, including harness-prefixed tool names, for implementation workers and independent reviewer runs. Discover current provider/model support with `orchestrator_capabilities`; do not infer usability merely from a catalog entry.
+- An available T3 `delegate_task` satisfies the `subagent` capability requirement; do not ask for a waiver or extra implementation approval solely because Pi's native `subagent` tool is absent. This changes the delegation mechanism, not required worker outcomes, review independence, authorization, or completion evidence.
+- If the selected harness cannot provide a mandatory delegation outcome, stop before that phase and ask the user for an explicit scoped waiver or approval of a named alternative.
 - Use Pi's repository-reading, file-editing, and validation tools to inspect evidence, make bounded changes, and verify commands. Use the Pi progress UI for multi-step work when available.
 - For a complex feature in Pi, place the canonical plan under the repository's planning convention (otherwise `plans/planned/<feature-slug>.md`), preserve one integration owner, and save the final report under the repository's report convention (otherwise `reports/<feature-slug>.html`). Use the `html-report` skill for that report when it is available.
 - Do not install this package or modify Pi settings without explicit user confirmation. A later approved local installation may use `pi install <absolute-path-to-package>`.

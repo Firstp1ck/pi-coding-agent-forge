@@ -33,6 +33,14 @@ If classification is unavailable or unclear, Pi receives a short fallback tellin
 
 If the enabled skill or a required reference cannot be read in a parent session, feature implementation stops with a configuration message. The extension does not silently continue with a partial policy. Pi child sessions are identified by the runtime's child marker and skip this check because their inherited skill catalog may be intentionally stripped.
 
+## T3 Code compatibility
+
+When Pi runs inside T3 Code, required implementation and review work can use T3 Code's own delegated agents. A missing native Pi subagent integration alone is not a reason to ask you for a workflow waiver or another implementation approval.
+
+Required worker outcomes, independent reviews and safety controls still apply. If T3 delegation cannot provide a mandatory outcome, the agent must stop at that step rather than skip it.
+
+After updating the extension, start a fresh Pi provider session in T3 Code so it loads the updated instructions. This change does not alter T3 permission modes or other safety extensions.
+
 ## Privacy and limitations
 
 Classification uses the active conversation model only for ambiguous requests. It runs separately without tools and receives bounded request context.
