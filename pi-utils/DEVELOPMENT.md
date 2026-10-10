@@ -54,6 +54,8 @@ Shared helper utilities used by `@firstpick/pi-extension-*` packages.
 
 `scoped-resource-command` keeps resource names as persistence identifiers. Callers may return separate `getResourcePresentation()` entries with `label`, `discovery`, or `description` fields. The TUI selector renders name, discovery, and status columns, includes presentation text in search, and shows the selected description without changing saved resource names.
 
+`resource-management` exports `isT3ResourceProfileContext(ctx, env = process.env, pid = process.pid)`. It accepts only RPC mode with the exact marker `T3_PI_RESOURCE_PROFILES=t3-v1:<pid>`. The injected T3 extension binds `t3-v1` to its own PID before `session_start`; consumers never adopt an unbound request. This keeps inherited ownership from leaking to child processes. It does not alter the canonical defaults reader, scope resolver, branch directive or storage format. `tests/resource-management.test.mjs` covers marker/mode rejection and a real descendant process with an inherited parent binding.
+
 `createExtensionWorkingIndicator` renders a reusable extension-owned spinner using `ctx.ui.setWidget` plus footer `setStatus`, so it works inside slash-command handlers where Pi's built-in model-streaming working row is not shown.
 
 `createLocalWikiEngine` centralizes local documentation corpus handling for wiki-style extensions: file discovery, Markdown/HTML parsing, section/link extraction, cache freshness, query expansion, search ranking, snippets, page reads, focused extracts, related links, and status payloads.

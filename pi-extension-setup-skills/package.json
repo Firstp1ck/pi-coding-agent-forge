@@ -29,7 +29,7 @@
     "@earendil-works/pi-coding-agent": "*"
   },
   "scripts": {
-    "test": "bun test"
+    "test": "bun test && node tests/t3-preflight-regression.mjs --no-skills"
   },
   "files": [
     "index.ts",

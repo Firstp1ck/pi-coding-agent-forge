@@ -33,6 +33,7 @@
   },
   "files": [
     "index.ts",
+    "src",
     "images",
     "README.md",
     "TECHNICAL.md",

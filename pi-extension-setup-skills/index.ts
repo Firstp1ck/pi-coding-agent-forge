@@ -5,7 +5,7 @@ import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext, Skill, Sl
 import { DefaultPackageManager, DynamicBorder, formatSkillsForPrompt, getAgentDir, getSettingsListTheme, parseArgs, SettingsManager } from "@earendil-works/pi-coding-agent";
 import { Container, getKeybindings, Key, matchesKey, type SettingItem, SettingsList, Text } from "@earendil-works/pi-tui";
 import { getAgentSettingsPath, readJsonIfExists, writeJsonFile } from "@firstpick/pi-utils";
-import { branchResourceDirective, readResourceDefaults, resolveResourceSelection } from "@firstpick/pi-utils/resource-management";
+import { branchResourceDirective, isT3ResourceProfileContext, readResourceDefaults, resolveResourceSelection } from "@firstpick/pi-utils/resource-management";
 import { registerScopedResourceCommand } from "@firstpick/pi-utils/scoped-resource-command";
 
 type PackageEntry = string | { source?: string; skills?: string[]; extensions?: string[]; prompts?: string[]; [key: string]: unknown };
@@ -453,15 +453,19 @@ export default function setupSkillsExtension(
   let legacyDisabledSkills = new Set<string>();
   let runtimeBaseline: string[] | undefined;
   let tuiActive = false;
+  let t3Active = false;
+  let t3CatalogCwd: string | undefined;
+  let t3PolicyMatchesContext: ((ctx: ExtensionContext) => boolean) | undefined;
+  let t3RefreshTail: Promise<void> = Promise.resolve();
   let generation = 0;
 
   const runtimeSkillNames = () => runtimeBaseline ??= pi.getCommands()
     .filter((command) => command.source === "skill" && command.name.startsWith("skill:"))
     .map((command) => command.name.slice("skill:".length));
 
-  async function refreshCatalog(ctx: ExtensionContext): Promise<void> {
+  async function loadCatalog(ctx: ExtensionContext): Promise<SkillCandidate[]> {
     if (limitToLoadedSkills) {
-      catalog = collectLoadedSkills(pi.getCommands()).map((skill) => ({
+      return collectLoadedSkills(pi.getCommands()).map((skill) => ({
         name: skill.name,
         description: skill.description,
         skillPath: skill.filePath,
@@ -470,17 +474,21 @@ export default function setupSkillsExtension(
         disableModelInvocation: skill.disableModelInvocation,
         sourceInfo: skill.sourceInfo,
       }));
-      return;
     }
     const settings = readJsonIfExists<SettingsShape>(getAgentSettingsPath(), {});
-    catalog = await discoverCandidates(settings, ctx.cwd);
+    return discoverCandidates(settings, ctx.cwd);
+  }
+
+  async function refreshCatalog(ctx: ExtensionContext): Promise<void> {
+    catalog = await loadCatalog(ctx);
   }
 
   const isSkillEnabled = (name: string): boolean => enabledSkills instanceof Set
     ? enabledSkills.has(name)
-    : runtimeSkillNames().includes(name) && !legacyDisabledSkills.has(name);
+    : (t3Active || runtimeSkillNames().includes(name)) && !legacyDisabledSkills.has(name);
 
   async function recompute(ctx: ExtensionContext, model = ctx.model): Promise<boolean> {
+    if (t3Active && isT3ResourceProfileContext(ctx)) return (await recomputeT3(ctx, model, true)) === true;
     const requestedKey = model?.provider && model?.id ? `${model.provider}\0${model.id}` : "";
     const currentGeneration = ++generation;
     let defaults;
@@ -508,6 +516,62 @@ export default function setupSkillsExtension(
     return true;
   }
 
+  function recomputeT3(ctx: ExtensionContext, model = ctx.model, discover = false): Promise<boolean | undefined> {
+    // RPC input and prompt preparation overlap. Queue reads so one cannot
+    // invalidate another merely by asking for the same current policy.
+    const result = t3RefreshTail.then(() => readT3Policy(ctx, model, discover));
+    t3RefreshTail = result.then(() => undefined, () => undefined);
+    return result;
+  }
+
+  // Read failures retain the policy (false); stale reads never publish state (undefined).
+  async function readT3Policy(ctx: ExtensionContext, model = ctx.model, discover = false): Promise<boolean | undefined> {
+    const currentGeneration = ++generation;
+    const modelKey = JSON.stringify([model?.provider, model?.id]);
+    const branchKey = JSON.stringify(lastBranchConfig(ctx));
+    const session = ctx.sessionManager.getSessionId?.() ?? ctx.sessionManager;
+    const cwd = ctx.cwd;
+    const matchesContext = (current: ExtensionContext) => t3Active && isT3ResourceProfileContext(current)
+      && session === (current.sessionManager.getSessionId?.() ?? current.sessionManager) && cwd === current.cwd
+      && modelKey === JSON.stringify([current.model?.provider, current.model?.id])
+      && branchKey === JSON.stringify(lastBranchConfig(current));
+    const isCurrent = () => currentGeneration === generation && matchesContext(ctx);
+    let defaults;
+    let nextCatalog = catalog;
+    try {
+      defaults = await readResourceDefaults();
+      if (!isCurrent()) return undefined;
+      // Profile edits change name selection, not discovery roots. Reuse the catalog
+      // at prompt boundaries; lifecycle changes still refresh installed candidates.
+      if (discover || t3CatalogCwd !== cwd) nextCatalog = await loadCatalog(ctx);
+    } catch (error) {
+      if (!isCurrent()) return undefined;
+      ctx.ui.notify(`Skill defaults could not be read: ${error instanceof Error ? error.message : String(error)}`, "error");
+      return false;
+    }
+    if (!isCurrent()) return undefined;
+    const directive = branchResourceDirective(lastBranchConfig(ctx), "skills");
+    legacyDisabledSkills = new Set(directive.legacyDisabledNames || []);
+    const resolved = directive.pinned
+      ? { names: directive.names }
+      : resolveResourceSelection(defaults, "skills", model?.provider, model?.id);
+    enabledSkills = resolved.names === null ? null : new Set(resolved.names);
+    catalog = nextCatalog;
+    t3CatalogCwd = cwd;
+    t3PolicyMatchesContext = matchesContext;
+    return true;
+  }
+
+  async function refreshT3ForUse(ctx: ExtensionContext): Promise<"ready" | "unowned" | "unresolved"> {
+    let refreshed = await recomputeT3(ctx);
+    const raced = refreshed === undefined;
+    if (raced) refreshed = await recomputeT3(ctx);
+    if (!t3Active || !isT3ResourceProfileContext(ctx)) return "unowned";
+    if (refreshed === undefined || (raced && !t3PolicyMatchesContext)
+      || (t3PolicyMatchesContext && !t3PolicyMatchesContext(ctx))) return "unresolved";
+    return "ready";
+  }
+
   registerScopedResourceCommand(pi, {
     commandName: "skills",
     resourceType: "skills",
@@ -528,31 +592,54 @@ export default function setupSkillsExtension(
   });
 
   pi.on("session_start", async (_event, ctx) => {
+    generation += 1;
     tuiActive = ctx.mode === "tui";
+    t3Active = isT3ResourceProfileContext(ctx);
+    if (t3Active) {
+      await recomputeT3(ctx, ctx.model, t3CatalogCwd !== ctx.cwd);
+      return;
+    }
     if (!tuiActive) return;
     runtimeBaseline ??= runtimeSkillNames();
     await recompute(ctx);
   });
   pi.on("session_tree", async (_event, ctx) => {
+    if (t3Active && isT3ResourceProfileContext(ctx)) await recomputeT3(ctx, ctx.model, true);
     if (tuiActive && ctx.mode === "tui") await recompute(ctx);
   });
   pi.on("model_select", async (event, ctx) => {
+    if (t3Active && isT3ResourceProfileContext(ctx)) await recomputeT3(ctx, event.model, true);
     if (tuiActive && ctx.mode === "tui") await recompute(ctx, event.model);
   });
   pi.on("session_shutdown", () => {
     tuiActive = false;
+    t3Active = false;
+    t3CatalogCwd = undefined;
+    t3PolicyMatchesContext = undefined;
     generation += 1;
   });
   pi.on("input", async (event, ctx) => {
-    if (!tuiActive || ctx.mode !== "tui") return { action: "continue" };
+    const t3 = t3Active && isT3ResourceProfileContext(ctx);
+    if (!(tuiActive && ctx.mode === "tui") && !t3) return { action: "continue" };
     const match = String(event.text || "").trim().match(/^\/skill:([^\s]+)(?:\s+([\s\S]*))?$/i);
     if (!match) return { action: "continue" };
+    if (t3) {
+      const refresh = await refreshT3ForUse(ctx);
+      if (refresh === "unowned" || !t3Active || !isT3ResourceProfileContext(ctx)) return { action: "continue" };
+      if (refresh === "unresolved" || (t3PolicyMatchesContext && !t3PolicyMatchesContext(ctx))) {
+        ctx.ui.notify("Skill selection changed while resolving this input. Please retry the skill command.", "warning");
+        return { action: "handled" };
+      }
+    }
     const name = match[1];
     if (!isSkillEnabled(name)) {
       ctx.ui.notify(`Skill /skill:${name} is disabled by /skills.`, "warning");
       return { action: "handled" };
     }
-    if (runtimeSkillNames().includes(name)) return { action: "continue" };
+    const loadedNames = t3 ? pi.getCommands().filter((command) => command.source === "skill")
+      .map((command) => command.name.slice("skill:".length)) : runtimeSkillNames();
+    if (loadedNames.includes(name)) return { action: "continue" };
+    if (t3 && (limitToLoadedSkills || enabledSkills === null)) return { action: "continue" };
     const candidate = catalog.find((skill) => skill.name === name);
     if (!candidate) return { action: "continue" };
     try {
@@ -564,19 +651,36 @@ export default function setupSkillsExtension(
       return { action: "handled" };
     }
   });
-  pi.on("before_agent_start", async (event) => {
-    if (!tuiActive) return undefined;
+  pi.on("before_agent_start", async (event, ctx) => {
+    const t3 = t3Active && isT3ResourceProfileContext(ctx);
+    if (!tuiActive && !t3) return undefined;
+    let unresolvedT3Policy = false;
+    if (t3) {
+      const refresh = await refreshT3ForUse(ctx);
+      if (refresh === "unowned" || !t3Active || !isT3ResourceProfileContext(ctx)) return undefined;
+      // Core treats an untouched event as successful preparation, not cancellation.
+      unresolvedT3Policy = refresh === "unresolved" || (t3PolicyMatchesContext !== undefined && !t3PolicyMatchesContext(ctx));
+    }
     const runtimeSkills = Array.isArray(event.systemPromptOptions?.skills) ? event.systemPromptOptions.skills : [];
-    const skillsByName = new Map<string, Skill>(catalog.map((candidate) => [candidate.name, candidateAsSkill(candidate)]));
+    const inheritRuntime = t3 && enabledSkills === null;
+    const candidates = inheritRuntime ? [] : catalog;
+    const skillsByName = new Map<string, Skill>(candidates.map((candidate) => [candidate.name, candidateAsSkill(candidate)]));
+    if (inheritRuntime && !event.systemPromptOptions) {
+      for (const skill of collectLoadedSkills(pi.getCommands())) skillsByName.set(skill.name, skill);
+    }
     for (const skill of runtimeSkills) skillsByName.set(skill.name, skill);
     const allSkills = [...skillsByName.values()];
-    const filtered = allSkills.filter((skill) => isSkillEnabled(skill.name) && !skill.disableModelInvocation);
+    const loadedNames = t3 && limitToLoadedSkills ? new Set(pi.getCommands()
+      .filter((command) => command.source === "skill" && command.name.startsWith("skill:"))
+      .map((command) => command.name.slice("skill:".length))) : undefined;
+    const filtered = allSkills.filter((skill) => !unresolvedT3Policy && isSkillEnabled(skill.name) && !skill.disableModelInvocation
+      && (!loadedNames || loadedNames.has(skill.name)));
     if (event.systemPromptOptions) {
       // Pi persists structured skills, not a returned full-prompt override, in the transcript.
       event.systemPromptOptions.skills = filtered;
       if (event.systemPromptOptions.forceSystemPrompt === undefined) return;
     }
-    const disabledNames = allSkills.filter((skill) => !isSkillEnabled(skill.name)).map((skill) => skill.name);
+    const disabledNames = allSkills.filter((skill) => unresolvedT3Policy || !isSkillEnabled(skill.name)).map((skill) => skill.name);
     const nextSection = formatSkillsForPrompt(filtered);
     let nextPrompt = event.systemPrompt;
     if (nextPrompt.includes("<available_skills>")) {

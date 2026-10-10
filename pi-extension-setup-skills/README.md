@@ -12,6 +12,7 @@ Choose which skills Pi can use for a session, by default, or with a specific mod
 - Sets a global default or an exact provider/model profile.
 - Applies model profiles when the active model changes.
 - Keeps WebUI and TUI resource choices in sync.
+- Uses saved choices in T3 chat sessions when paired with a compatible T3 launcher.
 - Honors `--no-skills` and `-ns`; `/skills` only shows skills loaded explicitly for those sessions.
 
 ## Install
@@ -29,6 +30,8 @@ Run `/skills`, then choose where the selection applies:
 - **Session only** changes the current session branch.
 - **Global default** applies when no session or model selection overrides it.
 - **Model default** applies to one exact provider/model pair.
+
+With a compatible T3 launcher, save a global or model default here and send your next T3 message to apply it there. T3's current session choice takes precedence. Skill choices stay independent of tool choices: keeping T3's own tools available does not enable a disabled skill.
 
 The resource list has separate **Name**, **Discovery**, and **Status** columns. Discovery shows how Pi found the skill, such as `auto`, while Status shows `enabled` or `disabled`. The selected skill's description appears below the list. Type to fuzzy-search by name, discovery value, or description. Name matches appear first, then source matches, then description matches. Use the arrow keys to move, press `Enter` to toggle, `Ctrl+X` to disable all matching skills, `Ctrl+A` to enable all matching skills, and `Ctrl+S` to save. `Escape` returns to the previous setup screen. From the scope screen it closes the setup flow. `Ctrl+C` closes the entire setup flow immediately.
 
