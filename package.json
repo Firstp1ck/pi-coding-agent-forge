@@ -3,12 +3,15 @@
   "private": true,
   "description": "Extensions, skills, prompts, themes, companion packages, and developer tools for the Pi coding agent.",
   "license": "MIT",
+  "engines": {
+    "node": "^22.23.4 || ^24.22.1 || >=26.12.1"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Firstp1ck/pi-coding-agent-forge.git"
   },
   "homepage": "https://github.com/Firstp1ck/pi-coding-agent-forge#readme",
   "dependencies": {
-    "@firstpick/pi-package-webui": "^0.10.9"
+    "@firstpick/pi-package-webui": "^0.11.1"
   }
 }
