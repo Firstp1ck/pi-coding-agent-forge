@@ -1,0 +1,9 @@
+{
+  "name": "pi-gui-electron-sample",
+  "private": true,
+  "version": "0.0.0",
+  "main": "main.js",
+  "devDependencies": {
+    "electron": "45.0.0"
+  }
+}

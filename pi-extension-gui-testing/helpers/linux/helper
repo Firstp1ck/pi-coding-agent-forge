@@ -1,0 +1,19 @@
+#!/usr/bin/python3 -I
+"""Entrypoint of the in-container Linux helper (docs/protocol.md).
+
+Runs isolated (-I) so neither PYTHONPATH nor the working directory can inject
+modules; the package lives next to this file under lib/ in the image.
+"""
+import os
+import sys
+
+_here = os.path.dirname(os.path.realpath(__file__))
+for candidate in (os.path.join(_here, "lib"), _here):
+    if os.path.isdir(os.path.join(candidate, "pi_gui_helper")):
+        sys.path.insert(0, candidate)
+        break
+
+from pi_gui_helper.main import main  # noqa: E402
+
+if __name__ == "__main__":
+    sys.exit(main())

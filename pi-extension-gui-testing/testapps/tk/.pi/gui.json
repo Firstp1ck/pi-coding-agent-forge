@@ -1,0 +1,11 @@
+{
+  "targets": [
+    "linux"
+  ],
+  "launch": {
+    "cmd": "python3",
+    "args": [
+      "app.py"
+    ]
+  }
+}

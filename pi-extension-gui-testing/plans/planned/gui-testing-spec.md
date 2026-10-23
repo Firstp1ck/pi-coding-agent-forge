@@ -78,7 +78,9 @@ with workstream IDs.
   PyGObject with GTK 3 and GTK 4 introspection, the Qt `xcb` platform libraries,
   and the Chromium/Electron runtime libraries. The exact package list lives in
   the Dockerfile and is documented in `DEVELOPMENT.md`; an image contract test
-  checks it.
+  checks it. The build context is a staged tar stream piped to `docker build -`
+  that contains only the helper, the Dockerfile, and the bundled GTK 3 smoke app,
+  so the build needs no buildx plugin and never sees project files.
 - **Image labels**: `pi-gui-testing.base=true`, `pi-gui-testing.version=<package
   version>`, `pi-gui-testing.protocol=<protocol version>`. The base image never
   carries a session label. `image.base` compares these labels.
@@ -428,8 +430,10 @@ setup runs start to finish with **zero prompts** and ends with one summary.
 5. **Remediation**, only for failures that have one:
    - Collect all fixable failures into **one** plan: exact commands, sudo needs,
      download sizes, durations, cost.
-   - `--fix` → apply without asking. Otherwise **one** `ctx.ui.confirm()` for the
-     whole plan, with an option to review items individually.
+   - `--fix` → apply without asking. Otherwise **one** prompt for the whole plan
+     (`ctx.ui.select`: apply all, review each item, cancel). Setup bounds every
+     dialog with its own timer (default 10 minutes) because Pi reports a timed-out
+     confirm the same as "no"; a timeout cancels setup.
    - Steps that need a password or human judgement (remote password for key
      install, host-key fingerprint, sudo password, firmware virtualization) are
      never automated. Setup lists the exact commands and stops with
@@ -457,8 +461,10 @@ mode, but in print and JSON mode it redirects extension writes to stdout onto
 stderr and reserves stdout for its own output. Without a UI, commands therefore
 report as follows: print mode writes the report to stderr; JSON and RPC mode
 emit it as a custom message (`pi.sendMessage`), never as plain text on stdout.
-When a required check fails, the command sets `process.exitCode = 1`, because
-Pi does not turn command errors into an exit code. M1 verifies all three
+When a required check fails without a UI (print/JSON), the command sets
+`process.exitCode = 1`, because Pi does not turn command errors into an exit
+code. With a UI the exit code is left alone, so a failed setup followed by a
+successful retry does not make Pi exit with an error later. M1 verifies all three
 paths with a live run.
 
 ### 5.3 Check definition

@@ -10,14 +10,52 @@
     "url": "git+https://github.com/Firstp1ck/pi-coding-agent-forge.git",
     "directory": "pi-extension-gui-testing"
   },
-  "keywords": ["pi-package", "pi", "pi-coding-agent", "extension", "skill", "gui-testing", "screenshots", "xvfb", "docker", "ssh"],
-  "pi": { "extensions": ["./index.ts"] },
+  "keywords": [
+    "pi-package",
+    "pi",
+    "pi-coding-agent",
+    "extension",
+    "skill",
+    "gui-testing",
+    "screenshots",
+    "xvfb",
+    "docker",
+    "ssh"
+  ],
+  "pi": {
+    "extensions": [
+      "./index.ts"
+    ],
+    "skills": [
+      "./skills"
+    ]
+  },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
-    "check": "npm run typecheck"
+    "test": "node --experimental-strip-types --test \"tests/contracts/**/*.test.mjs\" \"tests/unit/**/*.test.mjs\"",
+    "test:e2e": "node --experimental-strip-types --test --test-concurrency=1",
+    "check": "npm run typecheck && npm test"
   },
-  "devDependencies": { "@types/node": "^26.1.2", "typescript": "^6.0.3" },
-  "peerDependencies": { "@earendil-works/pi-coding-agent": "*", "typebox": "*" },
-  "engines": { "node": ">=22.19.0" },
-  "files": ["index.ts", "src", "README.md", "TECHNICAL.md", "DEVELOPMENT.md", "LICENSE"]
+  "devDependencies": {
+    "@types/node": "^24.12.4",
+    "typescript": "^6.0.3"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "typebox": "*"
+  },
+  "engines": {
+    "node": "^22.23.4 || ^24.22.1 || >=26.12.1"
+  },
+  "files": [
+    "index.ts",
+    "src",
+    "helpers",
+    "testapps",
+    "skills",
+    "README.md",
+    "TECHNICAL.md",
+    "DEVELOPMENT.md",
+    "LICENSE"
+  ]
 }
