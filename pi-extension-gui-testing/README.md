@@ -28,7 +28,9 @@ pi install npm:@firstpick/pi-extension-gui-testing
 
 ## Before you start
 
-- Remote and cloud environments receive a copy of your project for the length of a session. Files such as `.env`, keys, and credentials are never sent.
+- With Docker on your own computer, the container can read your whole project by default, including `.env` files and keys, while setup commands run with network access. If your setup runs install scripts you don't trust, use `copy` mode or turn network access off (see [TECHNICAL.md](TECHNICAL.md#security-and-privacy)).
+- Remote and cloud environments receive a copy of your project for the length of a session. Files such as `.env`, keys, and credentials are left out by default. You can add specific files back with `sync.allow`, so only do that on purpose.
+- The Docker environment needs Docker 29 or newer in its standard (rootful) mode. Rootless Docker is not supported yet.
 - Cloud sandboxes cost money. Setup asks you to acknowledge this, and Pi warns you when usage looks unusual.
 
 ## Technical details

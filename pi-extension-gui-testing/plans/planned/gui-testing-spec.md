@@ -33,6 +33,28 @@ desktop.
 - Controlling apps on the user's real desktop (that is "computer use", explicitly out of scope).
 - Browser-only testing (use Playwright/Chrome DevTools MCP instead; the skill says so).
 
+## 3a. Decision record
+
+Decisions approved by the user during planning. Implementation plans cite them by ID.
+
+| ID | Decision (approved 2026-10-23) | Spec location |
+|---|---|---|
+| D1 | local-linux uses the project's existing environment; never runs setup commands on the client | §4.2 Dependencies |
+| D2 | docker-linux mounts the project read-only with writable tmpfs; optional workspaceMode "copy" | §4.1 Workspace |
+| D3 | Config split: .pi/gui.json (committed) and .pi/gui.local.json (personal, gitignored); precedence local → global → default | §7 |
+| D4 | Client-side dependency cache from the start | §4.8, M1b |
+| D5 | No cost cap; non-blocking usage/loop check; idle timeout 15 min; no max session length; max 2 concurrent sessions | §8 Limits, §8.1 |
+| D6 | Complete spec is v1; milestones are build order | header Scope, §11 |
+| D7 | Package @firstpick/pi-extension-gui-testing in the npm-packages repo following AGENTS.md | §10 |
+| Q5–Q7 | Docker Desktop hosts in M1c; remote host global or .pi/gui.local.json; remote base image kept by default | §13 |
+| T1 | Tk 9.1 assumed not installed; Tk apps use coordinates only | §4.6 |
+| D8 | local-windows uses @iiwate/pi-silent-gui as reference design and S1 test vehicle, not a dependency | §4.5, plan §11 |
+
+Changes adopted from the pre-implementation reviews (round 2 fixes X1–X26,
+approved 2026-10-23; round 3 fixes Y1–Y19, approved 2026-10-24) are recorded in
+the M1 plan §13.1. D8 was first recorded as "W1" and renamed to avoid a clash
+with workstream IDs.
+
 ## 4. Backends
 
 | Backend id | Host | Target | Isolation mechanism | Priority |
@@ -48,27 +70,86 @@ desktop.
 ### 4.1 `docker-linux`
 
 - Base image shipped as a Dockerfile in the package and built locally on setup (no
-  registry dependency): Debian slim + `xvfb`, `xdotool`, `imagemagick` (or `xwd`),
-  `dbus`, `at-spi2-core`, `python3-pyatspi`, a minimal WM (`openbox`), common fonts,
-  and the in-container helper (§6).
+  registry dependency) from a pinned Debian slim tag: `xvfb`, `xdotool`,
+  `imagemagick` (or `xwd`), `dbus`, `at-spi2-core`, `python3-pyatspi`, `tini`, a
+  minimal WM (`openbox`), common fonts, the `setup` toolchain (`python3-pip`,
+  `python3-venv`, `nodejs`, `npm`), and the in-container helper (§6). The
+  image also carries the toolkit runtimes the smoke test and sample apps need:
+  PyGObject with GTK 3 and GTK 4 introspection, the Qt `xcb` platform libraries,
+  and the Chromium/Electron runtime libraries. The exact package list lives in
+  the Dockerfile and is documented in `DEVELOPMENT.md`; an image contract test
+  checks it.
+- **Image labels**: `pi-gui-testing.base=true`, `pi-gui-testing.version=<package
+  version>`, `pi-gui-testing.protocol=<protocol version>`. The base image never
+  carries a session label. `image.base` compares these labels.
 - **No project data in images.** The project is never `COPY`'d into an image or a
   build context, so no image layer or build cache contains project files. The
   project's `setup` commands (§7) run inside the session container at session
-  start; their results live in the container's writable layer and disappear
-  with it (`--rm`). This trades a slower session start for a clean host (§7a).
+  start; their results live in container tmpfs mounts and disappear with the
+  container (`--rm`). This trades a slower session start for a clean host (§7a).
+- **Container lifetime**: the helper is the container's entrypoint
+  (`ENTRYPOINT ["tini", "--", "/opt/pi-gui-testing/helper"]`, no `CMD`), started
+  with `docker run -i --rm`, and speaks the protocol (§6) over that stdio. The
+  helper runs on the image's system `python3` and starts Xvfb, the private D-Bus,
+  `at-spi-bus-launcher`, and `openbox` itself. When stdin closes or the heartbeat
+  times out (§6), the helper tears down and exits, and `--rm` removes the
+  container without any client action. `docker exec` is used only for
+  diagnostics. Electron and Chromium apps get `--shm-size=512m`.
 - **Workspace (default `workspaceMode: "mount"`)**: the project directory is
-  bind-mounted **read-only** at `/workspace`. The app gets writable tmpfs mounts
-  for `/scratch`, `$HOME`, and `/tmp`. Apps that must write next to their own
-  files use `workspaceMode: "copy"`: the sync file set (§4.7) is copied into the
-  session temp dir (§7a.2) and mounted read-write. Containers run as host UID/GID
-  (`--user`) so files are not root-owned.
-- **Dependencies** come from the client-side dependency cache (§4.8), mounted at
-  `/deps`; `setup` commands run only on a cache miss.
-- Every container, network, and volume is created with
-  `--label pi-gui-testing.session=<id>` so cleanup and sweeps can find it.
-- Hard rules, verified at setup and on every session start via `docker inspect`:
-  no `--privileged`, no host Docker socket, no host X11/Wayland sockets, no host
-  D-Bus mount, no host network namespace.
+  bind-mounted **read-only** at `/workspace`. Apps that must write next to their
+  own files use `workspaceMode: "copy"`: the sync file set (§4.7) is copied into
+  the session temp dir (§7a.2) and mounted read-write. Containers run as host
+  UID/GID (`--user`) so files are not root-owned. The client generates `passwd`
+  and `group` files for that UID/GID in the session temp dir and bind-mounts them
+  read-only at `/etc/passwd` and `/etc/group`, so the UID resolves to a user with
+  home `/home/app`. There is no root entrypoint and no `LD_PRELOAD`.
+- **Writable mounts**: uid-owned tmpfs mounts with explicit `uid`, `gid`, and
+  `mode` for `/scratch`, `$HOME` (`/home/app`), `/tmp`, `/deps`, and
+  `XDG_RUNTIME_DIR=/run/user/<uid>` (mode 0700). The §4.2 environment block
+  applies inside the container (`DISPLAY` = the container's Xvfb,
+  `DBUS_SESSION_BUS_ADDRESS` = the container's private bus).
+- **Mount-mode privacy**: in `mount` mode the container can read every file in the
+  project, including `.env*` files and keys, while `setup` and the app run with
+  network access. The §4.7 exclusions apply only to `copy` mode and remotes. Use
+  `copy` mode or `network: "none"` when `setup` runs untrusted install scripts.
+  Before start, a scan of the whole mounted tree (including `.git`,
+  `node_modules`, and virtualenvs; bounded to 20 s) refuses a workspace that
+  contains Unix sockets, because the container runs as the host UID and could
+  connect to them. A timeout or an unreadable directory also refuses the
+  session, with a message pointing to `copy` mode. A project root that
+  is `/`, the user's home directory, or an ancestor of a forbidden path below is
+  refused.
+- **Dependencies (M1)**: `/deps` is a uid-owned tmpfs. Before the first `setup`
+  command the helper creates `/deps/venv` with
+  `python3 -m venv --system-site-packages`, so the image's `gi` and `pyatspi`
+  stay importable. `setup` runs as the host UID via `sh -c` with cwd `/workspace`
+  and a fixed environment that the launched app also gets: `VIRTUAL_ENV=/deps/venv`,
+  `PATH=/deps/venv/bin:/deps/node/bin:$PATH`, `npm_config_prefix=/deps/node`,
+  `PYTHONUSERBASE=/deps/python`. `setup` that must write into the project tree
+  (for example `npm install` creating `node_modules`) needs `copy` mode. From
+  M1b the dependency cache (§4.8) fills `/deps` at the same paths, and `setup`
+  runs only on a cache miss.
+- **Labels**: every container, network, and volume gets
+  `pi-gui-testing.session=<id>` and
+  `pi-gui-testing.owner=<clientId>:<pid>:<processStartTime>:<bootId>` so cleanup
+  and sweeps can find it and check its owner (§7a.2), even without the temp dir.
+- **Docker endpoint**: only a local daemon is supported. The active context's
+  endpoint must be a `unix://` socket; a remote context or a remote `DOCKER_HOST`
+  is rejected. The endpoint is resolved once per session and passed explicitly to
+  every `docker` call of that session. M1 requires a rootful daemon: rootless
+  Docker maps container UIDs to subordinate host UIDs, which breaks file
+  ownership and access to the session temp dir. Rootless support is planned for
+  M1c.
+- **Hard rules**, one list shared by the unit tests and `isolation.inspect`,
+  verified at setup and on every session start via `docker inspect`:
+  `Privileged=false`; `NetworkMode`, `IpcMode`, `PidMode`, and `UsernsMode` not
+  `host`; capabilities dropped (`--cap-drop ALL`) and none added;
+  `no-new-privileges`; no devices; no bind source (after resolving symlinks) that
+  equals or is an ancestor of `/tmp/.X11-unix`, `/run/user`, `/run/dbus`,
+  `/var/run`, or any `docker.sock`; `Env` contains no `WAYLAND_DISPLAY` and no
+  `DBUS_SESSION_BUS_ADDRESS`, and `Env.DISPLAY`, when set, matches `^:[0-9]+$`
+  (the helper's own Xvfb, which is reachable only because no X11 socket
+  directory is mounted).
 - Network on by default (dependency installs); `network: "none"` option for runs.
 
 ### 4.2 `local-linux`
@@ -179,16 +260,48 @@ monitor, GPU, or desktop environment is needed; Xvfb renders in RAM.
 
 ### 4.5 `local-windows`
 
-- Signed helper `.exe` creates a private desktop and launches itself and the app on
-  it (`STARTUPINFO.lpDesktop`).
-- Interaction via UI Automation patterns; `PostMessage` mouse/keyboard fallback.
-  `SendInput` is forbidden (it reaches the user's input desktop).
-- Screenshots via `PrintWindow(PW_RENDERFULLCONTENT)`.
+- **Reference design**: [`@iiwate/pi-silent-gui`](https://www.npmjs.com/package/@iiwate/pi-silent-gui)
+  (MIT, v0.2.0, Windows-only Pi extension; reviewed 2026-10-23 from its README and
+  source layout, not executed). It is used as a blueprint and for spike S1, **not as
+  a runtime dependency**: it exposes its own tools instead of our `gui_*` interface,
+  has no UI Automation, no text typing (single key actions only), and requires Python plus a manual
+  `pip install pycaw`. Reused code keeps its MIT attribution.
+- Signed helper `.exe` (see Q4) creates a private desktop with a session-unique name
+  the caller cannot choose and launches itself and the app on it
+  (`STARTUPINFO.lpDesktop`). Never calls `SwitchDesktop`, `SendInput`, or clipboard
+  APIs.
+- **Process containment (adopted from the reference)**:
+  - every app process joins a Job Object with `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`
+    atomically at creation (`STARTUPINFOEX` + `PROC_THREAD_ATTRIBUTE_JOB_LIST`), so
+    a helper crash kills the whole process tree;
+  - the app starts suspended and is resumed only after the desktop, job, and
+    monitoring are in place; if any guard fails, the job is closed (fail closed);
+  - the app runs non-elevated by default using the user's Explorer token; no
+    `runas`, no UAC prompt; elevated targets only when Pi itself is elevated and
+    the call opts in;
+  - kill and audit operate only on registered jobs and PID + creation-time
+    identities, never on executable names or parent PIDs.
+- **Interaction**: UI Automation patterns first (Invoke, Value, Toggle,
+  ExpandCollapse, SelectionItem) for `gui_snapshot` refs and `set_value`/`type`.
+  Fallback for coordinates: `WM_NCHITTEST` decides client vs non-client hits;
+  client hits go to the deepest visible child window via `SendMessageTimeoutW`,
+  non-client hits are posted asynchronously with `PostMessageW` so title-bar and
+  menu modal loops cannot block the helper. Coordinates are in the full-window
+  screenshot space. Per-thread DPI awareness is set only for the operation and
+  restored afterwards.
+- **Screenshots**: `PrintWindow(PW_RENDERFULLCONTENT)` of the full window rect,
+  lossless PNG, with an `allBlack` flag in the result. An all-black capture is
+  returned as evidence, flagged, and counted by the usage check instead of being
+  silently retried.
+- **Temp files** under `%LOCALAPPDATA%\Temp\pi-gui-testing-<session>`; deletion holds
+  directory handles and refuses junctions, symlinks, and other reparse points.
+- Audio muting (present in the reference) is out of scope.
 - Software rendering forced where a framework allows it: Chromium/Electron
   `--disable-gpu`, `QT_OPENGL=software`, `QT_QUICK_BACKEND=software`, Flutter
   `--enable-software-rendering`. WPF: warn, do not touch the per-user registry.
-- **Gated by spike S1** (§11). Known risks: black screenshots for GPU apps, AV/EDR
-  flagging hidden-desktop behaviour.
+- **Gated by spike S1** (§11), which runs the reference package on a Windows
+  machine before any helper code is written. Known risks: black screenshots for
+  GPU apps, AV/EDR flagging hidden-desktop behaviour.
 
 ### 4.6 Accessibility coverage
 
@@ -220,6 +333,18 @@ when to switch to coordinates. The skill (§9) teaches that switch.
   `sync.allow` list in `.pi/gui.json`.
 - `sync.deny` adds project-specific exclusions.
 - Dependency directories are never synced; they come from the dependency cache (§4.8).
+- **Matching and precedence**: built-in secret patterns match a file or directory
+  name at any depth (`services/api/.env` and `fixtures/.ssh/key` are excluded);
+  a matching directory excludes everything below it. `sync.allow` and
+  `sync.deny` use gitignore-style patterns relative to the project root. A path
+  is synced when it is in
+  the file set, not a dependency directory, not matched by `sync.deny`, and either
+  not always-excluded or explicitly listed in `sync.allow`. `sync.deny` beats
+  `sync.allow`; nothing re-includes a dependency directory.
+- **Links and special files**: traversal never follows symlinks. A symlink is
+  copied as a link only when its target resolves inside the project root and is
+  itself synced; otherwise it is dropped and counted as excluded. Sockets, FIFOs,
+  and device files are always dropped.
 - Every sync result reports file count, bytes sent, and excluded-file count.
 
 ### 4.8 Dependency cache (client-side)
@@ -257,10 +382,12 @@ keeps installed dependencies **on the client** and ships them to the session.
 | Command | Purpose |
 |---|---|
 | `/gui-setup [backend] [flags]` | First-time setup. Without a backend, shows a `ctx.ui.select()` of backends supported on this host, with a one-line description each. |
-| `/gui-doctor [backend]` | Re-runs all checks and the smoke test without changing anything. Never prompts. |
+| `/gui-doctor [backend]` | Re-runs all checks and the smoke test. Never prompts, never remediates, and never changes configuration choices. It may create labelled temporary test resources, which it removes and audits before finishing. On success it refreshes the verified state; on failure it marks the backend unverified. |
 | `/gui-backend <id> [--project]` | Switches the active backend (must already be verified). Writes the global config, or `.pi/gui.local.json` with `--project`. |
 | `/gui-usage [session]` | Shows the usage/cost check (§8.1) for current and recent sessions. |
 | `/gui-reset <backend>` | Removes that backend's config, images, sandboxes, and VM volumes after confirmation. |
+| `/gui-cleanup [backend\|--all] [--deps]` | Runs teardown and the sweep now, then the audit (§7a.5). Also cancels a running setup. |
+| `/gui-export <session> <dest>` | Copies a session's screenshots, dumps, and logs out of the temp dir (§7a.2). |
 
 `/gui-setup` flags. Every prompt has a flag equivalent, so a fully specified call
 never prompts:
@@ -275,6 +402,7 @@ never prompts:
 | `--fix` | approves every remediation that needs no password: package installs via passwordless sudo, image builds, key generation, VM install |
 | `--no-fix` | never remediate; report and stop |
 | `--project` | write the backend choice and host to `.pi/gui.local.json` instead of the global config |
+| `--purge-tooling` | `remote-linux-docker`: remove the base image from the remote after every session (§7a.1, Q7) |
 
 Setup and doctor are commands, not tools: the model cannot install or provision
 anything itself. A tool call on an unverified backend fails with
@@ -287,9 +415,10 @@ appears only when a decision or secret is genuinely missing. If every check
 passes and every required acknowledgement is given by flag or already recorded,
 setup runs start to finish with **zero prompts** and ends with one summary.
 
-1. **Resolve inputs** in this order: flags → project `.pi/gui.json` → global
-   config → environment (`CUA_API_KEY`, `~/.ssh/config`) → prompt. Prompt only
-   for what is still missing.
+1. **Resolve inputs** per field in this order: flags → `.pi/gui.local.json` →
+   global config → environment (`CUA_API_KEY`, `~/.ssh/config`) → prompt. Prompt
+   only for what is still missing. `.pi/gui.json` contributes only the shared
+   fields listed in §7. Setup and launch use the same resolution.
 2. **Host detection**: OS, arch, distro/package manager, Pi version.
 3. **Checks**: run every check for the backend (§5.4) in dependency order
    (client → connection → remote/runtime); independent checks run in parallel.
@@ -314,13 +443,23 @@ setup runs start to finish with **zero prompts** and ends with one summary.
 
 Long steps (image build, Windows install, cloud provisioning) report progress via
 `ctx.ui.setStatus` and are cancellable; cancellation leaves no half-registered
-backend.
+backend. Commands have no Pi abort signal while the agent is idle, so setup owns
+its own abort controller. It is aborted by `session_shutdown`, by the timeout or
+signal of each dialog, and by `/gui-cleanup` (whether a second command can run
+while setup is running is verified in M1). An aborted image build leaves no
+labelled image or build container.
 
-**Modes.** Interactive and RPC mode may prompt. In print/JSON mode setup runs only
-when no prompt is needed (all inputs resolved and nothing to fix, or `--fix` /
-`--no-fix` given); otherwise it fails and lists the missing flags. Verify during
-M1 that Pi 1.4.0 executes extension commands in print mode; if it does not,
-document RPC as the scripted path.
+**Modes.** Commands check `ctx.hasUI`. Interactive and RPC mode may prompt. In
+print/JSON mode there is no UI: setup runs only when no prompt is needed (all
+inputs resolved and nothing to fix, or `--fix` / `--no-fix` given); otherwise it
+fails and lists the missing flags. Pi 1.4.0 runs extension commands in print
+mode, but in print and JSON mode it redirects extension writes to stdout onto
+stderr and reserves stdout for its own output. Without a UI, commands therefore
+report as follows: print mode writes the report to stderr; JSON and RPC mode
+emit it as a custom message (`pi.sendMessage`), never as plain text on stdout.
+When a required check fails, the command sets `process.exitCode = 1`, because
+Pi does not turn command errors into an exit code. M1 verifies all three
+paths with a live run.
 
 ### 5.3 Check definition
 
@@ -328,8 +467,10 @@ document RPC as the scripted path.
 interface Check {
   id: string;                 // e.g. "linux.xvfb"
   description: string;
+  kind: "observe" | "probe";  // probe creates temporary labelled resources
+  dependsOn?: string[];       // failed dependency → this check is "blocked"
   required: boolean;          // false → "warn" and a degraded capability
-  run(ctx): Promise<{ status: "pass" | "fail" | "warn"; observed: string }>;
+  run(ctx): Promise<{ status: "pass" | "fail" | "warn" | "blocked"; observed: string }>;
   remediation?: {
     summary: string;          // shown to the user
     command?: string[];       // exact command, shown before confirmation
@@ -342,7 +483,8 @@ interface Check {
 ```
 
 Every check has a timeout (default 15 s; long-running remediations have their own
-bounds) and runs without side effects.
+bounds). `observe` checks have no side effects. `probe` checks may create only
+labelled temporary resources and remove them before returning.
 
 ### 5.4 Checks per backend
 
@@ -361,13 +503,16 @@ bounds) and runs without side effects.
 |---|---|---|---|
 | `docker.cli` | yes | `docker` on PATH | link to install docs (no auto-install) |
 | `docker.daemon` | yes | `docker info` succeeds within timeout | "start Docker" hint |
-| `docker.permission` | yes | `docker info` works without sudo | docker group / rootless hint |
-| `docker.version` | yes | server ≥ minimum tested version | — |
+| `docker.permission` | yes | `docker info` works without sudo | docker group hint |
+| `docker.rootless` | yes | daemon is rootful (`docker info` security options have no `rootless`); rootless fails in M1 with a clear message (§4.1) | — (rootless support planned for M1c) |
+| `docker.bind-uid` | yes | probe: a file a container creates on a bind of a session temp dir is owned by the host user | — (bug if fails) |
+| `docker.endpoint` | yes | active context endpoint is a local `unix://` socket; no remote context or `DOCKER_HOST` (§4.1) | switch to the local context |
+| `docker.version` | yes | server ≥ 29.0 (lowest tested major); newer untested majors warn | — |
 | `docker.ostype` | yes | `OSType` is `linux` | switch Docker Desktop to Linux containers |
 | `docker.arch` | yes | amd64 or arm64 | — |
 | `disk.free` | yes | ≥ 5 GB | — |
-| `image.base` | yes | base image present and label version matches | build image (confirm) |
-| `isolation.inspect` | yes | test container has none of the forbidden mounts/flags (§4.1) | — (bug if fails) |
+| `image.base` | yes | base image present and its `pi-gui-testing.version` and `.protocol` labels match (§4.1) | build image (confirm) |
+| `isolation.inspect` | yes | probe: a labelled test container violates none of the §4.1 hard rules | — (bug if fails) |
 
 **`local-linux`**
 
@@ -434,7 +579,7 @@ persisted so `/gui-doctor` can detect drift.
 | `remote.exec` | yes | a script written to the session root can execute (not `noexec`) | choose the next candidate root (§7a) or set `remote.sessionRoot` |
 | `remote.rsync` | no | `rsync` on the remote (only when the client has rsync) | remote package install; degrades: `tar` transport |
 | `sync.roundtrip` | yes | a test tree (incl. a symlink, unicode name, executable bit) syncs and checksums match on both ends | — |
-| `sync.exclusions` | yes | a dry-run sync of the real project lists no file matching the secret patterns (§4.3) | — (bug if fails) |
+| `sync.exclusions` | yes | a dry-run sync of the real project lists no file matching the secret patterns (§4.7) | — (bug if fails) |
 
 *Runtime: `remote-linux`*
 
@@ -502,6 +647,8 @@ persisted so `/gui-doctor` can detect drift.
 | `win.arch` | yes | x64 or arm64 | — |
 | `helper.present` | yes | helper exe present, signature valid | reinstall package |
 | `helper.desktop` | yes | helper can create and destroy a private desktop | — |
+| `helper.job` | yes | a test process in a kill-on-close Job Object dies when the job handle closes | — |
+| `helper.nonelevated` | yes | a non-elevated Explorer token is obtainable; refuse otherwise | run Pi from a normal user session |
 | `helper.uia` | yes | UI Automation reachable on the private desktop | — |
 | `helper.av` | no | helper not quarantined or blocked during the smoke test | warn with AV allowlist guidance |
 
@@ -527,13 +674,22 @@ persisted so `/gui-doctor` can detect drift.
 ## 6. Helper process
 
 Each backend runs one helper inside the isolated environment. All helpers speak the
-same JSON-lines protocol over stdio (`docker exec -i`, local spawn, SSH) or a
-localhost-only socket (VM guests).
+same JSON-lines protocol over stdio (container entrypoint via `docker run -i`,
+local spawn, SSH) or a localhost-only socket (VM guests).
 
-**Framing**: the client sends a random 128-bit token when starting the helper;
-the helper prints `PI-GUI-TESTING-READY <token>` and only lines prefixed with that token
-are protocol messages. Anything before or between them (MOTD, rc output) is
-captured as diagnostics and ignored.
+**Framing**: the client passes a random 128-bit token (32 hex characters) in the
+`PI_GUI_TESTING_TOKEN` environment variable, not in argv. The helper prints
+`PI-GUI-TESTING-READY <token>` within 10 s, or the session fails with the
+captured output as diagnostics. Only lines prefixed with that token are protocol
+messages. Anything before or between them (MOTD, rc output, app output) is
+captured as diagnostics and ignored. The token separates protocol lines from
+noise; it is not a secret.
+
+**Envelope**: every request carries an `id`; every response carries the same
+`id` and either `ok: true` with a result or `ok: false` with
+`error: {code, message}`. Events (`log`) carry no `id`. Requests on one session
+run sequentially, except `ping` and `cancel`, which bypass the queue. The exact
+types are frozen in `src/protocol.ts`.
 
 ```
 hello {protocol, packageVersion} → {protocol, helperVersion, os, arch, capabilities}
@@ -541,18 +697,36 @@ ping {} → {ok}                                   # heartbeat, every 15 s
 launch {cmd, args, env, cwd} → {pid, windows[]}
 wait {for: window|text|ref|idle, value?, timeoutMs} → {matched, elapsedMs}
 snapshot {maxNodes} → {snapshotId, coverage, tree: [{ref, role, name, value, bounds, states}]}
-screenshot {window?: ref, maxEdge?} → {png_base64, width, height, sha256}
-act {ref? | x,y, action: click|double_click|right_click|type|key|scroll|set_value, text?} → {ok}
+screenshot {window?: ref, maxEdge?} → {captureId, target, origin, width, height, scale, png_base64, sha256, allBlack?}
+act {ref? | captureId + x,y, action: click|double_click|right_click|type|key|scroll|set_value, text?} → {ok}
 windows {} → [{ref, title, bounds}]
-stop {} → {ok, leftovers[]}
+exec {cmd, cwd, env, timeoutMs} → {exitCode, elapsedMs}  # setup commands
+cancel {targetId} → {ok}                         # aborts a running request
+snapshotFull {snapshotId} → {tree_gz_base64}     # full tree for the temp-dir dump
+stop {} → {ok, leftovers: Leftover[]}             # Leftover = {kind: string, id: string, detail?}
+event log {stream: stdout|stderr, source: app|setup, data}  # bounded, app output
 ```
 
 - **Refs** are `<snapshotId>:<n>` and valid only until the next `snapshot`; an
   older ref is rejected with `stale ref, take a new snapshot`.
+- **Coordinates**: `x,y` in `act` are pixels in the unscaled space of the capture
+  named by `captureId`: the screen, or the window when the screenshot targeted
+  one. `origin` gives that capture's top-left corner on the screen and `scale`
+  the downscale factor of the returned PNG. Only the most recent capture is
+  valid; an older `captureId` is rejected with `STALE_REF`.
+- **`allBlack`**: set when a capture is entirely black (expected on some Windows
+  GPU apps, §4.5). The image is still returned as evidence and counted by the
+  usage check.
+- **Leftover `kind`** is an open string (for example `container`, `process`,
+  `tempdir`, `job`, `desktop`) so later backends add kinds without a protocol
+  change.
+- **Helper executable**: clients start the helper as an opaque executable with
+  stdio; nothing assumes it is written in Python.
 - **Screenshots**: default virtual screen 1280×800×24; images returned to the
   model are downscaled to at most 1280 px on the long edge (`maxEdge` overrides).
-- **Heartbeat**: the client pings every 15 s regardless of running operations, so
-  long `setup` commands never trigger the 60 s teardown (§7a.3).
+- **Heartbeat**: the client pings every 15 s regardless of running operations.
+  A helper that receives no client message for 60 s tears down and exits
+  (§4.1, §7a.3), so long `setup` commands never trigger it.
 
 - Linux helper: Python (AT-SPI via `pyatspi`, input via `xdotool`/XTEST, capture
   via XGetImage/`import`).
@@ -563,8 +737,10 @@ stop {} → {ok, leftovers[]}
 
 ## 7. Configuration and state
 
-- Global: `~/.pi/agent/gui/config.json`: active backend, verified backends with
-  `{verifiedAt, toolVersions, checksPassed}`.
+- Global: `<agent dir>/gui/config.json`, where the agent dir comes from Pi's
+  `getAgentDir()` (default `~/.pi/agent`; honours `PI_CODING_AGENT_DIR`): active
+  backend, verified backends with `{verifiedAt, toolVersions, checksPassed}`.
+  `pi.version` reads Pi's exported `VERSION`.
 - Project, shared: `.pi/gui.json` (committed):
 
 ```json
@@ -625,13 +801,21 @@ is part of the Pi session, not of this package's data.
 - **Session temp dir**: `fs.mkdtemp(join(os.tmpdir(), "pi-gui-testing-"))`, mode 0700.
   Holds screenshots, full accessibility dumps, logs, sync staging, the SSH
   `ControlPath` socket, and Xvfb/D-Bus runtime dirs for `local-linux`.
-- Contains `owner.json` = `{pid, processStartTime, piSessionId, createdAt}`.
-- **Removed after use** by `gui_stop`, by the idempotent `session_shutdown` handler,
-  and by `exit`/`SIGINT`/`SIGTERM` handlers.
+- Contains `owner.json` = `{pid, processStartTime, bootId, clientId, piSessionId,
+  backend, createdAt, resources[]}`, written atomically (temp file + rename) and
+  updated before each resource is created. `bootId` comes from
+  `/proc/sys/kernel/random/boot_id`.
+- **Removed after use** by `gui_stop` and by the idempotent `session_shutdown`
+  handler, which is the primary path. A process `exit` handler does only bounded
+  synchronous work (`docker rm -f`, at most 5 s per container). The extension
+  installs no `SIGINT` handler; Pi owns Ctrl-C and its own signal handling.
 - **Startup sweep** (covers crashes, `SIGKILL`, power loss): on `session_start`,
-  every `os.tmpdir()/pi-gui-testing-*` dir whose owner process is gone (PID missing, or PID
-  reused with a different start time) is removed, together with the processes and
-  labelled containers it recorded. Dirs of live owners are never touched.
+  every `os.tmpdir()/pi-gui-testing-*` dir whose owner is gone (different boot,
+  PID missing, or PID reused with a different start time) is removed, together
+  with the processes and labelled containers it recorded. Docker objects whose
+  `pi-gui-testing.owner` label names a dead owner are removed even when no temp
+  dir exists. A missing or malformed `owner.json` is reported and never treated
+  as dead. Resources of live owners are never touched.
 - **Exporting**: artifacts leave the temp dir only through an explicit
   `gui_export {session, dest}` tool call or `/gui-export`, into a user-chosen
   directory. Tool results that mention a temp path say that it is temporary.
@@ -666,6 +850,12 @@ end of the smoke test, after every `gui_stop`, and in `/gui-doctor`.
 | SSH remote | session root contents; processes owned by the user whose cmdline or env carries the session tag; `/tmp/.X11-unix/X<N>` and `/tmp/.X<N>-lock` for displays the package started; labelled Docker objects; labelled build cache |
 | Cua | sandboxes tagged with this client's id (unless `keepSandbox`) |
 | `docker-windows` | session overlays; running session containers |
+| `local-windows` | session Job Objects and their processes; session private desktops; session temp dir |
+
+The audit after `gui_stop` and at the end of the smoke test covers only that
+session's resources. The audit in `/gui-doctor`, `/gui-cleanup`, and the startup
+sweep reports only orphans: resources of every type whose owner is gone. Live
+sessions are exempt everywhere.
 
 A non-empty audit makes `gui_stop` return an error naming each leftover, and
 setup does not complete.
@@ -774,7 +964,7 @@ Host-provided packages (`@earendil-works/pi-coding-agent`, `typebox`, …) go in
 | M2b | `remote-linux` + `remote-linux-docker` | Smoke test passes against an amd64 server and a Raspberry Pi 5 (64-bit OS, no monitor, SSH-only); no ports opened on the remote; sync excludes secrets |
 | M3 | `cua` (Linux, Windows; macOS behind a flag) | Smoke test on each available target; sync excludes secrets; stop leaves no running billable sandbox |
 | M4 | `docker-windows` | Unattended install from `/gui-setup` with no manual steps; smoke test passes; ports bound to localhost only |
-| S1 | Spike: hidden-desktop fidelity | Tk, PySide6, WinForms, Electron, WPF tested; per-framework screenshot/UIA results recorded |
+| S1 | Spike: hidden-desktop fidelity, using `@iiwate/pi-silent-gui` as-is on a Windows machine | Tk, PySide6, WinForms, Electron (with and without `--disable-gpu`), WPF launched, clicked, and captured; per-framework `all_black` rate and click delivery recorded; UIA reachability on the private desktop measured separately with a minimal UIA probe; result decides helper language (Q4) |
 | M5 | `local-windows` (only if S1 is acceptable) | Smoke test passes; foreground-unchanged assertion passes; AV behaviour documented |
 
 ## 12. Acceptance criteria
@@ -803,7 +993,7 @@ Host-provided packages (`@earendil-works/pi-coding-agent`, `typebox`, …) go in
 | Q1 | Where should the Cua API key live: Pi's own credential store (if extensions can use it) or a 0600 file? Verify Pi 1.4.0 APIs. |
 | Q2 | Cua pricing and macOS availability: confirm current terms before M3. |
 | Q3 | dockur/windows: confirm the OEM install hook and shared-folder mechanism versions before M4. |
-| Q4 | Windows helper code signing: who owns the certificate? |
+| Q4 | Windows helper form: (a) native `.exe` (recommended; needs a code-signing certificate, owner to be decided) or (b) Python helper like the reference (no signing, but setup must download an embeddable Python automatically to keep install-and-use). Decide after S1. |
 | Q5 | ~~Docker Desktop hosts in M1?~~ Resolved: Linux hosts in M1, Docker Desktop hosts in M1c. |
 | Q6 | ~~Remote host scope?~~ Resolved: global config or `.pi/gui.local.json`; never the committed file. |
 | Q7 | ~~Remote tooling retention?~~ Resolved: keep the base image by default; `--purge-tooling` opts out. |
