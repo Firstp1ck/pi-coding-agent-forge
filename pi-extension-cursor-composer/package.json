@@ -31,7 +31,7 @@
   },
   "dependencies": {
     "@connectrpc/connect-node": "^2.1.2",
-    "@cursor/sdk": "1.0.20",
+    "@cursor/sdk": "1.0.40",
     "@firstpick/pi-utils": "^0.2.4"
   },
   "devDependencies": {
