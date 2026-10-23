@@ -1,0 +1,23 @@
+{
+  "name": "@firstpick/pi-extension-gui-testing",
+  "version": "0.1.0",
+  "description": "Launch, navigate, and screenshot GUI apps in isolated Docker, SSH, or cloud environments so Pi can check its own UI work without touching your desktop.",
+  "type": "module",
+  "license": "MIT",
+  "homepage": "https://github.com/Firstp1ck/pi-coding-agent-forge/tree/main/pi-extension-gui-testing#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Firstp1ck/pi-coding-agent-forge.git",
+    "directory": "pi-extension-gui-testing"
+  },
+  "keywords": ["pi-package", "pi", "pi-coding-agent", "extension", "skill", "gui-testing", "screenshots", "xvfb", "docker", "ssh"],
+  "pi": { "extensions": ["./index.ts"] },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "check": "npm run typecheck"
+  },
+  "devDependencies": { "@types/node": "^26.1.2", "typescript": "^6.0.3" },
+  "peerDependencies": { "@earendil-works/pi-coding-agent": "*", "typebox": "*" },
+  "engines": { "node": ">=22.19.0" },
+  "files": ["index.ts", "src", "README.md", "TECHNICAL.md", "DEVELOPMENT.md", "LICENSE"]
+}

@@ -54,6 +54,7 @@ Extensions add commands, tools, interface elements, or automatic behavior to Pi.
 - **[Git Footer Status for Pi](pi-extension-git-footer-status/README.md)** — Shows Git state, token use, context use, and model information in Pi’s footer.
 - **[Guided Git workflow for Pi](pi-extension-git-guided-workflow/README.md)** — Guides staged changes through message, commit, and push with explicit safety checks and confirmations.
 - **[Grill Me for Pi](pi-extension-grill-me/README.md)** — Turns an early idea into a focused design interview so important decisions are made before implementation.
+- **[GUI Testing for Pi](pi-extension-gui-testing/README.md)** — Lets Pi run your desktop app in a private container, SSH host, or cloud sandbox, click through it, and check screenshots without touching your desktop (in development).
 - **[Hyprland Wiki Local for Pi](pi-extension-hyprland-wiki-local/README.md)** — Lets Pi search a local copy of the official Hyprland Wiki first.
 - **[Image generation for Pi](pi-extension-image-generation/README.md)** lets you configure OpenRouter image defaults and privacy, choose a model, confirm the prompt, and save the image locally.
 - **[Model Research for Pi](pi-extension-model-research/README.md)** — Compare any two model names with configured research workers, exchange evidence-linked reviews, and create an uninstalled skill draft with task-by-task model choices in Pi TUI or T3 Code.

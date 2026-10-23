@@ -186,7 +186,7 @@ Every skill must have distinct examples and advice. Do not copy the same generic
 When adding a new first-party package:
 
 1. Create its user-facing `README.md`.
-2. Add `TECHNICAL.md` when users need advanced commands, configuration, compatibility, security, or troubleshooting.
+2. Create `TECHNICAL.md` for every new package. It holds the advanced user reference: complete commands and options, configuration, requirements and supported platforms, storage locations, security and privacy behavior, limitations, and troubleshooting. It must add reference detail beyond the README, not repeat it.
 3. Add `DEVELOPMENT.md` when implementation or contributor material exists.
 4. Link the documents in both directions.
 5. Add the package to the correct group in the repository `README.md`.
@@ -194,7 +194,7 @@ When adding a new first-party package:
 7. Include requirements and safety warnings before users encounter a failure or risk.
 8. Keep nested fixture, template, test, worker, and vendored READMEs scoped to their own specialized audience.
 
-Do not create an empty `DEVELOPMENT.md`. Do not create `TECHNICAL.md` merely to repeat the README.
+Do not create an empty `DEVELOPMENT.md`. Every new package gets a `TECHNICAL.md`; write it as a reference that goes beyond the README instead of repeating it.
 
 ## Documenting a change
 
