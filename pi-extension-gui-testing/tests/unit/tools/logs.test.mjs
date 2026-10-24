@@ -1,7 +1,7 @@
 /** Q5: the session log store is bounded in events, bytes per event, pending writes, and file size. */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { link, mkdtemp, readFile, rename, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PassThrough } from "node:stream";
@@ -152,4 +152,38 @@ test("P1: the setup output tail is bounded in characters and owns its text", () 
   tail.push("last line\n");
   assert.ok(tail.text.endsWith("last line\n"));
   assert.equal(tail.text.length, 4096);
+});
+
+test("app.log is created once and written through its handle: planted links and later swaps never redirect it", async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), "gui-logs-link-"));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  for (const kind of ["symlink", "hardlink"]) {
+    const victim = join(dir, `${kind}-outside.txt`);
+    await writeFile(victim, "OUTSIDE");
+    const file = join(dir, `${kind}-app.log`);
+    if (kind === "symlink") await symlink(victim, file);
+    else await link(victim, file);
+    const logs = new LogBuffer(file);
+    logs.add({ event: "log", stream: "stdout", source: "app", data: "PLANTED-LINK-APPEND\n" });
+    await logs.flush();
+    assert.equal(await readFile(victim, "utf8"), "OUTSIDE", `${kind}: the outside file is untouched`);
+    assert.deepEqual(logs.tail(1), ["[app stdout] PLANTED-LINK-APPEND"], "the output stays in memory");
+    await logs.close();
+  }
+  // A swap after the file exists: writes keep going to the file that was created.
+  const file = join(dir, "app.log");
+  const logs = new LogBuffer(file);
+  logs.add({ event: "log", stream: "stdout", source: "app", data: "first\n" });
+  await logs.flush();
+  await rename(file, join(dir, "moved.log"));
+  const victim = join(dir, "victim.txt");
+  await writeFile(victim, "OUTSIDE");
+  await symlink(victim, file);
+  logs.add({ event: "log", stream: "stdout", source: "app", data: "second\n" });
+  await logs.close();
+  assert.equal(await readFile(victim, "utf8"), "OUTSIDE");
+  assert.match(await readFile(join(dir, "moved.log"), "utf8"), /first[\s\S]*second/);
+  logs.add({ event: "log", stream: "stdout", source: "app", data: "after close\n" });
+  await logs.flush();
+  assert.doesNotMatch(await readFile(join(dir, "moved.log"), "utf8"), /after close/, "nothing is written after close()");
 });

@@ -537,6 +537,8 @@ export class GuiRuntime {
    */
   async #settleFailedStart(id: string, backend: BackendId, transient: boolean, dir: SessionDir, logs: LogBuffer | undefined, error: unknown): Promise<void> {
     const remnant = startLeftovers(error);
+    // The start is over: release the log file before the dir may be removed.
+    await logs?.close();
     if (!remnant && (await dir.remove().then(() => true, () => false))) return;
     const artifactsDir = join(dir.path, "artifacts");
     const session = remnant?.session ?? cleanedSession(id, backend);
@@ -588,7 +590,7 @@ export class GuiRuntime {
       stopFailed = true;
       return [{ kind: "session", id: live.id, detail: `stop failed: ${e.message}` }];
     });
-    await live.logs.flush();
+    await live.logs.close();
     let audit = await live.session.auditFootprint().catch((e: Error): Leftover[] => [{ kind: "audit", id: live.id, detail: `audit failed: ${e.message}` }]);
     if (audit.length === 0 && !stopFailed) {
       // Only now is it safe to drop owner.json: nothing it lists is left.

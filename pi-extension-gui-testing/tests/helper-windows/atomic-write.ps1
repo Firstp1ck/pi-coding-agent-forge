@@ -31,8 +31,11 @@ try {
       $e = $_.Exception; while ($e.InnerException) { $e = $e.InnerException }
       if ($e -isnot [DllNotFoundException] -and $e -isnot [EntryPointNotFoundException]) { throw }
     }
+    $record = Join-Path $case 'runtime/session.json'
+    if ((Test-Path -LiteralPath $record) -and [IO.File]::ReadAllText($record) -ne '{"overwritten":true}') { $failed++; "not ok - $kind record has the wrong content" }
     if ([IO.File]::ReadAllText($victim) -eq 'OUTSIDE') { $passed++; "ok - $kind plant left the outside file untouched" } else { $failed++; "not ok - $kind plant: outside file overwritten" }
-    $strays = @(Get-ChildItem -LiteralPath (Join-Path $case 'runtime') -Force | Where-Object { $_.Name -ne 'session.json.tmp' })
+    # The plant, and on Windows (where the rename succeeds) the new record itself, are expected.
+    $strays = @(Get-ChildItem -LiteralPath (Join-Path $case 'runtime') -Force | Where-Object { $_.Name -ne 'session.json.tmp' -and $_.Name -ne 'session.json' })
     if ($strays.Count -eq 0) { $passed++; "ok - $kind no temp file left after the failed rename" } else { $failed++; "not ok - $kind leftover: $($strays.Name -join ', ')" }
   }
 } finally { Remove-Item -LiteralPath $scratch -Recurse -Force -ErrorAction SilentlyContinue }

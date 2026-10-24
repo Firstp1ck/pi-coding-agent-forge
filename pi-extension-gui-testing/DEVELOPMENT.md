@@ -477,6 +477,8 @@ pi -e ./index.ts -p "/gui-doctor local-windows" </dev/null                      
 
 ## Known gaps
 
+- **Directory ancestors are not anchored** (Windows review round 4, accepted). Writes into the client session dir, `artifacts/`, and the Windows runtime dir protect the final entry (exclusive creation, no-follow, `app.log` written through one descriptor created with `O_EXCL`) but re-resolve parent paths, so a same-user process that replaces a parent folder with a junction can redirect them. Only `local-linux` and `local-windows` apps can reach these folders, and they already run as the user with full access to the user's files, so this grants nothing new; container, VM, remote, and Cua apps cannot reach them. Anchoring every write to retained directory handles is left for later.
+
 - `disk.free` measures `os.tmpdir()`, not Docker's data root (docker-linux).
 - Electron detection does not cover `npm start` launches.
 - Live `docker inspect` field shapes on Docker 29 are assumed (`HostConfig.CapDrop`, `SecurityOpt` `no-new-privileges`); an unexpected shape refuses every session (fail closed).

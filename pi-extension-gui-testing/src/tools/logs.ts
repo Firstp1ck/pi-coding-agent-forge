@@ -11,7 +11,13 @@
  * append at a time and bounded, with a "dropped N" marker (also written by
  * {@link LogBuffer.flush}); the file stops growing at {@link LOG_LIMITS.fileBytes}.
  */
-import { appendFile } from "node:fs/promises";
+import { close as closeFd, constants, open as openFd, write as writeFd } from "node:fs";
+import { promisify } from "node:util";
+
+const openAsync = promisify(openFd);
+// fs.write has a custom promisified form that resolves to { bytesWritten, buffer }.
+const writeAsync = promisify(writeFd) as unknown as (fd: number, buffer: Buffer) => Promise<{ bytesWritten: number }>;
+const closeAsync = promisify(closeFd);
 import { canonicalLogEvent } from "../framing/log-event.ts";
 import type { LogEvent } from "../protocol.ts";
 
@@ -35,6 +41,10 @@ export type LogLimits = { [K in keyof typeof LOG_LIMITS]: number };
 export class LogBuffer {
   readonly #max: number;
   readonly #file?: string;
+  /** A plain descriptor, not a FileHandle: an unclosed FileHandle throws when garbage-collected. */
+  #fd?: number;
+  #openFailed = false;
+  #closed = false;
   readonly #limits: LogLimits;
   #events: LogEvent[] = [];
   #bytes = 0;
@@ -122,12 +132,52 @@ export class LogBuffer {
         this.#pendingChars = 0;
       }
       try {
-        await appendFile(file, batch, { mode: 0o600 });
-        this.#fileBytes += bytes;
+        const fd = await this.#descriptor(file);
+        if (fd !== undefined) {
+          let rest = Buffer.from(batch);
+          while (rest.length > 0) {
+            const { bytesWritten } = await writeAsync(fd, rest);
+            if (!(bytesWritten > 0)) throw new Error("app.log write made no progress");
+            rest = rest.subarray(bytesWritten);
+          }
+          this.#fileBytes += bytes;
+        }
       } catch {
         // Best effort: the in-memory buffer still has the output.
       }
     }
+  }
+
+  /**
+   * The log file, created once with O_EXCL and then written through the kept descriptor: an entry planted at
+   * that path (a symbolic or hard link) makes the creation fail instead of being written through, and a
+   * later swap of the path cannot redirect writes. `undefined` when the file cannot be created (the
+   * in-memory buffer still has the output) or after `close()`.
+   */
+  async #descriptor(file: string): Promise<number | undefined> {
+    if (this.#closed) return undefined;
+    if (this.#fd === undefined) {
+      if (this.#openFailed) return undefined;
+      try {
+        this.#fd = await openAsync(file, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_APPEND, 0o600);
+      } catch (error) {
+        this.#openFailed = true;
+        throw error;
+      }
+    }
+    return this.#fd;
+  }
+
+  /**
+   * Flushes, then releases the log file (before the session dir is removed: Windows cannot delete a
+   * directory holding an open file). Later output stays in memory only. Idempotent; never rejects.
+   */
+  async close(): Promise<void> {
+    await this.flush();
+    this.#closed = true;
+    const fd = this.#fd;
+    this.#fd = undefined;
+    if (fd !== undefined) await closeAsync(fd).catch(() => {});
   }
 
   /**
