@@ -6,7 +6,7 @@
  * paths (resolved on the remote host), and labelled objects of other client
  * machines are never swept while they run.
  */
-import { SessionError, type Session, type SyncSummary } from "../../backend.ts";
+import { SessionError, type DepsCacheReport, type Session, type SyncSummary } from "../../backend.ts";
 import type { BackendId } from "../../config/types.ts";
 import { FORBIDDEN_MOUNT_PATHS } from "../../hardening.ts";
 import { LABEL_SESSION } from "../../labels.ts";
@@ -163,6 +163,19 @@ export class RemoteDockerSession implements Session {
 
   get arch(): string {
     return this.docker.arch;
+  }
+
+  get platform(): string | undefined {
+    return this.docker.platform;
+  }
+
+  get capabilities(): readonly string[] {
+    return this.docker.capabilities;
+  }
+
+  /** Set on the container session by the setup step (spec §4.8). */
+  get depsCache(): DepsCacheReport | undefined {
+    return this.docker.depsCache;
   }
 
   request<M extends Method>(method: M, params: Params<M>, options?: { signal?: AbortSignal; timeoutMs?: number }): Promise<Result<M>> {

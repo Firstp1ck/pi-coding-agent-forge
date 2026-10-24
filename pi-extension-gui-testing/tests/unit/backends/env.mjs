@@ -14,7 +14,7 @@ export const VERIFIED = {
   toolVersions: {
     "package.version": "0.1.0",
     "pi.version": "1.4.0",
-    protocol: "1",
+    protocol: "2",
     "docker.cli": "29.9.1",
     "docker.server": "29.9.1",
     "image.base": "0.1.0",
@@ -61,6 +61,8 @@ export async function fakeEnv(t, options = {}) {
     docker: { runner, spawner, endpointSource: {}, version: "0.1.0", common: { configDir: root, diskPath: root, minFreeBytes: 1, piVersion: "1.4.0", platform: "linux" }, ...options.docker?.backend },
     tmpRoot: tmp,
     globalConfigPath,
+    // Hermetic: the dependency cache lives in the test's temp root, never in ~/.cache.
+    depsCacheRoot: join(root, "deps-cache"),
     dockerOnPath: async () => options.dockerOnPath ?? false,
     ...(options.manualClock ? { now: () => clock } : {}),
     ...options.runtime,
@@ -86,6 +88,7 @@ export async function fakeEnv(t, options = {}) {
   });
   return {
     root,
+    depsCacheRoot: join(root, "deps-cache"),
     project,
     tmp,
     globalConfigPath,

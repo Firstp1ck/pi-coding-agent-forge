@@ -52,7 +52,8 @@ export function remoteDockerRuntimeChecks(probes: RemoteProbes): Check[] {
   const host = () => o.host ?? "<host>";
   const ssh = probes.ssh;
 
-  const reused = dockerLinuxChecks({ runner: remote, ownerLabel: o.ownerLabel, version: o.version, endpointSource: {} }).filter((c) => REUSED.has(c.id));
+  // The remote host is Linux whatever the client is, so the reused checks never take the Docker Desktop rules of a macOS client.
+  const reused = dockerLinuxChecks({ runner: remote, ownerLabel: o.ownerLabel, version: o.version, endpointSource: {}, platform: "linux" }).filter((c) => REUSED.has(c.id));
   const adjusted = reused.map((check): Check => {
     const copy: Check = { ...check };
     switch (check.id) {

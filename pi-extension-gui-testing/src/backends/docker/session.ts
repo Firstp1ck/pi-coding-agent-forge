@@ -14,7 +14,7 @@ import type { CommandRunner, DockerEndpoint } from "../../runner/types.ts";
 import { HelperSession } from "../../transport/helper-session.ts";
 import { describeFailure, dockerArgv, runDocker } from "./cli.ts";
 import { listLabelledObjects, removeObject, toLeftover, type LabelledObject } from "./footprint.ts";
-import { formatViolations, hardRuleViolations, workspaceMountProblem, type ContainerInspect, type PathProbe } from "./inspect.ts";
+import { formatViolations, hardRuleViolations, workspaceMountProblem, type ContainerInspect, type HostRules, type PathProbe } from "./inspect.ts";
 import type { Spawner } from "./process.ts";
 import { containerName, dockerRunArgs, WORKSPACE_PATH, type RunArgsInput } from "./run-args.ts";
 
@@ -31,6 +31,8 @@ export interface DockerSessionOptions {
   sync?: SyncSummary;
   onLog(event: LogEvent): void;
   pathProbe?: PathProbe;
+  /** Client platform for the isolation rules (M1c Docker Desktop hosts); default Linux. */
+  hostRules?: HostRules;
   readyTimeoutMs?: number;
   heartbeatIntervalMs?: number;
   /** Time the `docker run` process gets to exit after stdin closes. */
@@ -86,10 +88,10 @@ export class DockerSession extends HelperSession {
     if (result.exitCode !== 0) return `docker inspect failed: ${describeFailure(result)}`;
     const [container] = JSON.parse(result.stdout) as ContainerInspect[];
     const problems = [];
-    const violations = hardRuleViolations(container, this.#docker.pathProbe);
+    const violations = hardRuleViolations(container, this.#docker.pathProbe, this.#docker.hostRules);
     if (violations.length > 0) problems.push(formatViolations(violations));
     // The workspace must be the exact directory that was checked, not whatever the path names now.
-    const workspace = workspaceMountProblem(container, this.#docker.run.workspace.source, WORKSPACE_PATH);
+    const workspace = workspaceMountProblem(container, this.#docker.run.workspace.source, WORKSPACE_PATH, this.#docker.hostRules?.platform);
     if (workspace) problems.push(`workspace: ${workspace}`);
     return problems.length > 0 ? problems.join("; ") : undefined;
   }

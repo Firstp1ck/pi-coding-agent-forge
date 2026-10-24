@@ -163,11 +163,11 @@ test("image.base: a missing image or wrong labels fail with the build remediatio
   assert.equal(remediation.manual, undefined);
   assert.equal(byId["isolation.inspect"].status, "blocked");
 
-  ({ byId } = await run(t, { imageLabels: { "pi-gui-testing.base": "true", "pi-gui-testing.version": "0.0.9", "pi-gui-testing.protocol": "1" } }));
+  ({ byId } = await run(t, { imageLabels: { "pi-gui-testing.base": "true", "pi-gui-testing.version": "0.0.9", "pi-gui-testing.protocol": "2" } }));
   assert.equal(byId["image.base"].status, "fail");
   assert.match(byId["image.base"].observed, /pi-gui-testing\.version is 0\.0\.9, this package is 0\.1\.0/);
-  ({ byId } = await run(t, { imageLabels: { "pi-gui-testing.base": "true", "pi-gui-testing.version": "0.1.0", "pi-gui-testing.protocol": "2" } }));
-  assert.match(byId["image.base"].observed, /protocol is 2/);
+  ({ byId } = await run(t, { imageLabels: { "pi-gui-testing.base": "true", "pi-gui-testing.version": "0.1.0", "pi-gui-testing.protocol": "1" } }));
+  assert.match(byId["image.base"].observed, /protocol is 1, this package speaks 2/);
 });
 
 test("docker.bind-uid: a file owned by another uid fails; the probe dir is always removed", async (t) => {

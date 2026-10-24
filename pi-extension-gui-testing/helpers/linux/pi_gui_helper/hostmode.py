@@ -24,6 +24,18 @@ Without the variable, or with ``container``, it runs exactly as in the
 ``PI_GUI_ALLOW_EXEC=1`` (optional)
     Allows ``exec``. Default off: ``exec`` answers ``BAD_REQUEST`` because
     ``local-linux`` never runs ``setup``.
+``PI_GUI_DEPS_DIR=<abs dir>`` (optional, protocol 2; ``remote-linux`` only)
+    Deps dir of the dependency cache (spec §4.8). The helper creates it
+    (mode 0700) when missing; it must then be a real directory owned by the
+    helper's user without group/other write bits. With it, every child also
+    gets ``PIP_TARGET=<dir>/python``, ``PYTHONPATH=<dir>/python``,
+    ``npm_config_prefix=<dir>/node``, ``NODE_PATH=<dir>/node/lib/node_modules``
+    (defaults the request's ``env`` may override) and ``PATH`` prefixed with
+    ``<dir>/python/bin:<dir>/node/bin``, so ``pip install`` and ``npm install
+    -g`` land in the dir and the cached tree stays valid at another session
+    path (``pip install --target`` instead of a venv, which embeds absolute
+    paths). ``depsPack``/``depsUnpack`` work on this dir. Without it (local-linux)
+    the deps methods answer ``BAD_REQUEST``.
 ``PI_GUI_TESTING_TOKEN``, ``PI_GUI_TESTING_HEARTBEAT_TIMEOUT_MS``
     As in container mode.
 
@@ -62,8 +74,8 @@ environment: ``WAYLAND_DISPLAY``, ``WAYLAND_SOCKET``, ``NO_AT_BRIDGE``,
 ``HOME`` with ``XDG_CONFIG_HOME``/``XDG_CACHE_HOME``/``XDG_DATA_HOME``/
 ``XDG_STATE_HOME`` below it, ``TMPDIR=<runtime>/tmp``, and
 ``PI_GUI_TAG=<16 hex>``, the session tag. The request's ``env`` cannot
-override any of these. ``PATH`` is the client's (no ``/deps`` prefix);
-``/deps/venv`` is never created. Chromium/Electron get
+override any of these. ``PATH`` is the client's (no ``/deps`` prefix unless
+``PI_GUI_DEPS_DIR`` is set, see above); ``/deps/venv`` is never created. Chromium/Electron get
 ``--force-renderer-accessibility`` as in container mode.
 
 Lock record (JSON, ``version: 1``): ``display`` (int), ``helper``
@@ -105,9 +117,10 @@ WORKSPACE_ENV = "PI_GUI_WORKSPACE"
 RUNTIME_ENV = "PI_GUI_RUNTIME_DIR"
 LOCK_DIR_ENV = "PI_GUI_DISPLAY_LOCK_DIR"
 ALLOW_EXEC_ENV = "PI_GUI_ALLOW_EXEC"
+DEPS_DIR_ENV = "PI_GUI_DEPS_DIR"
 TAG_ENV = "PI_GUI_TAG"
 # Contract variables never reach a child.
-CONTRACT_ENV = (MODE_ENV, WORKSPACE_ENV, RUNTIME_ENV, LOCK_DIR_ENV, ALLOW_EXEC_ENV)
+CONTRACT_ENV = (MODE_ENV, WORKSPACE_ENV, RUNTIME_ENV, LOCK_DIR_ENV, ALLOW_EXEC_ENV, DEPS_DIR_ENV)
 # Variables that would connect a child to the user's desktop session.
 DESKTOP_ENV = ("DISPLAY", "WAYLAND_DISPLAY", "WAYLAND_SOCKET", "DBUS_SESSION_BUS_ADDRESS",
                "XDG_RUNTIME_DIR", "XAUTHORITY", "SESSION_MANAGER")
@@ -168,11 +181,12 @@ def check_private_dir(path, what, forbidden_bits=0o077, uid=None):
 class HostConfig:
     """The validated contract input of one host-mode helper."""
 
-    def __init__(self, workspace, runtime_dir, lock_dir, allow_exec):
+    def __init__(self, workspace, runtime_dir, lock_dir, allow_exec, deps_dir=None):
         self.workspace = workspace
         self.runtime_dir = runtime_dir
         self.lock_dir = lock_dir
         self.allow_exec = allow_exec
+        self.deps_dir = deps_dir
 
     @classmethod
     def from_environ(cls, environ, uid=None):
@@ -181,7 +195,19 @@ class HostConfig:
             raise HostModeError("%s must name an existing absolute directory, not %r" % (WORKSPACE_ENV, workspace))
         runtime_dir = check_private_dir(environ.get(RUNTIME_ENV, ""), RUNTIME_ENV, 0o077, uid)
         lock_dir = check_private_dir(environ.get(LOCK_DIR_ENV, ""), LOCK_DIR_ENV, 0o022, uid)
-        return cls(os.path.realpath(workspace), runtime_dir, lock_dir, environ.get(ALLOW_EXEC_ENV) == "1")
+        deps_dir = None
+        raw = environ.get(DEPS_DIR_ENV, "")
+        if raw:
+            if not os.path.isabs(raw):
+                raise HostModeError("%s must be an absolute path, not %r" % (DEPS_DIR_ENV, raw))
+            try:
+                os.mkdir(raw, 0o700)
+            except FileExistsError:
+                pass
+            except OSError as exc:
+                raise HostModeError("%s %s: %s" % (DEPS_DIR_ENV, raw, exc.strerror or exc)) from None
+            deps_dir = check_private_dir(raw, DEPS_DIR_ENV, 0o022, uid)
+        return cls(os.path.realpath(workspace), runtime_dir, lock_dir, environ.get(ALLOW_EXEC_ENV) == "1", deps_dir)
 
 
 # ----- process identity ----------------------------------------------------
@@ -428,12 +454,28 @@ def strip_env(base, private_prefix):
     return env
 
 
-def build_host_env(base, request_env, session_env, private_prefix):
+def deps_env(deps_dir):
+    """Install locations below ``PI_GUI_DEPS_DIR`` (defaults; the request may override them)."""
+    python = os.path.join(deps_dir, "python")
+    node = os.path.join(deps_dir, "node")
+    return {
+        "PIP_TARGET": python,
+        "PYTHONPATH": python,
+        "npm_config_prefix": node,
+        "NODE_PATH": os.path.join(node, "lib", "node_modules"),
+    }
+
+
+def build_host_env(base, request_env, session_env, private_prefix, deps_dir=None):
     """Child environment in host mode: the forced block always wins over the request."""
     env = strip_env(base, private_prefix)
+    if deps_dir:
+        env.update(deps_env(deps_dir))
     for key, value in (request_env or {}).items():
         env[str(key)] = str(value)
     path = env.get("PATH") or base.get("PATH") or DEFAULT_PATH
+    if deps_dir:
+        path = "%s:%s:%s" % (os.path.join(deps_dir, "python", "bin"), os.path.join(deps_dir, "node", "bin"), path)
     env.update(session_env)
     env["PATH"] = path
     for key in REMOVED_ENV:

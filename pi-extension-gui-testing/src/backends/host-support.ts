@@ -11,6 +11,7 @@ export interface HostSupport {
 }
 
 export const DOCKER_LINUX_HOST_SUPPORT: HostSupport = {
-  platforms: ["linux"],
-  otherwise: "docker-linux runs on Linux hosts in this version; Docker Desktop hosts (macOS, Windows) are planned",
+  // Linux with Docker Engine; macOS and Windows with Docker Desktop's Linux containers (M1c).
+  platforms: ["linux", "darwin", "win32"],
+  otherwise: "docker-linux runs on Linux (Docker Engine), macOS, and Windows (Docker Desktop with Linux containers)",
 };

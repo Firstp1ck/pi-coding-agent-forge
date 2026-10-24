@@ -118,6 +118,10 @@ export function resolveConfig(sources: ConfigSources, layers: ResolveLayers = {}
       warnDailyCostUsd: field((c) => c.usageCheck?.warnDailyCostUsd) ?? DEFAULTS.usageCheck.warnDailyCostUsd,
     },
     keepSandbox: field((c) => c.keepSandbox) ?? DEFAULTS.keepSandbox,
+    depsCache: {
+      enabled: field((c) => c.depsCache?.enabled) ?? DEFAULTS.depsCache.enabled,
+      maxBytes: Math.round((field((c) => c.depsCache?.maxSizeGB) ?? DEFAULTS.depsCache.maxSizeGB) * 1024 ** 3),
+    },
     warnings: [...sources.warnings],
   };
   if (host !== undefined || purgeTooling !== undefined) {

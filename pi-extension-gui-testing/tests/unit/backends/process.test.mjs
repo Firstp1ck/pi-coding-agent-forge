@@ -21,7 +21,7 @@ import { createGuiTools } from "../../../src/tools/tools.ts";
 const HERE = dirname(fileURLToPath(import.meta.url));
 
 /** The versions setup records against the fake docker (what currentVersions reports). */
-const versions = (imageId) => ({ "package.version": "0.1.0", "pi.version": PI_VERSION, protocol: "1", "docker.cli": "29.9.1", "docker.server": "29.9.1", "image.base": "0.1.0", "image.id": imageId });
+const versions = (imageId) => ({ "package.version": "0.1.0", "pi.version": PI_VERSION, protocol: "2", "docker.cli": "29.9.1", "docker.server": "29.9.1", "image.base": "0.1.0", "image.id": imageId });
 
 async function withFakeDocker(t) {
   const root = await mkdtemp(join(tmpdir(), "gui-fake-docker-"));
@@ -66,7 +66,7 @@ test("real processes: /gui-setup --fix streams the build context, passes every c
 test("real processes: SIGKILL of the Pi process ends the session container through stdin EOF; the next start sweeps the temp dir", { timeout: 180_000 }, async (t) => {
   const env = await withFakeDocker(t);
   await mkdir(dirname(env.globalConfigPath), { recursive: true });
-  await writeFile(join(env.state, "image.json"), JSON.stringify({ Id: `sha256:${"cd".repeat(32)}`, Architecture: "amd64", Config: { Labels: { "pi-gui-testing.base": "true", "pi-gui-testing.version": "0.1.0", "pi-gui-testing.protocol": "1" } } }));
+  await writeFile(join(env.state, "image.json"), JSON.stringify({ Id: `sha256:${"cd".repeat(32)}`, Architecture: "amd64", Config: { Labels: { "pi-gui-testing.base": "true", "pi-gui-testing.version": "0.1.0", "pi-gui-testing.protocol": "2" } } }));
   await writeFile(env.globalConfigPath, JSON.stringify({ version: 1, verified: { "docker-linux": { verifiedAt: "2026-10-24T00:00:00Z", toolVersions: versions(`sha256:${"cd".repeat(32)}`), checksPassed: [] } } }));
   const project = join(env.root, "project");
   await mkdir(project);
@@ -105,7 +105,7 @@ test("real processes: SIGKILL of the Pi process ends the session container throu
 test("real processes: tools over the real stdio protocol, then gui_stop with an empty audit", { timeout: 180_000 }, async (t) => {
   const env = await withFakeDocker(t);
   await mkdir(dirname(env.globalConfigPath), { recursive: true });
-  await writeFile(join(env.state, "image.json"), JSON.stringify({ Id: "sha256:ee", Architecture: "amd64", Config: { Labels: { "pi-gui-testing.base": "true", "pi-gui-testing.version": "0.1.0", "pi-gui-testing.protocol": "1" } } }));
+  await writeFile(join(env.state, "image.json"), JSON.stringify({ Id: "sha256:ee", Architecture: "amd64", Config: { Labels: { "pi-gui-testing.base": "true", "pi-gui-testing.version": "0.1.0", "pi-gui-testing.protocol": "2" } } }));
   await writeFile(env.globalConfigPath, JSON.stringify({ version: 1, verified: { "docker-linux": { verifiedAt: "x", toolVersions: versions("sha256:ee"), checksPassed: [] } } }));
   const project = join(env.root, "project");
   await mkdir(project);

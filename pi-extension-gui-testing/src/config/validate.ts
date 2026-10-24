@@ -155,6 +155,16 @@ function personalFields(kept: Obj, c: FieldChecker): PersonalConfig {
     if (remote.host !== undefined) config.remote.host = c.string(remote.host, "remote.host");
     if (remote.purgeTooling !== undefined) config.remote.purgeTooling = c.boolean(remote.purgeTooling, "remote.purgeTooling");
   }
+  if (kept.depsCache !== undefined) {
+    const cache = c.object(kept.depsCache, "depsCache");
+    config.depsCache = {};
+    if (cache.enabled !== undefined) config.depsCache.enabled = c.boolean(cache.enabled, "depsCache.enabled");
+    if (cache.maxSizeGB !== undefined) {
+      const size = cache.maxSizeGB;
+      if (typeof size !== "number" || !Number.isFinite(size) || size <= 0 || size > 10_000) c.fail("depsCache.maxSizeGB", "a number of GB above 0 and at most 10000");
+      config.depsCache.maxSizeGB = size;
+    }
+  }
   if (kept.keepSandbox !== undefined) config.keepSandbox = c.boolean(kept.keepSandbox, "keepSandbox");
   if (kept.limits !== undefined) {
     const limits = c.object(kept.limits, "limits");

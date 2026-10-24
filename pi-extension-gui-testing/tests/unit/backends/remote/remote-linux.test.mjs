@@ -143,6 +143,8 @@ test("a session: records first, syncs, deploys, starts the host-mode helper, run
   assert.equal(record.env.PI_GUI_RUNTIME_DIR, join(dir, "run"));
   assert.equal(record.env.PI_GUI_DISPLAY_LOCK_DIR, join(e.base, "displays"));
   assert.equal(record.env.PI_GUI_ALLOW_EXEC, "1");
+  // Spec §4.8: setup installs below the session dir (pip --target, npm prefix), where the cache packs and fills.
+  assert.equal(record.env.PI_GUI_DEPS_DIR, join(dir, "deps"));
   assert.equal(record.options.ControlPath, join(s.sessionDir, "ssh"), "the helper runs through the ControlMaster");
   const setup = child.requests.find((r) => r.method === "exec");
   assert.deepEqual([setup.params.cmd, setup.params.cwd], ["pip install -r requirements.txt", join(dir, "workspace")]);

@@ -6,7 +6,9 @@
  */
 import { join } from "node:path";
 import { VERSION as PI_VERSION } from "@earendil-works/pi-coding-agent";
-import { SessionError, type SessionStartOptions, type SyncSummary } from "../../backend.ts";
+import { SessionError, type DepsCacheReport, type SessionStartOptions, type SyncSummary } from "../../backend.ts";
+import { depsCacheFor, runSetupWithCache } from "../../deps/flow.ts";
+import type { DepsSession } from "../../deps/transfer.ts";
 import type { CheckResult } from "../../checks/types.ts";
 import type { BackendId } from "../../config/types.ts";
 import { TextTail } from "../../framing/log-event.ts";
@@ -61,6 +63,8 @@ export interface RemoteBackendOptions {
   /** Parent of short ControlMaster dirs when the session dir path is too long; default `/tmp`. */
   shortControlRoot?: string;
   packageRoot?: string;
+  /** Root of the dependency cache (spec §4.8); default `~/.cache/pi-extension-gui-testing/deps`. */
+  depsCacheRoot?: string;
 }
 
 /** What a session start has built when the helper is about to start. */
@@ -240,25 +244,45 @@ export abstract class RemoteBackendBase implements RemoteHostCapability {
 
   /**
    * Runs the project's `setup` commands through the helper's `exec`
-   * (spec §4.2a, §4.8) in `cwd`. Throws `SETUP_FAILED` with the output tail.
+   * (spec §4.2a, §4.8) in `cwd`, with the dependency cache: a hit restores
+   * the deps dir and skips them; a miss runs them and stores the deps dir.
+   * Throws `SETUP_FAILED` with the output tail.
+   *
+   * @param deps `base` of the cache key and whether the helper can write to `cwd`.
    */
   protected async runSetup(
-    session: { request: (method: "exec", params: { cmd: string; cwd: string; env: Record<string, string>; timeoutMs: number }, options: { signal?: AbortSignal; timeoutMs?: number }) => Promise<{ exitCode: number }> },
+    session: DepsSession & { depsCache?: DepsCacheReport },
     options: SessionStartOptions,
     cwd: string,
     tail: TextTail,
+    deps: { base: string; writable: boolean },
   ): Promise<void> {
     const shared = options.config.shared;
     const commands = shared.setup ?? [];
     const timeoutMs = this.options.setupTimeoutMs ?? REMOTE_SETUP_TIMEOUT_MS;
-    for (const [index, cmd] of commands.entries()) {
-      options.onStatus?.(`setup ${index + 1}/${commands.length} on the remote host: ${cmd}`);
-      const result = await session.request("exec", { cmd, cwd, env: { ...(shared.deps?.env ?? {}) }, timeoutMs }, { signal: options.signal, timeoutMs: timeoutMs + 30_000 });
-      if (result.exitCode !== 0) {
-        const text = tail.text.trim().slice(-2000);
-        throw new SessionError("SETUP_FAILED", `setup command ${JSON.stringify(cmd)} exited with ${result.exitCode} on the remote host${text ? `; last output:\n${text}` : ""}`);
+    const runCommands = async () => {
+      for (const [index, cmd] of commands.entries()) {
+        options.onStatus?.(`setup ${index + 1}/${commands.length} on the remote host: ${cmd}`);
+        const result = await session.request("exec", { cmd, cwd, env: { ...(shared.deps?.env ?? {}) }, timeoutMs }, { signal: options.signal, timeoutMs: timeoutMs + 30_000 });
+        if (result.exitCode !== 0) {
+          const text = tail.text.trim().slice(-2000);
+          throw new SessionError("SETUP_FAILED", `setup command ${JSON.stringify(cmd)} exited with ${result.exitCode} on the remote host${text ? `; last output:\n${text}` : ""}`);
+        }
       }
-    }
+    };
+    const report = await runSetupWithCache({
+      session,
+      cache: depsCacheFor(options.config, this.options.depsCacheRoot),
+      projectRoot: options.projectRoot,
+      config: options.config,
+      backend: this.id,
+      base: deps.base,
+      workspace: { path: cwd, writable: deps.writable },
+      runSetup: runCommands,
+      ...(options.onStatus ? { onStatus: options.onStatus } : {}),
+      signal: options.signal,
+    });
+    if (report) session.depsCache = report;
   }
 
   /** `onLog` that also keeps the setup output tail. */

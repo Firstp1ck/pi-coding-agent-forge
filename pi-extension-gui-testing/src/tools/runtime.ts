@@ -13,6 +13,7 @@ import { hasCost, sweepAllowed, type RuntimeBackend, type SweepContext } from ".
 import { DEFAULT_REGISTRY, type BackendOptions, type BackendRegistry } from "../backends/registry.ts";
 import { startLeftovers } from "../backends/start-failure.ts";
 import { DEFAULT_PROC_ROOT, createOwnerIdentity } from "../cleanup/identity.ts";
+import { defaultDepsCacheRoot } from "../deps/store.ts";
 import { installExitCleanup } from "../cleanup/exit.ts";
 import { createSessionDir, type SessionDir } from "../cleanup/session-dir.ts";
 import { auditClientOrphans, auditSession, sweepClientOrphans, type SweepReport } from "../cleanup/sweep.ts";
@@ -104,6 +105,8 @@ export interface RuntimeOptions extends BackendOptions {
   shutdownWaitMs?: number;
   /** Replaces the `/gui-setup` SSH host picker (`pickHost` of `src/setup/hosts.ts`; unit tests). */
   hostPicker?: typeof pickHost;
+  /** Root of the dependency cache (spec §4.8); default `~/.cache/pi-extension-gui-testing/deps`. */
+  depsCacheRoot?: string;
 }
 
 /** Default bound for `shutdown()` to wait for pending starts and setup runs. */
@@ -194,6 +197,11 @@ export class GuiRuntime {
     return this.options.procRoot ?? DEFAULT_PROC_ROOT;
   }
 
+  /** Root of the client-side dependency cache (`/gui-cleanup --deps` clears it). */
+  get depsCacheRoot(): string {
+    return this.options.depsCacheRoot ?? defaultDepsCacheRoot();
+  }
+
   /** Owner identity of this extension instance; read lazily from `/proc`. */
   identity(): OwnerLabel {
     this.#identity ??= createOwnerIdentity(this.procRoot);
@@ -235,6 +243,7 @@ export class GuiRuntime {
             ...(this.options.tmpRoot ? { tmpRoot: this.options.tmpRoot } : {}),
             ...(this.options.procRoot ? { procRoot: this.options.procRoot } : {}),
             configDir: this.configDir,
+            ...(this.options.depsCacheRoot ? { depsCacheRoot: this.options.depsCacheRoot } : {}),
             runtimeOptions: this.options,
           });
       this.#backends.set(id, backend);

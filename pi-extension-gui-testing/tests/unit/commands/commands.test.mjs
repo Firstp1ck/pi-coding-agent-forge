@@ -518,3 +518,25 @@ test("P3: /gui-cleanup stops live sessions and sweeps even when .pi/gui.json is 
   }
   assert.match(messages.at(-1).content, /so every backend is cleaned/, "the default falls back to every implemented backend");
 });
+
+test("M1b: /gui-cleanup --deps clears the whole dependency cache and says what it removed", async (t) => {
+  const { DepsCache } = await import("../../../src/deps/store.ts");
+  const { createHash } = await import("node:crypto");
+  const env = await fakeEnv(t);
+  const out = capture(t);
+  const cache = new DepsCache({ root: env.depsCacheRoot });
+  const data = Buffer.alloc(2 * 1024 * 1024, 1);
+  const writer = await cache.beginStore(cache.entry("0123456789abcdef", "linux", "x86_64", "a".repeat(64)));
+  await writer.write(data);
+  await writer.commit({ size: data.length, sha256: createHash("sha256").update(data).digest("hex") });
+  const { byName } = commands(env);
+  await byName["gui-cleanup"].handler("--deps", env.ctx());
+  assert.match(out.text(), new RegExp(`dependency cache: removed 1 entry \\(2\\.0 MB\\) from ${env.depsCacheRoot.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&")}`));
+  assert.equal(existsSync(env.depsCacheRoot), false);
+  out.reset();
+  await byName["gui-cleanup"].handler("--deps", env.ctx());
+  assert.match(out.text(), /dependency cache: already empty/);
+  out.reset();
+  await byName["gui-cleanup"].handler("", env.ctx());
+  assert.doesNotMatch(out.text(), /dependency cache/, "without --deps the cache is untouched and not mentioned");
+});

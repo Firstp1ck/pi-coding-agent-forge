@@ -1,4 +1,4 @@
-# Helper protocol (version 1)
+# Helper protocol (version 2)
 
 Contributor contract between the TypeScript client and the helper. The source of truth for types is [`src/protocol.ts`](../src/protocol.ts); this page explains the same contract for the Python helper. At the end of M1 this content moves into `DEVELOPMENT.md`.
 
@@ -36,7 +36,9 @@ Error response:
 {"id": 8, "ok": false, "error": {"code": "STALE_REF", "message": "stale ref, take a new snapshot"}}
 ```
 
-Error codes: `STALE_REF`, `NOT_FOUND`, `TIMEOUT`, `HANDOFF`, `PROTOCOL_MISMATCH`, `CANCELLED`, `BAD_REQUEST`, `INTERNAL`.
+Error codes: `STALE_REF`, `NOT_FOUND`, `TIMEOUT`, `HANDOFF`, `PROTOCOL_MISMATCH`, `CANCELLED`, `BAD_REQUEST`, `INTERNAL`, and since version 2 `ARCHIVE_REJECTED` (a dependency archive failed verification; the deps dir was emptied) and `TOO_LARGE` (a deps dir or archive exceeds the request's bound).
+
+Version history: version 1 (M1); version 2 (M1b) adds the dependency-cache methods below, the two error codes, `hello.platform`, the `deps` capability, and the host-mode variable `PI_GUI_DEPS_DIR`. The image label `pi-gui-testing.protocol` carries the version, so `image.base` asks for a rebuild after an upgrade.
 
 Event (helper → client, no `id`):
 
@@ -56,7 +58,7 @@ Event (helper → client, no `id`):
 
 | Method | Params | Result |
 |---|---|---|
-| `hello` | `protocol`, `packageVersion` | `protocol`, `helperVersion`, `os`, `arch`, `capabilities[]`. If `protocol` differs from the helper's, answer `PROTOCOL_MISMATCH` and exit. |
+| `hello` | `protocol`, `packageVersion` | `protocol`, `helperVersion`, `os`, `arch`, `capabilities[]`, `platform?` (version 2: e.g. `Linux x86_64; glibc 2.36; debian 12; python 3.11.2`, at most 256 characters; part of the dependency-cache key). `capabilities` holds `deps` when the session has a deps dir. If `protocol` differs from the helper's, answer `PROTOCOL_MISMATCH` and exit. |
 | `ping` | — | `{ok: true}` |
 | `launch` | `cmd`, `args[]`, `env{}`, `cwd` (default `/workspace`) | `pid`, `windows[]`. The app runs in its own process group under the helper, with the private `DISPLAY` and bus; teardown kills that group. Waits up to 20 s for a new window and returns `windows: []` if the app runs without one. A missing `cwd` or unknown command → `NOT_FOUND`; exit within the grace period without a window → `HANDOFF`. |
 | `wait` | `for` (`window`/`text`/`ref`/`idle`), `value?`, `timeoutMs` (default 10 s, max 10 min) | `matched`, `elapsedMs`. A timeout returns `matched: false`, not an error. `window`: a window whose title contains `value` (case-insensitive) or equals a window ref, or any window without `value`; `text`: any accessible name or value contains `value`; `ref`: the ref resolves and is showing; `idle`: three identical screen hashes 250 ms apart. |
@@ -67,6 +69,12 @@ Event (helper → client, no `id`):
 | `windows` | — | `windows[]` |
 | `exec` | `cmd`, `cwd`, `env{}`, `timeoutMs` | `exitCode`, `elapsedMs`. Runs `sh -c cmd`; output arrives as `log` events with `source: "setup"`. |
 | `cancel` | `targetId` | `{ok: true}`, also for unknown or finished ids (a late cancel cannot be told from an early one). |
+| `depsPack` | `maxBytes` | `transfer`, `size`, `sha256`, `entries`, `skipped`. See "Dependency cache". |
+| `depsRead` | `transfer`, `offset`, `length` (≤ 4 MiB) | `data_base64`, `eof` |
+| `depsReceive` | `size`, `sha256` | `transfer` |
+| `depsWrite` | `transfer`, `offset` (= bytes received so far), `data_base64` (≤ 4 MiB decoded) | `received` |
+| `depsUnpack` | `transfer`, `maxUnpackedBytes`, `maxEntries` | `entries`, `bytes` |
+| `depsDiscard` | `transfer` | `{ok: true}` (idempotent) |
 | `stop` | — | `ok` (false when leftovers remain), `leftovers[]` (`{kind, id, detail?}`; in containers, `kind: "process"` for any process still alive besides tini and the helper) |
 
 Tree nodes: `{ref, role, name, value?, bounds?, states[], parent?}`. Refs are `<snapshotId>:<n>` and valid only until the next `snapshot`; older refs fail with `STALE_REF`.
@@ -114,3 +122,39 @@ QT_ACCESSIBILITY=1
 ```
 
 `WAYLAND_DISPLAY` and `NO_AT_BRIDGE` are removed.
+
+## Dependency cache (version 2)
+
+The client keeps installed dependencies between sessions (spec §4.8). The archive format is a gzip-compressed tar (PAX). The client treats archives as opaque bytes: it hashes, stores, and forwards them and never unpacks them.
+
+Deps dir: `/deps` in containers (docker-linux, remote-linux-docker); in host mode the directory named by `PI_GUI_DEPS_DIR` (remote-linux sets `<session dir>/deps`; local-linux sets none, so the deps methods answer `BAD_REQUEST` and `hello` omits `deps`).
+
+Miss (after a successful `setup`):
+
+```text
+depsPack {maxBytes}            → {transfer, size, sha256, entries, skipped}
+depsRead {transfer, offset, length} … until eof   (client hashes while it stores)
+depsDiscard {transfer}
+```
+
+Hit (before any `setup`, instead of it):
+
+```text
+depsReceive {size, sha256}     → {transfer}
+depsWrite {transfer, offset, data_base64} …
+depsUnpack {transfer, maxUnpackedBytes, maxEntries} → {entries, bytes}
+```
+
+Packing walks the deps dir in name order without following symlinks. It adds directories, regular files (opened with `O_NOFOLLOW`), and symlinks whose target stays inside the deps dir (an absolute target inside it becomes relative). It skips and counts everything else: symlinks out of the deps dir (a venv's `bin/python` → `/usr/bin/python3`, recreated by the venv step before the next `exec`/`launch`), sockets, FIFOs, devices. Owners are never stored; modes keep `0755` plus owner read/write. A compressed size over `maxBytes` answers `TOO_LARGE`.
+
+Unpacking first checks that the upload has exactly the announced size and SHA-256, then empties the deps dir and extracts. It refuses, with `ARCHIVE_REJECTED`:
+
+- absolute names, `..` components, NUL, names over 4096 bytes or components over 255 bytes, nesting over 128 levels;
+- members below a symlink or a file (every parent is opened with `O_NOFOLLOW` relative to the previous one), and members that collide with an existing entry;
+- hardlinks, character and block devices, FIFOs, contiguous and sparse files;
+- symlinks with an absolute target or a target that leaves the deps dir;
+- data that is not gzip or tar, or ends early.
+
+More than `maxUnpackedBytes` of file data or `maxEntries` entries answers `TOO_LARGE`. Every failure (also `CANCELLED`) leaves the deps dir empty. Owners are never applied; setuid, setgid, and sticky bits are dropped; file mtimes are kept. Transfers live in unlinked temp files (at most four at a time) and end with the helper.
+
+Host mode with `PI_GUI_DEPS_DIR` also gives every child `PIP_TARGET=<dir>/python`, `PYTHONPATH=<dir>/python`, `npm_config_prefix=<dir>/node`, `NODE_PATH=<dir>/node/lib/node_modules` (defaults the request's `env` may override) and `PATH` prefixed with `<dir>/python/bin:<dir>/node/bin`, so installs stay valid at another session path.

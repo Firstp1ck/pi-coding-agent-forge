@@ -251,7 +251,7 @@ export class RemoteLinuxDockerBackend
       if (same.exitCode !== 0) {
         throw new SessionError("ISOLATION", `the directory mounted at /workspace is not the synced session dir (device/inode ${remote.workspaceId} expected; exit ${same.exitCode}); the session was stopped`);
       }
-      await this.runSetup(docker, options, "/workspace", tail);
+      await this.runSetup(docker, options, "/workspace", tail, { base: `image ${this.version}`, writable: !readOnly });
       if (purge) {
         counted = true;
         this.#count(destination, 1);

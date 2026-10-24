@@ -57,7 +57,7 @@ F ──► (L ∥ R ∥ C) ──► integration ──► D ──► integrat
 | L | done 2026-10-24 (unregistered) | `claude-opus-5-5`, handoff `plans/handoffs/post-m1-L.md`: local-linux backend, helper host mode (`hostmode.py`), 16 checks, display/bus/lock audit and sweep; tested with a stand-in Xvfb + real dbus-daemon; real X untested |
 | R | done 2026-10-24 (unregistered) | `claude-opus-5-5`, handoff `plans/handoffs/post-m1-R.md`: SSH ControlMaster transport, host picker, remote session dirs, rsync/tar sync, remote-linux (host mode), remote-linux-docker (docker code over SSH, no docker/** changes); loopback-ssh tests; no real sshd |
 | C | done 2026-10-24 (unregistered) | `claude-opus-5-5`, handoff `plans/handoffs/post-m1-C.md`: **Cua Cloud ended 2026-10-18**; backend built on the open-source `cua` CLI (user's own AWS/GCP/Hetzner/Modal account), helper over `cua sandbox exec -i`, sandbox ledger + cleanup paths; no API key stored; Linux only |
-| D | not started | |
+| D | done 2026-10-24 | `claude-opus-5-5`, handoff `plans/handoffs/post-m1-D.md`: dependency cache (gzip, key, LRU, `depsCache.enabled`/`maxSizeGB`, `/gui-cleanup --deps`); **protocol 1 → 2** (6 deps methods, `ARCHIVE_REJECTED`, `TOO_LARGE`, `hello.platform`); Docker Desktop host support (macOS/Windows endpoints, bind-uid, path mapping, fingerprint workspace check, portable owner liveness). Owner rerun: 475/475 on Node 26 and 22; helper tests only `gi` errors. Package version 0.1.0 → 0.2.0 (helper change) |
 | W | not started | |
 | Review | not started | |
 

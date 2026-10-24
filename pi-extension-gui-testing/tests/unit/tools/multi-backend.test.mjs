@@ -136,7 +136,7 @@ test("F: /gui-setup with the picker and /gui-doctor verify the non-Docker backen
   await env.commands["gui-setup"].handler("", ctx);
   const picker = env.uiCalls.find(([kind]) => kind === "select");
   assert.deepEqual(picker[2], [
-    "docker-linux — Linux apps in a local Docker container with a virtual display (needs rootful Docker)",
+    "docker-linux — Linux apps in a local Docker container with a virtual display (rootful Docker Engine, or Docker Desktop on macOS and Windows)",
     "local-linux — Fake helper on the host (test backend)",
   ]);
   assert.match(last(env), /GUI testing setup: local-linux — verified/);

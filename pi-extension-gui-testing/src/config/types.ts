@@ -64,15 +64,24 @@ export interface RemoteConfig {
   purgeTooling?: boolean;
 }
 
+/** `depsCache` in `.pi/gui.local.json` and the global config: the client-side dependency cache (spec §4.8). */
+export interface DepsCacheConfig {
+  /** Default `true`. `false`: `setup` runs every session and nothing is stored. */
+  enabled?: boolean;
+  /** Size limit of the whole cache in GB (1024³ bytes), shared by all projects. Default 5; least recently used entries go first. */
+  maxSizeGB?: number;
+}
+
 export interface PersonalConfig {
   backend?: BackendId;
   remote?: RemoteConfig;
+  depsCache?: DepsCacheConfig;
   keepSandbox?: boolean;
   limits?: Limits;
   usageCheck?: UsageCheckConfig;
 }
 
-export const PERSONAL_FIELDS = ["backend", "remote", "keepSandbox", "limits", "usageCheck"] as const;
+export const PERSONAL_FIELDS = ["backend", "remote", "depsCache", "keepSandbox", "limits", "usageCheck"] as const;
 
 /** Verified state of one backend, persisted after a successful setup or doctor run. */
 export interface VerifiedBackend {
@@ -99,6 +108,7 @@ export const DEFAULTS = {
   keepSandbox: false,
   limits: { maxConcurrentSessions: 2, idleTimeoutMinutes: 15 },
   usageCheck: { warnSessionCostUsd: 1, warnDailyCostUsd: 5 },
+  depsCache: { enabled: true, maxSizeGB: 5 },
 } as const;
 
 export const PROJECT_SHARED_FILE = ".pi/gui.json";
@@ -118,6 +128,8 @@ export interface ResolvedConfig {
   usageCheck: Required<UsageCheckConfig>;
   keepSandbox: boolean;
   remote?: RemoteConfig;
+  /** Resolved `depsCache` (always set by `resolveConfig`; optional for hand-built configs, which get the defaults). */
+  depsCache?: { enabled: boolean; maxBytes: number };
   /** Human-readable warnings, e.g. personal fields ignored in `.pi/gui.json`. */
   warnings: string[];
 }

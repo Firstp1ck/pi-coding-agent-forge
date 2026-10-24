@@ -13,6 +13,16 @@ import {
   NON_HOST_MODES,
   type HardRuleViolation,
 } from "../../hardening.ts";
+import { daemonSourceToHost, desktopBindProblem, isWindowsHostPath, sameHostPath, type DesktopEnv } from "./desktop.ts";
+
+/**
+ * The client platform whose host paths the rules judge (M1c). Linux is the
+ * default; on Docker Desktop hosts (`darwin`, `win32`) bind sources are host
+ * paths in that OS's form and Desktop's own state is forbidden as well.
+ */
+export interface HostRules extends DesktopEnv {
+  platform: NodeJS.Platform;
+}
 
 /** The parts of `docker container inspect` this module reads. */
 export interface ContainerInspect {
@@ -91,13 +101,24 @@ function isSameOrAncestor(a: string, b: string): boolean {
   return pb === pa || pb.startsWith(`${pa}/`);
 }
 
+/**
+ * Splits a `HostConfig.Binds` entry `src:dst[:opts]`; a Windows source keeps
+ * its drive letter (`C:\p:/workspace:ro` → `C:\p`, `/workspace`).
+ */
+export function splitBind(bind: string): { source: string; target: string | undefined } {
+  const drive = /^([A-Za-z]:[\\/][^:]*):(.*)$/.exec(bind);
+  if (drive) return { source: drive[1], target: drive[2].split(":")[0] };
+  const [source, target] = bind.split(":");
+  return { source: source ?? "", target };
+}
+
 /** Bind sources from `HostConfig.Binds` (`src:dst[:opts]`), `HostConfig.Mounts`, and `Mounts`. */
 export function bindSources(inspect: ContainerInspect): string[] {
   const sources = new Set<string>();
   for (const bind of inspect.HostConfig?.Binds ?? []) {
-    const source = bind.split(":")[0];
-    // Named volumes have no leading slash; they are not host paths.
-    if (source.startsWith("/")) sources.add(source);
+    const { source } = splitBind(bind);
+    // Named volumes have no leading slash (or drive); they are not host paths.
+    if (source.startsWith("/") || isWindowsHostPath(source)) sources.add(source);
   }
   for (const mount of [...(inspect.HostConfig?.Mounts ?? []), ...(inspect.Mounts ?? [])]) {
     if (mount.Type === "bind" && mount.Source) sources.add(mount.Source);
@@ -110,7 +131,17 @@ export function bindSources(inspect: ContainerInspect): string[] {
  * the path as given and after resolving symlinks, against the forbidden paths
  * as given and resolved (e.g. `/var/run` → `/run`).
  */
-export function forbiddenBindReason(source: string, probe: PathProbe = hostPathProbe): HardRuleViolation | undefined {
+export function forbiddenBindReason(source: string, probe: PathProbe = hostPathProbe, rules?: HostRules): HardRuleViolation | undefined {
+  if (rules && (rules.platform === "darwin" || rules.platform === "win32")) {
+    const desktop = desktopBindProblem(rules.platform, source, rules) ?? desktopBindProblem(rules.platform, probe.realpath(daemonSourceToHost(rules.platform, source)), rules);
+    if (desktop) return { rule: FORBIDDEN_SOCKET_BASENAME.test(basename(source.replace(/\\/g, "/"))) ? "docker-socket" : "forbidden-mount", observed: desktop };
+    // A Windows host path is judged above; the Linux rules below concern POSIX (VM or macOS) paths.
+    if (rules.platform === "win32" && isWindowsHostPath(daemonSourceToHost(rules.platform, source))) {
+      if (FORBIDDEN_SOCKET_BASENAME.test(basename(source.replace(/\\/g, "/")))) return { rule: "docker-socket", observed: `bind source ${source}` };
+      return probe.isSocket(source) ? { rule: "forbidden-mount", observed: `bind source ${source} is a socket` } : undefined;
+    }
+    source = daemonSourceToHost(rules.platform, source);
+  }
   const forms = [...new Set([source, probe.realpath(source)])];
   for (const form of forms) {
     if (FORBIDDEN_SOCKET_BASENAME.test(basename(form))) return { rule: "docker-socket", observed: `bind source ${source}` };
@@ -135,7 +166,7 @@ function hasNoNewPrivileges(securityOpt: readonly string[]): boolean {
 }
 
 /** Every hard-rule violation of `inspect`; empty when the container is compliant. */
-export function hardRuleViolations(inspect: ContainerInspect, probe: PathProbe = hostPathProbe): HardRuleViolation[] {
+export function hardRuleViolations(inspect: ContainerInspect, probe: PathProbe = hostPathProbe, rules?: HostRules): HardRuleViolation[] {
   const violations: HardRuleViolation[] = [];
   const host = inspect.HostConfig ?? {};
   if (host.Privileged !== false) violations.push({ rule: "privileged", observed: `HostConfig.Privileged=${String(host.Privileged)}` });
@@ -157,7 +188,7 @@ export function hardRuleViolations(inspect: ContainerInspect, probe: PathProbe =
   ];
   if (devices.length > 0) violations.push({ rule: "devices", observed: `HostConfig has ${devices.length} device entr${devices.length === 1 ? "y" : "ies"} (${[...new Set(devices)].join(", ")})` });
   for (const source of bindSources(inspect)) {
-    const violation = forbiddenBindReason(source, probe);
+    const violation = forbiddenBindReason(source, probe, rules);
     if (violation) violations.push(violation);
   }
   for (const entry of inspect.Config?.Env ?? []) {
@@ -175,15 +206,16 @@ export function hardRuleViolations(inspect: ContainerInspect, probe: PathProbe =
  * resolved directory that was checked), or `undefined` when it is. Docker
  * must report one mount at the workspace path, a bind, with that source.
  */
-export function workspaceMountProblem(inspect: ContainerInspect, expected: string, destination = "/workspace"): string | undefined {
+export function workspaceMountProblem(inspect: ContainerInspect, expected: string, destination = "/workspace", platform: NodeJS.Platform = "linux"): string | undefined {
   const mounts = (inspect.Mounts ?? []).filter((m) => m.Destination === destination);
   if (mounts.length !== 1) return `${mounts.length} mounts at ${destination}, expected 1`;
   const [mount] = mounts;
   if (mount.Type !== "bind") return `${destination} is a ${mount.Type ?? "unknown"} mount, expected a bind`;
-  if (mount.Source !== expected) return `${destination} is bound from ${mount.Source ?? "(unknown)"}, expected ${expected}`;
+  // Docker Desktop may report the shared host path in its VM form; every form must name the same host path.
+  if (mount.Source === undefined || !sameHostPath(platform, mount.Source, expected)) return `${destination} is bound from ${mount.Source ?? "(unknown)"}, expected ${expected}`;
   for (const bind of inspect.HostConfig?.Binds ?? []) {
-    const [source, target] = bind.split(":");
-    if (target === destination && source !== expected) return `HostConfig.Binds binds ${source} at ${destination}, expected ${expected}`;
+    const { source, target } = splitBind(bind);
+    if (target === destination && !sameHostPath(platform, source, expected)) return `HostConfig.Binds binds ${source} at ${destination}, expected ${expected}`;
   }
   return undefined;
 }

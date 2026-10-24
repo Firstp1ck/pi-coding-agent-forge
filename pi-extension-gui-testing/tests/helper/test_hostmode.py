@@ -344,7 +344,7 @@ class HostHandlerTests(HostSessionTests):
         sess = self.session()
         sess.a11y_available = False
         handlers = methods.Handlers(sess, lambda reason: None)
-        result = handlers.hello(FakeCtx(), {"protocol": 1})
+        result = handlers.hello(FakeCtx(), {"protocol": methods.PROTOCOL_VERSION})
         self.assertNotIn("a11y-atspi", result["capabilities"])
         store = handlers._store()
         snap = store.take(10, [])

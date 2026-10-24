@@ -246,6 +246,7 @@ async function launchApp(params: Static<typeof LAUNCH_PARAMS>, rt: GuiRuntime, c
   }
   const sync = live.session.sync;
   const backendWarnings = [...(live.session.warnings ?? [])];
+  const depsCache = live.session.depsCache;
   // gui_launch always repeats the config warnings: it starts the session the config describes.
   rt.takeConfigWarnings(config.warnings);
   const configWarnings = config.warnings;
@@ -259,11 +260,12 @@ async function launchApp(params: Static<typeof LAUNCH_PARAMS>, rt: GuiRuntime, c
           `arch: ${live.session.arch}`,
           `workspace: ${live.session.workspaceDescription ?? (config.shared.workspaceMode === "copy" ? "writable filtered copy" : "read-only mount")} at ${workspace}; network: ${config.shared.network}`,
           sync ? `sync: ${sync.files} files, ${sync.bytes} bytes, ${sync.excluded} excluded` : undefined,
+          depsCache ? `dependency cache: ${depsCache.detail}` : undefined,
           backendWarnings.length ? `${backendId} warnings:\n${backendWarnings.map((w) => `- ${w}`).join("\n")}` : undefined,
           windows.length ? `windows:\n${windows.join("\n")}` : "no window yet; use gui_wait for: window",
         ]),
       ],
-      details: { session: live.id, arch: live.session.arch, pid: launched.pid, windows: launched.windows, ...(sync ? { sync } : {}), ...(backendWarnings.length ? { backendWarnings } : {}) },
+      details: { session: live.id, arch: live.session.arch, pid: launched.pid, windows: launched.windows, ...(sync ? { sync } : {}), ...(depsCache ? { depsCache: { ...depsCache } } : {}), ...(backendWarnings.length ? { backendWarnings } : {}) },
     },
     backendId,
     warnings,

@@ -1,6 +1,6 @@
 {
   "name": "@firstpick/pi-extension-gui-testing",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Launch, navigate, and screenshot GUI apps in isolated Docker, SSH, or cloud environments so Pi can check its own UI work without touching your desktop.",
   "type": "module",
   "license": "MIT",

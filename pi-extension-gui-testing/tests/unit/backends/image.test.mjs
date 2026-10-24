@@ -50,7 +50,7 @@ test("the build context holds only package tooling: Dockerfile, helper, helper p
 });
 
 test("docker build streams the context to stdin with version and protocol build args; an abort kills it", async () => {
-  assert.deepEqual(buildArgs("0.1.0"), ["build", "--force-rm", "--build-arg", "PACKAGE_VERSION=0.1.0", "--build-arg", "PROTOCOL_VERSION=1", "-t", "pi-gui-testing-base:0.1.0", "-"]);
+  assert.deepEqual(buildArgs("0.1.0"), ["build", "--force-rm", "--build-arg", "PACKAGE_VERSION=0.1.0", "--build-arg", "PROTOCOL_VERSION=2", "-t", "pi-gui-testing-base:0.1.0", "-"]);
   assert.equal(baseImageTag("2.0.0"), "pi-gui-testing-base:2.0.0");
   assert.equal(packageVersion(), JSON.parse(execFileSync("node", ["-p", `JSON.stringify(require(${JSON.stringify(join(PACKAGE_ROOT, "package.json"))}).version)`], { encoding: "utf8" })));
 
@@ -88,7 +88,7 @@ test("docker build streams the context to stdin with version and protocol build 
 });
 
 test("base image labels must match package version and protocol", () => {
-  const labels = { "pi-gui-testing.base": "true", "pi-gui-testing.version": "0.1.0", "pi-gui-testing.protocol": "1" };
+  const labels = { "pi-gui-testing.base": "true", "pi-gui-testing.version": "0.1.0", "pi-gui-testing.protocol": "2" };
   assert.equal(baseImageProblem({ id: "x", architecture: "amd64", labels }, "0.1.0"), undefined);
   assert.match(baseImageProblem({ id: "x", architecture: "amd64", labels: {} }, "0.1.0"), /pi-gui-testing\.base is missing/);
   assert.match(baseImageProblem({ id: "x", architecture: "amd64", labels: { ...labels, "pi-gui-testing.session": "s" , "pi-gui-testing.version": "9" } }, "0.1.0"), /version is 9/);

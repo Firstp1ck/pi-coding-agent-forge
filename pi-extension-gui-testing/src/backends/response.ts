@@ -8,7 +8,7 @@
 import { gunzipSync } from "node:zlib";
 import { SessionError } from "../backend.ts";
 import { ownedSlice } from "../framing/log-event.ts";
-import type { Coverage, Method, Result, TreeNode, WindowInfo } from "../protocol.ts";
+import { DEPS_CHUNK_BASE64_CHARS, DEPS_CHUNK_BYTES, type Coverage, type Method, type Result, type TreeNode, type WindowInfo } from "../protocol.ts";
 
 /** Upper bounds for helper-supplied values. */
 export const RESPONSE_LIMITS = {
@@ -41,7 +41,22 @@ export const RESPONSE_LIMITS = {
    */
   a11yCoordinate: 2 ** 31,
   leftovers: 1_000,
+  /** `hello.platform` characters. */
+  platformChars: 256,
+  /** Transfer ids of the deps methods. */
+  transferChars: 64,
+  /** Bytes of one dependency archive (and of an unpacked deps dir). */
+  depsBytes: 2 ** 50,
+  /** Entries of one dependency archive. */
+  depsEntries: 100_000_000,
+  /** Base64 text and decoded bytes of one deps chunk. */
+  depsChunkBase64Chars: DEPS_CHUNK_BASE64_CHARS,
+  depsChunkBytes: DEPS_CHUNK_BYTES,
 } as const;
+
+/** A helper-chosen transfer id: short and plain, so it is never more than an opaque token. */
+const TRANSFER_ID = /^[A-Za-z0-9_-]{1,64}$/;
+const SHA256_HEX = /^[0-9a-f]{64}$/;
 
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 /**
@@ -125,6 +140,20 @@ class Checker {
     return text;
   }
 
+  /** A deps transfer id: {@link TRANSFER_ID}, as an owned copy. */
+  transfer(value: unknown, field: string): string {
+    const text = this.string(value, field, RESPONSE_LIMITS.transferChars);
+    if (!TRANSFER_ID.test(text)) this.fail(`${field} has unexpected characters`);
+    return ownedSlice(text);
+  }
+
+  /** A lowercase hex SHA-256, as an owned copy. */
+  sha256(value: unknown, field: string): string {
+    const text = this.string(value, field, 64);
+    if (!SHA256_HEX.test(text)) this.fail(`${field} is not a lowercase hex SHA-256`);
+    return ownedSlice(text);
+  }
+
   /** Display text (names, values, titles): must be a string; longer ones are cut, not refused. */
   text(value: unknown, field: string): string {
     if (typeof value !== "string") this.fail(`${field} is not a string`);
@@ -203,6 +232,8 @@ const VALIDATORS: Validators = {
       return arch;
     })(),
     capabilities: c.array(r.capabilities, "capabilities", 256).map((x, i) => c.string(x, `capabilities[${i}]`)),
+    // Owned copy: the fingerprint ends up in a cache key and must not pin the response line.
+    ...(r.platform !== undefined ? { platform: ownedSlice(c.string(r.platform, "platform", RESPONSE_LIMITS.platformChars)) } : {}),
   }),
   ping: () => ({ ok: true }),
   launch: (c, r) => ({ pid: c.integer(r.pid, "pid", 0), windows: c.windows(r.windows, "windows") }),
@@ -237,6 +268,24 @@ const VALIDATORS: Validators = {
   windows: (c, r) => ({ windows: c.windows(r.windows, "windows") }),
   exec: (c, r) => ({ exitCode: c.integer(r.exitCode, "exitCode", -1_000, 1_000), elapsedMs: c.number(r.elapsedMs, "elapsedMs", 0) }),
   cancel: () => ({ ok: true }),
+  depsPack: (c, r) => ({
+    transfer: c.transfer(r.transfer, "transfer"),
+    size: c.integer(r.size, "size", 0, RESPONSE_LIMITS.depsBytes),
+    sha256: c.sha256(r.sha256, "sha256"),
+    entries: c.integer(r.entries, "entries", 0, RESPONSE_LIMITS.depsEntries),
+    skipped: c.integer(r.skipped, "skipped", 0, RESPONSE_LIMITS.depsEntries),
+  }),
+  depsRead: (c, r) => {
+    const data = c.base64(r.data_base64, "data_base64", RESPONSE_LIMITS.depsChunkBase64Chars);
+    return { data_base64: data, eof: c.boolean(r.eof, "eof") };
+  },
+  depsReceive: (c, r) => ({ transfer: c.transfer(r.transfer, "transfer") }),
+  depsWrite: (c, r) => ({ received: c.integer(r.received, "received", 0, RESPONSE_LIMITS.depsBytes) }),
+  depsUnpack: (c, r) => ({
+    entries: c.integer(r.entries, "entries", 0, RESPONSE_LIMITS.depsEntries),
+    bytes: c.integer(r.bytes, "bytes", 0, RESPONSE_LIMITS.depsBytes),
+  }),
+  depsDiscard: () => ({ ok: true }),
   stop: (c, r) => ({
     ok: c.boolean(r.ok, "ok"),
     leftovers: c.array(r.leftovers, "leftovers", RESPONSE_LIMITS.leftovers).map((l, i) => {

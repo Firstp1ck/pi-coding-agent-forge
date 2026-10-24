@@ -8,7 +8,8 @@ import { readdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, posix } from "node:path";
 import { FORBIDDEN_MOUNT_PATHS, REFUSED_PROJECT_ROOTS, SOCKET_SCAN_TIMEOUT_MS } from "../../hardening.ts";
-import { forbiddenBindReason, hostPathProbe, type PathProbe } from "./inspect.ts";
+import { desktopRootProblem } from "./desktop.ts";
+import { forbiddenBindReason, hostPathProbe, type HostRules, type PathProbe } from "./inspect.ts";
 
 /** A workspace that must not be mounted; the message is user- and model-facing. */
 export class WorkspaceRefusedError extends Error {
@@ -29,12 +30,29 @@ function isSameOrAncestor(a: string, b: string): boolean {
 /**
  * Why `root` may not be a project root in mount mode, or `undefined`. Refused:
  * `/`, the user's home directory or an ancestor of it, an ancestor of a
- * forbidden path, and any path a bind of which breaks a hard rule.
+ * forbidden path, and any path a bind of which breaks a hard rule. On Docker
+ * Desktop hosts (`rules.platform` `darwin` or `win32`) also Desktop's own
+ * state, and on Windows a drive root, a share root, and the user profile.
  *
  * @param root Absolute project root (symlinks are resolved here).
  */
-export function projectRootProblem(root: string, probe: PathProbe = hostPathProbe, home: string = homedir()): string | undefined {
+export function projectRootProblem(root: string, probe: PathProbe = hostPathProbe, home: string = homedir(), rules?: HostRules): string | undefined {
   const real = probe.realpath(root);
+  const desktopProblem = () => {
+    if (!rules || (rules.platform !== "darwin" && rules.platform !== "win32")) return undefined;
+    for (const form of new Set([root, real])) {
+      const desktop = desktopRootProblem(rules.platform, form, { ...rules, home: rules.home ?? home });
+      if (desktop) return desktop;
+    }
+    return undefined;
+  };
+  if (rules?.platform === "win32") {
+    // Windows paths: the POSIX rules below do not apply.
+    const desktop = desktopProblem();
+    if (desktop) return desktop;
+    const violation = forbiddenBindReason(real, probe, rules);
+    return violation ? `project root ${real} cannot be mounted (${violation.observed})` : undefined;
+  }
   for (const form of new Set([root, real])) {
     if ((REFUSED_PROJECT_ROOTS as readonly string[]).includes(form)) return `project root ${form} is the filesystem root`;
     if (home && isSameOrAncestor(form, probe.realpath(home))) return `project root ${form} is your home directory or contains it`;
@@ -42,13 +60,15 @@ export function projectRootProblem(root: string, probe: PathProbe = hostPathProb
       if (isSameOrAncestor(form, path) || isSameOrAncestor(form, probe.realpath(path))) return `project root ${form} contains ${path}`;
     }
   }
-  const violation = forbiddenBindReason(real, probe);
+  const desktop = desktopProblem();
+  if (desktop) return desktop;
+  const violation = forbiddenBindReason(real, probe, rules);
   return violation ? `project root ${real} cannot be mounted (${violation.observed})` : undefined;
 }
 
 /** @throws WorkspaceRefusedError when {@link projectRootProblem} finds a problem. */
-export function assertMountableRoot(root: string, probe?: PathProbe, home?: string): void {
-  const problem = projectRootProblem(root, probe, home);
+export function assertMountableRoot(root: string, probe?: PathProbe, home?: string, rules?: HostRules): void {
+  const problem = projectRootProblem(root, probe, home, rules);
   if (problem) throw new WorkspaceRefusedError(`${problem}; open Pi in the project directory itself, or ${COPY_HINT}`);
 }
 

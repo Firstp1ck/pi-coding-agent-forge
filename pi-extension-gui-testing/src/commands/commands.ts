@@ -12,6 +12,7 @@ import { hasRemoteHost } from "../backends/remote/host.ts";
 import { DEFAULT_REGISTRY } from "../backends/registry.ts";
 import { requiredChecksPass } from "../checks/runner.ts";
 import type { BackendId, PersonalConfig } from "../config/types.ts";
+import { DepsCache } from "../deps/store.ts";
 import {
   FlagError,
   parseBackendArgs,
@@ -435,8 +436,22 @@ export function createGuiCommands(pi: CommandPi, runtime: GuiRuntime): GuiComman
       const sweepable = await runtime.sweepableBackends(backends, { startup: false });
       const sweep = await runtime.sweepNow(sweepable, controller.signal);
       lines.push(`swept: ${sweep.removedDirs.length} temp dir(s), ${sweep.killed.length} process(es)`);
-      if (parsed.deps) lines.push("dependency cache: not used in this version; nothing to clear");
-      const audit = [...stopLeftovers, ...sweep.leftovers, ...sweep.unknown, ...(await runtime.auditOrphans(sweepable, controller.signal))];
+      const depsLeftovers: Leftover[] = [];
+      if (parsed.deps) {
+        // Spec §4.8, §7a.5: the whole client-side cache (every project); it only ever saves setup time.
+        const cache = new DepsCache({ root: runtime.depsCacheRoot });
+        try {
+          const cleared = await cache.clear();
+          lines.push(
+            cleared.entries > 0
+              ? `dependency cache: removed ${cleared.entries} entr${cleared.entries === 1 ? "y" : "ies"} (${(cleared.bytes / 1024 ** 2).toFixed(1)} MB) from ${cache.root}`
+              : `dependency cache: already empty (${cache.root})`,
+          );
+        } catch (error) {
+          depsLeftovers.push({ kind: "deps-cache", id: cache.root, detail: `could not remove the dependency cache: ${(error as Error).message}` });
+        }
+      }
+      const audit = [...stopLeftovers, ...sweep.leftovers, ...sweep.unknown, ...depsLeftovers, ...(await runtime.auditOrphans(sweepable, controller.signal))];
       const unique = [...new Map(audit.map((l) => [`${l.kind}:${l.id}`, l])).values()];
       lines.push(leftoverLines("Footprint audit", unique));
       emit(`GUI testing cleanup (${backends.join(", ")}):\n${lines.join("\n")}`, unique.length > 0);

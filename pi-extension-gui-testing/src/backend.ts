@@ -40,6 +40,18 @@ export interface SyncSummary {
   excluded: number;
 }
 
+/** Outcome of the dependency cache for one session start (spec §4.8), shown by `gui_launch`. */
+export interface DepsCacheReport {
+  /** `hit`: restored, `setup` skipped; `miss`: `setup` ran (and maybe was stored); `off`: the cache was not used. */
+  state: "hit" | "miss" | "off";
+  /** One user-facing line, e.g. "hit: restored 1 204 entries (38.2 MB); setup skipped". */
+  detail: string;
+  /** First 12 hex characters of the cache key. */
+  key?: string;
+  /** Whether a miss was stored in the cache. */
+  stored?: boolean;
+}
+
 export interface Session {
   readonly id: string;
   readonly backend: BackendId;
@@ -56,6 +68,12 @@ export interface Session {
   readonly workspaceDescription?: string;
   /** Optional (added after M1). Launch warnings of the backend (e.g. skipped `setup` commands), shown in the `gui_launch` result. */
   readonly warnings?: readonly string[];
+  /** Optional (M1b). `hello.platform` of the helper. */
+  readonly platform?: string;
+  /** Optional (M1b). `hello.capabilities` of the helper. */
+  readonly capabilities?: readonly string[];
+  /** Optional (M1b). What the dependency cache did at start; absent when there is no `setup`. */
+  readonly depsCache?: DepsCacheReport;
   /**
    * Sends one protocol request. Requests other than `ping` and `cancel` run
    * sequentially per session. Rejects with a {@link SessionError} carrying the

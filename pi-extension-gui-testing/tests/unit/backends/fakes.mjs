@@ -101,8 +101,10 @@ export function fakeDocker(overrides = {}) {
     imageId: overrides.imageId ?? "sha256:35eede0900000000000000000000000000000000000000000000000000000000",
   };
   const version = overrides.version ?? "0.1.0";
-  const imageLabels = overrides.imageLabels ?? { "pi-gui-testing.base": "true", "pi-gui-testing.version": version, "pi-gui-testing.protocol": "1" };
-  const host = (re) => new RegExp(`^docker --host ${HOST.replace(/[/.]/g, "\\$&")} ${re}`);
+  const imageLabels = overrides.imageLabels ?? { "pi-gui-testing.base": "true", "pi-gui-testing.version": version, "pi-gui-testing.protocol": "2" };
+  // The endpoint every session call uses (`--host <endpoint>`); Docker Desktop tests use a pipe or another socket.
+  const endpoint = overrides.contextHost ?? HOST;
+  const host = (re) => new RegExp(`^docker --host ${endpoint.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&")} ${re}`);
   runner
     .on(["docker", "--version"], { stdout: "Docker version 29.9.1, build abcdef0\n" })
     .on(["docker", "context", "inspect", "--format", "{{json .}}"], {

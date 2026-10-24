@@ -45,7 +45,7 @@ else if (command === "build") {
   const tar = Buffer.concat(chunks);
   if (tar.toString("latin1", 257, 262) !== "ustar" || !tar.includes("FROM debian")) fail("build context is not a tar with the Dockerfile");
   const version = args[args.indexOf("--build-arg") + 1].split("=")[1];
-  writeFileSync(imageFile, JSON.stringify({ Id: `sha256:${"ab".repeat(32)}`, Architecture: "amd64", Config: { Labels: { "pi-gui-testing.base": "true", "pi-gui-testing.version": version, "pi-gui-testing.protocol": "1" } } }));
+  writeFileSync(imageFile, JSON.stringify({ Id: `sha256:${"ab".repeat(32)}`, Architecture: "amd64", Config: { Labels: { "pi-gui-testing.base": "true", "pi-gui-testing.version": version, "pi-gui-testing.protocol": "2" } } }));
   writeFileSync(join(stateDir, "build-context-bytes"), String(tar.length));
   out("Successfully built fake");
 } else if (command === "create") {

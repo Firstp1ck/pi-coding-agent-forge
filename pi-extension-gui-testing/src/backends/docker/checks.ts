@@ -25,6 +25,8 @@ import {
 import { formatViolations, hardRuleViolations, workspaceMountProblem, type ContainerInspect, type PathProbe } from "./inspect.ts";
 import { baseImageTag } from "./package.ts";
 import { dockerCreateArgs, writeIdentityFiles } from "./run-args.ts";
+import { containerUser, hostFlavor, WINDOWS_CONTAINER_UID, type DockerHostFlavor } from "./desktop.ts";
+import type { HostRules } from "./inspect.ts";
 
 /** Lowest tested Docker server major (spec §5.4, plan X15). */
 export const MIN_DOCKER_SERVER = "29.0";
@@ -34,6 +36,7 @@ export const MAX_TESTED_DOCKER_MAJOR = 29;
 export const PROBE_DIR_PREFIX = "pi-gui-probe-";
 
 export const DOCKER_INSTALL_URL = "https://docs.docker.com/engine/install/";
+export const DOCKER_DESKTOP_URL = "https://docs.docker.com/desktop/";
 
 export interface DockerCheckOptions {
   runner: CommandRunner;
@@ -48,6 +51,10 @@ export interface DockerCheckOptions {
   pathProbe?: PathProbe;
   /** Overrides for the common checks (tests). */
   common?: Partial<CommonCheckOptions>;
+  /** Client platform; `darwin` and `win32` are Docker Desktop hosts (M1c). Default `process.platform`. */
+  platform?: NodeJS.Platform;
+  env?: NodeJS.ProcessEnv;
+  home?: string;
 }
 
 /** Parsed `docker info` (the fields the checks read). */
@@ -57,6 +64,36 @@ export interface DockerInfo {
   Architecture?: string;
   SecurityOptions?: string[];
   ServerErrors?: string[];
+  /** e.g. `Docker Desktop`, `Debian GNU/Linux 13 (trixie)`. */
+  OperatingSystem?: string;
+  /** e.g. `docker-desktop`. */
+  Name?: string;
+}
+
+/** `true` when `docker info` describes Docker Desktop's engine. */
+export function isDockerDesktop(info: DockerInfo): boolean {
+  return /docker desktop/i.test(info.OperatingSystem ?? "") || info.Name === "docker-desktop";
+}
+
+/** Per-flavor remediation texts (Linux Engine vs Docker Desktop on macOS or Windows). */
+function remedies(flavor: DockerHostFlavor) {
+  if (flavor === "engine") {
+    return {
+      install: { summary: `Install Docker Engine (${DOCKER_INSTALL_URL}); setup never installs it for you`, manual: true as const },
+      endpoint: "Switch to the local Docker context (docker context use default) and unset a remote DOCKER_HOST",
+      daemon: { summary: "Start the Docker daemon", command: ["sudo", "systemctl", "start", "docker"], manual: true as const },
+      permission: undefined,
+    };
+  }
+  const windows = flavor === "desktop-windows";
+  return {
+    install: { summary: `Install Docker Desktop (${DOCKER_DESKTOP_URL}) and start it once; setup never installs it for you`, manual: true as const },
+    endpoint: "Use Docker Desktop's context (docker context use desktop-linux) and unset a remote DOCKER_HOST",
+    daemon: { summary: "Start Docker Desktop and wait until it reports that the engine is running", manual: true as const },
+    permission: windows
+      ? { summary: "Add your Windows account to the docker-users group (Computer Management → Local Users and Groups), then sign out and in", manual: true as const }
+      : { summary: "Restart Docker Desktop; its socket belongs to your macOS user", manual: true as const },
+  };
 }
 
 type InfoOutcome =
@@ -104,8 +141,11 @@ export function parseDockerCliVersion(output: string): string | undefined {
 /** All `docker-linux` checks: the common ones first, then the Docker ones in dependency order. */
 export function dockerLinuxChecks(options: DockerCheckOptions): Check[] {
   const { runner } = options;
-  const uid = options.uid ?? process.getuid?.() ?? 0;
-  const gid = options.gid ?? process.getgid?.() ?? 0;
+  const platform = options.platform ?? process.platform;
+  const flavor = hostFlavor(platform);
+  const fix = remedies(flavor);
+  const rules: HostRules | undefined = flavor === "engine" ? undefined : { platform, ...(options.env ? { env: options.env } : {}), ...(options.home ? { home: options.home } : {}) };
+  const { uid, gid } = containerUser(platform, { ...(options.uid !== undefined ? { uid: options.uid } : {}), ...(options.gid !== undefined ? { gid: options.gid } : {}) });
   const tag = baseImageTag(options.version);
   // `docker info` once per check run: the dependents of `docker.permission` share its result object.
   const infoCache = new WeakMap<CheckResult, Promise<InfoOutcome>>();
@@ -121,14 +161,14 @@ export function dockerLinuxChecks(options: DockerCheckOptions): Check[] {
     return outcome.info;
   };
 
-  const common = commonChecks("docker-linux", { minFreeBytes: DOCKER_LINUX_MIN_FREE_BYTES, ...options.common });
+  const common = commonChecks("docker-linux", { minFreeBytes: DOCKER_LINUX_MIN_FREE_BYTES, platform, ...options.common });
 
   const cli: Check = {
     id: "docker.cli",
     description: "docker CLI on PATH",
     kind: "observe",
     required: true,
-    remediation: { summary: `Install Docker Engine (${DOCKER_INSTALL_URL}); setup never installs it for you`, manual: true },
+    remediation: fix.install,
     async run(ctx) {
       let result: RunResult;
       try {
@@ -150,10 +190,10 @@ export function dockerLinuxChecks(options: DockerCheckOptions): Check[] {
     kind: "observe",
     required: true,
     dependsOn: ["docker.cli"],
-    remediation: { summary: "Switch to the local Docker context (docker context use default) and unset a remote DOCKER_HOST", manual: true },
+    remediation: { summary: fix.endpoint, manual: true },
     async run(ctx) {
       try {
-        const resolved = await resolveEndpoint(runner, { signal: ctx.signal, source: options.endpointSource });
+        const resolved = await resolveEndpoint(runner, { signal: ctx.signal, source: options.endpointSource, platform });
         return { status: "pass", observed: `${resolved.host} (context ${resolved.context})`, facts: { context: resolved.context, host: resolved.host } };
       } catch (error) {
         if (error instanceof EndpointError) return { status: "fail", observed: error.message };
@@ -168,7 +208,7 @@ export function dockerLinuxChecks(options: DockerCheckOptions): Check[] {
     kind: "observe",
     required: true,
     dependsOn: ["docker.endpoint"],
-    remediation: { summary: "Start the Docker daemon", command: ["sudo", "systemctl", "start", "docker"], manual: true },
+    remediation: fix.daemon,
     async run(ctx) {
       const outcome = await dockerInfo(runner, requireEndpoint(ctx), ctx.signal);
       if (outcome.ok) return { status: "pass", observed: `server ${outcome.info.ServerVersion} at ${ctx.dockerEndpoint!.host}` };
@@ -185,7 +225,7 @@ export function dockerLinuxChecks(options: DockerCheckOptions): Check[] {
     kind: "observe",
     required: true,
     dependsOn: ["docker.daemon"],
-    remediation: {
+    remediation: fix.permission ?? {
       summary: "Add your user to the docker group, then log out and back in",
       command: ["sudo", "usermod", "-aG", "docker", safeUserName()],
       manual: true,
@@ -212,6 +252,11 @@ export function dockerLinuxChecks(options: DockerCheckOptions): Check[] {
           status: "fail",
           observed: `rootless Docker daemon (security options: ${summary}); this version needs a rootful daemon because rootless Docker maps container UIDs to other host UIDs; rootless support is planned`,
         };
+      }
+      if (flavor !== "engine") {
+        // Docker Desktop's engine is rootful inside its own Linux VM; file sharing, not UID mapping, decides who owns bind-mounted files (docker.bind-uid).
+        const engine = isDockerDesktop(info) ? "Docker Desktop" : info.OperatingSystem ? `"${info.OperatingSystem}"` : "a Docker VM";
+        return { status: "pass", observed: `rootful inside ${engine}'s Linux VM (security options: ${summary}); files on bind mounts are mapped by its file sharing, see docker.bind-uid` };
       }
       return { status: "pass", observed: `rootful (security options: ${summary})` };
     },
@@ -241,7 +286,7 @@ export function dockerLinuxChecks(options: DockerCheckOptions): Check[] {
     kind: "observe",
     required: true,
     dependsOn: ["docker.permission"],
-    remediation: { summary: "Switch Docker to Linux containers", manual: true },
+    remediation: { summary: flavor === "desktop-windows" ? "In Docker Desktop, choose \"Switch to Linux containers\"" : "Switch Docker to Linux containers", manual: true },
     async run(ctx) {
       const os = (await sharedInfo(ctx)).OSType ?? "unknown";
       return { status: os === "linux" ? "pass" : "fail", observed: `OSType ${os}` };
@@ -312,9 +357,23 @@ export function dockerLinuxChecks(options: DockerCheckOptions): Check[] {
           { timeoutMs: 30_000, signal: ctx.signal },
         );
         if (result.exitCode !== 0) return { status: "fail", observed: `probe container failed (${describeFailure(result)})` };
-        const owner = (await stat(join(dir, "owned"))).uid;
-        if (owner !== uid) return { status: "fail", observed: `file is owned by uid ${owner}, expected ${uid}` };
-        return { status: "pass", observed: `owned by uid ${uid}` };
+        const created = await stat(join(dir, "owned")).catch(() => undefined);
+        if (!created) {
+          return {
+            status: "fail",
+            observed:
+              flavor === "engine"
+                ? "the probe container's file did not appear in the bind-mounted directory"
+                : `the probe container's file did not appear in ${dir}; allow Docker Desktop's file sharing for that directory (Settings → Resources → File sharing)`,
+          };
+        }
+        if (flavor === "desktop-windows") {
+          // Windows has no POSIX owner to compare: the file must show up and be yours to remove (rm below).
+          await rm(join(dir, "owned"));
+          return { status: "pass", observed: `created through Docker Desktop file sharing and removable by you (Windows has no POSIX owner; the container runs as uid ${WINDOWS_CONTAINER_UID})` };
+        }
+        if (created.uid !== uid) return { status: "fail", observed: `file is owned by uid ${created.uid}, expected ${uid}` };
+        return { status: "pass", observed: flavor === "desktop-macos" ? `owned by uid ${uid} (Docker Desktop file sharing maps it to you)` : `owned by uid ${uid}` };
       } finally {
         await removeObject(runner, endpointValue, { kind: "container", id: `pi-gui-testing-${probeId}`, name: probeId, session: probeId }).catch(() => undefined);
         await rm(dir, { recursive: true, force: true });
@@ -358,9 +417,9 @@ export function dockerLinuxChecks(options: DockerCheckOptions): Check[] {
         const inspected = await runDocker(runner, endpointValue, ["container", "inspect", `pi-gui-testing-${probeId}`], { timeoutMs: 10_000, signal: ctx.signal });
         if (inspected.exitCode !== 0) return { status: "fail", observed: `docker inspect failed (${describeFailure(inspected)})` };
         const [container] = JSON.parse(inspected.stdout) as ContainerInspect[];
-        const violations = hardRuleViolations(container, options.pathProbe);
+        const violations = hardRuleViolations(container, options.pathProbe, rules);
         if (violations.length > 0) return { status: "fail", observed: formatViolations(violations) };
-        const workspace = workspaceMountProblem(container, workspaceDir);
+        const workspace = workspaceMountProblem(container, workspaceDir, "/workspace", platform);
         if (workspace) return { status: "fail", observed: `workspace: ${workspace}` };
         return { status: "pass", observed: "no hard-rule violations (container created, never started)" };
       } finally {

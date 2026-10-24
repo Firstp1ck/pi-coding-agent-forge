@@ -20,15 +20,18 @@ export const HELPER_WORKSPACE_ENV = "PI_GUI_WORKSPACE";
 export const HELPER_RUNTIME_DIR_ENV = "PI_GUI_RUNTIME_DIR";
 export const HELPER_DISPLAY_LOCK_DIR_ENV = "PI_GUI_DISPLAY_LOCK_DIR";
 export const HELPER_ALLOW_EXEC_ENV = "PI_GUI_ALLOW_EXEC";
+/** Protocol 2: the helper's deps dir in host mode (dependency cache, spec §4.8). */
+export const HELPER_DEPS_DIR_ENV = "PI_GUI_DEPS_DIR";
 
 /** Helper environment for a remote session dir (the token is added by {@link HelperSession}). */
-export function remoteHelperEnv(remote: RemoteSessionDir, options: { allowExec: boolean; heartbeatTimeoutMs?: number }): Record<string, string> {
+export function remoteHelperEnv(remote: RemoteSessionDir, options: { allowExec: boolean; heartbeatTimeoutMs?: number; depsDir?: string }): Record<string, string> {
   return {
     [HELPER_MODE_ENV]: "host",
     [HELPER_WORKSPACE_ENV]: remote.workspace,
     [HELPER_RUNTIME_DIR_ENV]: remote.run,
     [HELPER_DISPLAY_LOCK_DIR_ENV]: remote.displays,
     ...(options.allowExec ? { [HELPER_ALLOW_EXEC_ENV]: "1" } : {}),
+    ...(options.depsDir ? { [HELPER_DEPS_DIR_ENV]: options.depsDir } : {}),
     ...(options.heartbeatTimeoutMs !== undefined ? { [HEARTBEAT_TIMEOUT_TEST_ENV]: String(options.heartbeatTimeoutMs) } : {}),
   };
 }
@@ -47,6 +50,8 @@ export interface RemoteLinuxSessionOptions {
   resources: RemoteResources;
   remote: RemoteSessionDir;
   allowExec: boolean;
+  /** Deps dir for the helper (`PI_GUI_DEPS_DIR`), inside the remote session dir. */
+  depsDir?: string;
   /** Re-sends the workspace (incremental with rsync). */
   resync?: (signal?: AbortSignal) => Promise<SyncReport>;
   heartbeatTimeoutMs?: number;
@@ -63,7 +68,11 @@ export class RemoteLinuxSession extends HelperSession {
 
   constructor(options: RemoteLinuxSessionOptions) {
     const { resources, remote } = options;
-    const env = remoteHelperEnv(remote, { allowExec: options.allowExec, ...(options.heartbeatTimeoutMs !== undefined ? { heartbeatTimeoutMs: options.heartbeatTimeoutMs } : {}) });
+    const env = remoteHelperEnv(remote, {
+      allowExec: options.allowExec,
+      ...(options.heartbeatTimeoutMs !== undefined ? { heartbeatTimeoutMs: options.heartbeatTimeoutMs } : {}),
+      ...(options.depsDir ? { depsDir: options.depsDir } : {}),
+    });
     super({
       id: options.id,
       backend: options.backend,

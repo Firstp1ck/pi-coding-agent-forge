@@ -7,7 +7,7 @@
  * backend supplies the process and the parts that differ: verification after
  * start, removal of its own resources, and the read-only audit.
  */
-import { SessionError, type Session, type SyncSummary } from "../backend.ts";
+import { SessionError, type DepsCacheReport, type Session, type SyncSummary } from "../backend.ts";
 import type { BackendId } from "../config/types.ts";
 import { ProtocolClient, ProtocolClientError } from "../framing/client.ts";
 import { generateToken } from "../framing/codec.ts";
@@ -28,6 +28,12 @@ export const METHOD_TIMEOUTS_MS: Partial<Record<Method, number>> = {
   act: 30_000,
   windows: 10_000,
   stop: 20_000,
+  depsPack: 10 * 60_000,
+  depsRead: 60_000,
+  depsReceive: 15_000,
+  depsWrite: 60_000,
+  depsUnpack: 10 * 60_000,
+  depsDiscard: 15_000,
 };
 
 /** Wording of user-visible messages, so each backend names what the user knows. */
@@ -103,7 +109,11 @@ export class HelperSession implements Session {
   readonly workspacePath?: string;
   readonly workspaceDescription?: string;
   readonly warnings?: readonly string[];
+  /** Set by the backend after the dependency-cache step (spec §4.8). */
+  depsCache?: DepsCacheReport;
   #arch = "unknown";
+  #platform?: string;
+  #capabilities: readonly string[] = [];
   readonly #options: HelperSessionOptions;
   #child?: HelperProcess;
   #client?: ProtocolClient;
@@ -127,6 +137,16 @@ export class HelperSession implements Session {
 
   get arch(): string {
     return this.#arch;
+  }
+
+  /** `hello.platform`, when the helper reported one. */
+  get platform(): string | undefined {
+    return this.#platform;
+  }
+
+  /** `hello.capabilities`. */
+  get capabilities(): readonly string[] {
+    return this.#capabilities;
   }
 
   /** PID of the launcher process, once started. */
@@ -172,6 +192,8 @@ export class HelperSession implements Session {
       });
       const hello = validateResult("hello", await Promise.race([client.connect(this.#options.packageVersion, signal), spawnFailure.then(() => new Promise<never>(() => {}))]));
       this.#arch = hello.arch;
+      this.#capabilities = hello.capabilities;
+      if (hello.platform !== undefined) this.#platform = hello.platform;
       await hooks.verifyAfterStart?.(signal);
     } catch (error) {
       const failure = toSessionError(error, "START_FAILED");

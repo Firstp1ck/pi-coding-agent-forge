@@ -28,6 +28,7 @@ from . import hostmode, procs
 from .dispatch import ProtocolError, diag
 
 SCREEN = "1280x800x24"
+DEPS_DIR = "/deps"
 VENV_DIR = "/deps/venv"
 DEFAULT_HOME = "/home/app"
 _STEP_TIMEOUT_S = 6.0
@@ -139,6 +140,24 @@ class Session:
         self.display_lock = None
         self.a11y_available = True
         self._created = []
+
+    # ----- dependency cache (deps.py) ---------------------------------------
+
+    def deps_root(self):
+        """The deps dir the cache packs and fills: ``/deps`` in containers, ``PI_GUI_DEPS_DIR`` in host mode (else None)."""
+        if self.mode == "host":
+            return self.host.deps_dir if self.host is not None else None
+        if self.mode == "container" and os.path.isdir(DEPS_DIR):
+            return DEPS_DIR
+        return None
+
+    def transfer_tmp_dir(self):
+        """Where unlinked transfer files live: the private ``tmp/`` in host mode, else the default temp dir."""
+        return self.tmp_dir if self.mode == "host" else None
+
+    def deps_unpacked(self):
+        """The deps dir was replaced: recreate the venv's interpreter links before the next exec/launch."""
+        self._venv_ready = False
 
     @property
     def default_cwd(self):
@@ -516,7 +535,8 @@ class Session:
 
     def child_env(self, request_env):
         if self.host is not None:
-            return hostmode.build_host_env(self.environ, request_env, self.session_env(), _PRIVATE_ENV_PREFIX)
+            return hostmode.build_host_env(self.environ, request_env, self.session_env(), _PRIVATE_ENV_PREFIX,
+                                           deps_dir=self.host.deps_dir)
         return build_env(self.environ, request_env, self.session_env())
 
     def tool_env(self):

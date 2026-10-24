@@ -9,12 +9,12 @@ import os
 import platform
 import time
 
-from . import HELPER_VERSION, PROTOCOL_VERSION, capture, inputs, procs, x11
+from . import HELPER_VERSION, PROTOCOL_VERSION, capture, deps, inputs, procs, x11
 from .dispatch import ProtocolError
 
 ACTIONS = ("click", "double_click", "right_click", "type", "key", "scroll", "set_value")
 WAIT_KINDS = ("window", "text", "ref", "idle")
-CAPABILITIES = ["launch", "wait", "snapshot", "snapshotFull", "screenshot", "act", "windows", "exec", "a11y-atspi"]
+CAPABILITIES = ["launch", "wait", "snapshot", "snapshotFull", "screenshot", "act", "windows", "exec", "deps", "a11y-atspi"]
 
 DEFAULT_CWD = "/workspace"
 LAUNCH_WINDOW_WAIT_S = 20.0
@@ -71,6 +71,27 @@ def _cwd(params, default=DEFAULT_CWD):
     return cwd
 
 
+def _os_release():
+    """``ID VERSION_ID`` from ``/etc/os-release`` (empty when unreadable)."""
+    values = {}
+    try:
+        with open("/etc/os-release", encoding="utf-8", errors="replace") as handle:
+            for line in handle.read(16384).splitlines():
+                key, sep, value = line.partition("=")
+                if sep and key in ("ID", "VERSION_ID"):
+                    values[key] = value.strip().strip('"')[:64]
+    except OSError:
+        pass
+    return " ".join(v for v in (values.get("ID"), values.get("VERSION_ID")) if v)
+
+
+def platform_fingerprint():
+    """What installed dependencies depend on: OS, machine, libc, distribution, Python (bounded)."""
+    libc = " ".join(v for v in platform.libc_ver() if v)
+    parts = ["%s %s" % (platform.system(), platform.machine()), libc, _os_release(), "python %s" % platform.python_version()]
+    return "; ".join(p for p in parts if p)[:256]
+
+
 def is_chromium_like(cmd, args):
     """True for Electron/Chromium binaries, including ``npx electron`` / ``node …/electron``."""
     if os.path.basename(cmd) in _CHROMIUM_NAMES:
@@ -97,6 +118,11 @@ class Handlers:
         self._snapshots = None
         self._capture_counter = 0
         self._capture = None
+        self._deps = deps.Transfers(
+            getattr(session, "deps_root", lambda: None),
+            tmp_dir=getattr(session, "transfer_tmp_dir", None),
+            on_unpacked=getattr(session, "deps_unpacked", None),
+        )
 
     @property
     def env(self):
@@ -114,6 +140,12 @@ class Handlers:
             "act": self.act,
             "windows": self.windows,
             "exec": self.exec_,
+            "depsPack": self._deps.pack,
+            "depsRead": self._deps.read,
+            "depsReceive": self._deps.receive,
+            "depsWrite": self._deps.write,
+            "depsUnpack": self._deps.unpack,
+            "depsDiscard": self._deps.discard,
             "stop": self.stop,
         }
 
@@ -143,13 +175,22 @@ class Handlers:
             "helperVersion": HELPER_VERSION,
             "os": "linux",
             "arch": platform.machine(),
-            "capabilities": [c for c in CAPABILITIES if c != "a11y-atspi" or getattr(self.session, "a11y_available", True)],
+            "capabilities": [c for c in CAPABILITIES if self._has_capability(c)],
+            "platform": platform_fingerprint(),
         }
+
+    def _has_capability(self, name):
+        if name == "a11y-atspi":
+            return getattr(self.session, "a11y_available", True)
+        if name == "deps":
+            return bool(getattr(self.session, "deps_root", lambda: None)())
+        return True
 
     def ping(self, ctx, params):
         return {"ok": True}
 
     def stop(self, ctx, params):
+        self._deps.close()
         leftovers = self.session.teardown()
         ctx.after = lambda: self._request_exit("stop")
         return {"ok": not leftovers, "leftovers": leftovers}

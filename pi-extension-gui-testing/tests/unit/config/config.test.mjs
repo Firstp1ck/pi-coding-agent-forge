@@ -182,3 +182,17 @@ test("I: remote.purgeTooling is validated and resolved per field (local over glo
   assert.deepEqual(resolveConfig(sources).remote, { host: "lab", purgeTooling: true });
   assert.equal(resolveConfig({ ...sources, global: { version: 1, verified: {} }, local: {} }).remote, undefined);
 });
+
+test("M1b: depsCache.enabled and depsCache.maxSizeGB are validated and resolved per field with defaults", async () => {
+  const { validatePersonalConfig } = await import("../../../src/config/validate.ts");
+  assert.deepEqual(validatePersonalConfig({ depsCache: { enabled: false, maxSizeGB: 0.5 } }, "x.json").config.depsCache, { enabled: false, maxSizeGB: 0.5 });
+  assert.throws(() => validatePersonalConfig({ depsCache: { enabled: "no" } }, "x.json"), /depsCache\.enabled/);
+  assert.throws(() => validatePersonalConfig({ depsCache: { maxSizeGB: 0 } }, "x.json"), /depsCache\.maxSizeGB/);
+  assert.throws(() => validatePersonalConfig({ depsCache: { maxSizeGB: "5" } }, "x.json"), /depsCache\.maxSizeGB/);
+  const empty = { shared: {}, local: {}, global: { version: 1, verified: {} }, warnings: [] };
+  assert.deepEqual(resolveConfig(empty).depsCache, { enabled: true, maxBytes: 5 * 1024 ** 3 });
+  const layered = { shared: {}, local: { depsCache: { maxSizeGB: 2 } }, global: { version: 1, verified: {}, depsCache: { enabled: false, maxSizeGB: 9 } }, warnings: [] };
+  assert.deepEqual(resolveConfig(layered).depsCache, { enabled: false, maxBytes: 2 * 1024 ** 3 });
+  const shared = await import("../../../src/config/validate.ts").then((m) => m.validateSharedConfig({ depsCache: { enabled: false } }, ".pi/gui.json"));
+  assert.match(shared.warnings[0], /"depsCache" is a personal setting/);
+});

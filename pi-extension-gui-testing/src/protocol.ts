@@ -7,8 +7,13 @@
  * `<token> <json>\n`. Lines without the token prefix are diagnostics.
  */
 
-/** Bumped on every incompatible change; `hello` fails closed on mismatch. */
-export const PROTOCOL_VERSION = 1;
+/**
+ * Bumped on every incompatible change; `hello` fails closed on mismatch.
+ * Version 2 (M1b) added the dependency-cache transfer methods (`depsPack`,
+ * `depsRead`, `depsReceive`, `depsWrite`, `depsUnpack`, `depsDiscard`), the
+ * error codes `ARCHIVE_REJECTED` and `TOO_LARGE`, and `hello.platform`.
+ */
+export const PROTOCOL_VERSION = 2;
 
 /** Environment variable that carries the framing token to the helper (never argv, so it stays out of `ps`). */
 export const TOKEN_ENV = "PI_GUI_TESTING_TOKEN";
@@ -33,6 +38,14 @@ export const MAX_LINE_BYTES = 64 * 1024 * 1024;
 /** Upper bound for the `data` field of one `log` event. */
 export const MAX_LOG_EVENT_BYTES = 64 * 1024;
 
+/**
+ * Upper bound for the raw bytes of one dependency-archive chunk (`depsRead`,
+ * `depsWrite`). Its base64 text (4/3 of it) stays far below {@link MAX_LINE_BYTES}.
+ */
+export const DEPS_CHUNK_BYTES = 4 * 1024 * 1024;
+/** Base64 characters of one full {@link DEPS_CHUNK_BYTES} chunk. */
+export const DEPS_CHUNK_BASE64_CHARS = Math.ceil(DEPS_CHUNK_BYTES / 3) * 4;
+
 /** Requests that bypass the per-session sequential queue (spec §6). */
 export const QUEUE_BYPASS_METHODS = ["ping", "cancel"] as const;
 
@@ -44,7 +57,11 @@ export type ErrorCode =
   | "PROTOCOL_MISMATCH"
   | "CANCELLED"
   | "BAD_REQUEST"
-  | "INTERNAL";
+  | "INTERNAL"
+  /** Protocol 2: a dependency archive failed verification (size, hash, or an unsafe member); the deps dir was emptied. */
+  | "ARCHIVE_REJECTED"
+  /** Protocol 2: the deps dir or an archive exceeds the size or entry bound of the request. */
+  | "TOO_LARGE";
 
 export interface ProtocolError {
   code: ErrorCode;
@@ -116,6 +133,12 @@ export interface Methods {
       os: string;
       arch: string;
       capabilities: string[];
+      /**
+       * Protocol 2, optional: platform fingerprint of the helper's system
+       * (kernel family, libc, Python version), for the dependency-cache key.
+       * Untrusted and bounded like every result.
+       */
+      platform?: string;
     };
   };
   ping: { params: Record<string, never>; result: { ok: true } };
@@ -185,6 +208,59 @@ export interface Methods {
     result: { exitCode: number; elapsedMs: number };
   };
   cancel: { params: { targetId: number }; result: { ok: true } };
+  /**
+   * Protocol 2. Packs the session's deps dir (`/deps`, or the host-mode
+   * `PI_GUI_DEPS_DIR`) into a gzip-compressed tar held by the helper in a
+   * private temp file. Regular files, directories, and symlinks whose target
+   * stays inside the deps dir are packed; anything else (escaping symlinks such
+   * as a venv's `bin/python`, sockets, devices, FIFOs) is skipped and counted.
+   * No owners, no hardlinks. `TOO_LARGE` when the archive exceeds `maxBytes`.
+   */
+  depsPack: {
+    params: { maxBytes: number };
+    result: {
+      /** Opaque transfer id for `depsRead` and `depsDiscard`. */
+      transfer: string;
+      /** Archive size in bytes. */
+      size: number;
+      /** SHA-256 of the archive, hex. */
+      sha256: string;
+      /** Entries packed (files, dirs, links). */
+      entries: number;
+      /** Entries skipped (escaping symlinks, special files). */
+      skipped: number;
+    };
+  };
+  /** Protocol 2. Reads `length` (≤ {@link DEPS_CHUNK_BYTES}) bytes of a packed archive at `offset`. */
+  depsRead: {
+    params: { transfer: string; offset: number; length: number };
+    result: { data_base64: string; eof: boolean };
+  };
+  /** Protocol 2. Opens an upload of an archive of exactly `size` bytes with SHA-256 `sha256`. */
+  depsReceive: {
+    params: { size: number; sha256: string };
+    result: { transfer: string };
+  };
+  /** Protocol 2. Appends one chunk; `offset` must equal the bytes received so far. */
+  depsWrite: {
+    params: { transfer: string; offset: number; data_base64: string };
+    result: { received: number };
+  };
+  /**
+   * Protocol 2. Verifies size and SHA-256 of the upload, empties the deps
+   * dir, and unpacks into it. Members must be relative, without `..`, not
+   * below a symlink, and regular files, directories, or symlinks whose target
+   * stays inside the deps dir; owners and special mode bits are never applied.
+   * Any violation answers `ARCHIVE_REJECTED` and leaves the deps dir empty;
+   * exceeding a bound answers `TOO_LARGE` (also emptied). The upload is
+   * discarded either way.
+   */
+  depsUnpack: {
+    params: { transfer: string; maxUnpackedBytes: number; maxEntries: number };
+    result: { entries: number; bytes: number };
+  };
+  /** Protocol 2. Drops a pack or upload (idempotent; unknown ids answer ok). */
+  depsDiscard: { params: { transfer: string }; result: { ok: true } };
   stop: { params: Record<string, never>; result: { ok: boolean; leftovers: Leftover[] } };
 }
 

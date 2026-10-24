@@ -1,7 +1,8 @@
 /**
  * `docker-linux` backend (spec §4.1): apps run in a hardened, labelled
  * container with Xvfb, started per session with the helper as entrypoint.
- * Linux hosts with a rootful local Docker daemon only in this version.
+ * Linux hosts with a rootful local Docker daemon, and (M1c) macOS and Windows
+ * hosts with Docker Desktop's Linux containers (`./docker/desktop.ts`).
  */
 import { lstat, realpath } from "node:fs/promises";
 import { join } from "node:path";
@@ -30,7 +31,10 @@ import { containerName, shmSizeFor, writeIdentityFiles } from "./docker/run-args
 import { DockerSession } from "./docker/session.ts";
 import { stopAfterFailedStart } from "./start-failure.ts";
 import { assertMountableRoot, assertNoSockets, WorkspaceRefusedError } from "./docker/workspace.ts";
+import { containerUser, hostFlavor, listingFingerprint, listingIdentityCommand } from "./docker/desktop.ts";
+import type { HostRules } from "./docker/inspect.ts";
 import { ELECTRON_SHM_SIZE } from "../hardening.ts";
+import { depsCacheFor, runSetupWithCache } from "../deps/flow.ts";
 import { LABEL_BASE } from "../labels.ts";
 
 /** Bound for one `setup` command (spec §7); the heartbeat keeps the helper alive meanwhile. */
@@ -88,6 +92,14 @@ export interface DockerLinuxOptions {
   readyTimeoutMs?: number;
   /** Whether a `docker` executable is on PATH (checked without running it). Tests inject it. */
   dockerOnPath?: () => Promise<boolean>;
+  /** Root of the dependency cache (spec §4.8); default `~/.cache/pi-extension-gui-testing/deps`. */
+  depsCacheRoot?: string;
+  /** Client platform (M1c: `darwin` and `win32` are Docker Desktop hosts); default `process.platform`. Tests inject it. */
+  platform?: NodeJS.Platform;
+  /** Environment for Desktop paths (`USERPROFILE`, `LOCALAPPDATA`, …); default `process.env`. */
+  env?: NodeJS.ProcessEnv;
+  /** Home directory for the project-root rules; default `os.homedir()`. */
+  home?: string;
 }
 
 export class DockerLinuxBackend implements Backend, ImageCapability, DriftCapability, ResetCapability, SweepAvailability, OrphanAuditGate, RunnerCapability {
@@ -108,12 +120,26 @@ export class DockerLinuxBackend implements Backend, ImageCapability, DriftCapabi
     return baseImageTag(this.version);
   }
 
+  get #platform(): NodeJS.Platform {
+    return this.#options.platform ?? process.platform;
+  }
+
+  /** Container user: the host UID/GID, or the fixed Windows one (no POSIX ids there). */
+  get #user(): { uid: number; gid: number } {
+    return containerUser(this.#platform, { ...(this.#options.uid !== undefined ? { uid: this.#options.uid } : {}), ...(this.#options.gid !== undefined ? { gid: this.#options.gid } : {}) });
+  }
+
   get #uid(): number {
-    return this.#options.uid ?? process.getuid?.() ?? 0;
+    return this.#user.uid;
   }
 
   get #gid(): number {
-    return this.#options.gid ?? process.getgid?.() ?? 0;
+    return this.#user.gid;
+  }
+
+  /** Isolation rules for this client platform. */
+  get #rules(): HostRules {
+    return { platform: this.#platform, ...(this.#options.env ? { env: this.#options.env } : {}), ...(this.#options.home ? { home: this.#options.home } : {}) };
   }
 
   checks(): Check[] {
@@ -127,12 +153,15 @@ export class DockerLinuxBackend implements Backend, ImageCapability, DriftCapabi
       ...(this.#options.endpointSource ? { endpointSource: this.#options.endpointSource } : {}),
       ...(this.#options.pathProbe ? { pathProbe: this.#options.pathProbe } : {}),
       ...(this.#options.common ? { common: this.#options.common } : {}),
+      platform: this.#platform,
+      ...(this.#options.env ? { env: this.#options.env } : {}),
+      ...(this.#options.home ? { home: this.#options.home } : {}),
     });
   }
 
-  /** Resolves the local endpoint for one session or command (spec §4.1). */
+  /** Resolves the local endpoint for one session or command (spec §4.1; Docker Desktop's pipe on Windows). */
   endpoint(signal?: AbortSignal): Promise<DockerEndpoint> {
-    return resolveEndpoint(this.runner, { signal, source: this.#options.endpointSource });
+    return resolveEndpoint(this.runner, { signal, source: this.#options.endpointSource, platform: this.#platform });
   }
 
   /** Builds the base image (the `image.base` remediation). */
@@ -175,20 +204,26 @@ export class DockerLinuxBackend implements Backend, ImageCapability, DriftCapabi
     let sync: SyncSummary | undefined;
     // Identity of the checked directory: Docker gets its resolved path, and the
     // running container must show the same device and inode at /workspace.
+    // Docker Desktop's file sharing changes both, so there the container must
+    // show the same top-level listing instead (a weaker, still fail-closed check).
+    const desktop = hostFlavor(this.#platform) !== "engine";
     let identity: string;
+    let workspaceDir: string;
     if (shared.workspaceMode === "copy") {
       options.onStatus?.("copying the workspace (sync rules apply)");
       const set = await buildFileSet(options.projectRoot, { allow: shared.sync?.allow, deny: shared.sync?.deny, runner: this.runner, signal });
       const dest = join(await realpath(options.sessionDir), "workspace");
       sync = await copyFileSet(set, dest, signal);
       identity = await directoryIdentity(dest);
+      workspaceDir = dest;
       workspace = { source: dest, readOnly: false };
     } else {
       const probe = this.#options.pathProbe ?? hostPathProbe;
-      assertMountableRoot(options.projectRoot, probe);
+      assertMountableRoot(options.projectRoot, probe, this.#options.home, this.#rules);
       // Resolve once; every check below and Docker use this exact path.
       const root = probe.realpath(options.projectRoot);
-      assertMountableRoot(root, probe);
+      assertMountableRoot(root, probe, this.#options.home, this.#rules);
+      workspaceDir = root;
       identity = await directoryIdentity(root);
       options.onStatus?.("scanning the workspace for sockets");
       await assertNoSockets(root, { signal, ...(this.#options.socketScanTimeoutMs ? { timeoutMs: this.#options.socketScanTimeoutMs } : {}) });
@@ -216,6 +251,7 @@ export class DockerLinuxBackend implements Backend, ImageCapability, DriftCapabi
       onLog,
       ...(sync ? { sync } : {}),
       ...(this.#options.pathProbe ? { pathProbe: this.#options.pathProbe } : {}),
+      ...(this.#platform !== "linux" ? { hostRules: this.#rules } : {}),
       ...(this.#options.readyTimeoutMs !== undefined ? { readyTimeoutMs: this.#options.readyTimeoutMs } : {}),
       ...(heartbeat !== undefined ? { heartbeatIntervalMs: Math.max(250, Math.floor(heartbeat / 3)) } : {}),
       run: {
@@ -240,29 +276,47 @@ export class DockerLinuxBackend implements Backend, ImageCapability, DriftCapabi
       options.onStatus?.("starting the session container");
       await session.start(signal);
       // Fail closed unless /workspace is the directory that was checked (no swap between check and mount).
-      const same = await session.request("exec", { cmd: workspaceIdentityCommand(identity), cwd: "/", env: {}, timeoutMs: 30_000 }, { signal, timeoutMs: 60_000 });
+      const expected = desktop ? `listing ${(await listingFingerprint(workspaceDir)).slice(0, 12)}…` : `device/inode ${identity}`;
+      const cmd = desktop ? listingIdentityCommand(await listingFingerprint(workspaceDir)) : workspaceIdentityCommand(identity);
+      const same = await session.request("exec", { cmd, cwd: "/", env: {}, timeoutMs: 30_000 }, { signal, timeoutMs: 60_000 });
       if (same.exitCode !== 0) {
         throw new SessionError(
           "ISOLATION",
-          `the directory mounted at /workspace is not the one that was checked (device/inode ${identity} expected; exit ${same.exitCode}); it changed while the session started, so the session was stopped`,
+          `the directory mounted at /workspace is not the one that was checked (${expected} expected; exit ${same.exitCode}); it changed while the session started, so the session was stopped`,
         );
       }
-      for (const [index, cmd] of commands.entries()) {
-        options.onStatus?.(`setup ${index + 1}/${commands.length}: ${cmd}`);
-        const result = await session.request(
-          "exec",
-          { cmd, cwd: "/workspace", env: { ...(shared.deps?.env ?? {}) }, timeoutMs },
-          { signal, timeoutMs: timeoutMs + 30_000 },
-        );
-        if (result.exitCode !== 0) {
-          const tail = setupTail.text.trim().slice(-2000);
-          throw new SessionError(
-            "SETUP_FAILED",
-            `setup command ${JSON.stringify(cmd)} exited with ${result.exitCode}${tail ? `; last output:\n${tail}` : ""}` +
-              (shared.workspaceMode === "mount" ? '\n(the workspace is read-only in mount mode; setup that writes into the project needs "workspaceMode": "copy")' : ""),
+      const runSetup = async () => {
+        for (const [index, cmd] of commands.entries()) {
+          options.onStatus?.(`setup ${index + 1}/${commands.length}: ${cmd}`);
+          const result = await session.request(
+            "exec",
+            { cmd, cwd: "/workspace", env: { ...(shared.deps?.env ?? {}) }, timeoutMs },
+            { signal, timeoutMs: timeoutMs + 30_000 },
           );
+          if (result.exitCode !== 0) {
+            const tail = setupTail.text.trim().slice(-2000);
+            throw new SessionError(
+              "SETUP_FAILED",
+              `setup command ${JSON.stringify(cmd)} exited with ${result.exitCode}${tail ? `; last output:\n${tail}` : ""}` +
+                (shared.workspaceMode === "mount" ? '\n(the workspace is read-only in mount mode; setup that writes into the project needs "workspaceMode": "copy")' : ""),
+            );
+          }
         }
-      }
+      };
+      // Spec §4.8: a cache hit fills /deps and skips setup; a miss runs setup and stores /deps.
+      const deps = await runSetupWithCache({
+        session,
+        cache: depsCacheFor(config, this.#options.depsCacheRoot),
+        projectRoot: options.projectRoot,
+        config,
+        backend: this.id,
+        base: `image ${this.version}`,
+        workspace: { path: "/workspace", writable: shared.workspaceMode === "copy" },
+        runSetup,
+        ...(options.onStatus ? { onStatus: options.onStatus } : {}),
+        signal,
+      });
+      if (deps) session.depsCache = deps;
     } catch (error) {
       // Stopped here (a retry when start() already tried); anything left stays attached to the error for the runtime.
       await stopAfterFailedStart(session, error);
@@ -277,7 +331,7 @@ export class DockerLinuxBackend implements Backend, ImageCapability, DriftCapabi
    * doctor). Hosts without one get no `docker` command.
    */
   sweepAvailable(): Promise<boolean> {
-    return (this.#options.dockerOnPath ?? (() => dockerOnPath()))().catch(() => false);
+    return (this.#options.dockerOnPath ?? (() => dockerOnPath(undefined, this.#platform)))().catch(() => false);
   }
 
   /** Doctor audits Docker orphans only when the daemon answered. */

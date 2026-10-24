@@ -4,24 +4,37 @@
  * which makes the CLI ignore `DOCKER_CONTEXT` and the current context.
  */
 import { access, constants, stat } from "node:fs/promises";
-import { delimiter, join } from "node:path";
+import { posix, win32 } from "node:path";
 import type { CommandRunner, DockerEndpoint, RunOptions, RunResult } from "../../runner/types.ts";
+import { endpointProblem, endpointRemedy } from "./desktop.ts";
 
 /**
  * `true` when an executable `docker` file is on `PATH`. Looks at the file
  * system only and never runs anything, so hosts without Docker see no
- * `docker` command at all (e.g. at Pi startup).
+ * `docker` command at all (e.g. at Pi startup). On Windows the names come
+ * from `PATHEXT` (`docker.exe`) and `PATH` is `;`-separated.
  */
-export async function dockerOnPath(path: string | undefined = process.env.PATH): Promise<boolean> {
-  for (const dir of (path ?? "").split(delimiter)) {
+export async function dockerOnPath(
+  path: string | undefined = process.env.PATH ?? process.env.Path,
+  platform: NodeJS.Platform = process.platform,
+  pathExt: string | undefined = process.env.PATHEXT,
+): Promise<boolean> {
+  const windows = platform === "win32";
+  const p = windows ? win32 : posix;
+  const names = windows ? (pathExt || ".COM;.EXE;.BAT;.CMD").split(";").filter(Boolean).map((ext) => `docker${ext.toLowerCase()}`) : ["docker"];
+  for (const dir of (path ?? "").split(windows ? ";" : ":")) {
     if (!dir) continue;
-    const candidate = join(dir, "docker");
-    try {
-      if (!(await stat(candidate)).isFile()) continue;
-      await access(candidate, constants.X_OK);
-      return true;
-    } catch {
-      // Not here; keep looking.
+    for (const name of names) {
+      // Windows accepts either separator; keep the one the PATH entry uses.
+      const candidate = windows ? `${dir.replace(/[\\/]+$/, "")}${dir.includes("\\") ? "\\" : "/"}${name}` : p.join(dir, name);
+      try {
+        if (!(await stat(candidate)).isFile()) continue;
+        // Windows has no execute bit; existence is what counts there.
+        await access(candidate, windows ? constants.F_OK : constants.X_OK);
+        return true;
+      } catch {
+        // Not here; keep looking.
+      }
     }
   }
   return false;
@@ -69,21 +82,28 @@ export interface EndpointSource {
   dockerHost?: string;
 }
 
+/** Client platform whose endpoint kinds are accepted (default: Linux semantics, as on remote hosts). */
+export type EndpointPlatform = NodeJS.Platform;
+
 /**
  * Resolves the Docker endpoint the CLI would use: `DOCKER_HOST` when set
  * (it overrides contexts), otherwise the current context (honouring
- * `DOCKER_CONTEXT`) via `docker context inspect`. Only `unix://` endpoints are
- * accepted (spec §4.1); remote contexts and remote `DOCKER_HOST` values fail.
+ * `DOCKER_CONTEXT`) via `docker context inspect`. Only local endpoints are
+ * accepted (spec §4.1): `unix://` sockets, and on Windows (`platform:
+ * "win32"`, Docker Desktop) local named pipes; remote contexts and remote
+ * `DOCKER_HOST` values fail. Without `platform` the Linux rule applies (the
+ * remote backends resolve endpoints on a Linux host).
  *
  * @throws EndpointError with a user-facing explanation.
  */
 export async function resolveEndpoint(
   runner: CommandRunner,
-  options: { signal?: AbortSignal; timeoutMs?: number; source?: EndpointSource } = {},
+  options: { signal?: AbortSignal; timeoutMs?: number; source?: EndpointSource; platform?: EndpointPlatform } = {},
 ): Promise<DockerEndpoint> {
+  const platform = options.platform ?? "linux";
   const dockerHost = options.source ? options.source.dockerHost : process.env.DOCKER_HOST;
   if (dockerHost !== undefined && dockerHost !== "") {
-    return acceptEndpoint("DOCKER_HOST", dockerHost);
+    return acceptEndpoint("DOCKER_HOST", dockerHost, platform);
   }
   const result = await runner.run(["docker", "context", "inspect", "--format", "{{json .}}"], {
     timeoutMs: options.timeoutMs ?? 10_000,
@@ -100,16 +120,14 @@ export async function resolveEndpoint(
   const name = typeof context.Name === "string" && context.Name ? context.Name : "default";
   const host = context.Endpoints?.docker?.Host;
   if (typeof host !== "string" || host === "") throw new EndpointError(`context "${name}" has no Docker endpoint`);
-  return acceptEndpoint(name, host);
+  return acceptEndpoint(name, host, platform);
 }
 
-function acceptEndpoint(context: string, host: string): DockerEndpoint {
-  if (!host.startsWith("unix://") || host.length <= "unix://".length) {
+function acceptEndpoint(context: string, host: string, platform: EndpointPlatform): DockerEndpoint {
+  const problem = endpointProblem(platform, host);
+  if (problem) {
     const origin = context === "DOCKER_HOST" ? "DOCKER_HOST" : `context "${context}"`;
-    throw new EndpointError(
-      `${origin} points to ${host}; only a local Docker daemon on a unix:// socket is supported. ` +
-        (context === "DOCKER_HOST" ? "Unset DOCKER_HOST" : "Run: docker context use default"),
-    );
+    throw new EndpointError(`${origin} points to ${host}; ${problem}. ${endpointRemedy(platform, context === "DOCKER_HOST" ? "DOCKER_HOST" : "context")}`);
   }
   return { context, host };
 }

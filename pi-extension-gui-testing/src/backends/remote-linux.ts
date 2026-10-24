@@ -78,6 +78,8 @@ export class RemoteLinuxBackend
       // Spec §4.2a/§4.8: remote-linux runs the project's setup on the remote host.
       allowExec: true,
       resync: prepared.resync,
+      // Spec §4.8: installs go below <session dir>/deps (pip --target, npm prefix), which the cache fills and packs.
+      depsDir: `${prepared.remote.dir}/deps`,
       ...(heartbeat !== undefined ? { heartbeatTimeoutMs: heartbeat, heartbeatIntervalMs: Math.max(250, Math.floor(heartbeat / 3)) } : {}),
       ...(this.options.readyTimeoutMs !== undefined ? { readyTimeoutMs: this.options.readyTimeoutMs } : {}),
     });
@@ -85,7 +87,7 @@ export class RemoteLinuxBackend
     try {
       options.onStatus?.(`starting the helper on ${prepared.destination}`);
       await session.start(options.signal);
-      await this.runSetup(session, options, prepared.remote.workspace, tail);
+      await this.runSetup(session, options, prepared.remote.workspace, tail, { base: `helper ${this.version}`, writable: true });
     } catch (error) {
       await stopAfterFailedStart(session, error);
       throw error;

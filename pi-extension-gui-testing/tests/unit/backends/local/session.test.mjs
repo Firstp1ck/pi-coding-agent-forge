@@ -196,7 +196,7 @@ test("capabilities: host support, smoke app, sweep gate, reset texts, drift vers
   assert.equal(await b.sweepAvailable({ startup: true }), true);
   assert.equal(await backend(host, localSpawner(host), { platform: "darwin" }).sweepAvailable({ startup: true }), false);
   assert.match(b.resetSummary, /installs nothing/);
-  assert.deepEqual(await b.currentVersions(), { "package.version": "0.1.0", "pi.version": "1.4.0", protocol: "1", "python.version": "3.11.15" });
+  assert.deepEqual(await b.currentVersions(), { "package.version": "0.1.0", "pi.version": "1.4.0", protocol: "2", "python.version": "3.11.15" });
   assert.deepEqual(await b.auditOrphans(new AbortController().signal), []);
 });
 
@@ -207,7 +207,7 @@ test("through the runtime and tools: gui_launch and gui_stop on local-linux, doc
   writeFileSync(join(host.project, ".pi", "gui.json"), JSON.stringify({ launch: { cmd: "python3", args: ["app.py"] }, setup: ["make deps"] }));
   const globalConfigPath = join(host.root, "agent", "gui", "config.json");
   mkdirSync(join(host.root, "agent", "gui"), { recursive: true });
-  const verified = { verifiedAt: "2026-10-24T00:00:00.000Z", toolVersions: { "package.version": "0.1.0", "pi.version": "1.4.0", protocol: "1", "python.version": "3.11.15" }, checksPassed: ["linux.xvfb"] };
+  const verified = { verifiedAt: "2026-10-24T00:00:00.000Z", toolVersions: { "package.version": "0.1.0", "pi.version": "1.4.0", protocol: "2", "python.version": "3.11.15" }, checksPassed: ["linux.xvfb"] };
   writeFileSync(globalConfigPath, JSON.stringify({ version: 1, backend: "local-linux", verified: { "local-linux": verified } }));
   const entry = {
     id: "local-linux",

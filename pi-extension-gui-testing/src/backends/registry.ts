@@ -49,6 +49,8 @@ export interface BackendFactoryContext {
    * state files here, so tests with a private config path never read the real agent dir.
    */
   configDir?: string;
+  /** Root of the dependency cache (`RuntimeOptions.depsCacheRoot`; tests); backends default to `~/.cache/pi-extension-gui-testing/deps`. */
+  depsCacheRoot?: string;
   /** `RuntimeOptions.backendOptions[id]`; the backend defines its type. */
   options: unknown;
   /** Every runtime backend option, for the M1 option names. */
@@ -128,12 +130,13 @@ export class BackendRegistry {
  */
 const BUILT_IN: { [K in ImplementedBackendId]: Omit<BackendEntry, "id"> } = {
   "docker-linux": {
-    description: "Linux apps in a local Docker container with a virtual display (needs rootful Docker)",
+    description: "Linux apps in a local Docker container with a virtual display (rootful Docker Engine, or Docker Desktop on macOS and Windows)",
     hostSupport: DOCKER_LINUX_HOST_SUPPORT,
     targets: ["linux"],
     create: (ctx) =>
       new DockerLinuxBackend({
         ownerLabel: ctx.ownerLabel,
+        ...(ctx.depsCacheRoot ? { depsCacheRoot: ctx.depsCacheRoot } : {}),
         ...ctx.runtimeOptions.docker,
         ...(ctx.options as Partial<DockerLinuxOptions> | undefined),
         ...(ctx.runtimeOptions.dockerOnPath ? { dockerOnPath: ctx.runtimeOptions.dockerOnPath } : {}),
@@ -159,6 +162,7 @@ const BUILT_IN: { [K in ImplementedBackendId]: Omit<BackendEntry, "id"> } = {
     create: (ctx) =>
       new RemoteLinuxBackend({
         ownerLabel: ctx.ownerLabel,
+        ...(ctx.depsCacheRoot ? { depsCacheRoot: ctx.depsCacheRoot } : {}),
         ...(ctx.options as Partial<RemoteLinuxOptions> | undefined),
         ...(ctx.tmpRoot ? { tmpRoot: ctx.tmpRoot } : {}),
         ...(ctx.procRoot ? { procRoot: ctx.procRoot } : {}),
@@ -171,6 +175,7 @@ const BUILT_IN: { [K in ImplementedBackendId]: Omit<BackendEntry, "id"> } = {
     create: (ctx) =>
       new RemoteLinuxDockerBackend({
         ownerLabel: ctx.ownerLabel,
+        ...(ctx.depsCacheRoot ? { depsCacheRoot: ctx.depsCacheRoot } : {}),
         ...(ctx.options as Partial<RemoteLinuxDockerOptions> | undefined),
         ...(ctx.tmpRoot ? { tmpRoot: ctx.tmpRoot } : {}),
         ...(ctx.procRoot ? { procRoot: ctx.procRoot } : {}),
