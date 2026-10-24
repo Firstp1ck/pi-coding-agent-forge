@@ -220,3 +220,42 @@ for (const stage of ["temp file", "old generation's marker", "old generation"]) 
     assert.ok(!(await lockFiles(dir)).some((f) => f === ".lock.1" || f === ".lock.1.free"), `${await lockFiles(dir)}`);
   });
 }
+
+test("a directory read failing right after the lock is published does not leave the lock held", async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), "gui-lock-postpublish-"));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const fsp = await import("node:fs/promises");
+  const { syncBuiltinESMExports } = await import("node:module");
+  const fsDefault = fsp.default;
+  const link = fsDefault.link;
+  const readdirOriginal = fsDefault.readdir;
+  let published = false;
+  let injected = false;
+  fsDefault.link = async (from, to) => {
+    const result = await link(from, to);
+    if (String(to).startsWith(join(dir, ".lock."))) published = true;
+    return result;
+  };
+  fsDefault.readdir = async (path, ...rest) => {
+    if (String(path) === dir && published && !injected) {
+      injected = true;
+      throw Object.assign(new Error("injected post-publish readdir EIO"), { code: "EIO" });
+    }
+    return readdirOriginal(path, ...rest);
+  };
+  syncBuiltinESMExports();
+  try {
+    await assert.rejects(new LedgerLock(dir, { timeoutMs: 100 }).acquire(), { code: "EIO" });
+  } finally {
+    fsDefault.link = link;
+    fsDefault.readdir = readdirOriginal;
+    syncBuiltinESMExports();
+  }
+  assert.equal(injected, true);
+  // Neither this process nor another one is locked out afterwards.
+  const again = await new LedgerLock(dir, { timeoutMs: 1_000 }).acquire();
+  await again();
+  const child = spawn(process.execPath, ["--experimental-strip-types", "--no-warnings", "--input-type=module", "-e",
+    `import { LedgerLock } from ${JSON.stringify(new URL("../../../../src/backends/cua/ledger-lock.ts", import.meta.url).href)}; const r = await new LedgerLock(${JSON.stringify(dir)}, { timeoutMs: 2000 }).acquire(); await r();`], { stdio: "ignore" });
+  assert.equal(await new Promise((resolve) => child.once("exit", resolve)), 0);
+});

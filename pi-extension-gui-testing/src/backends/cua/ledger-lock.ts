@@ -219,7 +219,16 @@ export class LedgerLock {
       const holder: Holder = { version: 1, pid: process.pid, processStartTime, bootId, token: randomBytes(8).toString("hex") };
       if (!(await this.#take(next, holder))) continue;
       // A generation removed by a newer holder can be taken again: only the highest one holds the lock.
-      if ((await this.#generations()).some((g) => g > next)) {
+      let newer: boolean;
+      try {
+        newer = (await this.#generations()).some((g) => g > next);
+      } catch (error) {
+        // Published but not returned: free it now, or owe its release so this process's next acquisition
+        // settles it. Either way the failure must not leave the lock held until the process exits.
+        await this.#markFree(next).catch(() => owed.set(next, holder.token));
+        throw error;
+      }
+      if (newer) {
         // Below the top it holds nothing; a copy left by a failed removal goes with the next holder's cleanup.
         await rm(this.#file(next), { force: true }).catch(() => undefined);
         continue;

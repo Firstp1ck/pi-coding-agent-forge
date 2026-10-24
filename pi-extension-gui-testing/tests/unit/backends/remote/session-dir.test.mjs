@@ -6,6 +6,7 @@
  * bounded exit-handler argv.
  */
 import { test } from "node:test";
+import { randomBytes } from "node:crypto";
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { lstat, mkdir, mkdtemp, readFile, rm, stat, symlink, utimes, writeFile } from "node:fs/promises";
@@ -26,6 +27,9 @@ import { RemoteResources } from "../../../../src/backends/remote/resources.ts";
 import { loopbackSsh } from "../../transport/ssh/fake-ssh.mjs";
 import { BOOT, fakeProc } from "../fakes.mjs";
 
+// Tags of this run only: suites running at once must never match each other's processes.
+const TAG = randomBytes(8).toString("hex");
+const OTHER_TAG = randomBytes(8).toString("hex");
 const OWNER_DEAD = `c1:999999:123:${BOOT}`;
 const OWNER_ALIVE = `c2:4321:777:${BOOT}`;
 const OWNER_FOREIGN = "c3:55:66:ffffffff-0000-0000-0000-000000000000";
@@ -318,7 +322,7 @@ async function procId(pid) {
 async function writeLock(displays, display, fields) {
   await mkdir(displays, { recursive: true, mode: 0o700 });
   const bootId = (await readFile("/proc/sys/kernel/random/boot_id", "utf8")).trim();
-  const record = { version: 1, display, helper: "999999:10", bootId, tag: "0123456789abcdef", runtimeDir: "", workspace: "", createdAt: new Date().toISOString(), xvfbPid: null, infra: {}, ...fields };
+  const record = { version: 1, display, helper: "999999:10", bootId, tag: TAG, runtimeDir: "", workspace: "", createdAt: new Date().toISOString(), xvfbPid: null, infra: {}, ...fields };
   const sorted = Object.fromEntries(Object.keys(record).sort().map((k) => [k, record[k]]));
   const path = join(displays, `display-${display}.lock`);
   await writeFile(path, `${JSON.stringify(sorted, null, 0).replaceAll('":', '": ').replaceAll(',"', ', "')}\n`, { mode: 0o600 });
@@ -390,9 +394,9 @@ test("W9: a forced removal also removes the dead helper's display lock and its X
   await writeFile(xlock, "999998\n");
   t.after(() => rm(xlock, { force: true }));
   // A crashed helper: its lock remains, and an app it started still runs with the session tag.
-  const app = spawn("sleep", ["60"], { env: { PATH: process.env.PATH, PI_GUI_TAG: "0123456789abcdef" }, stdio: "ignore", detached: true });
+  const app = spawn("sleep", ["60"], { env: { PATH: process.env.PATH, PI_GUI_TAG: TAG }, stdio: "ignore", detached: true });
   t.after(() => app.kill("SIGKILL"));
-  const unrelated = spawn("sleep", ["600"], { env: { PATH: process.env.PATH, PI_GUI_TAG: "0123456789abcdee" }, stdio: "ignore", detached: true });
+  const unrelated = spawn("sleep", ["600"], { env: { PATH: process.env.PATH, PI_GUI_TAG: OTHER_TAG }, stdio: "ignore", detached: true });
   t.after(() => unrelated.kill("SIGKILL"));
   const lock = await writeLock(remote.displays, display, { runtimeDir: remote.run, workspace: remote.workspace, xvfbPid: 999998, infra: { xvfb: "999998:5" } });
   // Another session's lock (live helper) is never touched.
@@ -487,7 +491,7 @@ test("X5: display lock records are parsed as JSON: compact, pretty, and reordere
   const formats = {
     compact: (r) => JSON.stringify(r),
     pretty: (r) => JSON.stringify(r, null, 2),
-    reordered: (r) => `{ "infra" : { } ,\t"tag":"0123456789abcdef", "runtimeDir" :"${r.runtimeDir}" , "helper": "${r.helper}", "bootId": "${r.bootId}", "display": ${r.display}, "extra": [1, {"runtimeDir": "/nope"}, null, true, -1.5e3] }`,
+    reordered: (r) => `{ "infra" : { } ,\t"tag":"${TAG}", "runtimeDir" :"${r.runtimeDir}" , "helper": "${r.helper}", "bootId": "${r.bootId}", "display": ${r.display}, "extra": [1, {"runtimeDir": "/nope"}, null, true, -1.5e3] }`,
     escaped: (r) => JSON.stringify(r).replace(/\//g, "\\/").replace("run", "\\u0072un"),
   };
   let display = 9100;
@@ -496,7 +500,7 @@ test("X5: display lock records are parsed as JSON: compact, pretty, and reordere
     await mkdir(join(base, "displays"), { recursive: true, mode: 0o700 });
     await mkdir(join(base, name), { mode: 0o700 });
     const lock = join(base, "displays", `display-${++display}.lock`);
-    const record = { version: 1, helper: "999999:10", bootId, tag: "0123456789abcdef", runtimeDir: join(base, name, "run"), display, infra: {} };
+    const record = { version: 1, helper: "999999:10", bootId, tag: TAG, runtimeDir: join(base, name, "run"), display, infra: {} };
     await writeFile(lock, `${render(record)}\n`, { mode: 0o600 });
     assert.match(call(AUDIT_SCRIPT, [name]).stdout, new RegExp(`^lock=${lock}$`, "m"), `${format}: the audit attributes the lock`);
     call(REMOVE_SCRIPT, ["fast", name]);

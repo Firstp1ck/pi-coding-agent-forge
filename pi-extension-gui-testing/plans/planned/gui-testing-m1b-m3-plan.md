@@ -119,6 +119,11 @@ Accepted: BB1 post-commit stale-copy removal failure in `claimKept` loses a comm
 
 Accepted: CC1 unreadable/invalid current ledger copy treated as absent → stale kept copy claimable by a second session (fail closed); CC2 lock stuck for the process lifetime after repeated release failures (same process must be able to finish releasing its own generation later); CC3 acquisition GC failures after publishing a generation abandon a live lock (best-effort or release before rejecting); CC4 `/gui-reset` reconcile drops audit failures returned as leftovers. Fix CC-r1 (`claude-opus-5-5`, handoff `plans/handoffs/post-m1-CC.md`): unreadable copies make the record unknown (never claimed or overwritten, reported with a manual remedy); owed lock releases are retried by the same process; post-publish lock GC is best-effort; reset keeps audit failures. The worker accidentally deleted `src/` mid-task and restored it from HEAD before re-applying its edits; owner confirmed only the four intended `src` files differ from HEAD. Owner also gave the remote symlink-root test its own fake uid (the shared `/tmp/pi-gui-testing-<uid>` fallback collided between concurrent suites). Owner rerun: concurrent `npm run check` + Node 22 suite ×2 → 562/562 each. Round 6 revalidation launched (P-A6, P-B6).
 
+| P-A6 | Pi / `openai-codex/gpt-6.1-sol` (xhigh), seat A | `…gui-testing-post-m1-review-A-r6` | completed: **ready after fixes**; CC1/CC3 + owed release fixed; 1 non-blocking (DD1) |
+| P-B6 | Pi / `openai-codex/gpt-6.1-sol` (xhigh), seat B | `…gui-testing-post-m1-review-B-r6` | completed: **not ready**; CC2/CC4 fixed; DD1 rated blocking; 1 non-blocking test isolation item (DD2) |
+
+Owner fixes (direct, `claude-opus-5-5`): DD1 a directory read failing after the lock generation is published frees it or records an owed release before rethrowing (test fails before / passes after); DD2 remote session-dir tests use per-run random tags; DD3 runner SIGKILL test gives the child time to install its handler under load (seat A saw SIGTERM). Owner rerun: concurrent `npm run check` + Node 22 suite ×2 → 563/563 each; no leaked sleepers. Round 7 revalidation launched (P-A7, P-B7).
+
 ## 8. Open live verification
 
 Filled in at completion.
