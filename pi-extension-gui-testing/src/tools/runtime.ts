@@ -7,9 +7,9 @@
  */
 import { randomBytes } from "node:crypto";
 import { mkdir } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import type { Backend, Session, SessionStartOptions } from "../backend.ts";
-import { sweepAllowed, type RuntimeBackend, type SweepContext } from "../backends/capabilities.ts";
+import { hasCost, sweepAllowed, type RuntimeBackend, type SweepContext } from "../backends/capabilities.ts";
 import { DEFAULT_REGISTRY, type BackendOptions, type BackendRegistry } from "../backends/registry.ts";
 import { startLeftovers } from "../backends/start-failure.ts";
 import { DEFAULT_PROC_ROOT, createOwnerIdentity } from "../cleanup/identity.ts";
@@ -17,10 +17,11 @@ import { installExitCleanup } from "../cleanup/exit.ts";
 import { createSessionDir, type SessionDir } from "../cleanup/session-dir.ts";
 import { auditClientOrphans, auditSession, sweepClientOrphans, type SweepReport } from "../cleanup/sweep.ts";
 import { loadConfigSources, resolveConfig } from "../config/load.ts";
-import type { BackendId, GlobalConfig, ResolvedConfig } from "../config/types.ts";
+import { DEFAULTS, globalConfigPath, type BackendId, type GlobalConfig, type ResolvedConfig, type UsageCheckConfig } from "../config/types.ts";
 import { notSetUpMessage, verificationState } from "../config/verified.ts";
 import { formatOwnerLabel, type OwnerLabel } from "../owner.ts";
 import type { Leftover, LogEvent } from "../protocol.ts";
+import type { pickHost } from "../setup/hosts.ts";
 import { UsageTracker } from "../usage/detector.ts";
 import { SessionRegistry } from "../usage/registry.ts";
 import type { UsageEvent, UsageWarning } from "../usage/types.ts";
@@ -101,6 +102,8 @@ export interface RuntimeOptions extends BackendOptions {
   now?: () => number;
   /** Bound for `shutdown()` to wait for session starts and setup runs in flight. */
   shutdownWaitMs?: number;
+  /** Replaces the `/gui-setup` SSH host picker (`pickHost` of `src/setup/hosts.ts`; unit tests). */
+  hostPicker?: typeof pickHost;
 }
 
 /** Default bound for `shutdown()` to wait for pending starts and setup runs. */
@@ -140,7 +143,14 @@ export type { RuntimeBackend } from "../backends/capabilities.ts";
 
 export class GuiRuntime {
   readonly options: RuntimeOptions;
-  readonly tracker = new UsageTracker();
+  /** `usageCheck` thresholds of the latest session start (read by the tracker on every call). */
+  #usageCheck: Required<UsageCheckConfig> = { ...DEFAULTS.usageCheck };
+  /**
+   * Usage and loop check (spec §8.1). Billing backends ({@link CostCapability},
+   * e.g. `cua`) feed the cost estimate; the cost thresholds are the
+   * `usageCheck` of the latest session start.
+   */
+  readonly tracker: UsageTracker;
   readonly #sessions = new Map<string, LiveSession>();
   readonly #backends = new Map<BackendId, RuntimeBackend>();
   /** Removal argv of sessions that are still starting (bound to their endpoint, from the backend), for the exit handler. */
@@ -160,6 +170,24 @@ export class GuiRuntime {
 
   constructor(options: RuntimeOptions = {}) {
     this.options = options;
+    const runtime = this;
+    this.tracker = new UsageTracker({
+      estimateCost: (usage) => {
+        const backend = this.#backends.get(usage.backend as BackendId);
+        return backend && hasCost(backend) ? backend.estimateCost(usage) : undefined;
+      },
+      get warnSessionCostUsd() {
+        return runtime.#usageCheck.warnSessionCostUsd;
+      },
+      get warnDailyCostUsd() {
+        return runtime.#usageCheck.warnDailyCostUsd;
+      },
+    });
+  }
+
+  /** Directory of the global config; backends keep their state files there. */
+  get configDir(): string {
+    return dirname(this.options.globalConfigPath ?? globalConfigPath());
   }
 
   get procRoot(): string {
@@ -206,6 +234,7 @@ export class GuiRuntime {
             ownerLabel: () => this.ownerLabel(),
             ...(this.options.tmpRoot ? { tmpRoot: this.options.tmpRoot } : {}),
             ...(this.options.procRoot ? { procRoot: this.options.procRoot } : {}),
+            configDir: this.configDir,
             runtimeOptions: this.options,
           });
       this.#backends.set(id, backend);
@@ -471,7 +500,10 @@ export class GuiRuntime {
       await this.closeSession(id);
       throw abortError("Pi is shutting down; the GUI session that was starting was stopped");
     }
-    if (!transient) this.tracker.startSession(id, options.backend);
+    if (!transient) {
+      this.#usageCheck = { ...options.config.usageCheck };
+      this.tracker.startSession(id, options.backend);
+    }
     this.touch(id);
     return live;
   }

@@ -126,13 +126,24 @@ export class RemoteDockerSession implements Session {
   readonly backend: BackendId;
   readonly sync?: SyncSummary;
   readonly workspacePath: string;
+  readonly workspaceDescription?: string;
   readonly docker: DockerSession;
   readonly #resources: RemoteResources;
   readonly #stop: RetryableStop;
   readonly #resync?: (signal?: AbortSignal) => Promise<SyncReport>;
   #closed = false;
 
-  constructor(options: { docker: DockerSession; resources: RemoteResources; sync?: SyncSummary; resync?: (signal?: AbortSignal) => Promise<SyncReport> }) {
+  readonly #afterStop?: () => Promise<Leftover[]>;
+
+  constructor(options: {
+    docker: DockerSession;
+    resources: RemoteResources;
+    sync?: SyncSummary;
+    resync?: (signal?: AbortSignal) => Promise<SyncReport>;
+    workspaceDescription?: string;
+    /** Runs after the container and the remote resources are gone (`remote.purgeTooling`: remove the base image). */
+    afterStop?: () => Promise<Leftover[]>;
+  }) {
     this.docker = options.docker;
     this.#resources = options.resources;
     this.id = options.docker.id;
@@ -140,9 +151,12 @@ export class RemoteDockerSession implements Session {
     this.workspacePath = options.docker.workspacePath ?? "/workspace";
     if (options.sync) this.sync = options.sync;
     if (options.resync) this.#resync = options.resync;
+    if (options.workspaceDescription) this.workspaceDescription = options.workspaceDescription;
+    if (options.afterStop) this.#afterStop = options.afterStop;
     this.#stop = new RetryableStop(async () => {
       const leftovers = await this.docker.stop().catch((e: Error): Leftover[] => [{ kind: "session", id: this.id, detail: `container stop failed: ${e.message}` }]);
       leftovers.push(...(await this.#resources.teardown()));
+      if (leftovers.length === 0 && this.#afterStop) leftovers.push(...(await this.#afterStop().catch((e: Error): Leftover[] => [{ kind: "image", id: this.id, detail: e.message }])));
       return leftovers;
     });
   }

@@ -172,3 +172,13 @@ test("verified state: mark, read, stale on tool-version change, unverify", async
   ({ global } = await loadConfigSources(root, globalPath));
   assert.equal(global.verified["docker-linux"], undefined);
 });
+
+test("I: remote.purgeTooling is validated and resolved per field (local over global)", async () => {
+  const { validatePersonalConfig } = await import("../../../src/config/validate.ts");
+  const { resolveConfig } = await import("../../../src/config/load.ts");
+  assert.deepEqual(validatePersonalConfig({ remote: { host: "raspi5", purgeTooling: true } }, "x.json").config.remote, { host: "raspi5", purgeTooling: true });
+  assert.throws(() => validatePersonalConfig({ remote: { purgeTooling: "yes" } }, "x.json"), /remote\.purgeTooling/);
+  const sources = { shared: {}, local: { remote: { host: "lab" } }, global: { version: 1, verified: {}, remote: { host: "g", purgeTooling: true } }, warnings: [] };
+  assert.deepEqual(resolveConfig(sources).remote, { host: "lab", purgeTooling: true });
+  assert.equal(resolveConfig({ ...sources, global: { version: 1, verified: {} }, local: {} }).remote, undefined);
+});

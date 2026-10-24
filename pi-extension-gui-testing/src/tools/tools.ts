@@ -8,6 +8,7 @@ import type { ExtensionContext, ToolDefinition } from "@earendil-works/pi-coding
 import { Type, type Static, type TSchema } from "typebox";
 import { SessionError } from "../backend.ts";
 import { hasDrift } from "../backends/capabilities.ts";
+import { hasRemoteHost } from "../backends/remote/host.ts";
 import { decodeTreeDump } from "../backends/response.ts";
 import type { TargetOs } from "../config/types.ts";
 import { verificationState } from "../config/verified.ts";
@@ -201,6 +202,8 @@ async function launchApp(params: Static<typeof LAUNCH_PARAMS>, rt: GuiRuntime, c
   const target = params.target ?? targets[0] ?? "linux";
   const supported = rt.registry.entry(backendId)?.targets ?? ["linux"];
   if (!supported.includes(target as TargetOs)) throw new Error(`backend "${backendId}" runs ${targetList(supported)} apps only; target "${target}" is not available on it`);
+  // Remote backends observe the configured host, so a changed remote.host is drift (run /gui-doctor).
+  if (hasRemoteHost(backend)) backend.useHost(config.remote?.host ?? global.verified[backendId]?.inputs?.host);
   if (hasDrift(backend)) {
     let current: Record<string, string>;
     try {
@@ -242,6 +245,7 @@ async function launchApp(params: Static<typeof LAUNCH_PARAMS>, rt: GuiRuntime, c
     );
   }
   const sync = live.session.sync;
+  const backendWarnings = [...(live.session.warnings ?? [])];
   // gui_launch always repeats the config warnings: it starts the session the config describes.
   rt.takeConfigWarnings(config.warnings);
   const configWarnings = config.warnings;
@@ -253,12 +257,13 @@ async function launchApp(params: Static<typeof LAUNCH_PARAMS>, rt: GuiRuntime, c
         text([
           `session ${live.id} started; app pid ${launched.pid} (${cmd}${args.length ? ` ${args.join(" ")}` : ""})`,
           `arch: ${live.session.arch}`,
-          `workspace: ${config.shared.workspaceMode === "copy" ? "writable filtered copy" : "read-only mount"} at ${workspace}; network: ${config.shared.network}`,
+          `workspace: ${live.session.workspaceDescription ?? (config.shared.workspaceMode === "copy" ? "writable filtered copy" : "read-only mount")} at ${workspace}; network: ${config.shared.network}`,
           sync ? `sync: ${sync.files} files, ${sync.bytes} bytes, ${sync.excluded} excluded` : undefined,
+          backendWarnings.length ? `${backendId} warnings:\n${backendWarnings.map((w) => `- ${w}`).join("\n")}` : undefined,
           windows.length ? `windows:\n${windows.join("\n")}` : "no window yet; use gui_wait for: window",
         ]),
       ],
-      details: { session: live.id, arch: live.session.arch, pid: launched.pid, windows: launched.windows, ...(sync ? { sync } : {}) },
+      details: { session: live.id, arch: live.session.arch, pid: launched.pid, windows: launched.windows, ...(sync ? { sync } : {}), ...(backendWarnings.length ? { backendWarnings } : {}) },
     },
     backendId,
     warnings,
@@ -275,7 +280,7 @@ export function createGuiTools(runtime: GuiRuntime): ToolDefinition<TSchema, Rec
       label: "GUI launch",
       description:
         "Start an isolated GUI session (never on the user's desktop) and launch an app in it. Defaults come from .pi/gui.json (launch, setup, workspaceMode). " +
-        "Returns the session id, backend, architecture, and windows. The project is mounted read-only at /workspace unless workspaceMode is copy.",
+        "Returns the session id, backend, architecture, windows, and where the workspace is and whether the app can write to it (depends on the backend and workspaceMode).",
       promptSnippet: "Launch a GUI app in an isolated background session to inspect, operate, and screenshot it",
       promptGuidelines: [
         "Use gui_launch → gui_snapshot → gui_act by ref → gui_screenshot to check GUI work; use coordinates only when an element has no ref (coverage none, e.g. Tk).",

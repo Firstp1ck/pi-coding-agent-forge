@@ -55,7 +55,7 @@ test("parseSetupArgs rejects bad input with clear messages", () => {
 test("parsers for the other commands", () => {
   assert.deepEqual(parseDoctorArgs(""), {});
   assert.deepEqual(parseDoctorArgs("docker-linux"), { backend: "docker-linux" });
-  assert.throws(() => parseDoctorArgs("--fix"), /\/gui-doctor: unknown flag --fix; valid flags: none/);
+  assert.throws(() => parseDoctorArgs("--fix"), /\/gui-doctor: unknown flag --fix; valid flags: --host/);
 
   assert.deepEqual(parseBackendArgs("docker-linux --project"), { backend: "docker-linux", project: true });
   assert.throws(() => parseBackendArgs(""), /missing backend/);
@@ -75,4 +75,17 @@ test("parsers for the other commands", () => {
   assert.throws(() => parseExportArgs("s1"), /missing destination/);
   assert.throws(() => parseExportArgs(""), /missing session and destination/);
   assert.throws(() => parseExportArgs("a b c"), /unexpected argument "c"/);
+});
+
+test("I: /gui-setup --cloud and --rate-usd-per-hour; /gui-doctor --host", () => {
+  const parsed = parseSetupArgs("cua --cloud gcp --rate-usd-per-hour 1.25 --accept-billing");
+  assert.equal(parsed.cloud, "gcp");
+  assert.equal(parsed.rateUsdPerHour, 1.25);
+  assert.equal(parsed.acceptBilling, true);
+  assert.throws(() => parseSetupArgs("cua --cloud azure"), /unknown cloud "azure"; valid clouds: aws, gcp, hetzner, modal/);
+  for (const bad of ["abc", "1e3", "-1", "1001"]) assert.throws(() => parseSetupArgs(`cua --rate-usd-per-hour=${bad}`), /--rate-usd-per-hour must be a number from 0 to 1000/, bad);
+  assert.equal(parseSetupArgs("remote-linux-docker --host raspi5 --purge-tooling").purgeTooling, true);
+  assert.deepEqual(parseDoctorArgs("remote-linux --host raspi5"), { backend: "remote-linux", host: "raspi5" });
+  assert.deepEqual(parseDoctorArgs("--host=user@box"), { host: "user@box" });
+  assert.throws(() => parseDoctorArgs("remote-linux --host"), /--host needs a value/);
 });

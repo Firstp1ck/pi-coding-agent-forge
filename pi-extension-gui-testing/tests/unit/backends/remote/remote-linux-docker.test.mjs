@@ -82,7 +82,7 @@ async function env(t, options = {}) {
   await mkdir(sessionDir, { mode: 0o700 });
   const recorded = [];
   const exitArgvs = [];
-  const start = (shared = {}) =>
+  const start = (shared = {}, extra = {}) =>
     backend.startSession({
       sessionId: "gui-dock0001",
       projectRoot: project,
@@ -93,6 +93,7 @@ async function env(t, options = {}) {
         usageCheck: { warnSessionCostUsd: 1, warnDailyCostUsd: 5 },
         keepSandbox: false,
         warnings: [],
+        ...extra,
       },
       ownerLabel: OWNER,
       recordResource: async (kind, id) => void recorded.push([kind, id]),
@@ -217,3 +218,89 @@ test("remote Docker orphans: dead owners of this boot are removed; foreign runni
   const audit = await e.backend.auditOrphans(new AbortController().signal);
   assert.ok(audit.every((l) => l.id !== "pi-gui-testing-alive"));
 });
+
+/** Base images on the fake remote: `image ls` lists them, `image rm -f` removes them (and `image inspect` then misses). */
+function baseImages(e, ids = ["sha256:base0001"]) {
+  const images = new Set(ids);
+  const removed = [];
+  e.docker.runner
+    .on((argv) => argv[0] === "docker" && argv.includes("image") && argv.includes("ls"), () => ({ stdout: [...images].map((i) => `${i}\n`).join("") }))
+    .on((argv) => argv[0] === "docker" && argv.includes("image") && argv.includes("rm"), (argv) => {
+      images.delete(argv.at(-1));
+      removed.push(argv.at(-1));
+      e.docker.state.imageMissing = images.size === 0;
+      return {};
+    });
+  return { images, removed };
+}
+
+test("I: remote.purgeTooling removes the base image after the session, and the next start rebuilds it", async (t) => {
+  const e = await env(t);
+  const images = baseImages(e);
+  const purge = { remote: { host: "raspi5", purgeTooling: true } };
+  const first = await e.start({ setup: [] }, purge);
+  assert.match(first.workspaceDescription, /^read-only mount of the copy synced to raspi5$/);
+  assert.deepEqual(images.removed, [], "nothing is purged while the session runs");
+  assert.deepEqual(await first.stop(), []);
+  assert.deepEqual(images.removed, ["sha256:base0001"], "the base image is removed after the session");
+  assert.equal(e.docker.state.containers.size, 0);
+  assert.equal(e.dirs.size, 0);
+
+  // The image is gone: the next start builds it on the host (the context streams over ssh) before the container starts.
+  let built = 0;
+  e.fake.onStream = async (decoded) => {
+    if (decoded.argv.includes("build")) {
+      built++;
+      images.images.add("sha256:base0002");
+      e.docker.state.imageMissing = false;
+    }
+    return { exitCode: 0, stdout: "Successfully tagged\n" };
+  };
+  const statuses = [];
+  const second = await e.backend.startSession({ ...(await secondStart(e, purge)), onStatus: (s) => statuses.push(s) });
+  assert.equal(built, 1);
+  assert.ok(statuses.some((s) => /building the base image on raspi5 \(purgeTooling removed it/.test(s)));
+  assert.deepEqual(await second.stop(), []);
+  assert.deepEqual(images.removed, ["sha256:base0001", "sha256:base0002"]);
+});
+
+test("I: without purgeTooling the base image stays; a failed purge is reported as a leftover of the stop", async (t) => {
+  const e = await env(t);
+  const images = baseImages(e);
+  const kept = await e.start({ setup: [] });
+  assert.deepEqual(await kept.stop(), []);
+  assert.deepEqual(images.removed, [], "tooling is kept by default (spec §7a.1)");
+
+  const failing = await e.start({ setup: [] }, { remote: { host: "raspi5", purgeTooling: true } });
+  e.docker.runner.on((argv) => argv[0] === "docker" && argv.includes("image") && argv.includes("rm"), { exitCode: 1, stderr: "conflict: image is being used by running container" });
+  const leftovers = await failing.stop();
+  assert.equal(leftovers.length, 1);
+  assert.equal(leftovers[0].kind, "image");
+  assert.match(leftovers[0].detail, /on raspi5: .*being used/);
+  assert.deepEqual(await failing.auditFootprint(), [], "the session itself left nothing");
+});
+
+/** Start options for a second session in the same env (fresh session dir and id). */
+async function secondStart(e, extra) {
+  const sessionDir = join(e.root, "pi-gui-testing-y");
+  await mkdir(sessionDir, { mode: 0o700 });
+  const project = join(e.root, "project");
+  return {
+    sessionId: "gui-dock0002",
+    projectRoot: project,
+    sessionDir,
+    config: {
+      shared: { targets: ["linux"], workspaceMode: "copy", network: "none", setup: [] },
+      limits: { maxConcurrentSessions: 2, idleTimeoutMinutes: 15 },
+      usageCheck: { warnSessionCostUsd: 1, warnDailyCostUsd: 5 },
+      keepSandbox: false,
+      warnings: [],
+      ...extra,
+    },
+    ownerLabel: OWNER,
+    recordResource: async () => {},
+    onLog: () => {},
+    signal: new AbortController().signal,
+    onExitCleanup: () => {},
+  };
+}

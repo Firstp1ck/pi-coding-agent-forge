@@ -180,7 +180,9 @@ test("/gui-backend requires a verified backend; /gui-usage and /gui-export repor
   assert.match(out.text(), /GUI testing backend is now docker-linux \(global config\)/);
   assert.equal(JSON.parse(await readFile(env.globalConfigPath, "utf8")).backend, "docker-linux");
   await byName["gui-backend"].handler("cua", env.ctx());
-  assert.match(out.text(), /backend "cua" is not available yet/);
+  assert.match(out.text(), /backend "cua" is not verified; run \/gui-setup cua first/);
+  await byName["gui-backend"].handler("docker-windows", env.ctx());
+  assert.match(out.text(), /backend "docker-windows" is not available yet/);
   await byName["gui-backend"].handler("--bogus", env.ctx());
   assert.match(out.text(), /\/gui-backend: unknown flag --bogus; valid flags: --project/);
 
@@ -504,7 +506,8 @@ test("P3: /gui-cleanup stops live sessions and sweeps even when .pi/gui.json is 
     await writeFile(join(env.project, ".pi", "gui.json"), "{ not json");
     await byName["gui-cleanup"].handler(args, ctx);
     const report = messages.at(-1).content;
-    assert.match(report, /GUI testing cleanup \(docker-linux\)/, `/gui-cleanup ${args}`);
+    // A broken config, or --all, cleans every backend; an explicit backend only that one.
+    assert.match(report, args === "docker-linux" ? /GUI testing cleanup \(docker-linux\)/ : /GUI testing cleanup \(docker-linux, local-linux, remote-linux, remote-linux-docker, cua\)/, `/gui-cleanup ${args}`);
     assert.match(report, new RegExp(`stopped sessions: ${session}`));
     assert.match(report, /warning: could not read the GUI testing config \(.*gui\.json.*malformed JSON/);
     assert.match(report, /Footprint audit: empty/);

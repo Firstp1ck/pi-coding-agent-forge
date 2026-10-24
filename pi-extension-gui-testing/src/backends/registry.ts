@@ -4,12 +4,20 @@
  * `Backend` contract plus the optional capabilities of
  * `./capabilities.ts`, so adding a backend is one module and one entry below.
  */
+import { dirname, join } from "node:path";
 import type { BackendId, ImplementedBackendId, TargetOs } from "../config/types.ts";
-import { IMPLEMENTED_BACKEND_IDS } from "../config/types.ts";
+import { globalConfigPath, IMPLEMENTED_BACKEND_IDS } from "../config/types.ts";
 import { notAvailableMessage } from "../config/verified.ts";
 import type { RuntimeBackend } from "./capabilities.ts";
+import { CUA_HOST_SUPPORT, CuaBackend, type CuaBackendOptions } from "./cua.ts";
+import { SandboxLedger } from "./cua/ledger.ts";
+import { CuaSettingsStore } from "./cua/settings.ts";
 import { DockerLinuxBackend, type DockerLinuxOptions } from "./docker-linux.ts";
 import { DOCKER_LINUX_HOST_SUPPORT, type HostSupport } from "./host-support.ts";
+import { LOCAL_LINUX_HOST_SUPPORT, LocalLinuxBackend, type LocalLinuxOptions } from "./local-linux.ts";
+import { RemoteLinuxDockerBackend, type RemoteLinuxDockerOptions } from "./remote-linux-docker.ts";
+import { RemoteLinuxBackend, type RemoteLinuxOptions } from "./remote-linux.ts";
+import { REMOTE_HOST_SUPPORT } from "./remote/host.ts";
 
 export type { RuntimeBackend } from "./capabilities.ts";
 export type { HostSupport } from "./host-support.ts";
@@ -35,6 +43,12 @@ export interface BackendFactoryContext {
   tmpRoot?: string;
   /** `/proc` root for owner liveness (tests); default `/proc`. */
   procRoot?: string;
+  /**
+   * Directory of the runtime's global config (`<agent dir>/gui`, or the
+   * directory of `RuntimeOptions.globalConfigPath`). Backends keep their own
+   * state files here, so tests with a private config path never read the real agent dir.
+   */
+  configDir?: string;
   /** `RuntimeOptions.backendOptions[id]`; the backend defines its type. */
   options: unknown;
   /** Every runtime backend option, for the M1 option names. */
@@ -125,6 +139,58 @@ const BUILT_IN: { [K in ImplementedBackendId]: Omit<BackendEntry, "id"> } = {
         ...(ctx.runtimeOptions.dockerOnPath ? { dockerOnPath: ctx.runtimeOptions.dockerOnPath } : {}),
         ...(ctx.tmpRoot ? { tmpRoot: ctx.tmpRoot } : {}),
       }),
+  },
+  "local-linux": {
+    description: "Linux apps on this machine under a private virtual display (needs Xvfb, never your desktop)",
+    hostSupport: LOCAL_LINUX_HOST_SUPPORT,
+    targets: ["linux"],
+    create: (ctx) =>
+      new LocalLinuxBackend({
+        ownerLabel: ctx.ownerLabel,
+        ...(ctx.options as Partial<LocalLinuxOptions> | undefined),
+        ...(ctx.tmpRoot ? { tmpRoot: ctx.tmpRoot } : {}),
+        ...(ctx.procRoot ? { procRoot: ctx.procRoot } : {}),
+      }),
+  },
+  "remote-linux": {
+    description: "Linux apps on your own SSH host under a private virtual display (synced copy of the project)",
+    hostSupport: REMOTE_HOST_SUPPORT,
+    targets: ["linux"],
+    create: (ctx) =>
+      new RemoteLinuxBackend({
+        ownerLabel: ctx.ownerLabel,
+        ...(ctx.options as Partial<RemoteLinuxOptions> | undefined),
+        ...(ctx.tmpRoot ? { tmpRoot: ctx.tmpRoot } : {}),
+        ...(ctx.procRoot ? { procRoot: ctx.procRoot } : {}),
+      }),
+  },
+  "remote-linux-docker": {
+    description: "Linux apps in a Docker container on your own SSH host (no local Docker needed)",
+    hostSupport: REMOTE_HOST_SUPPORT,
+    targets: ["linux"],
+    create: (ctx) =>
+      new RemoteLinuxDockerBackend({
+        ownerLabel: ctx.ownerLabel,
+        ...(ctx.options as Partial<RemoteLinuxDockerOptions> | undefined),
+        ...(ctx.tmpRoot ? { tmpRoot: ctx.tmpRoot } : {}),
+        ...(ctx.procRoot ? { procRoot: ctx.procRoot } : {}),
+      }),
+  },
+  cua: {
+    description: "Linux apps in a Cua sandbox in your own cloud account (AWS, Google Cloud, Hetzner, Modal; billed by that cloud)",
+    hostSupport: CUA_HOST_SUPPORT,
+    targets: ["linux"],
+    create: (ctx) => {
+      // The sandbox ledger and settings follow the runtime's config dir (not always the real agent dir).
+      const configDir = ctx.configDir ?? dirname(globalConfigPath());
+      return new CuaBackend({
+        ownerLabel: ctx.ownerLabel,
+        ledger: new SandboxLedger(join(configDir, "cua-sandboxes")),
+        settings: new CuaSettingsStore(join(configDir, "cua.json")),
+        ...(ctx.procRoot ? { procRoot: ctx.procRoot } : {}),
+        ...(ctx.options as Partial<CuaBackendOptions> | undefined),
+      });
+    },
   },
 };
 

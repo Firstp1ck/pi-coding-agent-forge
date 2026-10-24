@@ -28,6 +28,26 @@ import { deployFiles } from "./remote/deploy.ts";
 import { remoteDockerRuntimeChecks, identityEntries } from "./remote/docker-checks.ts";
 import { auditRemoteDockerOrphans, fetchRemotePathProbe, RemoteDockerSession, sweepRemoteDockerOrphans } from "./remote/docker.ts";
 import { PendingRemoteSession } from "./remote/resources.ts";
+import type { SshTransport } from "../transport/ssh/transport.ts";
+
+/** Removes every image labelled `pi-gui-testing.base` on `destination` through `runner` (a runner on that host). */
+export async function removeBaseImagesOn(runner: CommandRunner, destination: string, signal?: AbortSignal): Promise<{ removed: string[]; leftovers: Leftover[] }> {
+  const endpoint = await resolveEndpoint(runner, { ...(signal ? { signal } : {}), source: {} });
+  const list = await runDocker(runner, endpoint, ["image", "ls", "-q", "--no-trunc", "--filter", `label=${LABEL_BASE}`], { timeoutMs: 20_000, ...(signal ? { signal } : {}) });
+  if (list.exitCode !== 0) throw new Error(`docker image ls on ${destination} failed (${describeFailure(list)})`);
+  const ids = [...new Set(list.stdout.split("\n").map((l) => l.trim()).filter(Boolean))];
+  const removed: string[] = [];
+  const leftovers: Leftover[] = [];
+  for (const id of ids) {
+    const result = await runDocker(runner, endpoint, ["image", "rm", "-f", id], { timeoutMs: 60_000, ...(signal ? { signal } : {}) });
+    if (result.exitCode === 0) removed.push(id);
+    else leftovers.push({ kind: "image", id, detail: `on ${destination}: ${describeFailure(result)}` });
+  }
+  return { removed, leftovers };
+}
+
+/** Bound for removing the base image after a session (`remote.purgeTooling`). */
+const PURGE_TIMEOUT_MS = 90_000;
 
 /** The GTK 3 smoke app baked into the base image. */
 const IMAGE_SMOKE_APP = { cmd: "python3", args: ["/opt/pi-gui-testing/testapps/gtk3-smoke/app.py"] };
@@ -43,6 +63,8 @@ export class RemoteLinuxDockerBackend
 {
   readonly id: BackendId = "remote-linux-docker";
   readonly #docker: RemoteLinuxDockerOptions;
+  /** Running sessions per host; `remote.purgeTooling` removes the base image only after the last one. */
+  readonly #running = new Map<string, number>();
 
   constructor(options: RemoteLinuxDockerOptions) {
     super(options);
@@ -78,26 +100,17 @@ export class RemoteLinuxDockerBackend
 
   /** Builds the base image on the remote host; the build context (tooling only) streams over SSH. */
   async buildImage(signal: AbortSignal, onLine?: (line: string) => void): Promise<RunResult> {
-    const transport = this.oneShot(this.requireHost());
+    return this.#buildImageOn(this.oneShot(this.requireHost()), signal, onLine);
+  }
+
+  async #buildImageOn(transport: SshTransport, signal: AbortSignal, onLine?: (line: string) => void): Promise<RunResult> {
     const endpoint = await resolveEndpoint(transport.runner, { signal, source: {} });
     return buildBaseImage({ spawner: transport.remoteSpawner(), endpoint, signal, version: this.version, ...(onLine ? { onLine } : {}), ...(this.options.packageRoot ? { packageRoot: this.options.packageRoot } : {}) });
   }
 
   /** `/gui-reset`: removes every image labelled `pi-gui-testing.base` on the remote host. */
   async removeBaseImages(signal: AbortSignal): Promise<{ removed: string[]; leftovers: Leftover[] }> {
-    const runner = this.#remoteRunner();
-    const endpoint = await resolveEndpoint(runner, { signal, source: {} });
-    const list = await runDocker(runner, endpoint, ["image", "ls", "-q", "--no-trunc", "--filter", `label=${LABEL_BASE}`], { timeoutMs: 20_000, signal });
-    if (list.exitCode !== 0) throw new Error(`docker image ls on ${this.remoteHost} failed (${describeFailure(list)})`);
-    const ids = [...new Set(list.stdout.split("\n").map((l) => l.trim()).filter(Boolean))];
-    const removed: string[] = [];
-    const leftovers: Leftover[] = [];
-    for (const id of ids) {
-      const result = await runDocker(runner, endpoint, ["image", "rm", "-f", id], { timeoutMs: 60_000, signal });
-      if (result.exitCode === 0) removed.push(id);
-      else leftovers.push({ kind: "image", id, detail: `on ${this.remoteHost}: ${describeFailure(result)}` });
-    }
-    return { removed, leftovers };
+    return removeBaseImagesOn(this.#remoteRunner(), this.requireHost(), signal);
   }
 
   readonly resetSummary =
@@ -105,6 +118,7 @@ export class RemoteLinuxDockerBackend
   readonly resetNote = "system packages: setup installs none for remote-linux-docker; Docker on the remote host is yours and stays installed";
 
   async resetData(signal: AbortSignal): Promise<{ lines: string[]; leftovers: Leftover[] }> {
+    if (!this.remoteHost) return { lines: ["no SSH host is configured, so no remote base image was removed"], leftovers: [] };
     try {
       const images = await this.removeBaseImages(signal);
       return { lines: [`removed ${images.removed.length} base image(s) on ${this.remoteHost}`], leftovers: images.leftovers };
@@ -164,8 +178,10 @@ export class RemoteLinuxDockerBackend
     const { remote, resources, transport } = prepared;
     const { tail, onLog } = this.setupLog(options);
     let session: RemoteDockerSession | undefined;
+    const purge = config.remote?.purgeTooling === true;
     try {
       const endpoint = await resolveEndpoint(transport.runner, { signal, source: {} });
+      if (purge) await this.#ensureImage(transport, endpoint, prepared.destination, options);
       const name = containerName(options.sessionId);
       resources.docker = { host: endpoint.host, container: name };
       options.onExitCleanup?.(resources.exitArgv());
@@ -199,7 +215,33 @@ export class RemoteLinuxDockerBackend
           ...(heartbeat !== undefined ? { heartbeatTimeoutMs: heartbeat } : {}),
         },
       });
-      session = new RemoteDockerSession({ docker, resources, sync: prepared.sync, resync: prepared.resync });
+      const destination = prepared.destination;
+      let counted = false;
+      session = new RemoteDockerSession({
+        docker,
+        resources,
+        sync: prepared.sync,
+        resync: prepared.resync,
+        workspaceDescription: readOnly ? `read-only mount of the copy synced to ${destination}` : `writable copy synced to ${destination} (changes stay there)`,
+        ...(purge
+          ? {
+              afterStop: async () => {
+                if (counted) {
+                  counted = false;
+                  this.#count(destination, -1);
+                }
+                if ((this.#running.get(destination) ?? 0) > 0) return [];
+                const controller = new AbortController();
+                const timer = setTimeout(() => controller.abort(), PURGE_TIMEOUT_MS);
+                try {
+                  return (await removeBaseImagesOn(this.oneShot(destination).runner, destination, controller.signal)).leftovers;
+                } finally {
+                  clearTimeout(timer);
+                }
+              },
+            }
+          : {}),
+      });
       options.onExitCleanup?.(session.forceRemoveArgv());
       await options.recordResource("container", `${prepared.destination}:${name}`);
       options.onStatus?.(`starting the session container on ${prepared.destination}`);
@@ -210,10 +252,35 @@ export class RemoteLinuxDockerBackend
         throw new SessionError("ISOLATION", `the directory mounted at /workspace is not the synced session dir (device/inode ${remote.workspaceId} expected; exit ${same.exitCode}); the session was stopped`);
       }
       await this.runSetup(docker, options, "/workspace", tail);
+      if (purge) {
+        counted = true;
+        this.#count(destination, 1);
+      }
     } catch (error) {
       await stopAfterFailedStart(session ?? new PendingRemoteSession(options.sessionId, this.id, resources), error);
       throw error;
     }
     return session;
+  }
+
+  #count(destination: string, delta: number): void {
+    const next = (this.#running.get(destination) ?? 0) + delta;
+    if (next > 0) this.#running.set(destination, next);
+    else this.#running.delete(destination);
+  }
+
+  /** `remote.purgeTooling`: an earlier session removed the base image, so build it again when it is missing. */
+  async #ensureImage(transport: SshTransport, endpoint: Awaited<ReturnType<typeof resolveEndpoint>>, destination: string, options: SessionStartOptions): Promise<void> {
+    const { signal } = options;
+    const present = await runDocker(transport.runner, endpoint, ["image", "inspect", "--format", "{{.Id}}", this.imageTag], { timeoutMs: 20_000, signal });
+    if (present.exitCode === 0) return;
+    options.onStatus?.(`building the base image on ${destination} (purgeTooling removed it after the last session; this takes several minutes)`);
+    const built = await this.#buildImageOn(transport, signal, (line) => {
+      const trimmed = line.trim();
+      if (trimmed) options.onStatus?.(`building the base image on ${destination}: ${trimmed.slice(0, 100)}`);
+    });
+    if (built.exitCode !== 0 || built.timedOut) {
+      throw new SessionError("START_FAILED", `building the base image on ${destination} failed (${describeFailure(built)}); run /gui-doctor remote-linux-docker`);
+    }
   }
 }

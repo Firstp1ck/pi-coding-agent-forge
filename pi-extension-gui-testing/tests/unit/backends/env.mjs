@@ -64,6 +64,8 @@ export async function fakeEnv(t, options = {}) {
     dockerOnPath: async () => options.dockerOnPath ?? false,
     ...(options.manualClock ? { now: () => clock } : {}),
     ...options.runtime,
+    // Hermetic: a real `cua` on PATH is never asked (the other backends' sweeps need no tools or use tmpRoot).
+    backendOptions: { cua: { cuaOnPath: async () => false }, ...options.runtime?.backendOptions },
   });
   t.after(() => runtime.shutdown());
   const notes = [];

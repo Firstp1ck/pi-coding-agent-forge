@@ -76,6 +76,10 @@ export interface HelperSessionOptions {
   sync?: SyncSummary;
   /** Absolute path of the workspace as the helper sees it. */
   workspacePath?: string;
+  /** `Session.workspaceDescription`. */
+  workspaceDescription?: string;
+  /** `Session.warnings`. */
+  warnings?: readonly string[];
   onLog(event: LogEvent): void;
   readyTimeoutMs?: number;
   heartbeatIntervalMs?: number;
@@ -97,6 +101,8 @@ export class HelperSession implements Session {
   readonly backend: BackendId;
   readonly sync?: SyncSummary;
   readonly workspacePath?: string;
+  readonly workspaceDescription?: string;
+  readonly warnings?: readonly string[];
   #arch = "unknown";
   readonly #options: HelperSessionOptions;
   #child?: HelperProcess;
@@ -115,6 +121,8 @@ export class HelperSession implements Session {
     this.backend = options.backend;
     if (options.sync) this.sync = options.sync;
     if (options.workspacePath) this.workspacePath = options.workspacePath;
+    if (options.workspaceDescription) this.workspaceDescription = options.workspaceDescription;
+    if (options.warnings?.length) this.warnings = [...options.warnings];
   }
 
   get arch(): string {

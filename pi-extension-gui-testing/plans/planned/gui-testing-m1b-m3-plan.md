@@ -69,6 +69,8 @@ F ──► (L ∥ R ∥ C) ──► integration ──► D ──► integrat
 
 Owner rerun after L/R/C: `npm run check` → 416/416 twice (Node 26).
 
+Phase I (integration, `claude-opus-5-5`, handoff `plans/handoffs/post-m1-I.md`): all five backends registered; host resolution `--host` → `remote.host` → picker (UI only); doctor `--host`; `remote.purgeTooling` implemented; cua billing gate, `--cloud`, `--rate-usd-per-hour`, `--api-key-env` rejected; `Session.workspaceDescription?`/`warnings?`; flags of other backends refused. Owner rerun: 435/435 on Node 26 and 22; `pi -p /gui-doctor` for local-linux, cua, docker-linux exit 1 with report on stderr.
+
 ## 7. Reviews
 
 Not started.

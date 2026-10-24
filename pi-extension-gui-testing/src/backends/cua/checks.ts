@@ -206,7 +206,7 @@ export function cuaChecks(options: CuaCheckOptions): Check[] {
       required: true,
       dependsOn: ["cua.cloud"],
       async run(ctx) {
-        const requested = [...new Set([...(await targets(ctx.projectRoot)), "linux" as TargetOs])];
+        const requested = [...new Set([...(ctx.targets ?? (await targets(ctx.projectRoot))), "linux" as TargetOs])];
         const refused = requested.map(targetRefusal).filter((r): r is string => r !== undefined);
         if (refused.length > 0) return fail(refused.join("; "));
         try {

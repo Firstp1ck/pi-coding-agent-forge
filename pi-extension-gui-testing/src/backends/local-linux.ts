@@ -88,6 +88,11 @@ export function setupSkippedWarning(count: number): string {
 export const COPY_MODE_WARNING =
   'workspaceMode "copy" on local-linux: the app runs in a filtered copy without dependency directories (node_modules, .venv, …); use "mount" to run it in the project with its existing environment';
 
+/** `gui_launch` workspace line in `mount` mode: no container, so the app writes to the project itself. */
+export const LOCAL_MOUNT_DESCRIPTION = "the project directory itself (writable)";
+/** `gui_launch` workspace line in `copy` mode. */
+export const LOCAL_COPY_DESCRIPTION = "writable filtered copy (without dependency directories)";
+
 export class LocalLinuxBackend implements Backend, DriftCapability, ResetCapability, SweepAvailability, RunnerCapability, SmokeCapability {
   readonly id: BackendId = "local-linux";
   readonly runner: CommandRunner;
@@ -167,7 +172,8 @@ export class LocalLinuxBackend implements Backend, DriftCapability, ResetCapabil
     }
     const python = this.#python();
     if (!python) throw new SessionError("START_FAILED", "python3 not found; run /gui-doctor local-linux");
-    if ((shared.setup ?? []).length > 0) config.warnings.push(setupSkippedWarning(shared.setup!.length));
+    const warnings: string[] = [];
+    if ((shared.setup ?? []).length > 0) warnings.push(setupSkippedWarning(shared.setup!.length));
 
     let workspace: string;
     let sync: SyncSummary | undefined;
@@ -176,7 +182,7 @@ export class LocalLinuxBackend implements Backend, DriftCapability, ResetCapabil
       const set = await buildFileSet(options.projectRoot, { allow: shared.sync?.allow, deny: shared.sync?.deny, runner: this.runner, signal });
       workspace = join(await realpath(options.sessionDir), "workspace");
       sync = await copyFileSet(set, workspace, signal);
-      config.warnings.push(COPY_MODE_WARNING);
+      warnings.push(COPY_MODE_WARNING);
     } else {
       workspace = await realpath(options.projectRoot);
       if (!(await stat(workspace)).isDirectory()) throw new SessionError("START_FAILED", `${workspace} is not a directory`);
@@ -204,6 +210,8 @@ export class LocalLinuxBackend implements Backend, DriftCapability, ResetCapabil
       argv: helperArgv(python),
       env: helperEnv({ base: this.#env, workspace, runtimeDir, lockDir, ...(heartbeat !== undefined ? { heartbeatTimeoutMs: heartbeat } : {}) }),
       workspacePath: workspace,
+      workspaceDescription: shared.workspaceMode === "copy" ? LOCAL_COPY_DESCRIPTION : LOCAL_MOUNT_DESCRIPTION,
+      ...(warnings.length ? { warnings } : {}),
       runtimeDir,
       footprint: this.#footprint(),
       recordResource: options.recordResource,

@@ -100,6 +100,7 @@ export function resolveConfig(sources: ConfigSources, layers: ResolveLayers = {}
   const order = [layers.flags, sources.local, sources.global, layers.environment];
   const field = <T>(get: (c: PersonalConfig) => T | undefined): T | undefined => pick(...order.map((c) => (c ? get(c) : undefined)));
   const host = field((c) => c.remote?.host);
+  const purgeTooling = field((c) => c.remote?.purgeTooling);
   const resolved: ResolvedConfig = {
     backend: field((c) => c.backend),
     shared: {
@@ -119,7 +120,9 @@ export function resolveConfig(sources: ConfigSources, layers: ResolveLayers = {}
     keepSandbox: field((c) => c.keepSandbox) ?? DEFAULTS.keepSandbox,
     warnings: [...sources.warnings],
   };
-  if (host !== undefined) resolved.remote = { host };
+  if (host !== undefined || purgeTooling !== undefined) {
+    resolved.remote = { ...(host !== undefined ? { host } : {}), ...(purgeTooling !== undefined ? { purgeTooling } : {}) };
+  }
   return resolved;
 }
 

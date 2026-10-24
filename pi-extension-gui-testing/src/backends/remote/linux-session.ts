@@ -69,6 +69,7 @@ export class RemoteLinuxSession extends HelperSession {
       backend: options.backend,
       packageVersion: options.packageVersion,
       workspacePath: remote.workspace,
+      workspaceDescription: `writable copy synced to ${resources.destination} (changes stay there)`,
       onLog: options.onLog,
       ...(options.sync ? { sync: options.sync } : {}),
       ...(options.readyTimeoutMs !== undefined ? { readyTimeoutMs: options.readyTimeoutMs } : {}),

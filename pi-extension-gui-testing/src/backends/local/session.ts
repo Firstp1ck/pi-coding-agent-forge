@@ -33,6 +33,10 @@ export interface LocalSessionOptions {
   env: Record<string, string>;
   /** Directory the app runs in (the project, or its copy). */
   workspacePath: string;
+  /** `Session.workspaceDescription`. */
+  workspaceDescription?: string;
+  /** `Session.warnings`: launch warnings such as skipped setup commands. */
+  warnings?: readonly string[];
   /** `PI_GUI_RUNTIME_DIR`. */
   runtimeDir: string;
   footprint: FootprintOptions;
@@ -77,6 +81,8 @@ export class LocalLinuxSession extends HelperSession {
       backend: options.backend,
       packageVersion: options.packageVersion,
       workspacePath: options.workspacePath,
+      ...(options.workspaceDescription ? { workspaceDescription: options.workspaceDescription } : {}),
+      ...(options.warnings?.length ? { warnings: options.warnings } : {}),
       onLog: options.onLog,
       ...(options.sync ? { sync: options.sync } : {}),
       ...(options.readyTimeoutMs !== undefined ? { readyTimeoutMs: options.readyTimeoutMs } : {}),

@@ -37,8 +37,12 @@ test("S9: every tool refuses with the spec's text when docker-linux is not verif
 });
 
 test("a backend that this build lacks is refused as not available, never replaced by another (R6)", async (t) => {
-  const env = await fakeEnv(t, { local: { backend: "local-linux" } });
-  await assert.rejects(call(tools(env.runtime).gui_launch, {}, env.ctx()), /backend "local-linux" is not available yet; available: docker-linux/);
+  const env = await fakeEnv(t, { local: { backend: "docker-windows" } });
+  await assert.rejects(call(tools(env.runtime).gui_launch, {}, env.ctx()), /backend "docker-windows" is not available yet; available: docker-linux, local-linux, remote-linux, remote-linux-docker, cua/);
+  // A registered backend that is not verified is refused too; docker-linux (verified) is never used instead.
+  const local = await fakeEnv(t, { local: { backend: "local-linux" } });
+  await assert.rejects(call(tools(local.runtime).gui_launch, {}, local.ctx()), /backend "local-linux" is not set up; ask the user to run \/gui-setup local-linux/);
+  assert.deepEqual(local.runner.calls, []);
 });
 
 test("launch → snapshot → act by ref → screenshot (image block) → logs → export → stop with an empty audit", async (t) => {

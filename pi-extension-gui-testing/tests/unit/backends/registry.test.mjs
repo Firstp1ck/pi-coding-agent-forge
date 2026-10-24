@@ -29,8 +29,9 @@ test("F: the default registry matches IMPLEMENTED_BACKENDS and holds docker-linu
   assert.equal(docker.hostSupport, DOCKER_LINUX_HOST_SUPPORT);
   assert.deepEqual(docker.targets, ["linux"]);
   assert.equal(BACKEND_DESCRIPTIONS["docker-linux"], docker.description);
-  assert.equal(DEFAULT_REGISTRY.has("cua"), false);
-  assert.match(DEFAULT_REGISTRY.notAvailableMessage("cua"), /backend "cua" is not available yet; available: docker-linux/);
+  assert.deepEqual(DEFAULT_REGISTRY.ids, ["docker-linux", "local-linux", "remote-linux", "remote-linux-docker", "cua"]);
+  assert.equal(DEFAULT_REGISTRY.has("docker-windows"), false);
+  assert.match(DEFAULT_REGISTRY.notAvailableMessage("docker-windows"), /backend "docker-windows" is not available yet; available: docker-linux, local-linux, remote-linux, remote-linux-docker, cua/);
 });
 
 test("F: the docker-linux factory merges the M1 option names, backendOptions, and the context's tmpRoot; creating runs nothing", async () => {

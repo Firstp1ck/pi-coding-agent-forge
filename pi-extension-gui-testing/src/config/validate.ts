@@ -153,6 +153,7 @@ function personalFields(kept: Obj, c: FieldChecker): PersonalConfig {
     const remote = c.object(kept.remote, "remote");
     config.remote = {};
     if (remote.host !== undefined) config.remote.host = c.string(remote.host, "remote.host");
+    if (remote.purgeTooling !== undefined) config.remote.purgeTooling = c.boolean(remote.purgeTooling, "remote.purgeTooling");
   }
   if (kept.keepSandbox !== undefined) config.keepSandbox = c.boolean(kept.keepSandbox, "keepSandbox");
   if (kept.limits !== undefined) {

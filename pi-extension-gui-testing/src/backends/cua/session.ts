@@ -161,6 +161,7 @@ export class CuaSession extends HelperSession {
       backend: options.backend,
       packageVersion: options.packageVersion,
       workspacePath: `${guestDir(options.id)}/workspace`,
+      workspaceDescription: "writable copy uploaded to the sandbox (changes stay there)",
       sync: options.sync,
       onLog: options.onLog,
       // `cua sandbox exec -i` crosses the relay: allow more than the local 10 s for READY.

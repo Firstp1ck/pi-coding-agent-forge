@@ -20,7 +20,7 @@ export type BackendId =
  * Ids of the backends implemented in this build, in picker order. Each needs
  * an entry in `src/backends/registry.ts`; the type check fails when the two differ.
  */
-export const IMPLEMENTED_BACKEND_IDS = ["docker-linux"] as const satisfies readonly BackendId[];
+export const IMPLEMENTED_BACKEND_IDS = ["docker-linux", "local-linux", "remote-linux", "remote-linux-docker", "cua"] as const satisfies readonly BackendId[];
 
 export type ImplementedBackendId = (typeof IMPLEMENTED_BACKEND_IDS)[number];
 
@@ -56,9 +56,17 @@ export interface UsageCheckConfig {
 }
 
 /** Fields allowed in `.pi/gui.local.json` and the global config. */
+/** `remote` in `.pi/gui.local.json` and the global config (remote backends, spec §4.2a). */
+export interface RemoteConfig {
+  /** SSH alias or `user@host` (never resolved values). */
+  host?: string;
+  /** `remote-linux-docker`: remove the base image from the host after every session (spec §7a.1, Q7). Default `false`. */
+  purgeTooling?: boolean;
+}
+
 export interface PersonalConfig {
   backend?: BackendId;
-  remote?: { host?: string };
+  remote?: RemoteConfig;
   keepSandbox?: boolean;
   limits?: Limits;
   usageCheck?: UsageCheckConfig;
@@ -109,7 +117,7 @@ export interface ResolvedConfig {
   limits: Required<Limits>;
   usageCheck: Required<UsageCheckConfig>;
   keepSandbox: boolean;
-  remote?: { host?: string };
+  remote?: RemoteConfig;
   /** Human-readable warnings, e.g. personal fields ignored in `.pi/gui.json`. */
   warnings: string[];
 }

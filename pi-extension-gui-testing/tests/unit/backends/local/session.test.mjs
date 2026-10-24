@@ -150,8 +150,10 @@ test("setup is never run: a configured setup only adds a warning", async (t) => 
   const cfg = config({ setup: ["pip install -r requirements.txt", "npm ci"] });
   const session = await backend(host, fake).startSession((await startOptions(host, cfg)).options);
   assert.ok(!fake.spawner.children[0].requests.some((r) => r.method === "exec"));
-  assert.equal(cfg.warnings.length, 1);
-  assert.match(cfg.warnings[0], /never runs setup commands; the 2 setup command\(s\)/);
+  assert.deepEqual(cfg.warnings, [], "launch warnings belong to the session, not to the shared config");
+  assert.equal(session.warnings.length, 1);
+  assert.match(session.warnings[0], /never runs setup commands; the 2 setup command\(s\)/);
+  assert.equal(session.workspaceDescription, "the project directory itself (writable)");
   await session.stop();
 });
 
@@ -175,7 +177,9 @@ test("network none is refused, copy mode runs in a filtered copy", async (t) => 
   assert.equal(await readFile(join(copy, "app.py"), "utf8"), "print('hi')\n");
   assert.ok(!existsSync(join(copy, ".env")) && !existsSync(join(copy, "node_modules")));
   assert.ok(session.sync.excluded >= 1);
-  assert.deepEqual(cfg.warnings, [COPY_MODE_WARNING]);
+  assert.deepEqual(session.warnings, [COPY_MODE_WARNING]);
+  assert.deepEqual(cfg.warnings, []);
+  assert.match(session.workspaceDescription, /writable filtered copy/);
   await session.stop();
 });
 

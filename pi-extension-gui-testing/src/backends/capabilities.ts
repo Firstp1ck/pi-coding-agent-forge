@@ -9,6 +9,8 @@ import type { CheckResult } from "../checks/types.ts";
 import type { ResolvedConfig } from "../config/types.ts";
 import type { Leftover } from "../protocol.ts";
 import type { CommandRunner, RunResult } from "../runner/types.ts";
+import type { CostEstimate } from "../usage/detector.ts";
+import type { SessionUsage } from "../usage/types.ts";
 
 /** Id of the check whose remediation is {@link ImageCapability.buildImage}. */
 export const IMAGE_CHECK_ID = "image.base";
@@ -81,9 +83,45 @@ export interface SmokeCapability {
   smokeConfig?(base: ResolvedConfig): ResolvedConfig;
 }
 
+/** A backend whose sessions bill (spec §8.1): estimated cost for the usage check's cost warnings. */
+export interface CostCapability {
+  /** Estimate for one session of this backend; `undefined` when no rate is known. */
+  estimateCost(usage: SessionUsage): CostEstimate | undefined;
+}
+
+/** Where a billing backend would run sessions and whether the user acknowledged that it bills them. */
+export interface BillingStatus {
+  /** Where sessions would run and bill, e.g. a cloud name; `undefined` when unknown (the checks say why). */
+  location?: string;
+  acknowledged: boolean;
+  /** Acknowledgement text for the confirm dialog (set with `location`). */
+  text?: string;
+  /** Why the location is unknown. */
+  problem?: string;
+}
+
+/** Choices `/gui-setup` passes to a billing backend (`--cloud`, `--rate-usd-per-hour`). Never secrets. */
+export interface BillingSetupInputs {
+  location?: string;
+  rateUsdPerHour?: number;
+}
+
+/**
+ * A backend whose sessions bill the user's account and upload project files
+ * (spec §5.1 `--accept-billing`). `/gui-setup` shows {@link BillingStatus.text}
+ * in one confirm dialog, or takes `--accept-billing`; without a UI and without
+ * the flag it never prompts and the backend's checks report the missing acknowledgement.
+ */
+export interface BillingCapability {
+  /** Read-only: the location sessions would use with `inputs` applied, and the acknowledgement state. */
+  billingStatus(inputs: BillingSetupInputs, signal: AbortSignal): Promise<BillingStatus>;
+  /** Stores the setup choices and, with `acknowledgedLocation`, the acknowledgement for that location. */
+  recordSetupInputs(inputs: BillingSetupInputs & { acknowledgedLocation?: string }): Promise<void>;
+}
+
 /** A backend with every optional capability it may have. */
 export type RuntimeBackend = Backend &
-  Partial<ImageCapability & DriftCapability & ResetCapability & SweepAvailability & OrphanAuditGate & RunnerCapability & SmokeCapability>;
+  Partial<ImageCapability & DriftCapability & ResetCapability & SweepAvailability & OrphanAuditGate & RunnerCapability & SmokeCapability & CostCapability & BillingCapability>;
 
 const isFunction = (value: unknown): boolean => typeof value === "function";
 
@@ -113,6 +151,15 @@ export function hasOrphanAuditGate(backend: Backend): backend is Backend & Orpha
 export function hasRunner(backend: Backend): backend is Backend & RunnerCapability {
   const runner = (backend as Partial<RunnerCapability>).runner;
   return typeof runner === "object" && runner !== null && isFunction(runner.run);
+}
+
+export function hasCost(backend: Backend): backend is Backend & CostCapability {
+  return isFunction((backend as Partial<CostCapability>).estimateCost);
+}
+
+export function hasBilling(backend: Backend): backend is Backend & BillingCapability {
+  const b = backend as Partial<BillingCapability>;
+  return isFunction(b.billingStatus) && isFunction(b.recordSetupInputs);
 }
 
 export function hasSmoke(backend: Backend): backend is Backend & SmokeCapability {

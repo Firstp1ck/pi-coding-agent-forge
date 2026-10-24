@@ -30,8 +30,8 @@ import type { CommandRunner } from "../runner/types.ts";
 import type { LocalSpawner } from "../transport/local-process.ts";
 import type { CostEstimate } from "../usage/detector.ts";
 import type { SessionUsage } from "../usage/types.ts";
-import type { DriftCapability, OrphanAuditGate, ResetCapability, SmokeCapability, SweepAvailability } from "./capabilities.ts";
-import { sandboxRef, type CuaApi } from "./cua/api.ts";
+import type { BillingCapability, BillingSetupInputs, BillingStatus, CostCapability, DriftCapability, OrphanAuditGate, ResetCapability, SmokeCapability, SweepAvailability } from "./capabilities.ts";
+import { isCloudLocation, sandboxRef, type CuaApi } from "./cua/api.ts";
 import { chooseLocation, cuaChecks } from "./cua/checks.ts";
 import { CuaCliApi } from "./cua/cli-api.ts";
 import { CuaCostLedger, reportedRate } from "./cua/cost.ts";
@@ -40,7 +40,7 @@ import { hostTag, projectKey, sandboxName, SandboxLedger, type LedgerRecord } fr
 import { auditCuaOrphans, deleteKeptSandboxes, hasDeadOwnerRecords, sweepCuaOrphans } from "./cua/orphans.ts";
 import { redact } from "./cua/redact.ts";
 import { CuaSession, GUEST_ROOT, guestDir, pendingSession, SandboxHandle, startError } from "./cua/session.ts";
-import { CuaSettingsStore, DEFAULT_IMAGE } from "./cua/settings.ts";
+import { billingAcknowledgementText, CuaSettingsStore, DEFAULT_IMAGE } from "./cua/settings.ts";
 import { packageVersion } from "./docker/package.ts";
 import { stopAfterFailedStart } from "./start-failure.ts";
 
@@ -98,7 +98,7 @@ export async function executableOnPath(name: string, path: string | undefined = 
   return false;
 }
 
-export class CuaBackend implements Backend, DriftCapability, ResetCapability, SweepAvailability, OrphanAuditGate, SmokeCapability {
+export class CuaBackend implements Backend, DriftCapability, ResetCapability, SweepAvailability, OrphanAuditGate, SmokeCapability, CostCapability, BillingCapability {
   readonly id: BackendId = "cua";
   readonly version: string;
   readonly api: CuaApi;
@@ -138,6 +138,36 @@ export class CuaBackend implements Backend, DriftCapability, ResetCapability, Sw
   /** `UsageTrackerOptions.estimateCost` for `cua` sessions. */
   estimateCost(usage: SessionUsage): CostEstimate | undefined {
     return this.cost.estimate(usage);
+  }
+
+  /**
+   * `/gui-setup`: the cloud sandboxes would use (`--cloud`, else the stored
+   * choice, else Cua's default cloud) and whether billing is acknowledged for
+   * it. Reads `cua cloud status`; creates nothing.
+   */
+  async billingStatus(inputs: BillingSetupInputs, signal: AbortSignal): Promise<BillingStatus> {
+    const settings = await this.settings.read();
+    const providers = await this.api.cloudStatus(signal);
+    const location = inputs.location !== undefined && isCloudLocation(inputs.location) ? inputs.location : undefined;
+    const chosen = chooseLocation(location ? { ...settings, location } : settings, providers);
+    if (!chosen.location) return { acknowledged: false, problem: chosen.why };
+    const rate = reportedRate(providers, chosen.location, settings.image ?? DEFAULT_IMAGE) ?? inputs.rateUsdPerHour ?? settings.rateUsdPerHour;
+    const acknowledged = settings.billingAcceptedAt !== undefined && (settings.billingLocation === undefined || settings.billingLocation === chosen.location);
+    return { location: chosen.location, acknowledged, text: billingAcknowledgementText(chosen.location, rate) };
+  }
+
+  /** `/gui-setup`: stores `--cloud`, `--rate-usd-per-hour`, and the acknowledgement in `cua.json`. */
+  async recordSetupInputs(inputs: BillingSetupInputs & { acknowledgedLocation?: string }): Promise<void> {
+    if (inputs.location !== undefined && !isCloudLocation(inputs.location)) throw new Error(`unknown cloud "${inputs.location}"`);
+    if (inputs.acknowledgedLocation !== undefined && !isCloudLocation(inputs.acknowledgedLocation)) throw new Error(`unknown cloud "${inputs.acknowledgedLocation}"`);
+    const change: Parameters<CuaSettingsStore["update"]>[0] = {};
+    if (inputs.location !== undefined) change.location = inputs.location;
+    if (inputs.rateUsdPerHour !== undefined) change.rateUsdPerHour = inputs.rateUsdPerHour;
+    if (inputs.acknowledgedLocation !== undefined) {
+      change.billingAcceptedAt = new Date().toISOString();
+      change.billingLocation = inputs.acknowledgedLocation;
+    }
+    if (Object.keys(change).length > 0) await this.settings.update(change);
   }
 
   async currentVersions(signal?: AbortSignal): Promise<Record<string, string>> {

@@ -49,6 +49,14 @@ export interface Session {
   /** Optional (added after M1). Workspace path as the helper sees it; default `/workspace`. */
   readonly workspacePath?: string;
   /**
+   * Optional (added after M1). What the workspace is, for the `gui_launch`
+   * result, e.g. "the project directory itself (writable)". Default: "read-only
+   * mount", or "writable filtered copy" in `copy` mode.
+   */
+  readonly workspaceDescription?: string;
+  /** Optional (added after M1). Launch warnings of the backend (e.g. skipped `setup` commands), shown in the `gui_launch` result. */
+  readonly warnings?: readonly string[];
+  /**
    * Sends one protocol request. Requests other than `ping` and `cancel` run
    * sequentially per session. Rejects with a {@link SessionError} carrying the
    * protocol error code.
