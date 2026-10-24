@@ -8,7 +8,7 @@
  */
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import { hasBilling, hasImage, hasOrphanAuditGate, hasReset, hasRunner, IMAGE_CHECK_ID } from "../backends/capabilities.ts";
-import { hasRemoteHost } from "../backends/remote/host.ts";
+import { bindHost, hasRemoteHost } from "../backends/remote/host.ts";
 import { DEFAULT_REGISTRY } from "../backends/registry.ts";
 import { requiredChecksPass } from "../checks/runner.ts";
 import type { BackendId, PersonalConfig } from "../config/types.ts";
@@ -38,8 +38,8 @@ import { runSmokeTest } from "../setup/smoke.ts";
 import { createSetupUi } from "../setup/ui.ts";
 import { exportArtifacts } from "../tools/export.ts";
 import { formatLeftovers } from "../tools/format.ts";
-import { assertCurrent, type GuiRuntime, type RuntimeBackend } from "../tools/runtime.ts";
-import { configuredHost, hasRemoteSudo, setupFlagProblem, useConfiguredHost } from "./backend-inputs.ts";
+import { assertCurrent, type BackendViews, type GuiRuntime, type RuntimeBackend } from "../tools/runtime.ts";
+import { configuredHost, configuredView, hasRemoteSudo, setupFlagProblem } from "./backend-inputs.ts";
 import { offerLocalConfigIgnore } from "./gitignore.ts";
 
 type CommandPi = Pick<ExtensionAPI, "sendMessage">;
@@ -87,6 +87,11 @@ export function withConfigWarnings(report: string | RenderedReport, warnings: re
 export function createGuiCommands(pi: CommandPi, runtime: GuiRuntime): GuiCommand[] {
   const registry = runtime.registry;
   const implemented = registry.ids;
+  /** Backends whose host support includes this client's OS: the only ones the picker and hints offer. */
+  const offered = (): BackendId[] => {
+    const platform = runtime.options.platform ?? process.platform;
+    return implemented.filter((b) => registry.entry(b)?.hostSupport.platforms.includes(platform));
+  };
   const backendCompletions = (prefix: string): AutocompleteItem[] =>
     registry
       .entries()
@@ -142,7 +147,10 @@ export function createGuiCommands(pi: CommandPi, runtime: GuiRuntime): GuiComman
     getArgumentCompletions: backendCompletions,
     handler: guarded("gui-setup", async (args, ctx, emit, generation) => {
       const parsed = parseSetupArgs(args);
-      if (!parsed.backend && !ctx.hasUI) return emit(`/gui-setup needs a backend when there is no interactive UI; run /gui-setup ${implemented.join(" or /gui-setup ")}`, true);
+      if (!parsed.backend && !ctx.hasUI) {
+        const ids = offered();
+        return emit(ids.length ? `/gui-setup needs a backend when there is no interactive UI; run /gui-setup ${ids.join(" or /gui-setup ")}` : `/gui-setup: no backend of this build runs on ${runtime.options.platform ?? process.platform}`, true);
+      }
       if (parsed.backend && !runtime.implemented(parsed.backend)) return emit(runtime.notAvailableMessage(parsed.backend), true);
       if (parsed.backend) {
         const problem = setupFlagProblem(parsed.backend, runtime.backend(parsed.backend), parsed);
@@ -155,23 +163,27 @@ export function createGuiCommands(pi: CommandPi, runtime: GuiRuntime): GuiComman
         const ui = createSetupUi(ctx, { controller });
         let id = parsed.backend;
         if (!id) {
-          const labels = implemented.map((b) => `${b} — ${registry.entry(b)?.description ?? ""}`);
+          // Only backends that run on this client's OS are offered (an explicit `/gui-setup <id>` still reports host.os).
+          const ids = offered();
+          if (ids.length === 0) return emit(`/gui-setup: no backend of this build runs on ${runtime.options.platform ?? process.platform}`, true);
+          const labels = ids.map((b) => `${b} — ${registry.entry(b)?.description ?? ""}`);
           let choice: string | undefined;
           try {
-            choice = await ui.select("Choose a GUI testing backend", labels, { flags: implemented.map((b) => `/gui-setup ${b}`) });
+            choice = await ui.select("Choose a GUI testing backend", labels, { flags: ids.map((b) => `/gui-setup ${b}`) });
           } catch (error) {
             const cancelled = cancelledBy(error, controller);
             if (!cancelled) throw error;
             return emit(cancelled, false);
           }
           if (choice === undefined) return emit("GUI setup cancelled; nothing was changed", false);
-          id = implemented[labels.indexOf(choice)];
+          id = ids[labels.indexOf(choice)];
           if (!id) return emit("GUI setup cancelled; nothing was changed", false);
           const problem = setupFlagProblem(id, runtime.backend(id), parsed);
           if (problem) return emit(problem, true);
         }
         const backendId = id;
-        const backend = runtime.backend(backendId);
+        // Remote backends: replaced below by a view bound to this run's host (the shared backend never changes).
+        let backend = runtime.backend(backendId);
         const inputs: Record<string, string> = { backend: backendId, scope: parsed.project ? "project" : "global" };
         const notes: string[] = [];
 
@@ -194,15 +206,20 @@ export function createGuiCommands(pi: CommandPi, runtime: GuiRuntime): GuiComman
             host = choice.host;
             if (choice.template) notes.push(`To give this host an alias, you can add this block to ~/.ssh/config (the package never writes it):\n${choice.template}`);
           }
-          backend.useHost(host);
-          remoteHost = backend.remoteHost;
+          const bound = bindHost(backend, host);
+          remoteHost = hasRemoteHost(bound) ? bound.remoteHost : undefined;
+          backend = bound;
           if (remoteHost) inputs.host = remoteHost;
         }
 
         // Billing backends: one acknowledgement (--accept-billing or one confirm); never a prompt without a UI.
         if (hasBilling(backend)) {
-          const choices = { ...(parsed.cloud !== undefined ? { location: parsed.cloud } : {}), ...(parsed.rateUsdPerHour !== undefined ? { rateUsdPerHour: parsed.rateUsdPerHour } : {}) };
-          const status = await backend.billingStatus(choices, controller.signal).catch((error: Error) => ({ acknowledged: false, problem: error.message }) as { acknowledged: boolean; location?: string; text?: string; problem?: string });
+          const choices = {
+            ...(parsed.cloud !== undefined ? { location: parsed.cloud } : {}),
+            ...(parsed.rateUsdPerHour !== undefined ? { rateUsdPerHour: parsed.rateUsdPerHour } : {}),
+            ...(parsed.image !== undefined ? { image: parsed.image } : {}),
+          };
+          const status = await backend.billingStatus(choices, controller.signal).catch((error: Error) => ({ acknowledged: false, problem: error.message }) as { acknowledged: boolean; location?: string; text?: string; problem?: string; image?: string });
           let acknowledgedLocation: string | undefined;
           if (!status.acknowledged && status.location) {
             if (parsed.acceptBilling) acknowledgedLocation = status.location;
@@ -223,6 +240,7 @@ export function createGuiCommands(pi: CommandPi, runtime: GuiRuntime): GuiComman
           assertCurrent(generation);
           await backend.recordSetupInputs({ ...choices, ...(acknowledgedLocation ? { acknowledgedLocation } : {}) });
           if (status.location) inputs.cloud = parsed.cloud ?? status.location;
+          if (parsed.image ?? status.image) inputs.image = (parsed.image ?? status.image)!;
           if (parsed.targets) inputs.targets = parsed.targets.join(",");
         }
 
@@ -235,7 +253,7 @@ export function createGuiCommands(pi: CommandPi, runtime: GuiRuntime): GuiComman
           projectRoot: ctx.cwd,
           signal: controller.signal,
           ...(parsed.targets ? { targets: parsed.targets } : {}),
-          smoke: (signal) => runSmokeTest({ runtime, backend: backendId, piSessionId: ctx.sessionManager.getSessionId(), signal, onStatus: (t) => ui.setStatus(t) }),
+          smoke: (signal) => runSmokeTest({ runtime, backend: backendId, view: backend, piSessionId: ctx.sessionManager.getSessionId(), signal, onStatus: (t) => ui.setStatus(t) }),
           persist: async (record) => {
             // A run cancelled by shutdown or /gui-cleanup never saves, whatever finished late.
             controller.signal.throwIfAborted();
@@ -284,19 +302,23 @@ export function createGuiCommands(pi: CommandPi, runtime: GuiRuntime): GuiComman
       const { resolved, global } = await runtime.config(ctx.cwd);
       const id = parsed.backend ?? resolved.backend ?? registry.defaultId;
       if (!runtime.implemented(id)) return emit(runtime.notAvailableMessage(id), true);
-      const backend = runtime.backend(id);
-      // Remote backends check the configured host, or the --host given (never stored).
-      let probeOnly: string | undefined;
-      if (hasRemoteHost(backend)) {
-        const configured = configuredHost(id, resolved, global);
-        backend.useHost(parsed.host ?? configured);
-        if (parsed.host !== undefined && backend.remoteHost !== configured) {
-          probeOnly = `checked ${backend.remoteHost} given by --host; the verified state is unchanged because the configured host is ${configured ?? "not set"} (run /gui-setup ${id} --host ${backend.remoteHost} to switch)`;
-        }
-      } else if (parsed.host !== undefined) return emit(`/gui-doctor: --host only applies to the remote backends (remote-linux, remote-linux-docker), not ${id}`, true);
+      const shared = runtime.backend(id);
+      if (!hasRemoteHost(shared) && parsed.host !== undefined) return emit(`/gui-doctor: --host only applies to the remote backends (remote-linux, remote-linux-docker), not ${id}`, true);
+      // The guard comes first: a doctor refused because another run is active changes nothing.
       const controller = runtime.beginSetup("/gui-doctor", generation);
       const setStatus = (text: string | undefined) => ctx.hasUI && ctx.ui.setStatus("gui-testing", text);
       try {
+        // Remote backends check the configured host, or the --host given (never stored), through a view bound to it.
+        let backend = shared;
+        let probeOnly: string | undefined;
+        if (hasRemoteHost(shared)) {
+          const configured = configuredHost(id, resolved, global);
+          backend = bindHost(shared, parsed.host ?? configured);
+          const host = hasRemoteHost(backend) ? backend.remoteHost : undefined;
+          if (parsed.host !== undefined && host !== configured) {
+            probeOnly = `checked ${host} given by --host; the verified state is unchanged because the configured host is ${configured ?? "not set"} (run /gui-setup ${id} --host ${host} to switch)`;
+          }
+        }
         const existing = global.verified[id];
         // The record names the host it was verified for.
         const inputs = existing?.inputs && hasRemoteHost(backend) && backend.remoteHost ? { ...existing.inputs, host: backend.remoteHost } : existing?.inputs;
@@ -306,7 +328,7 @@ export function createGuiCommands(pi: CommandPi, runtime: GuiRuntime): GuiComman
           runner: runnerOf(backend),
           projectRoot: ctx.cwd,
           signal: controller.signal,
-          smoke: (signal) => runSmokeTest({ runtime, backend: id, piSessionId: ctx.sessionManager.getSessionId(), signal, onStatus: setStatus }),
+          smoke: (signal) => runSmokeTest({ runtime, backend: id, view: backend, piSessionId: ctx.sessionManager.getSessionId(), signal, onStatus: setStatus }),
           // A run cancelled by shutdown or /gui-cleanup never writes, whatever finished late.
           persist: async (record) => {
             controller.signal.throwIfAborted();
@@ -323,7 +345,7 @@ export function createGuiCommands(pi: CommandPi, runtime: GuiRuntime): GuiComman
         });
         // The backend's orphan audit runs only when the checks showed it reachable.
         const reachable = hasOrphanAuditGate(backend) ? backend.orphanAuditReady(report.results) : requiredChecksPass(report.results);
-        const orphans = report.status === "cancelled" ? [] : await runtime.auditOrphans(reachable ? id : undefined, controller.signal);
+        const orphans = report.status === "cancelled" ? [] : await runtime.auditOrphans(reachable ? id : undefined, controller.signal, { [id]: backend });
         const text = [renderReport(report), ...(probeOnly ? [probeOnly] : []), leftoverLines("Footprint audit (orphans of ended sessions)", orphans)].join("\n\n");
         emit({ text, summary: summarizeReport(report) }, report.status !== "verified");
       } finally {
@@ -424,17 +446,18 @@ export function createGuiCommands(pi: CommandPi, runtime: GuiRuntime): GuiComman
       const stopLeftovers: Leftover[] = [];
       for (const b of backends) stopLeftovers.push(...(await runtime.stopAll(b)));
       lines.push(stopped.length ? `stopped sessions: ${stopped.join(", ")}` : "no running sessions");
-      // Remote backends sweep their configured host; without one their gate says no.
+      // Remote backends sweep their configured host (a view bound to it); without one their gate says no.
+      const views: BackendViews = {};
       for (const b of backends) {
         try {
-          useConfiguredHost(b, runtime.backend(b), config?.resolved, config?.global);
+          views[b] = configuredView(b, runtime.backend(b), config?.resolved, config?.global);
         } catch (error) {
           lines.push(`warning: ${b}: ${(error as Error).message}; its remote host is not swept`);
         }
       }
       // Each backend's gate decides, verified or not, without running a command (Docker: a docker executable on PATH).
-      const sweepable = await runtime.sweepableBackends(backends, { startup: false });
-      const sweep = await runtime.sweepNow(sweepable, controller.signal);
+      const sweepable = await runtime.sweepableBackends(backends, { startup: false }, views);
+      const sweep = await runtime.sweepNow(sweepable, controller.signal, views);
       lines.push(`swept: ${sweep.removedDirs.length} temp dir(s), ${sweep.killed.length} process(es)`);
       const depsLeftovers: Leftover[] = [];
       if (parsed.deps) {
@@ -451,7 +474,7 @@ export function createGuiCommands(pi: CommandPi, runtime: GuiRuntime): GuiComman
           depsLeftovers.push({ kind: "deps-cache", id: cache.root, detail: `could not remove the dependency cache: ${(error as Error).message}` });
         }
       }
-      const audit = [...stopLeftovers, ...sweep.leftovers, ...sweep.unknown, ...depsLeftovers, ...(await runtime.auditOrphans(sweepable, controller.signal))];
+      const audit = [...stopLeftovers, ...sweep.leftovers, ...sweep.unknown, ...depsLeftovers, ...(await runtime.auditOrphans(sweepable, controller.signal, views))];
       const unique = [...new Map(audit.map((l) => [`${l.kind}:${l.id}`, l])).values()];
       lines.push(leftoverLines("Footprint audit", unique));
       emit(`GUI testing cleanup (${backends.join(", ")}):\n${lines.join("\n")}`, unique.length > 0);
@@ -466,10 +489,9 @@ export function createGuiCommands(pi: CommandPi, runtime: GuiRuntime): GuiComman
       const { backend: id } = parseResetArgs(args);
       if (!runtime.implemented(id)) return emit(runtime.notAvailableMessage(id), true);
       if (!ctx.hasUI) return emit(`/gui-reset ${id} deletes its setup data and config and needs your confirmation in an interactive Pi session`, true);
-      const backend = runtime.backend(id);
-      // Remote backends reset (sweep, base images) on their configured host.
+      // Remote backends reset (sweep, base images) on their configured host, through a view bound to it.
       const config = await runtime.config(ctx.cwd).catch(() => undefined);
-      useConfiguredHost(id, backend, config?.resolved, config?.global);
+      const backend = configuredView(id, runtime.backend(id), config?.resolved, config?.global);
       const resetCapability = hasReset(backend) ? backend : undefined;
       const ok = await ctx.ui.confirm(`Reset ${id}?`, resetCapability?.resetSummary ?? DEFAULT_RESET_SUMMARY);
       if (!ok) return emit(`GUI reset ${id} cancelled; nothing was changed`, false);
@@ -478,7 +500,7 @@ export function createGuiCommands(pi: CommandPi, runtime: GuiRuntime): GuiComman
       const lines: string[] = [];
       const leftovers = await runtime.stopAll(id);
       const controller = new AbortController();
-      const sweep = await runtime.sweepNow([id], controller.signal);
+      const sweep = await runtime.sweepNow([id], controller.signal, { [id]: backend });
       leftovers.push(...sweep.leftovers);
       if (resetCapability?.resetData) {
         try {

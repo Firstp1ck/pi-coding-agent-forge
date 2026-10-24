@@ -89,3 +89,10 @@ test("I: /gui-setup --cloud and --rate-usd-per-hour; /gui-doctor --host", () => 
   assert.deepEqual(parseDoctorArgs("--host=user@box"), { host: "user@box" });
   assert.throws(() => parseDoctorArgs("remote-linux --host"), /--host needs a value/);
 });
+
+test("V13: /gui-setup --image takes an image alias or registry reference", async () => {
+  const { parseSetupArgs } = await import("../../../src/config/flags.ts");
+  assert.equal(parseSetupArgs("cua --image ghcr.io/me/desktop:2").image, "ghcr.io/me/desktop:2");
+  assert.equal(parseSetupArgs("cua --image linux").image, "linux");
+  for (const bad of ["'-x'", "'a b'", "'$(id)'"]) assert.throws(() => parseSetupArgs(`cua --image ${bad}`), /--image must be/, bad);
+});

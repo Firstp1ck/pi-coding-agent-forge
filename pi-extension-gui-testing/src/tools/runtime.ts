@@ -107,6 +107,8 @@ export interface RuntimeOptions extends BackendOptions {
   hostPicker?: typeof pickHost;
   /** Root of the dependency cache (spec §4.8); default `~/.cache/pi-extension-gui-testing/deps`. */
   depsCacheRoot?: string;
+  /** Client platform the `/gui-setup` picker offers backends for; default `process.platform` (unit tests). */
+  platform?: NodeJS.Platform;
 }
 
 /** Default bound for `shutdown()` to wait for pending starts and setup runs. */
@@ -143,6 +145,12 @@ function cleanedSession(id: string, backend: BackendId): Session {
 
 /** A backend with its optional capabilities (`src/backends/capabilities.ts`). */
 export type { RuntimeBackend } from "../backends/capabilities.ts";
+
+/**
+ * Per-call replacements of the shared backends, e.g. a remote backend bound
+ * to the host of one command (`forHost`). Missing ids use the shared backend.
+ */
+export type BackendViews = Partial<Record<BackendId, RuntimeBackend>>;
 
 export class GuiRuntime {
   readonly options: RuntimeOptions;
@@ -275,12 +283,12 @@ export class GuiRuntime {
    * {@link SweepAvailability} gate (no command runs to decide; e.g. Docker
    * only when a `docker` executable is on PATH).
    */
-  async sweepableBackends(ids: readonly BackendId[], context: SweepContext): Promise<BackendId[]> {
+  async sweepableBackends(ids: readonly BackendId[], context: SweepContext, views?: BackendViews): Promise<BackendId[]> {
     const allowed: BackendId[] = [];
     for (const id of ids) {
       let backend: RuntimeBackend;
       try {
-        backend = this.backend(id);
+        backend = views?.[id] ?? this.backend(id);
       } catch {
         continue;
       }
@@ -676,12 +684,12 @@ export class GuiRuntime {
   }
 
   /** Orphan audit for doctor and cleanup: client scope plus the scope of each given backend. */
-  async auditOrphans(backends: BackendId | readonly BackendId[] | undefined, signal: AbortSignal): Promise<Leftover[]> {
+  async auditOrphans(backends: BackendId | readonly BackendId[] | undefined, signal: AbortSignal, views?: BackendViews): Promise<Leftover[]> {
     const leftovers = await auditClientOrphans({ procRoot: this.procRoot, ...(this.options.tmpRoot ? { tmpRoot: this.options.tmpRoot } : {}) });
     const ids: readonly BackendId[] = backends === undefined ? [] : typeof backends === "string" ? [backends] : backends;
     for (const backend of ids) {
       try {
-        leftovers.push(...(await this.backend(backend).auditOrphans(signal)));
+        leftovers.push(...(await (views?.[backend] ?? this.backend(backend)).auditOrphans(signal)));
       } catch (error) {
         leftovers.push({ kind: "audit", id: backend, detail: `audit failed: ${(error as Error).message}` });
       }
@@ -690,10 +698,10 @@ export class GuiRuntime {
   }
 
   /** Runs the sweep now (`/gui-cleanup`), for the client scope and the given backends. */
-  sweepNow(backends: readonly BackendId[], signal: AbortSignal): Promise<SweepReport> {
+  sweepNow(backends: readonly BackendId[], signal: AbortSignal, views?: BackendViews): Promise<SweepReport> {
     return sweepClientOrphans({
       signal,
-      sweepers: backends.map((b) => this.backend(b)),
+      sweepers: backends.map((b) => views?.[b] ?? this.backend(b)),
       procRoot: this.procRoot,
       ...(this.options.tmpRoot ? { tmpRoot: this.options.tmpRoot } : {}),
     });

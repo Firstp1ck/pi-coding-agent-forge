@@ -15,7 +15,7 @@ import { DEFAULTS } from "../config/types.ts";
 import { hasDrift, hasSmoke } from "../backends/capabilities.ts";
 import { PROTOCOL_VERSION, type TreeNode } from "../protocol.ts";
 import { decodePng, isUniform } from "../tools/png.ts";
-import type { GuiRuntime, LiveSession } from "../tools/runtime.ts";
+import type { GuiRuntime, LiveSession, RuntimeBackend } from "../tools/runtime.ts";
 import type { SmokeOutcome } from "./flow.ts";
 
 /** The GTK 3 smoke app baked into the base image (spec §4.1); the default for backends without a {@link SmokeCapability}. */
@@ -38,6 +38,12 @@ export function smokeConfig(app: { cmd: string; args: readonly string[] } = SMOK
 export interface SmokeOptions {
   runtime: GuiRuntime;
   backend: BackendId;
+  /**
+   * The backend as the calling command sees it (e.g. a remote backend bound to
+   * that command's host); it supplies the smoke app and session config.
+   * Default: the runtime's shared backend.
+   */
+  view?: RuntimeBackend;
   piSessionId: string;
   signal: AbortSignal;
   onStatus?: (text: string | undefined) => void;
@@ -50,7 +56,7 @@ function findNode(tree: readonly TreeNode[], roles: readonly string[], name: str
 /** Runs the smoke test; never leaves a session behind, even on failure or abort. */
 export async function runSmokeTest(options: SmokeOptions): Promise<SmokeOutcome> {
   const { runtime, signal } = options;
-  const backend = runtime.backend(options.backend);
+  const backend = options.view ?? runtime.backend(options.backend);
   const version = hasDrift(backend) ? backend.version : (backend as { version?: unknown }).version;
   const app: { cmd: string; args: readonly string[]; cwd?: string } = hasSmoke(backend) ? backend.smokeApp() : SMOKE_APP;
   const config = hasSmoke(backend) && backend.smokeConfig ? backend.smokeConfig(smokeConfig(app)) : smokeConfig(app);

@@ -60,6 +60,10 @@ export function decodeRemote(command) {
   let args = words.slice(4);
   if (script.includes("exec env -i")) {
     const keys = [...script.matchAll(/read -r (\w+)/g)].map((m) => m[1]);
+    // The remote session wrapper (session-dir.ts): `argv` is the wrapped command, `session` the dir it removes.
+    if (args[0] === "/bin/sh" && args[1] === "-c" && args[2]?.startsWith("pi_gui_session_wrapper=1;") && args[3] === "sh") {
+      return { kind: "helper", argv: args.slice(9), keys, script, session: { dir: args[4], name: args[5] }, ...(args[8] ? { container: { host: args[7], name: args[8] } } : {}), wrapped: args };
+    }
     return { kind: "helper", argv: args, keys, script };
   }
   if (!script.startsWith("unset DISPLAY")) return { kind: "raw", argv: words, script, args };

@@ -14,7 +14,7 @@ import { chmod, mkdir, open, readlink, realpath, symlink, type FileHandle } from
 import { dirname, join } from "node:path";
 import { pipeline } from "node:stream/promises";
 import type { SyncSummary } from "../backend.ts";
-import { parentOf, type FileSet, type SyncedEntry } from "./fileset.ts";
+import { fileIdentity, parentOf, type FileSet, type SyncedEntry } from "./fileset.ts";
 
 /** A synced file changed into something the copy must not read. The message names the path. */
 export class SyncChangedError extends Error {
@@ -60,7 +60,7 @@ export async function openSyncedFile(root: string, entry: SyncedEntry): Promise<
   try {
     const info = await handle.stat({ bigint: true });
     if (!info.isFile()) throw new SyncChangedError(entry.path, "it is no longer a regular file");
-    if (entry.identity !== undefined && `${info.dev}:${info.ino}` !== entry.identity) throw new SyncChangedError(entry.path, "it was replaced by another file");
+    if (entry.identity !== undefined && fileIdentity(info) !== entry.identity) throw new SyncChangedError(entry.path, "it was replaced by another file");
     const actual = await openedPath(handle);
     if (actual !== undefined && actual !== source) throw new SyncChangedError(entry.path, `it resolved to ${actual}`);
     return handle;

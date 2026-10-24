@@ -111,6 +111,44 @@ test("re-sync removes files that left the set (only inside the workspace) and up
   assert.equal(await readFile(outsideVictim, "utf8"), "keep me");
 });
 
+test("W1: re-sync removal never follows a symlinked ancestor out of the workspace; a symlinked workspace is refused", async (t) => {
+  const s = await sandbox(t);
+  await mkdir(join(s.project, "deep/a"), { recursive: true });
+  await writeFile(join(s.project, "deep/a/victim"), "tracked\n");
+  await writeFile(join(s.project, "deep/a/gone"), "tracked\n");
+  const sync = new WorkspaceSync({ transport: s.transport, stagingRoot: s.staging, remoteDir: s.remote.workspace, method: "tar" });
+  await sync.sync(await buildFileSet(s.project));
+  const ws = s.remote.workspace;
+  const outside = join(s.root, "outside");
+  await mkdir(outside);
+  for (const name of ["victim", "lib.py"]) await writeFile(join(outside, name), "OUTSIDE\n");
+  // Remote side: an ancestor of each stale path becomes a link out of the workspace (directly and through "..").
+  await rm(join(ws, "src"), { recursive: true });
+  await symlink(outside, join(ws, "src"));
+  await rm(join(ws, "deep/a"), { recursive: true });
+  await mkdir(join(ws, "deep/b"));
+  await symlink("b/../../..", join(ws, "deep/a"));
+  await writeFile(join(ws, "deep/b/gone"), "inside\n");
+  await rm(join(s.project, "src"), { recursive: true });
+  await rm(join(s.project, "deep/a/victim"));
+  await rm(join(s.project, "app.py"));
+  const report = await sync.sync(await buildFileSet(s.project));
+  assert.equal(report.deleted, 4, "src/lib.py, the lib-link.py pointing at it, deep/a/victim, app.py left the set");
+  assert.equal(await readFile(join(outside, "lib.py"), "utf8"), "OUTSIDE\n", "src -> outside was not followed");
+  assert.equal(await readFile(join(outside, "victim"), "utf8"), "OUTSIDE\n");
+  assert.equal(await readFile(join(ws, "deep/b/gone"), "utf8"), "inside\n", "nothing removed through deep/a -> b/../../..");
+  await assert.rejects(lstat(join(ws, "app.py")), "a plain stale file is still removed");
+  // A workspace that is itself a symlink is refused before anything is removed.
+  const other = join(s.root, "other-ws");
+  await mkdir(other);
+  await writeFile(join(other, "run.sh"), "keep\n");
+  await rm(ws, { recursive: true });
+  await symlink(other, ws);
+  await rm(join(s.project, "run.sh"));
+  await assert.rejects(sync.sync(await buildFileSet(s.project)), /removing files that left the sync set failed.*not a directory owned/);
+  assert.equal(await readFile(join(other, "run.sh"), "utf8"), "keep\n");
+});
+
 test("rsync: --files-from with exactly the staged entries, -e with the session ssh options, no --delete", async (t) => {
   const s = await sandbox(t);
   const local = new FakeCommandRunner();

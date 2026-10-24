@@ -22,12 +22,13 @@ import { containerName, shmSizeFor } from "./docker/run-args.ts";
 import { DockerSession } from "./docker/session.ts";
 import { workspaceIdentityCommand } from "./docker-linux.ts";
 import { stopAfterFailedStart } from "./start-failure.ts";
-import { RemoteBackendBase, type RemoteBackendOptions } from "./remote/base.ts";
+import { RemoteBackendBase, type RemoteBackendOptions, type RemoteSharedState } from "./remote/base.ts";
 import { RemoteProbes, remoteBaseChecks } from "./remote/checks.ts";
 import { deployFiles } from "./remote/deploy.ts";
 import { remoteDockerRuntimeChecks, identityEntries } from "./remote/docker-checks.ts";
 import { auditRemoteDockerOrphans, fetchRemotePathProbe, RemoteDockerSession, sweepRemoteDockerOrphans } from "./remote/docker.ts";
 import { PendingRemoteSession } from "./remote/resources.ts";
+import { sessionWrappedArgv } from "./remote/session-dir.ts";
 import type { SshTransport } from "../transport/ssh/transport.ts";
 
 /** Removes every image labelled `pi-gui-testing.base` on `destination` through `runner` (a runner on that host). */
@@ -63,12 +64,15 @@ export class RemoteLinuxDockerBackend
 {
   readonly id: BackendId = "remote-linux-docker";
   readonly #docker: RemoteLinuxDockerOptions;
-  /** Running sessions per host; `remote.purgeTooling` removes the base image only after the last one. */
-  readonly #running = new Map<string, number>();
 
-  constructor(options: RemoteLinuxDockerOptions) {
-    super(options);
+  constructor(options: RemoteLinuxDockerOptions, shared?: RemoteSharedState) {
+    super(options, shared);
     this.#docker = options;
+  }
+
+  /** Running sessions per host, shared by every host-bound view; `remote.purgeTooling` removes the base image only after the last one. */
+  get #running(): Map<string, number> {
+    return this.shared.running;
   }
 
   get imageTag(): string {
@@ -194,7 +198,10 @@ export class RemoteLinuxDockerBackend
         id: options.sessionId,
         backend: this.id,
         runner: transport.runner,
-        spawner: transport.remoteSpawner(),
+        // `docker run` runs under the session wrapper: when it ends (container exited, --rm, or the client
+        // died), the remote host removes the container and then the synced session dir itself, also after a
+        // dropped connection.
+        spawner: { spawn: (argv, o) => transport.spawnHelper(sessionWrappedArgv(remote, argv, { host: endpoint.host, container: name }), o?.env ?? {}) },
         endpoint,
         packageVersion: this.version,
         onLog,

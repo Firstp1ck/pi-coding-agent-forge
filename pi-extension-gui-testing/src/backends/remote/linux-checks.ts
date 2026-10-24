@@ -72,9 +72,14 @@ export function remoteLinuxRuntimeChecks(probes: RemoteProbes): Check[] {
     python,
     tool("linux.xvfb", "Xvfb on the remote host", true, "xvfb", (f) => (has(f, "Xvfb") ? { ok: true, observed: has(f, "Xvfb")! } : { ok: false, observed: "Xvfb not found" })),
     tool("linux.xdotool", "xdotool on the remote host", true, "xdotool", (f) => (has(f, "xdotool") ? { ok: true, observed: has(f, "xdotool")! } : { ok: false, observed: "xdotool not found" })),
-    tool("linux.screenshot", "import (ImageMagick) or xwd on the remote host", true, "screenshot", (f) => {
-      const found = ["import", "magick", "xwd"].find((t) => has(f, t));
-      return found ? { ok: true, observed: has(f, found)! } : { ok: false, observed: "neither import nor xwd found" };
+    // The helper captures with ImageMagick only (`magick import`, or IM6 `import` and `convert`); xwd is not enough.
+    tool("linux.screenshot", "ImageMagick on the remote host (screen capture and scaling)", true, "screenshot", (f) => {
+      const magick = has(f, "magick");
+      if (magick) return { ok: true, observed: `${magick} (ImageMagick 7)` };
+      const imp = has(f, "import");
+      const convert = has(f, "convert");
+      if (imp && convert) return { ok: true, observed: `${imp}, ${convert} (ImageMagick 6)` };
+      return { ok: false, observed: `neither magick nor import and convert found${has(f, "xwd") ? ` (xwd at ${has(f, "xwd")} is not used)` : ""}` };
     }),
     tool("linux.dbus", "dbus-run-session on the remote host", true, "dbus", (f) => {
       const found = has(f, "dbus-run-session") ?? has(f, "dbus-daemon");

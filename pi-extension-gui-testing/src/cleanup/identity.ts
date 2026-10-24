@@ -11,6 +11,9 @@
  * The prefix keeps the owner labels of different operating systems apart:
  * a label written on another OS (for example a Pi in WSL next to a Windows
  * Pi on the same Docker Desktop engine) is always `unknown`, never `dead`.
+ * macOS falls back to `darwin-boot-<kern.boottime seconds>` when the boot
+ * session UUID is unreadable; the two macOS forms are different
+ * representations of the same boot, so they never compare (`unknown`).
  * Anything that cannot be read is `unknown`, and `unknown` is never swept.
  */
 import { execFileSync } from "node:child_process";
@@ -216,6 +219,16 @@ export function createOwnerIdentity(procRoot: string = DEFAULT_PROC_ROOT, pid: n
   return { clientId: createClientId(), pid, processStartTime, bootId };
 }
 
+/**
+ * Representation of a boot id: its OS plus, on macOS, which form it is
+ * (`darwin-<uuid>` or the `darwin-boot-<seconds>` fallback). Only boot ids of
+ * the same representation compare; any other pair is incomparable.
+ */
+export function bootKind(bootId: string): string {
+  if (bootId.startsWith(`${BOOT_PREFIX.darwin}boot-`)) return "darwin-boottime";
+  return bootFlavor(bootId);
+}
+
 /** Which operating system wrote a boot id. */
 export function bootFlavor(bootId: string): ProcessProbe["flavor"] {
   if (bootId.startsWith(BOOT_PREFIX.darwin)) return "darwin";
@@ -228,7 +241,8 @@ export function bootFlavor(bootId: string): ProcessProbe["flavor"] {
  *
  * - `dead`: same OS, and the boot id differs, the PID is gone, or the PID now has a different start time.
  * - `alive`: same boot, same PID, same start time.
- * - `unknown`: anything could not be read, or the owner was written by another OS; such owners are never swept.
+ * - `unknown`: anything could not be read, the owner was written by another OS, or its boot id uses
+ *   another representation than this machine's (macOS UUID vs boot-time fallback); such owners are never swept.
  */
 export function ownerLiveness(
   owner: Pick<OwnerLabel, "pid" | "processStartTime" | "bootId">,
@@ -238,6 +252,8 @@ export function ownerLiveness(
   const bootId = probe.bootId();
   if (!bootId) return "unknown";
   if (bootFlavor(owner.bootId) !== probe.flavor || bootFlavor(bootId) !== probe.flavor) return "unknown";
+  // A different representation of a boot id says nothing about whether it is the same boot.
+  if (bootKind(owner.bootId) !== bootKind(bootId)) return "unknown";
   if (bootId !== owner.bootId) return "dead";
   const startTime = probe.startTime(owner.pid);
   if (startTime === null) return "dead";

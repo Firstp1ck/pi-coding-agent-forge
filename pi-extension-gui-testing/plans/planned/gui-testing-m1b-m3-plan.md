@@ -80,6 +80,15 @@ Phase I (integration, `claude-opus-5-5`, handoff `plans/handoffs/post-m1-I.md`):
 
 Accepted fixes (round 1, seat B + docs-worker code reports): V1 B-F1 doctor `useHost` before guard / per-operation host binding; V2 B-F2 cua lookup failure treated as absence; V3 B-F3 (+W-1) remote-linux accepts `network: none`; V4 B-F4 remote workspace/deps not removed on helper-side teardown; V5 B-F5 kept-sandbox cost not tracked; V6 B-F6 session tools use active instead of session backend; V7 B-F7 cua `/deps` + venv provisioning; V8 B-F8 cua e2e false positives; V9 W-2 remote `linux.screenshot` passes with xwd only; V10 W-3 `cua.rate` fix text; V11 W-4 `cua.cli` minimum version; V12 W-5 picker lists unsupported backends; V13 W-6 cua image setting untracked for drift; V14 W-7 `--api-key-env` message on non-cua backends; V15 W-8 spec §4.8 `.tar.zst` → `.tar.gz` (owner).
 
+| Run | Provider / model | Task id | Status |
+|---|---|---|---|
+| P-A1b | Pi / `openai-codex/gpt-6.1-sol` (xhigh), seat A robustness | `…gui-testing-post-m1-review-A-r1b` | completed: **not ready**, 10 findings, all reproduced |
+| Fix V-r1 | Claude / `claude-opus-5-5` | `…gui-testing-post-m1-fixes-V-r1` | **failed**: Claude API rate limit mid-run; partial edits left in the tree (24 files, no handoff) |
+
+V15 applied by owner (spec §4.8). Seat A findings accepted as W1–W10: W1 A-F1 re-sync `rm` follows ancestor symlinks out of the remote workspace; W2 A-F2 remote cleanup follows a symlinked session dir when selecting processes; W3 A-F3 macOS boot-identity fallback marks a live owner dead; W4 A-F4 streamed cua stderr bypasses redaction; W5 A-F5 cua exit argv keeps API keys/proxy credentials; W6 A-F6 tar PAX metadata unbounded before limits; W7 A-F7 symlink graph escapes in deps archives; W8 A-F8 cua ledger keep/claim race; W9 A-F9 remote display locks left and unaudited; W10 A-F10 SSH stderr tail reads whole log and retains it. Relaunched as fix V-r2 (finish V1–V14 + W1–W10).
+
+Fix V-r2 (`claude-opus-5-5`, handoff `plans/handoffs/post-m1-V.md`): all 24 fixed with regression tests; kept the partial V-r1 edits after review; new `/gui-setup cua --image`. Owner rerun: 515/515 on Node 26 and Node 22, 0 cancelled; helper tests only `gi` errors; `git diff --check` clean. Round 2 review launched (P-A2, P-B2).
+
 ## 8. Open live verification
 
 Filled in at completion.

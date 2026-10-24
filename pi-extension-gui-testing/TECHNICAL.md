@@ -142,7 +142,7 @@ All `cua` checks only read. They create no sandbox and cost nothing.
 
 | Check | What it confirms |
 |---|---|
-| `cua.cli` | The `cua` command-line tool is installed. |
+| `cua.cli` | The `cua` command-line tool, version 0.7 or newer, is installed. The report shows the version found. |
 | `cua.network` | The Cua service (`api.cua.ai`) is reachable. No credentials are sent. |
 | `cua.signin` | You are signed in to cua.ai. |
 | `cua.auth` | A signed-in, read-only Cua call works. |
@@ -203,10 +203,13 @@ Every question setup can ask has an option, so a complete command runs without q
 | `--accept-billing` | `cua` | You accept that each session creates a sandbox that bills your cloud account, and that the project files allowed by the sync rules are uploaded into it. Without it, the interactive screen asks once. |
 | `--cloud aws\|gcp\|hetzner\|modal` | `cua` | The cloud for sandboxes. Default: the cloud you chose with `cua cloud connect … --default`. |
 | `--rate-usd-per-hour <n>` | `cua` | Your cloud's price per sandbox hour, from 0 to 1000. Used for the cost estimate only when Cua reports no price. |
+| `--image <image>` | `cua` | The sandbox image: a Cua image alias or a registry reference. Default: Cua's `linux` image. Your own image needs the helper's packages, or `apt-get` as root or with passwordless sudo. Changing the image later blocks new sessions until you run `/gui-doctor cua`. |
 | `--targets linux,windows,macos` | `cua` | The platforms to check. Only `linux` passes in this release. |
 | `--accept-windows-license` | *planned* | For `docker-windows`, which is not available yet. Refused. |
 
-An option that does not fit the chosen backend is refused with a message naming the backend it belongs to; it is never silently ignored. `--api-key-env` is always refused, because `cua` uses your `cua auth login` session and needs no API key.
+An option that does not fit the chosen backend is refused with a message naming the backend it belongs to; it is never silently ignored. `--api-key-env` is always refused: for `cua` because it uses your `cua auth login` session and needs no API key, and for every other backend because it is not one of its options.
+
+Without a backend name, the interactive screen lists only the backends that run on your computer's operating system.
 
 Passing `--fix` or `--accept-billing` counts as your explicit approval.
 
@@ -270,16 +273,16 @@ Then run `/gui-setup cua`, or `/gui-setup cua --accept-billing` to accept billin
 What happens in each session:
 
 1. The sandbox is created in your cloud. Billing starts here. The first launch takes a few minutes.
-2. The package's helper is copied into the sandbox. Missing helper packages are installed inside the sandbox with `apt-get`, never on your computer.
+2. The package's helper is copied into the sandbox. Missing helper packages are installed inside the sandbox with `apt-get`, never on your computer; when a `setup` command uses `pip`, `python3-pip` is installed too. The helper runs as the sandbox user and keeps its files, and what `setup` installs, in the session's own folder, so the image needs no writable `/deps` and no `python3-venv`.
 3. Your project files, without secrets, are uploaded once. Changes the app makes stay in the sandbox.
 4. `setup` commands run in the sandbox, then the app starts.
 5. When the session stops, the sandbox is deleted, unless `keepSandbox` is on.
 
-**Cost.** The estimate is sandbox time multiplied by the hourly price that `cua cloud status` reports for your cloud, or the price you gave with `--rate-usd-per-hour`. `/gui-usage` shows it. When it passes `usageCheck.warnSessionCostUsd` or `usageCheck.warnDailyCostUsd`, Pi gets a warning; it is never stopped. Your cloud's bill is what counts: minimum charges, disks, and network traffic are not in the estimate. Set a budget in your cloud account.
+**Cost.** The estimate is sandbox time multiplied by the hourly price that `cua cloud status` reports for your cloud, or the price you gave with `--rate-usd-per-hour`. A sandbox kept by `keepSandbox` keeps counting toward the daily estimate between sessions, until it is deleted; reusing it never counts it twice. `/gui-usage` shows it. When it passes `usageCheck.warnSessionCostUsd` or `usageCheck.warnDailyCostUsd`, Pi gets a warning; it is never stopped. Your cloud's bill is what counts: minimum charges, disks, and network traffic are not in the estimate. Set a budget in your cloud account.
 
 **Cleanup.** The sandbox is deleted on `gui_stop`, a failed start, the idle timeout, quitting Pi, and `/gui-cleanup`. If Pi is killed, the next Pi start deletes it. At the latest, your cloud's expiry deletes it (`cua cloud connect <cloud> --ttl-hours 8`; 8 hours by default). `cua cloud sweep --delete` removes anything Cua itself recorded and left behind.
 
-**`keepSandbox`.** With `"keepSandbox": true` in `.pi/gui.local.json`, a stopped session keeps its sandbox, and the next session of the same project in the same cloud reuses it after clearing it and uploading the project again. A kept sandbox **keeps billing**, your project files stay in your cloud, and it still expires with your cloud's expiry time. An expired one is replaced automatically. `/gui-reset cua` deletes kept sandboxes.
+**`keepSandbox`.** With `"keepSandbox": true` in `.pi/gui.local.json`, a stopped session keeps its sandbox, and the next session of the same project in the same cloud reuses it after clearing it and uploading the project again. A kept sandbox **keeps billing**, your project files stay in your cloud, and it still expires with your cloud's expiry time. An expired one is replaced automatically. If Cua cannot say whether the kept sandbox still exists (for example a network error), the start fails and the sandbox stays recorded, so no second sandbox is created; try again, or delete it with `/gui-reset cua`. `/gui-reset cua` deletes kept sandboxes.
 
 ## Dependency cache
 
@@ -330,7 +333,7 @@ Settings are read in this order, field by field: options you pass to a command, 
 | `deps.env` | Extra environment variables for the `setup` commands. They are part of the cache key. |
 | `sync.deny` | Extra files never sent to servers or sandboxes, or into the `copy`-mode workspace. |
 | `sync.allow` | Files sent or copied even though they match the built-in secret list. Use with care. |
-| `network` | `default`, or `none` to run the app without network access. `none` works with `docker-linux` and `remote-linux-docker`. `local-linux` and `cua` refuse it. `remote-linux` does not enforce it in this release: the app keeps the server's network. |
+| `network` | `default`, or `none` to run the app without network access. `none` works with `docker-linux` and `remote-linux-docker`. `local-linux`, `remote-linux`, and `cua` refuse it, because they cannot enforce it; a session never starts with a network setting it does not apply. |
 
 Pi proposes `setup` and `launch` after its first working run and shows them to you before saving.
 
@@ -419,7 +422,7 @@ Your project data stays on your computer. Servers, sandboxes, and containers hol
 | Docker container `pi-gui-testing-<session>` | The running session | Removed when the session ends, when Pi exits or crashes (the container stops by itself within about a minute), or by the next startup cleanup. The startup cleanup and `/gui-cleanup` look for leftover containers whenever a `docker` command is installed, even if setup never finished. |
 | `~/.cache/pi-extension-gui-testing/deps/` (or under `XDG_CACHE_HOME`) | Installed dependencies per project and processor type, as `.tar.gz` archives with checksums | Kept; up to `depsCache.maxSizeGB` (5 GB), oldest entries removed first. Removed by `/gui-cleanup --deps`. |
 | `~/.pi/agent/gui/` (or `gui/` inside `PI_CODING_AGENT_DIR`) | Settings, verified backends, the recorded server host keys, `cua.json`, and `cua-sandboxes/` (one record per sandbox this computer created, so a crash can be cleaned up) | Kept until `/gui-reset`. A sandbox record is removed once its sandbox is deleted. |
-| On a server: `$XDG_RUNTIME_DIR/pi-gui-testing`, else `/tmp/pi-gui-testing-<uid>`, else `~/.cache/pi-gui-testing-tmp` | One folder per session with your synced project, the helper, installed dependencies, and runtime files | Deleted when the session stops, fails to start, times out, or Pi exits. The parent folder is removed when no session is left. After a lost connection, the next session start there or `/gui-cleanup` removes it. |
+| On a server: `$XDG_RUNTIME_DIR/pi-gui-testing`, else `/tmp/pi-gui-testing-<uid>`, else `~/.cache/pi-gui-testing-tmp` | One folder per session with your synced project, the helper, installed dependencies, and runtime files | Deleted when the session stops, fails to start, times out, or Pi exits. After a lost connection the server removes it by itself as soon as the session's helper (or container) ends. The parent folder is removed when no session is left. Anything still left is removed by the next session start there or `/gui-cleanup`. A session folder that is a symbolic link or not yours is reported and never followed. |
 | On a server: Docker base image (`remote-linux-docker`) | Tools only, no project files | Kept unless you use `--purge-tooling`. |
 | On a server: system packages | Tools you agreed to install at setup | Kept. Remove them yourself if nothing else needs them. |
 | `cua`: one sandbox per session in your cloud | The helper, your synced project, installed dependencies | Deleted when the session ends, unless `keepSandbox` is on. |
@@ -434,7 +437,7 @@ Screenshots that Pi already received are part of your Pi session history, not of
 |---|---|---|---|
 | `docker-linux` | The container reads your whole project, including `.env` files and keys. It cannot change it. | The container gets a writable copy of the selected files, without secrets. | On; `"network": "none"` turns it off. |
 | `local-linux` | The app runs in your project folder as you and **can change any file there** and anything else your user can. | The app runs on a writable copy of the selected files, without secrets. Dependency folders are not copied. | Always on; `"network": "none"` is refused. |
-| `remote-linux` | The app gets a writable copy on the server, without secrets. | Same. | The server's network. `"network": "none"` is not enforced. |
+| `remote-linux` | The app gets a writable copy on the server, without secrets. | Same. | The server's network. `"network": "none"` is refused. |
 | `remote-linux-docker` | The container reads the copy on the server without secrets. | The container gets a writable copy on the server. | On; `"network": "none"` turns it off. |
 | `cua` | The app gets a writable copy in the sandbox, without secrets. | Same. | Always on; `"network": "none"` is refused. |
 
@@ -542,7 +545,7 @@ Screenshots that Pi already received are part of your Pi session history, not of
 | `backend "<id>" is not set up` | Run `/gui-setup <id>`. |
 | `backend "<id>" is not available yet` | The backend is planned. Choose one of the listed backends. |
 | Setup ends with `needs-user-action` | Run the listed commands yourself, then run `/gui-setup` again. |
-| `backend "<id>" changed since setup (…)` | The package, a tool version, the server, or the cloud changed. Run `/gui-doctor <id>`. |
+| `backend "<id>" changed since setup (…)` | The package, a tool version, the server, the cloud, or the `cua` sandbox image changed. Run `/gui-doctor <id>`. |
 | `at most N GUI sessions can run at once` | Stop a session first, or raise `limits.maxConcurrentSessions` in `.pi/gui.local.json`. |
 | `Pi is shutting down (or restarted this extension); run the command again` | Pi quit or reloaded while the command was starting. Run it again. |
 | `cleanup did not finish; run gui_stop or /gui-cleanup to retry` | A container, folder, or sandbox could not be removed. Retry; if it persists, the message names what remains. |
@@ -566,6 +569,7 @@ Screenshots that Pi already received are part of your Pi session history, not of
 | `linux.xvfb` or another tool check fails | Install the listed package, for example `xorg-server-xvfb` (Arch), `xvfb` (Debian/Ubuntu), or `xorg-x11-server-Xvfb` (Fedora/openSUSE). The report shows the Xvfb error it saw. |
 | `local-linux never runs setup commands; …` | Expected. Install the app's dependencies in your project yourself, or use another backend. |
 | `local-linux cannot block the app's network` | Remove `"network": "none"`, or use `docker-linux` for an offline run. |
+| `remote-linux cannot block the app's network` | Remove `"network": "none"` (or set `"network": "default"`), or use `remote-linux-docker` or `docker-linux` for an offline run. |
 | `… is too deep for the private bus sockets; set TMPDIR to a shorter path` | Start Pi with a short `TMPDIR`, such as `/tmp`. |
 | `display lock dir … belongs to uid …` | Another user created that folder. Remove it, or start Pi with a private `TMPDIR`. |
 | A crashed session left a display or processes | Run `/gui-cleanup local-linux`. |
@@ -581,7 +585,8 @@ Screenshots that Pi already received are part of your Pi session history, not of
 | `pip install --user` fails in `setup` on `remote-linux` | Use plain `pip install`, or set `PIP_TARGET` in `deps.env`. |
 | Leftovers after a lost connection | Run `/gui-cleanup <id>` once the server is back. |
 | **`cua`** | |
-| `cua.cli` fails | Install the `cua` tool, then run `/gui-setup cua` again. |
+| `cua.cli` fails | Install the `cua` tool, or update it to 0.7 or newer, then run `/gui-setup cua` again. |
+| `checking the kept sandbox … (kept; try again …)` | Cua could not say whether the kept sandbox still exists. Nothing new was created. Try again later, or delete kept sandboxes with `/gui-reset cua`. |
 | `cua.signin` fails | Run `cua auth login` in a terminal. |
 | `cua.cloud` fails | Connect a cloud: `cua cloud connect aws --region <region> --default` (or `gcp`, `hetzner`, `modal`). |
 | `cua.quota` fails | Fix what `cua cloud test <cloud>` reports. |

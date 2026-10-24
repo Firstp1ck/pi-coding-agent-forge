@@ -2,9 +2,10 @@
  * Which SSH host a remote backend talks to (spec §4.2a, §7 `remote.host`).
  *
  * Checks and sweeps run outside a session, where no `ResolvedConfig` is at
- * hand, so the commands tell the backend its host through
- * {@link RemoteHostCapability.useHost} (from `--host`, the picker, or
- * `remote.host`). A session start prefers `config.remote.host`.
+ * hand, so each operation works on a view bound to its own host through
+ * {@link RemoteHostCapability.forHost} (from `--host`, the picker, or
+ * `remote.host`); the shared backend is never re-pointed, so concurrent
+ * operations cannot redirect each other. A session start uses `config.remote.host`.
  */
 import type { Backend } from "../../backend.ts";
 import type { ResolvedConfig } from "../../config/types.ts";
@@ -22,16 +23,22 @@ export interface RemoteHostCapability {
   /** The SSH alias (or `user@host`) in use, if one was set. */
   readonly remoteHost: string | undefined;
   /**
-   * Sets the host for checks, sweeps, image builds, and sessions whose config names none.
+   * A view of the same backend bound to `host` for checks, sweeps, audits,
+   * image builds, and smoke sessions. The receiver is not changed.
    *
    * @throws Error for a value that is not a usable SSH destination.
    */
-  useHost(host: string | undefined): void;
+  forHost(host: string | undefined): Backend & RemoteHostCapability;
 }
 
 export function hasRemoteHost(backend: Backend): backend is Backend & RemoteHostCapability {
   const b = backend as Partial<RemoteHostCapability>;
-  return typeof b.useHost === "function" && "remoteHost" in b;
+  return typeof b.forHost === "function" && "remoteHost" in b;
+}
+
+/** `backend` bound to `host` when it is a remote backend; any other backend unchanged. */
+export function bindHost<B extends Backend>(backend: B, host: string | undefined): B {
+  return hasRemoteHost(backend) ? (backend.forHost(host) as unknown as B) : backend;
 }
 
 /** The host for a session: `config.remote.host`, else the backend's own. */

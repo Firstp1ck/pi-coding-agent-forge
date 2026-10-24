@@ -5,7 +5,7 @@
  */
 import type { Backend } from "../backend.ts";
 import { hasBilling, hasImage } from "../backends/capabilities.ts";
-import { hasRemoteHost, type RemoteHostCapability } from "../backends/remote/host.ts";
+import { bindHost, hasRemoteHost, type RemoteHostCapability } from "../backends/remote/host.ts";
 import type { SetupArgs } from "../config/flags.ts";
 import type { BackendId, GlobalConfig, ResolvedConfig } from "../config/types.ts";
 
@@ -24,7 +24,10 @@ export function hasRemoteSudo(backend: Backend): backend is Backend & RemoteSudo
  */
 export function setupFlagProblem(id: BackendId, backend: Backend, parsed: SetupArgs): string | undefined {
   if (parsed.apiKeyEnv !== undefined) {
-    return "/gui-setup: --api-key-env is no longer used: cua uses your `cua auth login` session and needs no API key (Cua Cloud API keys ended with Cua Cloud)";
+    // Only cua ever took an API key; for every other backend it is simply not one of its options.
+    return hasBilling(backend)
+      ? "/gui-setup: --api-key-env is no longer used: cua uses your `cua auth login` session and needs no API key (Cua Cloud API keys ended with Cua Cloud)"
+      : `/gui-setup: --api-key-env is not an option of ${id}`;
   }
   const remote = hasRemoteHost(backend);
   if (parsed.host !== undefined && !remote) return `/gui-setup: --host only applies to the remote backends (remote-linux, remote-linux-docker), not ${id}`;
@@ -34,6 +37,7 @@ export function setupFlagProblem(id: BackendId, backend: Backend, parsed: SetupA
       parsed.acceptBilling ? "--accept-billing" : undefined,
       parsed.cloud !== undefined ? "--cloud" : undefined,
       parsed.rateUsdPerHour !== undefined ? "--rate-usd-per-hour" : undefined,
+      parsed.image !== undefined ? "--image" : undefined,
       parsed.targets !== undefined ? "--targets" : undefined,
     ].filter((f): f is string => f !== undefined);
     if (billing.length > 0) return `/gui-setup: ${billing.join(", ")} only ${billing.length === 1 ? "applies" : "apply"} to cua, not ${id}`;
@@ -52,17 +56,14 @@ export function configuredHost(id: BackendId, resolved: Pick<ResolvedConfig, "re
 }
 
 /**
- * Points a remote backend at its configured host before checks, sweeps,
- * audits, image builds, or reset. Other backends are left alone.
+ * A remote backend bound to its configured host for checks, sweeps, audits,
+ * image builds, or reset; other backends unchanged. The shared backend is
+ * never re-pointed, so a concurrent operation keeps its own host.
  *
- * @returns The host in use (`undefined` when none is configured or the backend is not remote).
  * @throws Error for a configured value that is not a usable SSH destination.
  */
-export function useConfiguredHost(id: BackendId, backend: Backend, resolved: Pick<ResolvedConfig, "remote"> | undefined, global: Pick<GlobalConfig, "verified"> | undefined): string | undefined {
-  if (!hasRemoteHost(backend)) return undefined;
-  const host = configuredHost(id, resolved, global);
-  backend.useHost(host);
-  return backend.remoteHost;
+export function configuredView<B extends Backend>(id: BackendId, backend: B, resolved: Pick<ResolvedConfig, "remote"> | undefined, global: Pick<GlobalConfig, "verified"> | undefined): B {
+  return hasRemoteHost(backend) ? bindHost(backend, configuredHost(id, resolved, global)) : backend;
 }
 
 export type { RemoteHostCapability };

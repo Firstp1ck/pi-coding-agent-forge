@@ -8,8 +8,9 @@
  * Needs the `cua` CLI, `cua auth login`, a cloud connected with
  * `cua cloud connect <cloud> --default`, and the billing acknowledgement in
  * the global config dir (`/gui-setup cua --accept-billing`). Checks: the
- * smoke test passes, the synced workspace excludes secrets, and after stop
- * no sandbox of this run is left (`cua sandbox ls`).
+ * smoke test passes with an empty footprint audit, the synced workspace
+ * excludes secrets, and after stop no sandbox of this run is left in a
+ * `cua sandbox ls` listing that succeeded and parsed.
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -34,6 +35,13 @@ function skipReason() {
 
 const skip = skipReason();
 
+/** The parsed `cua sandbox ls` of the user's account; throws when the call or its JSON fails (never an empty pass). */
+async function sandboxNames(backend) {
+  const listed = await backend.api.listSandboxes(AbortSignal.timeout(120_000));
+  assert.ok(Array.isArray(listed), "the sandbox listing parsed");
+  return listed.map((s) => s.name);
+}
+
 function runtimeFor(root) {
   return new GuiRuntime({
     registry: new BackendRegistry([
@@ -50,11 +58,15 @@ test("cua smoke test passes and leaves no sandbox", { skip, timeout: 60 * 60_000
     await runtime.shutdown();
     await rm(root, { recursive: true, force: true });
   });
+  const backend = runtime.backend("cua");
+  const before = new Set(await sandboxNames(backend));
   const outcome = await runSmokeTest({ runtime, backend: "cua", piSessionId: "e2e-cua", signal: AbortSignal.timeout(45 * 60_000) });
   assert.equal(outcome.ok, true, JSON.stringify(outcome));
-  const backend = runtime.backend("cua");
+  assert.deepEqual(outcome.leftovers ?? [], [], "the smoke session's footprint audit is empty");
+  const after = await sandboxNames(backend);
+  assert.deepEqual(after.filter((name) => !before.has(name) && name.startsWith("pi-gui-testing-")), [], "no sandbox of this run is left");
   const leftovers = await backend.auditOrphans(AbortSignal.timeout(60_000));
-  assert.deepEqual(leftovers.filter((l) => l.kind === "sandbox"), []);
+  assert.deepEqual(leftovers.filter((l) => l.kind === "sandbox" && !before.has(l.id.split(":").at(-1))), []);
 });
 
 test("cua sync uploads the project without secrets and stop deletes the sandbox", { skip, timeout: 60 * 60_000 }, async (t) => {
@@ -75,6 +87,6 @@ test("cua sync uploads the project without secrets and stop deletes the sandbox"
   assert.equal(listing.exitCode, 0);
   const outcome = await runtime.closeSession(live.id);
   assert.deepEqual(outcome, { stopLeftovers: [], audit: [] });
-  const ls = spawnSync("cua", ["--json", "sandbox", "ls", "--no-size"], { encoding: "utf8" });
-  assert.ok(!ls.stdout.includes(live.id), "the sandbox of this session is gone");
+  const names = await sandboxNames(runtime.backend("cua"));
+  assert.ok(!names.some((name) => name.endsWith(live.id)), `the sandbox of this session is gone: ${names.join(", ")}`);
 });

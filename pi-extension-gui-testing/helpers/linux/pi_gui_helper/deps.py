@@ -15,10 +15,15 @@ rules, and unpacking fails closed:
   previous one, so a symlink planted by an earlier member cannot redirect a
   later write);
 - only regular files, directories, and symlinks whose target stays inside the
-  deps dir; hardlinks, devices, FIFOs, sparse and contiguous files are refused;
+  deps dir; hardlinks, devices, FIFOs, sparse and contiguous files are refused.
+  A link target is resolved the way the kernel will, against the archive's own
+  links (``b -> .`` then ``a -> b/..`` leaves the deps dir and is refused), and
+  link loops are refused;
 - owners are never applied; modes keep only ``0755`` plus owner read/write;
 - the upload's size and SHA-256 must match what the client announced;
-- bounds on unpacked bytes and entries.
+- bounds on unpacked bytes and entries, on every header record (PAX and GNU
+  long-name records included), on each metadata record's size before it is
+  read, and on the decompressed bytes read in total.
 
 Any violation empties the deps dir again and answers ``ARCHIVE_REJECTED`` (or
 ``TOO_LARGE`` for a bound). Transfer files are unlinked temp files, so nothing
@@ -34,6 +39,7 @@ import posixpath
 import re
 import secrets
 import stat
+import gzip
 import tarfile
 import tempfile
 import zlib
@@ -46,6 +52,14 @@ MAX_NAME_BYTES = 4096
 MAX_COMPONENT_BYTES = 255
 MAX_DEPTH = 128
 DEFAULT_MAX_ENTRIES = 2_000_000
+# Metadata records (PAX ``x``/``g``, GNU long name/link): bounded before tarfile reads them.
+MAX_META_BYTES = 64 * 1024
+MAX_META_RUN = 4
+# Symlinks followed while resolving one link target (the kernel's ELOOP bound).
+MAX_LINK_HOPS = 40
+_META_TYPES = (tarfile.XHDTYPE, tarfile.XGLTYPE, tarfile.SOLARIS_XHDTYPE, tarfile.GNUTYPE_LONGNAME, tarfile.GNUTYPE_LONGLINK)
+# Decompressed read-ahead of tarfile's stream plus the end-of-archive blocks.
+_STREAM_SLACK = 4 * tarfile.RECORDSIZE
 _COPY_BYTES = 1024 * 1024
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _TRANSFER_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
@@ -102,6 +116,67 @@ def safe_link_target(member_path, target):
     if not target or "\x00" in target or target.startswith("/"):
         return False
     return _inside(posixpath.join(posixpath.dirname(member_path), target))
+
+
+def resolve_link(links, member_path, target):
+    """Resolves the symlink at ``member_path`` → ``target`` against ``links`` (relative member path → target).
+
+    Follows the archive's other symlinks the way the kernel does, so ``..``
+    after a link component climbs from the link's real target. Returns the
+    resolved path components (``[]`` is the root). Raises Rejected when the
+    target is absolute, climbs above the root, or loops.
+    """
+    cur = [p for p in member_path.split("/") if p not in ("", ".")][:-1]
+    pending = list(reversed(target.split("/")))
+    hops = 0
+    while pending:
+        part = pending.pop()
+        if part in ("", "."):
+            continue
+        if part == "..":
+            if not cur:
+                raise Rejected("symlink %s → %r leads outside the deps dir" % (member_path, target))
+            cur.pop()
+            continue
+        cur.append(part)
+        nxt = links.get("/".join(cur))
+        if nxt is None:
+            continue
+        hops += 1
+        if hops > MAX_LINK_HOPS:
+            raise Rejected("symlink %s → %r loops or chains more than %d links" % (member_path, target, MAX_LINK_HOPS))
+        if not nxt or "\x00" in nxt or nxt.startswith("/"):
+            raise Rejected("symlink %s → %r leads through a link with an absolute target" % (member_path, target))
+        cur.pop()
+        pending.extend(reversed(nxt.split("/")))
+    return cur
+
+
+def check_link_graph(links, check=None):
+    """Raises Rejected unless every link in ``links`` resolves inside the root without looping."""
+    for path, target in links.items():
+        if check is not None:
+            check()
+        resolve_link(links, path, target)
+
+
+def safe_link_subset(links):
+    """The largest subset found by dropping unsafe links until the rest resolve inside the root.
+
+    Dropping a link can turn another into an escape (``x -> b/../..`` once
+    ``b`` is gone), so this repeats until nothing changes.
+    """
+    keep = dict(links)
+    changed = True
+    while changed:
+        changed = False
+        for path, target in list(keep.items()):
+            try:
+                resolve_link(keep, path, target)
+            except Rejected:
+                del keep[path]
+                changed = True
+    return keep
 
 
 def clear_dir(root):
@@ -236,8 +311,12 @@ class Transfers:
         writer = _HashingWriter(handle, max_bytes)
         counts = {"entries": 0, "skipped": 0}
         try:
+            links = {}
+            _collect_links(root, "", links, ctx)
+            # Only links that also resolve inside the deps dir among each other (the unpack rule).
+            allowed = safe_link_subset(links)
             with tarfile.open(fileobj=writer, mode="w:gz", format=tarfile.PAX_FORMAT, compresslevel=6) as tar:
-                _pack_tree(tar, root, "", counts, ctx)
+                _pack_tree(tar, root, "", counts, ctx, allowed)
             handle.flush()
         except TooLarge as exc:
             handle.close()
@@ -358,8 +437,48 @@ def _empty(root):
         pass
 
 
-def _pack_tree(tar, root, rel, counts, ctx):
-    """Adds the contents of ``root/rel`` in name order, never following symlinks."""
+def _pack_link_target(root, member, target):
+    """The target to store for the link ``member`` → ``target``, or None when it leaves the deps dir lexically."""
+    if target.startswith("/"):
+        # An absolute link into the deps dir is kept as a relative one.
+        absolute = posixpath.normpath(target)
+        base = posixpath.normpath(root)
+        if absolute == base or absolute.startswith(base + "/"):
+            target = posixpath.relpath(absolute, posixpath.dirname(posixpath.join(base, member)))
+    return target if safe_link_target(member, target) else None
+
+
+def _collect_links(root, rel, links, ctx):
+    """Records every symlink below ``root/rel`` whose stored target stays inside lexically, never following links."""
+    path = os.path.join(root, rel) if rel else root
+    try:
+        names = sorted(os.listdir(path))
+    except OSError as exc:
+        raise ProtocolError("INTERNAL", "cannot list %s: %s" % (path, exc.strerror or exc)) from None
+    for name in names:
+        ctx.check()
+        member = posixpath.join(rel, name) if rel else name
+        try:
+            info = os.lstat(os.path.join(path, name))
+        except FileNotFoundError:
+            continue
+        if stat.S_ISDIR(info.st_mode):
+            _collect_links(root, member, links, ctx)
+        elif stat.S_ISLNK(info.st_mode):
+            try:
+                target = _pack_link_target(root, member, os.readlink(os.path.join(path, name)))
+            except OSError:
+                continue
+            if target is not None:
+                links[member] = target
+
+
+def _pack_tree(tar, root, rel, counts, ctx, allowed):
+    """Adds the contents of ``root/rel`` in name order, never following symlinks.
+
+    A symlink is added only when ``allowed`` has it with the same target (it
+    resolves inside the deps dir among the other links).
+    """
     path = os.path.join(root, rel) if rel else root
     try:
         names = sorted(os.listdir(path))
@@ -380,7 +499,7 @@ def _pack_tree(tar, root, rel, counts, ctx):
             entry.mtime = int(info.st_mtime)
             tar.addfile(entry)
             counts["entries"] += 1
-            _pack_tree(tar, root, member, counts, ctx)
+            _pack_tree(tar, root, member, counts, ctx, allowed)
         elif stat.S_ISREG(info.st_mode):
             try:
                 fd = os.open(full, os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0))
@@ -399,15 +518,10 @@ def _pack_tree(tar, root, rel, counts, ctx):
                 tar.addfile(entry, handle)
             counts["entries"] += 1
         elif stat.S_ISLNK(info.st_mode):
-            target = os.readlink(full)
-            if target.startswith("/"):
-                # An absolute link into the deps dir is kept as a relative one.
-                absolute = posixpath.normpath(target)
-                base = posixpath.normpath(root)
-                if absolute == base or absolute.startswith(base + "/"):
-                    target = posixpath.relpath(absolute, posixpath.dirname(posixpath.join(base, member)))
-            if not safe_link_target(member, target):
-                # E.g. a venv's bin/python → /usr/bin/python3; recreated in the next session.
+            target = _pack_link_target(root, member, os.readlink(full))
+            if target is None or allowed.get(member) != target:
+                # E.g. a venv's bin/python → /usr/bin/python3 (recreated in the next session), a link
+                # that leaves the deps dir through another link, or one that changed during the walk.
                 counts["skipped"] += 1
                 continue
             entry = tarfile.TarInfo(member)
@@ -443,6 +557,72 @@ def _open_parent(root_fd, parts):
         raise
 
 
+class _Budget:
+    """Bounds of one unpack, applied to each header record before tarfile reads what follows it.
+
+    Every record counts (PAX and GNU metadata records included); a metadata
+    record over :data:`MAX_META_BYTES` is refused before its payload is read,
+    and the decompressed bytes read may not exceed the file data allowed plus
+    the records' own blocks.
+    """
+
+    def __init__(self, max_bytes, max_entries):
+        self.max_records = (max_entries + 1) * (MAX_META_RUN + 1)
+        self.records = 0
+        self.meta_run = 0
+        self.limit = max_bytes + _STREAM_SLACK
+
+    def header(self, info):
+        self.records += 1
+        if self.records > self.max_records:
+            raise TooLarge("the archive has more than %d header records" % self.max_records)
+        if not isinstance(info.size, int) or info.size < 0:
+            raise Rejected("a member of the archive has a negative size")
+        # The header block and the padding after the record's data.
+        self.limit += 2 * tarfile.BLOCKSIZE
+        if info.type in _META_TYPES:
+            if info.size > MAX_META_BYTES:
+                raise TooLarge("an archive metadata record is larger than %d bytes" % MAX_META_BYTES)
+            self.meta_run += 1
+            if self.meta_run > MAX_META_RUN:
+                raise Rejected("more than %d metadata records precede one member" % MAX_META_RUN)
+            self.limit += info.size
+        else:
+            self.meta_run = 0
+
+
+class _BoundedReader:
+    """Read-only file-like view of the decompressed stream that stops at the budget's limit."""
+
+    def __init__(self, raw, budget):
+        self._raw = raw
+        self._budget = budget
+        self.consumed = 0
+
+    def read(self, size=-1):
+        room = self._budget.limit - self.consumed
+        want = room + 1 if size is None or size < 0 else min(size, room + 1)
+        data = self._raw.read(want) if want > 0 else b""
+        self.consumed += len(data)
+        if self.consumed > self._budget.limit:
+            raise TooLarge("the archive decompresses to more than its bounds allow (%d bytes)" % self._budget.limit)
+        return data
+
+    def close(self):
+        pass
+
+
+def _bounded_tarinfo(budget):
+    class _BoundedTarInfo(tarfile.TarInfo):
+        # Runs for every header (also the records a PAX or GNU long-name header chains to) before
+        # tarfile reads the record's payload.
+        def _proc_member(self, tar):
+            budget.header(self)
+            return super()._proc_member(tar)
+
+    return _BoundedTarInfo
+
+
 def unpack_archive(handle, root, max_bytes, max_entries, check=None):
     """Unpacks the gzip tar ``handle`` into the empty directory ``root`` under the rules above.
 
@@ -451,12 +631,21 @@ def unpack_archive(handle, root, max_bytes, max_entries, check=None):
     """
     total = 0
     entries = 0
+    seen_root = False
+    links = {}
+    budget = _Budget(max_bytes, max_entries)
+    # The gzip layer is ours, so tarfile only ever sees the bounded decompressed stream.
+    stream = _BoundedReader(gzip.GzipFile(fileobj=handle, mode="rb"), budget)
     root_fd = os.open(root, _DIR_FLAGS)
     try:
         try:
-            tar = tarfile.open(fileobj=handle, mode="r|gz")
-        except (tarfile.TarError, EOFError, OSError, zlib.error) as exc:
+            tar = tarfile.open(fileobj=stream, mode="r|", tarinfo=_bounded_tarinfo(budget))
+        except (tarfile.TarError, EOFError, zlib.error) as exc:
             raise Rejected("not a gzip-compressed tar archive (%s)" % exc) from None
+        except OSError as exc:
+            if exc.errno is None:
+                raise Rejected("not a gzip-compressed tar archive (%s)" % exc) from None
+            raise
         with tar:
             while True:
                 if check is not None:
@@ -471,10 +660,13 @@ def unpack_archive(handle, root, max_bytes, max_entries, check=None):
                     raise
                 if member is None:
                     break
+                # Stream mode needs no member index; tarfile would otherwise keep every TarInfo.
+                del tar.members[:]
                 parts = member_parts(member.name)
                 if not parts:
-                    if not member.isdir():
-                        raise Rejected("the archive root is not a directory")
+                    if not member.isdir() or seen_root:
+                        raise Rejected("the archive root is not a directory or appears twice")
+                    seen_root = True
                     continue
                 entries += 1
                 if entries > max_entries:
@@ -497,12 +689,16 @@ def unpack_archive(handle, root, max_bytes, max_entries, check=None):
                         raise Rejected("duplicate member %s" % rel) from None
                     finally:
                         os.close(parent)
+                    links[rel] = member.linkname
                 else:
                     kind = {tarfile.LNKTYPE: "hardlink", tarfile.CHRTYPE: "character device", tarfile.BLKTYPE: "block device",
                             tarfile.FIFOTYPE: "FIFO", tarfile.CONTTYPE: "contiguous file"}.get(member.type, "type %r" % member.type)
                     if member.issparse():
                         kind = "sparse file"
                     raise Rejected("member %s is a %s" % (rel, kind))
+        # Every link is known now: each must resolve inside the deps dir through the others (no
+        # member was written through a link, so the tree holds exactly the archive's entries).
+        check_link_graph(links, check)
     finally:
         os.close(root_fd)
     return {"entries": entries, "bytes": total}

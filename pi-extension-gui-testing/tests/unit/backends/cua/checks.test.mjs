@@ -141,3 +141,40 @@ test("cost: reported rates, daily totals, and pruning", () => {
   assert.match(billingAcknowledgementText("aws", 0.5), /bills that account at about \$0\.50 per sandbox hour/);
   assert.match(billingAcknowledgementText("aws"), /secrets .* are always excluded/);
 });
+
+test("V10: the cua.rate fix names the flag that sets the rate", () => {
+  const backend = new CuaBackend({ ownerLabel: () => LIVE_OWNER, api: new FakeCuaApi(), hostTag: HOST_TAG, version: "0.1.0" });
+  const rate = backend.checks().find((c) => c.id === "cua.rate");
+  assert.match(rate.remediation.summary, /^Run \/gui-setup cua --rate-usd-per-hour <price> /);
+});
+
+test("V11: cua.cli requires CLI 0.7 or newer and reports the observed version", async (t) => {
+  for (const [version, status] of [["0.6.9", "fail"], ["0.7", "pass"], ["0.7.3", "pass"], ["1.0.0-beta.1", "pass"], ["dev", "fail"]]) {
+    const { results } = await run(t, { fake: { version } });
+    assert.equal(results["cua.cli"].status, status, version);
+    if (status === "fail") {
+      assert.equal(results["cua.cli"].observed, `cua ${version} (needs 0.7 or newer)`);
+      assert.match(results["cua.cli"].remediation.summary, /update the cua CLI to 0\.7 or newer/);
+      assert.equal(results["cua.signin"].status, "blocked");
+    } else assert.equal(results["cua.cli"].facts["cua.cli"], version);
+  }
+});
+
+test("V13: the sandbox image is a setup input and a drift key (cua.image)", async (t) => {
+  const { staleVersions } = await import("../../../../src/config/verified.ts");
+  const env = await cuaEnv(t, {});
+  const api = new FakeCuaApi();
+  const settings = new CuaSettingsStore(env.settingsPath);
+  const backend = new CuaBackend({ ownerLabel: () => LIVE_OWNER, api, ledger: new SandboxLedger(env.ledgerDir), settings, hostTag: HOST_TAG, version: "0.1.0", procRoot: env.proc, common: { piVersion: "1.4.0" } });
+  const before = await backend.currentVersions();
+  assert.equal(before["cua.image"], "linux", "the default image");
+  const { results } = await run(t);
+  assert.equal(results["cua.targets"].facts["cua.image"], "linux", "the verified record holds the image");
+  const status = await backend.billingStatus({ image: "ghcr.io/me/desktop:2" }, new AbortController().signal);
+  assert.equal(status.image, "ghcr.io/me/desktop:2");
+  await backend.recordSetupInputs({ image: "ghcr.io/me/desktop:2" });
+  assert.equal((await settings.read()).image, "ghcr.io/me/desktop:2");
+  const after = await backend.currentVersions();
+  assert.equal(after["cua.image"], "ghcr.io/me/desktop:2");
+  assert.deepEqual(staleVersions({ toolVersions: before }, after).map((c) => c.key), ["cua.image"], "a changed image blocks launches until /gui-doctor");
+});

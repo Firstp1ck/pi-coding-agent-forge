@@ -381,7 +381,7 @@ when to switch to coordinates. The skill (§9) teaches that switch.
 Clean remotes would otherwise reinstall dependencies every session. The cache
 keeps installed dependencies **on the client** and ships them to the session.
 
-- **Location**: `~/.cache/pi-extension-gui-testing/deps/<project-hash>/<target-os>-<arch>/<key>.tar.zst`
+- **Location**: `~/.cache/pi-extension-gui-testing/deps/<project-hash>/<target-os>-<arch>/<key>.tar.gz` (gzip, because the helper packs and unpacks archives and its Python has no zstd; the client never opens an archive)
   with a `.sha256` next to it. This is persistent client data (§7a.1).
 - **Key**: SHA-256 over the contents of the declared key files (default:
   lockfiles and manifests found in the project: `requirements*.txt`,

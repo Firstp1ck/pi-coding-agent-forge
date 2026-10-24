@@ -151,16 +151,17 @@ depsWrite {transfer, offset, data_base64} …
 depsUnpack {transfer, maxUnpackedBytes, maxEntries} → {entries, bytes}
 ```
 
-Packing walks the deps dir in name order without following symlinks. It adds directories, regular files (opened with `O_NOFOLLOW`), and symlinks whose target stays inside the deps dir (an absolute target inside it becomes relative). It skips and counts everything else: symlinks out of the deps dir (a venv's `bin/python` → `/usr/bin/python3`, recreated by the venv step before the next `exec`/`launch`), sockets, FIFOs, devices. Owners are never stored; modes keep `0755` plus owner read/write. A compressed size over `maxBytes` answers `TOO_LARGE`.
+Packing walks the deps dir in name order without following symlinks. It adds directories, regular files (opened with `O_NOFOLLOW`), and symlinks whose target stays inside the deps dir, also when resolved through the dir's other symlinks (an absolute target inside it becomes relative). It skips and counts everything else: symlinks out of the deps dir, directly or through other links, (a venv's `bin/python` → `/usr/bin/python3`, recreated by the venv step before the next `exec`/`launch`), sockets, FIFOs, devices. Owners are never stored; modes keep `0755` plus owner read/write. A compressed size over `maxBytes` answers `TOO_LARGE`.
 
 Unpacking first checks that the upload has exactly the announced size and SHA-256, then empties the deps dir and extracts. It refuses, with `ARCHIVE_REJECTED`:
 
 - absolute names, `..` components, NUL, names over 4096 bytes or components over 255 bytes, nesting over 128 levels;
 - members below a symlink or a file (every parent is opened with `O_NOFOLLOW` relative to the previous one), and members that collide with an existing entry;
 - hardlinks, character and block devices, FIFOs, contiguous and sparse files;
-- symlinks with an absolute target or a target that leaves the deps dir;
+- symlinks with an absolute target or a target that leaves the deps dir, also when resolved the way the kernel will through the archive's other symlinks (`b -> .` then `a -> b/..`), and symlink loops or chains of more than 40 links;
+- a second archive root entry, or more than 4 metadata records (PAX, GNU long name or link) before one member;
 - data that is not gzip or tar, or ends early.
 
-More than `maxUnpackedBytes` of file data or `maxEntries` entries answers `TOO_LARGE`. Every failure (also `CANCELLED`) leaves the deps dir empty. Owners are never applied; setuid, setgid, and sticky bits are dropped; file mtimes are kept. Transfers live in unlinked temp files (at most four at a time) and end with the helper.
+More than `maxUnpackedBytes` of file data or `maxEntries` entries answers `TOO_LARGE`, and so do a metadata record over 64 KiB (refused before its payload is read), more than `(maxEntries + 1) × 5` header records of any kind, and a decompressed stream longer than the file data allowed plus the records' own blocks. Every failure (also `CANCELLED`) leaves the deps dir empty. Owners are never applied; setuid, setgid, and sticky bits are dropped; file mtimes are kept. Transfers live in unlinked temp files (at most four at a time) and end with the helper.
 
 Host mode with `PI_GUI_DEPS_DIR` also gives every child `PIP_TARGET=<dir>/python`, `PYTHONPATH=<dir>/python`, `npm_config_prefix=<dir>/node`, `NODE_PATH=<dir>/node/lib/node_modules` (defaults the request's `env` may override) and `PATH` prefixed with `<dir>/python/bin:<dir>/node/bin`, so installs stay valid at another session path.

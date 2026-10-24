@@ -9,6 +9,14 @@ import { SessionError, type Session, type SyncSummary } from "../../backend.ts";
 import type { BackendId } from "../../config/types.ts";
 import type { Leftover, LogEvent } from "../../protocol.ts";
 import { HelperSession } from "../../transport/helper-session.ts";
+import {
+  HELPER_ALLOW_EXEC_ENV,
+  HELPER_DEPS_DIR_ENV,
+  HELPER_DISPLAY_LOCK_DIR_ENV,
+  HELPER_MODE_ENV,
+  HELPER_RUNTIME_DIR_ENV,
+  HELPER_WORKSPACE_ENV,
+} from "../remote/linux-session.ts";
 import { CuaApiError, type CuaApi } from "./api.ts";
 import type { CuaCostLedger } from "./cost.ts";
 import type { SandboxLedger } from "./ledger.ts";
@@ -33,7 +41,7 @@ export interface SandboxHandleOptions {
   sessionId: string;
   name: string;
   ref: string;
-  /** `keepSandbox`: a stop keeps the sandbox (and its billing) instead of deleting it. */
+  /** `keepSandbox`: a stop keeps the sandbox (and its billing, still counted by the cost ledger) instead of deleting it. */
   keep: boolean;
 }
 
@@ -87,8 +95,9 @@ export class SandboxHandle {
         leftovers.push({ kind: "sandbox-dir", id: `${this.ref}:${dir}`, detail: `kept sandbox: removing the session dir failed: ${redact((error as Error).message)}` });
       }
       if (leftovers.length > 0) return leftovers;
-      await ledger.markKept(this.name).catch(() => undefined);
-      cost.stop(this.#o.sessionId);
+      await ledger.markKept(this.name, this.#o.sessionId).catch(() => undefined);
+      // The kept sandbox keeps billing (tracked per sandbox until it is deleted); only this session's share ends.
+      cost.release(this.#o.sessionId);
       this.#done = true;
       return [];
     }
@@ -147,6 +156,25 @@ export interface CuaSessionOptions {
   killWaitMs?: number;
 }
 
+/**
+ * Host-mode environment of the helper in the sandbox (the contract of
+ * `helpers/linux/pi_gui_helper/hostmode.py`, as for remote-linux): it runs as
+ * the sandbox user with its runtime files, display locks, and `setup`
+ * installs (`PIP_TARGET`, npm prefix below `deps/`) in dirs it owns, so no
+ * writable `/deps` and no `python3-venv` are needed. `setup` runs through `exec`.
+ */
+export function cuaHelperEnv(sessionId: string): Record<string, string> {
+  const dir = guestDir(sessionId);
+  return {
+    [HELPER_MODE_ENV]: "host",
+    [HELPER_WORKSPACE_ENV]: `${dir}/workspace`,
+    [HELPER_RUNTIME_DIR_ENV]: `${dir}/run`,
+    [HELPER_DISPLAY_LOCK_DIR_ENV]: `${GUEST_ROOT}/displays`,
+    [HELPER_ALLOW_EXEC_ENV]: "1",
+    [HELPER_DEPS_DIR_ENV]: `${dir}/deps`,
+  };
+}
+
 /** The helper's argv in the guest (`python3 -I`, so neither PYTHONPATH nor the cwd injects modules). */
 export function helperArgv(sessionId: string): string[] {
   return ["python3", "-I", `${guestDir(sessionId)}/tools/helper`];
@@ -171,10 +199,12 @@ export class CuaSession extends HelperSession {
       ...(options.killWaitMs !== undefined ? { killWaitMs: options.killWaitMs } : {}),
       labels: { launcher: "cua", target: "the Cua sandbox session", inside: "inside the sandbox", stillRunning: "cua sandbox exec still running" },
       hooks: {
-        spawn: (env) => options.api.spawnHelper(options.handle.ref, helperArgv(options.id), env),
+        spawn: (env) => options.api.spawnHelper(options.handle.ref, helperArgv(options.id), { ...cuaHelperEnv(options.id), ...env }),
         // The sandbox is deleted after the stream; ending the CLI process ends the guest command too.
         teardown: () => options.handle.remove(),
         audit: () => options.handle.audit(),
+        // The CLI's stderr can quote requests and cloud SDK errors: redact it like every other cua output.
+        sanitizeDiagnostic: (text) => redact(text),
       },
     });
     this.handle = options.handle;

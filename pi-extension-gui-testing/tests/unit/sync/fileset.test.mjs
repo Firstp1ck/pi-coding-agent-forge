@@ -292,3 +292,18 @@ test("Z6: a directory link survives only when its target directory has synced fi
   assert.equal(why["env-link"], "link-excluded");
   assert.equal(why["empty-link"], "link-excluded");
 });
+
+test("Z3 (inode reuse): the file identity includes the birth time, so a replacement that reuses the inode number is refused; an in-place edit is not a replacement", async (t) => {
+  const { fileIdentity } = await import("../../../src/sync/fileset.ts");
+  assert.notEqual(fileIdentity({ dev: 1n, ino: 2n, birthtimeNs: 3n }), fileIdentity({ dev: 1n, ino: 2n, birthtimeNs: 4n }), "same dev and inode, another file");
+  const root = await tree(t, { "cfg/app.txt": "inside\n" });
+  const set = await buildFileSet(root, {});
+  const entry = set.entries.find((e) => e.path === "cfg/app.txt");
+  const info = await lstat(join(root, "cfg", "app.txt"), { bigint: true });
+  assert.equal(entry.identity, `${info.dev}:${info.ino}:${info.birthtimeNs}`);
+  await writeFile(join(root, "cfg", "app.txt"), "edited in place\n");
+  const dest = join(await mkdtemp(join(tmpdir(), "gui-copy-")), "workspace");
+  t.after(() => rm(dirname(dest), { recursive: true, force: true }));
+  await copyFileSet(set, dest);
+  assert.equal(await readFile(join(dest, "cfg", "app.txt"), "utf8"), "edited in place\n");
+});

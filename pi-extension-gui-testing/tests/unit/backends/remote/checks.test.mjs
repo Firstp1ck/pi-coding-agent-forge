@@ -22,7 +22,7 @@ import { FakeSsh } from "../../transport/ssh/fake-ssh.mjs";
 import { fakeDocker } from "../fakes.mjs";
 
 const BASE = "/run/user/1000/pi-gui-testing";
-const TOOLS = ["Xvfb", "xdotool", "import", "dbus-run-session", "at-spi-bus-launcher", "openbox", "fc-list", "xdpyinfo", "python3", "docker", "tar", "sha256sum", "mktemp", "stat"];
+const TOOLS = ["Xvfb", "xdotool", "import", "convert", "dbus-run-session", "at-spi-bus-launcher", "openbox", "fc-list", "xdpyinfo", "python3", "docker", "tar", "sha256sum", "mktemp", "stat"];
 
 function facts(overrides = {}) {
   const values = {
@@ -171,6 +171,22 @@ test("missing remote tools: sudo -n install with passwordless sudo, otherwise th
   assert.equal(hint.manual, true);
   assert.match(hint.summary, /ssh -t raspi5 sudo pacman -S --needed --noconfirm xorg-server-xvfb/);
   assert.equal(manual.by["remote.sudo"].status, "warn");
+});
+
+test("V9: linux.screenshot needs what the helper uses (magick, or import and convert); xwd alone fails", async (t) => {
+  const base = TOOLS.filter((x) => x !== "import" && x !== "convert");
+  const cases = [
+    [[...base, "xwd"], "fail", /neither magick nor import and convert found \(xwd at \/usr\/bin\/xwd is not used\)/],
+    [[...base, "import"], "fail", /neither magick nor import and convert/],
+    [[...base, "magick"], "pass", /ImageMagick 7/],
+    [[...base, "import", "convert"], "pass", /ImageMagick 6/],
+  ];
+  for (const [tools, status, observed] of cases) {
+    const { by } = await run(t, RemoteLinuxBackend, { facts: { tools } });
+    assert.equal(by["linux.screenshot"].status, status, tools.join(" "));
+    assert.match(by["linux.screenshot"].observed, observed);
+    if (status === "fail") assert.deepEqual(by["linux.screenshot"].remediation.command, ["ssh", "-o", "BatchMode=yes", "-T", "--", "raspi5", "sudo -n apt-get install -y imagemagick"]);
+  }
 });
 
 test("a non-Linux or 32-bit remote host", async (t) => {

@@ -4,13 +4,15 @@
  * starts in a fresh remote session dir. The workspace is synced there with
  * the §4.7 rules, the project's `setup` commands run there (never on the
  * client), and the session dir is removed on every exit path.
+ * `network: "none"` cannot be enforced on a shared remote host, so it is
+ * refused before anything is created there.
  */
-import type { Backend, Session, SessionStartOptions } from "../backend.ts";
+import { SessionError, type Backend, type Session, type SessionStartOptions } from "../backend.ts";
 import type { DriftCapability, OrphanAuditGate, ResetCapability, RunnerCapability, SmokeCapability, SweepAvailability } from "./capabilities.ts";
 import type { Check } from "../checks/types.ts";
 import type { BackendId, ResolvedConfig } from "../config/types.ts";
 import { stopAfterFailedStart } from "./start-failure.ts";
-import { RemoteBackendBase, type RemoteBackendOptions } from "./remote/base.ts";
+import { RemoteBackendBase, type RemoteBackendOptions, type RemoteSharedState } from "./remote/base.ts";
 import { RemoteProbes, remoteBaseChecks, REMOTE_LINUX_MIN_FREE_BYTES } from "./remote/checks.ts";
 import { deployHelper, REMOTE_SMOKE_APP } from "./remote/deploy.ts";
 import { remoteLinuxRuntimeChecks } from "./remote/linux-checks.ts";
@@ -24,8 +26,8 @@ export class RemoteLinuxBackend
 {
   readonly id: BackendId = "remote-linux";
 
-  constructor(options: RemoteLinuxOptions) {
-    super(options);
+  constructor(options: RemoteLinuxOptions, shared?: RemoteSharedState) {
+    super(options, shared);
   }
 
   checks(): Check[] {
@@ -55,12 +57,17 @@ export class RemoteLinuxBackend
     return { cmd: "python3", args: [REMOTE_SMOKE_APP] };
   }
 
-  /** The smoke session uses this backend's host. */
+  /** The smoke session uses this backend's host and the host's network (`none` cannot be enforced here). */
   smokeConfig(base: ResolvedConfig): ResolvedConfig {
-    return this.remoteHost ? { ...base, remote: { host: this.remoteHost } } : base;
+    const config: ResolvedConfig = { ...base, shared: { ...base.shared, network: "default" } };
+    return this.remoteHost ? { ...config, remote: { host: this.remoteHost } } : config;
   }
 
   async startSession(options: SessionStartOptions): Promise<Session> {
+    // Refused before any connection: gui_launch must never report a network mode that is not enforced.
+    if (options.config.shared.network === "none") {
+      throw new SessionError("UNSUPPORTED", 'remote-linux cannot block the app\'s network ("network": "none"); use remote-linux-docker or docker-linux for an offline session, or set "network": "default"');
+    }
     const prepared = await this.prepare(options, async (transport, remote, signal) => {
       options.onStatus?.(`copying the helper to ${transport.destination}`);
       await deployHelper(transport, remote.tooling, { signal, ...(this.options.packageRoot ? { packageRoot: this.options.packageRoot } : {}) });

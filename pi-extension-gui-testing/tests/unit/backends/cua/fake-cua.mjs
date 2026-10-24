@@ -66,7 +66,7 @@ export class FakeCuaApi {
   async version() {
     this.#record("version");
     this.#fail("version");
-    return "0.7.0";
+    return this.options.version ?? "0.7.0";
   }
 
   async signedIn() {

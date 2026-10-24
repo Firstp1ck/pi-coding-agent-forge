@@ -126,6 +126,8 @@ export interface SetupArgs {
   cloud?: CloudLocation;
   /** `cua`: hourly sandbox price for the cost estimate when Cua reports none (`--rate-usd-per-hour`). */
   rateUsdPerHour?: number;
+  /** `cua`: the sandbox image (`--image`, default Cua's `linux` image). */
+  image?: string;
 }
 
 export const SETUP_FLAGS: Record<string, FlagSpec> = {
@@ -140,10 +142,11 @@ export const SETUP_FLAGS: Record<string, FlagSpec> = {
   "--purge-tooling": { value: false },
   "--cloud": { value: true },
   "--rate-usd-per-hour": { value: true },
+  "--image": { value: true },
 };
 
 export const SETUP_USAGE =
-  "/gui-setup [backend] [--fix|--no-fix] [--project] [--host <ssh-alias-or-user@host>] [--purge-tooling] [--targets linux,windows,macos] [--accept-billing] [--cloud aws|gcp|hetzner|modal] [--rate-usd-per-hour <n>] [--accept-windows-license]";
+  "/gui-setup [backend] [--fix|--no-fix] [--project] [--host <ssh-alias-or-user@host>] [--purge-tooling] [--targets linux,windows,macos] [--accept-billing] [--cloud aws|gcp|hetzner|modal] [--rate-usd-per-hour <n>] [--image <cua-image>] [--accept-windows-license]";
 
 /** Parses `/gui-setup` arguments. `--fix` and `--no-fix` are mutually exclusive. */
 export function parseSetupArgs(input: string): SetupArgs {
@@ -177,6 +180,11 @@ export function parseSetupArgs(input: string): SetupArgs {
     const value = Number(rate);
     if (!/^\d+(\.\d+)?$/.test(rate) || !Number.isFinite(value) || value > 1_000) throw new FlagError(`${command}: --rate-usd-per-hour must be a number from 0 to 1000 (USD per sandbox hour)`);
     args.rateUsdPerHour = value;
+  }
+  const image = flags.get("--image");
+  if (typeof image === "string") {
+    if (!/^[A-Za-z0-9][A-Za-z0-9._:/@-]{0,255}$/.test(image)) throw new FlagError(`${command}: --image must be an image alias or registry reference (letters, digits, and . _ : / @ -)`);
+    args.image = image;
   }
   const targets = flags.get("--targets");
   if (typeof targets === "string") {

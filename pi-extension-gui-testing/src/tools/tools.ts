@@ -8,10 +8,10 @@ import type { ExtensionContext, ToolDefinition } from "@earendil-works/pi-coding
 import { Type, type Static, type TSchema } from "typebox";
 import { SessionError } from "../backend.ts";
 import { hasDrift } from "../backends/capabilities.ts";
-import { hasRemoteHost } from "../backends/remote/host.ts";
+import { bindHost, hasRemoteHost } from "../backends/remote/host.ts";
 import { decodeTreeDump } from "../backends/response.ts";
 import type { TargetOs } from "../config/types.ts";
-import { verificationState } from "../config/verified.ts";
+import { notSetUpMessage, verificationState } from "../config/verified.ts";
 import type { ActAction, TreeNode, WaitFor } from "../protocol.ts";
 import type { ToolName, UsageWarning } from "../usage/types.ts";
 import { nextArtifactName, writeArtifact } from "./artifacts.ts";
@@ -104,7 +104,9 @@ interface ToolEnv {
 /**
  * Shared frame of every session tool: verification, per-session order,
  * activity (from admission to the end of the call), usage, backend name, and
- * config warnings not yet shown.
+ * config warnings not yet shown. A session belongs to the backend that started
+ * it: that backend is verified and named, whatever the active backend is now
+ * (the active backend governs new launches only).
  */
 async function onSession(
   env: ToolEnv,
@@ -117,8 +119,15 @@ async function onSession(
   const release = runtime.admit(sessionId);
   try {
     runtime.setNotifier(ctx.hasUI ? (m, t) => ctx.ui.notify(m, t) : undefined);
-    const { id: backend, config } = await runtime.verifiedBackend(ctx.cwd);
-    const { output, usage } = await runtime.withSession(sessionId, run);
+    const known = runtime.find(sessionId);
+    // Without such a session, the active backend's state decides the refusal text (R8).
+    const { config, global } = known ? await runtime.config(ctx.cwd).then(({ resolved, global }) => ({ config: resolved, global })) : await runtime.verifiedBackend(ctx.cwd);
+    if (known && verificationState(global, known.backend).state !== "verified") throw new Error(notSetUpMessage(known.backend));
+    let backend = known?.backend ?? "";
+    const { output, usage } = await runtime.withSession(sessionId, (live) => {
+      backend = live.backend;
+      return run(live);
+    });
     const warnings = runtime.recordUsage({ session: sessionId, tool, ...usage });
     return finish(output, backend, warnings, runtime.takeConfigWarnings(config.warnings));
   } finally {
@@ -203,11 +212,13 @@ async function launchApp(params: Static<typeof LAUNCH_PARAMS>, rt: GuiRuntime, c
   const supported = rt.registry.entry(backendId)?.targets ?? ["linux"];
   if (!supported.includes(target as TargetOs)) throw new Error(`backend "${backendId}" runs ${targetList(supported)} apps only; target "${target}" is not available on it`);
   // Remote backends observe the configured host, so a changed remote.host is drift (run /gui-doctor).
-  if (hasRemoteHost(backend)) backend.useHost(config.remote?.host ?? global.verified[backendId]?.inputs?.host);
-  if (hasDrift(backend)) {
+  // The host is bound to this launch (a view, and the session config); the shared backend never changes.
+  const host = hasRemoteHost(backend) ? bindHost(backend, config.remote?.host ?? global.verified[backendId]?.inputs?.host).remoteHost : undefined;
+  const view = bindHost(backend, host);
+  if (hasDrift(view)) {
     let current: Record<string, string>;
     try {
-      current = await backend.currentVersions(signal);
+      current = await view.currentVersions(signal);
     } catch (error) {
       throw new Error(`backend "${backendId}" is not reachable (${(error as Error).message}); ask the user to run /gui-doctor ${backendId}`);
     }
@@ -219,7 +230,7 @@ async function launchApp(params: Static<typeof LAUNCH_PARAMS>, rt: GuiRuntime, c
   if (!cmd) throw new Error('no app to launch: pass cmd, or add "launch": {"cmd": …} to .pi/gui.json');
   const args = params.args ?? (params.cmd ? [] : (configured?.args ?? []));
   const appEnv = { ...(configured?.env ?? {}), ...(params.env ?? {}) };
-  const sessionConfig = { ...config, shared: { ...config.shared, launch: { cmd, args, env: appEnv } } };
+  const sessionConfig = { ...config, shared: { ...config.shared, launch: { cmd, args, env: appEnv } }, ...(host ? { remote: { ...config.remote, host } } : {}) };
   const live = await rt.openSession({
     backend: backendId,
     projectRoot: ctx.cwd,
@@ -472,11 +483,13 @@ export function createGuiTools(runtime: GuiRuntime): ToolDefinition<TSchema, Rec
       // Stopping is always safe: a live session is stopped even if its backend became unverified meanwhile.
       const known = env.runtime.find(params.session);
       const usable = known && !known.transient ? known : undefined;
-      const backend = usable ? usable.backend : (await env.runtime.verifiedBackend(env.ctx.cwd)).id;
       if (!usable) {
+        if (!known) await env.runtime.verifiedBackend(env.ctx.cwd); // Refuses with the spec's text when nothing is set up.
         env.runtime.get(params.session); // Throws for an unknown id.
         throw new Error(`GUI session ${params.session} belongs to a running /gui-setup or /gui-doctor; cancel it with /gui-cleanup`);
       }
+      // The session's own backend, whatever the active backend is now.
+      const backend = usable.backend;
       env.runtime.recordUsage({ session: params.session, tool: "gui_stop" });
       // A session whose earlier teardown failed is retried directly; a running one waits for its queue.
       const outcome =

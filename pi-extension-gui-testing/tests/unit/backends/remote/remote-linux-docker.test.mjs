@@ -104,6 +104,8 @@ async function env(t, options = {}) {
   return { root, backend, ...host, start, recorded, exitArgvs, sessionDir };
 }
 
+const p0 = (argv) => parseRunArgv(argv);
+
 test("a session runs every docker command on the remote host and binds the synced session dir", async (t) => {
   const e = await env(t);
   const session = await e.start();
@@ -114,6 +116,8 @@ test("a session runs every docker command on the remote host and binds the synce
   assert.equal(run.destination, "raspi5");
   const argv = run.decoded.argv;
   assert.deepEqual(argv.slice(0, 4), ["docker", "--host", HOST, "run"]);
+  assert.deepEqual(run.decoded.session, { dir, name }, "docker run runs under the remote cleanup wrapper of the synced dir");
+  assert.deepEqual(run.decoded.container, { host: HOST, name: p0(argv).one("--name") }, "the wrapper removes the session container first");
   const p = parseRunArgv(argv);
   assert.ok(p.all("-v").includes(`${dir}/workspace:/workspace:ro`));
   assert.ok(p.all("-v").includes(`${dir}/passwd:/etc/passwd:ro`));

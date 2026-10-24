@@ -9,8 +9,11 @@
  * `<dir>/<name>.kept.json` for one kept by `keepSandbox`. A record is written
  * (atomically, 0600) before `sandbox create` runs and removed only after the
  * deletion is confirmed, so a crash at any point leaves a record the next
- * sweep completes. Claiming a kept sandbox is a `rename` of its kept record,
- * which only one process can win.
+ * sweep completes. Every move between the two sets is a single `rename`, so a
+ * sandbox's record is in exactly one of them at any time and no step removes
+ * a file another process may have just written: keeping is `rename(active →
+ * kept)`, claiming a kept sandbox is `rename(kept → active)`, which only one
+ * process can win.
  */
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -151,12 +154,22 @@ export class SandboxLedger {
     await rm(this.#file(name, kept), { force: true });
   }
 
-  /** Moves the active record to the kept set (the sandbox stays). */
-  async markKept(name: string): Promise<void> {
+  /**
+   * Moves the active record to the kept set (the sandbox stays). The record is
+   * stamped in place and then renamed, never copied and removed: a session
+   * that claims the kept record the moment it appears keeps its claim.
+   *
+   * @param sessionId When given, only that session's record is moved.
+   */
+  async markKept(name: string, sessionId?: string): Promise<void> {
     const current = await this.read(name);
-    if (!current) return;
-    await writeJsonAtomic(this.#file(name, true), { ...current, keptAt: new Date().toISOString() }, { mode: 0o600, dirMode: 0o700 });
-    await this.remove(name);
+    if (!current || (sessionId !== undefined && current.sessionId !== sessionId)) return;
+    await this.write({ ...current, keptAt: new Date().toISOString() });
+    try {
+      await rename(this.#file(name, false), this.#file(name, true));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
   }
 
   /**

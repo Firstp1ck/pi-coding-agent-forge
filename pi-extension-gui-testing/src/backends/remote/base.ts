@@ -6,10 +6,10 @@
  */
 import { join } from "node:path";
 import { VERSION as PI_VERSION } from "@earendil-works/pi-coding-agent";
-import { SessionError, type DepsCacheReport, type SessionStartOptions, type SyncSummary } from "../../backend.ts";
+import { SessionError, type DepsCacheReport, type Session, type SessionStartOptions, type SyncSummary } from "../../backend.ts";
 import { depsCacheFor, runSetupWithCache } from "../../deps/flow.ts";
 import type { DepsSession } from "../../deps/transfer.ts";
-import type { CheckResult } from "../../checks/types.ts";
+import type { Check, CheckResult } from "../../checks/types.ts";
 import type { BackendId } from "../../config/types.ts";
 import { TextTail } from "../../framing/log-event.ts";
 import { PROTOCOL_VERSION, type Leftover, type LogEvent } from "../../protocol.ts";
@@ -38,7 +38,7 @@ export const REMOTE_SETUP_TAIL_CHARS = 4 * 1024;
 export interface RemoteBackendOptions {
   /** Owner label of this extension instance, for probe dirs and containers. */
   ownerLabel: () => string;
-  /** SSH alias; usually set later through {@link RemoteHostCapability.useHost}. */
+  /** SSH alias; host-bound views come from {@link RemoteHostCapability.forHost}. */
   host?: string;
   /** Local runner for `ssh`, `rsync`, `ssh-keygen`; default the spawn runner. */
   runner?: CommandRunner;
@@ -94,27 +94,45 @@ export function toStartError(error: unknown, destination: string): unknown {
   return error;
 }
 
+/** State every host-bound view of one backend shares (e.g. running sessions per host). */
+export interface RemoteSharedState {
+  /** Running `remote.purgeTooling` sessions per host (remote-linux-docker). */
+  running: Map<string, number>;
+}
+
 export abstract class RemoteBackendBase implements RemoteHostCapability {
   abstract readonly id: BackendId;
+  abstract checks(): Check[];
+  abstract startSession(options: SessionStartOptions): Promise<Session>;
   /** Local runner (remediation commands run on the client: `ssh … sudo -n …`, `ssh-keygen`). */
   readonly runner: CommandRunner;
   readonly version: string;
   protected readonly options: RemoteBackendOptions;
-  #host?: string;
+  protected readonly shared: RemoteSharedState;
+  /** Fixed at construction: a different host is a different view ({@link forHost}). */
+  readonly #host?: string;
 
-  constructor(options: RemoteBackendOptions) {
+  constructor(options: RemoteBackendOptions, shared?: RemoteSharedState) {
     this.options = options;
+    this.shared = shared ?? { running: new Map() };
     this.runner = options.runner ?? createSpawnRunner();
     this.version = options.version ?? packageVersion();
-    if (options.host !== undefined) this.useHost(options.host);
+    this.#host = options.host === undefined || options.host === "" ? undefined : assertDestination(options.host);
   }
 
   get remoteHost(): string | undefined {
     return this.#host;
   }
 
-  useHost(host: string | undefined): void {
-    this.#host = host === undefined || host === "" ? undefined : assertDestination(host);
+  /**
+   * A view of this backend bound to `host` (same options, runner, and shared
+   * state). Never changes this instance, so a concurrent setup, doctor,
+   * launch, or sweep keeps its own host.
+   */
+  forHost(host: string | undefined): this {
+    const Ctor = this.constructor as new (options: RemoteBackendOptions, shared: RemoteSharedState) => this;
+    const { host: _previous, ...rest } = this.options;
+    return new Ctor(host === undefined || host === "" ? rest : { ...rest, host }, this.shared);
   }
 
   /** Construction options shared by every transport of this backend. */

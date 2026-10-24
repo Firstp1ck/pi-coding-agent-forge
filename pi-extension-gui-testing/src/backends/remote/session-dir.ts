@@ -12,7 +12,9 @@
  * (mode 0700) holding `owner` (the client owner label, for remote sweeps),
  * `tooling/` (the helper), `workspace/` (the synced project), and `run/`
  * (helper runtime files). `<root>/displays` holds display locks shared by
- * concurrent sessions.
+ * concurrent sessions. The session's long-lived process runs under
+ * {@link SESSION_WRAPPER_SCRIPT}, which removes the dir on the remote host
+ * whenever that process ends, also after a dropped connection.
  *
  * All scripts are POSIX sh with their inputs as positional parameters.
  */
@@ -54,15 +56,67 @@ function forEachRoot(body: string): string {
 }
 
 /**
- * `snapshot` records this user's processes once as `<pid> <cmdline and
- * environment>` lines (NULs and newlines as spaces, so `grep -F` also works
- * with BusyBox); `tagged` prints the PIDs whose line contains `$1`. The
- * script's own argv never contains a full session path (it is built at run
- * time), and its own PID is skipped, so it never matches itself.
+ * Process selection shared by the scripts. `snapshot` records this user's
+ * processes once as ` <pid>:<starttime> <cmdline and environment words> `
+ * lines (NULs and newlines as spaces, so `grep -F` also works with BusyBox;
+ * `<starttime>` is `/proc/<pid>/stat` field 22). `tagged` prints the
+ * `<pid>:<starttime>` of the processes with a word that is the session path
+ * `$1` or below it (`$1`, `$1/…`, `X=$1`, `X=$1/…`; never a mere substring, so
+ * `s-a-1` does not select `s-a-12`). `withtag` prints those whose environment
+ * holds exactly `PI_GUI_TAG=$1` (the helper's session tag). `same` keeps the
+ * PIDs whose start time is still the recorded one, so a reused PID is never
+ * signalled. The scripts' own argv never contains a full session path (it is
+ * built at run time), and their own PID is skipped, so they never match
+ * themselves.
  */
 const TAGGED_FN = [
-  'snapshot() { snap=$(for f in /proc/[0-9]*; do p=${f#/proc/}; [ "$p" = "$$" ] && continue; [ -O "$f" ] || continue; printf "%s " "$p"; cat "$f/cmdline" "$f/environ" 2>/dev/null | tr "\\000\\n" "  "; echo; done); };',
-  'tagged() { [ -n "$1" ] || return 0; printf "%s\\n" "$snap" | grep -F -e "$1" | cut -d " " -f 1; };',
+  'st_of() { l=; { read -r l < "/proc/$1/stat"; } 2>/dev/null; set -- ${l##*) }; [ $# -ge 20 ] && shift 19 && printf "%s" "$1"; };',
+  'snapshot() { snap=$(for f in /proc/[0-9]*; do p=${f#/proc/}; [ "$p" = "$$" ] && continue; [ -O "$f" ] || continue; l=; { read -r l < "$f/stat"; } 2>/dev/null; set -- ${l##*) }; [ $# -ge 20 ] || continue; shift 19; s=$1; printf " %s:%s " "$p" "$s"; cat "$f/cmdline" "$f/environ" 2>/dev/null | tr "\\000\\n" "  "; echo " "; done); };',
+  'tagged() { [ -n "$1" ] || return 0; printf "%s\\n" "$snap" | grep -F -e " $1 " -e " $1/" -e "=$1 " -e "=$1/" | cut -d " " -f 2; };',
+  'withtag() { [ -n "$1" ] || return 0; printf "%s\\n" "$snap" | grep -F -e " PI_GUI_TAG=$1 " | cut -d " " -f 2; };',
+  'same() { for x in "$@"; do p=${x%%:*}; [ -n "$p" ] && [ "$(st_of "$p")" = "${x#*:}" ] && printf "%s " "$p"; done; };',
+].join(" ");
+
+/**
+ * Display lock records (`hostmode.py`: `<root>/displays/display-<N>.lock`,
+ * JSON with sorted keys). `field K` prints string field `K` of `$rec`;
+ * `locks_of P` sets `$locks` to this user's regular lock files (≤ 64 KiB, not
+ * symlinks) whose `runtimeDir` is exactly `P/run`, `$tags` to their session
+ * tags, and `$infra` to the `<pid>:<starttime>` of their infrastructure
+ * processes (Xvfb, buses, window manager) when the record is from this boot
+ * (other boots' PIDs mean nothing); the helper itself is selected by its
+ * path. `lock_gone` removes each such lock once its helper is
+ * dead, together with the X lock and socket of its display when the X lock
+ * names the recorded Xvfb and that Xvfb is gone; a live helper or Xvfb is
+ * reported as `left=` and its files stay.
+ */
+const LOCK_FN = [
+  'boot=$(cat /proc/sys/kernel/random/boot_id 2>/dev/null);',
+  'field() { printf "%s" "$rec" | sed -n "s/.*\\"$1\\": \\"\\([^\\"]*\\)\\".*/\\1/p"; };',
+  'num() { printf "%s" "$rec" | sed -n "s/.*\\"$1\\": \\([0-9][0-9]*\\).*/\\1/p"; };',
+  'infra_of() { printf "%s" "$rec" | sed -n "s/.*\\"infra\\": {\\([^}]*\\)}.*/\\1/p" | tr "," "\\n" | sed -n "s/.*\\"$1\\": \\"\\([0-9][0-9]*:[0-9][0-9]*\\)\\".*/\\1/p"; };',
+  'readrec() { rec=; { [ -f "$1" ] && [ ! -L "$1" ] && [ -O "$1" ]; } || return 1; sz=$(wc -c < "$1" 2>/dev/null) || return 1; [ $((sz + 0)) -le 65536 ] || return 1; rec=$(tr -d "\\n" < "$1" 2>/dev/null); };',
+  'locks_of() { locks=; tags=; infra=; ld="$rb/displays"; { [ -d "$ld" ] && [ ! -L "$ld" ] && [ -O "$ld" ]; } || return 0;',
+  'for l in "$ld"/display-*.lock; do readrec "$l" || continue; [ "$(field runtimeDir)" = "$1/run" ] || continue; locks="$locks $l";',
+  't=$(field tag); case $t in ""|*[!A-Za-z0-9_-]*) ;; *) tags="$tags $t" ;; esac;',
+  'if [ -n "$boot" ] && [ "$(field bootId)" = "$boot" ]; then infra="$infra $(infra_of "[a-z]*")"; fi;',
+  'done; };',
+  'lock_gone() { for l in $locks; do readrec "$l" || continue; same_boot=; [ -n "$boot" ] && [ "$(field bootId)" = "$boot" ] && same_boot=1;',
+  'h=$(field helper); if [ -n "$same_boot" ] && [ -n "$(same "$h")" ]; then echo "left=display-lock $l helper ${h%%:*} still running"; continue; fi;',
+  'n=$(num display); xp=$(num xvfbPid);',
+  'if [ -n "$same_boot" ] && [ -n "$n" ] && [ -n "$xp" ]; then xl=/tmp/.X$n-lock; xk=/tmp/.X11-unix/X$n;',
+  'if [ -e "$xl" ] || [ -L "$xl" ]; then lp=$(tr -dc 0-9 < "$xl" 2>/dev/null); else lp=$xp; fi;',
+  'if [ "$lp" = "$xp" ]; then xs=$(infra_of xvfb); if [ -n "$xs" ] && [ -n "$(same "$xs")" ]; then echo "left=display :$n Xvfb $xp still running"; continue; fi;',
+  'for f in "$xl" "$xk"; do if [ -O "$f" ] && [ ! -d "$f" ]; then rm -f -- "$f" 2>/dev/null; fi; done; fi; fi;',
+  'rm -f -- "$l" 2>/dev/null; if [ -e "$l" ] || [ -L "$l" ]; then echo "left=display-lock $l could not be removed"; fi;',
+  'done; };',
+].join(" ");
+
+/** The session path `$rb/$name` (`rb`: resolved root) and the lock state of that session; refuses a session dir that is a symlink or not this user's directory. */
+const SESSION_FN = [
+  'is_session() { d="$b/$name"; if [ -L "$d" ] || { [ -e "$d" ] && { [ ! -d "$d" ] || [ ! -O "$d" ]; }; }; then return 1; fi; rb=$(cd -P -- "$b" 2>/dev/null && pwd) || return 1; tag="$rb/$name"; locks_of "$tag"; };',
+  // Every process of the session: by path word (resolved and as named), by session tag, and the lock records' infrastructure.
+  'pairs() { tagged "$tag"; [ "$tag" = "$d" ] || tagged "$d"; for t in $tags; do withtag "$t"; done; for x in $infra; do echo "$x"; done; };',
 ].join(" ");
 
 const CMDLINE_FN = 'cmdline() { tr "\\000" " " < "/proc/$1/cmdline" 2>/dev/null | cut -c1-200; };';
@@ -93,64 +147,136 @@ export const CREATE_SCRIPT = [
 ].join(" ");
 
 /**
- * Removes session dirs `$2…` from every root: kills their tagged processes
- * (`$1` = `graceful`: TERM, up to 3 s, then KILL; `fast`: KILL), removes the
- * dir, and removes `displays/` and the root when no session is left. Prints
- * `left=<kind> <id> <detail>` for anything that remains.
+ * Removes session dirs `$2…` from every root: kills their processes (`$1` =
+ * `graceful`: TERM, up to 3 s, then KILL; `fast`: KILL; see {@link TAGGED_FN}),
+ * removes the dir and the display locks of its dead helper (also when the dir
+ * is already gone), and removes `displays/` and the root when no session is
+ * left. A session dir that is a symlink or not this user's directory is never
+ * followed and nothing is selected through it. Prints `left=<kind> <id>
+ * <detail>` for anything that remains.
  */
 export const REMOVE_SCRIPT = [
   TAGGED_FN,
   CMDLINE_FN,
+  LOCK_FN,
+  SESSION_FN,
   'mode=$1; shift;',
   'for name in "$@"; do case $name in s-*) ;; *) continue ;; esac;',
   forEachRoot(
     [
       '{ [ -d "$b" ] && [ ! -L "$b" ] && [ -O "$b" ]; } || continue;',
-      'd="$b/$name"; { [ -e "$d" ] || [ -L "$d" ]; } || continue;',
-      'tag=$(cd -P -- "$d" 2>/dev/null && pwd) || tag=$d;',
-      'snapshot; pids=$(tagged "$tag"); [ "$tag" = "$d" ] || pids="$pids $(tagged "$d")";',
+      'if ! is_session; then echo "left=remote-dir $d is a symlink or not your directory; not touched"; continue; fi;',
+      '{ [ -e "$d" ] || [ -n "$locks" ]; } || continue;',
+      'snapshot; pids=$(same $(pairs));',
       'if [ -n "$(echo $pids)" ]; then',
-      'if [ "$mode" = graceful ]; then kill -TERM $pids 2>/dev/null; i=0; while [ $i -lt 3 ]; do sleep 1; snapshot; pids=$(tagged "$tag"); [ -z "$pids" ] && break; i=$((i+1)); done; fi;',
+      'if [ "$mode" = graceful ]; then kill -TERM $pids 2>/dev/null; i=0; while [ $i -lt 3 ]; do sleep 1; snapshot; pids=$(same $(pairs)); [ -z "$(echo $pids)" ] && break; i=$((i+1)); done; fi;',
       '[ -n "$(echo $pids)" ] && { kill -KILL $pids 2>/dev/null; sleep 1; };',
       "fi;",
       'rm -rf -- "$d" 2>/dev/null;',
       'if [ -e "$d" ] || [ -L "$d" ]; then echo "left=remote-dir $d could not be removed"; fi;',
-      'snapshot; for p in $(tagged "$tag"); do echo "left=remote-process $p $(cmdline "$p")"; done;',
+      "lock_gone;",
+      'snapshot; for p in $(same $(pairs)); do echo "left=remote-process $p $(cmdline "$p")"; done;',
       'set -- "$b"/s-*; if [ ! -e "$1" ]; then rmdir -- "$b/displays" 2>/dev/null; rmdir -- "$b" 2>/dev/null; fi;',
     ].join(" "),
   ),
   "done; exit 0",
 ].join(" ");
 
-/** Read-only audit of session dir `$1`: prints `dir=<path>` and `process=<pid> <cmdline>` lines. */
+/**
+ * Remote-owned cleanup (spec §7a.3): runs a session's long-lived process
+ * (`"$@"`: the helper, or `docker run` for remote-linux-docker) and, whenever
+ * it ends (stop, stdin EOF after a dropped SSH connection, heartbeat timeout,
+ * crash), removes the session dir on the remote host itself, with no further
+ * client call. `$1` is the resolved session dir, `$2` its name, `$3`
+ * {@link REMOVE_SCRIPT}, `$4`/`$5` the Docker host and container of
+ * remote-linux-docker (empty otherwise): that container is removed first,
+ * since a `docker run` client that died (SIGHUP) can leave it running with
+ * the dir bind-mounted. The dir is removed only when it is what
+ * {@link CREATE_SCRIPT} made: named `s-*`, a real directory (not a symlink)
+ * owned by the SSH user, mode 0700, holding the `owner` record. The removal
+ * runs {@link REMOVE_SCRIPT} under `env -i` with only the session name in its
+ * argv, so it never matches itself while it ends the session's leftover
+ * processes. A dropped connection (SIGHUP, SIGPIPE) does not stop it.
+ */
+export const SESSION_WRAPPER_SCRIPT = [
+  "pi_gui_session_wrapper=1;",
+  'd=$1; n=$2; rm_script=$3; dh=$4; dc=$5; shift 5;',
+  "trap : HUP PIPE;",
+  '"$@"; st=$?;',
+  "exec </dev/null >/dev/null 2>&1;",
+  '[ -z "$dc" ] || docker --host "$dh" rm -f -- "$dc" >/dev/null 2>&1;',
+  'case $n in s-*) ;; *) exit "$st" ;; esac; [ "${d##*/}" = "$n" ] || exit "$st";',
+  '{ [ -d "$d" ] && [ ! -L "$d" ] && [ -O "$d" ]; } || exit "$st";',
+  '[ "$(stat -c %a -- "$d" 2>/dev/null)" = 700 ] || exit "$st";',
+  'grep -q "^owner=" "$d/owner" 2>/dev/null || exit "$st";',
+  // REMOVE_SCRIPT finds the dir below its usual roots; an XDG root is named through XDG_RUNTIME_DIR.
+  'b=${d%/*}; x=; case $b in */pi-gui-testing) x=${b%/pi-gui-testing} ;; esac;',
+  'exec env -i ${PATH+"PATH=$PATH"} ${HOME+"HOME=$HOME"} ${x:+"XDG_RUNTIME_DIR=$x"} /bin/sh -c "$rm_script" sh graceful "$n"',
+].join(" ");
+
+/**
+ * Argv that runs `argv` (the helper or `docker run`) under
+ * {@link SESSION_WRAPPER_SCRIPT}, so the remote host removes `remote.dir`
+ * (and first `docker.container`, when given) when it ends.
+ */
+export function sessionWrappedArgv(remote: Pick<RemoteSessionDir, "dir" | "name">, argv: readonly string[], docker?: { host: string; container: string }): string[] {
+  if (argv.length === 0) throw new Error("empty argv");
+  assertSafeRemotePath(remote.dir);
+  if (remote.dir.split("/").at(-1) !== assertSessionName(remote.name)) throw new Error(`remote session dir ${remote.dir} does not end in ${remote.name}`);
+  if (docker && (!/^[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(docker.container) || docker.host === "" || docker.host.startsWith("-"))) throw new Error(`invalid container ${JSON.stringify(docker.container)} on ${JSON.stringify(docker.host)}`);
+  return ["/bin/sh", "-c", SESSION_WRAPPER_SCRIPT, "sh", remote.dir, remote.name, REMOVE_SCRIPT, docker?.host ?? "", docker?.container ?? "", ...argv];
+}
+
+/**
+ * Read-only audit of session dir `$1`: prints `dir=<path>`, `lock=<path>`
+ * (display locks naming it), and `process=<pid> <cmdline>` lines. A session
+ * dir that is a symlink or not this user's directory is reported, never followed.
+ */
 export const AUDIT_SCRIPT = [
   TAGGED_FN,
   CMDLINE_FN,
+  LOCK_FN,
+  SESSION_FN,
   'name=$1; case $name in s-*) ;; *) exit 2 ;; esac; snapshot;',
   forEachRoot(
     [
       '{ [ -d "$b" ] && [ ! -L "$b" ] && [ -O "$b" ]; } || continue;',
-      'd="$b/$name"; if [ -e "$d" ] || [ -L "$d" ]; then echo "dir=$d"; fi;',
-      'tag=$(cd -P -- "$d" 2>/dev/null && pwd) || tag=$d;',
-      'for p in $(tagged "$tag"); do echo "process=$p $(cmdline "$p")"; done;',
+      'if ! is_session; then echo "dir=$d"; continue; fi;',
+      'if [ -e "$d" ]; then echo "dir=$d"; fi;',
+      'for l in $locks; do echo "lock=$l"; done;',
+      'for p in $(same $(pairs)); do echo "process=$p $(cmdline "$p")"; done;',
     ].join(" "),
   ),
   "exit 0",
 ].join(" ");
 
-/** Read-only scan of every session dir: `entry<TAB>name<TAB>path<TAB>owner<TAB>live<TAB>age`. */
+/**
+ * Read-only scan of every session dir: `entry<TAB>name<TAB>path<TAB>owner<TAB>live<TAB>age`,
+ * and of display locks whose session dir is gone: `lock<TAB>name<TAB>path<TAB>helper`
+ * (`helper`: `alive`, or `dead` for a dead helper or one of an earlier boot), or
+ * `lock<TAB>-<TAB>path<TAB>unknown` for a lock that names no session dir of this root.
+ */
 export const LIST_SCRIPT = [
   TAGGED_FN,
+  LOCK_FN,
   'now=$(date +%s); snapshot;',
   forEachRoot(
     [
       '{ [ -d "$b" ] && [ ! -L "$b" ] && [ -O "$b" ]; } || continue;',
-      'for d in "$b"/s-*; do { [ -d "$d" ] && [ ! -L "$d" ]; } || continue;',
+      'rb=$(cd -P -- "$b" 2>/dev/null && pwd) || continue;',
+      'for d in "$b"/s-*; do { [ -d "$d" ] && [ ! -L "$d" ] && [ -O "$d" ]; } || continue; name=${d##*/}; tag="$rb/$name";',
       'owner=$(sed -n "s/^owner=//p" "$d/owner" 2>/dev/null | head -n 1 | tr -d "\\t\\r");',
-      'tag=$(cd -P -- "$d" 2>/dev/null && pwd) || tag=$d;',
-      'if [ -n "$(tagged "$tag")" ]; then live=1; else live=0; fi;',
+      'locks_of "$tag"; live=0; [ -n "$(tagged "$tag")" ] && live=1; for t in $tags; do [ -n "$(withtag "$t")" ] && live=1; done;',
       'mt=$(stat -c %Y -- "$d" 2>/dev/null || echo "$now");',
-      'printf "entry\\t%s\\t%s\\t%s\\t%s\\t%s\\n" "${d##*/}" "$d" "$owner" "$live" "$((now - mt))";',
+      'printf "entry\\t%s\\t%s\\t%s\\t%s\\t%s\\n" "$name" "$d" "$owner" "$live" "$((now - mt))";',
+      "done;",
+      'ld="$rb/displays"; { [ -d "$ld" ] && [ ! -L "$ld" ] && [ -O "$ld" ]; } || continue;',
+      'for l in "$ld"/display-*.lock; do readrec "$l" || continue; r=$(field runtimeDir); name=-;',
+      'case $r in "$rb"/s-*/run) name=${r#"$rb"/}; name=${name%/run}; case $name in */*) name=- ;; esac ;; esac;',
+      'if [ "$name" = - ]; then printf "lock\\t-\\t%s\\tunknown\\n" "$l"; continue; fi;',
+      '{ [ -e "$rb/$name" ] || [ -L "$rb/$name" ]; } && continue;',
+      'state=dead; if [ -n "$boot" ] && [ "$(field bootId)" = "$boot" ] && [ -n "$(same "$(field helper)")" ]; then state=alive; fi;',
+      'printf "lock\\t%s\\t%s\\t%s\\n" "$name" "$l" "$state";',
       "done;",
     ].join(" "),
   ),
@@ -292,6 +418,7 @@ export async function auditRemoteSession(runner: CommandRunner, name: string, op
   const leftovers: Leftover[] = [];
   for (const line of result.stdout.split("\n")) {
     if (line.startsWith("dir=")) leftovers.push({ kind: "remote-dir", id: `${options.destination}:${line.slice(4)}` });
+    else if (line.startsWith("lock=")) leftovers.push({ kind: "display-lock", id: `${options.destination}:${line.slice(5)}`, detail: `display lock of session ${name}` });
     else if (line.startsWith("process=")) {
       const [pid, ...cmd] = line.slice(8).split(" ");
       leftovers.push({ kind: "remote-process", id: `${options.destination}:${pid}`, detail: cmd.join(" ").slice(0, 200) || `session ${name}` });
@@ -309,17 +436,55 @@ export interface RemoteSessionEntry {
   ageSeconds: number;
 }
 
-/** Lists every remote session dir (read-only). @throws Error when the call fails. */
-export async function listRemoteSessions(runner: CommandRunner, signal?: AbortSignal): Promise<RemoteSessionEntry[]> {
+/** A display lock whose session dir is gone (`name`), or that names no session dir of its root (`name` undefined). */
+export interface RemoteLockEntry {
+  name?: string;
+  path: string;
+  /** `alive`: its helper still runs; `dead`: gone (or from an earlier boot); `unknown`: not a lock of a session dir. */
+  helper: "alive" | "dead" | "unknown";
+}
+
+/** Lists every remote session dir and every display lock left without one (read-only). @throws Error when the call fails. */
+export async function listRemoteFootprint(runner: CommandRunner, signal?: AbortSignal): Promise<{ entries: RemoteSessionEntry[]; locks: RemoteLockEntry[] }> {
   const result = await runner.run(["/bin/sh", "-c", LIST_SCRIPT, "sh"], { timeoutMs: 30_000, ...(signal ? { signal } : {}) });
   if (result.exitCode !== 0) throw new Error(`listing remote session dirs failed (${remoteFailure(result)})`);
   const entries: RemoteSessionEntry[] = [];
+  const locks: RemoteLockEntry[] = [];
   for (const line of result.stdout.split("\n")) {
-    const [tag, name, path, owner, live, age] = line.split("\t");
+    const fields = line.split("\t");
+    if (fields[0] === "lock") {
+      const [, name, path, helper] = fields;
+      if (!path || !/^\/[A-Za-z0-9._/@+-]*\/displays\/display-\d+\.lock$/.test(path)) continue;
+      if (name !== "-" && name && NAME.test(name) && (helper === "alive" || helper === "dead")) locks.push({ name, path, helper });
+      else locks.push({ path, helper: "unknown" });
+      continue;
+    }
+    const [tag, name, path, owner, live, age] = fields;
     if (tag !== "entry" || !name || !NAME.test(name)) continue;
     entries.push({ name, path: path ?? "", owner: owner ?? "", live: live === "1", ageSeconds: Number(age) || 0 });
   }
-  return entries;
+  return { entries, locks };
+}
+
+/** Lists every remote session dir (read-only). @throws Error when the call fails. */
+export async function listRemoteSessions(runner: CommandRunner, signal?: AbortSignal): Promise<RemoteSessionEntry[]> {
+  return (await listRemoteFootprint(runner, signal)).entries;
+}
+
+/**
+ * Display locks left without their session dir: a dead helper's lock is
+ * removable (its session is gone and so is the helper that held the
+ * display); a live helper's lock and a lock that names no session dir are
+ * reported, never removed.
+ */
+export function decideLocks(locks: readonly RemoteLockEntry[]): { lock: RemoteLockEntry; action: "remove" | "report"; reason: string }[] {
+  return locks.map((lock) =>
+    lock.helper === "dead"
+      ? { lock, action: "remove", reason: `display lock of the removed session ${lock.name}; its helper is gone` }
+      : lock.helper === "alive"
+        ? { lock, action: "report", reason: `display lock of the removed session ${lock.name}; its helper still runs` }
+        : { lock, action: "report", reason: "display lock that names no session dir; not removed automatically" },
+  );
 }
 
 export type RemoteOwnerState = OwnerLiveness | "foreign";
@@ -365,21 +530,31 @@ export function decideOrphans(entries: readonly RemoteSessionEntry[], procRoot: 
   });
 }
 
-/** Read-only orphan audit of the remote session dirs. */
+/** Read-only orphan audit of the remote session dirs and of display locks left without one. */
 export async function auditRemoteOrphans(runner: CommandRunner, options: { destination: string; signal?: AbortSignal; procRoot?: string }): Promise<Leftover[]> {
-  const decisions = decideOrphans(await listRemoteSessions(runner, options.signal), options.procRoot);
-  return decisions
-    .filter((d) => d.action !== "keep")
-    .map((d) => ({ kind: "remote-dir", id: `${options.destination}:${d.entry.path}`, detail: d.reason }));
+  const footprint = await listRemoteFootprint(runner, options.signal);
+  return [
+    ...decideOrphans(footprint.entries, options.procRoot)
+      .filter((d) => d.action !== "keep")
+      .map((d) => ({ kind: "remote-dir", id: `${options.destination}:${d.entry.path}`, detail: d.reason })),
+    ...decideLocks(footprint.locks).map((d) => ({ kind: "display-lock", id: `${options.destination}:${d.lock.path}`, detail: d.reason })),
+  ];
 }
 
-/** Removes orphaned remote session dirs; reports the ones that are not judged dead and what could not be removed. */
+/**
+ * Removes orphaned remote session dirs and the display locks of dead helpers
+ * whose session dir is gone; reports what is not judged dead and what could not be removed.
+ */
 export async function sweepRemoteOrphans(runner: CommandRunner, options: { destination: string; signal?: AbortSignal; procRoot?: string }): Promise<Leftover[]> {
-  const decisions = decideOrphans(await listRemoteSessions(runner, options.signal), options.procRoot);
-  const leftovers: Leftover[] = decisions
-    .filter((d) => d.action === "report")
-    .map((d) => ({ kind: "remote-dir", id: `${options.destination}:${d.entry.path}`, detail: d.reason }));
-  const doomed = decisions.filter((d) => d.action === "remove").map((d) => d.entry.name);
+  const footprint = await listRemoteFootprint(runner, options.signal);
+  const decisions = decideOrphans(footprint.entries, options.procRoot);
+  const lockDecisions = decideLocks(footprint.locks);
+  const leftovers: Leftover[] = [
+    ...decisions.filter((d) => d.action === "report").map((d) => ({ kind: "remote-dir", id: `${options.destination}:${d.entry.path}`, detail: d.reason })),
+    ...lockDecisions.filter((d) => d.action === "report").map((d) => ({ kind: "display-lock", id: `${options.destination}:${d.lock.path}`, detail: d.reason })),
+  ];
+  // Removing a gone session's name removes its dead helper's locks (REMOVE_SCRIPT).
+  const doomed = [...new Set([...decisions.filter((d) => d.action === "remove").map((d) => d.entry.name), ...lockDecisions.filter((d) => d.action === "remove").map((d) => d.lock.name!)])];
   leftovers.push(...(await removeRemoteSessions(runner, doomed, { destination: options.destination, ...(options.signal ? { signal: options.signal } : {}) })));
   return leftovers;
 }

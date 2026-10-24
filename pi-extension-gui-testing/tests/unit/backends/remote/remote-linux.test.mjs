@@ -9,7 +9,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdir, mkdtemp, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { SessionError } from "../../../../src/backend.ts";
 import { createSpawner } from "../../../../src/backends/docker/process.ts";
@@ -105,13 +105,19 @@ test("capabilities and host handling", async (t) => {
   assert.ok(hasRemoteHost(b) && hasDrift(b) && hasReset(b) && hasRunner(b) && hasSmoke(b) && hasSweepAvailability(b));
   assert.equal(b.remoteHost, undefined);
   assert.equal(await b.sweepAvailable({ startup: false }), false, "no host, no sweep");
-  b.useHost("loop");
-  assert.equal(await b.sweepAvailable({ startup: true }), false, "never at Pi startup");
-  assert.equal(await b.sweepAvailable({ startup: false }), true);
-  assert.throws(() => b.useHost("-oProxyCommand=evil"), /starts with "-"/);
-  assert.deepEqual(b.smokeApp(), { cmd: "python3", args: ["../tooling/testapps/gtk3-smoke/app.py"] });
-  assert.equal(b.smokeConfig({ shared: {} }).remote.host, "loop");
-  assert.equal((await b.currentVersions())["remote.host"], "loop");
+  const v = b.forHost("loop");
+  assert.equal(b.remoteHost, undefined, "forHost never re-points the shared backend");
+  assert.equal(v.remoteHost, "loop");
+  assert.equal(v.id, "remote-linux");
+  assert.equal(await v.sweepAvailable({ startup: true }), false, "never at Pi startup");
+  assert.equal(await v.sweepAvailable({ startup: false }), true);
+  assert.equal(await b.sweepAvailable({ startup: false }), false);
+  assert.throws(() => b.forHost("-oProxyCommand=evil"), /starts with "-"/);
+  assert.equal(v.forHost(undefined).remoteHost, undefined);
+  assert.deepEqual(v.smokeApp(), { cmd: "python3", args: ["../tooling/testapps/gtk3-smoke/app.py"] });
+  assert.equal(v.smokeConfig({ shared: {} }).remote.host, "loop");
+  assert.equal((await v.currentVersions())["remote.host"], "loop");
+  assert.equal((await b.currentVersions())["remote.host"], undefined);
   assert.deepEqual(REMOTE_HOST_SUPPORT.platforms, ["linux", "darwin"]);
 });
 
@@ -136,6 +142,7 @@ test("a session: records first, syncs, deploys, starts the host-mode helper, run
 
   const [{ child, record }] = e.spawner.helpers;
   assert.deepEqual(record.decoded.argv, ["python3", "-I", join(dir, "tooling", "helper")]);
+  assert.deepEqual(record.decoded.session, { dir, name }, "the helper runs under the remote cleanup wrapper of its session dir");
   assert.equal(record.argv.join(" ").includes(record.env.PI_GUI_TESTING_TOKEN), false);
   assert.match(record.env.PI_GUI_TESTING_TOKEN, /^[0-9a-f]{32}$/);
   assert.equal(record.env.PI_GUI_HELPER_MODE, "host");
@@ -276,4 +283,19 @@ test("runtime and tools: gui_launch and gui_stop on remote-linux through a test 
   assert.equal(runtime.find(session), undefined);
   assert.deepEqual(await remoteDirs(e), []);
   assert.deepEqual(await readdir(tmp), [], "client session dir removed");
+});
+
+test('V3: "network": "none" is refused before any remote resource; the smoke config uses the host network', async (t) => {
+  const e = await env(t);
+  const s = await startOptions(e);
+  s.options.config = { ...s.options.config, shared: { ...s.options.config.shared, network: "none" } };
+  await assert.rejects(e.backend.startSession(s.options), (error) => error instanceof SessionError && error.code === "UNSUPPORTED" && /remote-linux cannot block the app's network/.test(error.message));
+  assert.deepEqual(s.recorded, [], "nothing recorded, so nothing was created");
+  assert.deepEqual(s.exitArgvs, []);
+  assert.equal(await readFile(e.lb.log, "utf8").catch(() => ""), "", "no ssh call");
+  assert.deepEqual(await remoteDirs(e), []);
+  assert.equal(e.spawner.helpers.length, 0);
+  const smoke = e.backend.smokeConfig({ shared: { targets: ["linux"], workspaceMode: "mount", network: "none" } });
+  assert.equal(smoke.shared.network, "default");
+  assert.equal(smoke.remote.host, "loop");
 });

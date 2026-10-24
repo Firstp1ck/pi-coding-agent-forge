@@ -4,7 +4,7 @@
  * cannot carry. Timeout and abort signal the process group, then SIGKILL.
  */
 import { spawn } from "node:child_process";
-import { closeSync, openSync, readFileSync, rmSync } from "node:fs";
+import { closeSync, constants, fstatSync, ftruncateSync, openSync, readSync, rmSync } from "node:fs";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import type { Spawner } from "../../backends/docker/process.ts";
@@ -85,12 +85,42 @@ export function runPiped(spawner: Spawner, argv: readonly string[], input: Buffe
   });
 }
 
+/** Bytes of the log's tail a {@link DetachedRunner} returns as `stderr`. */
+export const DETACHED_TAIL_BYTES = 16 * 1024;
+/** Size at which a {@link DetachedRunner} log is cut back to empty (its tail kept in memory). */
+export const DETACHED_LOG_CAP_BYTES = 1024 * 1024;
+const LOG_CHECK_MS = 200;
+
+/** The last `max` bytes of the file at `fd`, read by position into a fresh buffer (nothing larger is ever read). */
+function readTail(fd: number, max: number): Buffer {
+  const size = fstatSync(fd).size;
+  const start = Math.max(0, size - max);
+  const tail = Buffer.alloc(size - start);
+  let read = 0;
+  while (read < tail.length) {
+    const n = readSync(fd, tail, read, tail.length - read, start + read);
+    if (n === 0) break;
+    read += n;
+  }
+  return tail.subarray(0, read);
+}
+
+/** UTF-8 text of `bytes` without a code point cut at the start; a copy that owns its memory. */
+function tailText(bytes: Buffer): string {
+  let from = 0;
+  while (from < bytes.length && from < 4 && (bytes[from] & 0xc0) === 0x80) from++;
+  return Buffer.from(bytes.subarray(from)).toString("utf8");
+}
+
 /** Starts a process that daemonizes itself (`ssh -f`) and waits for the foreground part to exit. */
 export interface DetachedRunner {
   /**
    * Runs `argv` with stdin and stdout on `/dev/null` and stderr in a log file,
    * so the background child keeps no pipe of ours open. Resolves when the
-   * foreground process exits; `stderr` holds the log's tail.
+   * foreground process exits; `stderr` holds the log's tail (at most
+   * {@link DETACHED_TAIL_BYTES}). The log is kept below about
+   * {@link DETACHED_LOG_CAP_BYTES}: past it, its tail is kept in memory and
+   * the file is emptied (it is opened for append, so writes restart at 0).
    */
   run(argv: readonly string[], options: { logPath: string; timeoutMs: number; signal?: AbortSignal }): Promise<RunResult>;
 }
@@ -102,7 +132,18 @@ export function createDetachedRunner(baseEnv: NodeJS.ProcessEnv = process.env): 
       if (argv.length === 0) return Promise.reject(new Error("empty argv"));
       if (options.signal?.aborted) return Promise.reject(Object.assign(new Error("aborted before spawn"), { name: "AbortError" }));
       const started = Date.now();
-      const log = openSync(options.logPath, "w", 0o600);
+      // Ours stays open for the tail reads and cuts; the child's copy appends, so a cut restarts its writes at 0.
+      const log = openSync(options.logPath, constants.O_RDWR | constants.O_CREAT | constants.O_TRUNC | constants.O_APPEND | (constants.O_NOFOLLOW ?? 0), 0o600);
+      let closed = false;
+      const closeLog = () => {
+        if (closed) return;
+        closed = true;
+        try {
+          closeSync(log);
+        } catch {
+          // Already closed.
+        }
+      };
       return new Promise<RunResult>((resolve, reject) => {
         let child;
         try {
@@ -113,9 +154,27 @@ export function createDetachedRunner(baseEnv: NodeJS.ProcessEnv = process.env): 
             shell: false,
             windowsHide: true,
           });
-        } finally {
-          closeSync(log);
+        } catch (error) {
+          closeLog();
+          rmSync(options.logPath, { force: true });
+          throw error;
         }
+        let carry: Buffer = Buffer.alloc(0);
+        let truncated = false;
+        const bound = () => {
+          if (closed) return;
+          try {
+            if (fstatSync(log).size <= DETACHED_LOG_CAP_BYTES) return;
+            // Bytes written between this read and the cut are lost; the kept tail is the log's end before it.
+            carry = Buffer.from(readTail(log, DETACHED_TAIL_BYTES));
+            ftruncateSync(log, 0);
+            truncated = true;
+          } catch {
+            // The next check retries.
+          }
+        };
+        const watch = setInterval(bound, LOG_CHECK_MS);
+        watch.unref?.();
         let timedOut = false;
         const kill = (signal: NodeJS.Signals) => {
           if (child.pid === undefined) return;
@@ -134,20 +193,28 @@ export function createDetachedRunner(baseEnv: NodeJS.ProcessEnv = process.env): 
         options.signal?.addEventListener("abort", onAbort, { once: true });
         const finish = (code: number | null, signal: NodeJS.Signals | null) => {
           clearTimeout(timer);
+          clearInterval(watch);
           options.signal?.removeEventListener("abort", onAbort);
           let stderr = "";
           try {
-            stderr = readFileSync(options.logPath, "utf8").slice(-16 * 1024);
+            const rest = readTail(log, DETACHED_TAIL_BYTES);
+            const both = carry.length === 0 ? rest : Buffer.concat([carry, rest]);
+            if (truncated || fstatSync(log).size > DETACHED_TAIL_BYTES) truncated = true;
+            stderr = tailText(both.subarray(Math.max(0, both.length - DETACHED_TAIL_BYTES)));
           } catch {
             // No log.
           }
+          carry = Buffer.alloc(0);
+          closeLog();
           rmSync(options.logPath, { force: true });
-          resolve({ exitCode: timedOut ? null : code, signal, stdout: "", stderr, timedOut, truncated: false, durationMs: Date.now() - started });
+          resolve({ exitCode: timedOut ? null : code, signal, stdout: "", stderr, timedOut, truncated, durationMs: Date.now() - started });
         };
         child.once("error", (error) => {
           if (child.pid === undefined) {
             clearTimeout(timer);
+            clearInterval(watch);
             options.signal?.removeEventListener("abort", onAbort);
+            closeLog();
             rmSync(options.logPath, { force: true });
             reject(error);
           }

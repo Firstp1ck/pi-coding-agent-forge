@@ -73,6 +73,13 @@ export interface HelperSessionHooks {
   teardown(): Promise<Leftover[]>;
   /** Read-only audit of this session's backend resources (spec §7a.4). */
   audit(): Promise<Leftover[]>;
+  /**
+   * Backend-specific clean-up of launcher diagnostics (its stderr) before they
+   * reach a message, e.g. credential redaction. It receives whole lines only
+   * ({@link diagnosticTail}), so a secret split across stream chunks or cut by
+   * the tail bound is never half-kept. Default: the text unchanged.
+   */
+  sanitizeDiagnostic?(text: string): string;
 }
 
 export interface HelperSessionOptions {
@@ -101,6 +108,31 @@ export interface HelperSessionOptions {
 
 /** Launcher stderr kept for start errors (bytes). */
 const STDERR_TAIL_BYTES = 16 * 1024;
+/** Launcher stderr quoted in a start error (characters, before sanitising). */
+export const STDERR_QUOTE_CHARS = 1_500;
+
+/**
+ * The last whole lines of launcher output, at most `maxChars` long, as an
+ * owned copy. A line cut by the tail buffer (`truncated`) or by `maxChars` is
+ * dropped, never quoted in part: a partial line could hold the rest of a
+ * secret that no pattern recognises any more. When the last line alone is
+ * longer than `maxChars`, only a note remains.
+ */
+export function diagnosticTail(text: string, truncated: boolean, maxChars: number = STDERR_QUOTE_CHARS): string {
+  let out = text;
+  if (truncated) {
+    const nl = out.indexOf("\n");
+    out = nl === -1 ? "" : out.slice(nl + 1);
+  }
+  out = out.trim();
+  if (out.length > maxChars) {
+    const start = out.length - maxChars;
+    const nl = out[start - 1] === "\n" ? start - 1 : out.indexOf("\n", start);
+    out = nl === -1 ? "" : out.slice(nl + 1);
+  }
+  if (out === "" && text.trim() !== "") return `(last output line longer than ${maxChars} characters, omitted)`;
+  return ownedSlice(out);
+}
 
 export class HelperSession implements Session {
   readonly id: string;
@@ -197,11 +229,12 @@ export class HelperSession implements Session {
       await hooks.verifyAfterStart?.(signal);
     } catch (error) {
       const failure = toSessionError(error, "START_FAILED");
-      const stderr = this.#stderr.text().trim();
+      const tail = diagnosticTail(this.#stderr.text(), this.#stderr.truncated);
+      const stderr = (hooks.sanitizeDiagnostic ? hooks.sanitizeDiagnostic(tail) : tail).trim();
       // A failed removal stays attached to the error (and retryable through stop()); it is never dropped.
       await stopAfterFailedStart(this, failure);
       const quiet = this.#options.quietCodes ?? ["ISOLATION"];
-      if (stderr && !quiet.includes(failure.code)) failure.message += `\n${labels.launcher}: ${ownedSlice(stderr, Math.max(0, stderr.length - 1500))}`;
+      if (stderr && !quiet.includes(failure.code)) failure.message += `\n${labels.launcher}: ${ownedSlice(stderr)}`;
       throw failure;
     }
   }

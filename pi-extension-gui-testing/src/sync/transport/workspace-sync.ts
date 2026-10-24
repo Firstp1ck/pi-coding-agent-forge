@@ -13,7 +13,8 @@
  *   extracted by the remote `tar` inside the remote workspace.
  *
  * On a re-sync, files that left the file set (or changed type) are removed
- * first, by exact relative path inside the remote workspace and nowhere else.
+ * first, by exact relative path inside the remote workspace and nowhere else
+ * ({@link REMOVE_STALE_SCRIPT}: no symlink is followed on the way there).
  * Every result reports file count, bytes sent, and excluded count.
  */
 import { constants } from "node:fs";
@@ -52,8 +53,36 @@ export interface WorkspaceSyncOptions {
   timeoutMs?: number;
 }
 
-/** Paths per remote `rm` call. */
+/** Paths per remote removal call. */
 const DELETE_BATCH = 200;
+
+/**
+ * Removes stale paths (`$2…`, relative) inside the workspace `$1` without
+ * following any symlink. The workspace must be a real directory (not a
+ * symlink) owned by the SSH user. Each path is reached one component at a
+ * time from the workspace's resolved path: a component that is a symlink, not
+ * a directory, `.`/`..`, or that resolves anywhere but the expected place
+ * (`pwd -P`) ends that path untouched. The leaf is unlinked relative to the
+ * verified current directory (a symlink leaf removes the link itself); a
+ * directory leaf is never removed. POSIX sh, inputs as argv only.
+ */
+export const REMOVE_STALE_SCRIPT = [
+  'root=$1; shift; case $root in /*) ;; *) echo "workspace $root is not absolute" >&2; exit 2 ;; esac',
+  '{ [ -d "$root" ] && [ ! -L "$root" ] && [ -O "$root" ]; } || { echo "workspace $root is not a directory owned by the SSH user" >&2; exit 3; }',
+  'cd -P -- "$root" || exit 3; real=$(pwd -P) || exit 3',
+  "rm_stale() {",
+  '  cd -P -- "$real" || return 1; [ "$(pwd -P)" = "$real" ] || return 1',
+  '  ifs=$IFS; IFS=/; set -f; set -- $1; IFS=$ifs; set +f; want=$real',
+  '  while [ "$#" -gt 1 ]; do',
+  '    c=$1; shift; case $c in ""|.|..) return 0 ;; esac',
+  '    { [ ! -L "$c" ] && [ -d "$c" ]; } || return 0',
+  '    cd -P -- "./$c" || return 0; want=$want/$c; [ "$(pwd -P)" = "$want" ] || return 0',
+  "  done",
+  '  case $1 in ""|.|..) return 0 ;; esac',
+  '  if [ -L "$1" ]; then rm -f -- "./$1"; elif [ -d "$1" ]; then return 0; elif [ -e "$1" ]; then rm -f -- "./$1"; fi',
+  "}",
+  'st=0; for p in "$@"; do rm_stale "$p" || st=1; done; exit "$st"',
+].join("\n");
 export const SYNC_TIMEOUT_MS = 30 * 60_000;
 
 /** `rsync` argv for one transfer (exported for tests and the checks). */
@@ -185,13 +214,14 @@ export class WorkspaceSync {
     }
   }
 
-  /** Removes remote paths that left the file set or changed type, by exact path inside the workspace. */
+  /** Removes remote paths that left the file set or changed type, by exact path inside the workspace (never through a symlink). */
   async #deleteStale(current: ReadonlyMap<string, SyncedEntry["type"]>, signal?: AbortSignal): Promise<number> {
     if (!this.#previous) return 0;
     const stale = [...this.#previous].filter(([path, type]) => current.get(path) !== type).map(([path]) => path);
     for (let i = 0; i < stale.length; i += DELETE_BATCH) {
       const batch = stale.slice(i, i + DELETE_BATCH);
-      const result = await this.#options.transport.runner.run(["rm", "-f", "--", ...batch], { cwd: this.#options.remoteDir, timeoutMs: 60_000, ...(signal ? { signal } : {}) });
+      const argv = ["/bin/sh", "-c", REMOVE_STALE_SCRIPT, "sh", this.#options.remoteDir, ...batch];
+      const result = await this.#options.transport.runner.run(argv, { timeoutMs: 60_000, ...(signal ? { signal } : {}) });
       if (result.exitCode !== 0) throw new Error(`removing files that left the sync set failed (${describe(result)})`);
     }
     return stale.length;

@@ -12,7 +12,7 @@ import type { BackendId } from "../../config/types.ts";
 import { HEARTBEAT_TIMEOUT_TEST_ENV, type LogEvent } from "../../protocol.ts";
 import { HelperSession } from "../../transport/helper-session.ts";
 import type { RemoteResources } from "./resources.ts";
-import type { RemoteSessionDir } from "./session-dir.ts";
+import { sessionWrappedArgv, type RemoteSessionDir } from "./session-dir.ts";
 
 /** Environment contract of the helper's host mode (implemented by the helper). */
 export const HELPER_MODE_ENV = "PI_GUI_HELPER_MODE";
@@ -87,7 +87,9 @@ export class RemoteLinuxSession extends HelperSession {
       ...(options.killWaitMs !== undefined ? { killWaitMs: options.killWaitMs } : {}),
       labels: { launcher: "ssh", target: `the remote session on ${resources.destination}`, inside: `on ${resources.destination}`, stillRunning: "ssh to the remote helper still running" },
       hooks: {
-        spawn: (tokenEnv) => resources.transport.spawnHelper(remoteHelperArgv(remote), { ...env, ...tokenEnv }),
+        // The wrapper removes the session dir on the remote host when the helper ends for any reason
+        // (stdin EOF after a dropped connection, heartbeat timeout, crash), without another client call.
+        spawn: (tokenEnv) => resources.transport.spawnHelper(sessionWrappedArgv(remote, remoteHelperArgv(remote)), { ...env, ...tokenEnv }),
         // ssh ignored stdin EOF: end the remote processes first, so SIGTERM to ssh leaves nothing behind.
         onExitTimeout: async () => void (await resources.teardown().catch(() => undefined)),
         teardown: () => resources.teardown(),

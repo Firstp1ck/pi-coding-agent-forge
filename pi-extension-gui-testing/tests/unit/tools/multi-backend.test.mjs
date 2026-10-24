@@ -40,6 +40,7 @@ async function multiEnv(t, options = {}) {
     globalConfigPath,
     docker: { runner: dockerRunner, endpointSource: {} },
     dockerOnPath: async () => false,
+    ...(options.platform ? { platform: options.platform } : {}),
   });
   const exitCode = process.exitCode;
   t.after(async () => {
@@ -205,4 +206,65 @@ test("F: /gui-reset uses the backend's ResetCapability; a backend without one ge
   assert.equal(bare.uiCalls.find(([kind]) => kind === "confirm")[2], "Stops its sessions and removes its verified state and backend choice.");
   assert.match(last(bare), /GUI testing reset local-linux:\nremoved the verified state and backend choice\nLeftovers: empty/);
   assert.deepEqual([...env.dockerCalls, ...bare.dockerCalls], []);
+});
+
+test("V6: tools on a running session name and use that session's backend after the active backend changed", async (t) => {
+  const local = fakeBackendEntry({ id: "local-linux" });
+  const cua = fakeBackendEntry({ id: "cua" });
+  const root = await mkdtemp(join(tmpdir(), "gui-multi-v6-"));
+  const project = join(root, "project");
+  const globalConfigPath = join(root, "config.json");
+  await mkdir(join(root, "tmp"), { recursive: true });
+  await mkdir(join(project, ".pi"), { recursive: true });
+  await writeFile(join(project, ".pi", "gui.json"), JSON.stringify({ launch: { cmd: "app" } }));
+  await writeFile(globalConfigPath, JSON.stringify({ version: 1, backend: "local-linux", verified: { "local-linux": VERIFIED_FAKE, cua: VERIFIED_FAKE } }));
+  const runtime = new GuiRuntime({ registry: new BackendRegistry([local.entry, cua.entry]), globalConfigPath, tmpRoot: join(root, "tmp") });
+  t.after(async () => {
+    await runtime.shutdown();
+    await rm(root, { recursive: true, force: true });
+  });
+  const tools = Object.fromEntries(createGuiTools(runtime).map((x) => [x.name, x]));
+  const ctx = { cwd: project, hasUI: false, mode: "json", sessionManager: { getSessionId: () => "pi-v6" }, ui: { notify() {}, setStatus() {} } };
+  const launched = await tools.gui_launch.execute("c", {}, undefined, undefined, ctx);
+  assert.equal(launched.details.backend, "local-linux");
+  const session = launched.details.session;
+
+  // The user switches the active backend; the running session still belongs to local-linux.
+  await writeFile(globalConfigPath, JSON.stringify({ version: 1, backend: "cua", verified: { "local-linux": VERIFIED_FAKE, cua: VERIFIED_FAKE } }));
+  const logs = await tools.gui_logs.execute("c", { session }, undefined, undefined, ctx);
+  assert.equal(logs.details.backend, "local-linux");
+  assert.match(logs.content[0].text, /backend: local-linux/);
+
+  // Even with the active backend unverified, the running session is usable and named correctly.
+  await writeFile(globalConfigPath, JSON.stringify({ version: 1, backend: "cua", verified: { "local-linux": VERIFIED_FAKE } }));
+  const again = await tools.gui_logs.execute("c", { session }, undefined, undefined, ctx);
+  assert.equal(again.details.backend, "local-linux");
+  // The session's own backend losing its verified state (a failed /gui-doctor local-linux) is refused with its name; gui_stop still works.
+  await writeFile(globalConfigPath, JSON.stringify({ version: 1, backend: "cua", verified: { cua: VERIFIED_FAKE } }));
+  await assert.rejects(tools.gui_logs.execute("c", { session }, undefined, undefined, ctx), /backend "local-linux" is not set up/);
+  const stopped = await tools.gui_stop.execute("c", { session }, undefined, undefined, ctx);
+  assert.equal(stopped.details.backend, "local-linux");
+  assert.equal(cua.calls.starts.length, 0, "the new active backend started nothing");
+
+  // An unknown session with an unverified active backend keeps the spec's refusal.
+  await writeFile(globalConfigPath, JSON.stringify({ version: 1, backend: "cua", verified: {} }));
+  await assert.rejects(tools.gui_logs.execute("c", { session: "gui-nope" }, undefined, undefined, ctx), /backend "cua" is not set up/);
+});
+
+test("V12: the /gui-setup picker offers only the backends that run on this client's OS", async (t) => {
+  const env = await multiEnv(t, { verified: false, platform: "darwin" });
+  // Both before any command: each env restores the process exit code it saw.
+  const none = await multiEnv(t, { verified: false, platform: "aix" });
+  await env.commands["gui-setup"].handler("", env.ctx({ hasUI: true, mode: "rpc", answers: { select: undefined } }));
+  const picker = env.uiCalls.find(([kind]) => kind === "select");
+  assert.equal(picker[2].length, 1, `only docker-linux runs on macOS: ${picker[2]}`);
+  assert.match(picker[2][0], /^docker-linux — /);
+  assert.match(last(env), /GUI setup cancelled/);
+  // Without a UI the hint names the same backends.
+  await env.commands["gui-setup"].handler("", env.ctx());
+  assert.match(last(env), /run \/gui-setup docker-linux$/);
+
+  await none.commands["gui-setup"].handler("", none.ctx({ hasUI: true, mode: "rpc" }));
+  assert.match(last(none), /no backend of this build runs on aix/);
+  assert.equal(none.uiCalls.filter(([kind]) => kind === "select").length, 0);
 });

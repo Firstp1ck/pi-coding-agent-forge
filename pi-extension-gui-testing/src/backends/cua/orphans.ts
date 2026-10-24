@@ -19,6 +19,8 @@ export interface OrphanOptions {
   hostTag: string;
   signal: AbortSignal;
   procRoot?: string;
+  /** Called with the ref of every sandbox confirmed deleted or gone (the cost ledger stops billing it). */
+  onDeleted?: (ref: string) => void;
 }
 
 const UNRECORDED =
@@ -86,7 +88,10 @@ export async function sweepCuaOrphans(options: OrphanOptions): Promise<SweepResu
     if (entry.kept) {
       // A kept sandbox that expired or was deleted elsewhere: forget it.
       try {
-        if (!(await api.getSandbox(record.ref, signal))) await ledger.remove(record.name, true);
+        if (!(await api.getSandbox(record.ref, signal))) {
+          await ledger.remove(record.name, true);
+          options.onDeleted?.(record.ref);
+        }
       } catch {
         // Unreachable now; checked again by the next sweep.
       }
@@ -106,6 +111,7 @@ export async function sweepCuaOrphans(options: OrphanOptions): Promise<SweepResu
     try {
       await ledger.update(record.name, { phase: "deleting" });
       await api.deleteSandbox(record.ref, signal);
+      options.onDeleted?.(record.ref);
       await ledger.remove(record.name);
       result.deleted.push(record.ref);
     } catch (error) {
@@ -132,6 +138,7 @@ export async function deleteKeptSandboxes(options: Omit<OrphanOptions, "procRoot
     if (!(await ledger.claimForDeletion(record.name))) continue;
     try {
       await api.deleteSandbox(record.ref, signal);
+      options.onDeleted?.(record.ref);
       await ledger.remove(record.name);
       result.deleted.push(record.ref);
     } catch (error) {

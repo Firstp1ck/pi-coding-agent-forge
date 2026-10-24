@@ -1,8 +1,11 @@
 /**
  * Puts what a session needs into its sandbox (spec §4.3, §4.7): the Linux
  * helper and the smoke app (`<dir>/tools`), the helper's system packages when
- * the image lacks them, and the synced project (`<dir>/workspace`). Archives
- * are staged in the 0700 client session dir and deleted after the upload.
+ * the image lacks them, and the synced project (`<dir>/workspace`). The helper
+ * runs in host mode as the sandbox user (`<dir>/run` runtime dir,
+ * `<root>/displays` display locks, `<dir>/deps` for `setup` installs), so
+ * nothing outside the session dir needs to be writable. Archives are staged
+ * in the 0700 client session dir and deleted after the upload.
  */
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
@@ -14,7 +17,7 @@ import { PACKAGE_ROOT } from "../docker/package.ts";
 import { CuaApiError, type CuaApi } from "./api.ts";
 import { writeBufferFile, writeWorkspaceTar } from "./bundle.ts";
 import { redact } from "./redact.ts";
-import { guestDir } from "./session.ts";
+import { GUEST_ROOT, guestDir } from "./session.ts";
 
 /** Commands the helper runs (`Xvfb`, `dbus-daemon`, `xdotool`, `import`, `xprop`, `xwininfo`) plus the Python modules it imports. */
 export const HELPER_COMMANDS = ["Xvfb", "dbus-daemon", "xdotool", "import", "xprop", "xwininfo", "python3"] as const;
@@ -39,11 +42,25 @@ export const HELPER_APT_PACKAGES = [
   "fonts-dejavu-core",
 ] as const;
 
-/** Prints `missing:<what>` for each helper requirement the guest lacks. */
+/** Installs `pip` for `setup` commands that use it (they install below the session's deps dir with `pip install --target`). */
+export const PIP_APT_PACKAGE = "python3-pip";
+
+/**
+ * Prints `missing:<what>` for each helper requirement the guest lacks. `$1` is
+ * `1` when `setup` uses pip (then `python3 -m pip` is required too), the
+ * rest are commands.
+ */
 export const PROBE_SCRIPT = [
+  "pip=$1; shift",
   'for c in "$@"; do command -v "$c" >/dev/null 2>&1 || echo "missing:$c"; done',
   "python3 -c 'import gi; gi.require_version(\"Gtk\", \"3.0\"); from gi.repository import Gtk; import pyatspi' >/dev/null 2>&1 || echo missing:python3-gi",
+  '[ "$pip" != 1 ] || python3 -m pip --version >/dev/null 2>&1 || echo missing:python3-pip',
 ].join("\n");
+
+/** Whether a `setup` command calls pip (`pip`, `pip3`, `python3 -m pip`). */
+export function setupUsesPip(commands: readonly string[]): boolean {
+  return commands.some((cmd) => /(^|[\s;&|(])(pip3?|python3?(\.\d+)? -m pip)(\s|$)/.test(cmd));
+}
 
 /** Installs `$@` with apt as root or through passwordless sudo; exits 90 without either, 91 without apt. */
 export const INSTALL_SCRIPT = [
@@ -85,12 +102,15 @@ export interface DeployOptions {
   helperArchive?: () => Promise<Buffer>;
 }
 
-/** Creates the session dir and unpacks the helper tooling into `<dir>/tools`. */
+/**
+ * Creates the session dir (0700, with `tools/`, `workspace/`, `run/`) and the
+ * shared display lock dir, and unpacks the helper tooling into `<dir>/tools`.
+ */
 export async function deployHelper(options: DeployOptions): Promise<void> {
   const { api, ref, signal } = options;
   const dir = guestDir(options.sessionId);
   options.onStatus?.("copying the helper into the sandbox");
-  await execOk(api, ref, ["mkdir", "-p", "-m", "700", `${dir}/tools`, `${dir}/workspace`], "creating the session dir", DEPLOY_TIMEOUTS.mkdir, signal);
+  await execOk(api, ref, ["mkdir", "-p", "-m", "700", `${GUEST_ROOT}/displays`, dir, `${dir}/tools`, `${dir}/workspace`, `${dir}/run`], "creating the session dir", DEPLOY_TIMEOUTS.mkdir, signal);
   const archive = await (options.helperArchive ?? (() => stageBuildContext(PACKAGE_ROOT)))();
   const local = join(options.sessionDir, "helper.tar");
   await writeBufferFile(local, archive);
@@ -98,22 +118,24 @@ export async function deployHelper(options: DeployOptions): Promise<void> {
 }
 
 /**
- * Installs the helper's packages when the image lacks them (inside the
- * sandbox only; covered by the setup acknowledgement). Returns the missing
- * items it found, `[]` when the image was complete.
+ * Installs the helper's packages (and pip, when `setup` uses it) when the
+ * image lacks them (inside the sandbox only; covered by the setup
+ * acknowledgement). Returns the missing items it found, `[]` when the image
+ * was complete.
  */
-export async function ensureHelperPackages(options: Omit<DeployOptions, "sessionDir">): Promise<string[]> {
+export async function ensureHelperPackages(options: Omit<DeployOptions, "sessionDir"> & { pip?: boolean }): Promise<string[]> {
   const { api, ref, signal } = options;
-  const out = await execOk(api, ref, ["sh", "-c", PROBE_SCRIPT, "sh", ...HELPER_COMMANDS], "checking the helper's packages", DEPLOY_TIMEOUTS.probe, signal);
+  const out = await execOk(api, ref, ["sh", "-c", PROBE_SCRIPT, "sh", options.pip ? "1" : "0", ...HELPER_COMMANDS], "checking the helper's packages", DEPLOY_TIMEOUTS.probe, signal);
   const missing = out.split("\n").filter((l) => l.startsWith("missing:")).map((l) => l.slice("missing:".length).trim().slice(0, 64));
   if (missing.length === 0) return [];
   options.onStatus?.(`installing the helper's packages in the sandbox (missing: ${missing.join(", ")})`);
-  const result = await api.exec(ref, ["sh", "-c", INSTALL_SCRIPT, "sh", ...HELPER_APT_PACKAGES], { timeoutMs: DEPLOY_TIMEOUTS.install, signal });
+  const packages = options.pip ? [...HELPER_APT_PACKAGES, PIP_APT_PACKAGE] : [...HELPER_APT_PACKAGES];
+  const result = await api.exec(ref, ["sh", "-c", INSTALL_SCRIPT, "sh", ...packages], { timeoutMs: DEPLOY_TIMEOUTS.install, signal });
   if (result.exitCode !== 0) {
     const why = result.exitCode === 90 ? "the sandbox user is not root and has no passwordless sudo" : result.exitCode === 91 ? "the image has no apt-get" : `exit ${result.exitCode ?? result.signal ?? "?"}`;
     throw new CuaApiError(
       "FAILED",
-      `the sandbox image lacks ${missing.join(", ")} and installing them failed (${why}); use an image with the helper's packages (Debian/Ubuntu: ${HELPER_APT_PACKAGES.join(" ")})` +
+      `the sandbox image lacks ${missing.join(", ")} and installing them failed (${why}); use an image with the helper's packages (Debian/Ubuntu: ${packages.join(" ")})` +
         (result.stderr.trim() ? `\n${redact(result.stderr.trim().split("\n").slice(-5).join("\n"))}` : ""),
     );
   }

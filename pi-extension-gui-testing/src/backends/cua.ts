@@ -31,11 +31,11 @@ import type { LocalSpawner } from "../transport/local-process.ts";
 import type { CostEstimate } from "../usage/detector.ts";
 import type { SessionUsage } from "../usage/types.ts";
 import type { BillingCapability, BillingSetupInputs, BillingStatus, CostCapability, DriftCapability, OrphanAuditGate, ResetCapability, SmokeCapability, SweepAvailability } from "./capabilities.ts";
-import { isCloudLocation, sandboxRef, type CuaApi } from "./cua/api.ts";
+import { CuaApiError, isCloudLocation, sandboxRef, type CuaApi, type SandboxInfo } from "./cua/api.ts";
 import { chooseLocation, cuaChecks } from "./cua/checks.ts";
 import { CuaCliApi } from "./cua/cli-api.ts";
 import { CuaCostLedger, reportedRate } from "./cua/cost.ts";
-import { deployHelper, ensureHelperPackages, syncWorkspace } from "./cua/deploy.ts";
+import { deployHelper, ensureHelperPackages, setupUsesPip, syncWorkspace } from "./cua/deploy.ts";
 import { hostTag, projectKey, sandboxName, SandboxLedger, type LedgerRecord } from "./cua/ledger.ts";
 import { auditCuaOrphans, deleteKeptSandboxes, hasDeadOwnerRecords, sweepCuaOrphans } from "./cua/orphans.ts";
 import { redact } from "./cua/redact.ts";
@@ -135,6 +135,9 @@ export class CuaBackend implements Backend, DriftCapability, ResetCapability, Sw
     });
   }
 
+  /** Kept or orphaned sandboxes deleted (or found gone) outside a session stop billing. */
+  readonly #onDeleted = (ref: string): void => this.cost.sandboxDeleted(ref);
+
   /** `UsageTrackerOptions.estimateCost` for `cua` sessions. */
   estimateCost(usage: SessionUsage): CostEstimate | undefined {
     return this.cost.estimate(usage);
@@ -151,18 +154,20 @@ export class CuaBackend implements Backend, DriftCapability, ResetCapability, Sw
     const location = inputs.location !== undefined && isCloudLocation(inputs.location) ? inputs.location : undefined;
     const chosen = chooseLocation(location ? { ...settings, location } : settings, providers);
     if (!chosen.location) return { acknowledged: false, problem: chosen.why };
-    const rate = reportedRate(providers, chosen.location, settings.image ?? DEFAULT_IMAGE) ?? inputs.rateUsdPerHour ?? settings.rateUsdPerHour;
+    const image = inputs.image ?? settings.image ?? DEFAULT_IMAGE;
+    const rate = reportedRate(providers, chosen.location, image) ?? inputs.rateUsdPerHour ?? settings.rateUsdPerHour;
     const acknowledged = settings.billingAcceptedAt !== undefined && (settings.billingLocation === undefined || settings.billingLocation === chosen.location);
-    return { location: chosen.location, acknowledged, text: billingAcknowledgementText(chosen.location, rate) };
+    return { location: chosen.location, acknowledged, text: billingAcknowledgementText(chosen.location, rate), image };
   }
 
-  /** `/gui-setup`: stores `--cloud`, `--rate-usd-per-hour`, and the acknowledgement in `cua.json`. */
+  /** `/gui-setup`: stores `--cloud`, `--rate-usd-per-hour`, `--image`, and the acknowledgement in `cua.json`. */
   async recordSetupInputs(inputs: BillingSetupInputs & { acknowledgedLocation?: string }): Promise<void> {
     if (inputs.location !== undefined && !isCloudLocation(inputs.location)) throw new Error(`unknown cloud "${inputs.location}"`);
     if (inputs.acknowledgedLocation !== undefined && !isCloudLocation(inputs.acknowledgedLocation)) throw new Error(`unknown cloud "${inputs.acknowledgedLocation}"`);
     const change: Parameters<CuaSettingsStore["update"]>[0] = {};
     if (inputs.location !== undefined) change.location = inputs.location;
     if (inputs.rateUsdPerHour !== undefined) change.rateUsdPerHour = inputs.rateUsdPerHour;
+    if (inputs.image !== undefined) change.image = inputs.image;
     if (inputs.acknowledgedLocation !== undefined) {
       change.billingAcceptedAt = new Date().toISOString();
       change.billingLocation = inputs.acknowledgedLocation;
@@ -178,7 +183,10 @@ export class CuaBackend implements Backend, DriftCapability, ResetCapability, Sw
       "cua.cli": await this.api.version(signal),
     };
     const providers = await this.api.cloudStatus(signal);
-    const chosen = chooseLocation(await this.settings.read(), providers);
+    const settings = await this.settings.read();
+    // A different sandbox image is a different system: drift until /gui-doctor verifies it.
+    versions["cua.image"] = settings.image ?? DEFAULT_IMAGE;
+    const chosen = chooseLocation(settings, providers);
     if (chosen.location) {
       versions["cua.location"] = chosen.location;
       const region = providers.find((p) => p.name === chosen.location)?.region;
@@ -222,7 +230,18 @@ export class CuaBackend implements Backend, DriftCapability, ResetCapability, Sw
     if (keep) {
       reused = await this.ledger.claimKept(location, project, { ownerLabel: options.ownerLabel, sessionId: options.sessionId });
       if (reused) {
-        const exists = await this.api.getSandbox(reused.ref, signal).catch(() => undefined);
+        let exists: SandboxInfo | undefined;
+        try {
+          exists = await this.api.getSandbox(reused.ref, signal);
+        } catch (error) {
+          if (!(error instanceof CuaApiError && error.code === "NOT_FOUND")) {
+            // Not a confirmed absence: the sandbox may still exist and bill. Keep its record (back in
+            // the kept set) and fail without creating a new sandbox.
+            await this.ledger.markKept(reused.name, options.sessionId).catch(() => undefined);
+            throw startError(`checking the kept sandbox ${reused.ref} (kept; try again, or delete it with /gui-reset cua)`, error);
+          }
+        }
+        // Only a confirmed absence (expired or deleted elsewhere) forgets the record.
         if (!exists) {
           await this.ledger.remove(reused.name);
           reused = undefined;
@@ -242,7 +261,8 @@ export class CuaBackend implements Backend, DriftCapability, ResetCapability, Sw
       // owner.json, the ledger, and the exit handler know the sandbox before it exists (spec §7a.2).
       await options.recordResource("sandbox", ref);
       if (reused) {
-        this.cost.start(options.sessionId, rate);
+        // Billed since it was created (counted once, also between sessions), not since this session.
+        this.cost.start(options.sessionId, rate, undefined, { id: ref, since: Date.parse(reused.createdAt) });
         options.onExitCleanup?.(handle.forceRemoveArgv());
         stage = "preparing the kept sandbox";
         options.onStatus?.(`reusing the kept Cua sandbox ${ref}`);
@@ -261,7 +281,7 @@ export class CuaBackend implements Backend, DriftCapability, ResetCapability, Sw
           createdAt: new Date().toISOString(),
         });
         options.onExitCleanup?.(this.api.forceDeleteArgv(ref));
-        this.cost.start(options.sessionId, rate);
+        this.cost.start(options.sessionId, rate, undefined, { id: ref });
         options.onStatus?.(`creating a Cua sandbox in your ${location} account (billed by ${location} until it is deleted)`);
         await this.api.createSandbox({ name, location, image }, signal);
         handle.markCreated();
@@ -273,7 +293,7 @@ export class CuaBackend implements Backend, DriftCapability, ResetCapability, Sw
       const deploy = { api: this.api, ref, sessionId: options.sessionId, sessionDir: options.sessionDir, signal, ...(options.onStatus ? { onStatus: options.onStatus } : {}) };
       await deployHelper({ ...deploy, ...(this.#options.helperArchive ? { helperArchive: this.#options.helperArchive } : {}) });
       stage = "installing the helper's packages";
-      await ensureHelperPackages(deploy);
+      await ensureHelperPackages({ ...deploy, pip: setupUsesPip(shared.setup ?? []) });
       stage = "uploading the workspace";
       sync = await syncWorkspace({ ...deploy, projectRoot: options.projectRoot, allow: shared.sync?.allow, deny: shared.sync?.deny, runner: this.runner });
     } catch (error) {
@@ -344,7 +364,7 @@ export class CuaBackend implements Backend, DriftCapability, ResetCapability, Sw
   }
 
   async sweepOrphans(signal: AbortSignal): Promise<Leftover[]> {
-    return (await sweepCuaOrphans({ api: this.api, ledger: this.ledger, hostTag: this.hostTag, signal, ...(this.#options.procRoot ? { procRoot: this.#options.procRoot } : {}) })).leftovers;
+    return (await sweepCuaOrphans({ api: this.api, ledger: this.ledger, hostTag: this.hostTag, signal, onDeleted: this.#onDeleted, ...(this.#options.procRoot ? { procRoot: this.#options.procRoot } : {}) })).leftovers;
   }
 
   readonly resetSummary =
@@ -356,7 +376,7 @@ export class CuaBackend implements Backend, DriftCapability, ResetCapability, Sw
     const lines: string[] = [];
     const leftovers: Leftover[] = [];
     try {
-      const kept = await deleteKeptSandboxes({ api: this.api, ledger: this.ledger, hostTag: this.hostTag, signal });
+      const kept = await deleteKeptSandboxes({ api: this.api, ledger: this.ledger, hostTag: this.hostTag, signal, onDeleted: this.#onDeleted });
       lines.push(`deleted ${kept.deleted.length} kept sandbox(es)`);
       leftovers.push(...kept.leftovers);
     } catch (error) {

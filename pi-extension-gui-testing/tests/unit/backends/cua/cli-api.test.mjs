@@ -155,6 +155,38 @@ test("the exit-handler argv carries no secret", () => {
   assert.equal(cuaEnv({ DISPLAY: ":0" }).DISPLAY, undefined);
 });
 
+test("W5: the exit-handler argv carries only allowlisted settings: no API keys, no proxy credentials", () => {
+  const words = nonSecretEnvWords({
+    PATH: "/usr/bin",
+    CUA_HOME: "/home/u/.cua",
+    CUA_API_KEY: "demo-key",
+    CUA_ANYTHING_NEW: "demo-new",
+    GOOGLE_API_KEY: "demo-google-key",
+    GOOGLE_CLOUD_PROJECT: "proj-1",
+    HTTPS_PROXY: "http://name:demo-password@proxy.invalid",
+    HTTP_PROXY: "http://proxy.invalid:3128",
+    https_proxy: "http://name@proxy.invalid",
+    HCLOUD_TOKEN: "demo-token",
+    AWS_PROFILE: "dev",
+    AWS_ACCESS_KEY_ID: "AKIADEMO",
+    AWS_REGION: "eu-west-1",
+  });
+  assert.deepEqual(words, [
+    "AWS_PROFILE=dev",
+    "AWS_REGION=eu-west-1",
+    "CUA_HOME=/home/u/.cua",
+    "CUA_KEYCHAIN_NONINTERACTIVE=1",
+    "CUA_NO_BROWSER=1",
+    "GOOGLE_CLOUD_PROJECT=proj-1",
+    "HTTP_PROXY=http://proxy.invalid:3128",
+  ]);
+  for (const secret of ["demo-key", "demo-new", "demo-google-key", "demo-password", "demo-token", "AKIADEMO", "name@"]) {
+    assert.ok(!words.some((w) => w.includes(secret)), `${secret} in ${words.join(" ")}`);
+  }
+  const argv = new CuaCliApi({ runner: new FakeCommandRunner(), baseEnv: { PATH: "/usr/bin", CUA_API_KEY: "demo-key", HTTPS_PROXY: "http://a:b@p.invalid" } }).forceDeleteArgv("aws:x");
+  assert.deepEqual(argv, ["env", "CUA_KEYCHAIN_NONINTERACTIVE=1", "CUA_NO_BROWSER=1", "cua", "sandbox", "rm", "aws:x", "--force"]);
+});
+
 test("redact removes credential shapes and keeps paths readable", () => {
   assert.equal(redact('{"token": "abcdef", "name": "ok"}'), '{"token": "[redacted]", "name": "ok"}');
   assert.equal(redact("Authorization: Bearer abc.def"), "Authorization: Bearer [redacted]");

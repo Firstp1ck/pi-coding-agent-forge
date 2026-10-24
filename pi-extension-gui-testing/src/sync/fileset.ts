@@ -21,6 +21,16 @@ import type { CommandRunner } from "../runner/types.ts";
 import { SAFE_GIT_ENV, safeGitArgv } from "./git.ts";
 import { compilePatterns, DEFAULT_IGNORED_DIRS, inDependencyDir, secretMatch, type PathPattern } from "./patterns.ts";
 
+
+/**
+ * `<dev>:<ino>:<birth time ns>` of a file. The birth time tells a replacement
+ * that reuses a freed inode number (common on ext4) from the enumerated file,
+ * and does not change when the file is edited in place.
+ */
+export function fileIdentity(info: { dev: bigint; ino: bigint; birthtimeNs: bigint }): string {
+  return `${info.dev}:${info.ino}:${info.birthtimeNs}`;
+}
+
 export type ExclusionReason =
   | "dependency"
   | "deny"
@@ -43,7 +53,7 @@ export interface SyncedEntry {
   mode: number;
   /** For links: the target relative to the link's directory, so it stays valid in the copy. */
   linkTarget?: string;
-  /** For files: `<dev>:<ino>` at enumeration; the copy refuses a file whose identity changed. */
+  /** For files: {@link fileIdentity} at enumeration; the copy refuses a file whose identity changed. */
   identity?: string;
 }
 
@@ -208,7 +218,7 @@ export async function buildFileSet(root: string, options: FileSetOptions = {}): 
       links.push({ path, mode: Number(info.mode) });
     } else if (info.isFile()) {
       const size = Number(info.size);
-      set.entries.push({ path, type: "file", size, mode: Number(info.mode) & 0o7777, identity: `${info.dev}:${info.ino}` });
+      set.entries.push({ path, type: "file", size, mode: Number(info.mode) & 0o7777, identity: fileIdentity(info) });
       set.bytes += size;
       synced.add(path);
     } else if (info.isDirectory()) {

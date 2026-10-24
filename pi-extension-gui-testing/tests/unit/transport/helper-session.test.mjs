@@ -6,7 +6,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { SessionError } from "../../../src/backend.ts";
 import { startLeftovers } from "../../../src/backends/start-failure.ts";
-import { HelperSession, METHOD_TIMEOUTS_MS, toSessionError } from "../../../src/transport/helper-session.ts";
+import { diagnosticTail, HelperSession, METHOD_TIMEOUTS_MS, toSessionError } from "../../../src/transport/helper-session.ts";
 import { METHOD_TIMEOUTS_MS as DOCKER_TIMEOUTS } from "../../../src/backends/docker/session.ts";
 import { ProtocolClientError } from "../../../src/framing/client.ts";
 import { fakeSpawner } from "../backends/fakes.mjs";
@@ -158,4 +158,47 @@ test("toSessionError: helper error texts become bounded owned copies; aborts bec
   assert.equal(toSessionError(new Error("plain"), "START_FAILED").code, "START_FAILED");
   const same = new SessionError("A", "b");
   assert.equal(toSessionError(same, "X"), same);
+});
+
+test("W4: diagnosticTail quotes whole lines only: a line cut by the tail buffer or the quote bound is dropped", () => {
+  assert.equal(diagnosticTail("one\ntwo\n", false), "one\ntwo");
+  // The buffer dropped the start of the first line (it may hold the end of a secret).
+  assert.equal(diagnosticTail("ret-tail\nsecond line\n", true), "second line");
+  assert.equal(diagnosticTail("only a cut line", true), "(last output line longer than 1500 characters, omitted)");
+  const long = `${"x".repeat(20)} start-of-line\nkept\n`;
+  assert.equal(diagnosticTail(long, false, 10), "kept");
+  assert.equal(diagnosticTail("y".repeat(50), false, 10), "(last output line longer than 10 characters, omitted)");
+  assert.equal(diagnosticTail("", false), "");
+});
+
+test("W4: the sanitizeDiagnostic hook sees the launcher stderr before it is quoted in a start error", async () => {
+  const seen = [];
+  const spawner = fakeSpawner({ noReady: true });
+  const session = new HelperSession({
+    id: "gui-test",
+    backend: "local-linux",
+    packageVersion: "0.1.0",
+    onLog() {},
+    readyTimeoutMs: 100,
+    heartbeatIntervalMs: 0,
+    exitWaitMs: 50,
+    killWaitMs: 20,
+    labels: LABELS,
+    hooks: {
+      spawn: (env) => {
+        const child = spawner.spawn(["fake"], { env });
+        child.stderr.write("token=abc");
+        child.stderr.write("def\n");
+        return child;
+      },
+      teardown: async () => [],
+      audit: async () => [],
+      sanitizeDiagnostic: (text) => (seen.push(text), text.replace(/token=\S+/g, "token=[hidden]")),
+    },
+  });
+  const error = await session.start(signal()).then(() => undefined, (e) => e);
+  assert.ok(error);
+  assert.deepEqual(seen, ["token=abcdef"], "one call with the joined, whole line");
+  assert.ok(!error.message.includes("abcdef"), error.message);
+  assert.match(error.message, /fake-launcher: token=\[hidden\]/);
 });

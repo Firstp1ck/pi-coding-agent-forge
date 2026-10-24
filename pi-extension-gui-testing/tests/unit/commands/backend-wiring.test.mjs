@@ -22,28 +22,31 @@ import { fakeBackendEntry } from "../backends/fake-backend.mjs";
 
 const OK = { exitCode: 0, signal: null, stdout: "", stderr: "", timedOut: false, truncated: false, durationMs: 0 };
 
-/** A fake `remote-linux`: the fake helper backend plus `useHost`/`remoteHost`, remote sudo, and a package check fixed with sudo. */
-function remoteEntry() {
+/**
+ * A fake `remote-linux`: the fake helper backend plus `forHost`/`remoteHost`
+ * (host-bound views; the shared backend has no host), remote sudo, and a
+ * package check fixed with sudo. `options.wrapChecks(host, checks)` may add checks.
+ */
+function remoteEntry(options = {}) {
   const fake = fakeBackendEntry({ id: "remote-linux" });
-  const log = { useHost: [], hostsAtChecks: [], sudo: [], applied: [], hostsAtStart: [], hostsAtSweep: [] };
+  const log = { forHost: [], hostsAtChecks: [], sudo: [], applied: [], hostsAtStart: [], hostsAtSweep: [] };
   let installed = false;
   const create = fake.entry.create;
-  fake.entry.create = (ctx) => {
-    const backend = create(ctx);
-    let host;
-    Object.defineProperty(backend, "remoteHost", { get: () => host, enumerable: true });
-    backend.useHost = (h) => {
-      log.useHost.push(h);
+  /** A copy of `from` bound to `host`; methods that need the host read their own copy's. */
+  const view = (from, host) => {
+    const backend = { ...from };
+    Object.defineProperty(backend, "remoteHost", { value: host, enumerable: true });
+    backend.forHost = (h) => {
+      log.forHost.push(h);
       if (h !== undefined && /\s/.test(h)) throw new Error(`"${h}" is not a usable SSH destination`);
-      host = h;
+      return view(backend, h === "" ? undefined : h);
     };
     backend.passwordlessSudo = async () => (log.sudo.push(host), true);
     backend.runner = { run: async (argv) => (log.applied.push([host, ...argv]), (installed = true), OK) };
-    const checks = backend.checks;
     backend.checks = () => {
       log.hostsAtChecks.push(host);
-      return [
-        ...checks(),
+      const checks = [
+        ...from.baseChecks(),
         {
           id: "remote.pkg",
           description: "a package on the remote host",
@@ -53,13 +56,18 @@ function remoteEntry() {
           run: async () => (installed ? { status: "pass", observed: "installed", facts: { "remote.host": host ?? "" } } : { status: "fail", observed: "missing" }),
         },
       ];
+      return options.wrapChecks ? options.wrapChecks(host, checks) : checks;
     };
-    const start = backend.startSession.bind(backend);
-    backend.startSession = async (options) => (log.hostsAtStart.push(options.config.remote?.host ?? host), start(options));
-    const sweep = backend.sweepOrphans.bind(backend);
-    backend.sweepOrphans = async (signal) => (log.hostsAtSweep.push(host), sweep(signal));
+    backend.smokeConfig = (base) => (host ? { ...base, remote: { host } } : base);
+    backend.smokeApp = () => ({ cmd: "python3", args: ["/opt/pi-gui-testing/testapps/gtk3-smoke/app.py"] });
+    backend.startSession = async (start) => (log.hostsAtStart.push(start.config.remote?.host ?? host), from.baseStart(start));
+    backend.sweepOrphans = async (signal) => (log.hostsAtSweep.push(host), from.baseSweep(signal));
     backend.sweepAvailable = async (context) => !context.startup && host !== undefined;
     return backend;
+  };
+  fake.entry.create = (ctx) => {
+    const raw = create(ctx);
+    return view({ ...raw, baseChecks: raw.checks, baseStart: raw.startSession, baseSweep: raw.sweepOrphans }, undefined);
   };
   return { ...fake, log };
 }
@@ -182,7 +190,7 @@ test("I: /gui-setup --host wins over a stored remote.host; the alias, purgeTooli
   const env = await wiringEnv(t, [remote], { global: { remote: { host: "stored-host" } } });
   await env.commands["gui-setup"].handler("remote-linux --host raspi5 --fix", env.ctx());
   assert.match(env.last(), /remote-linux is set up and verified/);
-  assert.equal(remote.log.useHost.at(0), "raspi5");
+  assert.equal(remote.log.forHost.at(0), "raspi5");
   assert.deepEqual(remote.log.hostsAtChecks, ["raspi5"], "checks see the host before they run");
   assert.deepEqual(remote.log.sudo, ["raspi5"], "remote sudo is asked, not the client's sudo");
   assert.deepEqual(remote.log.applied, [["raspi5", "ssh", "host", "sudo", "-n", "apt-get", "install", "xvfb"]]);
@@ -278,7 +286,9 @@ test("I: gui_launch observes the configured host for drift; /gui-cleanup sweeps 
   await env.commands["gui-setup"].handler("remote-linux --fix", env.ctx());
   // The fake reports remote.host as a fact; a changed remote.host is drift.
   const backend = env.runtime.backend("remote-linux");
-  backend.currentVersions = async () => ({ "remote.host": backend.remoteHost });
+  backend.currentVersions = async function () {
+    return { "remote.host": this.remoteHost };
+  };
   await writeFile(join(env.project, ".pi", "gui.local.json"), JSON.stringify({ remote: { host: "new-box" } }));
   await assert.rejects(env.tools.gui_launch.execute("c", {}, undefined, undefined, env.ctx()), /changed since setup \(remote\.host raspi5 → new-box\); ask the user to run \/gui-doctor remote-linux/);
   await writeFile(join(env.project, ".pi", "gui.local.json"), JSON.stringify({}));
@@ -286,10 +296,62 @@ test("I: gui_launch observes the configured host for drift; /gui-cleanup sweeps 
   assert.equal(remote.log.hostsAtStart.at(-1), "raspi5");
   await env.tools.gui_stop.execute("c", { session: launched.details.session }, undefined, undefined, env.ctx());
 
-  backend.useHost(undefined);
+  assert.equal(backend.remoteHost, undefined, "the shared backend is never re-pointed");
   await env.commands["gui-cleanup"].handler("remote-linux", env.ctx());
   assert.deepEqual(remote.log.hostsAtSweep, ["raspi5"]);
   assert.match(env.last(), /GUI testing cleanup \(remote-linux\)/);
+});
+
+/** A barrier check for `host-A`: setup on that host waits in it until `release()`. */
+function barrier() {
+  let entered;
+  let release;
+  const inCheck = new Promise((r) => (entered = r));
+  const gate = new Promise((r) => (release = r));
+  const wrapChecks = (host, checks) =>
+    host !== "host-A"
+      ? checks
+      : [...checks, { id: "barrier", description: "waits", kind: "observe", required: true, run: async () => (entered(), await gate, { status: "pass", observed: "released", facts: { "barrier.host": host } }) }];
+  return { inCheck, release: () => release(), wrapChecks };
+}
+
+test("V1: /gui-doctor --host during a setup is refused before it can bind a host; the setup keeps its host to the end", async (t) => {
+  const b = barrier();
+  const remote = remoteEntry({ wrapChecks: b.wrapChecks });
+  const env = await wiringEnv(t, [remote]);
+  const setup = env.commands["gui-setup"].handler("remote-linux --host host-A --fix", env.ctx());
+  await b.inCheck;
+  await env.commands["gui-doctor"].handler("remote-linux --host host-B", env.ctx());
+  assert.match(env.last(), /\/gui-setup is already running/);
+  assert.ok(!remote.log.forHost.includes("host-B"), "a refused doctor binds no host");
+  b.release();
+  await setup;
+  assert.match(env.last(), /remote-linux is set up and verified/);
+  assert.deepEqual(remote.log.hostsAtStart, ["host-A"], "the smoke session runs on the setup's host");
+  assert.ok(remote.log.hostsAtChecks.every((h) => h === "host-A"), `checks only saw host-A: ${remote.log.hostsAtChecks}`);
+  const global = await env.global();
+  assert.equal(global.verified["remote-linux"].inputs.host, "host-A");
+  assert.equal(global.verified["remote-linux"].toolVersions["remote.host"], "host-A");
+  assert.deepEqual(global.remote, { host: "host-A" });
+  assert.equal(env.runtime.backend("remote-linux").remoteHost, undefined, "the shared backend is never re-pointed");
+});
+
+test("V1: gui_launch during a setup on another host starts on the configured host and does not redirect the setup", async (t) => {
+  const b = barrier();
+  const remote = remoteEntry({ wrapChecks: b.wrapChecks });
+  const record = { verifiedAt: new Date().toISOString(), toolVersions: { "fake.version": "1" }, checksPassed: [], inputs: { backend: "remote-linux", host: "raspi5" } };
+  const env = await wiringEnv(t, [remote], { global: { backend: "remote-linux", remote: { host: "raspi5" }, verified: { "remote-linux": record } } });
+  const setup = env.commands["gui-setup"].handler("remote-linux --host host-A --fix --project", env.ctx());
+  await b.inCheck;
+  const launched = await env.tools.gui_launch.execute("c", {}, undefined, undefined, env.ctx());
+  assert.deepEqual(remote.log.hostsAtStart, ["raspi5"], "the launch uses its own configured host");
+  await env.tools.gui_stop.execute("c", { session: launched.details.session }, undefined, undefined, env.ctx());
+  b.release();
+  await setup;
+  assert.match(env.last(), /remote-linux is set up and verified/);
+  assert.deepEqual(remote.log.hostsAtStart, ["raspi5", "host-A"], "the setup's smoke session still runs on host-A");
+  assert.ok(remote.log.hostsAtChecks.filter((h) => h !== undefined).every((h) => h === "host-A"), `setup checks only saw host-A: ${remote.log.hostsAtChecks}`);
+  assert.equal((await env.local()).remote.host, "host-A");
 });
 
 test("I: billing without a UI and without --accept-billing never prompts and ends with needs-user-action", async (t) => {
@@ -348,6 +410,29 @@ test("I: --api-key-env is rejected with the cua sign-in explanation; cua-only fl
   await env.commands["gui-setup"].handler("cua --rate-usd-per-hour -1", env.ctx());
   assert.match(env.last(), /--rate-usd-per-hour (must be a number|needs a value)/);
   assert.deepEqual(env.dockerCalls, []);
+});
+
+test("V14: --api-key-env on a backend other than cua is refused as not one of its options", async (t) => {
+  const env = await wiringEnv(t, [billingEntry()]);
+  for (const id of ["docker-linux", "cua"]) {
+    await env.commands["gui-setup"].handler(`${id} --api-key-env MY_KEY`, env.ctx());
+    if (id === "cua") assert.match(env.last(), /--api-key-env is no longer used: cua uses your `cua auth login` session/);
+    else assert.match(env.last(), new RegExp(`^/gui-setup: --api-key-env is not an option of ${id}$`));
+  }
+  assert.deepEqual(env.dockerCalls, []);
+});
+
+test("V13: --image reaches the billing backend, is recorded in the verified inputs, and is refused elsewhere", async (t) => {
+  const cua = billingEntry();
+  const env = await wiringEnv(t, [cua]);
+  await env.commands["gui-setup"].handler("cua --accept-billing --image ghcr.io/me/desktop:2", env.ctx());
+  assert.match(env.last(), /cua is set up and verified/);
+  assert.deepEqual(cua.state.recorded, [{ image: "ghcr.io/me/desktop:2", acknowledgedLocation: "aws" }]);
+  assert.equal((await env.global()).verified.cua.inputs.image, "ghcr.io/me/desktop:2");
+  await env.commands["gui-setup"].handler("docker-linux --image x", env.ctx());
+  assert.match(env.last(), /--image only applies to cua, not docker-linux/);
+  await env.commands["gui-setup"].handler("cua --image '-bad'", env.ctx());
+  assert.match(env.last(), /--image must be an image alias or registry reference/);
 });
 
 test("I: the usage tracker gets the backend's cost estimate and the configured usageCheck thresholds", async (t) => {

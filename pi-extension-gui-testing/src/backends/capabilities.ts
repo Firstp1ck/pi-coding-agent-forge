@@ -98,12 +98,16 @@ export interface BillingStatus {
   text?: string;
   /** Why the location is unknown. */
   problem?: string;
+  /** The sandbox image sessions would use (recorded in the verified inputs). */
+  image?: string;
 }
 
-/** Choices `/gui-setup` passes to a billing backend (`--cloud`, `--rate-usd-per-hour`). Never secrets. */
+/** Choices `/gui-setup` passes to a billing backend (`--cloud`, `--rate-usd-per-hour`, `--image`). Never secrets. */
 export interface BillingSetupInputs {
   location?: string;
   rateUsdPerHour?: number;
+  /** Sandbox image (`--image`). */
+  image?: string;
 }
 
 /**

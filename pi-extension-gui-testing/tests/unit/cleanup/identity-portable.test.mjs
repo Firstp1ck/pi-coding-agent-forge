@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { bootFlavor, createOwnerIdentity, darwinProbe, defaultProbe, ownerLiveness, parsePsLstart, win32Probe } from "../../../src/cleanup/identity.ts";
+import { bootFlavor, bootKind, createOwnerIdentity, darwinProbe, defaultProbe, ownerLiveness, parsePsLstart, win32Probe } from "../../../src/cleanup/identity.ts";
 import { fakeProc } from "../backends/fakes.mjs";
 
 /** A scripted SyncExec: `answers(file, args)` returns `{status, stdout}`; calls are recorded. */
@@ -99,6 +99,27 @@ test("liveness never sweeps across operating systems or on unreadable state", ()
   const noStart = { flavor: "darwin", bootId: () => "darwin-x", startTime: () => undefined };
   assert.equal(ownerLiveness({ pid: 1, processStartTime: "1", bootId: "darwin-x" }, undefined, noStart), "unknown");
   assert.deepEqual([bootFlavor(linuxBoot), bootFlavor("darwin-x"), bootFlavor("win32-boot-1")], ["linux", "darwin", "win32"]);
+});
+
+test("W3: macOS boot-session UUID and the boot-time fallback are incomparable: a live owner is unknown, never dead", () => {
+  const start = String(Date.UTC(2026, 9, 24, 10) / 1000);
+  // This Pi cannot read kern.bootsessionuuid and falls back to kern.boottime (reviewer reproduction).
+  const exec = (file, args) => {
+    if (file === "/bin/ps") return { status: 0, stdout: "Sat Oct 24 10:00:00 2026" };
+    if (args.includes("kern.bootsessionuuid")) return { status: null, stdout: "" };
+    return { status: 0, stdout: "{ sec = 1792800000, usec = 0 }" };
+  };
+  const fallback = darwinProbe(exec);
+  assert.equal(fallback.bootId(), "darwin-boot-1792800000");
+  assert.equal(fallback.startTime(12345), start, "the owner process is alive with the recorded start time");
+  const owner = { pid: 12345, processStartTime: start, bootId: "darwin-11111111-1111-1111-1111-111111111111" };
+  assert.equal(ownerLiveness(owner, undefined, fallback), "unknown");
+  // And the other way round: an owner written with the fallback, judged by a UUID-reading probe.
+  const uuid = probeOf("darwin", "darwin-11111111-1111-1111-1111-111111111111", { 12345: start });
+  assert.equal(ownerLiveness({ ...owner, bootId: "darwin-boot-1792800000" }, undefined, uuid), "unknown");
+  assert.equal(ownerLiveness({ ...owner, pid: 999 }, undefined, uuid), "dead", "the same representation still compares");
+  assert.equal(ownerLiveness({ ...owner, pid: 999, bootId: "darwin-boot-1" }, undefined, probeOf("darwin", "darwin-boot-2", {})), "dead", "two fallbacks compare");
+  assert.deepEqual([bootKind("darwin-boot-1"), bootKind("darwin-abcd"), bootKind("win32-boot-1"), bootKind("1111-2222")], ["darwin-boottime", "darwin", "win32", "linux"]);
 });
 
 test("owner identity on a Desktop host uses the probe; Linux and fake /proc trees keep reading /proc", async (t) => {

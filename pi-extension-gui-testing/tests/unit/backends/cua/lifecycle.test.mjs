@@ -202,6 +202,45 @@ test("missing helper packages are installed in the sandbox; an impossible instal
   assert.equal(bad.api.sandboxes.size, 0);
 });
 
+test("V7: the helper runs in host mode with session-owned runtime, lock, and deps dirs, so no writable /deps or venv is needed", async (t) => {
+  const { api, start } = await setup(t);
+  const session = await start();
+  t.after(() => session.stop());
+  const dir = "/tmp/pi-gui-testing/gui-00000001";
+  const mkdir = api.calls.find((c) => c.method === "exec" && c.args[1][0] === "mkdir");
+  assert.deepEqual(mkdir.args[1], ["mkdir", "-p", "-m", "700", "/tmp/pi-gui-testing/displays", dir, `${dir}/tools`, `${dir}/workspace`, `${dir}/run`]);
+  const env = api.calls.find((c) => c.method === "spawnHelper").args[2];
+  assert.equal(env.PI_GUI_HELPER_MODE, "host");
+  assert.equal(env.PI_GUI_WORKSPACE, `${dir}/workspace`);
+  assert.equal(env.PI_GUI_RUNTIME_DIR, `${dir}/run`);
+  assert.equal(env.PI_GUI_DISPLAY_LOCK_DIR, "/tmp/pi-gui-testing/displays");
+  assert.equal(env.PI_GUI_DEPS_DIR, `${dir}/deps`);
+  assert.equal(env.PI_GUI_ALLOW_EXEC, "1", "setup runs through exec");
+  assert.ok(!Object.values(env).some((v) => typeof v === "string" && v.startsWith("/deps")), "nothing below /deps");
+  // The image needs no python3-venv: it is neither probed nor installed.
+  const probe = api.calls.find((c) => c.method === "exec" && c.args[1][2]?.includes("missing:"));
+  assert.equal(probe.args[1][4], "0", "no pip needed without a pip setup");
+  assert.ok(!probe.args[1].includes("python3-venv"));
+});
+
+test("V7: a setup that uses pip probes for pip and installs python3-pip when the image lacks it", async (t) => {
+  const { setupUsesPip, HELPER_APT_PACKAGES } = await import("../../../../src/backends/cua/deploy.ts");
+  assert.equal(setupUsesPip(["pip install -r requirements.txt"]), true);
+  assert.equal(setupUsesPip(["python3 -m pip install ."]), true);
+  assert.equal(setupUsesPip(["cd app && pip3 install ."]), true);
+  assert.equal(setupUsesPip(["npm ci", "make pipeline"]), false);
+  assert.ok(!HELPER_APT_PACKAGES.includes("python3-venv"));
+  const { api, start } = await setup(t, { fake: { missing: ["python3-pip"] } });
+  const cfg = config();
+  cfg.shared.setup = ["pip install -r requirements.txt"];
+  const session = await start({ config: cfg });
+  t.after(() => session.stop());
+  const probe = api.calls.find((c) => c.method === "exec" && c.args[1][2]?.includes("missing:"));
+  assert.equal(probe.args[1][4], "1");
+  assert.ok(api.installed.includes("python3-pip"));
+  assert.ok(!api.installed.includes("python3-venv"));
+});
+
 test("refusals happen before anything is created", async (t) => {
   const noneNetwork = await setup(t);
   await assert.rejects(noneNetwork.start({ config: config({ shared: { network: "none" } }) }), (e) => e.code === "UNSUPPORTED");
@@ -256,6 +295,47 @@ test("a kept sandbox that expired is forgotten and a new one is created", async 
   assert.equal((await ledger.entries()).filter((e) => e.kept).length, 0);
 });
 
+test("V2: a failed lookup of a kept sandbox keeps its record and fails without creating a new sandbox", async (t) => {
+  const { api, ledger, start } = await setup(t);
+  const first = await start({ config: config({ keepSandbox: true }) });
+  await first.stop();
+  api.options.fail = { get: () => ((api.options.fail = {}), new Error("transient lookup failure")) };
+  await assert.rejects(start({ config: config({ keepSandbox: true }) }), (e) => e.code === "START_FAILED" && /checking the kept sandbox/.test(e.message) && /transient lookup failure/.test(e.message));
+  assert.equal(api.methods().filter((m) => m === "createSandbox").length, 1, "no new sandbox");
+  assert.deepEqual([...api.sandboxes.keys()], [REF], "the kept sandbox is untouched");
+  assert.deepEqual(api.deleted, []);
+  const entries = await ledger.entries();
+  assert.equal(entries.length, 1);
+  assert.equal(entries[0].kept, true, "the record is back in the kept set");
+  assert.equal(entries[0].record.ref, REF);
+
+  const coded = await setup(t);
+  const kept = await coded.start({ config: config({ keepSandbox: true }) });
+  await kept.stop();
+  coded.api.options.fail = { get: "TRANSPORT" };
+  await assert.rejects(coded.start({ config: config({ keepSandbox: true }) }), /checking the kept sandbox/);
+  assert.equal((await coded.ledger.entries())[0].kept, true);
+  coded.api.options.fail = {};
+
+  // The next start reuses it.
+  const again = await start({ config: config({ keepSandbox: true }) });
+  t.after(() => again.stop());
+  assert.equal(api.methods().filter((m) => m === "createSandbox").length, 1);
+  assert.equal(api.calls.filter((c) => c.method === "spawnHelper").at(-1).args[0], REF);
+});
+
+test("V2: a confirmed NOT_FOUND forgets the kept record and creates a new sandbox", async (t) => {
+  const { api, ledger, start } = await setup(t);
+  const first = await start({ config: config({ keepSandbox: true }) });
+  await first.stop();
+  api.options.fail = { get: "NOT_FOUND" };
+  const second = await start({ config: config({ keepSandbox: true }) });
+  api.options.fail = {};
+  t.after(() => second.stop());
+  assert.equal(api.methods().filter((m) => m === "createSandbox").length, 2);
+  assert.equal((await ledger.entries()).filter((e) => e.kept).length, 0);
+});
+
 test("keepSandbox does not keep a sandbox whose creation failed", async (t) => {
   const { api, start } = await setup(t, { fake: { fail: { create: "FAILED" } } });
   await assert.rejects(start({ config: config({ keepSandbox: true }) }));
@@ -272,6 +352,47 @@ test("the cost estimate counts billed sandbox time at the reported rate and stop
   advance(60 * 60_000);
   assert.equal(backend.estimateCost(usage).sessionUsd, 0.25);
   assert.equal(backend.estimateCost({ ...usage, backend: "docker-linux" }), undefined);
+});
+
+test("V5: a kept sandbox keeps counting between sessions, reuse never counts twice, and deletion stops it", async (t) => {
+  const { backend, start, advance, cost, api } = await setup(t);
+  const usage = (session) => ({ session, backend: "cua", startedAt: 0, toolCalls: {}, actions: 0, screenshots: 0, allBlackScreenshots: 0, bytesSynced: 0, warnings: [] });
+  const daily = () => cost.dailyUsd();
+  const first = await start({ config: config({ keepSandbox: true }) });
+  advance(30 * 60_000);
+  await first.stop();
+  assert.equal(backend.estimateCost(usage(first.id)).sessionUsd, 0.25);
+  advance(60 * 60_000); // kept, idle, still billed by the cloud
+  assert.equal(backend.estimateCost(usage(first.id)).sessionUsd, 0.25, "the session's share ended at its stop");
+  assert.equal(daily(), 0.75, "the kept sandbox keeps billing between sessions");
+  const second = await start({ config: config({ keepSandbox: true }) });
+  assert.equal(api.methods().filter((m) => m === "createSandbox").length, 1, "reused");
+  advance(30 * 60_000);
+  assert.equal(backend.estimateCost(usage(second.id)).sessionUsd, 0.25);
+  assert.equal(daily(), 1, "reuse is not counted twice");
+  await second.stop();
+  // /gui-reset deletes the kept sandbox: billing stops there.
+  const reset = await backend.resetData(new AbortController().signal);
+  assert.deepEqual(reset.leftovers, []);
+  advance(60 * 60_000);
+  assert.equal(daily(), 1, "nothing counts after the confirmed deletion");
+});
+
+test("V5: the reviewer's scenario: a kept sandbox after its session stop is still estimated", async () => {
+  let now = new Date("2026-10-24T12:00:00").getTime();
+  const cost = new CuaCostLedger(() => now);
+  cost.start("gui-cost", 1);
+  const { SandboxHandle } = await import("../../../../src/backends/cua/session.ts");
+  const handle = new SandboxHandle({ api: { exec: async () => ({ exitCode: 0, stderr: "" }) }, ledger: { markKept: async () => {} }, cost, sessionId: "gui-cost", name: "pi-gui-testing-repro", ref: "aws:pi-gui-testing-repro", keep: true });
+  handle.markCreated();
+  now += 60_000;
+  assert.deepEqual(await handle.remove(), []);
+  now += 3_600_000;
+  assert.equal(Math.round(cost.dailyUsd() * 6000) / 6000, Math.round((61 / 60) * 6000) / 6000);
+  assert.equal(cost.sessionUsd("gui-cost"), 1 / 60);
+  cost.sandboxDeleted("gui-cost");
+  now += 3_600_000;
+  assert.equal(Math.round(cost.dailyUsd() * 6000) / 6000, Math.round((61 / 60) * 6000) / 6000);
 });
 
 test("the settings file stores no credential and records the acknowledgement", async (t) => {

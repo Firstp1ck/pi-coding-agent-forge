@@ -8,7 +8,7 @@
  */
 import { loadResolvedConfig } from "../../config/load.ts";
 import type { TargetOs } from "../../config/types.ts";
-import { commonChecks, type CommonCheckOptions } from "../../checks/common.ts";
+import { commonChecks, compareVersions, type CommonCheckOptions } from "../../checks/common.ts";
 import type { Check, CheckOutcome } from "../../checks/types.ts";
 import type { HostSupport } from "../host-support.ts";
 import { CuaApiError, isCloudLocation, type CloudLocation, type CloudProvider, type CuaApi } from "./api.ts";
@@ -43,6 +43,9 @@ export async function probeCuaNetwork(signal: AbortSignal, url: string = process
   await response.body?.cancel().catch(() => undefined);
   return `${new URL(url).host} answered HTTP ${response.status}`;
 }
+
+/** Oldest `cua` CLI whose commands and JSON shapes this backend uses (`cloud status`, `sandbox exec -i`). */
+export const MIN_CUA_CLI = "0.7";
 
 export interface CuaCheckOptions {
   api: CuaApi;
@@ -94,13 +97,15 @@ export function cuaChecks(options: CuaCheckOptions): Check[] {
     ...commonChecks("cua", { minFreeBytes: CUA_MIN_FREE_BYTES, hostSupport: CUA_HOST_SUPPORT, ...options.common }),
     {
       id: "cua.cli",
-      description: "the cua CLI is installed",
       kind: "observe",
       required: true,
-      remediation: { summary: "Install the cua CLI (https://cua.ai/docs/cua-cli), then run /gui-setup cua again", manual: true },
+      description: `the cua CLI ${MIN_CUA_CLI} or newer is installed`,
+      remediation: { summary: `Install or update the cua CLI to ${MIN_CUA_CLI} or newer (https://cua.ai/docs/cua-cli), then run /gui-setup cua again`, manual: true },
       async run(ctx) {
         try {
           const version = await api.version(ctx.signal);
+          const cmp = compareVersions(version, MIN_CUA_CLI);
+          if (cmp === undefined || cmp < 0) return fail(`cua ${version} (needs ${MIN_CUA_CLI} or newer)`);
           return { status: "pass", observed: `cua ${version}`, facts: { "cua.cli": version } };
         } catch (error) {
           return fail(apiProblem(error));
@@ -216,7 +221,8 @@ export function cuaChecks(options: CuaCheckOptions): Check[] {
           const image = settings.image ?? DEFAULT_IMAGE;
           const kind = provider?.kinds.find((k) => k.image === image) ?? provider?.kinds.find((k) => k.image === "linux");
           if (kind && !kind.supported) return fail(`linux on ${chosen.location}: ${kind.reason ?? "not supported"}`);
-          return { status: "pass", observed: `linux (${image}${kind?.machineType ? ` on ${kind.machineType}` : ""})` };
+          // The image is a drift input: a different image is a different sandbox system (re-verify with /gui-doctor).
+          return { status: "pass", observed: `linux (${image}${kind?.machineType ? ` on ${kind.machineType}` : ""})`, facts: { "cua.image": image } };
         } catch (error) {
           return fail(apiProblem(error));
         }
@@ -250,7 +256,7 @@ export function cuaChecks(options: CuaCheckOptions): Check[] {
       required: false,
       dependsOn: ["cua.cloud"],
       degrades: "no cost estimate and no usageCheck cost warnings",
-      remediation: { summary: "Enter your cloud's hourly price at /gui-setup cua (stored as rateUsdPerHour)", manual: true },
+      remediation: { summary: "Run /gui-setup cua --rate-usd-per-hour <price> with your cloud's hourly sandbox price (stored as rateUsdPerHour)", manual: true },
       async run(ctx) {
         try {
           const settings = await options.settings();

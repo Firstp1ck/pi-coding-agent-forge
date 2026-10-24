@@ -64,8 +64,6 @@ export const CLI_TIMEOUTS = {
  */
 const PASS_PREFIXES = ["CUA_", "AWS_", "GOOGLE_", "CLOUDSDK_", "GCLOUD_", "HCLOUD_", "MODAL_"] as const;
 const PASS_NAMES = ["XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_CACHE_HOME", "SSL_CERT_FILE", "SSL_CERT_DIR", "HTTPS_PROXY", "HTTP_PROXY", "NO_PROXY", "https_proxy", "http_proxy", "no_proxy"] as const;
-/** Passed through but never placed in an argv (the exit handler's `env` prefix). */
-const SECRET_NAME = /(TOKEN|SECRET|PASSWORD|KEY_ID|ACCESS_KEY|CREDENTIALS_JSON|SESSION)/;
 
 /** The environment of every `cua` call (without the runner's inherited minimum). */
 export function cuaEnv(base: NodeJS.ProcessEnv = process.env): Record<string, string> {
@@ -79,10 +77,56 @@ export function cuaEnv(base: NodeJS.ProcessEnv = process.env): Record<string, st
   return env;
 }
 
-/** The non-secret part of {@link cuaEnv}, as `KEY=VALUE` words for an `env` argv prefix. */
+/**
+ * The only variables that may appear in an argv (the exit handler's `env`
+ * prefix, visible in the process list): where the CLI and the cloud SDKs keep
+ * their configuration, which profile/project/region they use, and TLS and
+ * proxy settings. A strict allowlist, so a new credential variable (any
+ * `CUA_*_KEY`, `GOOGLE_API_KEY`, …) is never placed there by accident.
+ */
+export const ARGV_ENV_NAMES: readonly string[] = [
+  "CUA_HOME",
+  "CUA_NO_BROWSER",
+  "CUA_KEYCHAIN_NONINTERACTIVE",
+  "XDG_CONFIG_HOME",
+  "XDG_DATA_HOME",
+  "XDG_CACHE_HOME",
+  "SSL_CERT_FILE",
+  "SSL_CERT_DIR",
+  "AWS_PROFILE",
+  "AWS_REGION",
+  "AWS_DEFAULT_REGION",
+  "AWS_CONFIG_FILE",
+  "AWS_SHARED_CREDENTIALS_FILE",
+  "GOOGLE_APPLICATION_CREDENTIALS",
+  "GOOGLE_CLOUD_PROJECT",
+  "CLOUDSDK_CONFIG",
+  "CLOUDSDK_CORE_PROJECT",
+  "MODAL_PROFILE",
+  "MODAL_CONFIG_PATH",
+  "HTTPS_PROXY",
+  "HTTP_PROXY",
+  "NO_PROXY",
+  "https_proxy",
+  "http_proxy",
+  "no_proxy",
+];
+
+/** A value fit for an argv: one line, no URL userinfo (`user:password@` in a proxy URL), nothing {@link redact} would hide. */
+function argvSafeValue(value: string): boolean {
+  if (/[\r\n\0]/.test(value) || value.length > 1_024) return false;
+  if (value.includes("@")) return false;
+  return redact(value) === value;
+}
+
+/**
+ * The allowlisted part of {@link cuaEnv} ({@link ARGV_ENV_NAMES}) as
+ * `KEY=VALUE` words for an `env` argv prefix. Values with credentials (a proxy
+ * URL with a user or password, token-shaped text) are left out.
+ */
 export function nonSecretEnvWords(base: NodeJS.ProcessEnv = process.env): string[] {
   return Object.entries(cuaEnv(base))
-    .filter(([key, value]) => !SECRET_NAME.test(key) && !value.includes("\n"))
+    .filter(([key, value]) => ARGV_ENV_NAMES.includes(key) && argvSafeValue(value))
     .map(([key, value]) => `${key}=${value}`)
     .sort();
 }

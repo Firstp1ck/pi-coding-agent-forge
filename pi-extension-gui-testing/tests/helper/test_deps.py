@@ -7,6 +7,7 @@ import shutil
 import stat
 import tarfile
 import tempfile
+import tracemalloc
 import unittest
 
 import helperpath  # noqa: F401
@@ -295,6 +296,120 @@ class MaliciousArchiveTests(DepsTestBase):
             add_entry(tar, "bad", tarfile.SYMTYPE, "/etc")
 
         self.assertRejected(gz_tar(build))
+
+
+class ArchiveMetadataBoundTests(DepsTestBase):
+    """W6: PAX/GNU metadata and the decompressed stream are bounded before tarfile parses them."""
+
+    def test_oversized_pax_record_is_refused_before_it_is_read(self):
+        def build(tar):
+            info = tarfile.TarInfo("empty")
+            info.pax_headers = {"comment": "X" * (16 * 1024 * 1024)}
+            tar.addfile(info)
+
+        archive = gz_tar(build)
+        tracemalloc.start()
+        try:
+            error = self.assertRejected(archive, code="TOO_LARGE", max_bytes=1, chunk=64 * 1024)
+            _, peak = tracemalloc.get_traced_memory()
+        finally:
+            tracemalloc.stop()
+        self.assertIn("metadata record", error.message)
+        self.assertLess(peak, 4 * 1024 * 1024, "the 16 MiB PAX payload must never be read into memory")
+
+    def test_oversized_gnu_long_name_is_refused(self):
+        buf = io.BytesIO()
+        with tarfile.open(fileobj=buf, mode="w:gz", format=tarfile.GNU_FORMAT) as tar:
+            add_file(tar, "d/" + "n" * (deps.MAX_META_BYTES + 10))
+        self.assertRejected(buf.getvalue(), code="TOO_LARGE")
+
+    def test_metadata_records_count_against_the_bounds(self):
+        def build(tar):
+            for _ in range(deps.MAX_META_RUN + 2):
+                add_entry(tar, "global", tarfile.XGLTYPE)  # an empty PAX global header record each
+            add_file(tar, "a")
+
+        self.assertRejected(gz_tar(build))
+
+        def roots(tar):
+            for _ in range(3):
+                add_entry(tar, ".", tarfile.DIRTYPE)
+
+        self.assertRejected(gz_tar(roots))
+
+    def test_normal_pax_long_names_still_unpack(self):
+        name = "/".join(["segment-%03d" % i for i in range(40)]) + "/file.txt"
+
+        def build(tar):
+            add_file(tar, name, b"long")
+            add_entry(tar, "lnk", tarfile.SYMTYPE, name)
+
+        result = self.push(gz_tar(build), max_entries=2, max_bytes=4)
+        self.assertEqual(result, {"entries": 2, "bytes": 4})
+        with open(os.path.join(self.dst, "lnk")) as fh:
+            self.assertEqual(fh.read(), "long")
+
+    def test_decompressed_stream_stops_at_the_budget(self):
+        budget = deps._Budget(10, 1)
+        reader = deps._BoundedReader(io.BytesIO(b"\0" * (budget.limit + 1)), budget)
+        reader.read(budget.limit)
+        with self.assertRaises(deps.TooLarge):
+            reader.read(10)
+
+
+class SymlinkGraphTests(DepsTestBase):
+    """W7: link targets are resolved through the archive's other links, as the kernel will."""
+
+    def test_reviewer_graph_escape_in_both_orders(self):
+        for order in ((("b", "."), ("a", "b/..")), (("a", "b/.."), ("b", "."))):
+            with self.subTest(order=order):
+                self.assertRejected(gz_tar(lambda tar: [add_entry(tar, n, tarfile.SYMTYPE, t) for n, t in order]))
+                self.assertFalse(os.path.lexists(os.path.join(self.dst, "a")))
+
+    def test_escape_through_a_link_to_an_ancestor(self):
+        def build(tar):
+            add_entry(tar, "d", tarfile.DIRTYPE)
+            add_entry(tar, "d/up", tarfile.SYMTYPE, "..")  # the root itself: fine on its own
+            add_entry(tar, "x", tarfile.SYMTYPE, "d/up/..")  # lexically "d", really the root's parent
+
+        self.assertRejected(gz_tar(build))
+
+    def test_link_loops_are_refused(self):
+        self.assertRejected(gz_tar(lambda tar: (add_entry(tar, "a", tarfile.SYMTYPE, "b"), add_entry(tar, "b", tarfile.SYMTYPE, "a"))))
+        self.assertRejected(gz_tar(lambda tar: add_entry(tar, "self", tarfile.SYMTYPE, "self/x")))
+
+    def test_ordinary_relative_links_and_chains_unpack(self):
+        def build(tar):
+            add_file(tar, "node_modules/pkg/bin/tool", b"#!/bin/sh\n")
+            add_entry(tar, "node_modules/.bin/tool", tarfile.SYMTYPE, "../pkg/bin/tool")
+            add_entry(tar, "venv/lib", tarfile.DIRTYPE)
+            add_entry(tar, "venv/lib64", tarfile.SYMTYPE, "lib")
+            add_entry(tar, "venv/bin/site", tarfile.SYMTYPE, "../lib64/../lib")
+            add_entry(tar, "dangling", tarfile.SYMTYPE, "not/there/../yet")
+
+        self.push(gz_tar(build))
+        self.assertEqual(os.readlink(os.path.join(self.dst, "node_modules", ".bin", "tool")), "../pkg/bin/tool")
+        self.assertTrue(os.path.isdir(os.path.join(self.dst, "venv", "bin", "site")))
+
+    def test_pack_skips_links_that_escape_through_other_links(self):
+        os.symlink(".", os.path.join(self.src, "b"))
+        os.symlink("b/..", os.path.join(self.src, "a"))  # leaves the deps dir through b
+        os.mkdir(os.path.join(self.src, "d"))
+        os.symlink("..", os.path.join(self.src, "d", "up"))
+        os.symlink("d/up/../x", os.path.join(self.src, "y"))
+        packed = self.packer.pack(Ctx(), {"maxBytes": 10 ** 6})
+        self.assertEqual(packed["skipped"], 2)
+        self.push(self.pull(packed["transfer"], packed["size"], chunk=4096))
+        self.assertEqual(sorted(os.listdir(self.dst)), ["b", "d"])
+        self.assertEqual(os.readlink(os.path.join(self.dst, "d", "up")), "..")
+
+    def test_resolve_link_follows_links_like_the_kernel(self):
+        links = {"b": ".", "d/up": "..", "lib64": "lib"}
+        self.assertEqual(deps.resolve_link(links, "x", "lib64/python"), ["lib", "python"])
+        self.assertEqual(deps.resolve_link(links, "d/x", "up/lib64"), ["lib"])
+        for path, target in (("a", "b/.."), ("x", "d/up/..")):
+            with self.assertRaises(deps.Rejected):
+                deps.resolve_link(links, path, target)
 
 
 class HostModeDepsTests(unittest.TestCase):
