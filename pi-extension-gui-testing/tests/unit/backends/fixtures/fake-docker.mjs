@@ -34,7 +34,7 @@ else if (command === "context" && sub === "inspect") out(JSON.stringify({ Name: 
 else if (command === "info") out(JSON.stringify(HEALTHY_INFO));
 else if (command === "version") out("29.9.1");
 else if (command === "image" && sub === "inspect") {
-  if (!existsSync(imageFile)) fail("Error response from daemon: No such image: pi-gui-testing-base:0.1.0");
+  if (!existsSync(imageFile)) fail("Error response from daemon: No such image: pi-gui-testing-base");
   out(readFileSync(imageFile, "utf8"));
 } else if (command === "image" && sub === "ls") {
   if (existsSync(imageFile)) out(JSON.parse(readFileSync(imageFile, "utf8")).Id);
