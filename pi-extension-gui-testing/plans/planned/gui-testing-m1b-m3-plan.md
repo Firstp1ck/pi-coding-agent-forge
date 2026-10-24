@@ -124,6 +124,11 @@ Accepted: CC1 unreadable/invalid current ledger copy treated as absent → stale
 
 Owner fixes (direct, `claude-opus-5-5`): DD1 a directory read failing after the lock generation is published frees it or records an owed release before rethrowing (test fails before / passes after); DD2 remote session-dir tests use per-run random tags; DD3 runner SIGKILL test gives the child time to install its handler under load (seat A saw SIGTERM). Owner rerun: concurrent `npm run check` + Node 22 suite ×2 → 563/563 each; no leaked sleepers. Round 7 revalidation launched (P-A7, P-B7).
 
+| P-A7 | Pi / `openai-codex/gpt-6.1-sol` (xhigh), seat A | `…gui-testing-post-m1-review-A-r7` | completed: **ready after fixes**; DD1 fixed; 1 non-blocking (EE1) |
+| P-B7 | Pi / `openai-codex/gpt-6.1-sol` (xhigh), seat B | `…gui-testing-post-m1-review-B-r7` | completed: **ready**, no findings; concurrent suites 563/563 ×2 |
+
+Owner fix EE1 (direct): when a kept-sandbox claim may have committed and the recovery listing fails too, the listing is retried, and the failed start carries a stand-in session whose stop returns the claim to the kept set once the records are readable (audit reports it until then); TECHNICAL troubleshooting row added; `claim-recovery.test.mjs` fails before / passes after. Owner rerun: concurrent pair ×2 → 564/564 each. Final seat A revalidation launched (P-A8).
+
 ## 8. Open live verification
 
 Filled in at completion.

@@ -44,6 +44,12 @@ import { billingAcknowledgementText, CuaSettingsStore, DEFAULT_IMAGE } from "./c
 import { packageVersion } from "./docker/package.ts";
 import { attachStartLeftovers, stopAfterFailedStart } from "./start-failure.ts";
 
+/** Reported while a failed start's kept-sandbox claim cannot be checked because the records are unreadable. */
+const unreadableClaimLeftover: Leftover = {
+  kind: "sandbox",
+  id: "kept-sandbox claim",
+  detail: "a kept-sandbox claim may have been saved, but the sandbox records could not be read; gui_stop, /gui-cleanup, and quitting Pi retry",
+};
 export { CUA_HOST_SUPPORT } from "./cua/checks.ts";
 
 /** Bound for one `setup` command (spec §7). */
@@ -248,6 +254,10 @@ export class CuaBackend implements Backend, DriftCapability, ResetCapability, Sw
           // The claim may have committed before the failure (for example in releasing the ledger lock): a
           // record that now names this session goes back to the kept set, or is attached to the failure.
           const committed = await this.#claimedBy(owner, tried);
+          if (committed === "unknown") {
+            // The records cannot be read either: track the possible claim, so the runtime's retries settle it.
+            throw attachStartLeftovers(failure, this.#claimRecovery(options.sessionId, owner, tried), [unreadableClaimLeftover]);
+          }
           if (committed) await settle(committed, "keep", failure);
           throw failure;
         }
@@ -376,10 +386,45 @@ export class CuaBackend implements Backend, DriftCapability, ResetCapability, Sw
     return session;
   }
 
-  /** The active record a claim of `owner` committed (not one of `tried`, which are settled already), if any. */
-  async #claimedBy(owner: { ownerLabel: string; sessionId: string }, tried: ReadonlySet<string>): Promise<LedgerRecord | undefined> {
-    const entries = await this.ledger.entries().catch(() => []);
-    return entries.find((e) => !e.kept && e.record && e.record.sessionId === owner.sessionId && e.record.ownerLabel === owner.ownerLabel && e.record.phase === "created" && !tried.has(e.record.name))?.record;
+  /**
+   * The active record a claim of `owner` committed (not one of `tried`, which are settled already), if any;
+   * `"unknown"` when the records cannot be listed after a few attempts.
+   */
+  async #claimedBy(owner: { ownerLabel: string; sessionId: string }, tried: ReadonlySet<string>): Promise<LedgerRecord | undefined | "unknown"> {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const entries = await this.ledger.entries();
+        return entries.find((e) => !e.kept && e.record && e.record.sessionId === owner.sessionId && e.record.ownerLabel === owner.ownerLabel && e.record.phase === "created" && !tried.has(e.record.name))?.record;
+      } catch {
+        await new Promise((resolve) => setTimeout(resolve, 20 * (attempt + 1)));
+      }
+    }
+    return "unknown";
+  }
+
+  /**
+   * A stand-in session for a claim that may have committed while the records could not be read. Stopping it
+   * (gui_stop, /gui-cleanup, shutdown) looks again and returns such a claim to the kept set; until then the
+   * audit reports it. No exit-time delete: a kept sandbox is never deleted for this, and once this Pi exits
+   * the next start's sweep settles the record of the dead owner.
+   */
+  #claimRecovery(sessionId: string, owner: { ownerLabel: string; sessionId: string }, tried: ReadonlySet<string>): Session {
+    const look = async (settle: boolean): Promise<Leftover[]> => {
+      const committed = await this.#claimedBy(owner, tried);
+      if (committed === "unknown") return [unreadableClaimLeftover];
+      if (!committed) return [];
+      if (!settle) return [{ kind: "sandbox", id: committed.ref, detail: "claimed by a start that failed; it goes back to the kept set on the next gui_stop or /gui-cleanup" }];
+      const back = new SandboxHandle({ api: this.api, ledger: this.ledger, cost: this.cost, sessionId, name: committed.name, ref: committed.ref, keep: true });
+      return back.returnToKept();
+    };
+    return {
+      id: sessionId,
+      backend: this.id,
+      arch: "unknown",
+      request: () => Promise.reject(new SessionError("CLOSED", `session ${sessionId} is stopped`)),
+      stop: () => look(true),
+      auditFootprint: () => look(false),
+    };
   }
 
   /** Launch warnings for kept sandboxes of this project that cannot be reused with `image` (not already reported). */
