@@ -10,6 +10,7 @@ import { readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { CuaBackend } from "../../../../src/backends/cua.ts";
 import { CuaCostLedger } from "../../../../src/backends/cua/cost.ts";
+import { LedgerLock } from "../../../../src/backends/cua/ledger-lock.ts";
 import { SandboxLedger } from "../../../../src/backends/cua/ledger.ts";
 import { CuaSettingsStore } from "../../../../src/backends/cua/settings.ts";
 import { startLeftovers } from "../../../../src/backends/start-failure.ts";
@@ -30,7 +31,7 @@ function config(overrides = {}) {
 async function setup(t, options = {}) {
   const env = await cuaEnv(t, options);
   const api = options.api ?? new FakeCuaApi(options.fake);
-  const ledger = new SandboxLedger(env.ledgerDir);
+  const ledger = new SandboxLedger(env.ledgerDir, options.lockTimeoutMs ? { lock: { timeoutMs: options.lockTimeoutMs } } : {});
   let now = options.now ?? 1_000_000;
   const cost = new CuaCostLedger(() => now);
   // `git ls-files` fails, so the file set walks the tree.
@@ -383,7 +384,7 @@ test("V5: the reviewer's scenario: a kept sandbox after its session stop is stil
   const cost = new CuaCostLedger(() => now);
   cost.start("gui-cost", 1);
   const { SandboxHandle } = await import("../../../../src/backends/cua/session.ts");
-  const handle = new SandboxHandle({ api: { exec: async () => ({ exitCode: 0, stderr: "" }) }, ledger: { markKept: async () => {} }, cost, sessionId: "gui-cost", name: "pi-gui-testing-repro", ref: "aws:pi-gui-testing-repro", keep: true });
+  const handle = new SandboxHandle({ api: { exec: async () => ({ exitCode: 0, stderr: "" }) }, ledger: { markKept: async () => true }, cost, sessionId: "gui-cost", name: "pi-gui-testing-repro", ref: "aws:pi-gui-testing-repro", keep: true });
   handle.markCreated();
   now += 60_000;
   assert.deepEqual(await handle.remove(), []);
@@ -544,4 +545,94 @@ test("X4: a kept sandbox confirmed missing stops billing (reviewer reproduction)
     assert.equal(cost.dailyUsd() - before, 0.5, `${missing}: only the new $0.50/h sandbox bills`);
     await second.stop();
   }
+});
+
+/** Takes the ledger lock (as another Pi process would) right after the next start claims a kept record. */
+function lockAfterClaim(api, env) {
+  const held = {};
+  const getSandbox = api.getSandbox.bind(api);
+  api.getSandbox = async (...args) => {
+    if (!held.release) held.release = await new LedgerLock(env.ledgerDir).acquire();
+    return getSandbox(...args);
+  };
+  return held;
+}
+
+const keptRecords = async (ledger) => (await ledger.entries()).map((e) => ({ kept: e.kept, sessionId: e.record.sessionId }));
+
+test("Y1: a kept sandbox's stop whose keep transition fails is a leftover, audited, and retried until the record is kept", async (t) => {
+  const { env, api, ledger, cost, start, advance } = await setup(t, { lockTimeoutMs: 120 });
+  const session = await start({ config: config({ keepSandbox: true }) });
+  const release = await new LedgerLock(env.ledgerDir).acquire();
+  t.after(release);
+  const [left] = await session.stop();
+  assert.equal(left.kind, "sandbox");
+  assert.equal(left.id, REF);
+  assert.match(left.detail, /moving its ledger record to the kept set failed.*keeps billing.*is locked by process/);
+  assert.deepEqual((await session.auditFootprint()).map((l) => l.detail), [left.detail], "the audit keeps reporting it");
+  assert.deepEqual(session.forceRemoveArgv(), [], "a kept sandbox is never in the exit handler");
+  assert.deepEqual(await keptRecords(ledger), [{ kept: false, sessionId: "gui-00000001" }]);
+  const billed = cost.sessionUsd("gui-00000001");
+  advance(3_600_000);
+  assert.ok(cost.sessionUsd("gui-00000001") > billed, "the session's share keeps counting until the keep completes");
+  await release();
+  assert.deepEqual(await session.stop(), []);
+  const released = cost.sessionUsd("gui-00000001");
+  advance(3_600_000);
+  assert.equal(cost.sessionUsd("gui-00000001"), released);
+  assert.deepEqual(await session.auditFootprint(), []);
+  assert.deepEqual(await keptRecords(ledger), [{ kept: true, sessionId: "gui-00000001" }]);
+  assert.equal(api.calls.filter((c) => c.method === "exec" && c.args[1].join(" ").startsWith("rm -rf -- /tmp/pi-gui-testing/gui-00000001")).length, 1, "the session dir is removed once");
+  assert.deepEqual(api.deleted, []);
+});
+
+test("Y1: a kept sandbox whose record vanished before its keep transition is deleted, not left untracked", async (t) => {
+  const { api, ledger, start } = await setup(t);
+  const session = await start({ config: config({ keepSandbox: true }) });
+  await ledger.remove(`pi-gui-testing-${HOST_TAG}-gui-00000001`);
+  assert.deepEqual(await session.stop(), []);
+  assert.deepEqual(api.deleted, [REF]);
+  assert.deepEqual(await session.auditFootprint(), []);
+  assert.deepEqual(await ledger.entries(), []);
+});
+
+test("Y1: a start that cannot return a claimed kept record to the kept set fails with it attached; the retry keeps it", async (t) => {
+  const { env, api, ledger, start } = await setup(t, { lockTimeoutMs: 120 });
+  const first = await start({ config: config({ keepSandbox: true }) });
+  await first.stop();
+  api.options.fail = { get: () => ((api.options.fail = {}), new Error("transient lookup failure")) };
+  const held = lockAfterClaim(api, env);
+  t.after(() => held.release?.());
+  const error = await start({ config: config({ keepSandbox: true }) }).then(() => assert.fail("the start succeeded"), (e) => e);
+  assert.match(error.message, /checking the kept sandbox/);
+  const attached = startLeftovers(error);
+  assert.ok(attached, "the claim is attached for the runtime to track");
+  assert.match(attached.leftovers[0].detail, /moving its ledger record to the kept set failed/);
+  assert.deepEqual(await keptRecords(ledger), [{ kept: false, sessionId: "gui-00000002" }], "claimed, not yet returned");
+  assert.deepEqual((await attached.session.auditFootprint()).length, 1);
+  await held.release();
+  assert.deepEqual(await attached.session.stop(), []);
+  assert.deepEqual(await attached.session.auditFootprint(), []);
+  assert.deepEqual(await keptRecords(ledger), [{ kept: true, sessionId: "gui-00000002" }]);
+  assert.deepEqual(api.deleted, []);
+  assert.equal(api.methods().filter((m) => m === "createSandbox").length, 1, "no new sandbox");
+});
+
+test("Y1: a start that cannot forget a claimed kept record whose sandbox is gone fails with it attached; the retry forgets it", async (t) => {
+  const { env, api, ledger, start } = await setup(t, { lockTimeoutMs: 120 });
+  const first = await start({ config: config({ keepSandbox: true }) });
+  await first.stop();
+  api.sandboxes.clear(); // expired in the cloud
+  const held = lockAfterClaim(api, env);
+  t.after(() => held.release?.());
+  const error = await start({ config: config({ keepSandbox: true }) }).then(() => assert.fail("the start succeeded"), (e) => e);
+  assert.match(error.message, /forgetting the kept sandbox .* failed/);
+  const attached = startLeftovers(error);
+  assert.equal(attached.leftovers[0].kind, "ledger");
+  assert.deepEqual(attached.session.forceRemoveArgv(), [], "nothing to delete at exit");
+  assert.equal(api.methods().filter((m) => m === "createSandbox").length, 1, "no new sandbox while the ledger is locked");
+  await held.release();
+  assert.deepEqual(await attached.session.stop(), []);
+  assert.deepEqual(await ledger.entries(), []);
+  assert.deepEqual(api.deleted, [], "nothing to delete");
 });

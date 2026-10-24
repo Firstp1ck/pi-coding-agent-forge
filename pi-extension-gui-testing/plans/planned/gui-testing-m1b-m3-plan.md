@@ -98,6 +98,17 @@ Round-2 fixes, accepted: X1 (A2-1, B2-B1) serialise cua ledger keep/claim/delete
 
 Fix X-r1 (`claude-opus-5-5`, handoff `plans/handoffs/post-m1-X.md`): X1 ledger lock (`ledger-lock.ts`) with CAS inside the lock; X2 sparse members refused before map parsing; X3 image-matched reuse; X4 cost stop on confirmed absence; X5 JSON lock parsing; X6 robust timing test; X7 `/gui-usage` shows estimated cost + doc/spec fixes; Z3 test stabilised. Owner rerun: `npm run check` concurrently with Node 22 suite → 529/529 both; helper tests only `gi` errors. Owner decision: `/gui-cleanup` lists image-less kept sandboxes without deleting them (`/gui-reset cua` deletes). Round 3 review launched (P-A3, P-B3).
 
+| Run | Provider / model | Task id | Status |
+|---|---|---|---|
+| P-A3 | Pi / `openai-codex/gpt-6.1-sol` (xhigh), seat A | `…gui-testing-post-m1-review-A-r3` | **failed**: provider content filter; relaunched as P-A3b with plainer wording |
+| P-B3 | Pi / `openai-codex/gpt-6.1-sol` (xhigh), seat B | `…gui-testing-post-m1-review-B-r3` | completed: **not ready**; R2-B1–B3 and doc corrections fixed; 1 blocking (Y1) + 2 non-blocking (Y2, Y3) |
+
+Round-3 fixes, accepted: Y1 cua `markKept` failure swallowed on stop/shutdown → sandbox untracked; Y2 process test CLI-liveness race under concurrent load; Y3 TECHNICAL cross-process cost wording. Fix Y-r1 (`claude-opus-5-5`, handoff `plans/handoffs/post-m1-Y.md`): ledger failures on stop/failed start surface as leftovers and stay retryable; process test waits for CLI exit; cost wording. Owner rerun: 536/536 (concurrent pair ×3 by worker).
+
+| P-A3b | Pi / `openai-codex/gpt-6.1-sol` (xhigh), seat A | `…gui-testing-post-m1-review-A-r3b` | completed: **ready after fixes**; round-2 items fixed; 3 blocking: AA1 stale keep accepted during `phase: deleting`; AA2 crash between kept-record rewrite and rename loses deletion recovery; AA3 raw NUL in remote display lock misattributes records in the awk reader |
+
+AA1–AA3 accepted; fix run AA-r1 launched.
+
 ## 8. Open live verification
 
 Filled in at completion.

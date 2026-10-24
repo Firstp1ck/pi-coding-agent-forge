@@ -10,12 +10,14 @@ import assert from "node:assert/strict";
 import { mkdir, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { CUA_HOST_SUPPORT, CuaBackend } from "../../../../src/backends/cua.ts";
+import { LedgerLock } from "../../../../src/backends/cua/ledger-lock.ts";
 import { SandboxLedger } from "../../../../src/backends/cua/ledger.ts";
 import { CuaSettingsStore } from "../../../../src/backends/cua/settings.ts";
 import { BackendRegistry } from "../../../../src/backends/registry.ts";
 import { DEFAULTS } from "../../../../src/config/types.ts";
 import { FakeCommandRunner } from "../../../../src/runner/fake.ts";
 import { GuiRuntime } from "../../../../src/tools/runtime.ts";
+import { createGuiTools } from "../../../../src/tools/tools.ts";
 import { UsageTracker } from "../../../../src/usage/detector.ts";
 import { cuaEnv, DEAD_OWNER, FakeCuaApi, HOST_TAG, tinyHelperArchive } from "./fake-cua.mjs";
 
@@ -40,12 +42,12 @@ function cuaEntry() {
   };
 }
 
-async function runtimeEnv(t, fake = {}) {
+async function runtimeEnv(t, fake = {}, options = {}) {
   const env = await cuaEnv(t);
   const tmp = join(env.root, "tmp");
   await mkdir(tmp);
   const api = new FakeCuaApi(fake);
-  const ledger = new SandboxLedger(env.ledgerDir);
+  const ledger = new SandboxLedger(env.ledgerDir, options.lockTimeoutMs ? { lock: { timeoutMs: options.lockTimeoutMs } } : {});
   const runner = new FakeCommandRunner().on(() => true, { exitCode: 128, stderr: "not a git repository" });
   const runtime = new GuiRuntime({
     registry: new BackendRegistry([cuaEntry()]),
@@ -137,4 +139,91 @@ test("the cost hook feeds UsageTracker's session-cost warning", async (t) => {
   const warnings = tracker.record({ session: live.id, tool: "gui_snapshot", at: Date.now() });
   assert.equal(warnings[0]?.signal, "session-cost");
   await runtime.closeSession(live.id);
+});
+
+/** `gui_stop` through the tool, as the agent calls it. */
+async function guiStop(runtime, env, session) {
+  const stop = createGuiTools(runtime).find((tool) => tool.name === "gui_stop");
+  const ctx = { cwd: env.project, hasUI: false, mode: "json", sessionManager: { getSessionId: () => "pi-1" }, ui: { notify() {}, setStatus() {} } };
+  return stop.execute("call", { session }, undefined, undefined, ctx);
+}
+
+/** Holds the ledger's interprocess lock (as another Pi process would) until the returned function runs. */
+const holdLedgerLock = (env) => new LedgerLock(env.ledgerDir).acquire();
+
+const records = async (ledger) => (await ledger.entries()).map((e) => ({ kept: e.kept, sessionId: e.record?.sessionId }));
+
+test("Y1: gui_stop of a kept sandbox while the ledger is locked reports it, keeps the session, and a retry after the lock is released keeps it (reviewer reproduction)", async (t) => {
+  const { env, api, ledger, runtime, open } = await runtimeEnv(t, {}, { lockTimeoutMs: 150 });
+  const live = await open(true);
+  const release = await holdLedgerLock(env);
+  t.after(release);
+  await assert.rejects(guiStop(runtime, env, live.id), (e) => /footprint audit is not empty/.test(e.message) && /moving its ledger record to the kept set failed/.test(e.message) && /is locked by process/.test(e.message) && /run gui_stop again/.test(e.message));
+  assert.deepEqual(runtime.list().map((s) => [s.id, s.state]), [[live.id, "failed"]], "the session stays tracked for a retry");
+  assert.deepEqual(await records(ledger), [{ kept: false, sessionId: live.id }]);
+  assert.equal(api.sandboxes.size, 1);
+  // /gui-cleanup's stop step retries too, and reports the same leftover while the lock is held.
+  assert.match(JSON.stringify(await runtime.stopAll("cua")), /moving its ledger record to the kept set failed/);
+  assert.equal(runtime.list().length, 1);
+
+  await release();
+  const stopped = await guiStop(runtime, env, live.id);
+  assert.match(stopped.content[0].text, /footprint audit: empty/);
+  assert.deepEqual(runtime.list(), []);
+  assert.deepEqual(await records(ledger), [{ kept: true, sessionId: live.id }]);
+  assert.deepEqual(api.deleted, [], "the kept sandbox is kept, not deleted");
+  // Now /gui-reset cua finds and deletes it.
+  const reset = await runtime.backend("cua").resetData(new AbortController().signal);
+  assert.deepEqual(reset.lines[0], "deleted 1 kept sandbox(es)");
+  assert.equal(api.sandboxes.size, 0);
+  assert.deepEqual(await ledger.entries(), []);
+});
+
+test("Y1: shutdown with the ledger locked keeps the kept sandbox's session tracked; /gui-cleanup and a later shutdown finish the keep", async (t) => {
+  const { env, api, ledger, runtime, open } = await runtimeEnv(t, {}, { lockTimeoutMs: 150 });
+  const first = await open(true);
+  const second = await open(true);
+  const release = await holdLedgerLock(env);
+  t.after(release);
+  await runtime.shutdown();
+  assert.deepEqual(runtime.list().map((s) => s.state), ["failed", "failed"]);
+  assert.deepEqual(await records(ledger), [
+    { kept: false, sessionId: first.id },
+    { kept: false, sessionId: second.id },
+  ].sort((a, b) => (a.sessionId < b.sessionId ? -1 : 1)));
+  await release();
+  // /gui-cleanup's stop step finishes both.
+  assert.deepEqual(await runtime.stopAll("cua").then(() => runtime.list()), []);
+  assert.deepEqual((await records(ledger)).map((r) => r.kept), [true, true]);
+  assert.equal(api.sandboxes.size, 2);
+  assert.deepEqual(api.deleted, []);
+
+  // A later shutdown retries the same way.
+  const third = await open(true);
+  assert.equal(api.sandboxes.size, 2, "the next launch reuses a kept sandbox");
+  const again = await holdLedgerLock(env);
+  t.after(again);
+  await runtime.shutdown();
+  assert.deepEqual(runtime.list().map((s) => [s.id, s.state]), [[third.id, "failed"]]);
+  await again();
+  await runtime.shutdown();
+  assert.deepEqual(runtime.list(), []);
+  assert.deepEqual((await records(ledger)).map((r) => r.kept), [true, true]);
+});
+
+test("Y1: a deleted sandbox whose ledger record cannot be removed stays tracked (without an exit-handler delete) until a retry removes the record", async (t) => {
+  const { env, api, ledger, runtime, open } = await runtimeEnv(t, {}, { lockTimeoutMs: 150 });
+  const live = await open(false);
+  const release = await holdLedgerLock(env);
+  t.after(release);
+  await assert.rejects(guiStop(runtime, env, live.id), /sandbox deleted, but removing its ledger record failed/);
+  assert.equal(api.sandboxes.size, 0, "the sandbox itself is deleted");
+  assert.deepEqual(runtime.list().map((s) => s.state), ["failed"]);
+  assert.deepEqual(runtime.exitCleanupCommands(), [[]], "no second delete at exit");
+  assert.equal((await ledger.entries()).length, 1);
+  await release();
+  assert.deepEqual(await runtime.closeSession(live.id), { stopLeftovers: [], audit: [] });
+  assert.deepEqual(runtime.list(), []);
+  assert.deepEqual(await ledger.entries(), []);
+  assert.deepEqual(api.deleted, [live.session.handle.ref], "deleted once");
 });

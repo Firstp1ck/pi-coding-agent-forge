@@ -88,13 +88,18 @@ test("real processes: SIGKILL of the Pi process ends the session container throu
   const started = Date.now();
   while ((await env.containers()).length > 0 && Date.now() - started < 15_000) await new Promise((r) => setTimeout(r, 100));
   assert.deepEqual(await env.containers(), [], "container gone after the Pi process died");
-  let cliAlive = true;
-  try {
-    process.kill(ready.cliPid, 0);
-  } catch {
-    cliAlive = false;
-  }
-  assert.equal(cliAlive, false, "no orphaned docker CLI");
+  // The fake CLI removes its container marker just before it exits: allow it (and its reaping) a bounded moment.
+  const cliAlive = () => {
+    try {
+      process.kill(ready.cliPid, 0);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  const exiting = Date.now();
+  while (cliAlive() && Date.now() - exiting < 15_000) await new Promise((r) => setTimeout(r, 50));
+  assert.equal(cliAlive(), false, "no orphaned docker CLI");
   assert.deepEqual(await readdir(env.tmp), [ready.dir.split("/").at(-1)], "the temp dir may remain until the next start");
 
   const restarted = new GuiRuntime({ tmpRoot: env.tmp, globalConfigPath: env.globalConfigPath });

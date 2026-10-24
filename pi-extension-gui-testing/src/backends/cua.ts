@@ -42,7 +42,7 @@ import { redact } from "./cua/redact.ts";
 import { CuaSession, GUEST_ROOT, guestDir, pendingSession, SandboxHandle, startError } from "./cua/session.ts";
 import { billingAcknowledgementText, CuaSettingsStore, DEFAULT_IMAGE } from "./cua/settings.ts";
 import { packageVersion } from "./docker/package.ts";
-import { stopAfterFailedStart } from "./start-failure.ts";
+import { attachStartLeftovers, stopAfterFailedStart } from "./start-failure.ts";
 
 export { CUA_HOST_SUPPORT } from "./cua/checks.ts";
 
@@ -231,8 +231,21 @@ export class CuaBackend implements Backend, DriftCapability, ResetCapability, Sw
     if (keep) {
       const owner = { ownerLabel: options.ownerLabel, sessionId: options.sessionId };
       const tried = new Set<string>();
+      // A claimed record that is not used goes back to the kept set (or is forgotten when its sandbox is gone).
+      // When that ledger transition fails, the start fails with the claim attached, so the runtime tracks
+      // it and its retries (gui_stop, /gui-cleanup, shutdown) finish the transition.
+      const settle = async (claimed: LedgerRecord, step: "keep" | "forget", failure: SessionError): Promise<void> => {
+        const back = new SandboxHandle({ api: this.api, ledger: this.ledger, cost: this.cost, sessionId: options.sessionId, name: claimed.name, ref: claimed.ref, keep: true });
+        const leftovers = step === "keep" ? await back.returnToKept() : await back.forgetGone();
+        if (leftovers.length > 0) throw attachStartLeftovers(failure, pendingSession(options.sessionId, this.id, back), leftovers);
+      };
       while (!reused) {
-        const claimed = await this.ledger.claimKept(location, project, owner, { image, exclude: tried });
+        let claimed: LedgerRecord | undefined;
+        try {
+          claimed = await this.ledger.claimKept(location, project, owner, { image, exclude: tried });
+        } catch (error) {
+          throw startError("claiming a kept sandbox", error);
+        }
         if (!claimed) break;
         tried.add(claimed.name);
         let exists: SandboxInfo | undefined;
@@ -242,17 +255,18 @@ export class CuaBackend implements Backend, DriftCapability, ResetCapability, Sw
           if (!(error instanceof CuaApiError && error.code === "NOT_FOUND")) {
             // Not a confirmed absence: the sandbox may still exist and bill. Keep its record (back in
             // the kept set) and fail without creating a new sandbox.
-            await this.ledger.markKept(claimed.name, options.sessionId).catch(() => undefined);
-            throw startError(`checking the kept sandbox ${claimed.ref} (kept; try again, or delete it with /gui-reset cua)`, error);
+            const failure = startError(`checking the kept sandbox ${claimed.ref} (kept; try again, or delete it with /gui-reset cua)`, error);
+            await settle(claimed, "keep", failure);
+            throw failure;
           }
         }
         if (!exists) {
           // Only a confirmed absence (expired or deleted elsewhere) forgets the record; it no longer bills.
           this.#onDeleted(claimed.ref);
-          await this.ledger.remove(claimed.name, false, { sessionId: options.sessionId });
+          await settle(claimed, "forget", new SessionError("START_FAILED", `forgetting the kept sandbox ${claimed.ref}, which no longer exists, failed`));
         } else if (exists.image !== undefined && exists.image !== image) {
           // Cua reports another image than the record: never reuse it. It stays kept.
-          await this.ledger.markKept(claimed.name, options.sessionId);
+          await settle(claimed, "keep", new SessionError("START_FAILED", `returning the kept sandbox ${claimed.ref} (image "${exists.image}", not "${image}") to the kept set failed`));
           warnings.push(`the kept sandbox ${claimed.ref} runs the image "${exists.image}", not "${image}", so a new sandbox was created; it keeps billing until it expires or you delete it with /gui-reset cua`);
         } else {
           reused = claimed;

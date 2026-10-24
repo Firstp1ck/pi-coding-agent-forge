@@ -47,7 +47,10 @@ export interface SandboxHandleOptions {
 
 /**
  * The sandbox of one session. `remove()` is idempotent and retryable: once a
- * deletion is confirmed (or the sandbox was kept) later calls return `[]`.
+ * deletion is confirmed (or the sandbox was kept) and its ledger record moved
+ * or removed, later calls return `[]`. A ledger transition that fails (e.g.
+ * the ledger lock timed out) is a leftover that `audit()` keeps reporting, so
+ * the runtime keeps the session and its retry finishes the transition.
  */
 export class SandboxHandle {
   readonly ref: string;
@@ -55,6 +58,14 @@ export class SandboxHandle {
   readonly #o: SandboxHandleOptions;
   /** Set once `sandbox create` returned; until then a kept sandbox cannot exist and every path deletes. */
   #created = false;
+  /** Keep path: the session dir is gone from the kept sandbox. */
+  #dirRemoved = false;
+  /** Delete path: the deletion is confirmed. */
+  #deleted = false;
+  /** A kept sandbox whose record is gone from the ledger is deleted instead: nothing would find, reuse, or clean it up. */
+  #deleteInstead = false;
+  /** The ledger transition a stop still owes, reported by `audit()` until a retry completes it. */
+  #owed: Leftover | undefined;
   #done = false;
 
   constructor(options: SandboxHandleOptions) {
@@ -65,7 +76,7 @@ export class SandboxHandle {
 
   /** `true` when a stop keeps the sandbox: `keepSandbox` and the sandbox was created. */
   get keeps(): boolean {
-    return this.#o.keep && this.#created;
+    return this.#o.keep && this.#created && !this.#deleteInstead;
   }
 
   markCreated(): void {
@@ -74,7 +85,25 @@ export class SandboxHandle {
 
   /** Argv for the synchronous exit handler; `[]` when the sandbox is kept or already removed. */
   forceRemoveArgv(): string[] {
-    return this.keeps || this.#done ? [] : this.#o.api.forceDeleteArgv(this.ref);
+    return this.keeps || this.#done || this.#deleted ? [] : this.#o.api.forceDeleteArgv(this.ref);
+  }
+
+  /**
+   * A kept record a start claimed but does not use (the sandbox was not
+   * touched): moves it back to the kept set. Leftovers as for `remove()`,
+   * which retries.
+   */
+  returnToKept(): Promise<Leftover[]> {
+    this.#created = true;
+    this.#dirRemoved = true;
+    return this.remove();
+  }
+
+  /** A claimed kept record whose sandbox is confirmed gone: forgets the record. Leftovers as for `remove()`, which retries. */
+  forgetGone(): Promise<Leftover[]> {
+    this.#deleteInstead = true;
+    this.#deleted = true;
+    return this.remove();
   }
 
   /**
@@ -86,41 +115,76 @@ export class SandboxHandle {
     if (this.#done) return [];
     const { api, ledger, cost } = this.#o;
     if (this.keeps) {
-      const dir = guestDir(this.#o.sessionId);
-      const leftovers: Leftover[] = [];
-      try {
-        const result = await api.exec(this.ref, ["rm", "-rf", "--", dir], { timeoutMs: 60_000 });
-        if (result.exitCode !== 0) leftovers.push({ kind: "sandbox-dir", id: `${this.ref}:${dir}`, detail: `kept sandbox: removing the session dir failed (exit ${result.exitCode}): ${redact(result.stderr.trim())}` });
-      } catch (error) {
-        leftovers.push({ kind: "sandbox-dir", id: `${this.ref}:${dir}`, detail: `kept sandbox: removing the session dir failed: ${redact((error as Error).message)}` });
+      if (!this.#dirRemoved) {
+        const dir = guestDir(this.#o.sessionId);
+        const leftovers: Leftover[] = [];
+        try {
+          const result = await api.exec(this.ref, ["rm", "-rf", "--", dir], { timeoutMs: 60_000 });
+          if (result.exitCode !== 0) leftovers.push({ kind: "sandbox-dir", id: `${this.ref}:${dir}`, detail: `kept sandbox: removing the session dir failed (exit ${result.exitCode}): ${redact(result.stderr.trim())}` });
+        } catch (error) {
+          leftovers.push({ kind: "sandbox-dir", id: `${this.ref}:${dir}`, detail: `kept sandbox: removing the session dir failed: ${redact((error as Error).message)}` });
+        }
+        if (leftovers.length > 0) return leftovers;
+        this.#dirRemoved = true;
       }
-      if (leftovers.length > 0) return leftovers;
-      await ledger.markKept(this.name, this.#o.sessionId).catch(() => undefined);
-      // The kept sandbox keeps billing (tracked per sandbox until it is deleted); only this session's share ends.
-      cost.release(this.#o.sessionId);
-      this.#done = true;
-      return [];
+      try {
+        if (!(await ledger.markKept(this.name, this.#o.sessionId)) && !(await this.#recorded())) this.#deleteInstead = true;
+      } catch (error) {
+        return this.#owe({
+          kind: "sandbox",
+          id: this.ref,
+          detail: `kept, but moving its ledger record to the kept set failed, so it is not reused or cleaned up yet and keeps billing; gui_stop, /gui-cleanup, or the Pi shutdown retries: ${redact((error as Error).message)}`,
+        });
+      }
+      if (!this.#deleteInstead) {
+        // The kept sandbox keeps billing (tracked per sandbox until it is deleted); only this session's share ends.
+        cost.release(this.#o.sessionId);
+        return this.#finish();
+      }
+    }
+    if (!this.#deleted) {
+      try {
+        await ledger.update(this.name, { phase: "deleting" }, { sessionId: this.#o.sessionId }).catch(() => undefined);
+        await api.deleteSandbox(this.ref);
+      } catch (error) {
+        return [{ kind: "sandbox", id: this.ref, detail: `delete failed (it may keep billing; /gui-cleanup retries): ${redact((error as Error).message)}` }];
+      }
+      cost.stop(this.#o.sessionId);
+      this.#deleted = true;
     }
     try {
-      await ledger.update(this.name, { phase: "deleting" }, { sessionId: this.#o.sessionId }).catch(() => undefined);
-      await api.deleteSandbox(this.ref);
+      await ledger.remove(this.name, false, { sessionId: this.#o.sessionId });
     } catch (error) {
-      return [{ kind: "sandbox", id: this.ref, detail: `delete failed (it may keep billing; /gui-cleanup retries): ${redact((error as Error).message)}` }];
+      return this.#owe({ kind: "ledger", id: this.ref, detail: `sandbox deleted, but removing its ledger record failed; gui_stop, /gui-cleanup, or the Pi shutdown retries: ${redact((error as Error).message)}` });
     }
-    cost.stop(this.#o.sessionId);
-    await ledger.remove(this.name, false, { sessionId: this.#o.sessionId }).catch(() => undefined);
+    return this.#finish();
+  }
+
+  /** Is a record of this sandbox (active or kept) still in the ledger? */
+  async #recorded(): Promise<boolean> {
+    return (await this.#o.ledger.read(this.name, true)) !== undefined || (await this.#o.ledger.read(this.name)) !== undefined;
+  }
+
+  #owe(leftover: Leftover): Leftover[] {
+    this.#owed = leftover;
+    return [leftover];
+  }
+
+  #finish(): Leftover[] {
+    this.#owed = undefined;
     this.#done = true;
     return [];
   }
 
-  /** Read-only: the sandbox if it still exists (unless kept). */
+  /** Read-only: the sandbox if it still exists (unless kept), and any ledger transition a stop still owes. */
   async audit(): Promise<Leftover[]> {
-    if (this.keeps && this.#done) return [];
+    const owed = this.#owed ? [this.#owed] : [];
+    if (this.keeps && (this.#done || this.#dirRemoved)) return owed;
     try {
       const info = await this.#o.api.getSandbox(this.ref);
-      return info ? [{ kind: "sandbox", id: this.ref, detail: `still exists (${info.status})` }] : [];
+      return [...owed, ...(info ? [{ kind: "sandbox", id: this.ref, detail: `still exists (${info.status})` }] : [])];
     } catch (error) {
-      return [{ kind: "sandbox", id: this.ref, detail: `audit failed: ${redact((error as Error).message)}` }];
+      return [...owed, { kind: "sandbox", id: this.ref, detail: `audit failed: ${redact((error as Error).message)}` }];
     }
   }
 }
