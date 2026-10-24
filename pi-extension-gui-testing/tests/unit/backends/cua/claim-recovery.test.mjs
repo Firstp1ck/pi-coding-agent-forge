@@ -15,6 +15,8 @@ import { CuaCostLedger } from "../../../../src/backends/cua/cost.ts";
 import { SandboxHandle } from "../../../../src/backends/cua/session.ts";
 import { startLeftovers } from "../../../../src/backends/start-failure.ts";
 import { FakeCuaApi, cuaEnv, HOST_TAG, LIVE_OWNER } from "./fake-cua.mjs";
+import { formatOwnerLabel } from "../../../../src/owner.ts";
+import { BOOT, fakeProc } from "../fakes.mjs";
 
 test("a claim committed while the ledger turns unreadable is attached for retry and goes back to the kept set", { skip: process.getuid?.() === 0 ? "needs a non-root user" : false }, async (t) => {
   const env = await cuaEnv(t);
@@ -145,4 +147,61 @@ test("an unreadable record during recovery is reported, never read as \"no claim
   }
   assert.equal((await ledger.read(name, true))?.keep, true, "back in the kept set");
   assert.equal(api.sandboxes.has(ref), true);
+});
+
+test("a stale retry of a known claim's settlement never moves another live owner's claim with the same session id", async (t) => {
+  const env = await cuaEnv(t);
+  const api = new FakeCuaApi({ fail: { get: new Error("transient network outage") } });
+  const ledger = new SandboxLedger(env.ledgerDir, { lock: { timeoutMs: 750 } });
+  const other = new SandboxLedger(env.ledgerDir, { lock: { timeoutMs: 750 } });
+  const name = `pi-gui-testing-${HOST_TAG}-gui-kept`;
+  const ref = `aws:${name}`;
+  await ledger.write(keptRecord(env, name));
+  assert.equal(await ledger.markKept(name, "gui-old"), true);
+  api.sandboxes.set(ref, { name, location: "aws", status: "ready", image: "linux" });
+  const backend = new CuaBackend({ ownerLabel: () => LIVE_OWNER, api, ledger, settings: new CuaSettingsStore(env.settingsPath), hostTag: HOST_TAG, procRoot: env.proc, version: "0.2.0" });
+  const mark = ledger.markKept.bind(ledger);
+  let once = true;
+  ledger.markKept = async (...args) => {
+    if (once) {
+      once = false;
+      throw new Error("transient ledger failure returning a known claim");
+    }
+    return mark(...args);
+  };
+  let release;
+  try {
+    const failure = await backend
+      .startSession({ sessionId: "gui-failed", projectRoot: env.project, sessionDir: env.sessionDir, config: { shared: { network: "default" }, keepSandbox: true }, ownerLabel: LIVE_OWNER, recordResource: async () => {}, onLog() {}, onExitCleanup() {}, signal: new AbortController().signal })
+      .then(() => assert.fail("the start succeeded"), (error) => error);
+    const attached = startLeftovers(failure);
+    assert.ok(attached);
+    fakeProc(env.proc, { 4242: 1000, 4343: 2000 });
+    const otherOwner = formatOwnerLabel({ clientId: "b0b0b0", pid: 4343, processStartTime: "2000", bootId: BOOT });
+    let arrived;
+    const paused = new Promise((resolve) => (arrived = resolve));
+    const resume = new Promise((resolve) => (release = resolve));
+    let armed = true;
+    ledger.markKept = async (...args) => {
+      if (armed) {
+        armed = false;
+        arrived();
+        await resume;
+      }
+      return mark(...args);
+    };
+    const first = attached.session.stop();
+    await paused;
+    assert.deepEqual(await attached.session.stop(), []);
+    // Another live Pi claims it with a colliding session id while the first retry is paused.
+    assert.ok(await other.claimKept("aws", projectKey(env.project), { ownerLabel: otherOwner, sessionId: "gui-failed" }, { image: "linux" }));
+    release();
+    await first;
+    assert.equal((await other.read(name))?.ownerLabel, otherOwner, "the other owner's claim stays active");
+    assert.equal(await other.read(name, true), undefined);
+    assert.deepEqual(api.deleted, []);
+  } finally {
+    release?.();
+    ledger.markKept = mark;
+  }
 });

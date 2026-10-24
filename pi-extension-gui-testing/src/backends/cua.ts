@@ -241,7 +241,7 @@ export class CuaBackend implements Backend, DriftCapability, ResetCapability, Sw
       // When that ledger transition fails, the start fails with the claim attached, so the runtime tracks
       // it and its retries (gui_stop, /gui-cleanup, shutdown) finish the transition.
       const settle = async (claimed: LedgerRecord, step: "keep" | "forget", failure: SessionError): Promise<void> => {
-        const back = new SandboxHandle({ api: this.api, ledger: this.ledger, cost: this.cost, sessionId: options.sessionId, name: claimed.name, ref: claimed.ref, keep: true });
+        const back = new SandboxHandle({ api: this.api, ledger: this.ledger, cost: this.cost, sessionId: options.sessionId, name: claimed.name, ref: claimed.ref, keep: true, ownerLabel: options.ownerLabel });
         const leftovers = step === "keep" ? await back.returnToKept() : await back.forgetGone();
         if (leftovers.length > 0) throw attachStartLeftovers(failure, pendingSession(options.sessionId, this.id, back), leftovers);
       };
@@ -291,7 +291,7 @@ export class CuaBackend implements Backend, DriftCapability, ResetCapability, Sw
     }
     const name = reused?.name ?? sandboxName(options.sessionId, this.hostTag);
     const ref = reused?.ref ?? sandboxRef(location, name);
-    const handle = new SandboxHandle({ api: this.api, ledger: this.ledger, cost: this.cost, sessionId: options.sessionId, name, ref, keep });
+    const handle = new SandboxHandle({ api: this.api, ledger: this.ledger, cost: this.cost, sessionId: options.sessionId, name, ref, keep, ownerLabel: options.ownerLabel });
     const pending = pendingSession(options.sessionId, this.id, handle);
 
     let stage = "creating the sandbox";
