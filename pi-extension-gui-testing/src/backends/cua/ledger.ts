@@ -113,6 +113,11 @@ export interface LedgerRecord {
    */
   image?: string;
   /**
+   * Guest OS of the sandbox; absent means `linux` (also in records of older
+   * versions). A kept sandbox is reused only for a session of the same target.
+   */
+  target?: "linux" | "windows";
+  /**
    * Raised by every committed transition (absent, meaning 0, in records of
    * older versions). Of two copies of a record, the higher generation is
    * the current one, and a transition that names the generation it read acts
@@ -188,6 +193,7 @@ function recordProblem(raw: unknown): string | undefined {
   if (!["creating", "created", "deleting"].includes(r.phase as string)) return "bad phase";
   if (typeof r.keep !== "boolean") return "bad keep";
   if (r.image !== undefined && (typeof r.image !== "string" || r.image.length === 0 || r.image.length > 512)) return "bad image";
+  if (r.target !== undefined && r.target !== "linux" && r.target !== "windows") return "bad target";
   if (r.generation !== undefined && (!Number.isSafeInteger(r.generation) || (r.generation as number) < 0)) return "bad generation";
   if (!(r.name as string).startsWith(SANDBOX_PREFIX) || r.ref !== `${r.location}:${r.name}`) return "name and ref disagree";
   return undefined;
@@ -401,12 +407,20 @@ export class SandboxLedger {
   /**
    * Claims a kept sandbox for a new session: a kept record of `project` in
    * `location` (with `image`: recorded as made from that image; with
-   * `exclude`: none of those names), never one pending deletion or unknown. Returns the
+   * `exclude`: none of those names) for the same `target` (default `linux`),
+   * never one pending deletion or unknown. Returns the
    * claimed record, now active with `phase: "created"` and the new owner.
    */
-  async claimKept(location: string, project: string, owner: { ownerLabel: string; sessionId: string }, options: { image?: string; exclude?: ReadonlySet<string> } = {}): Promise<LedgerRecord | undefined> {
+  async claimKept(
+    location: string,
+    project: string,
+    owner: { ownerLabel: string; sessionId: string },
+    options: { image?: string; exclude?: ReadonlySet<string>; target?: "linux" | "windows" } = {},
+  ): Promise<LedgerRecord | undefined> {
     const { image, exclude } = options;
-    const claimable = (r: LedgerRecord) => r.phase !== "deleting" && r.location === location && r.projectKey === project && (image === undefined || r.image === image) && !exclude?.has(r.name);
+    const target = options.target ?? "linux";
+    const claimable = (r: LedgerRecord) =>
+      r.phase !== "deleting" && r.location === location && r.projectKey === project && (image === undefined || r.image === image) && (r.target ?? "linux") === target && !exclude?.has(r.name);
     const candidates = (await this.entries()).filter((e) => e.kept && e.record && claimable(e.record)).map((e) => e.record!.name);
     // Nothing to claim: no lock (and no ledger dir) needed.
     if (candidates.length === 0) return undefined;

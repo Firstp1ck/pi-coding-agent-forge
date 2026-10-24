@@ -1,8 +1,9 @@
 /**
  * Personal `cua` settings recorded by `/gui-setup cua` (never secrets): the
  * billing and upload acknowledgement (`--accept-billing` or the confirm
- * dialog), the cloud the sandboxes run in, the image, and an hourly rate
- * entered at setup when Cua reports none. Stored in
+ * dialog), the cloud the sandboxes run in, the image per target OS (Linux
+ * `image`, Windows `windowsImage`), and hourly rates entered at setup when Cua
+ * reports none. Stored in
  * `<agent dir>/gui/cua.json`, mode 0600. Cua's own sign-in and the cloud
  * credentials stay in the `cua` CLI's store; this package never reads them.
  */
@@ -27,10 +28,22 @@ export interface CuaSettings {
   image?: string;
   /** USD per sandbox hour entered at setup, used when Cua reports no price. */
   rateUsdPerHour?: number;
+  /** Image alias or registry reference of Windows sandboxes (`--targets windows`); default `windows`. */
+  windowsImage?: string;
+  /** USD per Windows sandbox hour entered at setup, used when Cua reports no price for the Windows image. */
+  windowsRateUsdPerHour?: number;
 }
 
 export function defaultSettingsPath(): string {
   return join(dirname(globalConfigPath()), "cua.json");
+}
+
+function validImage(value: unknown): boolean {
+  return typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9._:/@-]{0,255}$/.test(value);
+}
+
+function validRate(value: unknown): boolean {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1_000;
 }
 
 /** Validates a settings value; `undefined` fields stay unset. */
@@ -41,10 +54,10 @@ export function settingsProblem(raw: unknown): string | undefined {
   if (r.billingAcceptedAt !== undefined && (typeof r.billingAcceptedAt !== "string" || Number.isNaN(Date.parse(r.billingAcceptedAt)))) return "has an invalid billingAcceptedAt";
   if (r.billingLocation !== undefined && !isCloudLocation(r.billingLocation)) return "has an invalid billingLocation";
   if (r.location !== undefined && !isCloudLocation(r.location)) return "has an invalid location (aws, gcp, hetzner, or modal)";
-  if (r.image !== undefined && (typeof r.image !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._:/@-]{0,255}$/.test(r.image))) return "has an invalid image";
-  if (r.rateUsdPerHour !== undefined && (typeof r.rateUsdPerHour !== "number" || !Number.isFinite(r.rateUsdPerHour) || r.rateUsdPerHour < 0 || r.rateUsdPerHour > 1_000)) {
-    return "has an invalid rateUsdPerHour (0–1000)";
-  }
+  if (r.image !== undefined && !validImage(r.image)) return "has an invalid image";
+  if (r.rateUsdPerHour !== undefined && !validRate(r.rateUsdPerHour)) return "has an invalid rateUsdPerHour (0–1000)";
+  if (r.windowsImage !== undefined && !validImage(r.windowsImage)) return "has an invalid windowsImage";
+  if (r.windowsRateUsdPerHour !== undefined && !validRate(r.windowsRateUsdPerHour)) return "has an invalid windowsRateUsdPerHour (0–1000)";
   return undefined;
 }
 

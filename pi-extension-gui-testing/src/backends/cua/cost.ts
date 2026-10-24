@@ -35,6 +35,17 @@ export function reportedRate(providers: readonly CloudProvider[], location: stri
   return (exact ?? linux ?? kinds[0])?.usdPerHour;
 }
 
+/**
+ * The hourly price Cua reports for a Windows `image` in `location`: that
+ * image's price, else the price of the `windows` entry (which covers every
+ * image Cua treats as Windows). A Linux price would understate a Windows
+ * machine (larger instance, license), so there is no other fallback.
+ */
+export function reportedWindowsRate(providers: readonly CloudProvider[], location: string, image: string): number | undefined {
+  const kinds = providers.find((p) => p.name === location)?.kinds.filter((k) => k.supported && k.usdPerHour !== undefined) ?? [];
+  return (kinds.find((k) => k.image === image) ?? kinds.find((k) => k.image === "windows"))?.usdPerHour;
+}
+
 /** Overlap of `[start, end)` with `[from, to)` in milliseconds. */
 function overlap(start: number, end: number, from: number, to: number): number {
   return Math.max(0, Math.min(end, to) - Math.max(start, from));

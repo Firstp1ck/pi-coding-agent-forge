@@ -6,6 +6,10 @@
  * `<root>/displays` display locks, `<dir>/deps` for `setup` installs), so
  * nothing outside the session dir needs to be writable. Archives are staged
  * in the 0700 client session dir and deleted after the upload.
+ *
+ * Windows sandboxes (`--targets windows`) get the Windows helper's 17 files in
+ * `<dir>\tools`, checked by SHA-256 after unpacking, and the project in
+ * `<dir>\workspace`; see `./windows.ts` for the guest commands.
  */
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
@@ -17,7 +21,8 @@ import { PACKAGE_ROOT } from "../docker/package.ts";
 import { CuaApiError, type CuaApi } from "./api.ts";
 import { writeBufferFile, writeWorkspaceTar } from "./bundle.ts";
 import { redact } from "./redact.ts";
-import { GUEST_ROOT, guestDir } from "./session.ts";
+import { GUEST_ROOT, guestDir, guestWorkspace } from "./session.ts";
+import { extractScript, powershellArgv, prepareScript, probeScript, removeFileScript, verifyScript, windowsGuestPaths, windowsHelperArchive, windowsHelperFiles, WINDOWS_MIN_BUILD, type CuaTarget, type HelperFile } from "./windows.ts";
 
 /** Commands the helper runs (`Xvfb`, `dbus-daemon`, `xdotool`, `import`, `xprop`, `xwininfo`) plus the Python modules it imports. */
 export const HELPER_COMMANDS = ["Xvfb", "dbus-daemon", "xdotool", "import", "xprop", "xwininfo", "python3"] as const;
@@ -79,14 +84,16 @@ async function execOk(api: CuaApi, ref: string, argv: readonly string[], what: s
 }
 
 /** Uploads a staged local archive and unpacks it into `targetDir`; removes both copies of the archive. */
-async function uploadAndExtract(api: CuaApi, ref: string, local: string, targetDir: string, signal: AbortSignal): Promise<void> {
+async function uploadAndExtract(api: CuaApi, ref: string, local: string, targetDir: string, signal: AbortSignal, target: CuaTarget = "linux"): Promise<void> {
   const remote = `${targetDir}.tar`;
+  const windows = target === "windows";
   try {
     await api.upload(ref, local, remote, signal);
-    await execOk(api, ref, ["tar", "-x", "--no-same-owner", "-f", remote, "-C", targetDir], `unpacking ${targetDir}`, DEPLOY_TIMEOUTS.extract, signal);
+    const extract = windows ? powershellArgv(extractScript(remote, targetDir)) : ["tar", "-x", "--no-same-owner", "-f", remote, "-C", targetDir];
+    await execOk(api, ref, extract, `unpacking ${targetDir}`, DEPLOY_TIMEOUTS.extract, signal);
   } finally {
     await rm(local, { force: true });
-    await api.exec(ref, ["rm", "-f", "--", remote], { timeoutMs: DEPLOY_TIMEOUTS.mkdir }).catch(() => undefined);
+    await api.exec(ref, windows ? powershellArgv(removeFileScript(remote)) : ["rm", "-f", "--", remote], { timeoutMs: DEPLOY_TIMEOUTS.mkdir }).catch(() => undefined);
   }
 }
 
@@ -142,12 +149,69 @@ export async function ensureHelperPackages(options: Omit<DeployOptions, "session
   return missing;
 }
 
+export interface WindowsDeployOptions extends Omit<DeployOptions, "helperArchive"> {
+  /** The helper's files; default: every file under `helpers/windows`. */
+  helperFiles?: () => Promise<HelperFile[]>;
+}
+
+/**
+ * Windows guests: creates the private session dir (with `tools`, `workspace`,
+ * and the runtime dir) and checks what the helper needs from the guest:
+ * Windows PowerShell 5.1, build {@link WINDOWS_MIN_BUILD} or newer, and
+ * `tar.exe`. Nothing is installed in a Windows sandbox; a missing requirement
+ * fails the start with what to change.
+ */
+export async function prepareWindowsGuest(options: Omit<DeployOptions, "sessionDir" | "helperArchive">): Promise<void> {
+  const { api, ref, signal } = options;
+  options.onStatus?.("preparing the Windows sandbox");
+  await execOk(api, ref, powershellArgv(prepareScript(options.sessionId)), "creating the session dir", DEPLOY_TIMEOUTS.mkdir, signal);
+  const out = await execOk(api, ref, powershellArgv(probeScript()), "checking the Windows sandbox", DEPLOY_TIMEOUTS.probe, signal);
+  const lines = out.split(/\r?\n/);
+  const missing = lines.filter((l) => l.startsWith("missing:")).map((l) => l.slice("missing:".length).trim().slice(0, 64));
+  if (missing.length === 0) return;
+  const build = lines.find((l) => l.startsWith("build:"))?.slice("build:".length).trim().slice(0, 16);
+  const why: Record<string, string> = {
+    powershell: "Windows PowerShell 5.1 (powershell.exe)",
+    "windows-build": `Windows 10 1809 / Server 2019 (build ${WINDOWS_MIN_BUILD}) or newer${build ? `, found build ${build}` : ""}`,
+    tar: "the system tar.exe (Windows 10 1803 and newer)",
+  };
+  throw new CuaApiError("FAILED", `the Windows sandbox image lacks ${missing.map((m) => why[m] ?? m).join(", ")}; choose another Windows image at /gui-setup cua`);
+}
+
+/**
+ * Uploads the Windows helper's files into `<dir>\tools` and checks each one
+ * against its SHA-256 in the guest. A mismatch (a truncated upload, an
+ * extraction that changed bytes, a file the guest's security software
+ * removed) fails the start.
+ */
+export async function deployWindowsHelper(options: WindowsDeployOptions): Promise<void> {
+  const { api, ref, signal } = options;
+  const paths = windowsGuestPaths(options.sessionId);
+  options.onStatus?.("copying the Windows helper into the sandbox");
+  const files = await (options.helperFiles ?? (() => windowsHelperFiles()))();
+  const local = join(options.sessionDir, "helper.tar");
+  await writeBufferFile(local, windowsHelperArchive(files));
+  await uploadAndExtract(api, ref, local, paths.tools, signal, "windows");
+  const result = await api.exec(ref, powershellArgv(verifyScript(paths.tools, files)), { timeoutMs: DEPLOY_TIMEOUTS.probe, signal });
+  if (result.exitCode !== 0) {
+    const bad = result.stdout.split(/\r?\n/).filter((l) => l.startsWith("bad:")).map((l) => l.slice("bad:".length).trim().slice(0, 128));
+    throw new CuaApiError(
+      "FAILED",
+      bad.length > 0
+        ? `the Windows helper in the sandbox does not match this package (missing or changed: ${bad.slice(0, 5).join(", ")}${bad.length > 5 ? ", …" : ""})`
+        : `checking the Windows helper in the sandbox failed (exit ${result.exitCode ?? result.signal ?? "?"})${result.stderr.trim() ? `: ${redact(result.stderr.trim())}` : ""}`,
+    );
+  }
+}
+
 export interface SyncOptions extends DeployOptions {
   projectRoot: string;
   allow?: readonly string[];
   deny?: readonly string[];
   /** Local runner for `git ls-files`. */
   runner: CommandRunner;
+  /** Guest OS; default `linux`. */
+  target?: CuaTarget;
 }
 
 /** Uploads the §4.7 file set into `<dir>/workspace`; returns files, bytes, and the excluded count. */
@@ -163,6 +227,7 @@ export async function syncWorkspace(options: SyncOptions): Promise<SyncSummary> 
     await rm(local, { force: true });
     throw error;
   }
-  await uploadAndExtract(api, ref, local, `${guestDir(options.sessionId)}/workspace`, signal);
+  const target = options.target ?? "linux";
+  await uploadAndExtract(api, ref, local, guestWorkspace(target, options.sessionId), signal, target);
   return summary;
 }

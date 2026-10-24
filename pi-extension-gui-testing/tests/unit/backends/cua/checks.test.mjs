@@ -71,12 +71,14 @@ test("a cloud test failure is reported without creating anything", async (t) => 
   assert.equal(results["cua.quota"].observed, "aws: quota: vCPU limit 0");
 });
 
-test("Windows and macOS targets are refused with the planned-work reason", async (t) => {
+test("macOS is refused as planned work; Windows is no longer refused outright (the cloud decides)", async (t) => {
   const { results } = await run(t, { targets: ["linux", "windows", "macos"] });
   assert.equal(results["cua.targets"].status, "fail");
-  assert.match(results["cua.targets"].observed, /windows: needs the Windows helper \(spike S1\); planned/);
   assert.match(results["cua.targets"].observed, /macos: .*planned/);
+  assert.doesNotMatch(results["cua.targets"].observed, /windows/, "macOS is reported first; Windows is checked against the cloud");
   assert.equal(targetRefusal("linux"), undefined);
+  assert.equal(targetRefusal("windows"), undefined);
+  assert.match(targetRefusal("macos"), /planned/);
 });
 
 test("the project's targets are read when no flag gives them", async (t) => {

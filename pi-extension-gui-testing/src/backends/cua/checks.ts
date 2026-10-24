@@ -2,7 +2,8 @@
  * `cua` checks (spec §5.4, adapted to Cua after Cua Cloud ended on
  * 2026-10-18): the `cua` CLI, network, cua.ai sign-in, a connected cloud of
  * the user's, its read-only account test, requested targets, sandbox expiry,
- * an hourly rate, and the billing + upload acknowledgement. Every check is
+ * an hourly rate, and the billing + upload acknowledgement. Windows targets
+ * pass only when the chosen cloud offers a Windows image (`cua cloud status`). Every check is
  * `observe`: nothing is created and nothing is billed. The package never
  * handles a credential: sign-in and cloud credentials stay in the `cua` CLI.
  */
@@ -11,10 +12,11 @@ import type { TargetOs } from "../../config/types.ts";
 import { commonChecks, compareVersions, type CommonCheckOptions } from "../../checks/common.ts";
 import type { Check, CheckOutcome } from "../../checks/types.ts";
 import type { HostSupport } from "../host-support.ts";
-import { CuaApiError, isCloudLocation, type CloudLocation, type CloudProvider, type CuaApi } from "./api.ts";
-import { reportedRate } from "./cost.ts";
+import { CuaApiError, isCloudLocation, type CloudKind, type CloudLocation, type CloudProvider, type CuaApi } from "./api.ts";
+import { reportedRate, reportedWindowsRate } from "./cost.ts";
 import { redact } from "./redact.ts";
 import { DEFAULT_IMAGE, type CuaSettings } from "./settings.ts";
+import { DEFAULT_WINDOWS_IMAGE } from "./windows.ts";
 
 /** How long checks of one run reuse a `cua cloud status` answer (ms). */
 const STATUS_REUSE_MS = 10_000;
@@ -28,13 +30,32 @@ export const CUA_HOST_SUPPORT: HostSupport = {
   otherwise: "cua runs from Linux clients in this version; macOS and Windows clients are planned",
 };
 
-/** Targets in this build; the others need the Windows helper (spike S1) or are planned. */
-export const CUA_TARGETS: readonly TargetOs[] = ["linux"];
+/** Targets in this build (Windows when the cloud offers a Windows image); macOS is planned. */
+export const CUA_TARGETS: readonly TargetOs[] = ["linux", "windows"];
 
 export function targetRefusal(target: TargetOs): string | undefined {
-  if (target === "linux") return undefined;
-  if (target === "windows") return "windows: needs the Windows helper (spike S1); planned";
+  if (target === "linux" || target === "windows") return undefined;
   return "macos: needs the macOS support of the Windows/macOS helper work; planned";
+}
+
+/** Kind name the `cua` CLI lists Windows under in `cua cloud status` (`providers[].kinds[].image`). */
+const WINDOWS_KIND_IMAGE = "windows";
+
+/**
+ * Whether Windows sandboxes can run in `provider`: the Windows image chosen
+ * at setup (`windowsImage`, default `windows`) and the kind `cua cloud status`
+ * lists for it (that image, else the `windows` entry, which covers every image
+ * Cua treats as Windows). An unsupported kind refuses with Cua's reason. A
+ * custom image no kind covers is accepted as chosen at setup; the start then
+ * checks that the Windows helper answered.
+ */
+export function windowsAvailability(settings: CuaSettings, provider: CloudProvider | undefined): { image: string; kind?: CloudKind; problem?: string } {
+  const image = settings.windowsImage ?? DEFAULT_WINDOWS_IMAGE;
+  const where = provider?.name ?? "the cloud";
+  const kind = provider?.kinds.find((k) => k.image === image) ?? provider?.kinds.find((k) => k.image === WINDOWS_KIND_IMAGE);
+  if (kind) return kind.supported ? { image, kind } : { image, kind, problem: `windows on ${where}: ${kind.reason ?? "not supported"}` };
+  if (settings.windowsImage !== undefined) return { image };
+  return { image, problem: `windows on ${where}: cua cloud status lists no Windows image for this cloud` };
 }
 
 /** Default reachability probe: any HTTP answer from the Cua API host counts (no credentials sent). */
@@ -221,8 +242,14 @@ export function cuaChecks(options: CuaCheckOptions): Check[] {
           const image = settings.image ?? DEFAULT_IMAGE;
           const kind = provider?.kinds.find((k) => k.image === image) ?? provider?.kinds.find((k) => k.image === "linux");
           if (kind && !kind.supported) return fail(`linux on ${chosen.location}: ${kind.reason ?? "not supported"}`);
-          // The image is a drift input: a different image is a different sandbox system (re-verify with /gui-doctor).
-          return { status: "pass", observed: `linux (${image}${kind?.machineType ? ` on ${kind.machineType}` : ""})`, facts: { "cua.image": image } };
+          const observed = [`linux (${image}${kind?.machineType ? ` on ${kind.machineType}` : ""})`];
+          const windows = windowsAvailability(settings, provider);
+          if (requested.includes("windows")) {
+            if (windows.problem) return fail(windows.problem);
+            observed.push(`windows (${windows.image}${windows.kind?.machineType ? ` on ${windows.kind.machineType}` : windows.kind ? "" : ", not listed by cua cloud status"})`);
+          }
+          // The images are drift inputs: a different image is a different sandbox system (re-verify with /gui-doctor).
+          return { status: "pass", observed: observed.join("; "), facts: { "cua.image": image, "cua.windowsImage": windows.image } };
         } catch (error) {
           return fail(apiProblem(error));
         }
@@ -262,9 +289,25 @@ export function cuaChecks(options: CuaCheckOptions): Check[] {
           const settings = await options.settings();
           const chosen = chooseLocation(settings, await cloudStatus(ctx.signal));
           const rate = chosen.location ? reportedRate(await cloudStatus(ctx.signal), chosen.location, settings.image ?? DEFAULT_IMAGE) : undefined;
-          if (rate !== undefined) return { status: "pass", observed: `~$${rate.toFixed(2)}/h (reported by Cua)` };
-          if (settings.rateUsdPerHour !== undefined) return { status: "pass", observed: `~$${settings.rateUsdPerHour.toFixed(2)}/h (entered at setup)` };
-          return { status: "warn", observed: "no price reported and none entered" };
+          let linux: CheckOutcome;
+          if (rate !== undefined) linux = { status: "pass", observed: `~$${rate.toFixed(2)}/h (reported by Cua)` };
+          else if (settings.rateUsdPerHour !== undefined) linux = { status: "pass", observed: `~$${settings.rateUsdPerHour.toFixed(2)}/h (entered at setup)` };
+          else linux = { status: "warn", observed: "no price reported and none entered" };
+          const requested = ctx.targets ?? (await targets(ctx.projectRoot));
+          if (!requested.includes("windows")) return linux;
+          // Windows has its own price (larger machine, license): never the Linux one.
+          const image = settings.windowsImage ?? DEFAULT_WINDOWS_IMAGE;
+          const windowsRate = chosen.location ? reportedWindowsRate(await cloudStatus(ctx.signal), chosen.location, image) : undefined;
+          const windows =
+            windowsRate !== undefined
+              ? `windows ~$${windowsRate.toFixed(2)}/h (reported by Cua)`
+              : settings.windowsRateUsdPerHour !== undefined
+                ? `windows ~$${settings.windowsRateUsdPerHour.toFixed(2)}/h (entered at setup)`
+                : undefined;
+          return {
+            status: linux.status === "pass" && windows ? "pass" : "warn",
+            observed: `linux ${linux.observed}; ${windows ?? "windows: no price reported and none entered (windowsRateUsdPerHour)"}`,
+          };
         } catch (error) {
           return { status: "warn", observed: apiProblem(error) };
         }

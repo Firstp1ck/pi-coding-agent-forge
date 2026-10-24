@@ -39,8 +39,8 @@ Order: WH → (WL ∥ WD ∥ WC) → I → review → fixes → report.
 | Phase | Status | Evidence |
 |---|---|---|
 | WH | done 2026-10-24 (never run on Windows) | `claude-opus-5-5`, handoff `plans/handoffs/windows-WH.md`: `helpers/windows/helper.ps1` + 15 C# sources (protocol core + Win32/UIA layer), `spikes/s1/` harness and sample apps, `docs/protocol.md` Windows section, MIT notice for `@iiwate/pi-silent-gui`. Ran here: PowerShell 7.6.8 linux-arm64 (dev tool in `~/.local/share/pi-tools/`) with a fake platform — 108/108 C# core checks, all 15 sources compile at C# 5 against .NET Framework 4.7.2 reference assemblies, 20 Node protocol tests whose results pass `response.ts`. Owner: added `tests/helper-windows/*.test.mjs` to `npm test`; stderr assertions now poll (they raced the stream under load). Owner rerun: concurrent `npm run check` + Node 22 → 589/589 each |
-| WL | not started | |
-| WD | not started | |
-| WC | not started | |
-| I | not started | |
+| WL | done 2026-10-24 (unregistered, never run on Windows) | handoff `plans/handoffs/windows-WL.md`: `local-windows` backend, shared `src/backends/windows/**`, 12 Windows checks via helper probes, runtime dir with owner-only ACL, foreground-unchanged isolation check, session.json audit/sweep |
+| WD | done 2026-10-24 (unregistered, never run) | handoff `plans/handoffs/windows-WD.md`: dockurr/windows 6.06 by digest, unattended install with OEM OpenSSH + helper, QEMU `-snapshot` session overlay, SSH on random 127.0.0.1 port, `--cap-drop ALL` + listed caps, base volume as tooling; `network: none` refused; one session at a time; helper runs in session 0 over SSH (private desktop, not the interactive session — spec §4.4 deviation) |
+| WC | done 2026-10-24 (never run) | handoff `plans/handoffs/windows-WC.md`: Windows target in `cua` (target-aware ledger records, `windowsImage`, Windows rate, encoded PowerShell commands, StdinEnv start); Cua CLI 0.9.0 marks Windows unsupported on all four clouds, so `cua.targets` fails until Cua offers it |
+| I | in progress 2026-10-24 | owner rerun after WL/WD/WC: concurrent `npm run check` + Node 22 → 700/700 each |
 | Review | not started | |

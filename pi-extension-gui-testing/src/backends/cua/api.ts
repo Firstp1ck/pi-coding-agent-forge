@@ -73,6 +73,16 @@ export interface CreateSandboxSpec {
   image: string;
 }
 
+export interface SpawnHelperOptions {
+  /**
+   * How `env` reaches the guest process: `posix` (default) wraps `argv` in a
+   * `sh` preamble that reads the values from the first stdin lines;
+   * `powershell` appends `-StdinEnv NAME,…` to `argv` (the Windows helper
+   * reads the values itself, in that order, from the first stdin lines).
+   */
+  stdinEnv?: "posix" | "powershell";
+}
+
 export interface ExecOptions {
   timeoutMs: number;
   signal?: AbortSignal;
@@ -132,9 +142,11 @@ export interface CuaApi {
   upload(ref: string, localPath: string, guestPath: string, signal?: AbortSignal): Promise<{ size: number }>;
   /**
    * Starts `argv` in the sandbox with a live stdio stream (the helper
-   * channel). `env` reaches the guest process only, never any argv.
+   * channel). `env` reaches the guest process only, never any argv: through a
+   * POSIX `sh` preamble (Linux guests, the default) or the Windows helper's
+   * `-StdinEnv` option, appended to `argv` (Windows guests).
    */
-  spawnHelper(ref: string, argv: readonly string[], env: Readonly<Record<string, string>>): HelperProcess;
+  spawnHelper(ref: string, argv: readonly string[], env: Readonly<Record<string, string>>, options?: SpawnHelperOptions): HelperProcess;
   /** Argv that deletes the sandbox synchronously, for the process `exit` handler (no shell, no secret). */
   forceDeleteArgv(ref: string): string[];
 }

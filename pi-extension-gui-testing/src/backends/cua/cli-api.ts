@@ -10,7 +10,12 @@
  * - `cua --json sandbox create <image> --on <cloud> --name <name>`
  * - `cua --json sandbox info|ls|rm …`, `cua --json sandbox cp <file> <ref>:<path>`
  * - `cua sandbox exec -i [--cwd d] <ref> -- argv…` (argv, no shell; stdio streamed;
- *   the guest command is killed when the CLI process ends)
+ *   the guest command is killed when the CLI process ends). On Windows guests
+ *   the argv reaches `CreateProcessW` through Rust's standard quoting; stdin is
+ *   forwarded raw (no CRLF translation). Plain `exec` without `-i` runs
+ *   `/bin/sh -c` on every guest, so this adapter always passes `-i`.
+ * - Guest paths are POSIX (`/tmp/…`) or Windows drive paths (`C:\…`); `cp`
+ *   splits `<ref>:<path>` at the first `:` followed by a guest path.
  *
  * Exit codes (CLI reference): 2 invalid argument, 3 not found, 4 not supported or
  * not configured, 5 transport, 6 unauthenticated, 7 disk, 8 no room, 130 cancelled.
@@ -29,6 +34,7 @@ import {
   type CuaErrorCode,
   type ExecOptions,
   type SandboxInfo,
+  type SpawnHelperOptions,
 } from "./api.ts";
 import { redact } from "./redact.ts";
 
@@ -382,7 +388,7 @@ export class CuaCliApi implements CuaApi {
   }
 
   async upload(ref: string, localPath: string, guestPath: string, signal?: AbortSignal): Promise<{ size: number }> {
-    if (!guestPath.startsWith("/")) throw new CuaApiError("FAILED", `guest path must be absolute: ${guestPath}`);
+    if (!guestPath.startsWith("/") && !/^[A-Za-z]:\\/.test(guestPath)) throw new CuaApiError("FAILED", `guest path must be absolute: ${guestPath}`);
     const result = await this.#run(["--json", "sandbox", "cp", localPath, `${ref}:${guestPath}`], { timeoutMs: CLI_TIMEOUTS.upload, signal });
     if (result.exitCode !== 0) throw this.#failure("sandbox cp", result);
     const { shape, value } = this.#parse("sandbox cp", result);
@@ -390,12 +396,19 @@ export class CuaCliApi implements CuaApi {
     return { size: shape.optionalNumber(o.size, "size", 0, Number.MAX_SAFE_INTEGER) ?? 0 };
   }
 
-  spawnHelper(ref: string, argv: readonly string[], env: Readonly<Record<string, string>>): HelperProcess {
-    const { script, lines } = envPreamble(env);
-    const child = this.#spawner.spawn(
-      [this.#cua, "sandbox", "exec", "-i", ref, "--", "sh", "-c", script, "sh", ...argv],
-      { env: minimalEnv(this.#baseEnv, cuaEnv(this.#baseEnv)) },
-    );
+  spawnHelper(ref: string, argv: readonly string[], env: Readonly<Record<string, string>>, options: SpawnHelperOptions = {}): HelperProcess {
+    let guest: string[];
+    let lines: string;
+    if (options.stdinEnv === "powershell") {
+      const stdin = powershellStdinEnv(env);
+      guest = [...argv, ...stdin.args];
+      lines = stdin.lines;
+    } else {
+      const preamble = envPreamble(env);
+      guest = ["sh", "-c", preamble.script, "sh", ...argv];
+      lines = preamble.lines;
+    }
+    const child = this.#spawner.spawn([this.#cua, "sandbox", "exec", "-i", ref, "--", ...guest], { env: minimalEnv(this.#baseEnv, cuaEnv(this.#baseEnv)) });
     // `exec -i` forwards stdin: the guest shell reads the values before anything else arrives.
     if (lines) child.stdin.write(lines);
     return child;
@@ -405,6 +418,26 @@ export class CuaCliApi implements CuaApi {
     const words = nonSecretEnvWords(this.#baseEnv);
     return [...(words.length ? ["env", ...words] : []), this.#cua, "sandbox", "rm", ref, "--force"];
   }
+}
+
+/**
+ * The Windows helper's `-StdinEnv` form of `env`: the arguments naming the
+ * variables (sorted, comma-separated, appended to the helper's argv) and their
+ * values as the first stdin lines in the same order, LF-terminated. Values
+ * thus never appear in any argv, local or remote. The helper refuses a value
+ * with a CR or NUL and any name outside its contract; both are refused here
+ * first.
+ *
+ * @throws CuaApiError for a name that is not a plain variable name or a value with a CR, LF, or NUL.
+ */
+export function powershellStdinEnv(env: Readonly<Record<string, string>>): { args: string[]; lines: string } {
+  const keys = Object.keys(env).sort();
+  for (const key of keys) {
+    if (!ENV_NAME_RE.test(key)) throw new CuaApiError("FAILED", `invalid environment variable name ${JSON.stringify(key)}`);
+    if (/[\r\n\0]/.test(env[key])) throw new CuaApiError("FAILED", `environment value of ${key} contains a line break or NUL`);
+  }
+  if (keys.length === 0) return { args: [], lines: "" };
+  return { args: ["-StdinEnv", keys.join(",")], lines: keys.map((key) => `${env[key]}\n`).join("") };
 }
 
 /**

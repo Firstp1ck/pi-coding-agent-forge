@@ -1,9 +1,11 @@
 /**
- * `cua` backend (spec §4.3, M3, Linux targets): each session runs in its own
- * Cua sandbox in the user's cloud account (AWS, Google Cloud, Hetzner, or
- * Modal), created and deleted through the `cua` CLI. The Linux helper is
- * deployed into the sandbox and speaks the usual protocol over
- * `cua sandbox exec -i`, so sessions behave like every other backend's.
+ * `cua` backend (spec §4.3, M3, Linux and Windows targets): each session runs
+ * in its own Cua sandbox in the user's cloud account (AWS, Google Cloud,
+ * Hetzner, or Modal), created and deleted through the `cua` CLI. The Linux or
+ * the Windows helper is deployed into the sandbox and speaks the usual
+ * protocol over `cua sandbox exec -i`, so sessions behave like every other
+ * backend's. Both targets share the ledger, lock, cost, keepSandbox, and
+ * cleanup paths; only the guest commands differ (`./cua/windows.ts`).
  *
  * Cua Cloud (Cua-hosted sandboxes billed by Cua, `CUA_API_KEY`) ended on
  * 2026-10-18; see `./cua/api.ts`. The package stores no credential: the cua.ai
@@ -32,15 +34,16 @@ import type { CostEstimate } from "../usage/detector.ts";
 import type { SessionUsage } from "../usage/types.ts";
 import type { BillingCapability, BillingSetupInputs, BillingStatus, CostCapability, DriftCapability, OrphanAuditGate, ResetCapability, SmokeCapability, SweepAvailability } from "./capabilities.ts";
 import { CuaApiError, isCloudLocation, sandboxRef, type CuaApi, type SandboxInfo } from "./cua/api.ts";
-import { chooseLocation, cuaChecks } from "./cua/checks.ts";
+import { chooseLocation, cuaChecks, targetRefusal, windowsAvailability } from "./cua/checks.ts";
 import { CuaCliApi } from "./cua/cli-api.ts";
-import { CuaCostLedger, reportedRate } from "./cua/cost.ts";
-import { deployHelper, ensureHelperPackages, setupUsesPip, syncWorkspace } from "./cua/deploy.ts";
+import { CuaCostLedger, reportedRate, reportedWindowsRate } from "./cua/cost.ts";
+import { deployHelper, deployWindowsHelper, ensureHelperPackages, prepareWindowsGuest, setupUsesPip, syncWorkspace } from "./cua/deploy.ts";
 import { hostTag, projectKey, sandboxName, SandboxLedger, type LedgerRecord } from "./cua/ledger.ts";
 import { auditCuaOrphans, deleteKeptSandboxes, hasDeadOwnerRecords, sweepCuaOrphans } from "./cua/orphans.ts";
 import { redact } from "./cua/redact.ts";
-import { CuaSession, GUEST_ROOT, guestDir, pendingSession, SandboxHandle, startError } from "./cua/session.ts";
-import { billingAcknowledgementText, CuaSettingsStore, DEFAULT_IMAGE } from "./cua/settings.ts";
+import { CuaSession, guestRoot, guestWorkspace, pendingSession, removeGuestDirArgv, SandboxHandle, startError } from "./cua/session.ts";
+import { billingAcknowledgementText, CuaSettingsStore, DEFAULT_IMAGE, type CuaSettings } from "./cua/settings.ts";
+import { DEFAULT_WINDOWS_IMAGE, windowsSetupCommand, type CuaTarget, type HelperFile } from "./cua/windows.ts";
 import { packageVersion } from "./docker/package.ts";
 import { attachStartLeftovers, stopAfterFailedStart } from "./start-failure.ts";
 
@@ -51,6 +54,25 @@ const unreadableClaimLeftover: Leftover = {
   detail: "a kept-sandbox claim may have been saved, but the sandbox records could not be read; gui_stop, /gui-cleanup, and quitting Pi retry",
 };
 export { CUA_HOST_SUPPORT } from "./cua/checks.ts";
+
+/**
+ * Session start options with the launch's target OS. `target` is not (yet) a
+ * field of {@link SessionStartOptions}: without it a session runs the first of
+ * the project's `targets` (what `gui_launch` picks when its call names none).
+ */
+export interface CuaSessionStartOptions extends SessionStartOptions {
+  target?: TargetOs;
+}
+
+/** The target OS of a session start. */
+export function sessionTarget(options: CuaSessionStartOptions): TargetOs {
+  return options.target ?? options.config.shared.targets?.[0] ?? "linux";
+}
+
+/** Image of `target`'s sandboxes: the setup choice, else the default alias. */
+export function targetImage(settings: CuaSettings, target: CuaTarget): string {
+  return target === "windows" ? (settings.windowsImage ?? DEFAULT_WINDOWS_IMAGE) : (settings.image ?? DEFAULT_IMAGE);
+}
 
 /** Bound for one `setup` command (spec §7). */
 export const CUA_SETUP_COMMAND_TIMEOUT_MS = 15 * 60_000;
@@ -81,6 +103,8 @@ export interface CuaBackendOptions {
   cuaOnPath?: () => Promise<boolean>;
   /** Helper tooling archive (tests). */
   helperArchive?: () => Promise<Buffer>;
+  /** Windows helper files (tests); default: every file under `helpers/windows`. */
+  windowsHelperFiles?: () => Promise<HelperFile[]>;
   setupTimeoutMs?: number;
   readyTimeoutMs?: number;
   heartbeatIntervalMs?: number;
@@ -166,14 +190,20 @@ export class CuaBackend implements Backend, DriftCapability, ResetCapability, Sw
     return { location: chosen.location, acknowledged, text: billingAcknowledgementText(chosen.location, rate), image };
   }
 
-  /** `/gui-setup`: stores `--cloud`, `--rate-usd-per-hour`, `--image`, and the acknowledgement in `cua.json`. */
-  async recordSetupInputs(inputs: BillingSetupInputs & { acknowledgedLocation?: string }): Promise<void> {
+  /**
+   * `/gui-setup`: stores `--cloud`, `--rate-usd-per-hour`, `--image`, the
+   * Windows image and rate (`windowsImage`, `windowsRateUsdPerHour`), and the
+   * acknowledgement in `cua.json`.
+   */
+  async recordSetupInputs(inputs: BillingSetupInputs & { acknowledgedLocation?: string; windowsImage?: string; windowsRateUsdPerHour?: number }): Promise<void> {
     if (inputs.location !== undefined && !isCloudLocation(inputs.location)) throw new Error(`unknown cloud "${inputs.location}"`);
     if (inputs.acknowledgedLocation !== undefined && !isCloudLocation(inputs.acknowledgedLocation)) throw new Error(`unknown cloud "${inputs.acknowledgedLocation}"`);
     const change: Parameters<CuaSettingsStore["update"]>[0] = {};
     if (inputs.location !== undefined) change.location = inputs.location;
     if (inputs.rateUsdPerHour !== undefined) change.rateUsdPerHour = inputs.rateUsdPerHour;
     if (inputs.image !== undefined) change.image = inputs.image;
+    if (inputs.windowsImage !== undefined) change.windowsImage = inputs.windowsImage;
+    if (inputs.windowsRateUsdPerHour !== undefined) change.windowsRateUsdPerHour = inputs.windowsRateUsdPerHour;
     if (inputs.acknowledgedLocation !== undefined) {
       change.billingAcceptedAt = new Date().toISOString();
       change.billingLocation = inputs.acknowledgedLocation;
@@ -192,6 +222,7 @@ export class CuaBackend implements Backend, DriftCapability, ResetCapability, Sw
     const settings = await this.settings.read();
     // A different sandbox image is a different system: drift until /gui-doctor verifies it.
     versions["cua.image"] = settings.image ?? DEFAULT_IMAGE;
+    versions["cua.windowsImage"] = settings.windowsImage ?? DEFAULT_WINDOWS_IMAGE;
     const chosen = chooseLocation(settings, providers);
     if (chosen.location) {
       versions["cua.location"] = chosen.location;
@@ -201,11 +232,23 @@ export class CuaBackend implements Backend, DriftCapability, ResetCapability, Sw
     return versions;
   }
 
-  async startSession(options: SessionStartOptions): Promise<Session> {
+  async startSession(options: CuaSessionStartOptions): Promise<Session> {
     const { signal, config } = options;
     const shared = config.shared;
     const fail = (message: string, code = "START_FAILED") => new SessionError(code, message);
     if (shared.network === "none") throw fail('"network": "none" is not available on cua: sandboxes always have outbound network. Remove it or use docker-linux', "UNSUPPORTED");
+    const requested = sessionTarget(options);
+    const refusal = targetRefusal(requested);
+    if (refusal !== undefined) throw fail(`cua cannot run this target: ${refusal}`, "UNSUPPORTED");
+    const target = requested as CuaTarget;
+    const windows = target === "windows";
+    // Windows setup commands run as encoded PowerShell scripts with a length bound: refuse before anything bills.
+    let setupCommands: string[];
+    try {
+      setupCommands = (shared.setup ?? []).map((cmd) => (windows ? windowsSetupCommand(cmd) : cmd));
+    } catch (error) {
+      throw fail((error as Error).message, "SETUP_FAILED");
+    }
 
     let settings;
     try {
@@ -226,8 +269,12 @@ export class CuaBackend implements Backend, DriftCapability, ResetCapability, Sw
     if (settings.billingLocation && settings.billingLocation !== location) {
       throw fail(`billing was acknowledged for ${settings.billingLocation}, but sandboxes would run in ${location}; ask the user to run /gui-setup cua`, "NOT_SET_UP");
     }
-    const image = settings.image ?? DEFAULT_IMAGE;
-    const rate = reportedRate(providers, location, image) ?? settings.rateUsdPerHour;
+    const image = targetImage(settings, target);
+    if (windows) {
+      const available = windowsAvailability(settings, providers.find((p) => p.name === location));
+      if (available.problem) throw fail(`${available.problem}; ask the user to run /gui-setup cua`, "UNSUPPORTED");
+    }
+    const rate = windows ? (reportedWindowsRate(providers, location, image) ?? settings.windowsRateUsdPerHour) : (reportedRate(providers, location, image) ?? settings.rateUsdPerHour);
     const keep = config.keepSandbox;
     const project = projectKey(options.projectRoot);
 
@@ -241,14 +288,14 @@ export class CuaBackend implements Backend, DriftCapability, ResetCapability, Sw
       // When that ledger transition fails, the start fails with the claim attached, so the runtime tracks
       // it and its retries (gui_stop, /gui-cleanup, shutdown) finish the transition.
       const settle = async (claimed: LedgerRecord, step: "keep" | "forget", failure: SessionError): Promise<void> => {
-        const back = new SandboxHandle({ api: this.api, ledger: this.ledger, cost: this.cost, sessionId: options.sessionId, name: claimed.name, ref: claimed.ref, keep: true, ownerLabel: options.ownerLabel });
+        const back = new SandboxHandle({ api: this.api, ledger: this.ledger, cost: this.cost, sessionId: options.sessionId, name: claimed.name, ref: claimed.ref, keep: true, ownerLabel: options.ownerLabel, target });
         const leftovers = step === "keep" ? await back.returnToKept() : await back.forgetGone();
         if (leftovers.length > 0) throw attachStartLeftovers(failure, pendingSession(options.sessionId, this.id, back), leftovers);
       };
       while (!reused) {
         let claimed: LedgerRecord | undefined;
         try {
-          claimed = await this.ledger.claimKept(location, project, owner, { image, exclude: tried });
+          claimed = await this.ledger.claimKept(location, project, owner, { image, exclude: tried, ...(windows ? { target } : {}) });
         } catch (error) {
           const failure = startError("claiming a kept sandbox", error);
           // The claim may have committed before the failure (for example in releasing the ledger lock): a
@@ -256,7 +303,7 @@ export class CuaBackend implements Backend, DriftCapability, ResetCapability, Sw
           const committed = await this.#claimedBy(owner, tried);
           if (committed === "unknown") {
             // The records cannot be read either: track the possible claim, so the runtime's retries settle it.
-            throw attachStartLeftovers(failure, this.#claimRecovery(options.sessionId, owner, tried), [unreadableClaimLeftover]);
+            throw attachStartLeftovers(failure, this.#claimRecovery(options.sessionId, owner, tried, target), [unreadableClaimLeftover]);
           }
           if (committed) await settle(committed, "keep", failure);
           throw failure;
@@ -287,11 +334,11 @@ export class CuaBackend implements Backend, DriftCapability, ResetCapability, Sw
           reused = claimed;
         }
       }
-      if (!reused) warnings.push(...(await this.#unusableKept(location, project, image, tried)));
+      if (!reused) warnings.push(...(await this.#unusableKept(location, project, image, tried, target)));
     }
     const name = reused?.name ?? sandboxName(options.sessionId, this.hostTag);
     const ref = reused?.ref ?? sandboxRef(location, name);
-    const handle = new SandboxHandle({ api: this.api, ledger: this.ledger, cost: this.cost, sessionId: options.sessionId, name, ref, keep, ownerLabel: options.ownerLabel });
+    const handle = new SandboxHandle({ api: this.api, ledger: this.ledger, cost: this.cost, sessionId: options.sessionId, name, ref, keep, ownerLabel: options.ownerLabel, ...(windows ? { target } : {}) });
     const pending = pendingSession(options.sessionId, this.id, handle);
 
     let stage = "creating the sandbox";
@@ -307,7 +354,7 @@ export class CuaBackend implements Backend, DriftCapability, ResetCapability, Sw
         options.onExitCleanup?.(handle.forceRemoveArgv());
         stage = "preparing the kept sandbox";
         options.onStatus?.(`reusing the kept Cua sandbox ${ref}`);
-        await this.api.exec(ref, ["rm", "-rf", "--", GUEST_ROOT], { timeoutMs: 60_000, signal });
+        await this.api.exec(ref, removeGuestDirArgv(target, guestRoot(target)), { timeoutMs: 60_000, signal });
       } else {
         await this.ledger.write({
           version: 1,
@@ -321,23 +368,31 @@ export class CuaBackend implements Backend, DriftCapability, ResetCapability, Sw
           keep,
           createdAt: new Date().toISOString(),
           image,
+          ...(windows ? { target } : {}),
         });
         options.onExitCleanup?.(this.api.forceDeleteArgv(ref));
         this.cost.start(options.sessionId, rate, undefined, { id: ref });
-        options.onStatus?.(`creating a Cua sandbox in your ${location} account (billed by ${location} until it is deleted)`);
+        options.onStatus?.(`creating a ${windows ? "Windows " : ""}Cua sandbox in your ${location} account (billed by ${location} until it is deleted)`);
         await this.api.createSandbox({ name, location, image }, signal);
         handle.markCreated();
         await this.ledger.update(name, { phase: "created" }, { sessionId: options.sessionId });
         // With keepSandbox the exit handler leaves it alone from now on.
         options.onExitCleanup?.(handle.forceRemoveArgv());
       }
-      stage = "deploying the helper";
       const deploy = { api: this.api, ref, sessionId: options.sessionId, sessionDir: options.sessionDir, signal, ...(options.onStatus ? { onStatus: options.onStatus } : {}) };
-      await deployHelper({ ...deploy, ...(this.#options.helperArchive ? { helperArchive: this.#options.helperArchive } : {}) });
-      stage = "installing the helper's packages";
-      await ensureHelperPackages({ ...deploy, pip: setupUsesPip(shared.setup ?? []) });
+      if (windows) {
+        stage = "preparing the Windows sandbox";
+        await prepareWindowsGuest(deploy);
+        stage = "deploying the helper";
+        await deployWindowsHelper({ ...deploy, ...(this.#options.windowsHelperFiles ? { helperFiles: this.#options.windowsHelperFiles } : {}) });
+      } else {
+        stage = "deploying the helper";
+        await deployHelper({ ...deploy, ...(this.#options.helperArchive ? { helperArchive: this.#options.helperArchive } : {}) });
+        stage = "installing the helper's packages";
+        await ensureHelperPackages({ ...deploy, pip: setupUsesPip(shared.setup ?? []) });
+      }
       stage = "uploading the workspace";
-      sync = await syncWorkspace({ ...deploy, projectRoot: options.projectRoot, allow: shared.sync?.allow, deny: shared.sync?.deny, runner: this.runner });
+      sync = await syncWorkspace({ ...deploy, projectRoot: options.projectRoot, allow: shared.sync?.allow, deny: shared.sync?.deny, runner: this.runner, ...(windows ? { target } : {}) });
     } catch (error) {
       const failure = startError(stage, error);
       await stopAfterFailedStart(pending, failure);
@@ -358,6 +413,7 @@ export class CuaBackend implements Backend, DriftCapability, ResetCapability, Sw
       sync,
       onLog,
       warnings,
+      ...(windows ? { target } : {}),
       ...(this.#options.readyTimeoutMs !== undefined ? { readyTimeoutMs: this.#options.readyTimeoutMs } : {}),
       ...(this.#options.heartbeatIntervalMs !== undefined ? { heartbeatIntervalMs: this.#options.heartbeatIntervalMs } : {}),
       ...(this.#options.exitWaitMs !== undefined ? { exitWaitMs: this.#options.exitWaitMs } : {}),
@@ -369,11 +425,11 @@ export class CuaBackend implements Backend, DriftCapability, ResetCapability, Sw
 
     const commands = shared.setup ?? [];
     const timeoutMs = this.#options.setupTimeoutMs ?? CUA_SETUP_COMMAND_TIMEOUT_MS;
-    const workspace = `${guestDir(options.sessionId)}/workspace`;
+    const workspace = guestWorkspace(target, options.sessionId);
     try {
       for (const [index, cmd] of commands.entries()) {
         options.onStatus?.(`setup ${index + 1}/${commands.length}: ${cmd}`);
-        const result = await session.request("exec", { cmd, cwd: workspace, env: { ...(shared.deps?.env ?? {}) }, timeoutMs }, { signal, timeoutMs: timeoutMs + 30_000 });
+        const result = await session.request("exec", { cmd: setupCommands[index], cwd: workspace, env: { ...(shared.deps?.env ?? {}) }, timeoutMs }, { signal, timeoutMs: timeoutMs + 30_000 });
         if (result.exitCode !== 0) {
           const tail = setupTail.text.trim().slice(-2000);
           throw new SessionError("SETUP_FAILED", `setup command ${JSON.stringify(cmd)} exited with ${result.exitCode}${tail ? `; last output:\n${tail}` : ""}`);
@@ -410,13 +466,13 @@ export class CuaBackend implements Backend, DriftCapability, ResetCapability, Sw
    * audit reports it. No exit-time delete: a kept sandbox is never deleted for this, and once this Pi exits
    * the next start's sweep settles the record of the dead owner.
    */
-  #claimRecovery(sessionId: string, owner: { ownerLabel: string; sessionId: string }, tried: ReadonlySet<string>): Session {
+  #claimRecovery(sessionId: string, owner: { ownerLabel: string; sessionId: string }, tried: ReadonlySet<string>, target: CuaTarget): Session {
     const look = async (settle: boolean): Promise<Leftover[]> => {
       const committed = await this.#claimedBy(owner, tried);
       if (committed === "unknown") return [unreadableClaimLeftover];
       if (!committed) return [];
       if (!settle) return [{ kind: "sandbox", id: committed.ref, detail: "claimed by a start that failed; it goes back to the kept set on the next gui_stop or /gui-cleanup" }];
-      const back = new SandboxHandle({ api: this.api, ledger: this.ledger, cost: this.cost, sessionId, name: committed.name, ref: committed.ref, keep: true, ownerLabel: owner.ownerLabel });
+      const back = new SandboxHandle({ api: this.api, ledger: this.ledger, cost: this.cost, sessionId, name: committed.name, ref: committed.ref, keep: true, ownerLabel: owner.ownerLabel, target });
       return back.returnToKept();
     };
     return {
@@ -429,12 +485,12 @@ export class CuaBackend implements Backend, DriftCapability, ResetCapability, Sw
     };
   }
 
-  /** Launch warnings for kept sandboxes of this project that cannot be reused with `image` (not already reported). */
-  async #unusableKept(location: string, project: string, image: string, reported: ReadonlySet<string>): Promise<string[]> {
+  /** Launch warnings for kept sandboxes of this project and target that cannot be reused with `image` (not already reported). */
+  async #unusableKept(location: string, project: string, image: string, reported: ReadonlySet<string>, target: CuaTarget): Promise<string[]> {
     const warnings: string[] = [];
     for (const entry of await this.ledger.entries().catch(() => [])) {
       const r = entry.record;
-      if (!entry.kept || !r || r.phase === "deleting" || r.location !== location || r.projectKey !== project || r.image === image || reported.has(r.name)) continue;
+      if (!entry.kept || !r || r.phase === "deleting" || r.location !== location || r.projectKey !== project || (r.target ?? "linux") !== target || r.image === image || reported.has(r.name)) continue;
       const why = r.image === undefined ? "was kept by an older version that did not record its image" : `was made from the image "${r.image}", not "${image}"`;
       warnings.push(`the kept sandbox ${r.ref} ${why}, so it was not reused; it keeps billing until it expires or you delete it with /gui-reset cua`);
     }
@@ -494,8 +550,8 @@ export class CuaBackend implements Backend, DriftCapability, ResetCapability, Sw
     return { cmd: "python3", args: ["../tools/testapps/gtk3-smoke/app.py"] };
   }
 
-  /** Sandboxes have no mounts and always have outbound network. */
+  /** Sandboxes have no mounts and always have outbound network; the smoke app is the Linux one. */
   smokeConfig(base: ResolvedConfig): ResolvedConfig {
-    return { ...base, shared: { ...base.shared, workspaceMode: "copy", network: "default" } };
+    return { ...base, shared: { ...base.shared, targets: ["linux"], workspaceMode: "copy", network: "default" } };
   }
 }

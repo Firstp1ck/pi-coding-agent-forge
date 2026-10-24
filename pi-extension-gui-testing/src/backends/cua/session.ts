@@ -1,6 +1,7 @@
 /**
- * One `cua` session (spec §4.3, §6, §7a): one cloud sandbox, the Linux helper
- * deployed into it, and the helper's stdio carried by `cua sandbox exec -i`.
+ * One `cua` session (spec §4.3, §6, §7a): one cloud sandbox, the Linux or the
+ * Windows helper deployed into it, and the helper's stdio carried by
+ * `cua sandbox exec -i`.
  * The protocol side is the generic {@link HelperSession}; the sandbox side is
  * a {@link SandboxHandle} that deletes the sandbox on every stop (or keeps it
  * for `keepSandbox`) and never trusts the helper for that.
@@ -21,6 +22,7 @@ import { CuaApiError, type CuaApi } from "./api.ts";
 import type { CuaCostLedger } from "./cost.ts";
 import type { SandboxLedger } from "./ledger.ts";
 import { redact } from "./redact.ts";
+import { powershellArgv, removeDirScript, windowsGuestPaths, windowsHelperArgv, windowsHelperEnv, WINDOWS_GUEST_ROOT, type CuaTarget } from "./windows.ts";
 
 /** Guest directory of every session dir (`<root>/<sessionId>`); removed whenever a kept sandbox is reused. */
 export const GUEST_ROOT = "/tmp/pi-gui-testing";
@@ -29,6 +31,26 @@ export const GUEST_ROOT = "/tmp/pi-gui-testing";
 export function guestDir(sessionId: string): string {
   if (!/^[A-Za-z0-9-]{1,64}$/.test(sessionId)) throw new Error(`invalid session id ${JSON.stringify(sessionId)}`);
   return `${GUEST_ROOT}/${sessionId}`;
+}
+
+/** Root of every session dir in a guest of `target`. */
+export function guestRoot(target: CuaTarget): string {
+  return target === "windows" ? WINDOWS_GUEST_ROOT : GUEST_ROOT;
+}
+
+/** Session dir of `sessionId` in a guest of `target`. */
+export function targetGuestDir(target: CuaTarget, sessionId: string): string {
+  return target === "windows" ? windowsGuestPaths(sessionId).dir : guestDir(sessionId);
+}
+
+/** Workspace (launch and `setup` cwd) of `sessionId` in a guest of `target`. */
+export function guestWorkspace(target: CuaTarget, sessionId: string): string {
+  return target === "windows" ? windowsGuestPaths(sessionId).workspace : `${guestDir(sessionId)}/workspace`;
+}
+
+/** Argv that deletes `dir` in a guest of `target` (Windows: without following junctions or symlinks). */
+export function removeGuestDirArgv(target: CuaTarget, dir: string): string[] {
+  return target === "windows" ? powershellArgv(removeDirScript(dir)) : ["rm", "-rf", "--", dir];
 }
 
 /** What `/gui-reset`, the sweep, and teardown time out at per sandbox deletion (ms). */
@@ -45,6 +67,8 @@ export interface SandboxHandleOptions {
   keep: boolean;
   /** When set, ledger transitions also require this owner, not just the session id. */
   ownerLabel?: string;
+  /** Guest OS, for removing the session dir of a kept sandbox; default `linux`. */
+  target?: CuaTarget;
 }
 
 /**
@@ -118,10 +142,11 @@ export class SandboxHandle {
     const { api, ledger, cost } = this.#o;
     if (this.keeps) {
       if (!this.#dirRemoved) {
-        const dir = guestDir(this.#o.sessionId);
+        const target = this.#o.target ?? "linux";
+        const dir = targetGuestDir(target, this.#o.sessionId);
         const leftovers: Leftover[] = [];
         try {
-          const result = await api.exec(this.ref, ["rm", "-rf", "--", dir], { timeoutMs: 60_000 });
+          const result = await api.exec(this.ref, removeGuestDirArgv(target, dir), { timeoutMs: 60_000 });
           if (result.exitCode !== 0) leftovers.push({ kind: "sandbox-dir", id: `${this.ref}:${dir}`, detail: `kept sandbox: removing the session dir failed (exit ${result.exitCode}): ${redact(result.stderr.trim())}` });
         } catch (error) {
           leftovers.push({ kind: "sandbox-dir", id: `${this.ref}:${dir}`, detail: `kept sandbox: removing the session dir failed: ${redact((error as Error).message)}` });
@@ -223,6 +248,8 @@ export interface CuaSessionOptions {
   onLog(event: LogEvent): void;
   /** `Session.warnings` (e.g. kept sandboxes that were not reused). */
   warnings?: readonly string[];
+  /** Guest OS: which helper runs and how it gets its environment; default `linux`. */
+  target?: CuaTarget;
   readyTimeoutMs?: number;
   heartbeatIntervalMs?: number;
   exitWaitMs?: number;
@@ -253,27 +280,47 @@ export function helperArgv(sessionId: string): string[] {
   return ["python3", "-I", `${guestDir(sessionId)}/tools/helper`];
 }
 
+/**
+ * `READY` timeout of a Windows guest: `cua sandbox exec -i` crosses the relay,
+ * and the Windows helper compiles its C# sources with `Add-Type` before it is
+ * ready (twice when it relaunches itself).
+ */
+export const WINDOWS_READY_TIMEOUT_MS = 180_000;
+
+/** Fails the start unless `hello` came from the Windows helper (the image of a Windows target may be anything). */
+function requireWindowsHelper(session: HelperSession): void {
+  if (!/^Windows /.test(session.platform ?? "")) {
+    throw new SessionError("START_FAILED", `the sandbox did not start the Windows helper (it reported ${JSON.stringify(session.platform ?? "no platform")}); check the Windows image chosen at /gui-setup cua`);
+  }
+}
+
 export class CuaSession extends HelperSession {
   readonly handle: SandboxHandle;
+  readonly target: CuaTarget;
 
   constructor(options: CuaSessionOptions) {
+    const windows = options.target === "windows";
+    let self: CuaSession | undefined;
     super({
       id: options.id,
       backend: options.backend,
       packageVersion: options.packageVersion,
-      workspacePath: `${guestDir(options.id)}/workspace`,
+      workspacePath: guestWorkspace(options.target ?? "linux", options.id),
       workspaceDescription: "writable copy uploaded to the sandbox (changes stay there)",
       sync: options.sync,
       onLog: options.onLog,
       ...(options.warnings?.length ? { warnings: options.warnings } : {}),
       // `cua sandbox exec -i` crosses the relay: allow more than the local 10 s for READY.
-      readyTimeoutMs: options.readyTimeoutMs ?? 60_000,
+      readyTimeoutMs: options.readyTimeoutMs ?? (windows ? WINDOWS_READY_TIMEOUT_MS : 60_000),
       ...(options.heartbeatIntervalMs !== undefined ? { heartbeatIntervalMs: options.heartbeatIntervalMs } : {}),
       ...(options.exitWaitMs !== undefined ? { exitWaitMs: options.exitWaitMs } : {}),
       ...(options.killWaitMs !== undefined ? { killWaitMs: options.killWaitMs } : {}),
       labels: { launcher: "cua", target: "the Cua sandbox session", inside: "inside the sandbox", stillRunning: "cua sandbox exec still running" },
       hooks: {
-        spawn: (env) => options.api.spawnHelper(options.handle.ref, helperArgv(options.id), { ...cuaHelperEnv(options.id), ...env }),
+        spawn: windows
+          ? (env) => options.api.spawnHelper(options.handle.ref, windowsHelperArgv(options.id), { ...windowsHelperEnv(options.id), ...env }, { stdinEnv: "powershell" })
+          : (env) => options.api.spawnHelper(options.handle.ref, helperArgv(options.id), { ...cuaHelperEnv(options.id), ...env }),
+        ...(windows ? { verifyAfterStart: async () => requireWindowsHelper(self as CuaSession) } : {}),
         // The sandbox is deleted after the stream; ending the CLI process ends the guest command too.
         teardown: () => options.handle.remove(),
         audit: () => options.handle.audit(),
@@ -281,7 +328,9 @@ export class CuaSession extends HelperSession {
         sanitizeDiagnostic: (text) => redact(text),
       },
     });
+    self = this;
     this.handle = options.handle;
+    this.target = options.target ?? "linux";
   }
 
   forceRemoveArgv(): string[] {
