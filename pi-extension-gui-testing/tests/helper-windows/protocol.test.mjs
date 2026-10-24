@@ -276,6 +276,42 @@ test("protocol mismatch answers PROTOCOL_MISMATCH and exits", { skip }, async ()
   }
 });
 
+test("results stay within the client's limits: windows, inline tree bytes, full tree", { skip }, async () => {
+  const helper = await started();
+  try {
+    // 1200 windows: the client refuses a list over 1000 as a whole, so the helper caps it.
+    const launched = checkResponse("launch", await helper.send("launch", { cmd: "many-windows", args: [], cwd: "C:\\work" }).promise);
+    assert.equal(launched.windows.length, 1000);
+    assert.equal(checkResponse("windows", await helper.send("windows").promise).windows.length, 1000);
+
+    // 1100 nodes of 64 Ki characters (about 72 MB of JSON): the inline tree is cut by bytes, not only by maxNodes.
+    await helper.call("launch", { cmd: "big-tree", args: [], cwd: "C:\\work" });
+    const envelope = await helper.send("snapshot", { maxNodes: 2000 }).promise;
+    assert.ok(Buffer.byteLength(JSON.stringify(envelope)) < 40 * 1024 * 1024, "inline snapshot stays far below the 64 MiB line limit");
+    const snap = checkResponse("snapshot", envelope);
+    assert.equal(snap.truncated, true);
+    assert.ok(snap.tree.length > 100 && snap.tree.length < 1106, `inline nodes ${snap.tree.length}`);
+    const full = decodeTreeDump(checkResponse("snapshotFull", await helper.send("snapshotFull", { snapshotId: snap.snapshotId }).promise).tree_gz_base64);
+    assert.equal(full.length, 1106, "the full tree (6 window nodes + 1100) fits the walk budget");
+  } finally {
+    helper.kill();
+  }
+});
+
+test("a fatal platform error answers INTERNAL, then the helper ends the session", { skip }, async () => {
+  const helper = await started();
+  try {
+    const envelope = await helper.send("launch", { cmd: "unhealthy", args: [], cwd: "C:\\work" }).promise;
+    assert.equal(envelope.error.code, "INTERNAL");
+    assert.match(envelope.error.message, /still stuck in a hung app/);
+    assert.equal(await helper.waitExit(), 0);
+    await helper.expectStderr(/tearing down: session unhealthy: launch was refused/);
+    await helper.expectStderr(/fake: teardown/);
+  } finally {
+    helper.kill();
+  }
+});
+
 test("stdin EOF tears down and exits 0", { skip }, async () => {
   const helper = await started();
   try {

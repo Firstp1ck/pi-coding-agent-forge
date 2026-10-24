@@ -26,6 +26,16 @@ namespace PiGuiHelper
         public const int DefaultMaxNodes = 500;
         /// <summary>Upper bound for nodes in one walk (the client accepts 200 000).</summary>
         public const int WalkCap = 20000;
+        // Client limits (src/backends/response.ts RESPONSE_LIMITS, src/protocol.ts MAX_LINE_BYTES),
+        // enforced here so a result is never rejected as a whole by the client.
+        /// <summary>Windows in one result (RESPONSE_LIMITS.windows).</summary>
+        public const int MaxWindows = 1000;
+        /// <summary>Byte budget of one walk's JSON; the client unpacks at most 256 MiB (treeJsonBytes).</summary>
+        public const long MaxTreeJsonBytes = 128L * 1024 * 1024;
+        /// <summary>Base64 text of one gzip tree dump (treeGzBase64Chars).</summary>
+        public const int MaxTreeGzBase64Chars = 48 * 1024 * 1024;
+        /// <summary>Inline snapshot tree bytes, well below the 64 MiB line limit.</summary>
+        public const long MaxInlineTreeBytes = 32L * 1024 * 1024;
         public const int MaxTypeChars = 100000;
         const int PollMs = 250;
         const int IdleStableSamples = 3;
@@ -193,6 +203,7 @@ namespace PiGuiHelper
             string cwd = Cwd(p);
             var sw = Stopwatch.StartNew();
             IChild child = _platform.StartExec(cmd, env, cwd);
+            int code;
             try
             {
                 while (!child.HasExited)
@@ -214,6 +225,9 @@ namespace PiGuiHelper
                         throw;
                     }
                 }
+                // Read before KillTree and Forget: Forget closes the process handle, after which the
+                // exit code is gone, and KillTree must not overwrite it.
+                code = child.ExitCode;
                 // Background processes the command left in its job must not outlive the step.
                 child.KillTree();
                 child.DrainOutput(2000);
@@ -222,7 +236,6 @@ namespace PiGuiHelper
             {
                 _platform.Forget(child);
             }
-            int code = child.ExitCode;
             int reported = ReportedExitCode(code);
             if (reported != code)
                 _log.Log("stderr", "setup", "pi-gui-helper: setup command exited with code " + code.ToString(CultureInfo.InvariantCulture) +
@@ -258,11 +271,7 @@ namespace PiGuiHelper
             long exitedAt = -1;
             while (sw.ElapsedMilliseconds < LaunchWindowWaitMs)
             {
-                var windows = new List<object>();
-                foreach (WindowEntry w in _platform.ListWindows())
-                {
-                    if (!before.Contains(w.Ref)) windows.Add(w.ToJson());
-                }
+                List<object> windows = WindowsJson(_platform.ListWindows(), delegate(WindowEntry w) { return !before.Contains(w.Ref); });
                 if (windows.Count > 0) return LaunchResult(child, windows);
                 if (child.HasExited)
                 {
@@ -294,17 +303,17 @@ namespace PiGuiHelper
 
         object Windows(RequestContext ctx, Dictionary<string, object> p)
         {
-            var list = new List<object>();
-            foreach (WindowEntry w in _platform.ListWindows()) list.Add(w.ToJson());
             var r = new Dictionary<string, object>();
-            r["windows"] = list;
+            r["windows"] = WindowsJson(_platform.ListWindows(), null);
             return r;
         }
 
         object Snapshot(RequestContext ctx, Dictionary<string, object> p)
         {
             int maxNodes = Int(p, "maxNodes", DefaultMaxNodes, 0, int.MaxValue);
-            WalkResult walk = _platform.A11yAvailable ? _platform.Walk(WalkCap, ctx) : new WalkResult(new List<ElementNode>(), 0);
+            WalkResult walk = _platform.A11yAvailable ? _platform.Walk(new TreeBudget(WalkCap, MaxTreeJsonBytes), ctx) : new WalkResult(new List<ElementNode>(), 0);
+            if (walk.Truncated)
+                Diag.Write("the accessibility tree exceeds the walk budget; the snapshot holds its first " + walk.Nodes.Count + " nodes");
             _snapshotCounter++;
             string sid = "s" + _snapshotCounter.ToString(CultureInfo.InvariantCulture);
             var nodes = new List<object>();
@@ -313,13 +322,49 @@ namespace PiGuiHelper
             _snapshotNodes = walk.Nodes;
             // Keep only the latest full tree: snapshotFull follows right after snapshot.
             _snapshotJson = Encoding.UTF8.GetBytes(Json.Serialize(nodes));
-            int limit = Math.Max(0, maxNodes);
+            int limit = InlineCount(walk.Nodes, maxNodes, MaxInlineTreeBytes);
             var r = new Dictionary<string, object>();
             r["snapshotId"] = sid;
             r["coverage"] = _platform.A11yAvailable ? Coverage.Compute(walk) : "none";
             r["tree"] = nodes.Count > limit ? nodes.GetRange(0, limit) : nodes;
             r["truncated"] = nodes.Count > limit;
             return r;
+        }
+
+        /// <summary>How many leading nodes the inline tree holds: at most maxNodes and maxBytes (estimated).</summary>
+        public static int InlineCount(List<ElementNode> nodes, int maxNodes, long maxBytes)
+        {
+            var budget = new TreeBudget(Math.Max(0, maxNodes), maxBytes);
+            int count = 0;
+            while (count < nodes.Count && budget.Admit(nodes[count])) count++;
+            return count;
+        }
+
+        /// <summary>Gzip + base64 of a tree dump; TOO_LARGE when the text would exceed maxBase64Chars.</summary>
+        public static string TreeDump(byte[] json, int maxBase64Chars)
+        {
+            var output = new MemoryStream();
+            using (var gz = new GZipStream(output, CompressionMode.Compress, true))
+            {
+                gz.Write(json, 0, json.Length);
+            }
+            long chars = (output.Length + 2) / 3 * 4;
+            if (chars > maxBase64Chars)
+                throw new ProtocolException("TOO_LARGE", "the full accessibility tree is too large to transfer (" + chars + " base64 characters, at most " + maxBase64Chars +
+                    "); use the inline snapshot (maxNodes) or a screenshot");
+            return Convert.ToBase64String(output.GetBuffer(), 0, (int)output.Length);
+        }
+
+        /// <summary>At most MaxWindows windows as JSON (the client refuses a longer list as a whole).</summary>
+        public static List<object> WindowsJson(IEnumerable<WindowEntry> windows, Func<WindowEntry, bool> include)
+        {
+            var list = new List<object>();
+            foreach (WindowEntry w in windows)
+            {
+                if (list.Count >= MaxWindows) break;
+                if (include == null || include(w)) list.Add(w.ToJson());
+            }
+            return list;
         }
 
         static Dictionary<string, object> NodeJson(string sid, ElementNode n, int index)
@@ -351,13 +396,8 @@ namespace PiGuiHelper
             string sid = Str(p, "snapshotId", true);
             if (_snapshotId == null || sid != _snapshotId)
                 throw new ProtocolException("STALE_REF", "unknown or stale snapshotId '" + sid + "', take a new snapshot");
-            var output = new MemoryStream();
-            using (var gz = new GZipStream(output, CompressionMode.Compress, true))
-            {
-                gz.Write(_snapshotJson, 0, _snapshotJson.Length);
-            }
             var r = new Dictionary<string, object>();
-            r["tree_gz_base64"] = Convert.ToBase64String(output.ToArray());
+            r["tree_gz_base64"] = TreeDump(_snapshotJson, MaxTreeGzBase64Chars);
             return r;
         }
 

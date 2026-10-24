@@ -18,11 +18,76 @@ namespace PiGuiHelper
         }
 
         public string Code { get; private set; }
+        /// <summary>The session cannot continue: after the response, the helper tears down and exits.</summary>
+        public bool Fatal { get; protected set; }
     }
 
     public sealed class CancelledException : ProtocolException
     {
         public CancelledException() : base("CANCELLED", "request cancelled") { }
+    }
+
+    /// <summary>INTERNAL error after which the helper ends the session (the client then sees it closed).</summary>
+    public sealed class UnhealthyException : ProtocolException
+    {
+        public UnhealthyException(string message) : base("INTERNAL", message) { Fatal = true; }
+    }
+
+    /// <summary>
+    /// Bounds worker threads that a timed-out or cancelled operation left running (a thread blocked
+    /// in a hung app cannot be killed, only abandoned). Once max of them are outstanding, Begin
+    /// refuses with UnhealthyException, so the helper stops the session instead of piling up threads.
+    /// </summary>
+    public sealed class WorkerBudget
+    {
+        readonly object _lock = new object();
+        readonly int _max;
+        int _abandoned;
+
+        public WorkerBudget(int max) { _max = max; }
+
+        public int Abandoned { get { lock (_lock) { return _abandoned; } } }
+
+        public Worker Begin(string what)
+        {
+            lock (_lock)
+            {
+                if (_abandoned >= _max)
+                    throw new UnhealthyException(what + " was refused: " + _abandoned + " earlier operations are still stuck in a hung app. " +
+                        "The helper stops this session now; start a new one with gui_launch");
+            }
+            return new Worker(this);
+        }
+
+        /// <summary>One worker: Done when its thread finishes, Abandon when the caller stops waiting for it.</summary>
+        public sealed class Worker
+        {
+            readonly WorkerBudget _budget;
+            bool _done;
+            bool _abandoned;
+
+            internal Worker(WorkerBudget budget) { _budget = budget; }
+
+            public void Done()
+            {
+                lock (_budget._lock)
+                {
+                    if (_done) return;
+                    _done = true;
+                    if (_abandoned) _budget._abandoned--;
+                }
+            }
+
+            public void Abandon()
+            {
+                lock (_budget._lock)
+                {
+                    if (_done || _abandoned) return;
+                    _abandoned = true;
+                    _budget._abandoned++;
+                }
+            }
+        }
     }
 
     /// <summary>
@@ -78,11 +143,16 @@ namespace PiGuiHelper
             new LinkedList<KeyValuePair<RequestContext, Dictionary<string, object>>>();
         readonly object _lock = new object();
         readonly Thread _thread;
+        readonly Action<string> _onFatal;
         RequestContext _current;
         bool _closed;
 
-        public Dispatcher(ProtocolWriter writer, Dictionary<string, Handler> handlers)
+        public Dispatcher(ProtocolWriter writer, Dictionary<string, Handler> handlers) : this(writer, handlers, null) { }
+
+        /// <param name="onFatal">Called with a reason after a fatal error's response (UnhealthyException).</param>
+        public Dispatcher(ProtocolWriter writer, Dictionary<string, Handler> handlers, Action<string> onFatal)
         {
+            _onFatal = onFatal;
             _writer = writer;
             _handlers = new Dictionary<string, Handler>(handlers, StringComparer.Ordinal);
             _thread = new Thread(Run);
@@ -177,6 +247,7 @@ namespace PiGuiHelper
             catch (ProtocolException e)
             {
                 _writer.RespondError(ctx.Id, e.Code, e.Message);
+                if (e.Fatal && _onFatal != null) _onFatal("session unhealthy: " + e.Message);
             }
             catch (ThreadAbortException)
             {

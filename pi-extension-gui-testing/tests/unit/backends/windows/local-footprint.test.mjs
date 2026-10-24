@@ -3,16 +3,22 @@ import assert from "node:assert/strict";
 import { LocalWindowsBackend } from "../../../../src/backends/local-windows.ts";
 import { fakeWinHost, fakeWinRunner, ownerRecord, sessionRecord, winSpawner, BOOT, HELPER_DIR, TEMP_ROOT, WIN_ENV } from "./local-fakes.mjs";
 
-const DEAD_OWNER = ownerRecord({ pid: 777, processStartTime: "1761000000" });
+/** The helper of the records below as the client recorded it at spawn: FILETIME 133000000000000000 is Unix second 1655526400. */
+const SPAWNED_HELPER = { kind: "process", id: "5000:1655526400" };
+const DEAD_OWNER = ownerRecord({ pid: 777, processStartTime: "1761000000", resources: [SPAWNED_HELPER] });
 const LIVE_OWNER = ownerRecord();
 
-/** A runtime dir left by a session: owner copy, session.json, optional live objects in the world. */
+/** The job name of a runtime dir's session: its tag is the dir's own hex digits. */
+const jobOf = (dir, n = "aa") => `Local\\pi-gui-testing-${dir.slice(-16)}-job-${n.padStart(16, "0")}`;
+
+/** A runtime dir left by a session: owner copy, session.json, optional live objects in the world (the app in its job). */
 function leaveRuntimeDir(host, name, { owner = DEAD_OWNER, record, alive = true } = {}) {
   const dir = `${TEMP_ROOT}\\${name}`;
   host.fs.addDir(`${dir}\\tmp`);
   if (owner) host.fs.addFile(`${dir}\\owner.json`, JSON.stringify(owner));
   const rec = record ?? sessionRecord(dir, {
-    jobs: ["Local\\pi-gui-testing-0123456789abcdef-job-00000000000000aa"],
+    helper: { pid: 5000, created: "133000000000000000" },
+    jobs: [jobOf(dir)],
     processes: [{ pid: 7100, created: "133000000000002000" }],
   });
   host.fs.addFile(`${dir}\\session.json`, typeof rec === "string" ? rec : JSON.stringify(rec));
@@ -20,6 +26,7 @@ function leaveRuntimeDir(host, name, { owner = DEAD_OWNER, record, alive = true 
     host.world.processes.add(`${rec.helper.pid}:${rec.helper.created}`);
     for (const p of rec.processes) host.world.processes.add(`${p.pid}:${p.created}`);
     for (const j of rec.jobs) host.world.jobs.add(j);
+    host.world.jobMembers = new Map(rec.jobs.map((j) => [j, rec.processes.map((p) => `${p.pid}:${p.created}`)]));
     host.world.desktops.add(rec.desktop);
     host.world.desktopMembers = new Map([[rec.desktop, [`${rec.helper.pid}:${rec.helper.created}`, ...rec.processes.map((p) => `${p.pid}:${p.created}`)]]]);
   }
@@ -35,7 +42,6 @@ function backend(host, extra = {}) {
     spawner: winSpawner(host).spawner,
     helperDir: HELPER_DIR,
     processProbe: host.processProbe,
-    genericTmpRoot: "C:\\elsewhere",
     version: "0.2.0",
     ...extra,
   });
@@ -48,8 +54,8 @@ test("orphan audit lists a dead owner's runtime dir and the objects its record s
   const dir = leaveRuntimeDir(host, "pi-gui-testing-win-00000000000000a1");
   const leftovers = await backend(host).auditOrphans(signal());
   assert.deepEqual(leftovers.map((l) => `${l.kind} ${l.id}`).sort(), [
-    "desktop pi-gui-testing-0123456789abcdef-abababababababababababababababab",
-    "job Local\\pi-gui-testing-0123456789abcdef-job-00000000000000aa",
+    "desktop pi-gui-testing-00000000000000a1-abababababababababababababababab",
+    `job ${jobOf(dir)}`,
     "process 5000:133000000000000000",
     "process 7100:133000000000002000",
     `tempdir ${dir}`,
@@ -59,13 +65,30 @@ test("orphan audit lists a dead owner's runtime dir and the objects its record s
   assert.equal(host.world.inspections[0].action, "audit");
 });
 
-test("orphan sweep ends a dead owner's helper, jobs, and processes, then removes the dir", async () => {
+test("orphan sweep ends a dead owner's jobs (with their apps) and the helper it spawned, then removes the dir", async () => {
   const host = fakeWinHost();
   const dir = leaveRuntimeDir(host, "pi-gui-testing-win-00000000000000a2");
   assert.deepEqual(await backend(host).sweepOrphans(signal()), []);
   assert.equal(host.fs.has(dir), false);
-  assert.deepEqual(host.world.killed.sort(), ["5000:133000000000000000", "7100:133000000000002000", "Local\\pi-gui-testing-0123456789abcdef-job-00000000000000aa"].sort());
+  // The app process ended with its job; only the helper the owner recorded at spawn is ended by PID.
+  assert.deepEqual(host.world.killed.sort(), ["5000:133000000000000000", jobOf(dir)].sort());
+  const request = host.world.inspections[0];
+  assert.deepEqual(request.processes.map((p) => `${p.pid}:${p.kill === true}`), ["5000:true", "7100:false"]);
   assert.deepEqual(await backend(host).auditOrphans(signal()), []);
+});
+
+test("a recorded process outside the session's jobs is reported, never ended; the dir stays", async () => {
+  const host = fakeWinHost();
+  const dir = `${TEMP_ROOT}\\pi-gui-testing-win-00000000000000a3`;
+  // Review A-F2: a record (any app of the session can write it) naming an unrelated process of the user.
+  const victim = { pid: 12345, created: "133000000123456789" };
+  leaveRuntimeDir(host, "pi-gui-testing-win-00000000000000a3", { record: sessionRecord(dir, { jobs: [], processes: [victim] }), alive: false });
+  host.world.processes.add(`${victim.pid}:${victim.created}`);
+  const left = await backend(host).sweepOrphans(signal());
+  assert.equal(host.world.killed.length, 0);
+  assert.ok(host.world.processes.has(`${victim.pid}:${victim.created}`));
+  assert.ok(left.some((l) => l.kind === "process" && l.id === `${victim.pid}:${victim.created}` && /app process \(orphan\) still exists/.test(l.detail)));
+  assert.equal(host.fs.has(dir), true);
 });
 
 test("live owners are never touched; unknown owners are reported, never removed", async () => {
@@ -81,14 +104,16 @@ test("live owners are never touched; unknown owners are reported, never removed"
   assert.equal(host.world.inspections.length, 0, "nothing of a live or unknown owner is even inspected");
 });
 
-test("when the generic session-dir scan shares the root, unknown owners and the dir line are not repeated", async () => {
+test("unknown owners and dead owners' dirs are reported by this backend: the generic session-dir scan skips runtime dirs", async () => {
   const host = fakeWinHost();
   const dead = leaveRuntimeDir(host, "pi-gui-testing-win-00000000000000c1");
-  leaveRuntimeDir(host, "pi-gui-testing-win-00000000000000c2", { owner: null, alive: false });
-  const leftovers = await backend(host, { genericTmpRoot: TEMP_ROOT.toUpperCase() }).auditOrphans(signal());
-  assert.equal(leftovers.some((l) => l.kind === "tempdir"), false);
+  const noOwner = leaveRuntimeDir(host, "pi-gui-testing-win-00000000000000c2", { owner: null, alive: false });
+  const leftovers = await backend(host).auditOrphans(signal());
+  assert.ok(leftovers.some((l) => l.kind === "tempdir" && l.id === dead));
+  assert.ok(leftovers.some((l) => l.kind === "tempdir" && l.id === noOwner && /owner unknown/.test(l.detail)));
   assert.ok(leftovers.some((l) => l.kind === "job"));
-  assert.deepEqual(await backend(host, { genericTmpRoot: TEMP_ROOT }).sweepOrphans(signal()), []);
+  const swept = await backend(host).sweepOrphans(signal());
+  assert.deepEqual(swept.map((l) => l.id), [noOwner]);
   assert.equal(host.fs.has(dead), false);
 });
 
@@ -119,7 +144,7 @@ test("a forged session record is never used to end anything; the dead owner's di
   host.world.jobs.add("Local\\SomeOtherProgramJob");
   host.world.processes.add("4:1");
   const audit = await backend(host).auditOrphans(signal());
-  assert.ok(audit.some((l) => /session record lists a job that is not the session's; its objects were not inspected/.test(l.detail)));
+  assert.ok(audit.some((l) => /session record has another session's tag; its objects were not inspected/.test(l.detail)));
   assert.deepEqual(await backend(host).sweepOrphans(signal()), []);
   assert.equal(host.world.killed.length, 0);
   assert.ok(host.world.jobs.has("Local\\SomeOtherProgramJob"));

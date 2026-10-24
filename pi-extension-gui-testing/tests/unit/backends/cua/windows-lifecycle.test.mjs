@@ -271,7 +271,7 @@ test("setup runs as encoded PowerShell in the Windows workspace; a failure stops
   assert.equal(api.deleted.length, 2, "the failed session's sandbox is deleted");
 
   const calls = api.calls.length;
-  await assert.rejects(start({ config: config({ shared: { setup: ["x".repeat(4_000)] } }) }), (error) => error.code === "SETUP_FAILED" && /too long for a Windows sandbox/.test(error.message));
+  await assert.rejects(start({ config: config({ shared: { setup: ["x".repeat(4_000)] } }) }), (error) => error.code === "SETUP_FAILED" && /too long for a Windows guest/.test(error.message));
   assert.equal(api.calls.length, calls, "no Cua call");
 });
 

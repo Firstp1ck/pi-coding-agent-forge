@@ -346,7 +346,9 @@ The Windows backends are new and have not run on real Windows yet. They work lik
 - In `mount` mode (default) the app runs in your project folder and can change files there. In `copy` mode it runs in a filtered copy without secrets and without dependency folders such as `node_modules` or `.venv`.
 - `setup` commands never run; the app uses what is already installed on your computer. `"network": "none"` is refused.
 - Before Pi gets the session, the package checks that the app is on the private desktop and that your foreground window did not change during the start. If you switched windows yourself during those seconds, the start is refused; start it again.
-- Session files live in `%LOCALAPPDATA%\Temp\pi-gui-testing-win-<id>`, readable only by you, and are removed when the session ends.
+- Session files live in `%LOCALAPPDATA%\Temp\pi-gui-testing-win-<id>`, readable only by you, and are removed when the session ends. If a junction or link replaces a folder in there while it is being removed, the package stops at that folder and reports it instead of following it.
+- When the session ends, Windows ends the session's jobs and every app in them. A process the session recorded that is still running outside those jobs is reported, never ended by the package; end it yourself if you want it gone.
+- If Pi exits without stopping the session, it ends the helper only after checking that the process ID still belongs to the helper it started (same start time).
 
 ### `docker-windows` install and sessions
 
@@ -367,7 +369,7 @@ Each session:
 - runs the app on a private desktop inside the VM, as the VM's administrator account.
 - runs `setup` commands in the VM in every session, up to 15 minutes each. There is no dependency cache for Windows yet.
 
-Only one `docker-windows` session runs at a time. `workspaceMode` has no effect: the app always gets a writable copy.
+Only one `docker-windows` session runs at a time on this computer, also across several Pi windows that share the same settings folder. A start waits up to 30 seconds while another Pi window admits its session. A session left by a Pi that is no longer running is removed when the next session starts. `workspaceMode` has no effect: the app always gets a writable copy.
 
 ### Windows sandboxes with `cua`
 
@@ -385,7 +387,7 @@ With `docker-windows` and Windows sandboxes in `cua`, each `setup` command runs 
 
 - A failing PowerShell command (cmdlet) stops the script with exit code 1.
 - A failing program, such as `pip` or `npm`, does **not** stop it. The exit code is that of the last program. Add `if ($LASTEXITCODE) { exit $LASTEXITCODE }` after a program to stop on its failure.
-- With `cua`, one command can be about 2 900 characters at most; a longer one is refused before a sandbox is created.
+- One command can be about 2 900 characters at most; a longer one is refused before a sandbox or VM starts.
 - A project that tests both Linux and Windows needs commands that work in both `sh` and PowerShell, because `setup` has no per-platform list.
 
 ## Dependency cache
@@ -531,8 +533,8 @@ Your project data stays on your computer. Servers, sandboxes, and containers hol
 | On a server: Docker base image (`remote-linux-docker`) | Tools only, no project files | Kept unless you use `--purge-tooling`. |
 | On a server: system packages | Tools you agreed to install at setup | Kept. Remove them yourself if nothing else needs them. |
 | `cua`: one sandbox per session in your cloud | The helper, your synced project, installed dependencies | Deleted when the session ends, unless `keepSandbox` is on. |
-| `local-windows`: `%LOCALAPPDATA%\Temp\pi-gui-testing-win-<id>` | The session's runtime files and, in `copy` mode, the project copy. Only you can open it. | Deleted when the session ends. Leftovers of a crashed Pi are removed by the next Pi start or `/gui-cleanup local-windows`. |
-| `docker-windows`: `~/.pi/agent/gui/docker-windows/` (or inside `PI_CODING_AGENT_DIR`) | `settings.json`, this computer's key for the VM (`id_ed25519`, owner-only), the VM's public host key, and a `known_hosts` file used only for the VM. During the install, also the staged install files. | Kept until `/gui-reset docker-windows`. |
+| `local-windows`: `%LOCALAPPDATA%\Temp\pi-gui-testing-win-<id>` | The session's runtime files and, in `copy` mode, the project copy. Only you can open it. | Deleted when the session ends. Leftovers of a crashed Pi are removed by the next Pi start or `/gui-cleanup local-windows`, which first reads the session's record in the folder. A folder that could not be removed after a failed start stays listed and is retried. |
+| `docker-windows`: `~/.pi/agent/gui/docker-windows/` (or inside `PI_CODING_AGENT_DIR`) | `settings.json`, this computer's key for the VM (`id_ed25519`, owner-only), the VM's public host key, and a `known_hosts` file used only for the VM. During the install, also the staged install files. While a session runs, `session-lease.json` names it, and `session-lock/` holds the short-lived lock around session starts. | Kept until `/gui-reset docker-windows`. The lease is removed when its session ends; a lease of a Pi that is gone is replaced by the next session start. |
 | `docker-windows`: Docker volume `pi-gui-testing-windows-base` | The installed Windows disk with OpenSSH Server and the helper. Tools only, never project files. | Kept so later sessions start fast. Removed by `/gui-reset docker-windows`. |
 | `docker-windows`: Docker image `dockurr/windows` (6.06, pinned) | The container that runs the VM. It does not contain Windows. | Kept. Removed by `/gui-reset docker-windows`. |
 | `docker-windows`: containers `pi-gui-testing-win-<session>` and `pi-gui-testing-windows-install` | A running session's VM, or the running install | Removed when the session ends (with everything the session wrote) or the install finishes. Leftovers of a crashed Pi are removed by the next Pi start or `/gui-cleanup docker-windows`. |
@@ -590,6 +592,7 @@ Screenshots that Pi already received are part of your Pi session history, not of
 - The app runs **as you**, without administrator rights, on a private desktop of the session. It cannot draw on your desktop or read your screen through the package.
 - Unlike `local-linux`, the app sees your real user profile: `%APPDATA%`, `%LOCALAPPDATA%`, and the registry. Only `TEMP` and `TMP` point into the session folder. Settings an app saves, and data of Electron or Chromium apps, stay in your profile.
 - Every app the session starts is contained in Windows jobs that end with the session. Programs Windows starts on the app's behalf outside those jobs (for example Store apps such as Windows 11 Notepad, or COM servers) may run outside the private desktop and survive the session; the package reports what it recorded and cannot see.
+- Cleanup ends only the session's own jobs and the helper the package started. The app can write the session's record file, so a process named only in that file is reported and never ended: an app cannot make the package end another program.
 - The helper never runs elevated programs: when Pi itself runs as administrator, apps still start with your normal rights, and the helper refuses to start if that is not possible.
 - No API keys or other variables from Pi's environment reach the helper or the apps; only Windows' own system variables are passed.
 - Security software may react to the helper: it compiles itself with Windows' C# compiler into `%TEMP%` at every start, creates hidden desktops, and sends input to other windows. `helper.av` warns when it was blocked.
@@ -668,11 +671,13 @@ Screenshots that Pi already received are part of your Pi session history, not of
 
 - No network isolation and no read-only view of your project. Apps share your Windows profile.
 - Each session start takes 10–20 seconds (the helper compiles itself, twice when Pi runs elevated). Switching windows yourself during the start can make it fail; start again.
+- When an app hangs, a screenshot, snapshot, or click can time out. After two such operations are still stuck, the next one ends the session (the hung app with it); start a new one.
+- A `snapshot` holds at most 20 000 elements, and at most 1 000 windows are listed. A full tree larger than the transfer limit is refused; use the shorter snapshot or a screenshot.
 - `setup` never runs.
 
 ### `docker-windows`
 
-- One session at a time. The first install takes 15–30 minutes; each session boots Windows (one or two minutes expected, not yet measured).
+- One session at a time on this computer. The first install takes 15–30 minutes; each session boots Windows (one or two minutes expected, not yet measured).
 - The helper runs in the VM's background service session over SSH, not on the logged-in Windows desktop. Apps therefore run on a private desktop without the desktop's graphics composition, so screenshots of GPU-drawn apps are more likely to be black than on a real desktop.
 - The install needs Windows Update to install OpenSSH Server; offline or filtered networks make it time out after 2 hours.
 - `setup` commands run in every session. File names Windows cannot store are skipped.
@@ -770,6 +775,11 @@ Screenshots that Pi already received are part of your Pi session history, not of
 | `local-windows cannot block the app's network` | Remove `"network": "none"`. |
 | `the Windows helper … is missing; reinstall the package` | Reinstall: `pi install npm:@firstpick/pi-extension-gui-testing`. |
 | A crashed session left processes or a folder | Run `/gui-cleanup local-windows`. |
+| `app process (…) still exists` after a stop or cleanup | A process outside the session's jobs is still running. The package never ends it; close it yourself, then run `/gui-cleanup local-windows` to remove the folder. |
+| `… replaced while it was being removed (…); not entered` | Something replaced a folder in the session folder with a link during cleanup. Nothing behind the link was touched. Check the folder, then run `/gui-cleanup local-windows`. |
+| `helper.job` fails, or a launch fails, with `the helper runs inside a Job Object that does not accept a nested job` | The terminal, IDE, or CI runner that started Pi puts it in a restricted Windows job. Start Pi from a plain terminal (Windows Terminal, `cmd.exe`, or PowerShell). |
+| `… earlier operations are still stuck in a hung app` | The app stopped responding. The session ended; start a new one with `gui_launch`. |
+| `the full accessibility tree is too large to transfer` | Use `snapshot` with a smaller `maxNodes`, or a screenshot. |
 | **`docker-windows`** | |
 | `kvm.device` fails | Run `sudo usermod -aG kvm $USER`, then log out and back in. If `/dev/kvm` is missing, turn on VT-x or AMD-V in the firmware (or nested virtualization in your VM). |
 | `the Windows licensing acknowledgement is missing` or `The Windows licensing notice is not acknowledged; re-run with /gui-setup docker-windows --accept-windows-license` | Run `/gui-setup docker-windows --accept-windows-license`, or confirm in the interactive screen. |
@@ -778,7 +788,10 @@ Screenshots that Pi already received are part of your Pi session history, not of
 | `the Windows install did not finish within 120 minutes` | Check that the computer reaches Windows Update; the next setup starts a fresh install. |
 | `the Docker volume pi-gui-testing-windows-base exists but belongs to no install recorded here` | Another Pi configuration (another `PI_CODING_AGENT_DIR`) owns it, or the settings were deleted. Run `/gui-reset docker-windows`, then set up again. |
 | `the installed Windows disk changed during the session` | Reinstall: `/gui-reset docker-windows`, then `/gui-setup docker-windows`. |
-| `docker-windows runs one session at a time and … is still running` | Stop the other session with `gui_stop`, or `/gui-cleanup docker-windows` when its Pi is gone. |
+| `docker-windows runs one session at a time and … is still running` (or `… is still running or starting`) | Stop the other session with `gui_stop`, or `/gui-cleanup docker-windows` when its Pi is gone. |
+| `docker-windows runs one session at a time and the owner of session … cannot be judged` | Run `/gui-cleanup docker-windows`. If no Pi window uses docker-windows, delete the named `session-lease.json`. |
+| `the session lease … is not a valid lease` | The lease file is damaged. If no Pi window runs a docker-windows session, delete it and start again. |
+| `the docker-windows session lock … is locked by process …` | Another Pi window is starting a session. Try again; if no Pi runs, remove the named lock file. |
 | `Windows did not answer over SSH within 360 s` | The computer is slow or short of memory. Close other programs, or lower the load; then start again. |
 | `the Windows guest refused this machine's pinned SSH identity` | The VM's keys no longer match. Reinstall with `/gui-reset docker-windows` and `/gui-setup docker-windows`. |
 | `docker-windows cannot run with "network": "none"` | Remove it, or use `docker-linux` for an offline Linux run. |

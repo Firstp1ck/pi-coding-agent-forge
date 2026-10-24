@@ -5,7 +5,9 @@
 // Scripted commands for launch: "fake-app" (opens window "Fake App"),
 // "handoff" (exits 0 without a window), "crash" (exits 3), "windowless"
 // (runs, never opens a window), "missing" (NOT_FOUND), "black-app" (window
-// whose capture is all black). exec: "exit N", "echo TEXT", "sleep MS",
+// whose capture is all black), "many-windows" (1200 windows), "big-tree" (a
+// window whose tree holds 1100 nodes with 64 Ki-character names), "unhealthy"
+// (the platform reports the session unusable). exec: "exit N", "echo TEXT", "sleep MS",
 // "big N" (N bytes of output), "ntstatus" (exits 0xC0000005).
 using System;
 using System.Collections.Generic;
@@ -25,7 +27,9 @@ namespace PiGuiHelper.Tests
 
         public int Pid { get; private set; }
         public bool HasExited { get { return _exited.WaitOne(0); } }
-        public int ExitCode { get { return HasExited ? _exitCode : -1; } }
+        /// <summary>Like a closed process handle: after Forget the exit code can no longer be read.</summary>
+        public int ExitCode { get { return HasExited && !Forgotten ? _exitCode : -1; } }
+        public bool Forgotten { get; set; }
         public bool Killed { get; private set; }
 
         public void Exit(int code)
@@ -116,6 +120,7 @@ namespace PiGuiHelper.Tests
         public IChild Launch(string cmd, IList<string> args, IDictionary<string, string> env, string cwd)
         {
             if (cmd == "missing") throw new ProtocolException("NOT_FOUND", "command not found: " + cmd);
+            if (cmd == "unhealthy") throw new UnhealthyException("launch was refused: 2 earlier operations are still stuck in a hung app");
             if (cwd.IndexOf("missing", StringComparison.Ordinal) >= 0) throw new ProtocolException("NOT_FOUND", "cwd " + cwd + " does not exist in the session");
             var child = new FakeChild(Interlocked.Increment(ref _nextPid));
             List<string> effective = LaunchPolicy.Args(cmd, args, _config.SoftwareRendering);
@@ -128,6 +133,18 @@ namespace PiGuiHelper.Tests
                     _blackWindow = cmd == "black-app";
                     AddWindow(cmd == "black-app" ? "Black App" : "Fake App");
                     _log.Log("stderr", "app", "fake app started\n");
+                    break;
+                case "many-windows":
+                    for (int i = 0; i < 1200; i++) AddWindow("Window " + i);
+                    break;
+                case "big-tree":
+                    AddWindow("Big Tree");
+                    lock (_lock)
+                    {
+                        string name = new string('x', 65536);
+                        for (int i = 0; i < 1100; i++)
+                            _elements.Add(new FakeElement { Role = "paragraph", Name = name, Parent = 0, Bounds = new Bounds(20, 30, 30, 6), Window = _windows[_windows.Count - 1].Ref });
+                    }
                     break;
                 case "handoff":
                     child.ExitAfter(50, 0);
@@ -182,7 +199,11 @@ namespace PiGuiHelper.Tests
             return child;
         }
 
-        public void Forget(IChild child) { }
+        public void Forget(IChild child)
+        {
+            var c = child as FakeChild;
+            if (c != null) c.Forgotten = true;
+        }
 
         public IList<WindowEntry> ListWindows()
         {
@@ -227,12 +248,12 @@ namespace PiGuiHelper.Tests
             return Pattern(window.Bounds.Width, window.Bounds.Height, _blackWindow);
         }
 
-        public WalkResult Walk(int cap, RequestContext ctx)
+        public WalkResult Walk(TreeBudget budget, RequestContext ctx)
         {
             lock (_lock)
             {
                 var nodes = new List<ElementNode>();
-                for (int i = 0; i < _elements.Count && nodes.Count < cap; i++)
+                for (int i = 0; i < _elements.Count && !budget.Exhausted; i++)
                 {
                     FakeElement e = _elements[i];
                     var n = new ElementNode();
@@ -245,9 +266,10 @@ namespace PiGuiHelper.Tests
                     n.States.Add("enabled");
                     n.States.Add("showing");
                     n.Handle = e;
+                    if (!budget.Admit(n)) break;
                     nodes.Add(n);
                 }
-                return new WalkResult(nodes, _windows.Count);
+                return new WalkResult(nodes, _windows.Count, budget.Exhausted);
             }
         }
 

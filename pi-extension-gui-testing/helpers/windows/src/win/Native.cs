@@ -85,12 +85,6 @@ namespace PiGuiHelper.Win
     }
 
     [StructLayout(LayoutKind.Sequential)]
-    internal struct JOBOBJECT_BASIC_UI_RESTRICTIONS
-    {
-        public uint UIRestrictionsClass;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
     internal struct BITMAPINFOHEADER
     {
         public int biSize, biWidth, biHeight;
@@ -106,7 +100,10 @@ namespace PiGuiHelper.Win
         public RECT rcCaret;
     }
 
-    [StructLayout(LayoutKind.Sequential)]
+    // FILETIME is two DWORDs, 4-byte aligned. Pack = 4 keeps each one where Windows puts it
+    // (a long would be 8-aligned and shift every later field): 52 bytes, checked by
+    // tests/helper-windows/native-layout.ps1.
+    [StructLayout(LayoutKind.Sequential, Pack = 4)]
     internal struct BY_HANDLE_FILE_INFORMATION
     {
         public uint FileAttributes;
@@ -114,7 +111,8 @@ namespace PiGuiHelper.Win
         public uint VolumeSerialNumber, FileSizeHigh, FileSizeLow, NumberOfLinks, FileIndexHigh, FileIndexLow;
     }
 
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    // WIN32_FIND_DATAW: 592 bytes, cFileName at offset 44 (FILETIMEs 4-byte aligned, see above).
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode, Pack = 4)]
     internal struct WIN32_FIND_DATA
     {
         public uint dwFileAttributes;
@@ -153,7 +151,8 @@ namespace PiGuiHelper.Win
         public INPUTUNION u;
     }
 
-    [StructLayout(LayoutKind.Sequential)]
+    // RTL_OSVERSIONINFOEXW: szCSDVersion is 128 WCHARs, so 284 bytes (156 if marshalled as ANSI).
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     internal struct OSVERSIONINFOEX
     {
         public int dwOSVersionInfoSize, dwMajorVersion, dwMinorVersion, dwBuildNumber, dwPlatformId;
@@ -198,11 +197,10 @@ namespace PiGuiHelper.Win
 
         // Jobs
         public const int JobObjectBasicProcessIdList = 3;
-        public const int JobObjectBasicUIRestrictions = 4;
         public const int JobObjectExtendedLimitInformation = 9;
         public const uint JOB_OBJECT_LIMIT_DIE_ON_UNHANDLED_EXCEPTION = 0x400;
         public const uint JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x2000;
-        public const uint JOB_OBJECT_UILIMIT_EXITWINDOWS = 0x80;
+        public const int ERROR_ACCESS_DENIED = 5;
 
         // Desktops
         public const uint DESKTOP_ALL = 0x000F01FF;
@@ -267,9 +265,6 @@ namespace PiGuiHelper.Win
 
         [DllImport("kernel32.dll", SetLastError = true)]
         public static extern bool SetInformationJobObject(IntPtr job, int infoClass, ref JOBOBJECT_EXTENDED_LIMIT_INFORMATION info, int length);
-
-        [DllImport("kernel32.dll", SetLastError = true)]
-        public static extern bool SetInformationJobObject(IntPtr job, int infoClass, ref JOBOBJECT_BASIC_UI_RESTRICTIONS info, int length);
 
         [DllImport("kernel32.dll", SetLastError = true)]
         public static extern bool QueryInformationJobObject(IntPtr job, int infoClass, IntPtr info, int length, out int returnLength);

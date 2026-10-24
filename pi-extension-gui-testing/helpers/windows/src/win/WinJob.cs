@@ -52,11 +52,11 @@ namespace PiGuiHelper.Win
             var job = new WinJob(h, name);
             try
             {
+                // No JOB_OBJECT_UILIMIT_* limits: a job with UI limits cannot join a job hierarchy, and
+                // the app's job is nested whenever the helper itself runs in a job (the relay job of
+                // an elevated start, a terminal's or CI runner's job). Kill-on-close plus atomic
+                // membership at creation are the containment; the private desktop is the UI boundary.
                 SetKillOnClose(h);
-                var ui = new JOBOBJECT_BASIC_UI_RESTRICTIONS();
-                ui.UIRestrictionsClass = Native.JOB_OBJECT_UILIMIT_EXITWINDOWS;
-                if (!Native.SetInformationJobObject(h, Native.JobObjectBasicUIRestrictions, ref ui, Marshal.SizeOf(typeof(JOBOBJECT_BASIC_UI_RESTRICTIONS))))
-                    throw new InvalidOperationException(Native.Error("SetInformationJobObject(UI restrictions)"));
             }
             catch
             {
@@ -148,13 +148,17 @@ namespace PiGuiHelper.Win
             }
         }
 
+        int _exitCode = -1;
+
+        /// <summary>The exit code; kept when Close releases the handle, -1 while running or unknown.</summary>
         public int ExitCode
         {
             get
             {
                 int code;
                 IntPtr p = _process;
-                if (p == IntPtr.Zero || !Native.GetExitCodeProcess(p, out code) || code == Native.STILL_ACTIVE) return -1;
+                if (p == IntPtr.Zero) return _exitCode;
+                if (!Native.GetExitCodeProcess(p, out code) || code == Native.STILL_ACTIVE) return -1;
                 return code;
             }
         }
@@ -194,9 +198,12 @@ namespace PiGuiHelper.Win
         /// <summary>Kills the job and closes the handles (idempotent).</summary>
         public void Close()
         {
+            IntPtr p = _process;
+            int code;
+            // An exit code that exists before the job is terminated is the process's own.
+            if (p != IntPtr.Zero && Native.GetExitCodeProcess(p, out code) && code != Native.STILL_ACTIVE) _exitCode = code;
             Job.Terminate();
             Job.Close();
-            IntPtr p = _process;
             _process = IntPtr.Zero;
             if (p != IntPtr.Zero)
             {
@@ -226,6 +233,21 @@ namespace PiGuiHelper.Win
     {
         [DllImport("kernel32.dll", SetLastError = true)]
         static extern bool IsProcessInJob(IntPtr process, IntPtr job, out bool result);
+
+        /// <summary>True when this helper process already runs inside some Job Object.</summary>
+        public static bool InJob()
+        {
+            bool result;
+            return IsProcessInJob(Native.GetCurrentProcess(), IntPtr.Zero, out result) && result;
+        }
+
+        /// <summary>The failure text when an app cannot join its job while the helper is in a job itself.</summary>
+        public static string NestedJobProblem(string what)
+        {
+            return what + ": the helper runs inside a Job Object that does not accept a nested job (for example one with UI " +
+                "restrictions, set by the terminal, an IDE, a CI runner, or a sandbox that started Pi). Start Pi from a plain " +
+                "terminal (Windows Terminal, cmd.exe, or PowerShell) and run /gui-doctor local-windows again";
+        }
 
         static IntPtr InheritableNul()
         {
@@ -316,7 +338,12 @@ namespace PiGuiHelper.Win
                 int flags = Native.CREATE_SUSPENDED | Native.EXTENDED_STARTUPINFO_PRESENT | Native.CREATE_UNICODE_ENVIRONMENT | Native.CREATE_NO_WINDOW;
                 var commandLine = new StringBuilder(spec.CommandLine, spec.CommandLine.Length + 1);
                 if (!Native.CreateProcessW(spec.Application, commandLine, IntPtr.Zero, IntPtr.Zero, true, flags, env, spec.Cwd, ref si, out pi))
-                    throw CreateFailure(Marshal.GetLastWin32Error(), spec);
+                {
+                    int error = Marshal.GetLastWin32Error();
+                    if (error == Native.ERROR_ACCESS_DENIED && InJob())
+                        throw new ProtocolException("INTERNAL", NestedJobProblem("CreateProcess with a Job Object list failed for " + spec.Application));
+                    throw CreateFailure(error, spec);
+                }
 
                 // The child holds its own copies now.
                 Native.CloseHandle(nul); nul = IntPtr.Zero;
@@ -328,7 +355,9 @@ namespace PiGuiHelper.Win
 
                 bool inJob;
                 if (!IsProcessInJob(child.ProcessHandle, job.Handle, out inJob) || !inJob)
-                    throw new InvalidOperationException("the new process is not in its Job Object; refusing to resume it");
+                    throw new InvalidOperationException(InJob()
+                        ? NestedJobProblem("the new process is not in its Job Object; refusing to resume it")
+                        : "the new process is not in its Job Object; refusing to resume it");
                 if (!spec.AllowElevated && WinSecurity.IsProcessElevated(child.ProcessHandle))
                     throw new InvalidOperationException("the new process runs elevated although PI_GUI_ALLOW_ELEVATED is not set; refusing to resume it");
 

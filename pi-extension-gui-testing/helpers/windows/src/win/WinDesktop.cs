@@ -25,6 +25,10 @@ namespace PiGuiHelper.Win
 {
     internal sealed class WinDesktop
     {
+        /// <summary>Abandoned desktop workers allowed at once; one more request then ends the session.</summary>
+        public const int MaxAbandonedWorkers = 2;
+
+        readonly WorkerBudget _workers = new WorkerBudget(MaxAbandonedWorkers);
         IntPtr _handle;
 
         WinDesktop(IntPtr handle, string name, bool interactive)
@@ -117,7 +121,9 @@ namespace PiGuiHelper.Win
         /// <summary>
         /// Runs fn on a new MTA thread attached to this desktop, with per-monitor DPI awareness for
         /// the operation. Waits up to timeoutMs (TIMEOUT) and honours cancel (CANCELLED); a worker
-        /// stuck in a hung app is abandoned (background thread), never killed.
+        /// stuck in a hung app is abandoned (background thread), never killed. At most
+        /// MaxAbandonedWorkers may be outstanding: the next call fails with UnhealthyException and
+        /// the helper ends the session (its teardown terminates the hung app, which frees them).
         /// </summary>
         public T Run<T>(string what, int timeoutMs, RequestContext ctx, Func<T> fn)
         {
@@ -126,6 +132,7 @@ namespace PiGuiHelper.Win
             var done = new ManualResetEvent(false);
             IntPtr desktop = _handle;
             bool attach = !Interactive;
+            WorkerBudget.Worker worker = _workers.Begin(what);
             var thread = new Thread(delegate()
             {
                 try
@@ -142,18 +149,34 @@ namespace PiGuiHelper.Win
                 }
                 finally
                 {
+                    worker.Done();
                     done.Set();
                 }
             });
             thread.IsBackground = true;
             thread.Name = "desktop-" + what;
             thread.SetApartmentState(ApartmentState.MTA);
-            thread.Start();
+            try
+            {
+                thread.Start();
+            }
+            catch
+            {
+                worker.Done();
+                throw;
+            }
             var handles = ctx != null ? new WaitHandle[] { done, ctx.CancelHandle } : new WaitHandle[] { done };
             int index = WaitHandle.WaitAny(handles, timeoutMs);
             if (index == WaitHandle.WaitTimeout)
+            {
+                worker.Abandon();
                 throw new ProtocolException("TIMEOUT", what + " did not finish within " + (timeoutMs / 1000) + " s; the app may be hung");
-            if (index == 1) throw new CancelledException();
+            }
+            if (index == 1)
+            {
+                worker.Abandon();
+                throw new CancelledException();
+            }
             if (failure != null)
             {
                 if (failure is ProtocolException) throw failure;

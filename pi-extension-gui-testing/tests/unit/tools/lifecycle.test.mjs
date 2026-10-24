@@ -326,15 +326,18 @@ test("Q8: cancelling or the deadline interrupts a log flush that never finishes"
 test("Q8: cancelling or the deadline interrupts a slow copy; the partial file is not kept", async (t) => {
   keepAlive(t);
   const { root, live } = await exportFixture(t);
+  let onCopyStarted = () => {};
   const slowCopy = (src, dest, signal) =>
     new Promise((_, reject) => {
-      void writeFile(dest, "partial");
       signal.addEventListener("abort", () => rm(dest, { force: true }).then(() => reject(signal.reason)), { once: true });
+      void writeFile(dest, "partial").then(() => onCopyStarted());
     });
   const controller = new AbortController();
-  setTimeout(() => controller.abort(Object.assign(new Error("export cancelled by the user"), { name: "AbortError" })), 20);
+  // Cancel once a partial file exists (a fixed 20 ms timer could fire before the export had begun, under load).
+  onCopyStarted = () => controller.abort(Object.assign(new Error("export cancelled by the user"), { name: "AbortError" }));
   await assert.rejects(exportArtifacts(live, "out-a", root, { signal: controller.signal, copy: slowCopy }), /cancelled by the user/);
   assert.deepEqual(await readdir(join(root, "out-a")), []);
+  onCopyStarted = () => {};
   await assert.rejects(exportArtifacts(live, "out-b", root, { timeoutMs: 30, copy: slowCopy }), /did not finish within 0 s; 0 file\(s\) were copied/);
 
   // The real copy is a stream pipeline bound to the signal; an abort mid-copy removes the partial file.

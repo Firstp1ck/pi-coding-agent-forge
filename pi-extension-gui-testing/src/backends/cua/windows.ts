@@ -41,8 +41,8 @@ export const WINDOWS_MIN_BUILD = 17763;
 
 /** Longest command line `CreateProcess` accepts (characters, with the terminating NUL). */
 export const WINDOWS_COMMAND_LINE_MAX = 32_767;
-/** Longest command line `cmd.exe` accepts; the helper runs `setup` commands through `cmd.exe /d /s /c`. */
-export const CMD_LINE_MAX = 8_191;
+/** `setup` entries become encoded Windows PowerShell commands (shared with docker-windows). */
+export { CMD_LINE_MAX, windowsSetupCommand } from "../windows/setup-command.ts";
 
 /** Paths of one Windows session in the guest. */
 export interface WindowsGuestPaths {
@@ -116,35 +116,6 @@ export function windowsHelperEnv(sessionId: string): Record<string, string> {
     [HELPER_RUNTIME_DIR_ENV]: paths.runtime,
     [HELPER_ALLOW_EXEC_ENV]: "1",
   };
-}
-
-/**
- * A `setup` command for the Windows helper's `exec` (which runs
- * `cmd.exe /d /s /c "<cmd>"`): the command runs as a Windows PowerShell 5.1
- * script in the workspace. A failing cmdlet stops it (exit 1, its error on
- * stderr); a failing native command does not (PowerShell 5.1 has no switch
- * for that), and the script exits with the last native command's exit code.
- * Chain native commands with `if ($LASTEXITCODE) { exit $LASTEXITCODE }` to
- * stop early. Encoded, so no `cmd.exe` metacharacter of the command reaches
- * `cmd.exe`.
- *
- * @throws Error when the encoded command exceeds `cmd.exe`'s line limit.
- */
-export function windowsSetupCommand(cmd: string): string {
-  const script = [
-    "$ErrorActionPreference = 'Stop'",
-    "$ProgressPreference = 'SilentlyContinue'",
-    "$global:LASTEXITCODE = 0",
-    "try {",
-    cmd,
-    "} catch { [Console]::Error.WriteLine($_.ToString()); exit 1 }",
-    "if ($global:LASTEXITCODE) { exit $global:LASTEXITCODE }",
-    "exit 0",
-  ].join("\n");
-  const line = [...POWERSHELL, "-EncodedCommand", encodePowerShell(script)].join(" ");
-  // `cmd.exe /d /s /c "` + line + `"` must fit cmd.exe's limit.
-  if (line.length + 16 > CMD_LINE_MAX) throw new Error(`the setup command is too long for a Windows sandbox (${cmd.length} characters; about ${Math.floor((CMD_LINE_MAX - 200) / 2.7)} fit)`);
-  return line;
 }
 
 /**

@@ -5,6 +5,7 @@
 // file system's security lives behind IPlatform (src/win/*.cs), so the core is
 // compiled and tested on any host with a fake platform
 // (tests/helper-windows/FakePlatform.cs).
+using System;
 using System.Collections.Generic;
 
 namespace PiGuiHelper
@@ -103,14 +104,71 @@ namespace PiGuiHelper
 
     public sealed class WalkResult
     {
-        public WalkResult(List<ElementNode> nodes, int windowCount)
+        public WalkResult(List<ElementNode> nodes, int windowCount) : this(nodes, windowCount, false) { }
+
+        public WalkResult(List<ElementNode> nodes, int windowCount, bool truncated)
         {
             Nodes = nodes;
             WindowCount = windowCount;
+            Truncated = truncated;
         }
 
         public List<ElementNode> Nodes { get; private set; }
         public int WindowCount { get; private set; }
+        /// <summary>True when the walk stopped at its node or byte budget.</summary>
+        public bool Truncated { get; private set; }
+    }
+
+    /// <summary>
+    /// Node and byte budget of one accessibility walk, enforced while the walk runs (not after),
+    /// so a huge tree never has to fit in memory and every result stays within the client's
+    /// limits. The byte figure is an upper bound of the node's JSON in a tree dump.
+    /// </summary>
+    public sealed class TreeBudget
+    {
+        /// <summary>Fixed part of one node's JSON (ref, role, bounds, parent, punctuation), generously.</summary>
+        const long NodeOverheadBytes = 512;
+
+        public TreeBudget(int maxNodes, long maxBytes)
+        {
+            MaxNodes = maxNodes;
+            MaxBytes = maxBytes;
+        }
+
+        public int MaxNodes { get; private set; }
+        public long MaxBytes { get; private set; }
+        public int Nodes { get; private set; }
+        public long Bytes { get; private set; }
+        /// <summary>True once a node was refused: the walk stops and its result is truncated.</summary>
+        public bool Exhausted { get; private set; }
+
+        /// <summary>Upper bound of the node's JSON bytes in a tree dump (its strings exactly, the rest generously).</summary>
+        public static long EstimateBytes(ElementNode n)
+        {
+            long bytes = NodeOverheadBytes + Json.EncodedLength(n.Role ?? "") + Json.EncodedLength(n.Name ?? "") + Json.EncodedLength(n.Value ?? "");
+            int states = 0;
+            foreach (string s in n.States)
+            {
+                if (states++ >= 64) break;
+                bytes += 1 + Json.EncodedLength(s.Length > 256 ? s.Substring(0, 256) : s);
+            }
+            return bytes;
+        }
+
+        /// <summary>Counts the node when it fits; false (and Exhausted) when it does not.</summary>
+        public bool Admit(ElementNode n)
+        {
+            if (Exhausted) return false;
+            long bytes = EstimateBytes(n);
+            if (Nodes >= MaxNodes || Bytes + bytes > MaxBytes)
+            {
+                Exhausted = true;
+                return false;
+            }
+            Nodes++;
+            Bytes += bytes;
+            return true;
+        }
     }
 
     /// <summary>A process started by launch or exec, contained in the session's Job Objects.</summary>
@@ -171,7 +229,8 @@ namespace PiGuiHelper
         /// <summary>Full window-rect capture (PrintWindow with PW_RENDERFULLCONTENT).</summary>
         RgbImage CaptureWindow(WindowEntry window);
 
-        WalkResult Walk(int cap, RequestContext ctx);
+        /// <summary>Accessibility walk that stops as soon as the budget refuses a node (WalkResult.Truncated).</summary>
+        WalkResult Walk(TreeBudget budget, RequestContext ctx);
         /// <summary>False when the element no longer exists.</summary>
         bool ElementAlive(object handle);
         Bounds ElementBounds(object handle);

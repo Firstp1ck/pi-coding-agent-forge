@@ -1,11 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { DockerWindowsBackend, NETWORK_NONE_MESSAGE } from "../../../../src/backends/docker-windows.ts";
 import { ensureKeys } from "../../../../src/backends/docker-windows/keys.ts";
 import { helperFiles } from "../../../../src/backends/docker-windows/oem.ts";
 import { startLeftovers } from "../../../../src/backends/start-failure.ts";
+import { windowsSetupCommand } from "../../../../src/backends/windows/setup-command.ts";
 import { BOOT, fakeProc } from "../fakes.mjs";
 import { config, fakeWindowsDocker, parseRunArgv, windowsRoot } from "./docker-fakes.mjs";
 
@@ -118,11 +119,18 @@ test("session: container recorded first, overlay + loopback port, boot wait, gue
 });
 
 test("setup commands run in the guest workspace with exec allowed; the deps cache is reported off (no windows-<arch> cache in the helper)", async (t) => {
-  const s = await setup(t);
-  const session = await s.start({ setup: ["pip install -r requirements.txt"], deps: { env: { PIP_NO_INPUT: "1" } } });
+  const execs = [];
+  const s = await setup(t, { docker: { handlers: { exec: (params) => (execs.push(params), { exitCode: 0, elapsedMs: 1 }) } } });
+  const session = await s.start({ setup: ["pip install -r requirements.txt", "Set-Content -LiteralPath setup.txt -Value hello"], deps: { env: { PIP_NO_INPUT: "1" } } });
   assert.equal(s.state.helpers[0].env.PI_GUI_ALLOW_EXEC, "1");
-  assert.ok(s.logs.some((e) => e.source === "setup" && /ran pip install -r requirements\.txt/.test(e.data)), "the helper ran the command");
-  assert.ok(s.status.some((x) => x.startsWith("setup 1/1 in the Windows guest")));
+  // Review B-F3: each entry runs as a Windows PowerShell 5.1 script (as with cua's Windows sandboxes), never as cmd.exe text.
+  assert.deepEqual(execs.map((e) => e.cmd), [windowsSetupCommand("pip install -r requirements.txt"), windowsSetupCommand("Set-Content -LiteralPath setup.txt -Value hello")]);
+  const script = Buffer.from(/-EncodedCommand (\S+)$/.exec(execs[1].cmd)[1], "base64").toString("utf16le");
+  assert.match(script, /\$ErrorActionPreference = 'Stop'\n[\s\S]*\ntry \{\nSet-Content -LiteralPath setup\.txt -Value hello\n\} catch/);
+  assert.ok(execs[1].cmd.startsWith("powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand "));
+  assert.equal(execs[0].cwd, session.workspacePath);
+  assert.deepEqual(execs[0].env, { PIP_NO_INPUT: "1" });
+  assert.ok(s.status.some((x) => x === "setup 1/2 in the Windows guest: pip install -r requirements.txt"), "the status names the command as written");
   assert.equal(session.depsCache.state, "off");
   assert.match(session.depsCache.detail, /no dependency cache/);
   assert.deepEqual(await session.stop(), []);
@@ -152,10 +160,12 @@ test("refusals before anything starts: not installed, no licence, network none, 
   s = await setup(t);
   s.state.containers.set("pi-gui-testing-win-other", { name: "pi-gui-testing-win-other", argv: [], labels: { "pi-gui-testing.windows": "session", "pi-gui-testing.session": "other", "pi-gui-testing.owner": OWNER }, running: true });
   await assert.rejects(s.start(), /one session at a time and pi-gui-testing-win-other is still running/);
-  // A session of a dead Pi does not block (the sweep removes it).
+  // A session of a dead Pi does not block: it is removed before this one is admitted (it holds the base disk).
   s.state.containers.get("pi-gui-testing-win-other").labels["pi-gui-testing.owner"] = `c1:200:6000:${BOOT}`;
   s.state.containers.set("pi-gui-testing-windows-install", { name: "pi-gui-testing-windows-install", argv: [], labels: { "pi-gui-testing.windows": "install" }, running: true });
   await assert.rejects(s.start(), /install is still running/);
+  assert.ok(s.state.removed.includes("id-pi-gui-testing-win-other"), "the dead owner's session container was removed");
+  assert.equal(await stat(join(s.backend.store.dir, "session-lease.json")).then(() => true, () => false), false, "a refused start writes no lease");
   assert.deepEqual(s.recorded, []);
   assert.ok(!s.runner.calls.some((c) => c.argv.includes("-d")), "no container was started");
 });
@@ -225,4 +235,85 @@ test("windows-incompatible names are not synced and named in a launch warning", 
   assert.equal(session.sync.excluded, 2);
   assert.match(session.warnings[0], /2 file\(s\) were not synced because Windows cannot store their names: (CON\.md, a:b\.txt|a:b\.txt, CON\.md)/);
   await session.stop();
+});
+
+/** A second session of the same backend (another id and session dir). */
+async function secondStart(s, id) {
+  const sessionDir = join(s.root, id);
+  await mkdir(sessionDir, { mode: 0o700 });
+  return s.start({}, { sessionId: id, sessionDir });
+}
+
+test("one session at a time is atomic: two starts that both saw no session container admit exactly one (review A-F5/B-F1)", async (t) => {
+  const s = await setup(t);
+  // Hold each start at its session-container listing until both arrived (or 300 ms): without an admission lock
+  // both see an empty list and both boot the same base disk.
+  const original = s.runner.run.bind(s.runner);
+  let arrivals = 0;
+  let release;
+  const barrier = new Promise((r) => {
+    release = r;
+    setTimeout(r, 300).unref();
+  });
+  s.runner.run = async (argv, o) => {
+    const answer = await original(argv, o);
+    if (argv.join(" ").includes("ps -a --no-trunc --filter label=pi-gui-testing.windows=session")) {
+      if (++arrivals === 2) release();
+      await barrier;
+    }
+    return answer;
+  };
+  const results = await Promise.allSettled([secondStart(s, "gui-race0001"), secondStart(s, "gui-race0002")]);
+  s.runner.run = original;
+  assert.deepEqual(results.map((r) => r.status).sort(), ["fulfilled", "rejected"]);
+  const refused = results.find((r) => r.status === "rejected").reason;
+  assert.match(refused.message, /one session at a time and session gui-race000\d \(container pi-gui-testing-win-gui-race000\d\) is still running or starting/);
+  assert.equal([...s.state.containers.values()].filter((c) => c.labels["pi-gui-testing.windows"] === "session").length, 1, "one VM on the base disk");
+  const session = results.find((r) => r.status === "fulfilled").value;
+  const lease = JSON.parse(await readFile(join(s.backend.store.dir, "session-lease.json"), "utf8"));
+  assert.equal(lease.owner, OWNER);
+  assert.equal(lease.container, session.containerName);
+  assert.deepEqual(await session.stop(), []);
+  assert.equal(await stat(join(s.backend.store.dir, "session-lease.json")).then(() => true, () => false), false, "stop gives the lease back");
+  // The machine is free again.
+  const next = await secondStart(s, "gui-after001");
+  assert.deepEqual(await next.stop(), []);
+});
+
+test("the lease: a dead owner's is recovered (its container removed first); a live or unjudgeable owner's refuses; this process's abandoned one is reused", async (t) => {
+  const s = await setup(t);
+  const leaseFile = join(s.backend.store.dir, "session-lease.json");
+  const writeLease = (owner, container = "pi-gui-testing-win-gui-old00001") =>
+    writeFile(leaseFile, JSON.stringify({ version: 1, owner, session: "gui-old00001", container, token: "0011223344556677", createdAt: "2026-10-24T10:00:00.000Z" }));
+
+  // Dead owner (pid 200 is gone): its container goes before this session is admitted.
+  await writeLease(`c1:200:6000:${BOOT}`);
+  s.state.containers.set("pi-gui-testing-win-gui-old00001", { name: "pi-gui-testing-win-gui-old00001", argv: [], labels: {}, running: true });
+  let session = await s.start();
+  assert.ok(s.state.removed.includes("pi-gui-testing-win-gui-old00001"));
+  assert.deepEqual(await session.stop(), []);
+
+  // Another live Pi (pid 150) holds it.
+  fakeProc(s.procRoot, { 150: 7000 });
+  await writeLease(`c2:150:7000:${BOOT}`);
+  await assert.rejects(s.start(), /one session at a time and session gui-old00001 \(container pi-gui-testing-win-gui-old00001\) is still running or starting/);
+  // An owner label that cannot be judged, and a lease that cannot be read, are never taken over.
+  await writeLease("not-a-label");
+  await assert.rejects(s.start(), /cannot be judged; run \/gui-cleanup docker-windows/);
+  await writeFile(leaseFile, "{");
+  await assert.rejects(s.start(), /session lease .* is not a valid lease; if no Pi process runs a docker-windows session, delete that file/);
+  assert.ok(!s.runner.calls.some((c) => c.argv.includes("-d") && c.argv.includes("gui-test0001") && s.state.containers.has(NAME)), "nothing started meanwhile");
+
+  // This process's own lease that no session holds any more (a release that could not remove the file).
+  await writeLease(OWNER);
+  session = await s.start();
+  assert.deepEqual(await session.stop(), []);
+});
+
+test("a start that fails after admission gives the lease back", async (t) => {
+  const s = await setup(t, { docker: { tarFails: true } });
+  await assert.rejects(s.start(), /copying the workspace into the Windows guest failed/);
+  assert.equal(await stat(join(s.backend.store.dir, "session-lease.json")).then(() => true, () => false), false);
+  await assert.rejects(s.start({ setup: ["x".repeat(4_000)] }), (e) => e.code === "SETUP_FAILED" && /too long for a Windows guest/.test(e.message));
+  assert.equal(await stat(join(s.backend.store.dir, "session-lease.json")).then(() => true, () => false), false, "refused before admission");
 });

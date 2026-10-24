@@ -2,7 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { LocalWindowsBackend, WINDOWS_COPY_MODE_WARNING } from "../../../../src/backends/local-windows.ts";
 import { DEFAULTS } from "../../../../src/config/types.ts";
-import { fakeWinHost, fakeWinRunner, ownerRecord, winSpawner, HELPER_DIR, LOCAL, POWERSHELL, PROJECT, SESSION_DIR, SID, SYSTEM_ROOT, TEMP_ROOT, WIN_ENV } from "./local-fakes.mjs";
+import { startLeftovers } from "../../../../src/backends/start-failure.ts";
+import { fakeWinHost, fakeWinRunner, ownerRecord, winSpawner, HELPER_CREATED, HELPER_DIR, LOCAL, POWERSHELL, PROJECT, SESSION_DIR, SID, SYSTEM_ROOT, TEMP_ROOT, WIN_ENV } from "./local-fakes.mjs";
 
 function config(shared = {}) {
   return {
@@ -23,7 +24,6 @@ function backend(host, fake, extra = {}) {
     spawner: fake.spawner,
     helperDir: HELPER_DIR,
     processProbe: host.processProbe,
-    genericTmpRoot: "C:\\elsewhere",
     version: "0.2.0",
     readyTimeoutMs: 2_000,
     heartbeatTimeoutMs: 60_000,
@@ -99,9 +99,19 @@ test("startSession creates a private runtime dir and spawns the local helper wit
   assert.equal(owner.pid, 900);
   assert.deepEqual(owner.resources, [{ kind: "tempdir", id: runtimeDir }, { kind: "process", id: `${fake.helperPid}:1761300200` }]);
 
-  const taskkill = [`${SYSTEM_ROOT}\\System32\\taskkill.exe`, "/PID", String(fake.helperPid), "/T", "/F"];
-  assert.deepEqual(start.exitCleanup, [taskkill]);
-  assert.deepEqual(session.forceRemoveArgv(), taskkill);
+  // The client's own tag (the runtime dir's hex digits) names every job and the desktop.
+  assert.equal(env.PI_GUI_WIN_TAG, runtimeDir.slice(-16));
+  assert.equal(fake.state.record.tag, runtimeDir.slice(-16));
+
+  // Exit cleanup: Windows PowerShell stops the helper only while PID and start time still match; never taskkill /PID.
+  const [exitArgv] = start.exitCleanup;
+  assert.equal(start.exitCleanup.length, 1);
+  assert.deepEqual(exitArgv.slice(0, 5), [POWERSHELL, "-NoLogo", "-NoProfile", "-NonInteractive", "-EncodedCommand"]);
+  const exitScript = Buffer.from(exitArgv[5], "base64").toString("utf16le");
+  assert.match(exitScript, new RegExp(`Get-Process -Id ${fake.helperPid} `));
+  assert.match(exitScript, /ToUnixTimeSeconds\(\) -eq 1761300200\) \{ Stop-Process -InputObject \$p -Force/);
+  assert.equal(exitArgv.some((a) => /taskkill/i.test(a)), false);
+  assert.deepEqual(session.forceRemoveArgv(), exitArgv);
   assert.equal(session.desktop, fake.state.record.desktop);
 
   // Foreground probed before the spawn and after hello.
@@ -256,8 +266,9 @@ test("a foreground probe that fails stops the start before anything is created",
   assert.equal(fake.spawner.children.length, 0);
 });
 
-test("after a helper crash the client ends recorded processes and jobs, then removes the dir", async () => {
+test("after a helper crash the client ends the session's jobs and the helper it spawned, then removes the dir", async () => {
   const host = fakeWinHost();
+  // Not relaunched: the record's helper is the process the client spawned (same PID, same creation time).
   const fake = winSpawner(host, { dirty: true });
   const session = await backend(host, fake).startSession(startOptions().options);
   await session.request("launch", { cmd: "app.exe", args: [], env: {}, cwd: PROJECT });
@@ -266,10 +277,94 @@ test("after a helper crash the client ends recorded processes and jobs, then rem
   assert.ok(host.world.jobs.has(job));
   assert.deepEqual(await session.stop(), []);
   assert.ok(host.world.killed.includes(job), "the job was terminated");
-  assert.ok(host.world.killed.includes("5000:133000000000000000"), "the relaunched helper copy was ended");
+  assert.ok(host.world.killed.includes(`4242:${HELPER_CREATED}`), "the helper the client spawned was ended (PID + creation time)");
   assert.equal(host.world.processes.size, 0);
   assert.deepEqual(runtimeDirs(host), []);
   assert.deepEqual(await session.auditFootprint(), []);
+});
+
+test("an elevated relaunch's helper copy (another PID) is reported, never ended by PID", async () => {
+  const host = fakeWinHost();
+  // On Windows the copy runs in the spawned helper's kill-on-close relay job and dies with it; the fake keeps it alive.
+  const fake = winSpawner(host, { dirty: true, innerPid: 5000 });
+  const session = await backend(host, fake).startSession(startOptions().options);
+  fake.spawner.children[0].exit(null, "SIGKILL");
+  const leftovers = await session.stop();
+  assert.equal(host.world.killed.includes("5000:133000000000000000"), false);
+  assert.ok(leftovers.some((l) => l.kind === "process" && l.id === "5000:133000000000000000" && /GUI helper process \(session\) still exists/.test(l.detail)));
+  host.world.processes.delete("5000:133000000000000000");
+  await new Promise((resolve) => setImmediate(resolve)); // the first attempt has settled
+  assert.deepEqual(await session.stop(), [], "a retry finishes once it is gone");
+  assert.deepEqual(runtimeDirs(host), []);
+});
+
+test("a recorded process the client did not spawn is reported, never ended (forged session.json)", async () => {
+  const host = fakeWinHost();
+  // The record names the user's editor as an app process and as the "helper": neither is the process the client spawned.
+  const editor = { pid: 12345, created: "133000000123456789" };
+  host.world.processes.add(`${editor.pid}:${editor.created}`);
+  const fake = winSpawner(host, { dirty: true, innerPid: editor.pid, innerCreated: editor.created });
+  const session = await backend(host, fake).startSession(startOptions().options);
+  fake.state.record.processes.push(editor);
+  host.fs.put(`${fake.state.runtimeDir}\\session.json`, JSON.stringify(fake.state.record));
+  fake.spawner.children[0].exit(null, "SIGKILL");
+  const leftovers = await session.stop();
+  assert.equal(host.world.killed.length, 0, "nothing was ended by PID");
+  assert.ok(host.world.processes.has(`${editor.pid}:${editor.created}`));
+  assert.ok(leftovers.some((l) => l.kind === "process" && l.id === `${editor.pid}:${editor.created}` && /still exists/.test(l.detail)));
+  assert.ok(leftovers.some((l) => l.kind === "tempdir" && /kept until the objects above are gone/.test(l.detail)));
+  assert.equal(runtimeDirs(host).length, 1, "the dir stays for a retry");
+});
+
+test("a start whose spawner throws removes the runtime dir; a dir that cannot be removed stays attached for a retry", async () => {
+  const host = fakeWinHost();
+  const b = backend(host, { spawner: { spawn: () => { throw new Error("simulated spawn failure"); } } });
+  await assert.rejects(b.startSession(startOptions().options), (e) => e.code === "START_FAILED" && /simulated spawn failure/.test(e.message) && startLeftovers(e) === undefined);
+  assert.deepEqual(runtimeDirs(host), [], "cleaned up although the helper never ran");
+
+  // Same failure with a file in the runtime dir that cannot be deleted: the error carries a retryable session.
+  const busy = fakeWinHost();
+  const failing = backend(busy, {
+    spawner: {
+      spawn: (argv, options) => {
+        const file = `${options.env.PI_GUI_RUNTIME_DIR}\\partial.bin`;
+        busy.fs.addFile(file, "x");
+        busy.fs.busy.add(busy.fs.key(file));
+        throw new Error("simulated spawn failure");
+      },
+    },
+  });
+  const error = await failing.startSession(startOptions().options).catch((e) => e);
+  assert.equal(error.code, "START_FAILED");
+  const attached = startLeftovers(error);
+  assert.ok(attached, "leftovers are attached to the error");
+  assert.match(attached.leftovers[0].detail, /partial\.bin: EBUSY/);
+  assert.equal(runtimeDirs(busy).length, 1);
+  busy.fs.busy.clear();
+  assert.deepEqual(await attached.session.stop(), [], "the retry removes the rest");
+  assert.deepEqual(runtimeDirs(busy), []);
+});
+
+test("a copy that fails after the runtime dir exists cleans up, or attaches what it cannot remove", async () => {
+  const host = fakeWinHost();
+  const fake = winSpawner(host);
+  const b = backend(host, fake, {
+    copyWorkspace: async (_project, dest) => {
+      const file = `${dest.slice(0, dest.lastIndexOf("\\"))}\\partial.bin`;
+      host.fs.addFile(file, "partial workspace");
+      host.fs.busy.add(host.fs.key(file));
+      throw new Error("disk full");
+    },
+  });
+  const error = await b.startSession(startOptions(config({ workspaceMode: "copy" })).options).catch((e) => e);
+  assert.equal(error.code, "START_FAILED");
+  assert.match(error.message, /^disk full; .*could not be removed/);
+  const attached = startLeftovers(error);
+  assert.ok(attached, "the runtime dir that could not be removed is tracked, not forgotten");
+  assert.equal(fake.spawner.children.length, 0, "no helper was started");
+  host.fs.busy.clear();
+  assert.deepEqual(await attached.session.stop(), []);
+  assert.deepEqual(runtimeDirs(host), []);
 });
 
 test("a leftover that survives keeps the dir for a retry, which then succeeds", async () => {

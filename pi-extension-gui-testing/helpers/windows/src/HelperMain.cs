@@ -150,7 +150,7 @@ namespace PiGuiHelper
             }
 
             var handlers = new Handlers(platform, config, writer, shutdown.Request);
-            var dispatcher = new Dispatcher(writer, handlers.Table());
+            var dispatcher = new Dispatcher(writer, handlers.Table(), shutdown.Request);
             var watchdog = new Watchdog(Protocol.HeartbeatTimeoutMs(env), delegate { shutdown.Request("heartbeat timeout"); });
             writer.Ready();
             watchdog.Start();

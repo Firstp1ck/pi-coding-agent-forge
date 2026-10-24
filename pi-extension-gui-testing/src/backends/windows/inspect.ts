@@ -1,8 +1,9 @@
 /**
  * Client-side inspection of a Windows helper's kernel objects: whether a
  * process with a given PID and creation time still runs, whether a named Job
- * Object or desktop still exists, and (sweep and teardown only) ending such
- * processes and jobs. Node has no API for jobs and desktops, so one fixed
+ * Object or desktop still exists, and (sweep and teardown only) ending the
+ * session's jobs and the processes the caller marks as its own. Node has no
+ * API for jobs and desktops, so one fixed
  * PowerShell script does it through P/Invoke. The script text never changes;
  * the names and IDs travel in an environment variable as JSON, after the
  * caller validated them against the helper's formats
@@ -19,10 +20,19 @@ export const INSPECT_ENV = "PI_GUI_WIN_INSPECT";
 /** State of one object: `alive` (exists), `gone`, `killed` (ended by this call), or `unknown` (could not be read). */
 export type ObjectState = "alive" | "gone" | "killed" | "unknown";
 
+/** A process to inspect; `kill` (with `action: "kill"`) also ends it. Only processes the client itself started may carry it. */
+export interface InspectProcess extends WinProcessId {
+  kill?: boolean;
+}
+
 export interface InspectRequest {
-  /** `audit` reads only; `kill` ends matching processes and terminates existing jobs. */
+  /**
+   * `audit` reads only; `kill` terminates the named jobs that still exist
+   * (their names carry the session tag) and ends the processes marked
+   * `kill`. Every other process is only inspected, never ended.
+   */
   action: "audit" | "kill";
-  processes: readonly WinProcessId[];
+  processes: readonly InspectProcess[];
   /** Session tag that every job and desktop name must carry. */
   tag: string;
   jobs: readonly string[];
@@ -60,14 +70,14 @@ public static class PiGuiInspect {
   [DllImport("kernel32.dll", SetLastError = true)] static extern bool TerminateJobObject(IntPtr h, uint code);
   [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)] static extern IntPtr OpenDesktopW(string name, int flags, bool inherit, int access);
   [DllImport("user32.dll", SetLastError = true)] static extern bool CloseDesktop(IntPtr h);
-  public static string Process(int pid, long created, bool kill) {
+  public static string Process(int pid, long created, bool kill, uint settleMs) {
     IntPtr h = OpenProcess(0x1000 | 0x100000 | (kill ? 0x1 : 0), false, pid);
     if (h == IntPtr.Zero) return Marshal.GetLastWin32Error() == 87 ? "gone" : "unknown";
     try {
       long c, x, k, u;
       if (!GetProcessTimes(h, out c, out x, out k, out u)) return "unknown";
       if (c != created) return "gone";
-      if (WaitForSingleObject(h, 0) != 0x102) return "gone";
+      if (WaitForSingleObject(h, kill ? 0 : settleMs) != 0x102) return "gone";
       if (!kill) return "alive";
       if (!TerminateProcess(h, 1)) return "alive";
       return WaitForSingleObject(h, 5000) == 0 ? "killed" : "alive";
@@ -91,8 +101,11 @@ public static class PiGuiInspect {
 '@
 $kill = $req.action -eq 'kill'
 $out = @{ processes = @(); jobs = @(); desktops = @() }
-foreach ($p in @($req.processes)) { $out.processes += @{ id = "$($p.pid):$($p.created)"; state = [PiGuiInspect]::Process([int]$p.pid, [long]::Parse([string]$p.created), $kill) } }
+# Jobs first: their processes end with them, so the process states below show what survived.
 foreach ($j in @($req.jobs)) { $out.jobs += @{ id = [string]$j; state = [PiGuiInspect]::Job([string]$j, $kill) } }
+# After terminating jobs, give their processes up to 2 s to exit before calling them alive.
+$settle = if ($kill) { [uint32]2000 } else { [uint32]0 }
+foreach ($p in @($req.processes)) { $out.processes += @{ id = "$($p.pid):$($p.created)"; state = [PiGuiInspect]::Process([int]$p.pid, [long]::Parse([string]$p.created), ($kill -and $p.kill -eq $true), $settle) } }
 foreach ($d in @($req.desktops)) {
   $s = [PiGuiInspect]::Desktop([string]$d)
   # After ending processes, Windows destroys the desktop once its last user is gone: give it a moment.
@@ -107,7 +120,10 @@ $out['probe'] = 'inspect'
 export function validateInspectRequest(request: InspectRequest): string | undefined {
   if (!/^[0-9a-f]{16}$/.test(request.tag)) return "invalid session tag";
   if (request.processes.length > MAX_RECORD_ENTRIES + 1 || request.jobs.length > MAX_RECORD_ENTRIES || request.desktops.length > 1) return "too many objects";
-  for (const p of request.processes) if (!Number.isSafeInteger(p.pid) || p.pid <= 0 || p.pid > 0x7fffffff || !/^[1-9]\d{0,17}$/.test(p.created)) return "invalid process id";
+  for (const p of request.processes) {
+    if (!Number.isSafeInteger(p.pid) || p.pid <= 0 || p.pid > 0x7fffffff || !/^[1-9]\d{0,17}$/.test(p.created)) return "invalid process id";
+    if (p.kill !== undefined && typeof p.kill !== "boolean") return "invalid kill flag";
+  }
   const job = jobNamePattern(request.tag);
   for (const j of request.jobs) if (!job.test(j)) return "invalid job name";
   const desktop = privateDesktopPattern(request.tag);
@@ -152,7 +168,8 @@ export async function inspectWindowsObjects(request: InspectRequest, options: In
   const invalid = validateInspectRequest(request);
   if (invalid) return allUnknown(request, `refused to inspect: ${invalid}`);
   if (request.processes.length + request.jobs.length + request.desktops.length === 0) return { processes: new Map(), jobs: new Map(), desktops: new Map() };
-  const payload = JSON.stringify({ action: request.action, processes: request.processes, jobs: request.jobs, desktops: request.desktops });
+  const processes = request.processes.map((p) => ({ pid: p.pid, created: p.created, ...(request.action === "kill" && p.kill === true ? { kill: true } : {}) }));
+  const payload = JSON.stringify({ action: request.action, processes, jobs: request.jobs, desktops: request.desktops });
   let result;
   try {
     result = await options.runner.run(inlineScriptArgv(options.powershell, INSPECT_SCRIPT), {

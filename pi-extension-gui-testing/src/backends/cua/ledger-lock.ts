@@ -36,6 +36,8 @@ export interface LedgerLockOptions {
   procRoot?: string;
   /** How long one transition waits for a live holder before failing (ms); default 30 s. */
   timeoutMs?: number;
+  /** What the lock guards, for the timeout message; default "the cua sandbox ledger". */
+  label?: string;
 }
 
 interface Holder {
@@ -94,11 +96,13 @@ export class LedgerLock {
   readonly dir: string;
   readonly #procRoot: string;
   readonly #timeoutMs: number;
+  readonly #label: string;
 
   constructor(dir: string, options: LedgerLockOptions = {}) {
     this.dir = dir;
     this.#procRoot = options.procRoot ?? DEFAULT_PROC_ROOT;
     this.#timeoutMs = options.timeoutMs ?? 30_000;
+    this.#label = options.label ?? "the cua sandbox ledger";
   }
 
   #file(generation: number): string {
@@ -209,7 +213,7 @@ export class LedgerLock {
           waitedOn = holder;
           if (Date.now() >= deadline) {
             const who = waitedOn ? `process ${waitedOn.pid}` : "an unreadable lock record";
-            throw new Error(`the cua sandbox ledger ${this.dir} is locked by ${who}; try again, or remove ${this.#file(top)} if no Pi process is running`);
+            throw new Error(`${this.#label} ${this.dir} is locked by ${who}; try again, or remove ${this.#file(top)} if no Pi process is running`);
           }
           await sleep(5 + Math.floor(Math.random() * 20));
           continue;

@@ -111,8 +111,11 @@ namespace PiGuiHelper.Win
             return node;
         }
 
-        /// <summary>Breadth-first control-view walk of the given top-level windows.</summary>
-        public static WalkResult Walk(IList<IntPtr> windows, int cap, RequestContext ctx)
+        /// <summary>
+        /// Breadth-first control-view walk of the given top-level windows. Stops at the first node
+        /// the budget refuses (node count or bytes), so the result always fits the client's limits.
+        /// </summary>
+        public static WalkResult Walk(IList<IntPtr> windows, TreeBudget budget, RequestContext ctx)
         {
             var nodes = new List<ElementNode>();
             CacheRequest request = BuildCacheRequest();
@@ -120,7 +123,7 @@ namespace PiGuiHelper.Win
             var queue = new Queue<KeyValuePair<AutomationElement, int>>();
             using (request.Activate())
             {
-                for (int w = 0; w < windows.Count && nodes.Count < cap; w++)
+                for (int w = 0; w < windows.Count && !budget.Exhausted; w++)
                 {
                     AutomationElement root;
                     try
@@ -131,9 +134,10 @@ namespace PiGuiHelper.Win
                     catch (ArgumentException) { continue; }
                     ElementNode rootNode = Describe(root);
                     rootNode.Window = w;
+                    if (!budget.Admit(rootNode)) break;
                     nodes.Add(rootNode);
                     queue.Enqueue(new KeyValuePair<AutomationElement, int>(root, nodes.Count - 1));
-                    while (queue.Count > 0 && nodes.Count < cap)
+                    while (queue.Count > 0 && !budget.Exhausted)
                     {
                         if (ctx != null && nodes.Count % 50 == 0) ctx.Check();
                         var item = queue.Dequeue();
@@ -144,11 +148,12 @@ namespace PiGuiHelper.Win
                         }
                         catch (ElementNotAvailableException) { continue; }
                         int siblings = 0;
-                        while (child != null && nodes.Count < cap && siblings < MaxChildrenPerNode)
+                        while (child != null && siblings < MaxChildrenPerNode)
                         {
                             ElementNode node = Describe(child);
                             node.Parent = item.Value;
                             node.Window = w;
+                            if (!budget.Admit(node)) break;
                             nodes.Add(node);
                             queue.Enqueue(new KeyValuePair<AutomationElement, int>(child, nodes.Count - 1));
                             siblings++;
@@ -162,13 +167,13 @@ namespace PiGuiHelper.Win
                     queue.Clear();
                 }
             }
-            return new WalkResult(nodes, windows.Count);
+            return new WalkResult(nodes, windows.Count, budget.Exhausted);
         }
 
         /// <summary>True when any accessible name or value contains text (case-sensitive, as on Linux).</summary>
         public static bool FindText(IList<IntPtr> windows, string text, RequestContext ctx)
         {
-            WalkResult walk = Walk(windows, 5000, ctx);
+            WalkResult walk = Walk(windows, new TreeBudget(5000, Handlers.MaxTreeJsonBytes), ctx);
             foreach (ElementNode n in walk.Nodes)
             {
                 if ((n.Name != null && n.Name.IndexOf(text, StringComparison.Ordinal) >= 0) ||

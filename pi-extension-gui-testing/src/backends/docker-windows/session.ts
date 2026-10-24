@@ -85,6 +85,8 @@ export interface DockerWindowsSessionOptions {
   heartbeatTimeoutMs?: number;
   sleep?: (ms: number, signal: AbortSignal) => Promise<void>;
   warnings?: readonly string[];
+  /** Gives up the machine's one-session lease; called once the container is gone (or was never created). */
+  releaseLease?: () => Promise<void>;
 }
 
 export class DockerWindowsSession extends HelperSession {
@@ -232,16 +234,30 @@ export class DockerWindowsSession extends HelperSession {
     if (this.#guest) await this.#guest.close().catch(() => undefined);
     // No guest connection yet: still remove a separate short socket dir (long session paths).
     else if (o.control.shortDir) await rm(o.control.shortDir, { recursive: true, force: true }).catch(() => undefined);
-    if (!this.#started) return leftovers;
+    if (!this.#started) {
+      await this.#releaseLease();
+      return leftovers;
+    }
     const failed = await removeContainer(o.runner, o.endpoint, o.name).catch((e: Error) => e.message);
     if (failed) {
+      // The lease stays while the container may live: no second session boots the same disk.
       leftovers.push({ kind: "container", id: o.name, detail: `remove failed (${failed})` });
       return leftovers;
     }
     const state = await containerState(o.runner, o.endpoint, o.name).catch(() => undefined);
-    if (state) leftovers.push({ kind: "container", id: o.name, detail: `still present after docker rm -f (${state.status})` });
+    if (state) {
+      leftovers.push({ kind: "container", id: o.name, detail: `still present after docker rm -f (${state.status})` });
+      return leftovers;
+    }
     leftovers.push(...(await this.#baseChanged()));
+    await this.#releaseLease();
     return leftovers;
+  }
+
+  async #releaseLease(): Promise<void> {
+    // A lease file a failed removal leaves is harmless: no session of this process holds it any
+    // more, so the next start (of this or any process) takes it over as stale.
+    await this.#o.releaseLease?.().catch(() => undefined);
   }
 
   /** The installed disk must be unchanged after a session (the overlay took every write). */

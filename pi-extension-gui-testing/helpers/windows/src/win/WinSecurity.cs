@@ -144,6 +144,11 @@ namespace PiGuiHelper.Win
         /// Runs this same PowerShell command line again with the Explorer token, in a kill-on-close
         /// job, with the same stdin/stdout/stderr, and returns its exit code. The copy is created
         /// suspended and joins the job before it runs any code.
+        ///
+        /// The relay job has no UI limits and no breakaway: every app the copy starts is nested in
+        /// it (Windows 8+ nested jobs) under its own session job, so closing the relay job (this
+        /// process ending) still ends everything. Nesting needs every job in the hierarchy to be
+        /// free of UI limits, which is why the session jobs set none either (WinJob.Create).
         /// </summary>
         public static int RelaunchNonElevated()
         {
@@ -176,7 +181,9 @@ namespace PiGuiHelper.Win
                     throw new InvalidOperationException(Native.Error("CreateProcessWithTokenW(non-elevated helper)"));
                 if (!Native.AssignProcessToJobObject(job, pi.hProcess))
                 {
+                    bool denied = Marshal.GetLastWin32Error() == Native.ERROR_ACCESS_DENIED;
                     string error = Native.Error("AssignProcessToJobObject(non-elevated helper)");
+                    if (denied && WinLauncher.InJob()) error = WinLauncher.NestedJobProblem(error);
                     Native.TerminateProcess(pi.hProcess, 1);
                     throw new InvalidOperationException(error);
                 }

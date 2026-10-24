@@ -112,6 +112,7 @@ namespace PiGuiHelper.Tests
             LaunchPolicyTests();
             KeyTests();
             RoleAndCoverageTests();
+            LimitTests();
             Console.WriteLine("# passed " + _passed + ", failed " + _failed);
             return _failed == 0 ? 0 : 1;
         }
@@ -204,6 +205,12 @@ namespace PiGuiHelper.Tests
             HostConfig g = HostConfig.FromEnv(Env("PI_GUI_WORKSPACE", "C:\\w", "PI_GUI_RUNTIME_DIR", "D:\\s\\pi-gui-testing-1", "PI_GUI_HELPER_MODE", "guest",
                 "PI_GUI_WIN_DESKTOP", "interactive", "PI_GUI_WIN_INPUT", "sendinput", "PI_GUI_ALLOW_EXEC", "1", "PI_GUI_DEPS_DIR", "D:\\deps"), null);
             Check(g.Guest && g.InteractiveDesktop && g.SendInput && g.AllowExec && g.Warnings.Count == 1, "config: guest options and deps warning");
+            Check(c.SessionTag == null, "config: no session tag by default (the helper picks one)");
+            HostConfig t = HostConfig.FromEnv(Env("PI_GUI_WORKSPACE", "C:\\w", "PI_GUI_RUNTIME_DIR", runtime, "PI_GUI_WIN_TAG", "0123456789abcdef"), Temp);
+            Check(t.SessionTag == "0123456789abcdef", "config: the client's session tag");
+            foreach (string bad in new string[] { "0123456789ABCDEF", "0123456789abcde", "0123456789abcdefa", "0123456789abcdeg", "-123456789abcdef" })
+                Throws<ArgumentException>(delegate { HostConfig.FromEnv(Env("PI_GUI_WORKSPACE", "C:\\w", "PI_GUI_RUNTIME_DIR", runtime, "PI_GUI_WIN_TAG", bad), Temp); }, "config: session tag " + bad + " refused");
+            Check(Array.IndexOf(HostConfig.StdinEnvNames, "PI_GUI_WIN_TAG") >= 0, "config: session tag may come on stdin");
         }
 
         static void PathTests()
@@ -331,6 +338,73 @@ namespace PiGuiHelper.Tests
             Check(Coverage.Compute(new WalkResult(new List<ElementNode>(), 0)) == "none", "coverage: empty");
             Check(Handlers.ReportedExitCode(unchecked((int)0xC0000005)) == 1000 && Handlers.ReportedExitCode(-1) == -1 && Handlers.ReportedExitCode(3) == 3, "exec: exit code mapping");
             Check(Handlers.IsWindowRef("win:0x1a2b") && !Handlers.IsWindowRef("win:0x") && !Handlers.IsWindowRef("win:0xABC") && !Handlers.IsWindowRef("s1:2"), "refs: window ref syntax");
+        }
+
+        static ElementNode Named(string name)
+        {
+            var n = Node("text", 0, 0);
+            n.Name = name;
+            return n;
+        }
+
+        /// <summary>Client limits enforced in the helper (src/backends/response.ts), and the abandoned-worker bound.</summary>
+        static void LimitTests()
+        {
+            Check(Handlers.MaxWindows == 1000 && Handlers.MaxTreeGzBase64Chars == 48 * 1024 * 1024 && Handlers.MaxTreeJsonBytes <= 256L * 1024 * 1024 &&
+                  Handlers.MaxInlineTreeBytes < 64L * 1024 * 1024, "limits: constants within the client's");
+
+            var budget = new TreeBudget(3, long.MaxValue);
+            Check(budget.Admit(Named("a")) && budget.Admit(Named("b")) && budget.Admit(Named("c")) && !budget.Exhausted, "tree budget: admits up to the node cap");
+            Check(!budget.Admit(Named("d")) && budget.Exhausted && !budget.Admit(Named("e")), "tree budget: refuses beyond the cap and stays exhausted");
+            ElementNode big = Named(new string('x', 1000));
+            long bigBytes = TreeBudget.EstimateBytes(big);
+            Check(bigBytes >= 1000 && bigBytes < 2000, "tree budget: estimate follows the text");
+            foreach (string text in new string[] { "", "plain", "q\"b\\n\n\t\u0001\u2028", "\u00e9\u20ac", "\ud83d\ude00", "\ud83d lone", "\ude00" })
+                Check(Json.EncodedLength(text) == Encoding.UTF8.GetByteCount(Json.Serialize(text)), "json: EncodedLength matches Serialize for " + Json.Serialize(text));
+            var bytes = new TreeBudget(100, bigBytes * 2 + 1);
+            Check(bytes.Admit(big) && bytes.Admit(big) && !bytes.Admit(big) && bytes.Nodes == 2 && bytes.Exhausted, "tree budget: byte budget stops the walk");
+
+            var nodes = new List<ElementNode>();
+            for (int i = 0; i < 10; i++) nodes.Add(big);
+            Check(Handlers.InlineCount(nodes, 500, bigBytes * 4) == 4, "inline tree: byte bound cuts it");
+            Check(Handlers.InlineCount(nodes, 3, long.MaxValue) == 3 && Handlers.InlineCount(nodes, 0, long.MaxValue) == 0 && Handlers.InlineCount(nodes, 50, long.MaxValue) == 10, "inline tree: node bound");
+
+            var random = new byte[4096];
+            new Random(7).NextBytes(random);
+            ThrowsCode("TOO_LARGE", delegate { Handlers.TreeDump(random, 1024); }, "tree dump: over the base64 bound is TOO_LARGE");
+            string dump = Handlers.TreeDump(Encoding.UTF8.GetBytes("[]"), 1024);
+            using (var gz = new System.IO.Compression.GZipStream(new MemoryStream(Convert.FromBase64String(dump)), System.IO.Compression.CompressionMode.Decompress))
+            using (var reader = new StreamReader(gz)) Check(reader.ReadToEnd() == "[]", "tree dump: round trip");
+
+            var windows = new List<WindowEntry>();
+            for (int i = 0; i < 1200; i++) windows.Add(new WindowEntry("win:0x" + (i + 1).ToString("x"), "w", new Bounds(0, 0, 1, 1)));
+            Check(Handlers.WindowsJson(windows, null).Count == 1000, "windows: at most 1000 in a result");
+            Check(Handlers.WindowsJson(windows, delegate(WindowEntry w) { return w.Ref.EndsWith("0"); }).Count == 75, "windows: filter applies before the bound");
+
+            var workers = new WorkerBudget(2);
+            WorkerBudget.Worker a = workers.Begin("a");
+            a.Abandon();
+            WorkerBudget.Worker b = workers.Begin("b");
+            b.Done();
+            b.Abandon();
+            Check(workers.Abandoned == 1, "workers: a finished worker is never counted as abandoned");
+            WorkerBudget.Worker c = workers.Begin("c");
+            c.Abandon();
+            c.Abandon();
+            Check(workers.Abandoned == 2, "workers: two abandoned");
+            try
+            {
+                workers.Begin("snapshot");
+                Check(false, "workers: third request refused (no exception)");
+            }
+            catch (UnhealthyException e)
+            {
+                Check(e.Code == "INTERNAL" && e.Fatal && e.Message.StartsWith("snapshot was refused"), "workers: third request refused as fatal");
+            }
+            a.Done();
+            Check(workers.Abandoned == 1, "workers: an abandoned worker that finishes frees its slot");
+            workers.Begin("d").Done();
+            Check(!new ProtocolException("TIMEOUT", "x").Fatal, "errors: ordinary errors are not fatal");
         }
     }
 }

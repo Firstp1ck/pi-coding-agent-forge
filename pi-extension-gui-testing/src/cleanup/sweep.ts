@@ -12,6 +12,14 @@ import { SESSION_DIR_PREFIX, type OwnerLiveness, type OwnerRecord, type OwnerRes
 import { DEFAULT_PROC_ROOT, ownerLiveness, readProcessStartTime } from "./identity.ts";
 import { PROCESS_KIND, parseProcessResourceId, readOwnerRecord } from "./session-dir.ts";
 
+/**
+ * Dirs with the session-dir prefix that a backend creates and sweeps itself:
+ * `local-windows` runtime dirs (`pi-gui-testing-win-<16 hex>`) hold the
+ * helper's record of jobs and processes, which that backend's sweeper must
+ * read before the dir goes. The generic scan neither reports nor removes them.
+ */
+export const BACKEND_OWNED_DIR = /^pi-gui-testing-win-[0-9a-f]{16}$/;
+
 /** One `pi-gui-testing-*` dir and what is known about its owner. */
 export interface SessionDirInfo {
   path: string;
@@ -44,7 +52,7 @@ export async function scanSessionDirs(options: ScanOptions = {}): Promise<Sessio
   const uid = process.getuid?.();
   const infos: SessionDirInfo[] = [];
   for (const entry of entries) {
-    if (!entry.name.startsWith(SESSION_DIR_PREFIX) || !entry.isDirectory()) continue;
+    if (!entry.name.startsWith(SESSION_DIR_PREFIX) || BACKEND_OWNED_DIR.test(entry.name) || !entry.isDirectory()) continue;
     const path = join(root, entry.name);
     try {
       if (uid !== undefined && (await stat(path)).uid !== uid) continue;

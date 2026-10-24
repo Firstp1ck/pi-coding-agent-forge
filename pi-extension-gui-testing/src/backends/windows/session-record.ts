@@ -45,6 +45,12 @@ export interface RecordExpectations {
   mode?: "local" | "guest";
   /** `true`: the record must name a private desktop (always for `local`). */
   privateDesktop?: boolean;
+  /**
+   * The session tag the client chose and recorded before the helper started
+   * (`local`: the runtime dir's 16 hex digits). A record with another tag is
+   * rejected, so its job and desktop names can only be this session's.
+   */
+  tag?: string;
 }
 
 /** `<pid>:<created>`, the leftover id the helper uses for a process. */
@@ -92,6 +98,7 @@ export function parseSessionRecord(text: string, expect: RecordExpectations): { 
   if (!helper) return { problem: "has no valid helper process" };
   if (typeof r.tag !== "string" || !/^[0-9a-f]{16}$/.test(r.tag)) return { problem: "has no valid tag" };
   const tag = r.tag;
+  if (expect.tag !== undefined && tag !== expect.tag) return { problem: "has another session's tag" };
   if (r.mode !== "local" && r.mode !== "guest") return { problem: "has no valid mode" };
   if (expect.mode && r.mode !== expect.mode) return { problem: `is for mode ${r.mode}, not ${expect.mode}` };
   if (typeof r.privateDesktop !== "boolean") return { problem: "has no privateDesktop flag" };

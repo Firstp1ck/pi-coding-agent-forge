@@ -1,5 +1,6 @@
 // Runs the C#-level checks of the Windows helper through PowerShell 7:
-// CoreTests.cs (pure core, C# 5) and the compile check of every source,
+// CoreTests.cs (pure core, C# 5), the managed layout check of the Win32
+// structs (native-layout.ps1), and the compile check of every source,
 // including the Win32 and UI Automation layers, against the .NET Framework
 // 4.7.2 reference assemblies (PI_GUI_NETFX_REF, default
 // ~/.local/share/pi-tools/netfx-ref-net472). Nothing Windows-specific runs.
@@ -30,4 +31,10 @@ test("every helper source compiles against .NET Framework 4.7.2 at C# 5", {
   const result = run("compile-check.ps1", ["-ReferenceDir", REF]);
   assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
   assert.match(result.stdout, /0 errors, success=True/);
+});
+
+test("Win32 struct layouts match the Windows SDK (WIN32_FIND_DATAW, BY_HANDLE_FILE_INFORMATION, RTL_OSVERSIONINFOEXW)", { skip: PWSH ? false : "pwsh not found" }, () => {
+  const result = run("native-layout.ps1");
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  assert.match(result.stdout, /# passed \d+, failed 0/);
 });

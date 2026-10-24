@@ -4,12 +4,21 @@
  * with an owner-only ACL, handed to the helper as `PI_GUI_RUNTIME_DIR`, and
  * removed without following junctions or symbolic links.
  *
+ * Removal is path based (Node has no handle-relative deletion), so it pins
+ * each directory by identity instead: the volume serial number and file id
+ * of a directory are read before it is listed, after it is listed, and before
+ * every entry in it is removed. A directory that was replaced in between (by
+ * a junction, a symbolic link, or another directory) changes identity, and
+ * removal stops there with a leftover instead of entering or deleting through
+ * it. What remains is the gap between the last check and one syscall.
+ *
  * File access goes through {@link WinFs}, so unit tests can simulate a
  * Windows file system with Windows paths on any host.
  */
 import { randomBytes } from "node:crypto";
 import { lstat, mkdir, open, readdir, realpath, rename, rmdir, unlink, writeFile } from "node:fs/promises";
 import { win32 } from "node:path";
+import { BACKEND_OWNED_DIR } from "../../cleanup/sweep.ts";
 import { OWNER_FILE, type OwnerRecord } from "../../owner.ts";
 import type { Leftover } from "../../protocol.ts";
 import type { CommandRunner } from "../../runner/types.ts";
@@ -18,10 +27,18 @@ import { boundedText, isDirectChild, RUNTIME_DIR_PREFIX, samePath, system32Tool 
 /** What a path is, without following links. Junctions and symbolic links are `link`. */
 export type WinEntryType = "file" | "dir" | "link" | "other";
 
+/** What a path is (without following links) and which object it is: `<volume serial>:<file id>` (`ino`/`dev` from `lstat`). */
+export interface WinEntryIdentity {
+  type: WinEntryType;
+  id: string;
+}
+
 /** The file operations the Windows client code needs. */
 export interface WinFs {
   /** `undefined` when nothing exists at `path`. */
   lstat(path: string): Promise<WinEntryType | undefined>;
+  /** Type and identity of `path` without following links; `undefined` when nothing exists there. */
+  identify(path: string): Promise<WinEntryIdentity | undefined>;
   /** Final path (links, junctions, and 8.3 names resolved). */
   realpath(path: string): Promise<string>;
   /** Creates one directory; rejects (`EEXIST`) when anything exists there. */
@@ -52,6 +69,17 @@ export const nodeWinFs: WinFs = {
       throw error;
     }
   },
+  async identify(path) {
+    try {
+      const info = await lstat(path, { bigint: true });
+      const type: WinEntryType = info.isSymbolicLink() ? "link" : info.isDirectory() ? "dir" : info.isFile() ? "file" : "other";
+      // On Windows, libuv fills dev with the volume serial number and ino with the NTFS file id.
+      return { type, id: `${info.dev}:${info.ino}` };
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+      throw error;
+    }
+  },
   realpath: (path) => realpath(path),
   mkdir: async (path) => void (await mkdir(path)),
   readdir: (path) => readdir(path),
@@ -71,8 +99,18 @@ export const nodeWinFs: WinFs = {
   rmdir: (path) => rmdir(path),
 };
 
-/** Runtime dir names this package creates (never the generic session dirs `pi-gui-testing-XXXXXX`). */
-export const RUNTIME_DIR_NAME = /^pi-gui-testing-win-[0-9a-f]{16}$/;
+/**
+ * Runtime dir names this package creates (never the generic session dirs
+ * `pi-gui-testing-XXXXXX`). The generic session-dir sweep skips them, so this
+ * backend reads their records before anything removes them.
+ */
+export const RUNTIME_DIR_NAME = BACKEND_OWNED_DIR;
+
+/** The session tag of a runtime dir: its 16 hex digits, or `undefined` for any other name. */
+export function runtimeDirTag(dir: string): string | undefined {
+  const name = win32.basename(dir);
+  return RUNTIME_DIR_NAME.test(name) ? name.slice(-16) : undefined;
+}
 
 /** A fresh runtime dir name. */
 export function runtimeDirName(random: Buffer = randomBytes(8)): string {
@@ -165,28 +203,50 @@ export async function createRuntimeDir(options: CreateRuntimeDirOptions): Promis
 
 const MAX_DEPTH = 64;
 
-async function removeTree(fs: WinFs, dir: string, depth: number, problems: string[], keepLast?: string): Promise<void> {
+/** Thrown when a directory changed identity during removal: removal stops without touching it again. */
+class ReplacedError extends Error {}
+
+/** Checks that `dir` is still the directory `id` names (not replaced by a link or another directory). */
+async function stillSame(fs: WinFs, dir: string, id: string): Promise<void> {
+  const now = await fs.identify(dir);
+  if (now?.type !== "dir" || now.id !== id) {
+    throw new ReplacedError(`${dir}: replaced while it was being removed (${now ? `now a ${now.type === "link" ? "junction or symbolic link" : now.type}` : "gone"}); not entered`);
+  }
+}
+
+async function removeTree(fs: WinFs, dir: string, id: string, depth: number, problems: string[], keepLast?: string): Promise<void> {
   if (depth > MAX_DEPTH) {
     problems.push(`${dir}: nested deeper than ${MAX_DEPTH} levels`);
     return;
   }
   let names: string[];
   try {
+    await stillSame(fs, dir, id);
     names = await fs.readdir(dir);
+    // A swap between the check and the listing would have listed another directory: never act on such names.
+    await stillSame(fs, dir, id);
   } catch (error) {
-    problems.push(`${dir}: ${boundedText((error as Error).message)}`);
+    problems.push(error instanceof ReplacedError ? error.message : `${dir}: ${boundedText((error as Error).message)}`);
     return;
   }
   for (const name of names) {
     if (keepLast !== undefined && name.toLowerCase() === keepLast.toLowerCase()) continue;
     const path = win32.join(dir, name);
     try {
-      const type = await fs.lstat(path);
-      if (type === undefined) continue;
+      await stillSame(fs, dir, id);
+      const entry = await fs.identify(path);
+      if (entry === undefined) continue;
       // Links (junctions included) are removed as links: their targets are never entered.
-      if (type === "dir") await removeTree(fs, path, depth + 1, problems);
-      else await fs.unlink(path);
+      if (entry.type === "dir") await removeTree(fs, path, entry.id, depth + 1, problems);
+      else {
+        await stillSame(fs, dir, id);
+        await fs.unlink(path);
+      }
     } catch (error) {
+      if (error instanceof ReplacedError) {
+        problems.push(error.message);
+        return;
+      }
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") problems.push(`${path}: ${boundedText((error as Error).message)}`);
     }
   }
@@ -194,8 +254,13 @@ async function removeTree(fs: WinFs, dir: string, depth: number, problems: strin
   if (keepLast !== undefined) {
     if (problems.length > 0) return;
     try {
+      await stillSame(fs, dir, id);
       await fs.unlink(win32.join(dir, keepLast));
     } catch (error) {
+      if (error instanceof ReplacedError) {
+        problems.push(error.message);
+        return;
+      }
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
         problems.push(`${win32.join(dir, keepLast)}: ${boundedText((error as Error).message)}`);
         return;
@@ -203,29 +268,32 @@ async function removeTree(fs: WinFs, dir: string, depth: number, problems: strin
     }
   }
   try {
+    await stillSame(fs, dir, id);
     await fs.rmdir(dir);
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") problems.push(`${dir}: ${boundedText((error as Error).message)}`);
+    if (error instanceof ReplacedError) problems.push(error.message);
+    else if ((error as NodeJS.ErrnoException).code !== "ENOENT") problems.push(`${dir}: ${boundedText((error as Error).message)}`);
   }
 }
 
 /**
  * Removes a runtime dir this package created under `root`, never following
- * junctions or symbolic links. A link found at `dir` itself is removed as a
- * link. Paths that are not package runtime dirs are refused.
+ * junctions or symbolic links, and never entering a directory that changed
+ * identity while it was removed. A link found at `dir` itself is removed as
+ * a link. Paths that are not package runtime dirs are refused.
  *
  * @returns What could not be removed (one `tempdir` leftover), or `[]`.
  */
 export async function removeRuntimeDir(fs: WinFs, root: string, dir: string): Promise<Leftover[]> {
   if (!isPackageRuntimeDir(root, dir)) return [{ kind: "tempdir", id: dir, detail: "not a runtime dir of this package; not removed" }];
-  let type: WinEntryType | undefined;
+  let entry: WinEntryIdentity | undefined;
   try {
-    type = await fs.lstat(dir);
+    entry = await fs.identify(dir);
   } catch (error) {
     return [{ kind: "tempdir", id: dir, detail: `cannot read it: ${boundedText((error as Error).message)}` }];
   }
-  if (type === undefined) return [];
-  if (type !== "dir") {
+  if (entry === undefined) return [];
+  if (entry.type !== "dir") {
     try {
       await fs.unlink(dir);
       return [];
@@ -234,7 +302,7 @@ export async function removeRuntimeDir(fs: WinFs, root: string, dir: string): Pr
     }
   }
   const problems: string[] = [];
-  await removeTree(fs, dir, 0, problems, OWNER_FILE);
+  await removeTree(fs, dir, entry.id, 0, problems, OWNER_FILE);
   if (problems.length === 0 && (await fs.lstat(dir).catch(() => "dir" as const)) === undefined) return [];
   return [{ kind: "tempdir", id: dir, detail: `not fully removed: ${boundedText(problems.slice(0, 3).join("; ") || "still exists", 600)}` }];
 }
@@ -268,9 +336,9 @@ export async function readRuntimeOwner(fs: WinFs, dir: string): Promise<OwnerRec
 
 /**
  * Writes `<dir>\owner.json` atomically (new temp file, then rename). A copy of
- * the session's owner record in the runtime dir lets the client's generic
- * session-dir scan judge the dir like any session dir, instead of reporting it
- * as a dir without an owner.
+ * the session's owner record in the runtime dir lets this backend's orphan
+ * audit and sweep judge the dir's owner (and recognise the helper it spawned),
+ * instead of reporting it as a dir without an owner.
  */
 export async function writeRuntimeOwner(fs: WinFs, dir: string, record: OwnerRecord): Promise<void> {
   const target = win32.join(dir, OWNER_FILE);

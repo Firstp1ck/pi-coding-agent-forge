@@ -206,19 +206,20 @@ export class HelperSession implements Session {
   async start(signal: AbortSignal): Promise<void> {
     const token = generateToken();
     const { labels, hooks } = this.#options;
-    const child = hooks.spawn({ [TOKEN_ENV]: token });
-    this.#child = child;
-    child.stderr.on("data", (chunk: Buffer) => this.#stderr.add(chunk));
-    const client = new ProtocolClient({
-      stdin: child.stdin,
-      stdout: child.stdout,
-      token,
-      onLog: (event) => this.#options.onLog(event),
-      ...(this.#options.readyTimeoutMs !== undefined ? { readyTimeoutMs: this.#options.readyTimeoutMs } : {}),
-      ...(this.#options.heartbeatIntervalMs !== undefined ? { heartbeatIntervalMs: this.#options.heartbeatIntervalMs } : {}),
-    });
-    this.#client = client;
     try {
+      // Inside the try: a spawner that throws still gets the backend's teardown (temp dirs, records).
+      const child = hooks.spawn({ [TOKEN_ENV]: token });
+      this.#child = child;
+      child.stderr.on("data", (chunk: Buffer) => this.#stderr.add(chunk));
+      const client = new ProtocolClient({
+        stdin: child.stdin,
+        stdout: child.stdout,
+        token,
+        onLog: (event) => this.#options.onLog(event),
+        ...(this.#options.readyTimeoutMs !== undefined ? { readyTimeoutMs: this.#options.readyTimeoutMs } : {}),
+        ...(this.#options.heartbeatIntervalMs !== undefined ? { heartbeatIntervalMs: this.#options.heartbeatIntervalMs } : {}),
+      });
+      this.#client = client;
       const spawnFailure = child.exited.then((status) => {
         if (status.error) throw new SessionError("START_FAILED", `cannot start ${labels.launcher}: ${status.error.message}`);
       });

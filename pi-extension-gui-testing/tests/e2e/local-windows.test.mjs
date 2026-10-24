@@ -36,9 +36,14 @@ async function scratch(t) {
 
 async function startSession(t, backend, project) {
   const dir = await createSessionDir({ identity: createOwnerIdentity(), piSessionId: "e2e", backend: "local-windows" });
-  t.after(() => dir.remove());
+  let session;
+  // Unconditional teardown, also when an assertion fails before the test's own stop(): helper, jobs, runtime dir, then the session dir.
+  t.after(async () => {
+    await session?.stop().catch(() => undefined);
+    await dir.remove();
+  });
   const logs = [];
-  const session = await backend.startSession({
+  session = await backend.startSession({
     sessionId: `gui-e2e${Date.now() % 100000}`,
     projectRoot: project,
     sessionDir: dir.path,

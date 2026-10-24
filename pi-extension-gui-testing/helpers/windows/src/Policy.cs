@@ -24,6 +24,8 @@ namespace PiGuiHelper
     /// PI_GUI_WIN_DESKTOP=private|interactive  default private; interactive only in guest mode
     /// PI_GUI_WIN_INPUT=messages|sendinput     default messages; sendinput only with the interactive desktop
     /// PI_GUI_WIN_SOFTWARE_RENDERING=1|0       default 1 (force software rendering where a framework allows it)
+    /// PI_GUI_WIN_TAG=&lt;16 hex&gt;               session tag chosen by the client (default random); every job
+    ///     and the private desktop carry it, so the client can tell the session's objects from others
     /// PI_GUI_TESTING_TOKEN, PI_GUI_TESTING_HEARTBEAT_TIMEOUT_MS as on Linux.
     /// </summary>
     public sealed class HostConfig
@@ -38,12 +40,13 @@ namespace PiGuiHelper
         public const string SoftwareRenderingEnv = "PI_GUI_WIN_SOFTWARE_RENDERING";
         public const string DepsEnv = "PI_GUI_DEPS_DIR";
         public const string TagEnv = "PI_GUI_TAG";
+        public const string SessionTagEnv = "PI_GUI_WIN_TAG";
         public const string RuntimePrefix = "pi-gui-testing-";
 
         /// <summary>Variables the client may send as stdin lines (-StdinEnv); values never appear in argv.</summary>
         public static readonly string[] StdinEnvNames = new string[] {
             ModeEnv, WorkspaceEnv, RuntimeEnv, AllowExecEnv, AllowElevatedEnv, DesktopEnv, InputEnv,
-            SoftwareRenderingEnv, DepsEnv, Protocol.TokenEnv, Protocol.HeartbeatTestEnv,
+            SoftwareRenderingEnv, DepsEnv, SessionTagEnv, Protocol.TokenEnv, Protocol.HeartbeatTestEnv,
         };
 
         public string Mode { get; private set; }
@@ -54,6 +57,8 @@ namespace PiGuiHelper
         public bool InteractiveDesktop { get; private set; }
         public bool SendInput { get; private set; }
         public bool SoftwareRendering { get; private set; }
+        /// <summary>The client's session tag (16 lower-case hex digits), or null: the helper picks one.</summary>
+        public string SessionTag { get; private set; }
         public List<string> Warnings { get; private set; }
 
         public bool Guest { get { return Mode == "guest"; } }
@@ -117,6 +122,17 @@ namespace PiGuiHelper
             else throw new ArgumentException(InputEnv + " must be messages or sendinput");
             if (c.SendInput && !c.InteractiveDesktop)
                 throw new ArgumentException(InputEnv + "=sendinput needs " + DesktopEnv + "=interactive in guest mode");
+
+            string tag = Get(env, SessionTagEnv);
+            if (!string.IsNullOrEmpty(tag))
+            {
+                if (tag.Length != 16) throw new ArgumentException(SessionTagEnv + " must be 16 lower-case hex digits");
+                foreach (char ch in tag)
+                {
+                    if (!((ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f'))) throw new ArgumentException(SessionTagEnv + " must be 16 lower-case hex digits");
+                }
+                c.SessionTag = tag;
+            }
 
             if (!string.IsNullOrEmpty(Get(env, DepsEnv)))
                 c.Warnings.Add(DepsEnv + " is ignored: the Windows helper has no dependency-cache methods (hello omits \"deps\")");

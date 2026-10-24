@@ -15,8 +15,10 @@
  * - `network: "none"` cannot be enforced on the host, so it is refused.
  * - The runtime dir is `%LOCALAPPDATA%\Temp\pi-gui-testing-win-<16 hex>`,
  *   recorded in `owner.json` before it exists, with an ACL that grants only
- *   the user. It holds a copy of the owner record (so the generic session-dir
- *   scan judges it like any session dir) and the helper's `session.json`.
+ *   the user. Its 16 hex digits are the session tag the helper must use
+ *   (`PI_GUI_WIN_TAG`). It holds a copy of the owner record (so this
+ *   backend's orphan sweep can judge it; the generic session-dir scan skips
+ *   these dirs) and the helper's `session.json`.
  * - Isolation is verified before the session is handed out: `hello` must
  *   report a private desktop and no `exec`, the session record must name a
  *   private desktop of this session, and the user's foreground window
@@ -38,13 +40,14 @@ import { buildFileSet } from "../sync/fileset.ts";
 import { createLocalSpawner, type LocalSpawner } from "../transport/local-process.ts";
 import type { DriftCapability, ResetCapability, RunnerCapability, SmokeCapability, SweepAvailability } from "./capabilities.ts";
 import { packageVersion, PACKAGE_ROOT } from "./docker/package.ts";
+import { stopAfterFailedStart } from "./start-failure.ts";
 import { localHelperEnv, passedWindowsEnv } from "./windows/env.ts";
 import { auditWindowsOrphans, sweepWindowsOrphans, type WinFootprintOptions } from "./windows/footprint.ts";
 import { localWindowsChecks, LOCAL_WINDOWS_HOST_SUPPORT } from "./windows/local-checks.ts";
 import { foregroundOf, LocalWindowsSession, type ForegroundWindow } from "./windows/local-session.ts";
-import { boundedText, HELPER_DIR, helperArgv, localTempRoot, POWERSHELL_FILE_ARGS, powershellPath, system32Tool, systemRoot } from "./windows/paths.ts";
+import { boundedText, HELPER_DIR, helperArgv, localTempRoot, POWERSHELL_FILE_ARGS, powershellPath, systemRoot } from "./windows/paths.ts";
 import { runHelperProbe, type ProbeOutcome } from "./windows/probe.ts";
-import { createRuntimeDir, nodeWinFs, ownerRecordFrom, removeRuntimeDir, writeRuntimeOwner, type WinFs } from "./windows/runtime-dir.ts";
+import { createRuntimeDir, nodeWinFs, ownerRecordFrom, runtimeDirTag, writeRuntimeOwner, type WinFs } from "./windows/runtime-dir.ts";
 
 export { LOCAL_WINDOWS_HOST_SUPPORT } from "./windows/local-checks.ts";
 
@@ -72,8 +75,6 @@ export interface LocalWindowsOptions {
   smokeAppPath?: string;
   /** Start times of PIDs as `owner.json` records them; default the platform probe. */
   processProbe?: ProcessProbe;
-  /** Root of the client's generic session-dir scan; default `os.tmpdir()`. */
-  genericTmpRoot?: string;
   copyWorkspace?: CopyWorkspace;
   /** `false` turns off the foreground-window comparison around the helper start (tests only). */
   foregroundCheck?: boolean;
@@ -147,7 +148,6 @@ export class LocalWindowsBackend implements Backend, DriftCapability, ResetCapab
         env: passedWindowsEnv(this.#env),
         root: localTempRoot(this.#env),
         probe: this.#processProbe,
-        ...(this.#options.genericTmpRoot ? { genericRoot: this.#options.genericTmpRoot } : {}),
         ...(signal ? { signal } : {}),
       };
     } catch {
@@ -199,13 +199,11 @@ export class LocalWindowsBackend implements Backend, DriftCapability, ResetCapab
     const fs = this.#fs;
     let powershell: string;
     let root: string;
-    let taskkill: string;
     let cwd: string;
     try {
       powershell = powershellPath(env);
       root = localTempRoot(env);
-      taskkill = system32Tool(env, "taskkill.exe");
-      cwd = win32.dirname(taskkill);
+      cwd = win32.join(systemRoot(env), "System32");
     } catch (error) {
       throw new SessionError("START_FAILED", (error as Error).message);
     }
@@ -238,8 +236,47 @@ export class LocalWindowsBackend implements Backend, DriftCapability, ResetCapab
       foreground = { before, probe: (s) => this.#probe("foreground", s) };
     }
 
+    const heartbeat = this.#options.heartbeatTimeoutMs;
+    /** The session over `runtimeDir`; also the retry handle of a start that failed before the helper ran. */
+    const makeSession = (runtimeDir: string, workspacePath: string, extra: { warnings?: string[]; sync?: SyncSummary } = {}) =>
+      new LocalWindowsSession({
+        id: options.sessionId,
+        backend: this.id,
+        packageVersion: this.version,
+        onLog: options.onLog,
+        spawner: this.spawner,
+        argv: helperArgv(powershell, this.#helperDir),
+        env: localHelperEnv({
+          base: env,
+          workspace: workspacePath,
+          runtimeDir,
+          tag: runtimeDirTag(runtimeDir)!,
+          ...(heartbeat !== undefined ? { heartbeatTimeoutMs: heartbeat } : {}),
+        }),
+        cwd,
+        workspacePath,
+        workspaceDescription: shared.workspaceMode === "copy" ? WINDOWS_COPY_DESCRIPTION : WINDOWS_MOUNT_DESCRIPTION,
+        ...(extra.warnings?.length ? { warnings: extra.warnings } : {}),
+        runtimeDir,
+        // Not the start signal: teardown and audits run long after the start finished.
+        footprint: this.#footprint()!,
+        owner,
+        recordResource: options.recordResource,
+        ...(options.onExitCleanup ? { onExitCleanup: options.onExitCleanup } : {}),
+        processProbe: this.#processProbe,
+        powershell,
+        ...(foreground ? { foreground } : {}),
+        ...(extra.sync ? { sync: extra.sync } : {}),
+        ...(this.#options.readyTimeoutMs !== undefined ? { readyTimeoutMs: this.#options.readyTimeoutMs } : {}),
+        ...(heartbeat !== undefined ? { heartbeatIntervalMs: Math.max(250, Math.floor(heartbeat / 3)) } : {}),
+        ...(this.#options.exitWaitMs !== undefined ? { exitWaitMs: this.#options.exitWaitMs } : {}),
+        ...(this.#options.killWaitMs !== undefined ? { killWaitMs: this.#options.killWaitMs } : {}),
+        ...(this.#options.recordWaitMs !== undefined ? { recordWaitMs: this.#options.recordWaitMs } : {}),
+      });
+
     let runtimeDir: string | undefined;
     let sync: SyncSummary | undefined;
+    let session: LocalWindowsSession;
     try {
       options.onStatus?.("creating the private temp dir");
       runtimeDir = await createRuntimeDir({
@@ -259,47 +296,20 @@ export class LocalWindowsBackend implements Backend, DriftCapability, ResetCapab
         sync = await (this.#options.copyWorkspace ?? defaultCopy)(options.projectRoot, workspace, { allow: shared.sync?.allow, deny: shared.sync?.deny }, signal);
         warnings.push(WINDOWS_COPY_MODE_WARNING);
       }
+      session = makeSession(runtimeDir, workspace!, { warnings, ...(sync ? { sync } : {}) });
     } catch (error) {
-      const left = runtimeDir ? await removeRuntimeDir(fs, root, runtimeDir) : [];
-      const note = left.length > 0 ? `; ${left[0].id} could not be removed (${left[0].detail ?? "unknown"})` : "";
-      if (error instanceof SessionError) {
-        error.message += note;
-        throw error;
+      const failure = error instanceof SessionError ? error : new SessionError("START_FAILED", boundedText((error as Error).message, 600));
+      if (runtimeDir) {
+        // The same teardown as a stop: whatever it cannot remove stays attached to the error (and retryable), never dropped.
+        const pending = makeSession(runtimeDir, workspace ?? win32.join(runtimeDir, "workspace"));
+        const left = await stopAfterFailedStart(pending, failure);
+        if (left.length > 0) failure.message += `; ${left[0].id} could not be removed (${left[0].detail ?? "unknown"})`;
       }
-      throw new SessionError("START_FAILED", `${boundedText((error as Error).message, 600)}${note}`);
+      throw failure;
     }
 
-    const heartbeat = this.#options.heartbeatTimeoutMs;
-    const session = new LocalWindowsSession({
-      id: options.sessionId,
-      backend: this.id,
-      packageVersion: this.version,
-      onLog: options.onLog,
-      spawner: this.spawner,
-      argv: helperArgv(powershell, this.#helperDir),
-      env: localHelperEnv({ base: env, workspace: workspace!, runtimeDir, ...(heartbeat !== undefined ? { heartbeatTimeoutMs: heartbeat } : {}) }),
-      cwd,
-      workspacePath: workspace!,
-      workspaceDescription: shared.workspaceMode === "copy" ? WINDOWS_COPY_DESCRIPTION : WINDOWS_MOUNT_DESCRIPTION,
-      ...(warnings.length ? { warnings } : {}),
-      runtimeDir,
-      // Not the start signal: teardown and audits run long after the start finished.
-      footprint: this.#footprint()!,
-      owner,
-      recordResource: options.recordResource,
-      ...(options.onExitCleanup ? { onExitCleanup: options.onExitCleanup } : {}),
-      processProbe: this.#processProbe,
-      taskkill,
-      ...(foreground ? { foreground } : {}),
-      ...(sync ? { sync } : {}),
-      ...(this.#options.readyTimeoutMs !== undefined ? { readyTimeoutMs: this.#options.readyTimeoutMs } : {}),
-      ...(heartbeat !== undefined ? { heartbeatIntervalMs: Math.max(250, Math.floor(heartbeat / 3)) } : {}),
-      ...(this.#options.exitWaitMs !== undefined ? { exitWaitMs: this.#options.exitWaitMs } : {}),
-      ...(this.#options.killWaitMs !== undefined ? { killWaitMs: this.#options.killWaitMs } : {}),
-      ...(this.#options.recordWaitMs !== undefined ? { recordWaitMs: this.#options.recordWaitMs } : {}),
-    });
     options.onStatus?.("starting the Windows helper (compiling it takes a few seconds)");
-    // On failure start() has stopped the session (teardown removes the runtime dir); leftovers stay attached to the error.
+    // On failure (a spawn that throws included) start() has stopped the session; leftovers stay attached to the error.
     await session.start(signal);
     return session;
   }

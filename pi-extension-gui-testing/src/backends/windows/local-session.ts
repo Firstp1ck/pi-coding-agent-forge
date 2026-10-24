@@ -21,6 +21,7 @@ import { HelperSession } from "../../transport/helper-session.ts";
 import type { LocalSpawner } from "../../transport/local-process.ts";
 import { forbiddenLocalHelperEnv } from "./env.ts";
 import { auditRuntimeDir, cleanupRuntimeDir, readSessionRecord, type WinFootprintOptions } from "./footprint.ts";
+import { stopProcessArgv } from "./paths.ts";
 import type { ProbeOutcome } from "./probe.ts";
 import { reportString } from "./probe.ts";
 import { writeRuntimeOwner } from "./runtime-dir.ts";
@@ -69,8 +70,8 @@ export interface LocalWindowsSessionOptions {
   onExitCleanup?(argv: string[]): void;
   /** Start time of a PID in the format of `owner.json` process ids. */
   processProbe: ProcessProbe;
-  /** `%SystemRoot%\System32\taskkill.exe`. */
-  taskkill: string;
+  /** Absolute `powershell.exe`, for the exit handler's identity-checked stop of the helper. */
+  powershell: string;
   /** Foreground window before the helper started, and the probe for after; absent when the check is off (tests). */
   foreground?: { before: ForegroundWindow; probe(signal: AbortSignal): Promise<ProbeOutcome> };
   sync?: SyncSummary;
@@ -142,30 +143,49 @@ export class LocalWindowsSession extends HelperSession {
     return { ok, observed: ok ? `foreground unchanged (${describe(after)})` : `foreground changed from ${describe(check.before)} to ${describe(after)}` };
   }
 
-  /** `taskkill /T /F` of the helper process tree; the helper's jobs then end every app. `[]` once it exited. */
+  /**
+   * Ends the helper the client spawned, checked by PID and start time (never
+   * a reused PID); its kill-on-close jobs then end every app. `[]` once it
+   * exited, or when its start time could not be read.
+   */
   forceRemoveArgv(): string[] {
-    const pid = this.helperPid;
-    return pid !== undefined && this.processRunning ? [this.#win.taskkill, "/PID", String(pid), "/T", "/F"] : [];
+    return this.processRunning ? this.#stopArgv() : [];
+  }
+
+  #stopArgv(): string[] {
+    const id = this.#helperId;
+    if (!id) return [];
+    const [pid, start] = id.split(":");
+    return stopProcessArgv(this.#win.powershell, Number(pid), start);
   }
 
   #spawn(tokenEnv: Record<string, string>) {
     const child = this.#win.spawner.spawn(this.#win.argv, { env: { ...this.#win.env, ...tokenEnv }, cwd: this.#win.cwd });
     const pid = child.pid;
     if (pid !== undefined) {
+      let start: string | null | undefined;
+      try {
+        start = this.#win.processProbe.startTime(pid);
+      } catch {
+        start = undefined;
+      }
+      if (start) {
+        this.#helperId = `${pid}:${start}`;
+        // Without a start time there is nothing safe to end at exit; the helper then ends itself on stdin EOF.
+        const argv = this.#stopArgv();
+        if (argv.length > 0) this.#win.onExitCleanup?.(argv);
+      }
       // A process id needs the process: record it right after the spawn, before READY can arrive.
       this.#recorded = (async () => {
-        const start = this.#win.processProbe.startTime(pid);
-        if (!start) throw new Error(`cannot read the start time of process ${pid}`);
-        this.#helperId = `${pid}:${start}`;
+        if (!start || !this.#helperId) throw new Error(`cannot read the start time of process ${pid}`);
         await this.#win.recordResource("process", this.#helperId);
-        // The runtime dir's owner copy lists it too, so the generic sweep of a dead owner ends it.
+        // The runtime dir's owner copy lists it too: the orphan sweep ends a dead owner's helper only when it matches this record.
         await writeRuntimeOwner(this.#win.footprint.fs, this.#win.runtimeDir, {
           ...this.#win.owner,
           resources: [...this.#win.owner.resources, { kind: "tempdir", id: this.#win.runtimeDir }, { kind: "process", id: this.#helperId }],
         });
       })();
       this.#recorded.catch(() => {});
-      this.#win.onExitCleanup?.([this.#win.taskkill, "/PID", String(pid), "/T", "/F"]);
     }
     return child;
   }
@@ -209,10 +229,14 @@ export class LocalWindowsSession extends HelperSession {
     }
   }
 
-  /** After the helper exited: end whatever its record still names and remove the runtime dir. */
+  /**
+   * After the helper exited: end the session's jobs its record still names
+   * (and the helper only if it is the process this session spawned), report
+   * any other recorded process, and remove the runtime dir.
+   */
   async #teardown(): Promise<Leftover[]> {
     if (this.processRunning) return [{ kind: "process", id: this.#helperId ?? String(this.helperPid ?? "?"), detail: "Windows GUI helper did not exit" }];
-    return cleanupRuntimeDir(this.#win.runtimeDir, this.#win.footprint);
+    return cleanupRuntimeDir(this.#win.runtimeDir, this.#win.footprint, "session", this.#helperId ? [this.#helperId] : []);
   }
 }
 

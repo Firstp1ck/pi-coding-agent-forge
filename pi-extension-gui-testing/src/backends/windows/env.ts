@@ -19,6 +19,8 @@ export const WIN_HELPER_ENV = {
   input: "PI_GUI_WIN_INPUT",
   softwareRendering: "PI_GUI_WIN_SOFTWARE_RENDERING",
   depsDir: "PI_GUI_DEPS_DIR",
+  /** Session tag chosen by the client: every job and the private desktop carry it. */
+  tag: "PI_GUI_WIN_TAG",
 } as const;
 
 /**
@@ -90,6 +92,8 @@ export interface LocalHelperEnvInput {
   base: Readonly<Record<string, string | undefined>>;
   workspace: string;
   runtimeDir: string;
+  /** Session tag (16 hex), the runtime dir's own: the client recorded it in `owner.json` before the helper starts. */
+  tag?: string;
   /** Test-only shortened heartbeat timeout. */
   heartbeatTimeoutMs?: number;
 }
@@ -100,13 +104,14 @@ export function localHelperEnv(input: LocalHelperEnvInput): Record<string, strin
   env[WIN_HELPER_ENV.mode] = "local";
   env[WIN_HELPER_ENV.workspace] = input.workspace;
   env[WIN_HELPER_ENV.runtimeDir] = input.runtimeDir;
+  if (input.tag !== undefined) env[WIN_HELPER_ENV.tag] = input.tag;
   if (input.heartbeatTimeoutMs !== undefined) env[HEARTBEAT_TIMEOUT_TEST_ENV] = String(input.heartbeatTimeoutMs);
   return env;
 }
 
 /** Names in `env` that a `local` helper must not get (case-insensitive): forbidden contract variables, the token, or anything not allow-listed. */
 export function forbiddenLocalHelperEnv(env: Readonly<Record<string, string>>): string[] {
-  const allowed = new Set<string>([...WIN_PASSED_ENV, WIN_HELPER_ENV.mode, WIN_HELPER_ENV.workspace, WIN_HELPER_ENV.runtimeDir, WIN_HELPER_ENV.softwareRendering, HEARTBEAT_TIMEOUT_TEST_ENV].map((k) => k.toLowerCase()));
+  const allowed = new Set<string>([...WIN_PASSED_ENV, WIN_HELPER_ENV.mode, WIN_HELPER_ENV.workspace, WIN_HELPER_ENV.runtimeDir, WIN_HELPER_ENV.softwareRendering, WIN_HELPER_ENV.tag, HEARTBEAT_TIMEOUT_TEST_ENV].map((k) => k.toLowerCase()));
   const forbidden = new Set<string>(WIN_LOCAL_FORBIDDEN_ENV.map((k) => k.toLowerCase()));
   return Object.keys(env).filter((key) => forbidden.has(key.toLowerCase()) || !allowed.has(key.toLowerCase()));
 }

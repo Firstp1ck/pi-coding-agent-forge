@@ -121,6 +121,23 @@ export function inlineScriptArgv(powershell: string, script: string): string[] {
   return [powershell, "-NoLogo", "-NoProfile", "-NonInteractive", "-EncodedCommand", encodeCommand(script)];
 }
 
+/**
+ * Argv that ends process `pid` only while it still has the start time
+ * `start` (Unix seconds, as `owner.json` records Windows processes), so a
+ * reused PID is never hit. Bounded by the caller's timeout; no tree kill: the
+ * helper's kill-on-close Job Objects end its apps when it dies.
+ *
+ * @throws Error when `pid` or `start` is malformed (they are embedded in the script as numbers).
+ */
+export function stopProcessArgv(powershell: string, pid: number, start: string): string[] {
+  if (!Number.isSafeInteger(pid) || pid <= 0 || pid > 0x7fffffff || !/^[1-9]\d{0,14}$/.test(start)) throw new Error(`invalid process identity ${pid}:${start}`);
+  const script = [
+    `$p = Get-Process -Id ${pid} -ErrorAction SilentlyContinue`,
+    `if ($null -ne $p -and $null -ne $p.StartTime -and ([DateTimeOffset]$p.StartTime).ToUnixTimeSeconds() -eq ${start}) { Stop-Process -InputObject $p -Force -ErrorAction SilentlyContinue }`,
+  ].join("\n");
+  return inlineScriptArgv(powershell, script);
+}
+
 /** Bounded, single-line, printable copy of untrusted text (helper output, stderr) for a message. */
 export function boundedText(text: unknown, max = 300): string {
   const flat = String(text ?? "")

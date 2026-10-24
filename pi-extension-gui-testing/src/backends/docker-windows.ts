@@ -38,6 +38,7 @@ import { describeFailure, dockerArgv, dockerOnPath, resolveEndpoint, runDocker, 
 import { packageVersion } from "./docker/package.ts";
 import { createSpawner, runWithInput, type Spawner } from "./docker/process.ts";
 import { stopAfterFailedStart } from "./start-failure.ts";
+import { windowsSetupCommand } from "./windows/setup-command.ts";
 import { dockerWindowsChecks } from "./docker-windows/checks.ts";
 import {
   BASE_VOLUME,
@@ -56,6 +57,7 @@ import { auditWindowsOrphans, containerOwnerLiveness, sweepWindowsOrphans } from
 import { GuestSsh } from "./docker-windows/guest-ssh.ts";
 import { installBase } from "./docker-windows/install.ts";
 import { keyPaths, keysReady, type GuestKeys } from "./docker-windows/keys.ts";
+import { SessionLeases } from "./docker-windows/lease.ts";
 import { helperFiles, HELPER_SOURCE_DIR, type HelperFile } from "./docker-windows/oem.ts";
 import { POWERSHELL } from "./docker-windows/powershell.ts";
 import { DockerWindowsSession, stagingRootFor } from "./docker-windows/session.ts";
@@ -123,6 +125,7 @@ export class DockerWindowsBackend
   readonly version: string;
   readonly store: WindowsSettingsStore;
   readonly #o: DockerWindowsOptions;
+  readonly #leases: SessionLeases;
   #helper?: Promise<HelperFile[]>;
 
   constructor(options: DockerWindowsOptions) {
@@ -131,6 +134,7 @@ export class DockerWindowsBackend
     this.spawner = options.spawner ?? createSpawner();
     this.version = options.version ?? packageVersion();
     this.store = new WindowsSettingsStore(join(options.configDir ?? dirname(globalConfigPath()), "docker-windows"));
+    this.#leases = new SessionLeases(this.store.dir, { procRoot: this.#procRoot });
   }
 
   /** The dockurr image reference (pinned by digest). */
@@ -295,64 +299,90 @@ export class DockerWindowsBackend
     const endpoint = await this.endpoint(signal);
     const labels = await volumeLabels(this.runner, endpoint, BASE_VOLUME, signal);
     if (labels?.[LABEL_WINDOWS_INSTALL] !== record.id) throw new Error(`docker-windows: the base volume ${BASE_VOLUME} is missing or belongs to another install; run /gui-setup docker-windows`);
-    // One VM at a time on the base disk: QEMU opens it read-only, but dockurr still keeps small state files in that volume.
-    for (const other of await listRoleContainers(this.runner, endpoint, "session", signal)) {
-      if (containerOwnerLiveness(other, this.#procRoot) !== "dead") {
-        throw new Error(`docker-windows runs one session at a time and ${other.name} is still running; stop it with gui_stop (or /gui-cleanup docker-windows when its Pi is gone)`);
-      }
-    }
-    if (await containerState(this.runner, endpoint, INSTALL_CONTAINER, signal)) throw new Error("docker-windows: the Windows install is still running; finish /gui-setup docker-windows first");
-
-    options.onStatus?.("collecting the workspace files (sync rules apply)");
-    const fileSet = await buildFileSet(options.projectRoot, { allow: shared.sync?.allow, deny: shared.sync?.deny, runner: this.runner, signal });
-    const helper = await this.#helperFiles();
-    const baseStamp = await baseDiskStamp(this.runner, endpoint, this.imageTag, signal);
-    const keys = keyPaths(this.store.dir);
-    const control = await controlLocation(options.sessionDir, this.#o.shortControlRoot);
     const commands = shared.setup ?? [];
-    const setupTail = new TextTail(SETUP_TAIL_CHARS);
+    // `setup` entries are Windows PowerShell 5.1 scripts (as for cua's Windows sandboxes); refused before anything starts when too long.
+    let setupLines: string[];
+    try {
+      setupLines = commands.map((cmd) => windowsSetupCommand(cmd));
+    } catch (error) {
+      throw new SessionError("SETUP_FAILED", (error as Error).message);
+    }
     const name = sessionContainerName(options.sessionId);
-    const session = new DockerWindowsSession({
-      id: options.sessionId,
-      backend: this.id,
-      runner: this.runner,
-      endpoint,
-      packageVersion: this.version,
-      onLog: (event) => {
-        if (event.source === "setup") setupTail.push(typeof event.data === "string" ? event.data : String(event.data));
-        options.onLog(event);
-      },
-      ...(options.onStatus ? { onStatus: options.onStatus } : {}),
-      name,
-      ownerLabel: options.ownerLabel,
-      installId: record.id,
-      image: this.imageTag,
-      vm: resolveVm(settings, { ...this.#o.vm, diskGb: record.vm.diskGb, version: record.vm.version }),
-      ...(this.#o.viewer ? { viewer: true } : {}),
-      keys,
-      control,
-      guest: (port, k, c) => this.#guest(port, k, c),
-      fileSet,
-      stagingRoot: stagingRootFor(options.sessionDir),
-      helper,
-      baseStamp,
-      allowExec: commands.length > 0,
-      ...(this.#o.bootTimeoutMs !== undefined ? { bootTimeoutMs: this.#o.bootTimeoutMs } : {}),
-      ...(this.#o.bootPollMs !== undefined ? { bootPollMs: this.#o.bootPollMs } : {}),
-      ...(this.#o.readyTimeoutMs !== undefined ? { readyTimeoutMs: this.#o.readyTimeoutMs } : {}),
-      ...(this.#o.heartbeatTimeoutMs !== undefined ? { heartbeatTimeoutMs: this.#o.heartbeatTimeoutMs } : {}),
-      ...(this.#o.sleep ? { sleep: this.#o.sleep } : {}),
+
+    // One VM at a time on the base disk: QEMU opens it read-only, but dockurr still keeps small state files in that volume.
+    // Admission is atomic across Pi processes (an interprocess lock around the checks and the lease), and the lease
+    // stays until the container is gone, so a second start is refused even before the first container exists.
+    const lease = await this.#leases.acquire({ owner: options.ownerLabel, session: options.sessionId, container: name }, async (stale) => {
+      if (stale) {
+        const failed = await removeContainer(this.runner, endpoint, stale.container, signal);
+        if (failed) throw new Error(`docker-windows: the container ${stale.container} of an ended session could not be removed (${failed}); run /gui-cleanup docker-windows`);
+      }
+      for (const other of await listRoleContainers(this.runner, endpoint, "session", signal)) {
+        if (containerOwnerLiveness(other, this.#procRoot) !== "dead") {
+          throw new Error(`docker-windows runs one session at a time and ${other.name} is still running; stop it with gui_stop (or /gui-cleanup docker-windows when its Pi is gone)`);
+        }
+        // A dead owner's session still holds the base disk: remove it before this one boots.
+        const failed = await removeContainer(this.runner, endpoint, other.id, signal);
+        if (failed) throw new Error(`docker-windows: the session container ${other.name} of an ended Pi could not be removed (${failed}); run /gui-cleanup docker-windows`);
+      }
+      if (await containerState(this.runner, endpoint, INSTALL_CONTAINER, signal)) throw new Error("docker-windows: the Windows install is still running; finish /gui-setup docker-windows first");
     });
+
+    let session: DockerWindowsSession;
+    const setupTail = new TextTail(SETUP_TAIL_CHARS);
+    try {
+      options.onStatus?.("collecting the workspace files (sync rules apply)");
+      const fileSet = await buildFileSet(options.projectRoot, { allow: shared.sync?.allow, deny: shared.sync?.deny, runner: this.runner, signal });
+      const helper = await this.#helperFiles();
+      const baseStamp = await baseDiskStamp(this.runner, endpoint, this.imageTag, signal);
+      const keys = keyPaths(this.store.dir);
+      const control = await controlLocation(options.sessionDir, this.#o.shortControlRoot);
+      session = new DockerWindowsSession({
+        id: options.sessionId,
+        backend: this.id,
+        runner: this.runner,
+        endpoint,
+        packageVersion: this.version,
+        onLog: (event) => {
+          if (event.source === "setup") setupTail.push(typeof event.data === "string" ? event.data : String(event.data));
+          options.onLog(event);
+        },
+        ...(options.onStatus ? { onStatus: options.onStatus } : {}),
+        name,
+        ownerLabel: options.ownerLabel,
+        installId: record.id,
+        image: this.imageTag,
+        vm: resolveVm(settings, { ...this.#o.vm, diskGb: record.vm.diskGb, version: record.vm.version }),
+        ...(this.#o.viewer ? { viewer: true } : {}),
+        keys,
+        control,
+        guest: (port, k, c) => this.#guest(port, k, c),
+        fileSet,
+        stagingRoot: stagingRootFor(options.sessionDir),
+        helper,
+        baseStamp,
+        allowExec: commands.length > 0,
+        ...(this.#o.bootTimeoutMs !== undefined ? { bootTimeoutMs: this.#o.bootTimeoutMs } : {}),
+        ...(this.#o.bootPollMs !== undefined ? { bootPollMs: this.#o.bootPollMs } : {}),
+        ...(this.#o.readyTimeoutMs !== undefined ? { readyTimeoutMs: this.#o.readyTimeoutMs } : {}),
+        ...(this.#o.heartbeatTimeoutMs !== undefined ? { heartbeatTimeoutMs: this.#o.heartbeatTimeoutMs } : {}),
+        ...(this.#o.sleep ? { sleep: this.#o.sleep } : {}),
+        releaseLease: () => lease.release(),
+      });
+    } catch (error) {
+      await lease.release().catch(() => undefined);
+      throw error;
+    }
     // The exit handler and owner.json know the container before it exists (spec §7a.2).
     options.onExitCleanup?.(session.forceRemoveArgv());
-    await options.recordResource("container", name);
     try {
+      await options.recordResource("container", name);
       await session.prepare(signal);
       await session.start(signal);
       const timeoutMs = this.#o.setupTimeoutMs ?? SETUP_COMMAND_TIMEOUT_MS;
       for (const [index, cmd] of commands.entries()) {
         options.onStatus?.(`setup ${index + 1}/${commands.length} in the Windows guest: ${cmd}`);
-        const result = await session.request("exec", { cmd, cwd: session.workspacePath!, env: { ...(shared.deps?.env ?? {}) }, timeoutMs }, { signal, timeoutMs: timeoutMs + 30_000 });
+        const result = await session.request("exec", { cmd: setupLines[index], cwd: session.workspacePath!, env: { ...(shared.deps?.env ?? {}) }, timeoutMs }, { signal, timeoutMs: timeoutMs + 30_000 });
         if (result.exitCode !== 0) {
           const tail = setupTail.text.trim().slice(-2000);
           throw new SessionError("SETUP_FAILED", `setup command ${JSON.stringify(cmd)} exited with ${result.exitCode} in the Windows guest${tail ? `; last output:\n${tail}` : ""}`);

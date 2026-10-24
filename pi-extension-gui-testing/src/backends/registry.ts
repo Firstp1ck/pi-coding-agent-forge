@@ -207,7 +207,6 @@ const BUILT_IN: { [K in ImplementedBackendId]: Omit<BackendEntry, "id"> } = {
       new LocalWindowsBackend({
         ownerLabel: ctx.ownerLabel,
         ...(ctx.options as Partial<LocalWindowsOptions> | undefined),
-        ...(ctx.tmpRoot ? { genericTmpRoot: ctx.tmpRoot } : {}),
       }),
   },
   "docker-windows": {

@@ -167,7 +167,7 @@ test("setup commands become encoded PowerShell for cmd.exe, bounded by cmd.exe's
   assert.ok(script.includes(`\n${cmd}\n`));
   assert.match(script, /if \(\$global:LASTEXITCODE\) \{ exit \$global:LASTEXITCODE \}/);
   assert.ok(line.length < CMD_LINE_MAX);
-  assert.throws(() => windowsSetupCommand("x".repeat(3_500)), /too long for a Windows sandbox/);
+  assert.throws(() => windowsSetupCommand("x".repeat(3_500)), /too long for a Windows guest/);
 });
 
 test("the setup wrapper exits 0, a native command's code, or 1 for a failing cmdlet", { skip: noPwsh }, () => {

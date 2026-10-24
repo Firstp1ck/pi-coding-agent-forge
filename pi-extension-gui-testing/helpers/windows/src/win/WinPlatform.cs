@@ -72,7 +72,8 @@ namespace PiGuiHelper.Win
             if (build != 0 && build < 17763) throw new InvalidOperationException("Windows 10 1809 (build 17763) or later is required; this is build " + build);
             if (!Directory.Exists(_config.Workspace)) throw new InvalidOperationException("PI_GUI_WORKSPACE " + _config.Workspace + " is not a directory");
             WinFiles.CheckPrivateDir(_config.RuntimeDir, "PI_GUI_RUNTIME_DIR");
-            _tag = WinDesktop.RandomHex(8);
+            // The client's tag (local mode: the runtime dir's) lets it tie job and desktop names to this session.
+            _tag = _config.SessionTag ?? WinDesktop.RandomHex(8);
             _cmdExe = WinPath.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "cmd.exe");
             _tmpDir = WinFiles.CreateSubdir(_config.RuntimeDir, "tmp");
             _desktop = _config.InteractiveDesktop ? WinDesktop.OpenInteractive() : WinDesktop.CreatePrivate(_tag);
@@ -352,6 +353,8 @@ namespace PiGuiHelper.Win
                 var result = new List<WindowEntry>();
                 foreach (IntPtr hwnd in listed)
                 {
+                    // The client accepts at most this many windows in one result.
+                    if (result.Count >= Handlers.MaxWindows) break;
                     Bounds b = WinWindows.Rect(hwnd);
                     if (b != null) result.Add(new WindowEntry(WinWindows.Ref(hwnd), WinWindows.Title(hwnd), b));
                 }
@@ -409,10 +412,10 @@ namespace PiGuiHelper.Win
 
         // ----- accessibility -------------------------------------------------
 
-        public WalkResult Walk(int cap, RequestContext ctx)
+        public WalkResult Walk(TreeBudget budget, RequestContext ctx)
         {
             HashSet<int> pids = _config.InteractiveDesktop ? JobPids() : null;
-            return OnDesktop("snapshot", WalkTimeoutMs, ctx, delegate { return WinUia.Walk(ListedHwnds(pids), cap, ctx); });
+            return OnDesktop("snapshot", WalkTimeoutMs, ctx, delegate { return WinUia.Walk(ListedHwnds(pids), budget, ctx); });
         }
 
         public bool ElementAlive(object handle)

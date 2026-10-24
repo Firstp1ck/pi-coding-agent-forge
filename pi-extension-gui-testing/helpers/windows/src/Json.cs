@@ -102,6 +102,28 @@ namespace PiGuiHelper
         }
 
         /// <summary>Writes a JSON string. Lone surrogates become U+FFFD so the output is always valid UTF-8.</summary>
+        /// <summary>UTF-8 bytes WriteString produces for s, quotes included, without building it.</summary>
+        public static long EncodedLength(string s)
+        {
+            long n = 2;
+            for (int i = 0; i < s.Length; i++)
+            {
+                char c = s[i];
+                if (c == '"' || c == '\\' || c == '\n' || c == '\r' || c == '\t' || c == '\b' || c == '\f') n += 2;
+                else if (c < 0x20 || c == '\u2028' || c == '\u2029') n += 6;
+                else if (char.IsHighSurrogate(c))
+                {
+                    if (i + 1 < s.Length && char.IsLowSurrogate(s[i + 1])) { n += 4; i++; }
+                    else n += 3;
+                }
+                else if (char.IsLowSurrogate(c)) n += 3;
+                else if (c < 0x80) n += 1;
+                else if (c < 0x800) n += 2;
+                else n += 3;
+            }
+            return n;
+        }
+
         public static void WriteString(StringBuilder b, string s)
         {
             b.Append('"');
