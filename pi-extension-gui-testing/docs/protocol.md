@@ -165,3 +165,69 @@ Unpacking first checks that the upload has exactly the announced size and SHA-25
 More than `maxUnpackedBytes` of file data or `maxEntries` entries answers `TOO_LARGE`, and so do a metadata record over 64 KiB (refused before its payload is read), more than `(maxEntries + 1) × 5` header records of any kind, and a decompressed stream longer than the file data allowed plus the records' own blocks. Every failure (also `CANCELLED`) leaves the deps dir empty. Owners are never applied; setuid, setgid, and sticky bits are dropped; file mtimes are kept. Transfers live in unlinked temp files (at most four at a time) and end with the helper.
 
 Host mode with `PI_GUI_DEPS_DIR` also gives every child `PIP_TARGET=<dir>/python`, `PYTHONPATH=<dir>/python`, `npm_config_prefix=<dir>/node`, `NODE_PATH=<dir>/node/lib/node_modules` (defaults the request's `env` may override) and `PATH` prefixed with `<dir>/python/bin:<dir>/node/bin`, so installs stay valid at another session path.
+
+## Windows helper
+
+`helpers/windows/` speaks this same protocol version 2 on Windows 10 1809+ and Windows 11. It is a Windows PowerShell 5.1 script that compiles the C# sources next to it with `Add-Type` (in memory, no network) at every start and then runs them; the sources stay plain C# 5 so they can later be built into a signed `.exe` without changes (spec Q4). Status: tested only with a fake platform in place of the Win32 layer; it has not run on Windows yet, and spike S1 ([`spikes/s1/`](../spikes/s1/README.md)) is its first live check.
+
+### Process and transport
+
+```text
+powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File <dir>\helper.ps1 [-StdinEnv NAME,NAME,...]
+```
+
+- Deploy `helper.ps1`, `THIRD_PARTY_NOTICES.md`, and `src\` with its `win\` subdirectory unchanged. The script compiles only its fixed list of 15 files.
+- The script refuses (stderr diagnostic, exit 1, no ready line) when it is not on Windows, not Windows PowerShell 5.1 (`pwsh` is refused), or PowerShell runs in Constrained Language mode (AppLocker/WDAC block `Add-Type`). A failed compile (for example antivirus blocking `csc.exe`) also exits 1.
+- The ready line comes only after the compile, so the compile must fit in the client's 10 s ready timeout; spike S1 measures how long it takes.
+- The helper keeps the real stdout for protocol lines and points the process's stdout handle and `Console.Out` at stderr before anything else runs, so stray output cannot reach the protocol stream. Apps never inherit the helper's stdio: each child gets only its own output pipes and `NUL` as stdin.
+- `-StdinEnv`: for transports without an environment (`cua sandbox exec`), the client passes the variable names, comma-separated, in argv and writes their values as the first stdin lines in the same order, before any protocol line. Allowed names: `PI_GUI_HELPER_MODE`, `PI_GUI_WORKSPACE`, `PI_GUI_RUNTIME_DIR`, `PI_GUI_ALLOW_EXEC`, `PI_GUI_ALLOW_ELEVATED`, `PI_GUI_WIN_DESKTOP`, `PI_GUI_WIN_INPUT`, `PI_GUI_WIN_SOFTWARE_RENDERING`, `PI_GUI_DEPS_DIR`, `PI_GUI_TESTING_TOKEN`, `PI_GUI_TESTING_HEARTBEAT_TIMEOUT_MS`. An unknown or repeated name, a missing line, or a value with CR or NUL exits 2.
+- `-Probe NAME` prints one JSON line (`{probe, ok, ...}`) on stdout and exits (0 when `ok`), without the protocol: `env` (build, arch, elevation, session, window station), `desktop` (create and destroy a private desktop), `job` (a process in a kill-on-close job dies when the job handle closes), `nonelevated` (a non-elevated token is available), `uia` (UI Automation reads a window on a private desktop), `foreground` (the user's foreground window, for the isolation assertion before and after a session).
+- Teardown runs on `stop`, stdin EOF, heartbeat timeout, Ctrl+C, and a mismatched `hello`. If the helper process is killed instead, its Job Object handles close and Windows ends every app; the client's sweep removes the runtime dir.
+
+### Environment contract
+
+| Variable | Meaning |
+|---|---|
+| `PI_GUI_TESTING_TOKEN` | as on Linux (required) |
+| `PI_GUI_HELPER_MODE` | `local` (default): on the user's machine, apps always run on a private desktop. `guest`: inside a dedicated VM or sandbox session (`docker-windows`, `cua`); same containment, and the options below may use the guest's own desktop. Anything else exits 1. |
+| `PI_GUI_WORKSPACE` | absolute local path (`C:\...`), default `cwd` of `launch` and `exec` (required) |
+| `PI_GUI_RUNTIME_DIR` | session dir the client created, named `pi-gui-testing-<session>`; in `local` mode directly under `%LOCALAPPDATA%\Temp` (required). It must be a real directory reached without junctions or symlinks, owned by the user, Administrators, or SYSTEM, and not writable by Everyone, Users, Authenticated Users, INTERACTIVE, or ANONYMOUS LOGON. The helper creates `tmp\` (the apps' `TEMP`/`TMP`) and `session.json` in it, removes `tmp\` on teardown, and leaves the dir to the client. |
+| `PI_GUI_ALLOW_EXEC=1` | allows `exec` (default off: `BAD_REQUEST`) |
+| `PI_GUI_ALLOW_ELEVATED=1` | apps run with the helper's elevated token; valid only when the helper is elevated (exits 1 otherwise) |
+| `PI_GUI_WIN_DESKTOP` | `private` (default) or `interactive`; `interactive` only in `guest` mode, and only in an interactive session (window station `WinSta0`, session > 0). An SSH or service session is session 0, so it must use `private`. |
+| `PI_GUI_WIN_INPUT` | `messages` (default) or `sendinput`; `sendinput` only with `PI_GUI_WIN_DESKTOP=interactive` |
+| `PI_GUI_WIN_SOFTWARE_RENDERING` | `1` (default) or `0`; see "Launching" |
+| `PI_GUI_TESTING_HEARTBEAT_TIMEOUT_MS` | tests only, as on Linux |
+| `PI_GUI_DEPS_DIR` | ignored with a diagnostic: the Windows helper has no dependency cache |
+
+`PI_GUI_DISPLAY_LOCK_DIR` and the other Linux host-mode variables are not used.
+
+### Elevation
+
+In `local` mode an elevated helper without `PI_GUI_ALLOW_ELEVATED=1` (and without `-StdinEnv`) restarts itself before reading stdin: a copy runs with the Explorer shell's token (`CreateProcessWithTokenW`), created suspended inside a kill-on-close Job Object, with the same stdio and environment, and the first process only waits and returns the copy's exit code. The copy must be non-elevated and belong to the same user, otherwise startup fails. No `runas`, no UAC prompt. A `local` helper that is still elevated at startup (for example with `-StdinEnv`) exits 1. In `guest` mode the helper's token is used as is.
+
+### Launching
+
+- One named Job Object (`Local\pi-gui-testing-<tag>-job-<random>`) per `launch` and per `exec`, with kill-on-close, die-on-unhandled-exception (no error dialog blocking a crashed app), and no breakaway. The process joins it atomically at creation (`PROC_THREAD_ATTRIBUTE_JOB_LIST`) and starts suspended. Before it resumes, the helper checks the job membership and, unless elevation is allowed, that the process token is not elevated, starts the output pumps, and records the process in `session.json`. Any failure terminates the job.
+- Apps start on the session desktop: a private desktop `pi-gui-testing-<tag>-<random>` in the helper's window station, created at startup with a name the caller cannot choose. The helper never calls `SwitchDesktop` or clipboard functions, and `SendInput` only with `PI_GUI_WIN_INPUT=sendinput` in guest mode.
+- `cmd` resolution: a path (with `\`, `/`, or `:`) is taken relative to `cwd`; a bare name is searched only in the absolute directories of the child's `PATH`, never in `cwd`, with the `PATHEXT` extensions. `.cmd`/`.bat` files run through `cmd.exe /d /s /c`; their arguments must not contain `"`, `%`, `!`, or line breaks (`BAD_REQUEST`), because `cmd.exe` would expand or reinterpret them. Other arguments are quoted for `CommandLineToArgvW`.
+- `exec` runs `cmd.exe /d /s /c "<cmd>"` (the counterpart of `sh -c`) on the session desktop. Exit codes outside -1000..1000 (Windows status codes such as `0xC0000005`) are reported as `1000`, with the real code in a `setup` log event.
+- Child environment: the helper's environment without any `PI_GUI_*` variable; `PYTHONIOENCODING=utf-8` as a default the request may override; then the request's `env`; then forced values it cannot override: `TEMP` and `TMP` (`<runtime>\tmp`), `PI_GUI_TAG` (session tag), and with software rendering `QT_OPENGL=software`, `QT_QUICK_BACKEND=software`, `FLUTTER_ENGINE_SWITCHES=1` + `FLUTTER_ENGINE_SWITCH_1=enable-software-rendering` (unless the request sets Flutter switches itself; release engines ignore them). Names are case-insensitive; a name with `=` or a value with NUL is `BAD_REQUEST`.
+- Chromium/Electron (`electron`, `chrome`, `chromium`, `msedge`, or `npx`/`node` running Electron) get `--force-renderer-accessibility` and, with software rendering, `--disable-gpu`. WPF cannot be switched to software rendering without a per-user registry change, which the helper never makes; when a WPF window appears it sends one `log` event warning that captures may be black.
+- App output arrives as `log` events (`source: "app"` or `"setup"`), decoded as UTF-8; the helper keeps only an 8 KiB tail per process for error messages.
+
+### Differences in results
+
+- `hello`: `os: "windows"`, `arch` `x64`, `arm64`, or `x86`, `platform` like `Windows 10.0.22631 x64; .NET Framework 4.0.30319.42000; PowerShell 5.1.22621.4391`. `capabilities`: `launch`, `wait`, `snapshot`, `snapshotFull`, `screenshot`, `act`, `windows`, `exec` (only with `PI_GUI_ALLOW_EXEC=1`), `a11y-uia`, and `desktop-private` or `desktop-interactive`. Never `deps`: the six deps methods answer `BAD_REQUEST`.
+- Window refs are `win:0x<HWND in lowercase hex>`. Only windows of the session are listed or accepted: on a private desktop every visible top-level window on it; on a guest's interactive desktop only windows of the session's own processes. A ref to any other window is `NOT_FOUND`. Minimized, cloaked, and empty windows, menus, tooltips, IME windows, and untitled tool windows are not listed.
+- `screenshot` of a window: `PrintWindow(PW_RENDERFULLCONTENT)` of the full window rectangle (title bar and borders included), without raising it; `origin` is the window's top-left corner. `screen` on a private desktop, which has no framebuffer: the virtual screen composed from `PrintWindow` captures of the session's windows, bottom of the z-order first, on black. `screen` on an interactive desktop: `BitBlt` of the virtual screen. Coordinates are physical pixels (the capture threads are per-monitor DPI aware for the operation). `sha256` and `allBlack` mean the same as on Linux; GPU-rendered apps can capture all black and are returned flagged, not retried.
+- `snapshot`: UI Automation control view of every listed window, breadth first, at most 20 000 nodes per walk. Roles use the Linux names (`Button` → `push button`, `Edit` → `text`, `Text` → `label`, `Window` → `frame`, `Pane` → `panel`, …; unknown control types become their lowercase name). States: `enabled`/`sensitive`, `showing`/`visible`, `focusable`, `focused`, `checkable`/`checked`/`indeterminate`, `selected`, `expanded`/`collapsed`, `editable`. `value` comes from the Value or RangeValue pattern. `coverage` counts a window as covered when its tree holds an element that is not a container (`panel`, `frame`, `unknown`), scroll bar, thumb, or part of the title bar UI Automation adds to every standard window: no covered window is `none` (Tk), some is `partial`, all is `full`.
+- `wait for text` searches names and values of up to 5 000 nodes, case-sensitive as on Linux.
+- `act` by ref: `click` tries the Invoke, Toggle, SelectionItem, and ExpandCollapse patterns in that order (an action still running after 5 s, such as a button that opened a modal dialog, counts as delivered), then a pointer click at the element's centre. `set_value` uses Value or RangeValue (a number) and is `BAD_REQUEST` for read-only elements. `type` and `key` focus the element first.
+- `act` by coordinates: `WM_NCHITTEST` decides client or non-client. Client hits go to the deepest visible child window as `WM_MOUSEMOVE`/`WM_LBUTTONDOWN`/`WM_LBUTTONUP` (right and double clicks accordingly) with `SendMessageTimeoutW` (2 s; a timeout counts as delivered). Non-client hits are posted with `PostMessageW`; close, minimize, and maximize buttons become `WM_SYSCOMMAND`. The hit window is made active on the session desktop.
+- `key` accepts the Linux key syntax (`ctrl+a BackSpace`, `Return`, `Page_Up`, `F1`–`F24`, punctuation names like `comma`, single characters). Keys are posted as `WM_KEYDOWN`/`WM_KEYUP` to the focused control of the target window; for chords with modifiers the helper sets the modifier state of the target's input queue around the chord (best effort: apps that read raw input or `GetAsyncKeyState` may not see modifiers). `type` posts `WM_CHAR` per UTF-16 unit, line breaks as Return. Without a target, keys go to the window clicked or activated last, else the topmost session window. `scroll` posts wheel messages (120 per step) to the window under the point.
+- `stop` leftover kinds: `job` (id: job name), `process` (id: `<pid>:<creation time as FILETIME>`), `desktop` (id: desktop name), `tempdir` (id: path, detail: what could not be deleted). Deletion opens every entry without following reparse points and removes junctions and symlinks as links.
+
+### Session record
+
+`<PI_GUI_RUNTIME_DIR>\session.json` (written atomically, rewritten before every app resumes and at teardown) lets the client audit and sweep after a crash: `version: 1`, `helper` (`pid`, `created`), `tag`, `mode`, `windowStation`, `desktop`, `privateDesktop`, `jobs[]`, `processes[]` (`pid`, `created`, the newest 256), `tmpDir`, `status` (`running`/`stopped`), `leftovers` (after teardown), `updatedAt`. `created` values are process creation times as FILETIME decimal strings; a PID counts as the same process only when its creation time matches. Like every helper output, the record is untrusted input for the client.

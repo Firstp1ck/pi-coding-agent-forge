@@ -1,0 +1,26 @@
+{
+  "method": "hello",
+  "response": {
+    "id": 1,
+    "ok": true,
+    "result": {
+      "protocol": 2,
+      "helperVersion": "0.1.0",
+      "os": "windows",
+      "arch": "x64",
+      "capabilities": [
+        "launch",
+        "wait",
+        "snapshot",
+        "snapshotFull",
+        "screenshot",
+        "act",
+        "windows",
+        "exec",
+        "a11y-uia",
+        "desktop-private"
+      ],
+      "platform": "Windows 10.0.19045 x64; fake platform; .NET test"
+    }
+  }
+}

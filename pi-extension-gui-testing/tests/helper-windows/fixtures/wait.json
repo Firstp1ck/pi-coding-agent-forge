@@ -1,0 +1,11 @@
+{
+  "method": "wait",
+  "response": {
+    "id": 8,
+    "ok": true,
+    "result": {
+      "matched": true,
+      "elapsedMs": 1
+    }
+  }
+}

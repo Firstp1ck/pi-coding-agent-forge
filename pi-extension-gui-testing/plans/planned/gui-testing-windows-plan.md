@@ -38,7 +38,7 @@ Order: WH → (WL ∥ WD ∥ WC) → I → review → fixes → report.
 
 | Phase | Status | Evidence |
 |---|---|---|
-| WH | in progress 2026-10-24 | `claude-opus-5-5`, task `…gui-testing-windows-WH-r1` |
+| WH | done 2026-10-24 (never run on Windows) | `claude-opus-5-5`, handoff `plans/handoffs/windows-WH.md`: `helpers/windows/helper.ps1` + 15 C# sources (protocol core + Win32/UIA layer), `spikes/s1/` harness and sample apps, `docs/protocol.md` Windows section, MIT notice for `@iiwate/pi-silent-gui`. Ran here: PowerShell 7.6.8 linux-arm64 (dev tool in `~/.local/share/pi-tools/`) with a fake platform — 108/108 C# core checks, all 15 sources compile at C# 5 against .NET Framework 4.7.2 reference assemblies, 20 Node protocol tests whose results pass `response.ts`. Owner: added `tests/helper-windows/*.test.mjs` to `npm test`; stderr assertions now poll (they raced the stream under load). Owner rerun: concurrent `npm run check` + Node 22 → 589/589 each |
 | WL | not started | |
 | WD | not started | |
 | WC | not started | |

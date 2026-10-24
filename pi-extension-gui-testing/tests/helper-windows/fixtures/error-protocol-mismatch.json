@@ -1,0 +1,11 @@
+{
+  "method": "hello",
+  "response": {
+    "id": 1,
+    "ok": false,
+    "error": {
+      "code": "PROTOCOL_MISMATCH",
+      "message": "helper speaks protocol 2, client sent 1"
+    }
+  }
+}
