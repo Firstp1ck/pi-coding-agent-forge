@@ -782,7 +782,7 @@ Screenshots that Pi already received are part of your Pi session history, not of
 | `… earlier operations are still stuck in a hung app` | The app stopped responding. The session ended; start a new one with `gui_launch`. |
 | `the full accessibility tree is too large to transfer` | Use `snapshot` with a smaller `maxNodes`, or a screenshot. |
 | `the screenshot does not fit the transfer limit` | Capture a single window or element, or pass a smaller `maxEdge`. |
-| `GUI helper process (orphan) still exists` after `/gui-cleanup local-windows` | Pi's record of that session is gone, so the old helper was not ended. Close it (a `powershell.exe` process) in Task Manager, or sign out; then run `/gui-cleanup local-windows` again. |
+| `GUI helper process (orphan) still exists` after `/gui-cleanup local-windows` | Pi could not confirm that it started this process, so it did not end it. The process number comes from a file the tested app can change, so check it first: in Task Manager's Details tab, add the Command line column and end the process only if it is `powershell.exe` running `helper.ps1` from this package. Otherwise leave it alone. Then run `/gui-cleanup local-windows` again. |
 | **`docker-windows`** | |
 | `kvm.device` fails | Run `sudo usermod -aG kvm $USER`, then log out and back in. If `/dev/kvm` is missing, turn on VT-x or AMD-V in the firmware (or nested virtualization in your VM). |
 | `the Windows licensing acknowledgement is missing` or `The Windows licensing notice is not acknowledged; re-run with /gui-setup docker-windows --accept-windows-license` | Run `/gui-setup docker-windows --accept-windows-license`, or confirm in the interactive screen. |

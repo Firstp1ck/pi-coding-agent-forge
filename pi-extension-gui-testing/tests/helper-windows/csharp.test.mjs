@@ -38,3 +38,11 @@ test("Win32 struct layouts match the Windows SDK (WIN32_FIND_DATAW, BY_HANDLE_FI
   assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
   assert.match(result.stdout, /# passed \d+, failed 0/);
 });
+
+test("WriteAtomic never writes through a link planted at the old temp name", {
+  skip: !PWSH ? "pwsh not found" : existsSync(join(REF, "mscorlib.dll")) ? false : `no reference assemblies in ${REF}`,
+}, () => {
+  const result = run("atomic-write.ps1", ["-ReferenceDir", REF]);
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  assert.match(result.stdout, /# passed 4, failed 0/);
+});

@@ -218,13 +218,34 @@ namespace PiGuiHelper.Win
             }
         }
 
-        /// <summary>Writes text to path atomically (temp file + replace).</summary>
+        /// <summary>
+        /// Writes text to path atomically (temp file + replace). The temp name is unpredictable and created
+        /// with CreateNew, so an entry the app planted in its writable runtime dir (a link to an outside
+        /// file, or a hard link) is never opened, followed, or truncated. The rename replaces the directory
+        /// entry at path itself, never a file a link there points to.
+        /// </summary>
         public static void WriteAtomic(string path, string text)
         {
-            string temp = path + ".tmp";
-            File.WriteAllText(temp, text, new UTF8Encoding(false));
-            if (!Native.MoveFileExW(temp, path, Native.MOVEFILE_REPLACE_EXISTING | Native.MOVEFILE_WRITE_THROUGH))
-                throw new IOException(Native.Error("MoveFileEx(" + path + ")"));
+            var bytes = new UTF8Encoding(false).GetBytes(text);
+            var random = new byte[8];
+            using (var rng = System.Security.Cryptography.RandomNumberGenerator.Create()) rng.GetBytes(random);
+            string temp = path + "." + BitConverter.ToString(random).Replace("-", "").ToLowerInvariant() + ".tmp";
+            try
+            {
+                using (var stream = new FileStream(temp, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                {
+                    stream.Write(bytes, 0, bytes.Length);
+                    stream.Flush(true);
+                }
+                if (!Native.MoveFileExW(temp, path, Native.MOVEFILE_REPLACE_EXISTING | Native.MOVEFILE_WRITE_THROUGH))
+                    throw new IOException(Native.Error("MoveFileEx(" + path + ")"));
+            }
+            catch
+            {
+                // Only our own fresh temp file, never a pre-existing entry (CreateNew would have thrown).
+                if (File.Exists(temp)) { try { File.Delete(temp); } catch (IOException) { } catch (UnauthorizedAccessException) { } }
+                throw;
+            }
         }
     }
 }
