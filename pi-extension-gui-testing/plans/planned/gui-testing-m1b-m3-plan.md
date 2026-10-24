@@ -54,12 +54,20 @@ F ──► (L ∥ R ∥ C) ──► integration ──► D ──► integrat
 | Phase | Status | Evidence |
 |---|---|---|
 | F | done 2026-10-24 | `claude-opus-5-5`, task `…gui-testing-post-m1-F-r1`, handoff `plans/handoffs/post-m1-F.md`: registry (`src/backends/registry.ts` + `IMPLEMENTED_BACKEND_IDS`), capabilities (`src/backends/capabilities.ts`), `HelperSession` (`src/transport/helper-session.ts`), `spawnLocalProcess`, `HelperTransport` contract; `src/backend.ts` gained optional `onExitCleanup?`, `workspacePath?`, `forceRemoveArgv?`. Owner rerun: 257/257 on Node 26 and Node 22 |
-| L | not started | |
-| R | not started | |
-| C | not started | |
+| L | done 2026-10-24 (unregistered) | `claude-opus-5-5`, handoff `plans/handoffs/post-m1-L.md`: local-linux backend, helper host mode (`hostmode.py`), 16 checks, display/bus/lock audit and sweep; tested with a stand-in Xvfb + real dbus-daemon; real X untested |
+| R | done 2026-10-24 (unregistered) | `claude-opus-5-5`, handoff `plans/handoffs/post-m1-R.md`: SSH ControlMaster transport, host picker, remote session dirs, rsync/tar sync, remote-linux (host mode), remote-linux-docker (docker code over SSH, no docker/** changes); loopback-ssh tests; no real sshd |
+| C | done 2026-10-24 (unregistered) | `claude-opus-5-5`, handoff `plans/handoffs/post-m1-C.md`: **Cua Cloud ended 2026-10-18**; backend built on the open-source `cua` CLI (user's own AWS/GCP/Hetzner/Modal account), helper over `cua sandbox exec -i`, sandbox ledger + cleanup paths; no API key stored; Linux only |
 | D | not started | |
 | W | not started | |
 | Review | not started | |
+
+## 6a. Decisions
+
+| Date | Decision | By |
+|---|---|---|
+| 2026-10-24 | Cua Cloud (hosted, `CUA_API_KEY`) shut down 2026-10-18 (cua.ai migration guide). `cua` backend targets the open-source `cua` CLI with the user's own cloud account; no credential stored by the package (resolves Q1); billing acknowledgement names the user's cloud; check `cua.key` → `cua.signin`; `--api-key-env` rejected for `cua`. Needs user confirmation; spec §4.3/§5.4/Q1/Q2 updated at docs phase | integration owner |
+
+Owner rerun after L/R/C: `npm run check` → 416/416 twice (Node 26).
 
 ## 7. Reviews
 

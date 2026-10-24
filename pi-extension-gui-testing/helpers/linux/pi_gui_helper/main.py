@@ -66,7 +66,16 @@ def _read_loop(stream, token, dispatcher, watchdog):
         dispatcher.submit(message)
 
 
-def main():
+def main(argv=None):
+    argv = sys.argv[1:] if argv is None else argv
+    if len(argv) == 2 and argv[0] == "--probe":
+        # Client checks of the host mode (probe.py): one JSON line, no protocol.
+        from .probe import run
+
+        return run(argv[1])
+    if argv:
+        diag("unexpected arguments %r (only --probe display|env)" % (argv,))
+        return 2
     # The image's WORKDIR is /workspace (project files). Nothing the helper
     # runs itself (X tools, venv creation) should start there.
     try:
