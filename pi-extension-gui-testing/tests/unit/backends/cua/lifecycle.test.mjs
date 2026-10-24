@@ -662,7 +662,8 @@ test("BB1: a start whose kept-sandbox claim commits and then fails (releasing th
   const first = await start({ config: config({ keepSandbox: true }) });
   await first.stop();
   const freeMarker = (path) => path.startsWith(join(env.ledgerDir, ".lock.")) && path.endsWith(".free");
-  const error = await withFsFailureOnce("writeFile", freeMarker, () => start({ config: config({ keepSandbox: true }) })).then(
+  // Every release attempt fails (the release retries a transient failure; see the next test).
+  const error = await withFsFailureOnce("writeFile", freeMarker, () => start({ config: config({ keepSandbox: true }) }), 3).then(
     () => assert.fail("the start succeeded"),
     (e) => e,
   );
@@ -681,4 +682,16 @@ test("BB1: a start whose kept-sandbox claim commits and then fails (releasing th
   assert.deepEqual(await keptRecords(ledger), [{ kept: true, sessionId: "gui-00000002" }]);
   assert.deepEqual(api.deleted, []);
   assert.equal(api.methods().filter((m) => m === "createSandbox").length, 1, "no new sandbox");
+});
+
+test("BB4: a single failed lock release is retried, so the start that claimed a kept sandbox succeeds", async (t) => {
+  const { env, ledger, start } = await setup(t, { lockTimeoutMs: 120 });
+  const first = await start({ config: config({ keepSandbox: true }) });
+  await first.stop();
+  const freeMarker = (path) => path.startsWith(join(env.ledgerDir, ".lock.")) && path.endsWith(".free");
+  const { value: session, injected } = await withFsFailureOnce("writeFile", freeMarker, () => start({ config: config({ keepSandbox: true }) }));
+  assert.equal(injected, true);
+  assert.deepEqual(await keptRecords(ledger), [{ kept: false, sessionId: "gui-00000002" }], "claimed by the running session");
+  assert.deepEqual(await session.stop(), []);
+  assert.deepEqual(await keptRecords(ledger), [{ kept: true, sessionId: "gui-00000002" }]);
 });

@@ -97,7 +97,7 @@ test("removeRemoteSessions kills tagged processes, removes the dir and the empty
   const remote = await create(s.transport, name);
   const byEnv = tagged(remote.dir, "env");
   const byArgv = tagged(remote.dir, "argv");
-  const untagged = spawn("sleep", ["60"], { stdio: "ignore", detached: true });
+  const untagged = spawn("sleep", ["600"], { stdio: "ignore", detached: true });
   t.after(() => untagged.kill("SIGKILL"));
   await new Promise((r) => setTimeout(r, 200));
 
@@ -343,7 +343,7 @@ test("W2: a symlinked session dir is never followed: no process is selected thro
   const name = remoteSessionName("gui-symlink");
   await symlink(outside, join(s.base, name));
   // An unrelated process whose environment names the symlink's target.
-  const victim = spawn("sleep", ["60"], { env: { PATH: process.env.PATH, MARK: outside }, stdio: "ignore", detached: true });
+  const victim = spawn("sleep", ["600"], { env: { PATH: process.env.PATH, MARK: outside }, stdio: "ignore", detached: true });
   t.after(() => victim.kill("SIGKILL"));
   await new Promise((r) => setTimeout(r, 200));
 
@@ -367,7 +367,7 @@ test("W2: processes are selected by whole path words, never by a substring of an
   const name = remoteSessionName("gui-ab");
   const remote = await create(s.transport, name);
   // A sibling whose path only starts with this session's path (s-…-1 vs s-…-12).
-  const lookalike = spawn("sleep", ["60"], { env: { PATH: process.env.PATH, XDG_RUNTIME_DIR: `${remote.dir}2/run/xdg`, OTHER: `${remote.dir}x` }, stdio: "ignore", detached: true });
+  const lookalike = spawn("sleep", ["600"], { env: { PATH: process.env.PATH, XDG_RUNTIME_DIR: `${remote.dir}2/run/xdg`, OTHER: `${remote.dir}x` }, stdio: "ignore", detached: true });
   t.after(() => lookalike.kill("SIGKILL"));
   const mine = tagged(remote.dir, "env");
   await new Promise((r) => setTimeout(r, 200));
@@ -391,7 +391,7 @@ test("W9: a forced removal also removes the dead helper's display lock and its X
   // A crashed helper: its lock remains, and an app it started still runs with the session tag.
   const app = spawn("sleep", ["60"], { env: { PATH: process.env.PATH, PI_GUI_TAG: "0123456789abcdef" }, stdio: "ignore", detached: true });
   t.after(() => app.kill("SIGKILL"));
-  const unrelated = spawn("sleep", ["60"], { env: { PATH: process.env.PATH, PI_GUI_TAG: "0123456789abcdee" }, stdio: "ignore", detached: true });
+  const unrelated = spawn("sleep", ["600"], { env: { PATH: process.env.PATH, PI_GUI_TAG: "0123456789abcdee" }, stdio: "ignore", detached: true });
   t.after(() => unrelated.kill("SIGKILL"));
   const lock = await writeLock(remote.displays, display, { runtimeDir: remote.run, workspace: remote.workspace, xvfbPid: 999998, infra: { xvfb: "999998:5" } });
   // Another session's lock (live helper) is never touched.
@@ -557,7 +557,7 @@ test("AA3: a lock record with a raw NUL, control, DEL, or non-ASCII byte (or a l
   };
   await writeFile(lock, normal, { mode: 0o600 });
   assert.match(call(AUDIT_SCRIPT, [name]).stdout, /^lock=/m, "control: the well-formed record is attributed");
-  const unrelated = spawn("sleep", ["60"], { env: { PATH: process.env.PATH, PI_GUI_TAG: tag }, stdio: "ignore", detached: true });
+  const unrelated = spawn("sleep", ["600"], { env: { PATH: process.env.PATH, PI_GUI_TAG: tag }, stdio: "ignore", detached: true });
   t.after(() => unrelated.kill("SIGKILL"));
   await new Promise((r) => setTimeout(r, 200));
   for (const [variant, bytes] of Object.entries(variants)) {

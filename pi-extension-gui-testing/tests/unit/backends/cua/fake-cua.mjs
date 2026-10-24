@@ -198,11 +198,13 @@ export const HOST_TAG = "abcd1234";
  * `syncBuiltinESMExports`). Resolves `{ value, injected }`, or rejects with
  * `fn`'s error (with `injected` set on it).
  */
-export async function withFsFailureOnce(method, match, fn) {
+export async function withFsFailureOnce(method, match, fn, times = 1) {
   const original = fs[method];
   let injected = false;
+  let left = times;
   fs[method] = async (target, ...rest) => {
-    if (!injected && match(String(target))) {
+    if (left > 0 && match(String(target))) {
+      left--;
       injected = true;
       throw Object.assign(new Error(`EIO: injected i/o error, ${method} '${target}'`), { code: "EIO" });
     }
