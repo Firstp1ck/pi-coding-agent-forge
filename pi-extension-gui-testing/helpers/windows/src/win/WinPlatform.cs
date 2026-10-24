@@ -583,6 +583,8 @@ namespace PiGuiHelper.Win
         {
             var r = new Dictionary<string, object>();
             r["probe"] = name;
+            // Every probe runs in Pi's own security context: the client refuses local sessions from an elevated Pi.
+            r["elevated"] = WinSecurity.IsCurrentProcessElevated();
             switch (name)
             {
                 case "env": ProbeEnv(r); break;
@@ -668,10 +670,11 @@ namespace PiGuiHelper.Win
                 r["detail"] = "the helper is not elevated, so apps inherit a non-elevated token";
                 return;
             }
-            IntPtr token = WinSecurity.ShellToken();
-            Native.CloseHandle(token);
-            r["ok"] = true;
-            r["detail"] = "the helper is elevated; a non-elevated Explorer token of the same user is available";
+            // Refused for now: the app would run with the Explorer token while Pi's own writes into the
+            // session folders stay elevated, so an app that replaced one of those folders with a junction
+            // could make Pi write where the app itself cannot (DEVELOPMENT "Known gaps").
+            r["ok"] = false;
+            r["detail"] = "Pi runs elevated (as administrator); local-windows needs Pi started from a normal, non-administrator terminal";
         }
 
         /// <summary>

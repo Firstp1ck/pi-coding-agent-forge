@@ -46,7 +46,7 @@ import { auditWindowsOrphans, sweepWindowsOrphans, type WinFootprintOptions } fr
 import { localWindowsChecks, LOCAL_WINDOWS_HOST_SUPPORT } from "./windows/local-checks.ts";
 import { foregroundOf, LocalWindowsSession, type ForegroundWindow } from "./windows/local-session.ts";
 import { boundedText, clientTempRoot, HELPER_DIR, helperArgv, localTempRoot, POWERSHELL_FILE_ARGS, powershellPath, systemRoot } from "./windows/paths.ts";
-import { runHelperProbe, type ProbeOutcome } from "./windows/probe.ts";
+import { reportBoolean, runHelperProbe, type ProbeOutcome } from "./windows/probe.ts";
 import { createRuntimeDir, nodeWinFs, ownerRecordFrom, runtimeDirTag, writeRuntimeOwner, type WinFs } from "./windows/runtime-dir.ts";
 
 export { LOCAL_WINDOWS_HOST_SUPPORT } from "./windows/local-checks.ts";
@@ -178,7 +178,7 @@ export class LocalWindowsBackend implements Backend, DriftCapability, ResetCapab
     };
   }
 
-  #probe(name: "foreground", signal: AbortSignal): Promise<ProbeOutcome> {
+  #probe(name: "foreground" | "env", signal: AbortSignal): Promise<ProbeOutcome> {
     const env = this.#env;
     return runHelperProbe(name, {
       runner: this.runner,
@@ -231,12 +231,26 @@ export class LocalWindowsBackend implements Backend, DriftCapability, ResetCapab
     if (!owner) throw new SessionError("START_FAILED", `the session's ${OWNER_FILE} in ${options.sessionDir} cannot be read`);
 
     let foreground: { before: ForegroundWindow; probe(signal: AbortSignal): Promise<ProbeOutcome> } | undefined;
+    let elevationProbe: ProbeOutcome | undefined;
     if (this.#options.foregroundCheck !== false) {
       options.onStatus?.("reading the foreground window");
       const outcome = await this.#probe("foreground", signal);
+      elevationProbe = outcome;
       const before = foregroundOf(outcome);
       if (!before) throw new SessionError("START_FAILED", `the Windows helper could not read the foreground window: ${outcome.problem ?? "malformed report"}; run /gui-doctor local-windows`);
       foreground = { before, probe: (s) => this.#probe("foreground", s) };
+    }
+    // Refused before anything is created: with an elevated Pi, the client's own writes into the session
+    // folders would run elevated while the app runs as the normal user (DEVELOPMENT "Known gaps").
+    elevationProbe ??= await this.#probe("env", signal);
+    const elevated = reportBoolean(elevationProbe.report, "elevated");
+    if (elevated !== false) {
+      throw new SessionError(
+        elevated === true ? "UNSUPPORTED" : "START_FAILED",
+        elevated === true
+          ? "Pi runs elevated (as administrator); local-windows needs Pi started from a normal, non-administrator terminal"
+          : `the Windows helper could not report whether Pi runs elevated: ${elevationProbe.problem ?? "malformed report"}; run /gui-doctor local-windows`,
+      );
     }
 
     const heartbeat = this.#options.heartbeatTimeoutMs;

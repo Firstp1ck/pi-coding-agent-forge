@@ -187,3 +187,16 @@ test("app.log is created once and written through its handle: planted links and 
   await logs.flush();
   assert.doesNotMatch(await readFile(join(dir, "moved.log"), "utf8"), /after close/, "nothing is written after close()");
 });
+
+test("output added while close() runs is kept in memory only: no descriptor is opened after close", async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), "gui-logs-close-"));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const file = join(dir, "app.log");
+  const logs = new LogBuffer(file);
+  const closing = logs.close();
+  logs.add({ event: "log", stream: "stdout", source: "app", data: "late\n" });
+  await closing;
+  await logs.flush();
+  await assert.rejects(stat(file), { code: "ENOENT" }, "the late event never created the file");
+  assert.deepEqual(logs.tail(1), ["[app stdout] late"]);
+});

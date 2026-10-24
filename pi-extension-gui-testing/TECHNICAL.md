@@ -166,11 +166,11 @@ Setup installs nothing for this backend; every fix is a step for you or your adm
 | `win.powershell` | Windows PowerShell 5.1 (not PowerShell 7) is in `%SystemRoot%\System32\WindowsPowerShell\v1.0` and runs in full language mode. Constrained language mode, set by an AppLocker or WDAC policy, blocks the helper. |
 | `win.execution-policy` | No Group Policy sets PowerShell's execution policy to `AllSigned` or `Restricted`. The helper starts with `-ExecutionPolicy Bypass`, which a Group Policy overrides. |
 | `helper.present` | The package's 17 helper files are installed. The helper is an unsigned PowerShell script, so there is no signature to check. |
-| `win.version` | Windows 10 1809 (build 17763) or newer. The report also says whether Pi runs elevated. |
+| `win.version` | Windows 10 1809 (build 17763) or newer. |
 | `win.arch` | Windows runs on x64 or ARM64. |
 | `helper.desktop` | The helper can create a private, hidden desktop. |
 | `helper.job` | The helper can contain apps in a Windows job, so they all end with the session. |
-| `helper.nonelevated` | Apps start without administrator rights, as the same user as your Explorer, even when Pi itself runs elevated. |
+| `helper.nonelevated` | Pi runs without administrator rights, so apps start with your normal rights. `local-windows` refuses to run from an elevated (administrator) Pi. |
 | `helper.uia` | UI Automation (Windows' accessibility interface) works on the private desktop. |
 | `helper.av` | *Optional.* Security software did not block or kill the helper while it compiled itself. A warning names what happened. |
 
@@ -593,7 +593,7 @@ Screenshots that Pi already received are part of your Pi session history, not of
 - Unlike `local-linux`, the app sees your real user profile: `%APPDATA%`, `%LOCALAPPDATA%`, and the registry. Only `TEMP` and `TMP` point into the session folder. Settings an app saves, and data of Electron or Chromium apps, stay in your profile.
 - Every app the session starts is contained in Windows jobs that end with the session. Programs Windows starts on the app's behalf outside those jobs (for example Store apps such as Windows 11 Notepad, or COM servers) may run outside the private desktop and survive the session; the package reports what it recorded and cannot see.
 - Cleanup ends only the session's own jobs and the helper the package started. The app can write every file in the session folder, so a process named only there is reported and never ended: an app cannot make the package end another program. After a crash, cleanup ends the old helper only while Pi's own session record (in your temp folder, outside the session folder) still lists it; otherwise it reports it.
-- The helper never runs elevated programs: when Pi itself runs as administrator, apps still start with your normal rights, and the helper refuses to start if that is not possible.
+- `local-windows` never runs from an elevated Pi: if Pi runs as administrator, setup's `helper.nonelevated` check fails and every session start is refused with `Pi runs elevated (as administrator)`. Pi's own writes into the session folders would otherwise run with administrator rights while the app runs with your normal rights. Start Pi from a normal terminal.
 - No API keys or other variables from Pi's environment reach the helper or the apps; only Windows' own system variables are passed.
 - Security software may react to the helper: it compiles itself with Windows' C# compiler into `%TEMP%` at every start, creates hidden desktops, and sends input to other windows. `helper.av` warns when it was blocked.
 
@@ -670,7 +670,7 @@ Screenshots that Pi already received are part of your Pi session history, not of
 ### `local-windows`
 
 - No network isolation and no read-only view of your project. Apps share your Windows profile.
-- Each session start takes 10–20 seconds (the helper compiles itself, twice when Pi runs elevated). Switching windows yourself during the start can make it fail; start again.
+- Each session start takes 10–20 seconds (the helper compiles itself). Switching windows yourself during the start can make it fail; start again.
 - When an app hangs, a screenshot, snapshot, or click can time out. After two such operations are still stuck, the next one ends the session (the hung app with it); start a new one.
 - A `snapshot` holds at most 20 000 elements, and at most 1 000 windows are listed (fewer when their titles are very long; `gui_launch` then says the list was cut). A full tree larger than the transfer limit is refused; use the shorter snapshot or a screenshot.
 - A screenshot that does not compress well (photos, noise, very large screens) is scaled down further to fit the transfer limit; the reported scale says how far.
@@ -769,7 +769,7 @@ Screenshots that Pi already received are part of your Pi session history, not of
 | **`local-windows`** | |
 | `win.powershell` fails with `Add-Type is blocked outside FullLanguage mode` | An AppLocker or WDAC policy puts PowerShell in constrained language mode. Ask your administrator to allow full language mode for your user; otherwise use `docker-windows`. |
 | `win.execution-policy` fails (`… blocks helper.ps1`) | A Group Policy sets `AllSigned` or `Restricted`. Ask your administrator to allow local scripts (`RemoteSigned` or less). |
-| `helper.nonelevated` fails | Start Pi from a normal, non-elevated window of your own user, with Explorer running and UAC on. |
+| `helper.nonelevated` fails, or `Pi runs elevated (as administrator); local-windows needs Pi started from a normal, non-administrator terminal` | Start Pi from a normal, non-elevated window of your own user (not "Run as administrator"), with Explorer running and UAC on. |
 | `helper.av` warns, or checks fail with `not checked: the helper did not start (…)` | Security software blocked the helper. Allow `helper.ps1` and PowerShell's runtime compilation (`csc.exe` in `%TEMP%`) for the package's folder. |
 | `the user's foreground window changed while the helper started (…)` | You or another program switched windows during the start. Start the session again. |
 | `local-windows never runs setup commands; …` | Expected. Install the app's dependencies yourself, or use `docker-windows`. |

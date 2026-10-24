@@ -45,6 +45,7 @@ export class LogBuffer {
   #fd?: number;
   #openFailed = false;
   #closed = false;
+  #closing = false;
   readonly #limits: LogLimits;
   #events: LogEvent[] = [];
   #bytes = 0;
@@ -79,7 +80,7 @@ export class LogBuffer {
       this.#bytes -= this.#cost(this.#events.shift()!);
       this.dropped++;
     }
-    if (this.#file) this.#persist(kept);
+    if (this.#file && !this.#closing) this.#persist(kept);
   }
 
   #persist(event: LogEvent): void {
@@ -173,6 +174,8 @@ export class LogBuffer {
    * directory holding an open file). Later output stays in memory only. Idempotent; never rejects.
    */
   async close(): Promise<void> {
+    // Synchronously: output arriving from now on stays in memory, so no new open can start after the drain.
+    this.#closing = true;
     await this.flush();
     this.#closed = true;
     const fd = this.#fd;

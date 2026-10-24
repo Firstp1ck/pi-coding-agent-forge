@@ -343,7 +343,7 @@ above).**
     monitoring are in place; if any guard fails, the job is closed (fail closed);
   - the app runs non-elevated by default using the user's Explorer token; no
     `runas`, no UAC prompt; elevated targets only when Pi itself is elevated and
-    the call opts in;
+    the call opts in; *(Implementation 2026-10-25: deferred — `local-windows` refuses an elevated Pi until the client's writes into session folders are anchored to directory handles; see DEVELOPMENT "Known gaps".)*
   - kill and audit operate only on registered jobs and PID + creation-time
     identities, never on executable names or parent PIDs.
 - **Interaction**: UI Automation patterns first (Invoke, Value, Toggle,

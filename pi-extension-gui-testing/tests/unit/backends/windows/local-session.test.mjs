@@ -234,7 +234,7 @@ test("isolation: a changed foreground window, a non-private desktop, or exec fai
   const cases = [
     {
       name: "foreground changed",
-      runnerOptions: { probes: { foreground: (() => { let n = 0; return () => ({ probe: "foreground", ok: true, hwnd: n++ === 0 ? "win:0x1a2b" : "win:0x99", title: n === 1 ? "Editor" : "Pi GUI smoke" }); })() } },
+      runnerOptions: { probes: { foreground: (() => { let n = 0; return () => ({ probe: "foreground", ok: true, elevated: false, hwnd: n++ === 0 ? "win:0x1a2b" : "win:0x99", title: n === 1 ? "Editor" : "Pi GUI smoke" }); })() } },
       error: /foreground window changed .*win:0x1a2b "Editor" to win:0x99/,
     },
     { name: "interactive capability", spawner: { capabilities: ["launch", "desktop-interactive"] }, error: /private desktop/ },
@@ -435,4 +435,27 @@ test("stop still cleans up after the start's abort signal fired", async () => {
   fake.spawner.children[0].exit(null, "SIGKILL");
   assert.deepEqual(await session.stop(), []);
   assert.deepEqual(runtimeDirs(host), []);
+});
+
+test("an elevated Pi is refused before anything is created; an unknown elevation fails closed", async () => {
+  for (const [probes, code, pattern] of [
+    [{ foreground: { probe: "foreground", ok: true, elevated: true, hwnd: "win:0x1a2b", title: "Editor" } }, "UNSUPPORTED", /Pi runs elevated/],
+    [{ foreground: { probe: "foreground", ok: true, hwnd: "win:0x1a2b", title: "Editor" } }, "START_FAILED", /could not report whether Pi runs elevated/],
+  ]) {
+    const host = fakeWinHost();
+    const fake = winSpawner(host);
+    const b = backend(host, fake, { runnerOptions: { probes } });
+    await assert.rejects(b.startSession(startOptions().options), (e) => e.code === code && pattern.test(e.message));
+    assert.deepEqual(runtimeDirs(host), [], "no runtime dir");
+    assert.equal(fake.spawner.children.length, 0, "no helper");
+  }
+});
+
+test("without the foreground check, the env probe decides elevation", async () => {
+  const host = fakeWinHost();
+  const fake = winSpawner(host);
+  const env = { probe: "env", ok: true, os: "windows", arch: "x64", platform: "Windows 10.0.22631 x64", build: 22631, elevated: true, sessionId: 1, windowStation: "WinSta0" };
+  const b = backend(host, fake, { foregroundCheck: false, runnerOptions: { probes: { env } } });
+  await assert.rejects(b.startSession(startOptions().options), (e) => e.code === "UNSUPPORTED" && /Pi runs elevated/.test(e.message));
+  assert.equal(fake.spawner.children.length, 0);
 });

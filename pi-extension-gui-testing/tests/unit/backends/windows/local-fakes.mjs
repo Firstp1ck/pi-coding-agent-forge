@@ -276,11 +276,11 @@ export function sessionRecord(runtimeDir, extra = {}) {
 
 const PROBE_REPORTS = {
   env: { probe: "env", ok: true, os: "windows", arch: "x64", platform: "Windows 10.0.22631 x64; .NET Framework 4.0.30319.42000; PowerShell 5.1.22621.4391", build: 22631, elevated: false, sessionId: 1, windowStation: "WinSta0" },
-  desktop: { probe: "desktop", ok: true, desktop: "pi-gui-testing-probeabcd-00" },
-  job: { probe: "job", ok: true },
+  desktop: { probe: "desktop", ok: true, elevated: false, desktop: "pi-gui-testing-probeabcd-00" },
+  job: { probe: "job", ok: true, elevated: false },
   nonelevated: { probe: "nonelevated", ok: true, elevated: false, detail: "the helper is not elevated, so apps inherit a non-elevated token" },
-  uia: { probe: "uia", ok: true, name: "pi-gui-testing-probe" },
-  foreground: { probe: "foreground", ok: true, hwnd: "win:0x1a2b", title: "Editor" },
+  uia: { probe: "uia", ok: true, elevated: false, name: "pi-gui-testing-probe" },
+  foreground: { probe: "foreground", ok: true, elevated: false, hwnd: "win:0x1a2b", title: "Editor" },
 };
 
 export const POWERSHELL_INFO = { probe: "powershell", version: "5.1.22621.4391", edition: "Desktop", languageMode: "FullLanguage", machinePolicy: "Undefined", userPolicy: "Undefined" };
