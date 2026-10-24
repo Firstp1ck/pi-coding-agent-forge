@@ -109,38 +109,53 @@ export class SessionLeases {
    * replaced (if any), then writes this session's lease.
    *
    * @throws Error naming the session that holds the machine, or what `check` threw. Nothing is written then.
+   *   When the lock cannot be released after the lease was written, the lease is given back and the error says so.
    */
   async acquire(want: { owner: string; session: string; container: string }, check: (stale: SessionLease | undefined) => Promise<void>): Promise<LeaseHandle> {
     await mkdir(this.#dir, { recursive: true, mode: 0o700 });
-    const lease = await this.#lock.run(async () => {
-      const read = await this.read();
-      let stale: SessionLease | undefined;
-      if (read.state === "invalid") {
-        throw new Error(`docker-windows: the session lease ${this.file} ${read.problem}; if no Pi process runs a docker-windows session, delete that file and start again`);
-      }
-      if (read.state === "ok") {
-        const state = this.judge(read.lease, want.owner);
-        if (state === "alive") {
-          throw new Error(`docker-windows runs one session at a time and session ${read.lease.session} (container ${read.lease.container}) is still running or starting; stop it with gui_stop first`);
+    let published: SessionLease | undefined;
+    let lease: SessionLease;
+    try {
+      lease = await this.#lock.run(async () => {
+        const read = await this.read();
+        let stale: SessionLease | undefined;
+        if (read.state === "invalid") {
+          throw new Error(`docker-windows: the session lease ${this.file} ${read.problem}; if no Pi process runs a docker-windows session, delete that file and start again`);
         }
-        if (state === "unknown") {
-          throw new Error(`docker-windows runs one session at a time and the owner of session ${read.lease.session} (container ${read.lease.container}) cannot be judged; run /gui-cleanup docker-windows, or delete ${this.file} if no Pi process uses it`);
+        if (read.state === "ok") {
+          const state = this.judge(read.lease, want.owner);
+          if (state === "alive") {
+            throw new Error(`docker-windows runs one session at a time and session ${read.lease.session} (container ${read.lease.container}) is still running or starting; stop it with gui_stop first`);
+          }
+          if (state === "unknown") {
+            throw new Error(`docker-windows runs one session at a time and the owner of session ${read.lease.session} (container ${read.lease.container}) cannot be judged; run /gui-cleanup docker-windows, or delete ${this.file} if no Pi process uses it`);
+          }
+          stale = read.lease;
         }
-        stale = read.lease;
-      }
-      await check(stale);
-      const next: SessionLease = { version: 1, ...want, token: randomBytes(8).toString("hex"), createdAt: new Date().toISOString() };
-      const temp = join(this.#dir, `.${LEASE_FILE}.${process.pid}.${next.token}.tmp`);
-      await writeFile(temp, `${JSON.stringify(next, null, 2)}\n`, { mode: 0o600, flag: "wx" });
-      try {
-        await rename(temp, this.file);
-      } catch (error) {
-        await rm(temp, { force: true }).catch(() => undefined);
-        throw error;
-      }
-      held.add(next.token);
-      return next;
-    });
+        await check(stale);
+        const next: SessionLease = { version: 1, ...want, token: randomBytes(8).toString("hex"), createdAt: new Date().toISOString() };
+        const temp = join(this.#dir, `.${LEASE_FILE}.${process.pid}.${next.token}.tmp`);
+        await writeFile(temp, `${JSON.stringify(next, null, 2)}\n`, { mode: 0o600, flag: "wx" });
+        try {
+          await rename(temp, this.file);
+        } catch (error) {
+          await rm(temp, { force: true }).catch(() => undefined);
+          throw error;
+        }
+        held.add(next.token);
+        published = next;
+        return next;
+      });
+    } catch (error) {
+      if (!published) throw error;
+      // Published, but the lock could not be released, so no handle is returned. The lock's release is owed
+      // (LedgerLock retries it at this process's next acquisition here); this admission is given back now, so
+      // no held token is left without a handle. If the lease file cannot be removed either, its token is no
+      // longer held: this process's next start takes it over as abandoned.
+      held.delete(published.token);
+      await this.#removeOwn(published.token).catch(() => undefined);
+      throw new Error(`docker-windows: the session lock ${join(this.#dir, LEASE_LOCK_DIR)} could not be released (${(error as Error).message}); this start was given back, start the session again`);
+    }
     let released = false;
     return {
       lease,
@@ -149,11 +164,16 @@ export class SessionLeases {
         released = true;
         // Not held any more from here on: a lease file a failed removal leaves is this process's abandoned one.
         held.delete(lease.token);
-        await this.#lock.run(async () => {
-          const read = await this.read();
-          if (read.state === "ok" && read.lease.token === lease.token) await rm(this.file, { force: true });
-        });
+        await this.#removeOwn(lease.token);
       },
     };
+  }
+
+  /** Removes the lease file under the lock while it is still the lease of `token`. */
+  async #removeOwn(token: string): Promise<void> {
+    await this.#lock.run(async () => {
+      const read = await this.read();
+      if (read.state === "ok" && read.lease.token === token) await rm(this.file, { force: true });
+    });
   }
 }

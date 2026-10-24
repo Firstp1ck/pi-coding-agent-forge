@@ -144,7 +144,8 @@ export interface Methods {
   ping: { params: Record<string, never>; result: { ok: true } };
   launch: {
     params: { cmd: string; args: string[]; env: Record<string, string>; cwd: string };
-    result: { pid: number; windows: WindowInfo[] };
+    /** `truncated` (Windows helper): the list, or a title in it, was cut to the result bounds. */
+    result: { pid: number; windows: WindowInfo[]; truncated?: boolean };
   };
   wait: {
     params: { for: WaitFor; value?: string; timeoutMs: number };
@@ -201,7 +202,7 @@ export interface Methods {
     };
     result: { ok: true };
   };
-  windows: { params: Record<string, never>; result: { windows: WindowInfo[] } };
+  windows: { params: Record<string, never>; result: { windows: WindowInfo[]; truncated?: boolean } };
   exec: {
     /** Runs a `setup` command via `sh -c`; output arrives as `log` events with `source: "setup"`. */
     params: { cmd: string; cwd: string; env: Record<string, string>; timeoutMs: number };

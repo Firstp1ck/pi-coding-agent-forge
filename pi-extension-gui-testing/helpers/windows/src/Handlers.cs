@@ -30,6 +30,12 @@ namespace PiGuiHelper
         // enforced here so a result is never rejected as a whole by the client.
         /// <summary>Windows in one result (RESPONSE_LIMITS.windows).</summary>
         public const int MaxWindows = 1000;
+        /// <summary>Characters of one window title (RESPONSE_LIMITS.textChars).</summary>
+        public const int MaxTitleChars = 64 * 1024;
+        /// <summary>Encoded bytes of one window list (titles and envelope), well below the 64 MiB line limit.</summary>
+        public const long MaxWindowsJsonBytes = 16L * 1024 * 1024;
+        /// <summary>Allowance per window entry for its keys, bounds, and separators.</summary>
+        public const int WindowEntryOverheadBytes = 256;
         /// <summary>Byte budget of one walk's JSON; the client unpacks at most 256 MiB (treeJsonBytes).</summary>
         public const long MaxTreeJsonBytes = 128L * 1024 * 1024;
         /// <summary>Base64 text of one gzip tree dump (treeGzBase64Chars).</summary>
@@ -271,8 +277,9 @@ namespace PiGuiHelper
             long exitedAt = -1;
             while (sw.ElapsedMilliseconds < LaunchWindowWaitMs)
             {
-                List<object> windows = WindowsJson(_platform.ListWindows(), delegate(WindowEntry w) { return !before.Contains(w.Ref); });
-                if (windows.Count > 0) return LaunchResult(child, windows);
+                bool cut;
+                List<object> windows = WindowsJson(_platform.ListWindows(), delegate(WindowEntry w) { return !before.Contains(w.Ref); }, out cut);
+                if (windows.Count > 0) return LaunchResult(child, windows, cut);
                 if (child.HasExited)
                 {
                     if (exitedAt < 0) exitedAt = sw.ElapsedMilliseconds;
@@ -288,14 +295,15 @@ namespace PiGuiHelper
                 ctx.Sleep(100);
             }
             // Still running without a window: report it and let the client wait.
-            return LaunchResult(child, new List<object>());
+            return LaunchResult(child, new List<object>(), false);
         }
 
-        static Dictionary<string, object> LaunchResult(IChild child, List<object> windows)
+        static Dictionary<string, object> LaunchResult(IChild child, List<object> windows, bool truncated)
         {
             var r = new Dictionary<string, object>();
             r["pid"] = child.Pid;
             r["windows"] = windows;
+            if (truncated) r["truncated"] = true;
             return r;
         }
 
@@ -304,7 +312,9 @@ namespace PiGuiHelper
         object Windows(RequestContext ctx, Dictionary<string, object> p)
         {
             var r = new Dictionary<string, object>();
-            r["windows"] = WindowsJson(_platform.ListWindows(), null);
+            bool cut;
+            r["windows"] = WindowsJson(_platform.ListWindows(), null, out cut);
+            if (cut) r["truncated"] = true;
             return r;
         }
 
@@ -327,7 +337,8 @@ namespace PiGuiHelper
             r["snapshotId"] = sid;
             r["coverage"] = _platform.A11yAvailable ? Coverage.Compute(walk) : "none";
             r["tree"] = nodes.Count > limit ? nodes.GetRange(0, limit) : nodes;
-            r["truncated"] = nodes.Count > limit;
+            // Cut by the walk budget or by the inline bounds: either way the tree is not the whole tree.
+            r["truncated"] = walk.Truncated || nodes.Count > limit;
             return r;
         }
 
@@ -355,15 +366,48 @@ namespace PiGuiHelper
             return Convert.ToBase64String(output.GetBuffer(), 0, (int)output.Length);
         }
 
-        /// <summary>At most MaxWindows windows as JSON (the client refuses a longer list as a whole).</summary>
-        public static List<object> WindowsJson(IEnumerable<WindowEntry> windows, Func<WindowEntry, bool> include)
+        /// <summary>
+        /// Windows as JSON within the client's bounds (it refuses a longer list, or a longer title, as a
+        /// whole): at most MaxWindows entries, titles of at most MaxTitleChars, and at most
+        /// MaxWindowsJsonBytes of encoded JSON. truncated tells whether a window or a title was cut.
+        /// </summary>
+        public static List<object> WindowsJson(IEnumerable<WindowEntry> windows, Func<WindowEntry, bool> include, out bool truncated)
+        {
+            return WindowsJson(windows, include, MaxWindowsJsonBytes, out truncated);
+        }
+
+        public static List<object> WindowsJson(IEnumerable<WindowEntry> windows, Func<WindowEntry, bool> include, long maxBytes, out bool truncated)
         {
             var list = new List<object>();
+            truncated = false;
+            long bytes = 2;
             foreach (WindowEntry w in windows)
             {
-                if (list.Count >= MaxWindows) break;
-                if (include == null || include(w)) list.Add(w.ToJson());
+                if (include != null && !include(w)) continue;
+                if (list.Count >= MaxWindows)
+                {
+                    truncated = true;
+                    break;
+                }
+                Dictionary<string, object> entry = w.ToJson();
+                string title = w.Title;
+                if (title.Length > MaxTitleChars)
+                {
+                    int keep = MaxTitleChars;
+                    if (char.IsHighSurrogate(title[keep - 1])) keep--;
+                    entry["title"] = title.Substring(0, keep);
+                    truncated = true;
+                }
+                long size = Json.EncodedLength(w.Ref) + Json.EncodedLength((string)entry["title"]) + WindowEntryOverheadBytes;
+                if (bytes + size > maxBytes)
+                {
+                    truncated = true;
+                    break;
+                }
+                bytes += size;
+                list.Add(entry);
             }
+            if (truncated) Diag.Write("the window list exceeds the result bounds; it holds the first " + list.Count + " windows (titles of at most " + MaxTitleChars + " characters)");
             return list;
         }
 

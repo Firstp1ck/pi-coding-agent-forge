@@ -45,7 +45,7 @@ import { localHelperEnv, passedWindowsEnv } from "./windows/env.ts";
 import { auditWindowsOrphans, sweepWindowsOrphans, type WinFootprintOptions } from "./windows/footprint.ts";
 import { localWindowsChecks, LOCAL_WINDOWS_HOST_SUPPORT } from "./windows/local-checks.ts";
 import { foregroundOf, LocalWindowsSession, type ForegroundWindow } from "./windows/local-session.ts";
-import { boundedText, HELPER_DIR, helperArgv, localTempRoot, POWERSHELL_FILE_ARGS, powershellPath, systemRoot } from "./windows/paths.ts";
+import { boundedText, clientTempRoot, HELPER_DIR, helperArgv, localTempRoot, POWERSHELL_FILE_ARGS, powershellPath, systemRoot } from "./windows/paths.ts";
 import { runHelperProbe, type ProbeOutcome } from "./windows/probe.ts";
 import { createRuntimeDir, nodeWinFs, ownerRecordFrom, runtimeDirTag, writeRuntimeOwner, type WinFs } from "./windows/runtime-dir.ts";
 
@@ -73,6 +73,8 @@ export interface LocalWindowsOptions {
   helperDir?: string;
   /** Smoke app script; default {@link WINDOWS_SMOKE_APP_PATH}. */
   smokeAppPath?: string;
+  /** Where the client's session dirs live; default {@link clientTempRoot} (`os.tmpdir()` on Windows). */
+  clientTmpRoot?: string;
   /** Start times of PIDs as `owner.json` records them; default the platform probe. */
   processProbe?: ProcessProbe;
   copyWorkspace?: CopyWorkspace;
@@ -147,6 +149,7 @@ export class LocalWindowsBackend implements Backend, DriftCapability, ResetCapab
         powershell: powershellPath(this.#env),
         env: passedWindowsEnv(this.#env),
         root: localTempRoot(this.#env),
+        clientRoot: this.#options.clientTmpRoot ?? clientTempRoot(this.#env),
         probe: this.#processProbe,
         ...(signal ? { signal } : {}),
       };

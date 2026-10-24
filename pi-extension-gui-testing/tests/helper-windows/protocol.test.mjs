@@ -298,6 +298,37 @@ test("results stay within the client's limits: windows, inline tree bytes, full 
   }
 });
 
+test("results stay within the client's limits: long window titles, a walk beyond its budget, an incompressible screenshot (review WG3, WG4, WG6)", { skip }, async () => {
+  const helper = await started({ FAKE_SCREEN: "3600x3600", FAKE_SCREEN_NOISE: "1" });
+  try {
+    // 350 windows with 64 Ki CJK titles are about 68 MB of JSON: the list is cut by encoded bytes, and says so.
+    const launchEnvelope = await helper.send("launch", { cmd: "wide-titles", args: [], cwd: "C:\\work" }).promise;
+    assert.ok(Buffer.byteLength(JSON.stringify(launchEnvelope)) < 20 * 1024 * 1024, "launch result far below the 64 MiB line limit");
+    const launched = checkResponse("launch", launchEnvelope);
+    assert.equal(launched.truncated, true);
+    assert.ok(launched.windows.length > 0 && launched.windows.length < 350, `windows ${launched.windows.length}`);
+    const listEnvelope = await helper.send("windows").promise;
+    assert.ok(Buffer.byteLength(JSON.stringify(listEnvelope)) < 20 * 1024 * 1024);
+    assert.equal(checkResponse("windows", listEnvelope).truncated, true);
+
+    // A walk stopped by its budget is a truncated snapshot, even when every walked node fits inline.
+    await helper.call("launch", { cmd: "wide-tree", args: [], cwd: "C:\\work" });
+    const snap = checkResponse("snapshot", await helper.send("snapshot", { maxNodes: 50_000 }).promise);
+    assert.equal(snap.tree.length, 20_000);
+    assert.equal(snap.truncated, true);
+    await helper.expectStderr(/exceeds the walk budget/);
+
+    // 3600 x 3600 high-entropy pixels: about 52 million base64 characters at full size, above pngBase64Chars.
+    const shot = checkResponse("screenshot", await helper.send("screenshot", { maxEdge: 3600 }).promise);
+    assert.ok(shot.png_base64.length <= 48 * 1024 * 1024, `${shot.png_base64.length} characters`);
+    assert.ok(shot.scale < 1, `scale ${shot.scale}`);
+    assert.equal(shot.width, 3600);
+    await helper.expectStderr(/exceeds 50331648 base64 characters; downscaling/);
+  } finally {
+    helper.kill();
+  }
+});
+
 test("a fatal platform error answers INTERNAL, then the helper ends the session", { skip }, async () => {
   const helper = await started();
   try {

@@ -27,6 +27,33 @@ export async function containerState(runner: CommandRunner, endpoint: DockerEndp
   return { running: state.Running === true, status: state.Status ?? "unknown", ...(typeof state.ExitCode === "number" ? { exitCode: state.ExitCode } : {}) };
 }
 
+/** A container's immutable id and labels. */
+export interface ContainerIdentity {
+  id: string;
+  labels: Record<string, string>;
+}
+
+/** Id and labels of container `name`, or `undefined` when it does not exist. */
+export async function containerIdentity(runner: CommandRunner, endpoint: DockerEndpoint, name: string, signal?: AbortSignal): Promise<ContainerIdentity | undefined> {
+  const result = await runDocker(runner, endpoint, ["container", "inspect", "--format", "{{json .Id}}\t{{json .Config.Labels}}", name], { timeoutMs: 15_000, ...(signal ? { signal } : {}) });
+  if (result.exitCode !== 0) {
+    if (/no such (container|object)/i.test(result.stderr)) return undefined;
+    throw new Error(`docker container inspect ${name} failed (${describeFailure(result)})`);
+  }
+  const [rawId, rawLabels] = result.stdout.trim().split("\t");
+  let id: unknown;
+  let labels: unknown;
+  try {
+    id = JSON.parse(rawId ?? "");
+    labels = JSON.parse(rawLabels ?? "") ?? {};
+  } catch {
+    throw new Error(`docker container inspect ${name} gave an unreadable answer`);
+  }
+  if (typeof id !== "string" || !/^[0-9a-f]{12,64}$/.test(id) || typeof labels !== "object" || Array.isArray(labels)) throw new Error(`docker container inspect ${name} gave an unreadable answer`);
+  const strings = Object.fromEntries(Object.entries(labels as Record<string, unknown>).filter(([, v]) => typeof v === "string")) as Record<string, string>;
+  return { id, labels: strings };
+}
+
 /**
  * Host port of `containerPort` (e.g. `22/tcp`). Fails closed unless every
  * binding Docker reports is on `127.0.0.1`.

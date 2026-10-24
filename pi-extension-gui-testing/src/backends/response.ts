@@ -236,7 +236,7 @@ const VALIDATORS: Validators = {
     ...(r.platform !== undefined ? { platform: ownedSlice(c.string(r.platform, "platform", RESPONSE_LIMITS.platformChars)) } : {}),
   }),
   ping: () => ({ ok: true }),
-  launch: (c, r) => ({ pid: c.integer(r.pid, "pid", 0), windows: c.windows(r.windows, "windows") }),
+  launch: (c, r) => ({ pid: c.integer(r.pid, "pid", 0), windows: c.windows(r.windows, "windows"), ...(r.truncated !== undefined ? { truncated: c.boolean(r.truncated, "truncated") } : {}) }),
   wait: (c, r) => ({ matched: c.boolean(r.matched, "matched"), elapsedMs: c.number(r.elapsedMs, "elapsedMs", 0) }),
   snapshot: (c, r) => {
     const coverage = c.string(r.coverage, "coverage");
@@ -265,7 +265,7 @@ const VALIDATORS: Validators = {
     return result;
   },
   act: () => ({ ok: true }),
-  windows: (c, r) => ({ windows: c.windows(r.windows, "windows") }),
+  windows: (c, r) => ({ windows: c.windows(r.windows, "windows"), ...(r.truncated !== undefined ? { truncated: c.boolean(r.truncated, "truncated") } : {}) }),
   exec: (c, r) => ({ exitCode: c.integer(r.exitCode, "exitCode", -1_000, 1_000), elapsedMs: c.number(r.elapsedMs, "elapsedMs", 0) }),
   cancel: () => ({ ok: true }),
   depsPack: (c, r) => ({

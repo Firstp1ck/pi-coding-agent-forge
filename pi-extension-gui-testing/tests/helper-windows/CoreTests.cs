@@ -378,8 +378,39 @@ namespace PiGuiHelper.Tests
 
             var windows = new List<WindowEntry>();
             for (int i = 0; i < 1200; i++) windows.Add(new WindowEntry("win:0x" + (i + 1).ToString("x"), "w", new Bounds(0, 0, 1, 1)));
-            Check(Handlers.WindowsJson(windows, null).Count == 1000, "windows: at most 1000 in a result");
-            Check(Handlers.WindowsJson(windows, delegate(WindowEntry w) { return w.Ref.EndsWith("0"); }).Count == 75, "windows: filter applies before the bound");
+            bool cut;
+            Check(Handlers.WindowsJson(windows, null, out cut).Count == 1000 && cut, "windows: at most 1000 in a result, flagged");
+            Check(Handlers.WindowsJson(windows, delegate(WindowEntry w) { return w.Ref.EndsWith("0"); }, out cut).Count == 75 && !cut, "windows: filter applies before the bound");
+
+            // Review WG3: 350 windows with 64 Ki CJK titles are 68 MB of JSON, above the 64 MiB line.
+            var wide = new List<WindowEntry>();
+            string cjk = new string('\u4e00', 65536);
+            for (int i = 0; i < 350; i++) wide.Add(new WindowEntry("win:0x" + (i + 1).ToString("x"), cjk, new Bounds(0, 0, 1, 1)));
+            List<object> wideJson = Handlers.WindowsJson(wide, null, out cut);
+            long wideBytes = Encoding.UTF8.GetByteCount(Json.Serialize(wideJson));
+            Check(cut && wideJson.Count > 0 && wideJson.Count < 350 && wideBytes <= Handlers.MaxWindowsJsonBytes, "windows: encoded byte budget cuts the list (" + wideJson.Count + " windows, " + wideBytes + " bytes)");
+            Check(Handlers.MaxWindowsJsonBytes < 64L * 1024 * 1024 / 2 && Handlers.MaxTitleChars == 64 * 1024, "windows: byte budget well below the line limit, title bound = textChars");
+            var escaped = new List<WindowEntry>();
+            for (int i = 0; i < 100; i++) escaped.Add(new WindowEntry("win:0x" + (i + 1).ToString("x"), new string('\u0001', 60000), new Bounds(0, 0, 1, 1)));
+            List<object> escapedJson = Handlers.WindowsJson(escaped, null, 4L * 1024 * 1024, out cut);
+            Check(cut && Encoding.UTF8.GetByteCount(Json.Serialize(escapedJson)) <= 4L * 1024 * 1024, "windows: escaped titles are counted as encoded bytes");
+            var longTitle = new List<WindowEntry>();
+            longTitle.Add(new WindowEntry("win:0x1", new string('a', Handlers.MaxTitleChars - 1) + "\ud83d\ude00tail", new Bounds(0, 0, 1, 1)));
+            List<object> clipped = Handlers.WindowsJson(longTitle, null, out cut);
+            string clippedTitle = (string)((Dictionary<string, object>)clipped[0])["title"];
+            Check(cut && clipped.Count == 1 && clippedTitle.Length == Handlers.MaxTitleChars - 1 && !char.IsHighSurrogate(clippedTitle[clippedTitle.Length - 1]), "windows: an over-long title is clipped (never inside a surrogate pair) and flagged");
+
+            // Review WG4: a high-entropy capture is downscaled until its base64 fits; TOO_LARGE when it cannot.
+            Check(Imaging.MaxPngBase64Chars == 48 * 1024 * 1024, "screenshot: base64 bound = pngBase64Chars");
+            var noise = new byte[400 * 300 * 3];
+            new Random(42).NextBytes(noise);
+            var noisy = new RgbImage(400, 300, noise);
+            long fullChars = ((string)Imaging.BuildCapture(noisy, 400)["png_base64"]).Length;
+            Dictionary<string, object> fitted = Imaging.BuildCapture(noisy, 400, fullChars / 2);
+            string fittedPng = (string)fitted["png_base64"];
+            Check(fittedPng.Length <= fullChars / 2 && (double)fitted["scale"] < 1 && (int)fitted["width"] == 400 && (int)fitted["height"] == 300, "screenshot: an incompressible capture is downscaled until it fits (" + fittedPng.Length + " <= " + fullChars / 2 + ", scale " + fitted["scale"] + ")");
+            ThrowsCode("TOO_LARGE", delegate { Imaging.BuildCapture(noisy, 400, 40); }, "screenshot: a capture that cannot fit (not even a few pixels) is TOO_LARGE");
+            Check(((string)Imaging.BuildCapture(noisy, 400, fullChars)["png_base64"]).Length == fullChars, "screenshot: a capture that fits is not downscaled further");
 
             var workers = new WorkerBudget(2);
             WorkerBudget.Worker a = workers.Begin("a");

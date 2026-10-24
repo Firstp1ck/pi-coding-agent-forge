@@ -6,8 +6,11 @@
 // "handoff" (exits 0 without a window), "crash" (exits 3), "windowless"
 // (runs, never opens a window), "missing" (NOT_FOUND), "black-app" (window
 // whose capture is all black), "many-windows" (1200 windows), "big-tree" (a
-// window whose tree holds 1100 nodes with 64 Ki-character names), "unhealthy"
-// (the platform reports the session unusable). exec: "exit N", "echo TEXT", "sleep MS",
+// window whose tree holds 1100 nodes with 64 Ki-character names), "wide-titles"
+// (350 windows with 64 Ki-character CJK titles), "wide-tree" (a window whose tree
+// holds more nodes than the walk budget), "unhealthy" (the platform reports the
+// session unusable). FAKE_SCREEN=WxH sets the screen size; FAKE_SCREEN_NOISE=1
+// fills captures with high-entropy pixels. exec: "exit N", "echo TEXT", "sleep MS",
 // "big N" (N bytes of output), "ntstatus" (exits 0xC0000005).
 using System;
 using System.Collections.Generic;
@@ -137,6 +140,20 @@ namespace PiGuiHelper.Tests
                 case "many-windows":
                     for (int i = 0; i < 1200; i++) AddWindow("Window " + i);
                     break;
+                case "wide-titles":
+                    {
+                        string title = new string('\u4e00', 65536);
+                        for (int i = 0; i < 350; i++) AddWindow(title);
+                    }
+                    break;
+                case "wide-tree":
+                    AddWindow("Wide Tree");
+                    lock (_lock)
+                    {
+                        for (int i = 0; i < Handlers.WalkCap + 10; i++)
+                            _elements.Add(new FakeElement { Role = "text", Name = "extra", Parent = 0, Bounds = new Bounds(20, 30, 30, 6), Window = _windows[_windows.Count - 1].Ref });
+                    }
+                    break;
                 case "big-tree":
                     AddWindow("Big Tree");
                     lock (_lock)
@@ -240,6 +257,13 @@ namespace PiGuiHelper.Tests
                 h = int.Parse(p[1]);
             }
             rect = new Bounds(0, 0, w, h);
+            string noise;
+            if (_env.TryGetValue("FAKE_SCREEN_NOISE", out noise) && noise == "1")
+            {
+                var rgb = new byte[checked(w * h * 3)];
+                new Random(42).NextBytes(rgb);
+                return new RgbImage(w, h, rgb);
+            }
             return Pattern(w, h, false);
         }
 

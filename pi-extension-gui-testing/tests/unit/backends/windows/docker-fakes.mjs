@@ -61,6 +61,9 @@ export function parseRunArgv(argv) {
   return { flags, image, all, one: (name) => all(name).at(-1), rest: argv.slice(i + 1) };
 }
 
+/** The fake's immutable container id: 64 hex digits derived from the name, as Docker ids look. */
+export const fakeContainerId = (name) => createHash("sha256").update(`container:${name}`).digest("hex");
+
 const sha = (data) => createHash("sha256").update(data).digest("hex");
 
 /**
@@ -137,6 +140,8 @@ export function fakeWindowsDocker(opts = {}) {
     .on(host("container inspect --format"), (argv) => {
       const c = container(argv.at(-1));
       if (!c) return { exitCode: 1, stderr: `Error: No such container: ${argv.at(-1)}` };
+      // Immutable id and labels.
+      if (argv.includes("{{json .Id}}\t{{json .Config.Labels}}")) return { stdout: `${JSON.stringify(fakeContainerId(c.name))}\t${JSON.stringify(c.labels ?? {})}\n` };
       return { stdout: JSON.stringify({ Running: c.running, Status: c.running ? "running" : "exited", ExitCode: c.running ? 0 : 1 }) };
     })
     .on(host("container inspect pi-gui-testing-win-probe"), (argv) => {
@@ -159,7 +164,8 @@ export function fakeWindowsDocker(opts = {}) {
       return { stdout: [...lines, ...(opts.extraContainers?.[role] ?? [])].join("\n") };
     })
     .on(host("rm -f "), (argv) => {
-      const id = argv.at(-1).replace(/^id-/, "");
+      const target = argv.at(-1);
+      const id = [...state.containers.keys()].find((name) => fakeContainerId(name) === target) ?? target.replace(/^id-/, "");
       state.removed.push(argv.at(-1));
       state.containers.delete(id);
       return {};

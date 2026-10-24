@@ -37,6 +37,10 @@ namespace PiGuiHelper
         public const int DefaultMaxEdge = 1280;
         /// <summary>Same bound as the client's screenshot validation (RESPONSE_LIMITS.pixels).</summary>
         public const int MaxEdgePixels = 32768;
+        /// <summary>Base64 text of one screenshot (RESPONSE_LIMITS.pngBase64Chars).</summary>
+        public const int MaxPngBase64Chars = 48 * 1024 * 1024;
+        /// <summary>Encodings tried before a capture that does not fit is refused.</summary>
+        public const int MaxEncodeAttempts = 6;
 
         static readonly uint[] CrcTable = BuildCrcTable();
 
@@ -216,13 +220,45 @@ namespace PiGuiHelper
             return new RgbImage(width, height, dst);
         }
 
+        /// <summary>Base64 characters of n bytes.</summary>
+        public static long Base64Length(long n)
+        {
+            return (n + 2) / 3 * 4;
+        }
+
         /// <summary>The screenshot result fields that depend only on the pixels.</summary>
         public static Dictionary<string, object> BuildCapture(RgbImage image, int maxEdge)
         {
+            return BuildCapture(image, maxEdge, MaxPngBase64Chars);
+        }
+
+        /// <summary>
+        /// As BuildCapture, with at most maxBase64Chars of PNG text: a capture that does not compress
+        /// enough is downscaled further (the reported scale says how far) until it fits, and refused with
+        /// TOO_LARGE when it still does not fit after MaxEncodeAttempts encodings.
+        /// </summary>
+        public static Dictionary<string, object> BuildCapture(RgbImage image, int maxEdge, long maxBase64Chars)
+        {
             double scale;
             int outW, outH;
-            ScaledSize(image.Width, image.Height, maxEdge, out scale, out outW, out outH);
-            byte[] png = EncodePng(scale == 1 ? image : Resize(image, outW, outH));
+            int edge = Math.Max(1, Math.Min(maxEdge, Math.Max(image.Width, image.Height)));
+            byte[] png = null;
+            scale = 1;
+            for (int attempt = 0; ; attempt++)
+            {
+                ScaledSize(image.Width, image.Height, edge, out scale, out outW, out outH);
+                png = EncodePng(scale == 1 ? image : Resize(image, outW, outH));
+                long chars = Base64Length(png.Length);
+                if (chars <= maxBase64Chars) break;
+                // PNG size grows about with the pixel count: shrink the edge by the square root of the excess, with a margin.
+                int next = (int)Math.Floor(edge * Math.Sqrt(maxBase64Chars / (double)chars) * 0.95);
+                if (next >= edge) next = edge - 1;
+                if (next < 1 || attempt + 1 >= MaxEncodeAttempts)
+                    throw new ProtocolException("TOO_LARGE", "the screenshot does not fit the transfer limit (" + chars + " base64 characters at " + outW + "x" + outH + ", at most " + maxBase64Chars +
+                        "); capture a window or an element, or pass a smaller maxEdge");
+                Diag.Write("the screenshot (" + outW + "x" + outH + ") exceeds " + maxBase64Chars + " base64 characters; downscaling to a long edge of " + next);
+                edge = next;
+            }
             var result = new Dictionary<string, object>();
             result["width"] = image.Width;
             result["height"] = image.Height;

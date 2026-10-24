@@ -179,7 +179,7 @@ export class LocalWindowsSession extends HelperSession {
       this.#recorded = (async () => {
         if (!start || !this.#helperId) throw new Error(`cannot read the start time of process ${pid}`);
         await this.#win.recordResource("process", this.#helperId);
-        // The runtime dir's owner copy lists it too: the orphan sweep ends a dead owner's helper only when it matches this record.
+        // The runtime dir's owner copy lists it too (for audits); the apps can rewrite that copy, so no sweep trusts it to end anything.
         await writeRuntimeOwner(this.#win.footprint.fs, this.#win.runtimeDir, {
           ...this.#win.owner,
           resources: [...this.#win.owner.resources, { kind: "tempdir", id: this.#win.runtimeDir }, { kind: "process", id: this.#helperId }],
@@ -239,4 +239,3 @@ export class LocalWindowsSession extends HelperSession {
     return cleanupRuntimeDir(this.#win.runtimeDir, this.#win.footprint, "session", this.#helperId ? [this.#helperId] : []);
   }
 }
-

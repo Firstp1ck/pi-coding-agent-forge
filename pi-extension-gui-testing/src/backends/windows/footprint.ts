@@ -18,6 +18,14 @@
  *   creation time);
  * - every other recorded process is inspected and reported, never ended.
  *
+ * The runtime dir's `owner.json` copy is just as writable, so it never
+ * authorizes a kill either. In teardown the client's in-memory spawn id does;
+ * in the orphan sweep only the client's own session record does: the
+ * `owner.json` of a client session dir (`pi-gui-testing-XXXXXX`, outside the
+ * runtime dir) that lists this runtime dir. Without exactly one such record
+ * (for example after the client scan already removed it) the sweep ends only
+ * the session's jobs and reports the helper.
+ *
  * The orphan audit and sweep act only on runtime dirs this package created
  * (name pattern, real directory, owner record) whose owner is dead. Live and
  * unknown owners are never touched; unknown ones are reported.
@@ -25,12 +33,13 @@
 import { win32 } from "node:path";
 import { DEFAULT_PROC_ROOT, ownerLiveness, type ProcessProbe } from "../../cleanup/identity.ts";
 import { parseProcessResourceId, PROCESS_KIND } from "../../cleanup/session-dir.ts";
-import type { OwnerRecord } from "../../owner.ts";
+import { BACKEND_OWNED_DIR } from "../../cleanup/sweep.ts";
+import { OWNER_FILE, SESSION_DIR_PREFIX, type OwnerRecord } from "../../owner.ts";
 import type { Leftover } from "../../protocol.ts";
 import type { CommandRunner } from "../../runner/types.ts";
 import { inspectWindowsObjects, type InspectResult, type ObjectState } from "./inspect.ts";
-import { boundedText } from "./paths.ts";
-import { isPackageRuntimeDir, readRuntimeOwner, removeRuntimeDir, RUNTIME_DIR_NAME, runtimeDirTag, type WinFs } from "./runtime-dir.ts";
+import { boundedText, samePath } from "./paths.ts";
+import { isPackageRuntimeDir, ownerRecordFrom, readRuntimeOwner, removeRuntimeDir, RUNTIME_DIR_KIND, RUNTIME_DIR_NAME, runtimeDirTag, type WinFs } from "./runtime-dir.ts";
 import { MAX_SESSION_RECORD_BYTES, parseSessionRecord, processKey, SESSION_RECORD_FILE, type WinProcessId, type WinSessionRecord } from "./session-record.ts";
 
 export interface WinFootprintOptions {
@@ -42,6 +51,12 @@ export interface WinFootprintOptions {
   env: Record<string, string>;
   /** `%LOCALAPPDATA%\Temp`, where runtime dirs live. */
   root: string;
+  /**
+   * Where the client's session dirs live (`os.tmpdir()`, usually the same
+   * dir as `root`). Their `owner.json` is the only record the orphan sweep
+   * trusts to end a dead owner's helper; without it, nothing is ended by PID.
+   */
+  clientRoot?: string;
   /** Owner liveness probe (the platform default in production). */
   probe: ProcessProbe;
   signal?: AbortSignal;
@@ -97,7 +112,7 @@ export function spawnedByClient(process: WinProcessId, trusted: readonly string[
   });
 }
 
-/** The `process` resources of an owner record: what the client itself spawned and recorded. */
+/** The `process` resources of a client owner record: what the client itself spawned and recorded. */
 export function ownerProcesses(owner: OwnerRecord | undefined): string[] {
   return (owner?.resources ?? []).filter((r) => r.kind === PROCESS_KIND).map((r) => r.id);
 }
@@ -185,11 +200,52 @@ interface RuntimeDirEntry {
   dir: string;
   liveness: "alive" | "dead" | "unknown";
   reason?: string;
-  /** The owner copy's `process` resources: the helper the dead owner spawned. */
+  /** `process` resources of the client session record that lists this dir: the helper the dead owner spawned. */
   spawned?: string[];
 }
 
-/** Runtime dirs of this package under `root`, with their owner's liveness. Links and other users' leftovers are skipped. */
+/** A client session dir's `owner.json` (outside every runtime dir) of a `local-windows` session. */
+interface ClientRecord {
+  dir: string;
+  record: OwnerRecord;
+}
+
+/**
+ * The client session records under `clientRoot` written by `local-windows`
+ * sessions. Only real dirs with the generic session-dir name are read; the
+ * runtime dirs (also `pi-gui-testing-…`) never count, since their apps can write them.
+ */
+async function clientRecords(options: WinFootprintOptions): Promise<ClientRecord[]> {
+  const root = options.clientRoot;
+  if (!root) return [];
+  let names: string[];
+  try {
+    names = await options.fs.readdir(root);
+  } catch {
+    return [];
+  }
+  const records: ClientRecord[] = [];
+  for (const name of names.sort()) {
+    if (!name.startsWith(SESSION_DIR_PREFIX) || BACKEND_OWNED_DIR.test(name)) continue;
+    const dir = win32.join(root, name);
+    try {
+      if ((await options.fs.lstat(dir)) !== "dir" || (await options.fs.lstat(win32.join(dir, OWNER_FILE))) !== "file") continue;
+      const record = ownerRecordFrom(await options.fs.readFile(win32.join(dir, OWNER_FILE), 64 * 1024));
+      if (record?.backend === "local-windows") records.push({ dir, record });
+    } catch {
+      // Unreadable: not a record this sweep can rely on.
+    }
+  }
+  return records;
+}
+
+/**
+ * Runtime dirs of this package under `root`, with their owner's liveness.
+ * Links and other users' leftovers are skipped. The client session record
+ * that lists a dir decides its owner and trusted helper; the dir's own owner
+ * copy only judges the owner when no client record lists it, and then
+ * authorizes nothing.
+ */
 export async function scanRuntimeDirs(options: WinFootprintOptions): Promise<RuntimeDirEntry[]> {
   let names: string[];
   try {
@@ -198,6 +254,7 @@ export async function scanRuntimeDirs(options: WinFootprintOptions): Promise<Run
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
     throw error;
   }
+  const clients = await clientRecords(options);
   const entries: RuntimeDirEntry[] = [];
   for (const name of names.sort()) {
     if (!RUNTIME_DIR_NAME.test(name)) continue;
@@ -210,13 +267,19 @@ export async function scanRuntimeDirs(options: WinFootprintOptions): Promise<Run
       continue;
     }
     if (type !== "dir") continue;
-    const owner = await readRuntimeOwner(options.fs, dir);
+    const claims = clients.filter((c) => c.record.resources.some((r) => r.kind === RUNTIME_DIR_KIND && samePath(r.id, dir)));
+    if (claims.length > 1) {
+      entries.push({ dir, liveness: "unknown", reason: `${claims.length} client session records list it (${claims.map((c) => c.dir).join(", ")})` });
+      continue;
+    }
+    const client = claims[0]?.record;
+    const owner = client ?? (await readRuntimeOwner(options.fs, dir));
     if (!owner) {
       entries.push({ dir, liveness: "unknown", reason: "owner.json missing or invalid" });
       continue;
     }
     const liveness = ownerLiveness(owner, DEFAULT_PROC_ROOT, options.probe);
-    entries.push({ dir, liveness, spawned: ownerProcesses(owner), ...(liveness === "unknown" ? { reason: "owner process state could not be read" } : {}) });
+    entries.push({ dir, liveness, ...(client ? { spawned: ownerProcesses(client) } : {}), ...(liveness === "unknown" ? { reason: "owner process state could not be read" } : {}) });
   }
   return entries;
 }
@@ -241,7 +304,11 @@ export async function auditWindowsOrphans(options: WinFootprintOptions): Promise
   return leftovers;
 }
 
-/** Orphan sweep: {@link cleanupRuntimeDir} for every runtime dir whose owner is dead. Returns what is left and unknown owners. */
+/**
+ * Orphan sweep: {@link cleanupRuntimeDir} for every runtime dir whose owner is
+ * dead, trusting only the helper its client session record lists. Returns
+ * what is left and unknown owners.
+ */
 export async function sweepWindowsOrphans(options: WinFootprintOptions): Promise<Leftover[]> {
   const leftovers: Leftover[] = [];
   for (const entry of await scanRuntimeDirs(options)) {

@@ -26,6 +26,7 @@ import type { Check, CheckResult } from "../checks/types.ts";
 import type { BackendId, ResolvedConfig } from "../config/types.ts";
 import { globalConfigPath } from "../config/types.ts";
 import { DEFAULT_PROC_ROOT } from "../cleanup/identity.ts";
+import { LABEL_OWNER, LABEL_SESSION } from "../labels.ts";
 import { PROTOCOL_VERSION, type Leftover } from "../protocol.ts";
 import { createSpawnRunner } from "../runner/spawn.ts";
 import type { CommandRunner, DockerEndpoint, RunResult } from "../runner/types.ts";
@@ -46,18 +47,19 @@ import {
   DOCKURR_IMAGE,
   GUEST_SMOKE_APP,
   INSTALL_CONTAINER,
+  LABEL_WINDOWS,
   LABEL_WINDOWS_INSTALL,
   SESSION_ID_PATTERN,
   SETUP_COMMAND_TIMEOUT_MS,
   sessionContainerName,
   type WindowsVmSettings,
 } from "./docker-windows/constants.ts";
-import { baseDiskStamp, containerState, listRoleContainers, removeContainer, removeBaseVolumes, volumeLabels } from "./docker-windows/docker.ts";
+import { baseDiskStamp, containerIdentity, containerState, listRoleContainers, removeContainer, removeBaseVolumes, volumeLabels } from "./docker-windows/docker.ts";
 import { auditWindowsOrphans, containerOwnerLiveness, sweepWindowsOrphans } from "./docker-windows/footprint.ts";
 import { GuestSsh } from "./docker-windows/guest-ssh.ts";
 import { installBase } from "./docker-windows/install.ts";
 import { keyPaths, keysReady, type GuestKeys } from "./docker-windows/keys.ts";
-import { SessionLeases } from "./docker-windows/lease.ts";
+import { SessionLeases, type SessionLease } from "./docker-windows/lease.ts";
 import { helperFiles, HELPER_SOURCE_DIR, type HelperFile } from "./docker-windows/oem.ts";
 import { POWERSHELL } from "./docker-windows/powershell.ts";
 import { DockerWindowsSession, stagingRootFor } from "./docker-windows/session.ts";
@@ -286,6 +288,31 @@ export class DockerWindowsBackend
 
   // ---- sessions ----
 
+  /**
+   * The container a stale lease names, removed by its immutable id only when
+   * its labels say it is that lease's session of that (dead or abandoned)
+   * owner. A container of another owner that is alive or cannot be judged
+   * refuses the start; one of another dead owner is left to the dead-owner
+   * removal that follows.
+   */
+  async #removeStaleLeaseContainer(stale: SessionLease, endpoint: DockerEndpoint, signal: AbortSignal): Promise<void> {
+    const found = await containerIdentity(this.runner, endpoint, stale.container, signal);
+    if (!found) return;
+    const role = found.labels[LABEL_WINDOWS];
+    const owner = found.labels[LABEL_OWNER] ?? "";
+    const session = found.labels[LABEL_SESSION] ?? "";
+    if (role === "session" && owner === stale.owner && session === stale.session) {
+      const failed = await removeContainer(this.runner, endpoint, found.id, signal);
+      if (failed) throw new Error(`docker-windows: the container ${stale.container} of an ended session could not be removed (${failed}); run /gui-cleanup docker-windows`);
+      return;
+    }
+    const liveness = role === "session" ? containerOwnerLiveness({ owner }, this.#procRoot) : "unknown";
+    if (liveness === "dead") return;
+    throw new Error(
+      `docker-windows: the lease of ended session ${stale.session} names container ${stale.container}, but that container is ${role === "session" ? `session ${session || "?"} of ${liveness === "alive" ? "a Pi process that is still running" : "an owner that cannot be judged"}` : "not a docker-windows session container"} (owner ${owner || "unlabelled"}); it was not removed. Stop that session with gui_stop, or run /gui-cleanup docker-windows`,
+    );
+  }
+
   async startSession(options: SessionStartOptions): Promise<Session> {
     const { signal, config } = options;
     const shared = config.shared;
@@ -313,10 +340,7 @@ export class DockerWindowsBackend
     // Admission is atomic across Pi processes (an interprocess lock around the checks and the lease), and the lease
     // stays until the container is gone, so a second start is refused even before the first container exists.
     const lease = await this.#leases.acquire({ owner: options.ownerLabel, session: options.sessionId, container: name }, async (stale) => {
-      if (stale) {
-        const failed = await removeContainer(this.runner, endpoint, stale.container, signal);
-        if (failed) throw new Error(`docker-windows: the container ${stale.container} of an ended session could not be removed (${failed}); run /gui-cleanup docker-windows`);
-      }
+      if (stale) await this.#removeStaleLeaseContainer(stale, endpoint, signal);
       for (const other of await listRoleContainers(this.runner, endpoint, "session", signal)) {
         if (containerOwnerLiveness(other, this.#procRoot) !== "dead") {
           throw new Error(`docker-windows runs one session at a time and ${other.name} is still running; stop it with gui_stop (or /gui-cleanup docker-windows when its Pi is gone)`);

@@ -1,17 +1,21 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import fs, { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { syncBuiltinESMExports } from "node:module";
+import { join, sep } from "node:path";
 import { DockerWindowsBackend, NETWORK_NONE_MESSAGE } from "../../../../src/backends/docker-windows.ts";
 import { ensureKeys } from "../../../../src/backends/docker-windows/keys.ts";
 import { helperFiles } from "../../../../src/backends/docker-windows/oem.ts";
 import { startLeftovers } from "../../../../src/backends/start-failure.ts";
 import { windowsSetupCommand } from "../../../../src/backends/windows/setup-command.ts";
 import { BOOT, fakeProc } from "../fakes.mjs";
-import { config, fakeWindowsDocker, parseRunArgv, windowsRoot } from "./docker-fakes.mjs";
+import { config, fakeContainerId, fakeWindowsDocker, parseRunArgv, windowsRoot } from "./docker-fakes.mjs";
 
 const OWNER = `c1:100:5000:${BOOT}`;
 const INSTALL_ID = "ab".repeat(16);
+
+/** Labels of a docker-windows session container. */
+const sessionLabels = (owner, session) => ({ "pi-gui-testing.windows": "session", "pi-gui-testing.owner": owner, "pi-gui-testing.session": session, "pi-gui-testing.windows.install": INSTALL_ID });
 
 async function setup(t, { docker = {}, backend = {}, installed = true } = {}) {
   const r = await windowsRoot(t);
@@ -286,11 +290,12 @@ test("the lease: a dead owner's is recovered (its container removed first); a li
   const writeLease = (owner, container = "pi-gui-testing-win-gui-old00001") =>
     writeFile(leaseFile, JSON.stringify({ version: 1, owner, session: "gui-old00001", container, token: "0011223344556677", createdAt: "2026-10-24T10:00:00.000Z" }));
 
-  // Dead owner (pid 200 is gone): its container goes before this session is admitted.
+  // Dead owner (pid 200 is gone): its container (labelled with that owner and session) goes, by its immutable id, before this session is admitted.
   await writeLease(`c1:200:6000:${BOOT}`);
-  s.state.containers.set("pi-gui-testing-win-gui-old00001", { name: "pi-gui-testing-win-gui-old00001", argv: [], labels: {}, running: true });
+  s.state.containers.set("pi-gui-testing-win-gui-old00001", { name: "pi-gui-testing-win-gui-old00001", argv: [], labels: sessionLabels(`c1:200:6000:${BOOT}`, "gui-old00001"), running: true });
   let session = await s.start();
-  assert.ok(s.state.removed.includes("pi-gui-testing-win-gui-old00001"));
+  assert.ok(s.state.removed.includes(fakeContainerId("pi-gui-testing-win-gui-old00001")), "removed by id, not by name");
+  assert.equal(s.state.containers.has("pi-gui-testing-win-gui-old00001"), false);
   assert.deepEqual(await session.stop(), []);
 
   // Another live Pi (pid 150) holds it.
@@ -308,6 +313,63 @@ test("the lease: a dead owner's is recovered (its container removed first); a li
   await writeLease(OWNER);
   session = await s.start();
   assert.deepEqual(await session.stop(), []);
+});
+
+test("a stale lease never removes a container its labels give to a live or unknown owner (review WG2)", async (t) => {
+  const s = await setup(t);
+  const leaseFile = join(s.backend.store.dir, "session-lease.json");
+  const container = "pi-gui-testing-win-gui-live0001";
+  // The lease's owner (pid 200) is gone, but the container it names belongs to another Pi (pid 150) that still runs.
+  fakeProc(s.procRoot, { 150: 7000 });
+  const writeLease = () =>
+    writeFile(leaseFile, JSON.stringify({ version: 1, owner: `c1:200:6000:${BOOT}`, session: "gui-old00001", container, token: "0011223344556677", createdAt: "2026-10-24T10:00:00.000Z" }));
+  await writeLease();
+  s.state.containers.set(container, { name: container, argv: [], labels: sessionLabels(`c2:150:7000:${BOOT}`, "gui-live0001"), running: true });
+  await assert.rejects(s.start(), /lease of ended session gui-old00001 names container pi-gui-testing-win-gui-live0001, but that container is session gui-live0001 of a Pi process that is still running .*it was not removed/);
+  assert.equal(s.state.containers.has(container), true, "the live owner's container survives");
+  assert.deepEqual(s.state.removed, []);
+  assert.equal(s.state.containers.has(NAME), false, "nothing was started");
+  assert.equal(JSON.parse(await readFile(leaseFile, "utf8")).token, "0011223344556677", "the stale lease stays");
+
+  // An owner that cannot be judged, and a container without this backend's session labels, also refuse.
+  s.state.containers.set(container, { name: container, argv: [], labels: sessionLabels("not-a-label", "gui-live0001"), running: true });
+  await assert.rejects(s.start(), /an owner that cannot be judged \(owner not-a-label\); it was not removed/);
+  s.state.containers.set(container, { name: container, argv: [], labels: {}, running: true });
+  await assert.rejects(s.start(), /not a docker-windows session container \(owner unlabelled\); it was not removed/);
+  assert.deepEqual(s.state.removed, []);
+
+  // Another dead owner's session container under that name is removed with the other dead sessions (by id), then the start goes on.
+  s.state.containers.set(container, { name: container, argv: [], labels: sessionLabels(`c3:300:8000:${BOOT}`, "gui-live0001"), running: false });
+  const session = await s.start();
+  assert.deepEqual(s.state.removed, [`id-${container}`], "by the id docker ps reports");
+  assert.deepEqual(await session.stop(), []);
+});
+
+test("a session lock release that fails after admission leaves no stranded lease: the next start is admitted (review WG5)", async (t) => {
+  const s = await setup(t);
+  const original = fs.writeFile;
+  let failures = 0;
+  fs.writeFile = async function (path, ...rest) {
+    if (String(path).includes(`${sep}session-lock${sep}`) && String(path).endsWith(".free")) {
+      failures++;
+      throw Object.assign(new Error("EIO: lock release failure"), { code: "EIO" });
+    }
+    return original.call(this, path, ...rest);
+  };
+  syncBuiltinESMExports();
+  let error;
+  try {
+    error = await secondStart(s, "gui-lease001").then(() => assert.fail("the start succeeded"), (e) => e);
+  } finally {
+    fs.writeFile = original;
+    syncBuiltinESMExports();
+  }
+  assert.ok(failures >= 3);
+  assert.match(error.message, /could not be released \(EIO: lock release failure\); this start was given back/);
+  assert.deepEqual([...s.state.containers.keys()], [], "nothing was created");
+  assert.equal(await stat(join(s.backend.store.dir, "session-lease.json")).then(() => true, () => false), false, "no lease without a handle");
+  const next = await secondStart(s, "gui-lease002");
+  assert.deepEqual(await next.stop(), []);
 });
 
 test("a start that fails after admission gives the lease back", async (t) => {

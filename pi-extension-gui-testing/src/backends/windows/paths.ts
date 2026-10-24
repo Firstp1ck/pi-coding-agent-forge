@@ -103,6 +103,20 @@ export function localTempRoot(env: Readonly<Record<string, string | undefined>>)
   return win32.join(win32.normalize(local), "Temp");
 }
 
+/**
+ * Where the client's session dirs live: `os.tmpdir()` on Windows (`TEMP`,
+ * then `TMP`, then `%SystemRoot%\temp`), read from `env`.
+ *
+ * @throws Error when none of them is an absolute drive path.
+ */
+export function clientTempRoot(env: Readonly<Record<string, string | undefined>>): string {
+  for (const name of ["TEMP", "TMP"]) {
+    const value = envValue(env, name);
+    if (value && isDrivePath(value)) return win32.normalize(value).replace(/(?<!^[A-Za-z]:)\\+$/, "");
+  }
+  return win32.join(systemRoot(env), "temp");
+}
+
 /** PowerShell arguments that run a script file without profile, prompts, or a local execution policy in the way. */
 export const POWERSHELL_FILE_ARGS = ["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File"] as const;
 
