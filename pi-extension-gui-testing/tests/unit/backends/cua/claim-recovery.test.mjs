@@ -14,7 +14,9 @@ import { CuaSettingsStore } from "../../../../src/backends/cua/settings.ts";
 import { CuaCostLedger } from "../../../../src/backends/cua/cost.ts";
 import { SandboxHandle } from "../../../../src/backends/cua/session.ts";
 import { startLeftovers } from "../../../../src/backends/start-failure.ts";
-import { FakeCuaApi, cuaEnv, HOST_TAG, LIVE_OWNER } from "./fake-cua.mjs";
+import { FakeCuaApi, cuaEnv, DEAD_OWNER, HOST_TAG, LIVE_OWNER, tinyHelperArchive } from "./fake-cua.mjs";
+import { FakeCommandRunner } from "../../../../src/runner/fake.ts";
+import { DEFAULTS } from "../../../../src/config/types.ts";
 import { formatOwnerLabel } from "../../../../src/owner.ts";
 import { BOOT, fakeProc } from "../fakes.mjs";
 
@@ -203,5 +205,71 @@ test("a stale retry of a known claim's settlement never moves another live owner
   } finally {
     release?.();
     ledger.markKept = mark;
+  }
+});
+
+test("a stale retry forgetting an expired kept sandbox never removes another live owner's new record", async (t) => {
+  const env = await cuaEnv(t);
+  const api = new FakeCuaApi();
+  const ledger = new SandboxLedger(env.ledgerDir, { lock: { timeoutMs: 750 } });
+  const other = new SandboxLedger(env.ledgerDir, { lock: { timeoutMs: 750 } });
+  const sessionId = "gui-same";
+  const name = `pi-gui-testing-${HOST_TAG}-${sessionId}`;
+  const ref = `aws:${name}`;
+  const otherOwner = formatOwnerLabel({ clientId: "b0b0b0", pid: 4343, processStartTime: "2000", bootId: BOOT });
+  fakeProc(env.proc, { 4242: 1000, 4343: 2000 });
+  const runner = new FakeCommandRunner().on(() => true, { exitCode: 128, stderr: "not a git repository" });
+  const makeBackend = (l, owner) =>
+    new CuaBackend({ ownerLabel: () => owner, api, ledger: l, settings: new CuaSettingsStore(env.settingsPath), hostTag: HOST_TAG, procRoot: env.proc, version: "0.2.0", runner, helperArchive: tinyHelperArchive, readyTimeoutMs: 2000, heartbeatIntervalMs: 0, exitWaitMs: 200, killWaitMs: 50 });
+  const config = { shared: { targets: ["linux"], workspaceMode: "copy", network: "default", launch: { cmd: "python3", args: ["app.py"] } }, limits: { ...DEFAULTS.limits }, usageCheck: { ...DEFAULTS.usageCheck }, keepSandbox: true, warnings: [] };
+  const start = (backend, ownerLabel, sessionDir) => backend.startSession({ sessionId, projectRoot: env.project, sessionDir, config, ownerLabel, recordResource: async () => {}, onLog() {}, onExitCleanup() {}, signal: new AbortController().signal });
+  const remove = ledger.remove.bind(ledger);
+  let release;
+  let otherSession;
+  try {
+    // An expired kept sandbox: its record exists, the cloud sandbox does not.
+    await ledger.write(keptRecord(env, name, { ownerLabel: DEAD_OWNER }));
+    assert.equal(await ledger.markKept(name, "gui-old"), true);
+    let once = true;
+    ledger.remove = async (...args) => {
+      if (once) {
+        once = false;
+        throw new Error("transient ledger failure forgetting gone claim");
+      }
+      return remove(...args);
+    };
+    const failure = await start(makeBackend(ledger, LIVE_OWNER), LIVE_OWNER, env.sessionDir).then(() => assert.fail("the start succeeded"), (error) => error);
+    const attached = startLeftovers(failure);
+    assert.ok(attached);
+    let arrived;
+    const paused = new Promise((resolve) => (arrived = resolve));
+    const resume = new Promise((resolve) => (release = resolve));
+    let armed = true;
+    ledger.remove = async (...args) => {
+      if (armed) {
+        armed = false;
+        arrived();
+        await resume;
+      }
+      return remove(...args);
+    };
+    const stale = attached.session.stop();
+    await paused;
+    assert.deepEqual(await attached.session.stop(), []);
+    const otherDir = join(env.root, "other-session");
+    await fs.mkdir(otherDir, { mode: 0o700 });
+    // Another live Pi starts with a colliding session id and creates a sandbox at the same ref.
+    otherSession = await start(makeBackend(other, otherOwner), otherOwner, otherDir);
+    release();
+    await stale;
+    assert.equal(await other.recorded(name), true, "the other owner's record survives the stale retry");
+    assert.deepEqual(await otherSession.stop(), []);
+    otherSession = undefined;
+    assert.deepEqual(api.deleted, [], "its keepSandbox stop keeps the sandbox");
+    assert.equal((await other.read(name, true))?.ownerLabel, otherOwner);
+  } finally {
+    release?.();
+    ledger.remove = remove;
+    await otherSession?.stop();
   }
 });

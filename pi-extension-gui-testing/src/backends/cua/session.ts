@@ -130,8 +130,7 @@ export class SandboxHandle {
         this.#dirRemoved = true;
       }
       try {
-        const expect = this.#o.ownerLabel === undefined ? this.#o.sessionId : { sessionId: this.#o.sessionId, ownerLabel: this.#o.ownerLabel };
-        if (!(await ledger.markKept(this.name, expect)) && !(await this.#recorded())) this.#deleteInstead = true;
+        if (!(await ledger.markKept(this.name, this.#expect())) && !(await this.#recorded())) this.#deleteInstead = true;
       } catch (error) {
         return this.#owe({
           kind: "sandbox",
@@ -147,7 +146,7 @@ export class SandboxHandle {
     }
     if (!this.#deleted) {
       try {
-        await ledger.update(this.name, { phase: "deleting" }, { sessionId: this.#o.sessionId }).catch(() => undefined);
+        await ledger.update(this.name, { phase: "deleting" }, this.#expect()).catch(() => undefined);
         await api.deleteSandbox(this.ref);
       } catch (error) {
         return [{ kind: "sandbox", id: this.ref, detail: `delete failed (it may keep billing; /gui-cleanup retries): ${redact((error as Error).message)}` }];
@@ -156,11 +155,16 @@ export class SandboxHandle {
       this.#deleted = true;
     }
     try {
-      await ledger.remove(this.name, false, { sessionId: this.#o.sessionId });
+      await ledger.remove(this.name, false, this.#expect());
     } catch (error) {
       return this.#owe({ kind: "ledger", id: this.ref, detail: `sandbox deleted, but removing its ledger record failed; gui_stop, /gui-cleanup, or the Pi shutdown retries: ${redact((error as Error).message)}` });
     }
     return this.#finish();
+  }
+
+  /** The record state every ledger transition of this handle requires: this session, and the owner when known. */
+  #expect(): { sessionId: string; ownerLabel?: string } {
+    return this.#o.ownerLabel === undefined ? { sessionId: this.#o.sessionId } : { sessionId: this.#o.sessionId, ownerLabel: this.#o.ownerLabel };
   }
 
   /** Is a record of this sandbox (active or kept, or unreadable) still in the ledger? One locked read. */
