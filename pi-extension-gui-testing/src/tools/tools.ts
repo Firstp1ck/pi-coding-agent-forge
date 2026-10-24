@@ -7,7 +7,9 @@
 import type { ExtensionContext, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { Type, type Static, type TSchema } from "typebox";
 import { SessionError } from "../backend.ts";
+import { hasDrift } from "../backends/capabilities.ts";
 import { decodeTreeDump } from "../backends/response.ts";
+import type { TargetOs } from "../config/types.ts";
 import { verificationState } from "../config/verified.ts";
 import type { ActAction, TreeNode, WaitFor } from "../protocol.ts";
 import type { ToolName, UsageWarning } from "../usage/types.ts";
@@ -33,7 +35,7 @@ const actions = ["click", "double_click", "right_click", "type", "key", "scroll"
 const waits = ["window", "text", "ref", "idle"] as const;
 
 const LAUNCH_PARAMS = Type.Object({
-  target: Type.Optional(Type.String({ description: 'Target OS; docker-linux runs "linux" apps only. Default from .pi/gui.json.' })),
+  target: Type.Optional(Type.String({ description: 'Target OS ("linux", "windows", or "macos"); each backend runs only its own targets. Default from .pi/gui.json.' })),
   cmd: Type.Optional(Type.String({ description: "Executable to start inside the session, relative to /workspace or on PATH. Default: launch.cmd from .pi/gui.json." })),
   args: Type.Optional(Type.Array(Type.String(), { description: "Arguments. Default: launch.args from .pi/gui.json." })),
   env: Type.Optional(Type.Record(Type.String(), Type.String(), { description: "Extra environment variables for the app." })),
@@ -178,6 +180,18 @@ function toolDefinition<P extends TSchema>(
   };
 }
 
+/** Workspace path of sessions whose backend does not report one. */
+const DEFAULT_WORKSPACE_PATH = "/workspace";
+
+const TARGET_NAMES: Record<TargetOs, string> = { linux: "Linux", windows: "Windows", macos: "macOS" };
+
+/** "Linux", "Linux and Windows", "Linux, Windows, and macOS". */
+function targetList(targets: readonly TargetOs[]): string {
+  const names = targets.map((t) => TARGET_NAMES[t] ?? t);
+  if (names.length <= 2) return names.join(" and ");
+  return `${names.slice(0, -1).join(", ")}, and ${names.at(-1)}`;
+}
+
 /** The body of `gui_launch`: verification, drift check, session start, app launch. */
 async function launchApp(params: Static<typeof LAUNCH_PARAMS>, rt: GuiRuntime, ctx: ExtensionContext, signal: AbortSignal | undefined, onStatus: (text: string) => void): Promise<ToolOutput> {
   // Captured before the first await: a call that outlives a shutdown starts nothing.
@@ -185,8 +199,9 @@ async function launchApp(params: Static<typeof LAUNCH_PARAMS>, rt: GuiRuntime, c
   const { id: backendId, backend, config, global } = await rt.verifiedBackend(ctx.cwd);
   const targets = config.shared.targets;
   const target = params.target ?? targets[0] ?? "linux";
-  if (target !== "linux") throw new Error(`backend "${backendId}" runs Linux apps only; target "${target}" is not available on it`);
-  if (backend.currentVersions) {
+  const supported = rt.registry.entry(backendId)?.targets ?? ["linux"];
+  if (!supported.includes(target as TargetOs)) throw new Error(`backend "${backendId}" runs ${targetList(supported)} apps only; target "${target}" is not available on it`);
+  if (hasDrift(backend)) {
     let current: Record<string, string>;
     try {
       current = await backend.currentVersions(signal);
@@ -211,10 +226,11 @@ async function launchApp(params: Static<typeof LAUNCH_PARAMS>, rt: GuiRuntime, c
     generation,
     onStatus: (s) => s && onStatus(s),
   }).catch(rethrow);
+  const workspace = live.session.workspacePath ?? DEFAULT_WORKSPACE_PATH;
   let launched;
   try {
     onStatus(`launching ${cmd}`);
-    launched = await live.session.request("launch", { cmd, args, env: appEnv, cwd: "/workspace" }, { signal });
+    launched = await live.session.request("launch", { cmd, args, env: appEnv, cwd: workspace }, { signal });
   } catch (error) {
     const outcome = await rt.closeSession(live.id);
     const leftovers = [...outcome.stopLeftovers, ...outcome.audit];
@@ -237,7 +253,7 @@ async function launchApp(params: Static<typeof LAUNCH_PARAMS>, rt: GuiRuntime, c
         text([
           `session ${live.id} started; app pid ${launched.pid} (${cmd}${args.length ? ` ${args.join(" ")}` : ""})`,
           `arch: ${live.session.arch}`,
-          `workspace: ${config.shared.workspaceMode === "copy" ? "writable filtered copy" : "read-only mount"} at /workspace; network: ${config.shared.network}`,
+          `workspace: ${config.shared.workspaceMode === "copy" ? "writable filtered copy" : "read-only mount"} at ${workspace}; network: ${config.shared.network}`,
           sync ? `sync: ${sync.files} files, ${sync.bytes} bytes, ${sync.excluded} excluded` : undefined,
           windows.length ? `windows:\n${windows.join("\n")}` : "no window yet; use gui_wait for: window",
         ]),

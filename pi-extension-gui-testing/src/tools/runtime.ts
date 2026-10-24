@@ -9,17 +9,16 @@ import { randomBytes } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import type { Backend, Session, SessionStartOptions } from "../backend.ts";
-import { DockerLinuxBackend, type DockerLinuxOptions, type DockerStartOptions } from "../backends/docker-linux.ts";
+import { sweepAllowed, type RuntimeBackend, type SweepContext } from "../backends/capabilities.ts";
+import { DEFAULT_REGISTRY, type BackendOptions, type BackendRegistry } from "../backends/registry.ts";
 import { startLeftovers } from "../backends/start-failure.ts";
-import { dockerOnPath } from "../backends/docker/cli.ts";
 import { DEFAULT_PROC_ROOT, createOwnerIdentity } from "../cleanup/identity.ts";
 import { installExitCleanup } from "../cleanup/exit.ts";
 import { createSessionDir, type SessionDir } from "../cleanup/session-dir.ts";
 import { auditClientOrphans, auditSession, sweepClientOrphans, type SweepReport } from "../cleanup/sweep.ts";
 import { loadConfigSources, resolveConfig } from "../config/load.ts";
 import type { BackendId, GlobalConfig, ResolvedConfig } from "../config/types.ts";
-import { IMPLEMENTED_BACKENDS } from "../config/types.ts";
-import { notAvailableMessage, notSetUpMessage, verificationState } from "../config/verified.ts";
+import { notSetUpMessage, verificationState } from "../config/verified.ts";
 import { formatOwnerLabel, type OwnerLabel } from "../owner.ts";
 import type { Leftover, LogEvent } from "../protocol.ts";
 import { UsageTracker } from "../usage/detector.ts";
@@ -86,17 +85,20 @@ export interface OpenSessionOptions {
   generation?: AbortSignal;
 }
 
-export interface RuntimeOptions {
-  /** Options for the docker-linux backend (tests inject runners and fakes). */
-  docker?: Partial<Omit<DockerLinuxOptions, "ownerLabel">>;
-  /** Replaces backend construction entirely (unit tests). */
+/**
+ * Backend construction options (`backendOptions`, and the M1 names `docker`
+ * and `dockerOnPath`) come from {@link BackendOptions}; tests inject runners
+ * and fakes there.
+ */
+export interface RuntimeOptions extends BackendOptions {
+  /** The backends this runtime offers; default: the registry of this build. */
+  registry?: BackendRegistry;
+  /** Replaces backend construction entirely (unit tests). Ids still come from the registry. */
   createBackend?: (id: BackendId, runtime: GuiRuntime) => Backend;
   procRoot?: string;
   tmpRoot?: string;
   globalConfigPath?: string;
   now?: () => number;
-  /** Whether a `docker` executable is on PATH (checked without running it). Tests inject it. */
-  dockerOnPath?: () => Promise<boolean>;
   /** Bound for `shutdown()` to wait for session starts and setup runs in flight. */
   shutdownWaitMs?: number;
 }
@@ -133,8 +135,8 @@ function cleanedSession(id: string, backend: BackendId): Session {
   };
 }
 
-/** A backend that may also expose docker-linux extras. */
-export type RuntimeBackend = Backend & Partial<Pick<DockerLinuxBackend, "currentVersions" | "buildImage" | "removeBaseImages" | "imageTag" | "version">>;
+/** A backend with its optional capabilities (`src/backends/capabilities.ts`). */
+export type { RuntimeBackend } from "../backends/capabilities.ts";
 
 export class GuiRuntime {
   readonly options: RuntimeOptions;
@@ -174,18 +176,38 @@ export class GuiRuntime {
     return formatOwnerLabel(this.identity());
   }
 
+  /** The backends this runtime offers, in picker order. */
+  get registry(): BackendRegistry {
+    return this.options.registry ?? DEFAULT_REGISTRY;
+  }
+
+  /** Whether `id` is a backend of this runtime. */
+  implemented(id: string): id is BackendId {
+    return this.registry.has(id);
+  }
+
+  /** "not available yet" text for `id`, listing this runtime's backends. */
+  notAvailableMessage(id: string): string {
+    return this.registry.notAvailableMessage(id);
+  }
+
   /**
-   * The backend for `id`.
+   * The backend for `id`, created on first use (creating one runs nothing).
    *
    * @throws Error with the "not available yet" text for backends this build lacks.
    */
   backend(id: BackendId): RuntimeBackend {
-    if (!IMPLEMENTED_BACKENDS.includes(id)) throw new Error(notAvailableMessage(id));
+    if (!this.implemented(id)) throw new Error(this.notAvailableMessage(id));
     let backend = this.#backends.get(id);
     if (!backend) {
       backend = this.options.createBackend
         ? this.options.createBackend(id, this)
-        : new DockerLinuxBackend({ ownerLabel: () => this.ownerLabel(), ...this.options.docker, ...(this.options.tmpRoot ? { tmpRoot: this.options.tmpRoot } : {}) });
+        : this.registry.create(id, {
+            ownerLabel: () => this.ownerLabel(),
+            ...(this.options.tmpRoot ? { tmpRoot: this.options.tmpRoot } : {}),
+            ...(this.options.procRoot ? { procRoot: this.options.procRoot } : {}),
+            runtimeOptions: this.options,
+          });
       this.#backends.set(id, backend);
     }
     return backend;
@@ -210,9 +232,23 @@ export class GuiRuntime {
     return this.#shutdown.signal;
   }
 
-  /** Whether a `docker` executable is on PATH (no command is run). */
-  dockerAvailable(): Promise<boolean> {
-    return (this.options.dockerOnPath ?? (() => dockerOnPath()))().catch(() => false);
+  /**
+   * The backends among `ids` that may be swept and audited now, per their
+   * {@link SweepAvailability} gate (no command runs to decide; e.g. Docker
+   * only when a `docker` executable is on PATH).
+   */
+  async sweepableBackends(ids: readonly BackendId[], context: SweepContext): Promise<BackendId[]> {
+    const allowed: BackendId[] = [];
+    for (const id of ids) {
+      let backend: RuntimeBackend;
+      try {
+        backend = this.backend(id);
+      } catch {
+        continue;
+      }
+      if (await sweepAllowed(backend, context)) allowed.push(id);
+    }
+    return allowed;
   }
 
   /** The config warnings not yet shown in a tool result, marking them shown. */
@@ -236,8 +272,8 @@ export class GuiRuntime {
    */
   async verifiedBackend(projectRoot: string): Promise<{ id: BackendId; backend: RuntimeBackend; config: ResolvedConfig; global: GlobalConfig }> {
     const { resolved, global } = await this.config(projectRoot);
-    const id = resolved.backend ?? IMPLEMENTED_BACKENDS[0];
-    if (!IMPLEMENTED_BACKENDS.includes(id)) throw new Error(notAvailableMessage(id));
+    const id = resolved.backend ?? this.registry.defaultId;
+    if (!this.implemented(id)) throw new Error(this.notAvailableMessage(id));
     const state = verificationState(global, id);
     if (state.state !== "verified") throw new Error(notSetUpMessage(id));
     return { id, backend: this.backend(id), config: resolved, global };
@@ -407,7 +443,7 @@ export class GuiRuntime {
       logs = new LogBuffer(join(artifactsDir, "app.log"));
       const sessionLogs = logs;
       this.#installExitCleanup();
-      const start: SessionStartOptions & Pick<DockerStartOptions, "onExitCleanup"> = {
+      const start: SessionStartOptions = {
         sessionId: id,
         projectRoot: options.projectRoot,
         sessionDir: dir.path,
@@ -549,10 +585,7 @@ export class GuiRuntime {
   /** The commands the synchronous exit handler runs now: removal of every listed session and of starts in flight. */
   exitCleanupCommands(): string[][] {
     return [
-      ...this.list().map((live) => {
-        const session = live.session as Session & { forceRemoveArgv?: () => string[] };
-        return session.forceRemoveArgv?.() ?? [];
-      }),
+      ...this.list().map((live) => live.session.forceRemoveArgv?.() ?? []),
       ...this.#starting.values(),
     ];
   }
@@ -585,25 +618,27 @@ export class GuiRuntime {
   // ---------------------------------------------------------------- sweep and audit
 
   /**
-   * Startup sweep (spec §7a.2): removes temp dirs, processes, and labelled
-   * Docker objects of dead owners. The Docker sweeper runs whenever a `docker`
-   * executable is on PATH, whatever the verified state (a session may have
-   * outlived a reset or a failed doctor). Hosts without one get no `docker`
-   * command. Errors end up in the report; the sweep never throws.
+   * Startup sweep (spec §7a.2): removes temp dirs and processes of dead
+   * owners, then runs the sweeper of every registered backend whose gate
+   * allows it, whatever the verified state (a session may have outlived a
+   * reset or a failed doctor). Gates run no command (Docker: a `docker`
+   * executable on PATH). Errors end up in the report; the sweep never throws.
    */
   sweep(_projectRoot?: string, signal: AbortSignal = this.#shutdown.signal): Promise<SweepReport | undefined> {
     const run = async (): Promise<SweepReport | undefined> => {
-      const sweepers = (await this.dockerAvailable()) ? [this.backend("docker-linux")] : [];
+      const ids = await this.sweepableBackends(this.registry.ids, { startup: true });
+      const sweepers = ids.map((id) => this.backend(id));
       return sweepClientOrphans({ signal, sweepers, procRoot: this.procRoot, ...(this.options.tmpRoot ? { tmpRoot: this.options.tmpRoot } : {}) });
     };
     this.#sweep = run().catch(() => undefined);
     return this.#sweep;
   }
 
-  /** Orphan audit for doctor and cleanup: client scope plus the backend's Docker scope. */
-  async auditOrphans(backend: BackendId | undefined, signal: AbortSignal): Promise<Leftover[]> {
+  /** Orphan audit for doctor and cleanup: client scope plus the scope of each given backend. */
+  async auditOrphans(backends: BackendId | readonly BackendId[] | undefined, signal: AbortSignal): Promise<Leftover[]> {
     const leftovers = await auditClientOrphans({ procRoot: this.procRoot, ...(this.options.tmpRoot ? { tmpRoot: this.options.tmpRoot } : {}) });
-    if (backend) {
+    const ids: readonly BackendId[] = backends === undefined ? [] : typeof backends === "string" ? [backends] : backends;
+    for (const backend of ids) {
       try {
         leftovers.push(...(await this.backend(backend).auditOrphans(signal)));
       } catch (error) {

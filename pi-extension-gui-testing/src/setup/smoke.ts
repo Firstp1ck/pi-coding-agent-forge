@@ -1,30 +1,33 @@
 /**
- * Smoke test (spec §5.5) for `docker-linux`: start a session on an empty
+ * Smoke test (spec §5.5) for any backend: start a session on an empty
  * workspace, launch the bundled GTK 3 app, find its button by name, click it,
  * see the label change, take a valid non-uniform screenshot, stop, and require
- * an empty footprint audit. Isolation is guaranteed by construction and by
- * `isolation.inspect`, which ran before.
+ * an empty footprint audit. Isolation is the backend's job and was checked
+ * before (e.g. `isolation.inspect`). Where the app lives and which session
+ * options the backend needs come from its {@link SmokeCapability}; the
+ * defaults fit the base image of the container backends.
  */
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { BackendId, ResolvedConfig } from "../config/types.ts";
 import { DEFAULTS } from "../config/types.ts";
+import { hasDrift, hasSmoke } from "../backends/capabilities.ts";
 import { PROTOCOL_VERSION, type TreeNode } from "../protocol.ts";
 import { decodePng, isUniform } from "../tools/png.ts";
 import type { GuiRuntime, LiveSession } from "../tools/runtime.ts";
 import type { SmokeOutcome } from "./flow.ts";
 
-/** The GTK 3 smoke app baked into the base image (spec §4.1). */
+/** The GTK 3 smoke app baked into the base image (spec §4.1); the default for backends without a {@link SmokeCapability}. */
 export const SMOKE_APP = { cmd: "python3", args: ["/opt/pi-gui-testing/testapps/gtk3-smoke/app.py"] } as const;
 export const SMOKE_WINDOW_TITLE = "Pi GUI smoke";
 export const SMOKE_BUTTON = "Press me";
 export const SMOKE_LABEL_AFTER = "Pressed";
 
 /** Config of the smoke session: no setup, no network, an empty read-only workspace. */
-export function smokeConfig(): ResolvedConfig {
+export function smokeConfig(app: { cmd: string; args: readonly string[] } = SMOKE_APP): ResolvedConfig {
   return {
-    shared: { targets: ["linux"], workspaceMode: "mount", network: "none", launch: { cmd: SMOKE_APP.cmd, args: [...SMOKE_APP.args] } },
+    shared: { targets: ["linux"], workspaceMode: "mount", network: "none", launch: { cmd: app.cmd, args: [...app.args] } },
     limits: { ...DEFAULTS.limits },
     usageCheck: { ...DEFAULTS.usageCheck },
     keepSandbox: false,
@@ -47,7 +50,10 @@ function findNode(tree: readonly TreeNode[], roles: readonly string[], name: str
 /** Runs the smoke test; never leaves a session behind, even on failure or abort. */
 export async function runSmokeTest(options: SmokeOptions): Promise<SmokeOutcome> {
   const { runtime, signal } = options;
-  const version = runtime.backend(options.backend).version;
+  const backend = runtime.backend(options.backend);
+  const version = hasDrift(backend) ? backend.version : (backend as { version?: unknown }).version;
+  const app: { cmd: string; args: readonly string[]; cwd?: string } = hasSmoke(backend) ? backend.smokeApp() : SMOKE_APP;
+  const config = hasSmoke(backend) && backend.smokeConfig ? backend.smokeConfig(smokeConfig(app)) : smokeConfig(app);
   const status = (text: string) => options.onStatus?.(`smoke test: ${text}`);
   const empty = await mkdtemp(join(runtime.options.tmpRoot ?? tmpdir(), "pi-gui-probe-"));
   let live: LiveSession | undefined;
@@ -58,7 +64,7 @@ export async function runSmokeTest(options: SmokeOptions): Promise<SmokeOutcome>
     live = await runtime.openSession({
       backend: options.backend,
       projectRoot: empty,
-      config: smokeConfig(),
+      config,
       piSessionId: options.piSessionId,
       signal,
       transient: true,
@@ -67,7 +73,7 @@ export async function runSmokeTest(options: SmokeOptions): Promise<SmokeOutcome>
     const { session } = live;
     const step = (name: string) => status(name);
     step("launching the GTK 3 test app");
-    const launched = await session.request("launch", { cmd: SMOKE_APP.cmd, args: [...SMOKE_APP.args], env: {}, cwd: "/workspace" }, { signal });
+    const launched = await session.request("launch", { cmd: app.cmd, args: [...app.args], env: {}, cwd: app.cwd ?? session.workspacePath ?? "/workspace" }, { signal });
     const firstScreenshotAfter = Date.now() - started;
     if (!launched.windows.some((w) => w.title === SMOKE_WINDOW_TITLE)) {
       const waited = await session.request("wait", { for: "window", value: SMOKE_WINDOW_TITLE, timeoutMs: 10_000 }, { signal });
@@ -94,7 +100,7 @@ export async function runSmokeTest(options: SmokeOptions): Promise<SmokeOutcome>
       observed: `GTK 3 app launched, button found by name, click changed the label, ${png.width}×${png.height} screenshot valid (launch ${firstScreenshotAfter} ms)`,
       arch: session.arch,
       // Recorded for the drift check before each launch (see currentVersions of the backend).
-      facts: { "smoke.arch": session.arch, protocol: String(PROTOCOL_VERSION), ...(version ? { "package.version": version } : {}) },
+      facts: { "smoke.arch": session.arch, protocol: String(PROTOCOL_VERSION), ...(typeof version === "string" && version ? { "package.version": version } : {}) },
     };
   } catch (error) {
     if (signal.aborted) {

@@ -4,30 +4,15 @@
  * pipes or binary stdin. Unit tests substitute a {@link Spawner} fake.
  */
 import { spawn } from "node:child_process";
-import type { Readable, Writable } from "node:stream";
 import { minimalEnv } from "../../runner/spawn.ts";
 import type { RunResult } from "../../runner/types.ts";
+import { TailBuffer, wrapChildProcess, type ExitStatus, type HelperProcess } from "../../transport/process.ts";
 
-export interface ExitStatus {
-  code: number | null;
-  signal: string | null;
-  /** Set when the process could not be spawned. */
-  error?: Error;
-}
+export { TailBuffer };
+export type { ExitStatus };
 
-/** A running child with open pipes. */
-export interface ChildHandle {
-  readonly pid: number | undefined;
-  readonly stdin: Writable;
-  readonly stdout: Readable;
-  readonly stderr: Readable;
-  /** Resolves once the process exited (or failed to spawn). Never rejects. */
-  readonly exited: Promise<ExitStatus>;
-  /** `true` until the process exited. */
-  running(): boolean;
-  /** Signals the child's process group (POSIX) or the child. Ignores a child that already exited. */
-  kill(signal: NodeJS.Signals): void;
-}
+/** A running child with open pipes (the generic {@link HelperProcess}). */
+export type ChildHandle = HelperProcess;
 
 export interface SpawnOptions {
   /** Merged over the runner's minimal inherited environment. */
@@ -54,39 +39,7 @@ export function createSpawner(baseEnv: NodeJS.ProcessEnv = process.env): Spawner
         shell: false,
         windowsHide: true,
       });
-      let alive = true;
-      const exited = new Promise<ExitStatus>((resolve) => {
-        child.once("error", (error) => {
-          if (child.pid === undefined) {
-            alive = false;
-            resolve({ code: null, signal: null, error });
-          }
-        });
-        child.once("exit", (code, signal) => {
-          alive = false;
-          resolve({ code, signal });
-        });
-      });
-      child.stdin.on("error", () => {
-        // EPIPE after the child died; the exit status reports it.
-      });
-      return {
-        pid: child.pid,
-        stdin: child.stdin,
-        stdout: child.stdout,
-        stderr: child.stderr,
-        exited,
-        running: () => alive,
-        kill(signal) {
-          if (!alive || child.pid === undefined) return;
-          try {
-            if (process.platform !== "win32") process.kill(-child.pid, signal);
-            else child.kill(signal);
-          } catch {
-            // ESRCH: already gone.
-          }
-        },
-      };
+      return wrapChildProcess(child);
     },
   };
 }
@@ -155,35 +108,4 @@ export function runWithInput(spawner: Spawner, argv: readonly string[], input: B
       durationMs: Date.now() - started,
     };
   });
-}
-
-/** Keeps the last `max` bytes of a stream. */
-export class TailBuffer {
-  readonly #max: number;
-  #chunks: Buffer[] = [];
-  #size = 0;
-  truncated = false;
-
-  constructor(max: number) {
-    this.#max = max;
-  }
-
-  add(chunk: Buffer): void {
-    this.#chunks.push(chunk);
-    this.#size += chunk.length;
-    while (this.#size > this.#max && this.#chunks.length > 1) {
-      this.#size -= this.#chunks.shift()!.length;
-      this.truncated = true;
-    }
-    if (this.#size > this.#max) {
-      const only = this.#chunks[0];
-      this.#chunks = [only.subarray(only.length - this.#max)];
-      this.#size = this.#max;
-      this.truncated = true;
-    }
-  }
-
-  text(): string {
-    return Buffer.concat(this.#chunks).toString("utf8");
-  }
 }

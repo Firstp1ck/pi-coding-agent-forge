@@ -16,8 +16,16 @@ export type BackendId =
   | "docker-windows"
   | "local-windows";
 
+/**
+ * Ids of the backends implemented in this build, in picker order. Each needs
+ * an entry in `src/backends/registry.ts`; the type check fails when the two differ.
+ */
+export const IMPLEMENTED_BACKEND_IDS = ["docker-linux"] as const satisfies readonly BackendId[];
+
+export type ImplementedBackendId = (typeof IMPLEMENTED_BACKEND_IDS)[number];
+
 /** Backends implemented in the current build. Others are rejected with "not available yet". */
-export const IMPLEMENTED_BACKENDS: readonly BackendId[] = ["docker-linux"];
+export const IMPLEMENTED_BACKENDS: readonly BackendId[] = IMPLEMENTED_BACKEND_IDS;
 
 export type WorkspaceMode = "mount" | "copy";
 export type NetworkMode = "default" | "none";

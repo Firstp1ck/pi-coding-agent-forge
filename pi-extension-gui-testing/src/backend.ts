@@ -24,6 +24,13 @@ export interface SessionStartOptions {
   /** Progress text for `ctx.ui.setStatus`. */
   onStatus?(text: string): void;
   signal: AbortSignal;
+  /**
+   * Optional (added after M1). Receives the argv that force-removes the
+   * session's resources, before the backend creates them; the caller's
+   * synchronous exit handler runs it while the start is pending. The latest
+   * call wins.
+   */
+  onExitCleanup?(argv: string[]): void;
 }
 
 /** Summary of a workspace sync (`copy` mode, remote backends). */
@@ -39,6 +46,8 @@ export interface Session {
   /** Target architecture reported by `hello`, e.g. `x86_64`. */
   readonly arch: string;
   readonly sync?: SyncSummary;
+  /** Optional (added after M1). Workspace path as the helper sees it; default `/workspace`. */
+  readonly workspacePath?: string;
   /**
    * Sends one protocol request. Requests other than `ping` and `cancel` run
    * sequentially per session. Rejects with a {@link SessionError} carrying the
@@ -49,6 +58,11 @@ export interface Session {
   stop(): Promise<Leftover[]>;
   /** Read-only audit of this session's resources only (spec §7a.4). */
   auditFootprint(): Promise<Leftover[]>;
+  /**
+   * Optional (added after M1). Argv the synchronous exit handler runs when Pi
+   * exits before this session stopped (bounded, no shell); `[]` means nothing.
+   */
+  forceRemoveArgv?(): string[];
 }
 
 /** Failure of a session request; `code` is a protocol {@link ErrorCode} or a client-only code such as `CLOSED`. */

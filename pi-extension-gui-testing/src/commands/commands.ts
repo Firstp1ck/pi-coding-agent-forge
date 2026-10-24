@@ -7,8 +7,10 @@
  * a UI sets `process.exitCode = 1` (spec §5.2 "Modes").
  */
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
+import { hasImage, hasOrphanAuditGate, hasReset, hasRunner, IMAGE_CHECK_ID } from "../backends/capabilities.ts";
+import { DEFAULT_REGISTRY } from "../backends/registry.ts";
+import { requiredChecksPass } from "../checks/runner.ts";
 import type { BackendId } from "../config/types.ts";
-import { IMPLEMENTED_BACKENDS } from "../config/types.ts";
 import {
   FlagError,
   parseBackendArgs,
@@ -20,7 +22,7 @@ import {
   parseUsageArgs,
 } from "../config/flags.ts";
 import { updateGlobalConfig, updateLocalConfig } from "../config/load.ts";
-import { markUnverified, markVerified, notAvailableMessage, verificationState } from "../config/verified.ts";
+import { markUnverified, markVerified, verificationState } from "../config/verified.ts";
 import type { Leftover } from "../protocol.ts";
 import { createSpawnRunner } from "../runner/spawn.ts";
 import type { CommandRunner, RunResult } from "../runner/types.ts";
@@ -52,18 +54,15 @@ export interface GuiCommand {
   getArgumentCompletions?: (prefix: string) => AutocompleteItem[] | null;
 }
 
-/** One-line descriptions shown by the backend picker. */
-export const BACKEND_DESCRIPTIONS: Partial<Record<BackendId, string>> = {
-  "docker-linux": "Linux apps in a local Docker container with a virtual display (needs rootful Docker)",
-};
-
-function backendCompletions(prefix: string): AutocompleteItem[] {
-  return IMPLEMENTED_BACKENDS.filter((b) => b.startsWith(prefix)).map((b) => ({ value: b, label: b, description: BACKEND_DESCRIPTIONS[b] }));
-}
+/** One-line descriptions shown by the backend picker (from the registry of this build). */
+export const BACKEND_DESCRIPTIONS: Partial<Record<BackendId, string>> = Object.fromEntries(DEFAULT_REGISTRY.entries().map((e) => [e.id, e.description]));
 
 function runnerOf(backend: RuntimeBackend): CommandRunner {
-  return (backend as { runner?: CommandRunner }).runner ?? createSpawnRunner();
+  return hasRunner(backend) ? backend.runner : createSpawnRunner();
 }
+
+/** Text of `/gui-reset`'s confirmation when the backend does not describe its own reset. */
+const DEFAULT_RESET_SUMMARY = "Stops its sessions and removes its verified state and backend choice.";
 
 function leftoverLines(title: string, leftovers: readonly Leftover[]): string {
   return leftovers.length === 0 ? `${title}: empty` : `${title}:\n${leftovers.map((l) => `- ${formatLeftovers([l])}`).join("\n")}`;
@@ -81,6 +80,13 @@ export function withConfigWarnings(report: string | RenderedReport, warnings: re
 
 /** Builds the command set bound to `pi` and `runtime`. */
 export function createGuiCommands(pi: CommandPi, runtime: GuiRuntime): GuiCommand[] {
+  const registry = runtime.registry;
+  const implemented = registry.ids;
+  const backendCompletions = (prefix: string): AutocompleteItem[] =>
+    registry
+      .entries()
+      .filter((e) => e.id.startsWith(prefix))
+      .map((e) => ({ value: e.id, label: e.id, description: e.description }));
   const notifierFrom = (ctx: Ctx) => runtime.setNotifier(ctx.hasUI ? (m, t) => ctx.ui.notify(m, t) : undefined);
 
   /**
@@ -109,7 +115,7 @@ export function createGuiCommands(pi: CommandPi, runtime: GuiRuntime): GuiComman
     };
 
   const applyWith = (backend: RuntimeBackend, setStatus: (text: string) => void) => async (item: PlanItem, signal: AbortSignal): Promise<RunResult> => {
-    if (item.checkId === "image.base" && backend.buildImage) {
+    if (item.checkId === IMAGE_CHECK_ID && hasImage(backend)) {
       setStatus("building the base image (this can take several minutes)");
       return backend.buildImage(signal, (line) => {
         const trimmed = line.trim();
@@ -125,8 +131,8 @@ export function createGuiCommands(pi: CommandPi, runtime: GuiRuntime): GuiComman
     getArgumentCompletions: backendCompletions,
     handler: guarded("gui-setup", async (args, ctx, emit, generation) => {
       const parsed = parseSetupArgs(args);
-      if (!parsed.backend && !ctx.hasUI) return emit(`/gui-setup needs a backend when there is no interactive UI; run /gui-setup ${IMPLEMENTED_BACKENDS.join(" or /gui-setup ")}`, true);
-      if (parsed.backend && !IMPLEMENTED_BACKENDS.includes(parsed.backend)) return emit(notAvailableMessage(parsed.backend), true);
+      if (!parsed.backend && !ctx.hasUI) return emit(`/gui-setup needs a backend when there is no interactive UI; run /gui-setup ${implemented.join(" or /gui-setup ")}`, true);
+      if (parsed.backend && !runtime.implemented(parsed.backend)) return emit(runtime.notAvailableMessage(parsed.backend), true);
       // Registered before the first dialog: shutdown and /gui-cleanup cancel the picker too,
       // and a late answer after either can no longer start setup or save anything.
       const controller = runtime.beginSetup("/gui-setup", generation);
@@ -134,16 +140,16 @@ export function createGuiCommands(pi: CommandPi, runtime: GuiRuntime): GuiComman
         const ui = createSetupUi(ctx, { controller });
         let id = parsed.backend;
         if (!id) {
-          const labels = IMPLEMENTED_BACKENDS.map((b) => `${b} — ${BACKEND_DESCRIPTIONS[b] ?? ""}`);
+          const labels = implemented.map((b) => `${b} — ${registry.entry(b)?.description ?? ""}`);
           let choice: string | undefined;
           try {
-            choice = await ui.select("Choose a GUI testing backend", labels, { flags: IMPLEMENTED_BACKENDS.map((b) => `/gui-setup ${b}`) });
+            choice = await ui.select("Choose a GUI testing backend", labels, { flags: implemented.map((b) => `/gui-setup ${b}`) });
           } catch (error) {
             if (!controller.signal.aborted && (error as Error)?.name !== "AbortError") throw error;
             return emit(`GUI setup cancelled${error instanceof Error && error.message ? ` (${error.message})` : ""}; nothing was changed`, false);
           }
           if (choice === undefined) return emit("GUI setup cancelled; nothing was changed", false);
-          id = IMPLEMENTED_BACKENDS[labels.indexOf(choice)];
+          id = implemented[labels.indexOf(choice)];
           if (!id) return emit("GUI setup cancelled; nothing was changed", false);
         }
         const backendId = id;
@@ -194,8 +200,8 @@ export function createGuiCommands(pi: CommandPi, runtime: GuiRuntime): GuiComman
     handler: guarded("gui-doctor", async (args, ctx, emit, generation) => {
       const parsed = parseDoctorArgs(args);
       const { resolved, global } = await runtime.config(ctx.cwd);
-      const id = parsed.backend ?? resolved.backend ?? IMPLEMENTED_BACKENDS[0];
-      if (!IMPLEMENTED_BACKENDS.includes(id)) return emit(notAvailableMessage(id), true);
+      const id = parsed.backend ?? resolved.backend ?? registry.defaultId;
+      if (!runtime.implemented(id)) return emit(runtime.notAvailableMessage(id), true);
       const backend = runtime.backend(id);
       const controller = runtime.beginSetup("/gui-doctor", generation);
       const setStatus = (text: string | undefined) => ctx.hasUI && ctx.ui.setStatus("gui-testing", text);
@@ -221,8 +227,9 @@ export function createGuiCommands(pi: CommandPi, runtime: GuiRuntime): GuiComman
           ...(existing?.inputs ? { inputs: existing.inputs } : {}),
           onStatus: setStatus,
         });
-        const dockerReachable = report.results.some((r) => r.id === "docker.permission" && r.status === "pass");
-        const orphans = report.status === "cancelled" ? [] : await runtime.auditOrphans(dockerReachable ? id : undefined, controller.signal);
+        // The backend's orphan audit runs only when the checks showed it reachable.
+        const reachable = hasOrphanAuditGate(backend) ? backend.orphanAuditReady(report.results) : requiredChecksPass(report.results);
+        const orphans = report.status === "cancelled" ? [] : await runtime.auditOrphans(reachable ? id : undefined, controller.signal);
         const text = `${renderReport(report)}\n\n${leftoverLines("Footprint audit (orphans of ended sessions)", orphans)}`;
         emit({ text, summary: summarizeReport(report) }, report.status !== "verified");
       } finally {
@@ -237,7 +244,7 @@ export function createGuiCommands(pi: CommandPi, runtime: GuiRuntime): GuiComman
     getArgumentCompletions: backendCompletions,
     handler: guarded("gui-backend", async (args, ctx, emit, generation) => {
       const parsed = parseBackendArgs(args);
-      if (!IMPLEMENTED_BACKENDS.includes(parsed.backend)) return emit(notAvailableMessage(parsed.backend), true);
+      if (!runtime.implemented(parsed.backend)) return emit(runtime.notAvailableMessage(parsed.backend), true);
       const { global } = await runtime.config(ctx.cwd);
       if (verificationState(global, parsed.backend).state !== "verified") {
         return emit(`backend "${parsed.backend}" is not verified; run /gui-setup ${parsed.backend} first`, true);
@@ -296,7 +303,7 @@ export function createGuiCommands(pi: CommandPi, runtime: GuiRuntime): GuiComman
     handler: guarded("gui-cleanup", async (args, ctx, emit) => {
       const parsed = parseCleanupArgs(args);
       const lines: string[] = [];
-      if (parsed.backend && !IMPLEMENTED_BACKENDS.includes(parsed.backend)) return emit(notAvailableMessage(parsed.backend), true);
+      if (parsed.backend && !runtime.implemented(parsed.backend)) return emit(runtime.notAvailableMessage(parsed.backend), true);
       const cancelled = runtime.cancelSetup("cancelled by /gui-cleanup");
       if (cancelled) lines.push(`cancelled the running ${cancelled}`);
       // Cleanup never depends on a readable config: a malformed .pi/gui.json is a warning, and
@@ -309,10 +316,10 @@ export function createGuiCommands(pi: CommandPi, runtime: GuiRuntime): GuiComman
         configError = (error as Error)?.message ?? String(error);
       }
       let backends: BackendId[];
-      if (parsed.all || (configError !== undefined && !parsed.backend)) backends = [...IMPLEMENTED_BACKENDS];
+      if (parsed.all || (configError !== undefined && !parsed.backend)) backends = [...implemented];
       else {
-        const id = parsed.backend ?? configured ?? IMPLEMENTED_BACKENDS[0];
-        if (!IMPLEMENTED_BACKENDS.includes(id)) return emit(notAvailableMessage(id), true);
+        const id = parsed.backend ?? configured ?? registry.defaultId;
+        if (!runtime.implemented(id)) return emit(runtime.notAvailableMessage(id), true);
         backends = [id];
       }
       if (configError !== undefined) lines.push(`warning: could not read the GUI testing config (${configError}); cleanup does not need it${parsed.all || parsed.backend ? "" : ", so every backend is cleaned"}`);
@@ -321,12 +328,12 @@ export function createGuiCommands(pi: CommandPi, runtime: GuiRuntime): GuiComman
       const stopLeftovers: Leftover[] = [];
       for (const b of backends) stopLeftovers.push(...(await runtime.stopAll(b)));
       lines.push(stopped.length ? `stopped sessions: ${stopped.join(", ")}` : "no running sessions");
-      // Sweep Docker whenever a docker executable exists, verified or not; a host without one gets no docker command.
-      const sweepable = (await runtime.dockerAvailable()) ? backends.filter((b) => b === "docker-linux") : [];
+      // Each backend's gate decides, verified or not, without running a command (Docker: a docker executable on PATH).
+      const sweepable = await runtime.sweepableBackends(backends, { startup: false });
       const sweep = await runtime.sweepNow(sweepable, controller.signal);
       lines.push(`swept: ${sweep.removedDirs.length} temp dir(s), ${sweep.killed.length} process(es)`);
       if (parsed.deps) lines.push("dependency cache: not used in this version; nothing to clear");
-      const audit = [...stopLeftovers, ...sweep.leftovers, ...sweep.unknown, ...(await runtime.auditOrphans(sweepable[0], controller.signal))];
+      const audit = [...stopLeftovers, ...sweep.leftovers, ...sweep.unknown, ...(await runtime.auditOrphans(sweepable, controller.signal))];
       const unique = [...new Map(audit.map((l) => [`${l.kind}:${l.id}`, l])).values()];
       lines.push(leftoverLines("Footprint audit", unique));
       emit(`GUI testing cleanup (${backends.join(", ")}):\n${lines.join("\n")}`, unique.length > 0);
@@ -335,36 +342,37 @@ export function createGuiCommands(pi: CommandPi, runtime: GuiRuntime): GuiComman
 
   const reset: GuiCommand = {
     name: "gui-reset",
-    description: "Remove a backend's config, base images, and verified state: /gui-reset <backend>",
+    description: "Remove a backend's config, setup data (such as base images), and verified state: /gui-reset <backend>",
     getArgumentCompletions: backendCompletions,
     handler: guarded("gui-reset", async (args, ctx, emit, generation) => {
       const { backend: id } = parseResetArgs(args);
-      if (!IMPLEMENTED_BACKENDS.includes(id)) return emit(notAvailableMessage(id), true);
-      if (!ctx.hasUI) return emit(`/gui-reset ${id} deletes images and config and needs your confirmation in an interactive Pi session`, true);
-      const ok = await ctx.ui.confirm(`Reset ${id}?`, "Stops its sessions and removes its base images, verified state, and backend choice. Docker itself stays installed.");
+      if (!runtime.implemented(id)) return emit(runtime.notAvailableMessage(id), true);
+      if (!ctx.hasUI) return emit(`/gui-reset ${id} deletes its setup data and config and needs your confirmation in an interactive Pi session`, true);
+      const backend = runtime.backend(id);
+      const resetCapability = hasReset(backend) ? backend : undefined;
+      const ok = await ctx.ui.confirm(`Reset ${id}?`, resetCapability?.resetSummary ?? DEFAULT_RESET_SUMMARY);
       if (!ok) return emit(`GUI reset ${id} cancelled; nothing was changed`, false);
       assertCurrent(generation);
       runtime.cancelSetup(`cancelled by /gui-reset ${id}`);
-      const backend = runtime.backend(id);
       const lines: string[] = [];
       const leftovers = await runtime.stopAll(id);
       const controller = new AbortController();
       const sweep = await runtime.sweepNow([id], controller.signal);
       leftovers.push(...sweep.leftovers);
-      if (backend.removeBaseImages) {
+      if (resetCapability?.resetData) {
         try {
-          const images = await backend.removeBaseImages(controller.signal);
-          lines.push(`removed ${images.removed.length} base image(s)`);
-          leftovers.push(...images.leftovers);
+          const data = await resetCapability.resetData(controller.signal);
+          lines.push(...data.lines);
+          leftovers.push(...data.leftovers);
         } catch (error) {
-          leftovers.push({ kind: "image", id: "pi-gui-testing.base", detail: (error as Error).message });
+          leftovers.push({ kind: "reset", id, detail: (error as Error).message });
         }
       }
       await markUnverified(id, runtime.options.globalConfigPath);
       await updateGlobalConfig((c) => void (c.backend === id && delete c.backend), runtime.options.globalConfigPath);
       await updateLocalConfig(ctx.cwd, (c) => void (c.backend === id && delete c.backend)).catch(() => undefined);
       lines.push("removed the verified state and backend choice");
-      lines.push("system packages: setup installs none for docker-linux; Docker itself is yours and stays installed");
+      if (resetCapability) lines.push(resetCapability.resetNote);
       lines.push(leftoverLines("Leftovers", leftovers));
       emit(`GUI testing reset ${id}:\n${lines.join("\n")}`, leftovers.length > 0);
     }),

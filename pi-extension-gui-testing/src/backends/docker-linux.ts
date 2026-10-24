@@ -7,6 +7,8 @@ import { lstat, realpath } from "node:fs/promises";
 import { join } from "node:path";
 import { VERSION as PI_VERSION } from "@earendil-works/pi-coding-agent";
 import { SessionError, type Backend, type Session, type SessionStartOptions, type SyncSummary } from "../backend.ts";
+import type { DriftCapability, ImageCapability, OrphanAuditGate, ResetCapability, RunnerCapability, SweepAvailability } from "./capabilities.ts";
+import type { CheckResult } from "../checks/types.ts";
 import type { CommonCheckOptions } from "../checks/common.ts";
 import type { Check } from "../checks/types.ts";
 import type { BackendId } from "../config/types.ts";
@@ -18,7 +20,7 @@ import { buildFileSet } from "../sync/fileset.ts";
 import { copyFileSet } from "../sync/copy.ts";
 import { dockerLinuxChecks, parseDockerCliVersion } from "./docker/checks.ts";
 import { PROTOCOL_VERSION } from "../protocol.ts";
-import { describeFailure, resolveEndpoint, runDocker, type EndpointSource } from "./docker/cli.ts";
+import { describeFailure, dockerOnPath, resolveEndpoint, runDocker, type EndpointSource } from "./docker/cli.ts";
 import { auditDockerOrphans, sweepDockerOrphans } from "./docker/footprint.ts";
 import { buildBaseImage, inspectImage } from "./docker/image.ts";
 import { hostPathProbe, type PathProbe } from "./docker/inspect.ts";
@@ -84,9 +86,11 @@ export interface DockerLinuxOptions {
   /** Test-only: shortened helper heartbeat timeout (the client then pings at a third of it). */
   heartbeatTimeoutMs?: number;
   readyTimeoutMs?: number;
+  /** Whether a `docker` executable is on PATH (checked without running it). Tests inject it. */
+  dockerOnPath?: () => Promise<boolean>;
 }
 
-export class DockerLinuxBackend implements Backend {
+export class DockerLinuxBackend implements Backend, ImageCapability, DriftCapability, ResetCapability, SweepAvailability, OrphanAuditGate, RunnerCapability {
   readonly id: BackendId = "docker-linux";
   readonly runner: CommandRunner;
   readonly spawner: Spawner;
@@ -265,6 +269,33 @@ export class DockerLinuxBackend implements Backend {
       throw error;
     }
     return session;
+  }
+
+  /**
+   * The Docker sweep runs whenever a `docker` executable is on PATH, whatever
+   * the verified state (a session may have outlived a reset or a failed
+   * doctor). Hosts without one get no `docker` command.
+   */
+  sweepAvailable(): Promise<boolean> {
+    return (this.#options.dockerOnPath ?? (() => dockerOnPath()))().catch(() => false);
+  }
+
+  /** Doctor audits Docker orphans only when the daemon answered. */
+  orphanAuditReady(results: readonly CheckResult[]): boolean {
+    return results.some((r) => r.id === "docker.permission" && r.status === "pass");
+  }
+
+  readonly resetSummary = "Stops its sessions and removes its base images, verified state, and backend choice. Docker itself stays installed.";
+  readonly resetNote = "system packages: setup installs none for docker-linux; Docker itself is yours and stays installed";
+
+  /** `/gui-reset`: the base images. */
+  async resetData(signal: AbortSignal): Promise<{ lines: string[]; leftovers: Leftover[] }> {
+    try {
+      const images = await this.removeBaseImages(signal);
+      return { lines: [`removed ${images.removed.length} base image(s)`], leftovers: images.leftovers };
+    } catch (error) {
+      return { lines: [], leftovers: [{ kind: "image", id: LABEL_BASE, detail: (error as Error).message }] };
+    }
   }
 
   async auditOrphans(signal: AbortSignal): Promise<Leftover[]> {
