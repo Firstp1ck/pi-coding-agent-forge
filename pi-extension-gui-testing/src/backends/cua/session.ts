@@ -43,6 +43,8 @@ export interface SandboxHandleOptions {
   ref: string;
   /** `keepSandbox`: a stop keeps the sandbox (and its billing, still counted by the cost ledger) instead of deleting it. */
   keep: boolean;
+  /** When set, ledger transitions also require this owner, not just the session id. */
+  ownerLabel?: string;
 }
 
 /**
@@ -128,7 +130,8 @@ export class SandboxHandle {
         this.#dirRemoved = true;
       }
       try {
-        if (!(await ledger.markKept(this.name, this.#o.sessionId)) && !(await this.#recorded())) this.#deleteInstead = true;
+        const expect = this.#o.ownerLabel === undefined ? this.#o.sessionId : { sessionId: this.#o.sessionId, ownerLabel: this.#o.ownerLabel };
+        if (!(await ledger.markKept(this.name, expect)) && !(await this.#recorded())) this.#deleteInstead = true;
       } catch (error) {
         return this.#owe({
           kind: "sandbox",
@@ -160,9 +163,9 @@ export class SandboxHandle {
     return this.#finish();
   }
 
-  /** Is a record of this sandbox (active or kept) still in the ledger? */
+  /** Is a record of this sandbox (active or kept, or unreadable) still in the ledger? One locked read. */
   async #recorded(): Promise<boolean> {
-    return (await this.#o.ledger.read(this.name, true)) !== undefined || (await this.#o.ledger.read(this.name)) !== undefined;
+    return this.#o.ledger.recorded(this.name);
   }
 
   #owe(leftover: Leftover): Leftover[] {

@@ -394,6 +394,8 @@ export class CuaBackend implements Backend, DriftCapability, ResetCapability, Sw
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
         const entries = await this.ledger.entries();
+        // An unreadable record may be the claim: never read that as "no claim".
+        if (entries.some((e) => !e.record && e.problem !== undefined)) return "unknown";
         return entries.find((e) => !e.kept && e.record && e.record.sessionId === owner.sessionId && e.record.ownerLabel === owner.ownerLabel && e.record.phase === "created" && !tried.has(e.record.name))?.record;
       } catch {
         await new Promise((resolve) => setTimeout(resolve, 20 * (attempt + 1)));
@@ -414,7 +416,7 @@ export class CuaBackend implements Backend, DriftCapability, ResetCapability, Sw
       if (committed === "unknown") return [unreadableClaimLeftover];
       if (!committed) return [];
       if (!settle) return [{ kind: "sandbox", id: committed.ref, detail: "claimed by a start that failed; it goes back to the kept set on the next gui_stop or /gui-cleanup" }];
-      const back = new SandboxHandle({ api: this.api, ledger: this.ledger, cost: this.cost, sessionId, name: committed.name, ref: committed.ref, keep: true });
+      const back = new SandboxHandle({ api: this.api, ledger: this.ledger, cost: this.cost, sessionId, name: committed.name, ref: committed.ref, keep: true, ownerLabel: owner.ownerLabel });
       return back.returnToKept();
     };
     return {

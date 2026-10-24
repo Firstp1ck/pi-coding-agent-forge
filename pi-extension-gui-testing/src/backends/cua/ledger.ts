@@ -373,6 +373,18 @@ export class SandboxLedger {
    * read) and is not pending deletion. `true` when it moved. Throws for an
    * unknown record.
    */
+  /**
+   * Whether the sandbox still has a record (active or kept), read as one step under the lock, so a
+   * concurrent move between the two copies is never seen as absence. An unknown record counts as present.
+   */
+  async recorded(name: string): Promise<boolean> {
+    this.#file(name, false);
+    return this.#lock.run(async () => {
+      const loaded = await this.#load(name);
+      return loaded.unknown !== undefined || loaded.current !== undefined;
+    });
+  }
+
   async markKept(name: string, expect: string | ExpectedOwner): Promise<boolean> {
     const owner = typeof expect === "string" ? { sessionId: expect } : expect;
     if (typeof owner?.sessionId !== "string") throw new Error("markKept needs the session id of the record it keeps");
