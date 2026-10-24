@@ -87,17 +87,12 @@ test("X1: a delayed keep of a dead owner's record cannot undo a newer keep and c
   let paused, resume;
   const entered = new Promise((r) => (paused = r));
   const gate = new Promise((r) => (resume = r));
-  let armed = true;
-  // Sweep A read the dead owner's record and is delayed before acting on it.
+  // Sweep A read the dead owner's record and is delayed before its transition takes the lock.
   class SlowLedger extends SandboxLedger {
-    async read(name, kept = false) {
-      const r = await super.read(name, kept);
-      if (armed && !kept) {
-        armed = false;
-        paused();
-        await gate;
-      }
-      return r;
+    async markKept(name, expect) {
+      paused();
+      await gate;
+      return super.markKept(name, expect);
     }
   }
   const a = new SlowLedger(dir);

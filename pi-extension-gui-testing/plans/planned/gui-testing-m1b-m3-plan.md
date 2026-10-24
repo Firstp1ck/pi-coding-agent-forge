@@ -107,7 +107,7 @@ Round-3 fixes, accepted: Y1 cua `markKept` failure swallowed on stop/shutdown �
 
 | P-A3b | Pi / `openai-codex/gpt-6.1-sol` (xhigh), seat A | `…gui-testing-post-m1-review-A-r3b` | completed: **ready after fixes**; round-2 items fixed; 3 blocking: AA1 stale keep accepted during `phase: deleting`; AA2 crash between kept-record rewrite and rename loses deletion recovery; AA3 raw NUL in remote display lock misattributes records in the awk reader |
 
-AA1–AA3 accepted; fix run AA-r1 launched.
+AA1–AA3 accepted. Fix AA-r1 (`claude-opus-5-5`, handoff `plans/handoffs/post-m1-AA.md`): ledger generations + full-state CAS, `deleting` terminal; temp-file + rename commit point, `deleting` records anywhere treated as pending deletion; printable-ASCII byte check and exact session path match for remote display locks. Owner rerun: 542/542 on Node 26 and 22; helper tests only `gi` errors. Accepted residual: dot-prefixed temp files after a mid-write kill are ignored but not removed. Round 4 revalidation launched (P-A4, P-B4).
 
 ## 8. Open live verification
 

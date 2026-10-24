@@ -7,23 +7,30 @@
  *
  * Layout: `<dir>/<name>.json` for a sandbox in use or awaiting deletion,
  * `<dir>/<name>.kept.json` for one kept by `keepSandbox`. A record is written
- * (atomically, 0600) before `sandbox create` runs and removed only after the
- * deletion is confirmed, so a crash at any point leaves a record the next
- * sweep completes. Every move between the two sets is a single `rename`, so a
- * sandbox's record is in exactly one of them at any time.
+ * (0600) before `sandbox create` runs and removed only after the deletion is
+ * confirmed, so a crash at any point leaves a record the next sweep completes.
+ *
+ * Every transition writes the new record to a temp file and renames it onto
+ * its destination with a generation above the old one (the single commit
+ * point), and only then removes the copy it replaced. A crash between the two
+ * leaves both copies; the higher generation is the current one, and readers
+ * and the next transition ignore or remove the stale copy. `deleting` is
+ * terminal: such a record (in either set, also an older version's crash
+ * residue in the kept set) is never kept, claimed, or reused again, only
+ * deleted and removed.
  *
  * Every transition (write, update, keep, claim, delete) runs under the
  * ledger's interprocess lock ({@link LedgerLock}) and re-reads the record
- * inside it: a transition that names an expected owner (session id, and
- * optionally owner label or `keptAt`) acts only when the record still has it
- * (compare-and-swap). A sweep or a session working from an older read can
- * therefore never move, claim, or delete a record another process has taken
- * since. Reads (`read`, `entries`) take no lock.
+ * inside it: a transition that names an expected state (session id, and
+ * optionally owner label, `keptAt`, phase, and generation) acts only when the
+ * record still has it (compare-and-swap). A sweep or a session working from
+ * an older read can therefore never move, claim, or delete a record another
+ * process has changed since. Reads (`read`, `entries`) take no lock.
  */
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { hostname } from "node:os";
-import { readdir, readFile, rename, rm } from "node:fs/promises";
+import { readdir, readFile, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { writeJsonAtomic } from "../../config/atomic.ts";
 import { globalConfigPath } from "../../config/types.ts";
@@ -82,6 +89,7 @@ export interface LedgerRecord {
   ownerLabel: string;
   sessionId: string;
   projectKey: string;
+  /** `deleting` is terminal: such a sandbox is never kept, claimed, or reused again, only deleted. */
   phase: LedgerPhase;
   /** The session asked to keep it (`keepSandbox`); a dead owner's sandbox is then kept, not deleted. */
   keep: boolean;
@@ -95,19 +103,45 @@ export interface LedgerRecord {
    * never reused.
    */
   image?: string;
+  /**
+   * Raised by every committed transition (absent, meaning 0, in records of
+   * older versions). Of two copies of a record, the higher generation is
+   * the current one, and a transition that names the generation it read acts
+   * only while the record still has it.
+   */
+  generation?: number;
 }
 
-/** The owner a transition expects the record to still have. */
+/** The state a transition expects the record to still have; every given field must match. */
 export interface ExpectedOwner {
   sessionId: string;
   ownerLabel?: string;
   /** For kept records: the `keptAt` that was read. */
   keptAt?: string;
+  phase?: LedgerPhase;
+  generation?: number;
 }
 
-function hasOwner(record: LedgerRecord, expect: ExpectedOwner | undefined): boolean {
+/** The full state of `record` as read, for a transition that must act only while nothing changed since. */
+export function expectedState(record: LedgerRecord): ExpectedOwner {
+  return {
+    sessionId: record.sessionId,
+    ownerLabel: record.ownerLabel,
+    phase: record.phase,
+    generation: record.generation ?? 0,
+    ...(record.keptAt !== undefined ? { keptAt: record.keptAt } : {}),
+  };
+}
+
+function matches(record: LedgerRecord, expect: ExpectedOwner | undefined): boolean {
   if (!expect) return true;
-  return record.sessionId === expect.sessionId && (expect.ownerLabel === undefined || record.ownerLabel === expect.ownerLabel) && (expect.keptAt === undefined || record.keptAt === expect.keptAt);
+  return (
+    record.sessionId === expect.sessionId &&
+    (expect.ownerLabel === undefined || record.ownerLabel === expect.ownerLabel) &&
+    (expect.keptAt === undefined || record.keptAt === expect.keptAt) &&
+    (expect.phase === undefined || record.phase === expect.phase) &&
+    (expect.generation === undefined || (record.generation ?? 0) === expect.generation)
+  );
 }
 
 /** Default ledger directory: `<agent dir>/gui/cua-sandboxes`. */
@@ -128,8 +162,30 @@ function recordProblem(raw: unknown): string | undefined {
   if (!["creating", "created", "deleting"].includes(r.phase as string)) return "bad phase";
   if (typeof r.keep !== "boolean") return "bad keep";
   if (r.image !== undefined && (typeof r.image !== "string" || r.image.length === 0 || r.image.length > 512)) return "bad image";
+  if (r.generation !== undefined && (!Number.isSafeInteger(r.generation) || (r.generation as number) < 0)) return "bad generation";
   if (!(r.name as string).startsWith(SANDBOX_PREFIX) || r.ref !== `${r.location}:${r.name}`) return "name and ref disagree";
   return undefined;
+}
+
+/**
+ * Of the active and the kept copy of one record, the current one: the higher
+ * generation; on a tie (only by hand), a `deleting` copy, else the active one.
+ * Two copies exist only after a crash between a transition's commit and the
+ * removal of the copy it replaced.
+ */
+function current(active: LedgerRecord | undefined, kept: LedgerRecord | undefined): { record: LedgerRecord; kept: boolean } | undefined {
+  if (!active || !kept) return active ? { record: active, kept: false } : kept ? { record: kept, kept: true } : undefined;
+  const a = active.generation ?? 0;
+  const k = kept.generation ?? 0;
+  if (k > a || (k === a && kept.phase === "deleting" && active.phase !== "deleting")) return { record: kept, kept: true };
+  return { record: active, kept: false };
+}
+
+interface Loaded {
+  /** The current copy. */
+  current?: { record: LedgerRecord; kept: boolean };
+  active?: LedgerRecord;
+  kept?: LedgerRecord;
 }
 
 export interface LedgerEntry {
@@ -138,6 +194,11 @@ export interface LedgerEntry {
   problem?: string;
   file: string;
   kept: boolean;
+}
+
+/** A record whose sandbox is to be deleted (wherever its file is): never kept, claimed, or reused. */
+export function pendingDeletion(entry: LedgerEntry): boolean {
+  return entry.record?.phase === "deleting";
 }
 
 export interface SandboxLedgerOptions {
@@ -158,68 +219,106 @@ export class SandboxLedger {
     return join(this.dir, `${name}${kept ? KEPT : ACTIVE}`);
   }
 
-  async #put(record: LedgerRecord, kept = false): Promise<void> {
-    await writeJsonAtomic(this.#file(record.name, kept), record, { mode: 0o600, dirMode: 0o700 });
-  }
-
-  /** Writes (or replaces) the active record. Resolves before the caller creates or deletes anything. */
-  async write(record: LedgerRecord): Promise<void> {
-    this.#file(record.name, false);
-    await this.#lock.run(() => this.#put(record));
-  }
-
-  /** Changes the active record; only while it still has `expect`'s owner, when given. */
-  async update(name: string, change: Partial<LedgerRecord>, expect?: ExpectedOwner): Promise<LedgerRecord | undefined> {
-    this.#file(name, false);
-    return this.#lock.run(async () => {
-      const current = await this.read(name);
-      if (!current || !hasOwner(current, expect)) return undefined;
-      const next = { ...current, ...change };
-      await this.#put(next);
-      return next;
-    });
-  }
-
-  async read(name: string, kept = false): Promise<LedgerRecord | undefined> {
+  async #readCopy(name: string, kept: boolean): Promise<LedgerRecord | undefined> {
     let raw: unknown;
     try {
       raw = JSON.parse(await readFile(this.#file(name, kept), "utf8"));
     } catch {
       return undefined;
     }
-    return recordProblem(raw) ? undefined : (raw as LedgerRecord);
+    return recordProblem(raw) || (raw as LedgerRecord).name !== name ? undefined : (raw as LedgerRecord);
+  }
+
+  async #load(name: string): Promise<Loaded> {
+    const [active, kept] = await Promise.all([this.#readCopy(name, false), this.#readCopy(name, true)]);
+    const now = current(active, kept);
+    return { ...(now ? { current: now } : {}), ...(active ? { active } : {}), ...(kept ? { kept } : {}) };
+  }
+
+  /**
+   * Commits `record` as the record of its sandbox in the active or kept set:
+   * one temp-file write plus `rename` onto the destination, with a generation
+   * above both copies, is the commit point; only then is the copy it replaces
+   * removed. A crash at any step leaves either the old record or the new one
+   * as the current copy, never a half-made transition.
+   */
+  async #commit(record: LedgerRecord, kept: boolean, loaded: Loaded): Promise<LedgerRecord> {
+    const next: LedgerRecord = { ...record, generation: Math.max(loaded.active?.generation ?? 0, loaded.kept?.generation ?? 0) + 1 };
+    await writeJsonAtomic(this.#file(record.name, kept), next, { mode: 0o600, dirMode: 0o700 });
+    if (kept ? loaded.active : loaded.kept) await rm(this.#file(record.name, !kept), { force: true });
+    return next;
+  }
+
+  /**
+   * Writes (or replaces) the record as active. Resolves before the caller
+   * creates or deletes anything. Refuses to replace a record pending deletion.
+   */
+  async write(record: LedgerRecord): Promise<void> {
+    this.#file(record.name, false);
+    await this.#lock.run(async () => {
+      const loaded = await this.#load(record.name);
+      if (loaded.current?.record.phase === "deleting") throw new Error(`sandbox ${record.name} is pending deletion; its record is not replaced`);
+      await this.#commit(record, false, loaded);
+    });
+  }
+
+  /**
+   * Changes the active record; only while it still has `expect`'s state, when
+   * given. A record pending deletion takes no change other than `deleting`.
+   */
+  async update(name: string, change: Partial<LedgerRecord>, expect?: ExpectedOwner): Promise<LedgerRecord | undefined> {
+    this.#file(name, false);
+    const { generation: _ignored, name: _name, ...wanted } = change;
+    return this.#lock.run(async () => {
+      const loaded = await this.#load(name);
+      const now = loaded.current;
+      if (!now || now.kept || !matches(now.record, expect)) return undefined;
+      const next = { ...now.record, ...wanted };
+      const changed = Object.keys(wanted).some((key) => (next as unknown as Record<string, unknown>)[key] !== (now.record as unknown as Record<string, unknown>)[key]);
+      if (!changed) return now.record;
+      if (now.record.phase === "deleting") return undefined;
+      return this.#commit(next, false, loaded);
+    });
+  }
+
+  /** The current record of `name` when it is in the active (or, with `kept`, the kept) set. Takes no lock. */
+  async read(name: string, kept = false): Promise<LedgerRecord | undefined> {
+    const now = (await this.#load(name)).current;
+    return now && now.kept === kept ? now.record : undefined;
   }
 
   /**
    * Removes a record once the sandbox is confirmed gone; with `expect`, only
-   * while the record still has that owner. `true` when no such record is left.
+   * while the current record is in that set and still has that state. `true`
+   * when no such record is left.
    */
   async remove(name: string, kept = false, expect?: ExpectedOwner): Promise<boolean> {
     this.#file(name, kept);
     return this.#lock.run(async () => {
-      if (expect) {
-        const current = await this.read(name, kept);
-        if (current && !hasOwner(current, expect)) return false;
-      }
+      const loaded = await this.#load(name);
+      const now = loaded.current;
+      if (expect && now && (now.kept !== kept || !matches(now.record, expect))) return false;
       await rm(this.#file(name, kept), { force: true });
+      // A stale copy in the other set goes too, once the current record was in this one.
+      if (now?.kept === kept && (kept ? loaded.active : loaded.kept)) await rm(this.#file(name, !kept), { force: true });
       return true;
     });
   }
 
   /**
    * Moves the active record to the kept set (the sandbox stays), only while
-   * it still belongs to `expect` (a session id, or the session and owner a
-   * sweep judged). `true` when it moved.
+   * it still belongs to `expect` (a session id, or the full state a sweep
+   * read) and is not pending deletion. `true` when it moved.
    */
   async markKept(name: string, expect: string | ExpectedOwner): Promise<boolean> {
     const owner = typeof expect === "string" ? { sessionId: expect } : expect;
     if (typeof owner?.sessionId !== "string") throw new Error("markKept needs the session id of the record it keeps");
     this.#file(name, false);
     return this.#lock.run(async () => {
-      const current = await this.read(name);
-      if (!current || !hasOwner(current, owner)) return false;
-      await this.#put({ ...current, keptAt: new Date().toISOString() });
-      await rename(this.#file(name, false), this.#file(name, true));
+      const loaded = await this.#load(name);
+      const now = loaded.current;
+      if (!now || now.kept || now.record.phase === "deleting" || !matches(now.record, owner)) return false;
+      await this.#commit({ ...now.record, keptAt: new Date().toISOString() }, true, loaded);
       return true;
     });
   }
@@ -227,51 +326,60 @@ export class SandboxLedger {
   /**
    * Claims a kept sandbox for a new session: a kept record of `project` in
    * `location` (with `image`: recorded as made from that image; with
-   * `exclude`: none of those names). Returns the claimed record, now active
-   * with `phase: "created"` and the new owner.
+   * `exclude`: none of those names), never one pending deletion. Returns the
+   * claimed record, now active with `phase: "created"` and the new owner.
    */
   async claimKept(location: string, project: string, owner: { ownerLabel: string; sessionId: string }, options: { image?: string; exclude?: ReadonlySet<string> } = {}): Promise<LedgerRecord | undefined> {
     const { image, exclude } = options;
-    const wanted = (entry: LedgerEntry) => {
-      const r = entry.record;
-      return entry.kept && r !== undefined && r.location === location && r.projectKey === project && (image === undefined || r.image === image) && !exclude?.has(r.name);
-    };
+    const claimable = (r: LedgerRecord) => r.phase !== "deleting" && r.location === location && r.projectKey === project && (image === undefined || r.image === image) && !exclude?.has(r.name);
+    const candidates = (await this.entries()).filter((e) => e.kept && e.record && claimable(e.record)).map((e) => e.record!.name);
     // Nothing to claim: no lock (and no ledger dir) needed.
-    if (!(await this.entries()).some(wanted)) return undefined;
+    if (candidates.length === 0) return undefined;
     return this.#lock.run(async () => {
-      for (const entry of await this.entries()) {
-        if (!wanted(entry)) continue;
-        const r = entry.record!;
-        const claimed: LedgerRecord = { ...r, ...owner, phase: "created", keep: true };
+      for (const name of candidates) {
+        const loaded = await this.#load(name);
+        const now = loaded.current;
+        if (!now?.kept || !claimable(now.record)) continue;
+        const claimed: LedgerRecord = { ...now.record, ...owner, phase: "created", keep: true };
         delete claimed.keptAt;
-        await this.#put(claimed, true);
-        await rename(this.#file(r.name, true), this.#file(r.name, false));
-        return claimed;
+        return this.#commit(claimed, false, loaded);
       }
       return undefined;
     });
   }
 
   /**
-   * Claims a kept record for deletion: moves it to the active set with
-   * `phase: "deleting"`, so the sweep retries a failed deletion and no
-   * session reuses it. `false` when it is no longer kept.
+   * Claims a kept record for deletion: commits it to the active set with
+   * `phase: "deleting"` (terminal), so no session reuses it and the sweep or
+   * the next reset retries a failed deletion. Returns the committed record
+   * (pass it to {@link expectedState} for the removal), or `undefined` when it
+   * is no longer kept.
    */
-  async claimForDeletion(name: string): Promise<boolean> {
+  async claimForDeletion(name: string): Promise<LedgerRecord | undefined> {
     this.#file(name, true);
     return this.#lock.run(async () => {
-      const current = await this.read(name, true);
-      if (!current) return false;
-      const next: LedgerRecord = { ...current, phase: "deleting", keep: false };
+      const loaded = await this.#load(name);
+      if (!loaded.current?.kept) return undefined;
+      const next: LedgerRecord = { ...loaded.current.record, phase: "deleting", keep: false };
       delete next.keptAt;
-      await this.#put(next, true);
-      await rename(this.#file(name, true), this.#file(name, false));
-      return true;
+      return this.#commit(next, false, loaded);
     });
   }
 
-  /** Every record file, active and kept. A missing directory is an empty ledger. */
+  /**
+   * Every record, active and kept: one entry per sandbox (its current copy;
+   * a stale copy left by a crash is skipped), plus every file that cannot be
+   * read or validated. A missing directory is an empty ledger.
+   */
   async entries(): Promise<LedgerEntry[]> {
+    // A transition may replace a file between the listing and its read; list again then.
+    for (let attempt = 0; ; attempt++) {
+      const listed = await this.#list(attempt < 4);
+      if (listed) return listed;
+    }
+  }
+
+  async #list(retryOnVanished: boolean): Promise<LedgerEntry[] | undefined> {
     let names: string[];
     try {
       names = await readdir(this.dir);
@@ -280,22 +388,43 @@ export class SandboxLedger {
       throw error;
     }
     const entries: LedgerEntry[] = [];
+    const byName = new Map<string, { active?: LedgerEntry; kept?: LedgerEntry }>();
     for (const file of names.sort()) {
       if (!file.startsWith(SANDBOX_PREFIX) || !file.endsWith(ACTIVE)) continue;
       const kept = file.endsWith(KEPT);
       const path = join(this.dir, file);
+      let text: string;
       try {
-        const raw: unknown = JSON.parse(await readFile(path, "utf8"));
+        text = await readFile(path, "utf8");
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+          if (retryOnVanished) return undefined;
+          continue;
+        }
+        entries.push({ file: path, kept, problem: `unreadable: ${(error as Error).message}` });
+        continue;
+      }
+      try {
+        const raw: unknown = JSON.parse(text);
         const problem = recordProblem(raw);
         const expected = `${(raw as LedgerRecord)?.name}${kept ? KEPT : ACTIVE}`;
         if (problem) entries.push({ file: path, kept, problem });
         else if (expected !== file) entries.push({ file: path, kept, problem: "file name and record disagree" });
-        else entries.push({ file: path, kept, record: raw as LedgerRecord });
+        else {
+          const entry = { file: path, kept, record: raw as LedgerRecord };
+          const pair = byName.get(entry.record.name) ?? {};
+          pair[kept ? "kept" : "active"] = entry;
+          byName.set(entry.record.name, pair);
+        }
       } catch (error) {
         entries.push({ file: path, kept, problem: `unreadable: ${(error as Error).message}` });
       }
     }
-    return entries;
+    for (const pair of byName.values()) {
+      const now = current(pair.active?.record, pair.kept?.record);
+      if (now) entries.push((now.kept ? pair.kept : pair.active)!);
+    }
+    return entries.sort((a, b) => (a.file < b.file ? -1 : a.file > b.file ? 1 : 0));
   }
 }
 

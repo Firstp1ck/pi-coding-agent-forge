@@ -520,3 +520,57 @@ test("X5: display lock records are parsed as JSON: compact, pretty, and reordere
     assert.equal(await exists(lock), true, `${kind}: left alone`);
   }
 });
+
+test("AA3: a lock record with a raw NUL, control, DEL, or non-ASCII byte (or a leading-zero number) is never attributed, removed, or used to signal; the orphan audit reports it as malformed (reviewer reproduction)", async (t) => {
+  const { AUDIT_SCRIPT, REMOVE_SCRIPT, LIST_SCRIPT, listRemoteFootprint, decideLocks } = await import("../../../../src/backends/remote/session-dir.ts");
+  const root = await mkdtemp("/tmp/pgt-aa3-");
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const xdg = join(root, "xdg");
+  const base = join(xdg, "pi-gui-testing");
+  const name = "s-victim";
+  await mkdir(join(base, "displays"), { recursive: true, mode: 0o700 });
+  await mkdir(join(base, name), { mode: 0o700 });
+  const lock = join(base, "displays", "display-9999.lock");
+  const bootId = (await readFile("/proc/sys/kernel/random/boot_id", "utf8")).trim();
+  const env = { PATH: "/usr/bin:/bin", HOME: join(root, "nohome"), XDG_RUNTIME_DIR: xdg };
+  // Every root inside the scratch tree; `kill` only records, so nothing is ever signalled even if a record were attributed.
+  const scoped = (script) => script.replaceAll("/tmp/pi-gui-testing-$(id -u)", join(root, "no-fallback"));
+  const call = (script, args) => spawnSync("/bin/sh", ["-c", scoped(script), "sh", ...args], { env, encoding: "utf8", timeout: 60_000 });
+  const runner = { run: async (argv) => ({ ...call(argv[2], argv.slice(4)), exitCode: 0, signal: null, timedOut: false, durationMs: 1 }) };
+  const tag = "unrelatedlivetag0";
+  const record = { version: 1, runtimeDir: join(base, name, "run"), helper: "999999:10", bootId, tag, display: 9999, infra: {} };
+  const normal = Buffer.from(JSON.stringify(record));
+  const splice = (text, at, bytes) => {
+    const i = normal.indexOf(at);
+    return Buffer.concat([normal.subarray(0, i), Buffer.from(bytes), normal.subarray(i)]);
+  };
+  const variants = {
+    rawNulInPath: splice(normal, "/run", [0]),
+    rawNulInKey: splice(normal, "Dir", [0]),
+    rawControlInPath: splice(normal, "/run", [0x1b]),
+    rawDelInPath: splice(normal, "/run", [0x7f]),
+    rawLatin1InPath: splice(normal, "/run", [0xe9]),
+    rawC1InPath: splice(normal, "/run", [0xc2, 0x85]),
+    escapedDel: Buffer.from(JSON.stringify(record).replace("/run", "\\u007f/run")),
+    escapedC1: Buffer.from(JSON.stringify(record).replace("/run", "\\u0085/run")),
+    leadingZero: Buffer.from(JSON.stringify(record).replace('"version":1', '"version":01')),
+  };
+  await writeFile(lock, normal, { mode: 0o600 });
+  assert.match(call(AUDIT_SCRIPT, [name]).stdout, /^lock=/m, "control: the well-formed record is attributed");
+  const unrelated = spawn("sleep", ["60"], { env: { PATH: process.env.PATH, PI_GUI_TAG: tag }, stdio: "ignore", detached: true });
+  t.after(() => unrelated.kill("SIGKILL"));
+  await new Promise((r) => setTimeout(r, 200));
+  for (const [variant, bytes] of Object.entries(variants)) {
+    await writeFile(lock, bytes, { mode: 0o600 });
+    assert.doesNotMatch(call(AUDIT_SCRIPT, [name]).stdout, /^lock=/m, `${variant}: not attributed`);
+    const removal = call(`kill() { printf "WOULD SIGNAL %s\\n" "$*"; }; ${REMOVE_SCRIPT}`, ["fast", name]);
+    assert.doesNotMatch(removal.stdout, /WOULD SIGNAL/, `${variant}: no process is signalled through it`);
+    assert.equal(await exists(lock), true, `${variant}: left alone`);
+    assert.equal(unrelated.exitCode, null, `${variant}: the unrelated tagged process lives`);
+    await mkdir(join(base, name), { mode: 0o700 }).catch(() => undefined);
+    const { locks } = await listRemoteFootprint(runner);
+    const decisions = decideLocks(locks);
+    assert.deepEqual(decisions.map((d) => [d.lock.path, d.action, /malformed/.test(d.reason)]), [[lock, "report", true]], `${variant}: reported as malformed`);
+  }
+  assert.ok(LIST_SCRIPT.includes("malformed"));
+});

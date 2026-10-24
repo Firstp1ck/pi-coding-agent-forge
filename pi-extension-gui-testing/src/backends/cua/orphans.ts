@@ -4,12 +4,15 @@
  * is gone: a cloud account is shared by all of its owner's machines, so a
  * sandbox without a record here may belong to a live Pi elsewhere. Kept
  * sandboxes (`keepSandbox`) are not orphans; a dead owner's sandbox that asked
- * to be kept is moved to the kept set instead of deleted.
+ * to be kept is moved to the kept set instead of deleted. A record pending
+ * deletion (`phase: "deleting"`, in either set) is never reused: the sweep
+ * deletes it unless its owner still runs (then it is reported), and
+ * `/gui-reset cua` deletes it.
  */
 import { DEFAULT_PROC_ROOT } from "../../cleanup/identity.ts";
 import type { Leftover } from "../../protocol.ts";
 import type { CuaApi } from "./api.ts";
-import { hostPrefix, recordOwnerLiveness, type LedgerEntry, type SandboxLedger } from "./ledger.ts";
+import { expectedState, hostPrefix, pendingDeletion, recordOwnerLiveness, type LedgerEntry, type LedgerRecord, type SandboxLedger } from "./ledger.ts";
 import { redact } from "./redact.ts";
 
 export interface OrphanOptions {
@@ -34,6 +37,25 @@ function problemLeftover(entry: LedgerEntry): Leftover {
   return { kind: "ledger", id: entry.file, detail: `unreadable sandbox record (${entry.problem}); not acted on` };
 }
 
+/** Detail of a record pending deletion whose owner process still runs (it may be deleting it right now). */
+const PENDING_LIVE_OWNER = "pending deletion; its owner process still runs, so the sweep leaves it to that process (/gui-reset cua deletes it now)";
+const PENDING = "pending deletion; the next sweep (/gui-cleanup cua) or /gui-reset cua deletes it";
+
+/**
+ * Deletes the sandbox of a record pending deletion and removes the record
+ * (only while it is unchanged since `record` was read). Never throws.
+ */
+async function finishDeletion(options: Omit<OrphanOptions, "procRoot">, record: LedgerRecord, kept: boolean, result: SweepResult, failed: string): Promise<void> {
+  try {
+    await options.api.deleteSandbox(record.ref, options.signal);
+    options.onDeleted?.(record.ref);
+    if (await options.ledger.remove(record.name, kept, expectedState(record))) result.deleted.push(record.ref);
+    else result.leftovers.push({ kind: "ledger", id: record.ref, detail: "sandbox deleted, but its ledger record changed meanwhile; not removed" });
+  } catch (error) {
+    result.leftovers.push({ kind: "sandbox", id: record.ref, detail: `${failed}: ${redact((error as Error).message)}` });
+  }
+}
+
 /** Sandboxes with this machine's prefix that no ledger record names (read-only). */
 async function unrecorded(options: OrphanOptions, entries: readonly LedgerEntry[]): Promise<Leftover[]> {
   const known = new Set(entries.map((e) => e.record?.name).filter(Boolean));
@@ -47,7 +69,7 @@ async function unrecorded(options: OrphanOptions, entries: readonly LedgerEntry[
   }
 }
 
-/** Read-only: dead owners' sandboxes, owners that cannot be judged, unreadable records, unrecorded sandboxes of this machine. */
+/** Read-only: sandboxes pending deletion, dead owners' sandboxes, owners that cannot be judged, unreadable records, unrecorded sandboxes of this machine. */
 export async function auditCuaOrphans(options: OrphanOptions): Promise<Leftover[]> {
   const procRoot = options.procRoot ?? DEFAULT_PROC_ROOT;
   const entries = await options.ledger.entries();
@@ -55,6 +77,10 @@ export async function auditCuaOrphans(options: OrphanOptions): Promise<Leftover[
   for (const entry of entries) {
     if (!entry.record) {
       leftovers.push(problemLeftover(entry));
+      continue;
+    }
+    if (pendingDeletion(entry)) {
+      leftovers.push({ kind: "sandbox", id: entry.record.ref, detail: recordOwnerLiveness(entry.record, procRoot) === "alive" ? PENDING_LIVE_OWNER : PENDING });
       continue;
     }
     if (entry.kept) {
@@ -76,9 +102,11 @@ export interface SweepResult {
 }
 
 /**
- * Deletes dead owners' sandboxes (or moves them to the kept set), forgets
- * kept records whose sandbox is gone (expired), and reports everything it may
- * not touch. Never throws for a single sandbox.
+ * Deletes dead owners' sandboxes (or moves them to the kept set) and
+ * sandboxes pending deletion whose owner is not running, forgets kept records
+ * whose sandbox is gone (expired), and reports everything it may not touch.
+ * Every transition acts only on the record state it read. Never throws for a
+ * single sandbox.
  */
 export async function sweepCuaOrphans(options: OrphanOptions): Promise<SweepResult> {
   const procRoot = options.procRoot ?? DEFAULT_PROC_ROOT;
@@ -92,13 +120,19 @@ export async function sweepCuaOrphans(options: OrphanOptions): Promise<SweepResu
       result.leftovers.push(problemLeftover(entry));
       continue;
     }
+    if (pendingDeletion(entry)) {
+      // Never reused, so deleting it is safe whoever recorded it; a running owner may be deleting it right now.
+      if (recordOwnerLiveness(record, procRoot) === "alive") result.leftovers.push({ kind: "sandbox", id: record.ref, detail: PENDING_LIVE_OWNER });
+      else await finishDeletion(options, record, entry.kept, result, "delete failed (it may keep billing)");
+      continue;
+    }
     if (entry.kept) {
       // A kept sandbox that expired or was deleted elsewhere: forget it.
       try {
         if (!(await api.getSandbox(record.ref, signal))) {
           options.onDeleted?.(record.ref);
           // Only the record that was read: a session may have claimed and kept it again meanwhile.
-          await ledger.remove(record.name, true, { sessionId: record.sessionId, ...(record.keptAt ? { keptAt: record.keptAt } : {}) });
+          await ledger.remove(record.name, true, expectedState(record));
         } else if (record.image === undefined) {
           result.leftovers.push({ kind: "sandbox", id: record.ref, detail: NO_IMAGE_KEPT });
         }
@@ -113,21 +147,18 @@ export async function sweepCuaOrphans(options: OrphanOptions): Promise<SweepResu
       result.leftovers.push({ kind: "sandbox", id: record.ref, detail: "owner unknown; not removed automatically" });
       continue;
     }
-    // Every transition below acts only while the record still names the dead owner that was judged:
-    // another sweep or a new session may have kept or claimed it since this sweep read it.
-    const judged = { sessionId: record.sessionId, ownerLabel: record.ownerLabel };
-    if (record.keep && record.phase === "created") {
-      if (await ledger.markKept(record.name, judged)) result.kept.push(record.ref);
-      continue;
-    }
+    // Every transition below acts only while the record is exactly what this sweep read (owner, phase,
+    // generation): another sweep, a reset, or a new session may have kept, claimed, or condemned it since.
     try {
-      if (!(await ledger.update(record.name, { phase: "deleting" }, judged))) continue;
-      await api.deleteSandbox(record.ref, signal);
-      options.onDeleted?.(record.ref);
-      await ledger.remove(record.name, false, judged);
-      result.deleted.push(record.ref);
+      if (record.keep && record.phase === "created") {
+        if (await ledger.markKept(record.name, expectedState(record))) result.kept.push(record.ref);
+        continue;
+      }
+      const condemned = await ledger.update(record.name, { phase: "deleting" }, expectedState(record));
+      if (!condemned) continue;
+      await finishDeletion(options, condemned, false, result, "delete failed (it may keep billing)");
     } catch (error) {
-      result.leftovers.push({ kind: "sandbox", id: record.ref, detail: `delete failed (it may keep billing): ${redact((error as Error).message)}` });
+      result.leftovers.push({ kind: "sandbox", id: record.ref, detail: `ledger transition failed; the next sweep retries: ${redact((error as Error).message)}` });
     }
   }
   if (!signal.aborted) result.leftovers.push(...(await unrecorded(options, await ledger.entries())));
@@ -136,34 +167,41 @@ export async function sweepCuaOrphans(options: OrphanOptions): Promise<SweepResu
 
 /**
  * `/gui-reset cua`: deletes every kept sandbox of this machine (each record
- * claimed first), after the orphan sweep. A failed deletion stays recorded
- * as `deleting`, so the next sweep retries it. Live sessions are stopped by the runtime before this runs.
+ * claimed first, as `deleting`) and every sandbox already pending deletion,
+ * after the orphan sweep. A failed deletion stays recorded as `deleting`, so
+ * the next sweep or reset retries it. Live sessions are stopped by the
+ * runtime before this runs.
  */
 export async function deleteKeptSandboxes(options: Omit<OrphanOptions, "procRoot">): Promise<SweepResult> {
-  const { api, ledger, signal } = options;
+  const { ledger, signal } = options;
   const result: SweepResult = { deleted: [], kept: [], leftovers: [] };
+  const failed = "delete failed (it keeps billing until it expires)";
   for (const entry of await ledger.entries()) {
     if (signal.aborted) break;
     const record = entry.record;
-    if (!entry.kept || !record) continue;
-    // Claim it first, so a session starting meanwhile cannot reuse a sandbox being deleted.
-    if (!(await ledger.claimForDeletion(record.name))) continue;
-    try {
-      await api.deleteSandbox(record.ref, signal);
-      options.onDeleted?.(record.ref);
-      await ledger.remove(record.name);
-      result.deleted.push(record.ref);
-    } catch (error) {
-      result.leftovers.push({ kind: "sandbox", id: record.ref, detail: `delete failed (it keeps billing until it expires): ${redact((error as Error).message)}` });
+    if (!record) continue;
+    if (pendingDeletion(entry)) {
+      await finishDeletion(options, record, entry.kept, result, failed);
+      continue;
     }
+    if (!entry.kept) continue;
+    // Claim it first, so a session starting meanwhile cannot reuse a sandbox being deleted.
+    const claimed = await ledger.claimForDeletion(record.name);
+    if (claimed) await finishDeletion(options, claimed, false, result, failed);
   }
   return result;
 }
 
-/** Cheap startup gate input: does any active record name a dead owner? Reads files and `/proc` only. */
+/**
+ * Cheap startup gate input: does any active record name a dead owner, or any
+ * record pending deletion (in either set) an owner that is not running?
+ * Reads files and `/proc` only.
+ */
 export async function hasDeadOwnerRecords(ledger: SandboxLedger, procRoot: string = DEFAULT_PROC_ROOT): Promise<boolean> {
   for (const entry of await ledger.entries()) {
-    if (entry.record && !entry.kept && recordOwnerLiveness(entry.record, procRoot) === "dead") return true;
+    if (!entry.record) continue;
+    const liveness = recordOwnerLiveness(entry.record, procRoot);
+    if (pendingDeletion(entry) ? liveness !== "alive" : !entry.kept && liveness === "dead") return true;
   }
   return false;
 }

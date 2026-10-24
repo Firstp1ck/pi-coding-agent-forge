@@ -376,7 +376,7 @@ export class CuaBackend implements Backend, DriftCapability, ResetCapability, Sw
     const warnings: string[] = [];
     for (const entry of await this.ledger.entries().catch(() => [])) {
       const r = entry.record;
-      if (!entry.kept || !r || r.location !== location || r.projectKey !== project || r.image === image || reported.has(r.name)) continue;
+      if (!entry.kept || !r || r.phase === "deleting" || r.location !== location || r.projectKey !== project || r.image === image || reported.has(r.name)) continue;
       const why = r.image === undefined ? "was kept by an older version that did not record its image" : `was made from the image "${r.image}", not "${image}"`;
       warnings.push(`the kept sandbox ${r.ref} ${why}, so it was not reused; it keeps billing until it expires or you delete it with /gui-reset cua`);
     }
@@ -408,10 +408,10 @@ export class CuaBackend implements Backend, DriftCapability, ResetCapability, Sw
   }
 
   readonly resetSummary =
-    "Stops its sessions, deletes the sandboxes kept by keepSandbox, and removes the billing acknowledgement, cua settings, verified state, and backend choice. The cua CLI, your cua.ai sign-in, and your cloud connection stay.";
+    "Stops its sessions, deletes the sandboxes kept by keepSandbox (and any whose deletion did not finish), and removes the billing acknowledgement, cua settings, verified state, and backend choice. The cua CLI, your cua.ai sign-in, and your cloud connection stay.";
   readonly resetNote = "system packages: setup installs nothing on this computer for cua; sign out with `cua auth logout` and disconnect clouds with `cua cloud disconnect` yourself if you want";
 
-  /** `/gui-reset`: kept sandboxes and the settings file. */
+  /** `/gui-reset`: kept sandboxes, sandboxes pending deletion, and the settings file. */
   async resetData(signal: AbortSignal): Promise<{ lines: string[]; leftovers: Leftover[] }> {
     const lines: string[] = [];
     const leftovers: Leftover[] = [];

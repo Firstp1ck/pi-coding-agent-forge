@@ -84,9 +84,12 @@ const TAGGED_FN = [
  * `n:<path>=<value>` for number members of the top-level object and of nested
  * objects (`infra.xvfb`); only keys of `[A-Za-z0-9_]` are printed. It fails
  * (exit 1, nothing usable) on invalid JSON, a duplicate key, nesting deeper
- * than 16, a top level that is not an object, and strings holding control
- * characters or NUL, so such a record is never attributed to a session.
+ * than 16, a top level that is not an object, a number with a leading zero,
+ * and strings holding control characters (also escaped: `\u0000`–`\u001f`,
+ * `\u007f`–`\u009f`), so such a record is never attributed to a session.
  * `\uXXXX` escapes (Python's default `ensure_ascii`) are decoded to UTF-8.
+ * `readrec` admits only printable ASCII, tab, CR, and LF before it runs:
+ * awk keeps a raw NUL that shell command substitution would then drop.
  * It holds no single quote, so it fits in a single-quoted shell word.
  */
 const JSON_AWK = [
@@ -98,14 +101,14 @@ const JSON_AWK = [
   String.raw`while (p <= n) { c = substr(s, p, 1); if (c == "\"") { p++; return out; }`,
   String.raw`if (c == "\\") { e = substr(s, p + 1, 1); p += 2; if (e == "\"" || e == "\\" || e == "/") { out = out e; continue; } if (e != "u") fail(); u = hex4();`,
   String.raw`if (u >= 55296 && u < 56320) { if (substr(s, p, 2) != "\\u") fail(); p += 2; l = hex4(); if (l < 56320 || l >= 57344) fail(); u = 65536 + (u - 55296) * 1024 + (l - 56320); } else if (u >= 56320 && u < 57344) fail();`,
-  String.raw`if (u < 32) fail(); out = out utf8(u); continue; }`,
+  String.raw`if (u < 32 || (u >= 127 && u < 160)) fail(); out = out utf8(u); continue; }`,
   String.raw`if (index(ctl, c) > 0) fail(); out = out c; p++; } fail(); }`,
   String.raw`function put(t, k, v) { o = o t ":" k "=" v "\n"; }`,
   String.raw`function value(path, emit, depth,   c, v) { if (depth > 16) fail(); ws(); c = substr(s, p, 1);`,
   String.raw`if (c == "\"") { v = str(); if (emit) put("s", path, v); return; }`,
   String.raw`if (c == "{") { obj(path, emit, depth + 1); return; }`,
   String.raw`if (c == "[") { arr(depth + 1); return; }`,
-  String.raw`if (match(substr(s, p), /^-?[0-9]+([.][0-9]+)?([eE][-+]?[0-9]+)?/)) { v = substr(s, p, RLENGTH); p += RLENGTH; if (emit) put("n", path, v); return; }`,
+  String.raw`if (match(substr(s, p), /^-?(0|[1-9][0-9]*)([.][0-9]+)?([eE][-+]?[0-9]+)?/)) { v = substr(s, p, RLENGTH); p += RLENGTH; if (emit) put("n", path, v); return; }`,
   String.raw`if (substr(s, p, 4) == "true" || substr(s, p, 4) == "null") { p += 4; return; } if (substr(s, p, 5) == "false") { p += 5; return; } fail(); }`,
   String.raw`function obj(path, emit, depth,   k, kp, c, ok) { p++; ws(); if (substr(s, p, 1) == "}") { p++; return; }`,
   String.raw`for (;;) { ws(); k = str(); ws(); if (substr(s, p, 1) != ":") fail(); p++; kp = path == "" ? k : path "." k; ok = emit && k ~ /^[A-Za-z0-9_]+$/;`,
@@ -120,7 +123,10 @@ const JSON_AWK = [
 /**
  * Display lock records (`hostmode.py`: `<root>/displays/display-<N>.lock`,
  * JSON). `readrec F` parses this user's regular lock file `F` (≤ 64 KiB, not
- * a symlink) with {@link JSON_AWK} into `$kv`; `field K` prints its string
+ * a symlink, nothing but printable ASCII, tab, CR, and LF: no NUL, no other
+ * control character, no non-ASCII byte, as `hostmode.py` writes ASCII JSON)
+ * with {@link JSON_AWK} into `$kv`; a record that fails any check is never
+ * attributed to a session (the orphan listing reports it as malformed); `field K` prints its string
  * member `K`, `num K` its integer member `K`, `infra_of K` the
  * `<pid>:<starttime>` of `infra.K`. `locks_of P` sets `$locks` to the lock
  * files whose `runtimeDir` is exactly `P/run`, `$tags` to their session
@@ -135,7 +141,10 @@ const JSON_AWK = [
 const LOCK_FN = [
   'boot=$(cat /proc/sys/kernel/random/boot_id 2>/dev/null);',
   `json_awk='${JSON_AWK}';`,
-  'readrec() { kv=; { [ -f "$1" ] && [ ! -L "$1" ] && [ -O "$1" ]; } || return 1; sz=$(wc -c < "$1" 2>/dev/null) || return 1; [ $((sz + 0)) -le 65536 ] || return 1; kv=$(LC_ALL=C awk "$json_awk" < "$1" 2>/dev/null) || { kv=; return 1; }; };',
+  'readrec() { kv=; { [ -f "$1" ] && [ ! -L "$1" ] && [ -O "$1" ]; } || return 1; sz=$(wc -c < "$1" 2>/dev/null) || return 1; [ $((sz + 0)) -le 65536 ] || return 1;',
+  // Bytes other than printable ASCII, tab, LF, and CR (NUL, controls, DEL, anything non-ASCII): not a record of ours.
+  'bad=$(LC_ALL=C tr -d "\\011\\012\\015\\040-\\176" < "$1" 2>/dev/null | wc -c) || return 1; [ -n "$bad" ] && [ $((bad + 0)) -eq 0 ] || return 1;',
+  'kv=$(LC_ALL=C awk "$json_awk" < "$1" 2>/dev/null) || { kv=; return 1; }; };',
   'field() { printf "%s\\n" "$kv" | sed -n "s/^s:$1=//p"; };',
   'num() { printf "%s\\n" "$kv" | sed -n "s/^n:$1=\\([0-9][0-9]*\\)$/\\1/p"; };',
   'infra_of() { printf "%s\\n" "$kv" | sed -n "s/^s:infra[.]$1=\\([0-9][0-9]*:[0-9][0-9]*\\)$/\\1/p"; };',
@@ -296,8 +305,9 @@ export const AUDIT_SCRIPT = [
 /**
  * Read-only scan of every session dir: `entry<TAB>name<TAB>path<TAB>owner<TAB>live<TAB>age`,
  * and of display locks whose session dir is gone: `lock<TAB>name<TAB>path<TAB>helper`
- * (`helper`: `alive`, or `dead` for a dead helper or one of an earlier boot), or
- * `lock<TAB>-<TAB>path<TAB>unknown` for a lock that names no session dir of this root.
+ * (`helper`: `alive`, or `dead` for a dead helper or one of an earlier boot),
+ * `lock<TAB>-<TAB>path<TAB>unknown` for a lock that names no session dir of this
+ * root, or `lock<TAB>-<TAB>path<TAB>malformed` for a lock file `readrec` refuses.
  */
 export const LIST_SCRIPT = [
   TAGGED_FN,
@@ -314,8 +324,9 @@ export const LIST_SCRIPT = [
       'printf "entry\\t%s\\t%s\\t%s\\t%s\\t%s\\n" "$name" "$d" "$owner" "$live" "$((now - mt))";',
       "done;",
       'ld="$rb/displays"; { [ -d "$ld" ] && [ ! -L "$ld" ] && [ -O "$ld" ]; } || continue;',
-      'for l in "$ld"/display-*.lock; do readrec "$l" || continue; r=$(field runtimeDir); name=-;',
-      'case $r in "$rb"/s-*/run) name=${r#"$rb"/}; name=${name%/run}; case $name in */*) name=- ;; esac ;; esac;',
+      'for l in "$ld"/display-*.lock; do { [ -e "$l" ] || [ -L "$l" ]; } || continue; if ! readrec "$l"; then printf "lock\\t-\\t%s\\tmalformed\\n" "$l"; continue; fi; r=$(field runtimeDir); name=-;',
+      // Attributed only to a session dir name of exactly this root: `<root>/s-<safe chars>/run`.
+      'case $r in "$rb"/s-*/run) name=${r#"$rb"/}; name=${name%/run}; case $name in */*|*[!A-Za-z0-9._-]*) name=- ;; esac ;; esac;',
       'if [ "$name" = - ]; then printf "lock\\t-\\t%s\\tunknown\\n" "$l"; continue; fi;',
       '{ [ -e "$rb/$name" ] || [ -L "$rb/$name" ]; } && continue;',
       'state=dead; if [ -n "$boot" ] && [ "$(field bootId)" = "$boot" ] && [ -n "$(same "$(field helper)")" ]; then state=alive; fi;',
@@ -485,6 +496,8 @@ export interface RemoteLockEntry {
   path: string;
   /** `alive`: its helper still runs; `dead`: gone (or from an earlier boot); `unknown`: not a lock of a session dir. */
   helper: "alive" | "dead" | "unknown";
+  /** The record could not be read safely (not valid JSON, control or non-ASCII bytes, not a regular file of yours). */
+  malformed?: boolean;
 }
 
 /** Lists every remote session dir and every display lock left without one (read-only). @throws Error when the call fails. */
@@ -498,7 +511,8 @@ export async function listRemoteFootprint(runner: CommandRunner, signal?: AbortS
     if (fields[0] === "lock") {
       const [, name, path, helper] = fields;
       if (!path || !/^\/[A-Za-z0-9._/@+-]*\/displays\/display-\d+\.lock$/.test(path)) continue;
-      if (name !== "-" && name && NAME.test(name) && (helper === "alive" || helper === "dead")) locks.push({ name, path, helper });
+      if (helper === "malformed") locks.push({ path, helper: "unknown", malformed: true });
+      else if (name !== "-" && name && NAME.test(name) && (helper === "alive" || helper === "dead")) locks.push({ name, path, helper });
       else locks.push({ path, helper: "unknown" });
       continue;
     }
@@ -517,12 +531,14 @@ export async function listRemoteSessions(runner: CommandRunner, signal?: AbortSi
 /**
  * Display locks left without their session dir: a dead helper's lock is
  * removable (its session is gone and so is the helper that held the
- * display); a live helper's lock and a lock that names no session dir are
- * reported, never removed.
+ * display); a live helper's lock, a lock that names no session dir, and a
+ * malformed lock record are reported, never removed.
  */
 export function decideLocks(locks: readonly RemoteLockEntry[]): { lock: RemoteLockEntry; action: "remove" | "report"; reason: string }[] {
   return locks.map((lock) =>
-    lock.helper === "dead"
+    lock.malformed
+      ? { lock, action: "report", reason: "malformed display lock record (not valid JSON, control or non-ASCII bytes, or not a regular file of yours); not acted on" }
+      : lock.helper === "dead"
       ? { lock, action: "remove", reason: `display lock of the removed session ${lock.name}; its helper is gone` }
       : lock.helper === "alive"
         ? { lock, action: "report", reason: `display lock of the removed session ${lock.name}; its helper still runs` }
