@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import { isUtf8 } from "node:buffer";
@@ -98,11 +99,25 @@ export class ApprovalPersistence {
   readonly globalFile: string;
   readonly receiptFile: string;
   readonly lockFile: string;
+  readonly userConfigDir: string;
 
-  constructor(globalFile: string) {
+  /**
+   * @param globalFile User-owned approval store.
+   * @param userConfigDir The user's own Pi config directory. When Pi runs in the home directory this is also the
+   *   project config directory; it may be a symlink (for example into a dotfiles checkout) because the user, not a
+   *   repository, controls it. Approval and ignore files inside it must still be regular files.
+   */
+  constructor(globalFile: string, userConfigDir = path.join(os.homedir(), CONFIG_DIR_NAME)) {
     this.globalFile = path.resolve(globalFile);
     this.receiptFile = `${this.globalFile}.receipts.json`;
     this.lockFile = `${this.globalFile}.lock`;
+    this.userConfigDir = path.resolve(userConfigDir);
+  }
+
+  private rejectProjectConfigDirSymlink(file: string): void {
+    const dir = path.dirname(file);
+    if (dir === this.userConfigDir) return;
+    rejectSymlink(dir);
   }
 
   private global(): { raw?: string; store: AllowStore } {
@@ -130,7 +145,7 @@ export class ApprovalPersistence {
   private local(cwd: string): LocalState {
     const file = projectApprovalFile(cwd);
     try {
-      rejectSymlink(path.dirname(file));
+      this.rejectProjectConfigDirSymlink(file);
       rejectSymlink(file);
       const raw = readOptional(file);
       if (raw === undefined) return { entries: [], verified: true };
@@ -158,7 +173,7 @@ export class ApprovalPersistence {
     const file = projectApprovalFile(cwd);
     const previous = this.local(cwd);
     if (!previous.verified) throw new Error(previous.issue);
-    rejectSymlink(path.dirname(file));
+    this.rejectProjectConfigDirSymlink(file);
     fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
     const ignoreFile = path.join(path.dirname(file), ".gitignore");
     rejectSymlink(ignoreFile);

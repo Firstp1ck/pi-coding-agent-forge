@@ -184,6 +184,26 @@ test("symlinked local directories, approval files and ignore files are rejected"
   }
 });
 
+test("the user's own symlinked config directory is accepted; files inside it must still be regular", { skip: process.platform === "win32" }, () => {
+  const f = fixture();
+  const file = projectApprovalFile(f.cwd);
+  const dotfiles = path.join(f.dir, "dotfiles-pi");
+  fs.mkdirSync(dotfiles);
+  fs.symlinkSync(dotfiles, path.dirname(file));
+  const store = new ApprovalPersistence(f.globalFile, path.dirname(file));
+  assert.deepEqual(store.load(f.cwd), { entries: [], issues: [] });
+  store.save([local(f.cwd)], f.cwd);
+  assert.deepEqual(store.load(f.cwd), { entries: [local(f.cwd)], issues: [] });
+  assert.deepEqual(readEntries(path.join(dotfiles, "safety-guard-allow.json")), [local(f.cwd)]);
+
+  fs.rmSync(path.join(dotfiles, "safety-guard-allow.json"));
+  const target = path.join(f.dir, "untouched");
+  fs.writeFileSync(target, "untouched");
+  fs.symlinkSync(target, path.join(dotfiles, "safety-guard-allow.json"));
+  assert.throws(() => store.save([local(f.cwd)], f.cwd), /symlink/);
+  assert.equal(fs.readFileSync(target, "utf8"), "untouched");
+});
+
 test("clearing current/global grants leaves other verified projects untouched", () => {
   const f = fixture();
   f.store.save([local(f.cwd)], f.cwd);
