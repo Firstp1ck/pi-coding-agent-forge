@@ -78,6 +78,23 @@ def build_env(base, request_env, session_env):
     return env
 
 
+def venv_argv(python, venv_dir):
+    """Command that creates the app venv without importing anything from the cwd."""
+    return [python, "-I", "-m", "venv", "--system-site-packages", venv_dir]
+
+
+_VENV_ENV_KEYS = ("LANG", "LC_ALL", "LC_CTYPE", "TZ")
+
+
+def venv_env(base):
+    """Minimal environment for venv creation: no token, no ``PYTHON*``, fixed PATH."""
+    env = {"PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", "HOME": "/nonexistent"}
+    for key in _VENV_ENV_KEYS:
+        if key in base:
+            env[key] = base[key]
+    return env
+
+
 def in_container():
     """True when the helper is PID 1's child in a container PID namespace.
 
@@ -253,11 +270,18 @@ class Session:
         return build_env(self.environ, {}, self.session_env())
 
     def ensure_venv(self):
-        """Create ``/deps/venv`` with ``--system-site-packages`` once (before the first exec)."""
+        """Create ``/deps/venv`` with ``--system-site-packages`` once (before the first exec).
+
+        Runs before any project code, often with ``/workspace`` holding
+        untrusted files, so the interpreter is isolated (``-I``: no cwd or
+        script dir on ``sys.path``, no ``PYTHON*`` variables, no user site),
+        starts in ``/``, and gets a minimal environment without the session
+        token.
+        """
         if self._venv_ready or os.path.exists(os.path.join(VENV_DIR, "bin", "python")):
             self._venv_ready = True
             return
-        proc = subprocess.run([sys.executable, "-m", "venv", "--system-site-packages", VENV_DIR],
+        proc = subprocess.run(venv_argv(sys.executable, VENV_DIR), cwd="/", env=venv_env(self.environ),
                               stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                               timeout=120, check=False)
         if proc.returncode != 0:

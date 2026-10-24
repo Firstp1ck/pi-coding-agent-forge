@@ -133,3 +133,16 @@ test("session registry: limit with a clear message, reservation, idle detection,
   one.register("x", "docker-linux");
   assert.throws(() => one.register("y", "docker-linux"), /at most 1 GUI session can/);
 });
+
+test("Z12: failed launches share the launch-storm window with successful ones; each attempt counts once", () => {
+  const tracker = new UsageTracker();
+  let at = 0;
+  for (let i = 0; i < 10; i++) assert.deepEqual(tracker.recordFailedLaunch((at += 1_000)), []);
+  for (let i = 0; i < 10; i++) assert.deepEqual(tracker.record({ session: `s${i}`, tool: "gui_launch", at: (at += 1_000) }), []);
+  const warnings = tracker.recordFailedLaunch((at += 1_000));
+  assert.equal(warnings.length, 1);
+  assert.equal(warnings[0].signal, "launch-storm");
+  assert.equal(warnings[0].observed, 21);
+  assert.deepEqual(tracker.sessions().map((s) => s.session), Array.from({ length: 10 }, (_, i) => `s${i}`), "failed launches create no session usage");
+  assert.deepEqual(tracker.recordFailedLaunch(at + 10 * 60_000 + 1), [], "ages out with the window");
+});

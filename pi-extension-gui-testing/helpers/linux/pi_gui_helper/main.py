@@ -67,6 +67,12 @@ def _read_loop(stream, token, dispatcher, watchdog):
 
 
 def main():
+    # The image's WORKDIR is /workspace (project files). Nothing the helper
+    # runs itself (X tools, venv creation) should start there.
+    try:
+        os.chdir("/")
+    except OSError:
+        pass
     token = os.environ.get(framing.TOKEN_ENV, "")
     if not framing.valid_token(token):
         diag("%s must hold 32 hex characters" % framing.TOKEN_ENV)

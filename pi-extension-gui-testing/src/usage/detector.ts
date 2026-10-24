@@ -127,16 +127,7 @@ export class UsageTracker {
     if (event.allBlack) usage.allBlackScreenshots++;
     if (event.bytesSynced) usage.bytesSynced += event.bytesSynced;
 
-    if (event.tool === "gui_launch") {
-      this.#launches = this.#launches.filter((at) => event.at - at < t.launchStormWindowMs);
-      this.#launches.push(event.at);
-      if (this.#launches.length > t.launchStorm) {
-        warnings.push(this.#warning(usage, "launch-storm", this.#launches.length, t.launchStorm, !this.#launchReported));
-        this.#launchReported = true;
-      } else {
-        this.#launchReported = false;
-      }
-    }
+    if (event.tool === "gui_launch") warnings.push(...this.#countLaunch(event.at, usage));
 
     if (event.tool === "gui_act") {
       usage.actions++;
@@ -177,6 +168,30 @@ export class UsageTracker {
 
     warnings.push(...this.#costWarnings(usage, loop));
     return warnings;
+  }
+
+  /**
+   * Counts a `gui_launch` that failed before a session existed (refused,
+   * start failure, hand-off), so failed launches count toward `launch-storm`
+   * too. Successful launches are counted by {@link record}; count each attempt once.
+   */
+  recordFailedLaunch(at: number): UsageWarning[] {
+    return this.#countLaunch(at);
+  }
+
+  #countLaunch(at: number, usage?: SessionUsage): UsageWarning[] {
+    const t = this.#thresholds;
+    this.#launches = this.#launches.filter((launch) => at - launch < t.launchStormWindowMs);
+    this.#launches.push(at);
+    if (this.#launches.length <= t.launchStorm) {
+      this.#launchReported = false;
+      return [];
+    }
+    const store = !this.#launchReported;
+    this.#launchReported = true;
+    const warning: UsageWarning = { signal: "launch-storm", message: messageFor("launch-storm", this.#launches.length, t.launchStorm), observed: this.#launches.length, threshold: t.launchStorm };
+    if (usage && store && usage.warnings.length < (this.#options.maxStoredWarnings ?? 50)) usage.warnings.push(warning);
+    return [warning];
   }
 
   #costWarnings(usage: SessionUsage, loop: LoopState): UsageWarning[] {

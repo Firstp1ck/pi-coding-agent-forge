@@ -51,6 +51,8 @@
     "index.ts",
     "src",
     "helpers",
+    "!helpers/**/__pycache__",
+    "!helpers/**/*.pyc",
     "testapps",
     "skills",
     "README.md",

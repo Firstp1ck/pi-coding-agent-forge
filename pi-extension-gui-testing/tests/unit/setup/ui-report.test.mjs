@@ -163,3 +163,26 @@ test("tui and rpc send a displayed message plus a notification and leave the exi
   }
   assert.equal(written.length, 0);
 });
+
+test("Z14: after applied fixes, the report still lists every remaining step with its guidance", () => {
+  const failing = [
+    { id: "image.base", required: true, status: "fail", observed: "missing", remediation: { summary: "Build the base image", command: ["docker", "build", "-"], estimatedSeconds: 300 } },
+    { id: "pi.version", required: true, status: "fail", observed: "1.3.0", remediation: { summary: "Update Pi to 1.4.0 or newer", manual: true } },
+  ];
+  const plan = buildRemediationPlan(failing, false);
+  const text = renderReport({
+    kind: "setup",
+    backend: "docker-linux",
+    status: "needs-user-action",
+    message: "1 step(s) need you; do them, then run /gui-setup docker-linux again",
+    results: failing,
+    plan,
+    applied: [{ checkId: "image.base", command: ["docker", "build", "-"], ok: true, observed: "exit 0 in 10 ms" }],
+    manual: plan.items.filter((i) => !i.automated),
+    degraded: [],
+    durationMs: 10,
+  });
+  assert.match(text, /Fixes applied:\n- image\.base: ok/);
+  assert.match(text, /Remaining steps:\nSteps you need to do yourself:\n- pi\.version: Update Pi to 1\.4\.0 or newer\n {4}\(needs a password or your judgement\)/);
+  assert.doesNotMatch(text.split("Remaining steps:")[1], /image\.base/, "applied fixes are not repeated as remaining");
+});
