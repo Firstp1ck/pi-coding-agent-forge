@@ -4,7 +4,7 @@ Advanced user reference for commands, configuration, environments, storage, priv
 
 [Back to README](README.md) · [Development guide](DEVELOPMENT.md)
 
-> **Status:** early release. Only the `docker-linux` environment on a Linux computer is available. Everything marked *planned* on this page describes later releases and does not work yet.
+> **Status:** early release. Five backends for Linux apps are available. Everything marked *planned* on this page describes later releases and does not work yet.
 
 ## Environments
 
@@ -12,17 +12,17 @@ You choose one environment ("backend") explicitly. The package never switches to
 
 | Backend | Available | Runs your app | Your computer | App platforms |
 |---|---|---|---|---|
-| `docker-linux` | yes (Linux computers; Docker Desktop on macOS/Windows is planned) | in a Docker container on your computer | Linux | Linux, on your computer's processor type (x86-64 or ARM64) |
-| `local-linux` | planned | on a private virtual screen on your computer | Linux | Linux |
-| `remote-linux` | planned | on a private virtual screen on your own server | any computer with an SSH client | Linux, on the server's processor type |
-| `remote-linux-docker` | planned | in a Docker container on your own server | any computer with an SSH client | Linux, on the server's processor type |
-| `cua` | planned | in a Cua cloud sandbox | any | Linux, Windows, macOS |
+| `docker-linux` | yes | in a Docker container on your computer | Linux with Docker Engine; macOS or Windows with Docker Desktop | Linux, on your Docker's processor type (x86-64 or ARM64) |
+| `local-linux` | yes | on a private virtual screen on your computer | Linux | Linux |
+| `remote-linux` | yes | on a private virtual screen on your own server | Linux or macOS with an OpenSSH client | Linux, on the server's processor type |
+| `remote-linux-docker` | yes | in a Docker container on your own server | Linux or macOS with an OpenSSH client | Linux, on the server's processor type |
+| `cua` | yes, Linux apps only | in a Cua sandbox in your own cloud account | Linux | Linux. Windows and macOS sandboxes are planned. |
 | `docker-windows` | planned | in a Windows virtual machine inside Docker | Linux with hardware virtualization (KVM) | Windows |
 | `local-windows` | planned | on a hidden Windows desktop | Windows 10 or 11 | Windows |
 
-When you have not chosen a backend, the tools and `/gui-doctor` use `docker-linux`, the only one available. A backend you chose that is not available yet is refused, never replaced.
+When you have not chosen a backend, the tools and `/gui-doctor` use `docker-linux`. A backend you chose that is not available yet is refused, never replaced. Windows apps, and Windows clients for the remote backends, wait on the Windows helper, which is not built yet.
 
-The planned server backends will not need a monitor, graphics card, or desktop environment on the server. A Raspberry Pi 4 or 5 with a 64-bit OS, set up over SSH only, is a planned target.
+The server backends need no monitor, graphics card, or desktop environment on the server. A Raspberry Pi 4 or 5 with a 64-bit OS, set up over SSH only, works as a server.
 
 ## Requirements
 
@@ -30,43 +30,154 @@ All backends need Pi 1.4.0 or newer. Setup checks each requirement and tells you
 
 | Backend | Requirements |
 |---|---|
-| `docker-linux` | A Linux computer. Docker server 29.0 or newer, running rootful (the standard install), reachable through a local Unix socket (`DOCKER_HOST` or the current `docker context`). Rootless Docker and remote Docker hosts are not supported yet. Your user must be able to run `docker` without `sudo`. At least 5 GB of free disk space in your temp folder's file system. Network access the first time, to build the base image (about 0.5 GB of downloads). |
+| `docker-linux` | **On Linux:** Docker Engine 29.0 or newer, running rootful (the standard install), reachable through a local Unix socket (`DOCKER_HOST` or the current `docker context`). Your user must be able to run `docker` without `sudo`. **On macOS or Windows:** Docker Desktop running with Linux containers, Docker 29.0 or newer, and the `desktop-linux` (or default) context. Desktop's file sharing must cover your project and your temp folder. On Windows, your account must be in the `docker-users` group. **Everywhere:** at least 5 GB of free disk space in your temp folder's file system, and network access the first time to build the base image (about 0.5 GB of downloads). |
+| `local-linux` | A Linux computer with Python 3.9 or newer, Xvfb, xdotool, xprop and xwininfo, ImageMagick, the D-Bus daemon, and PyGObject with GTK 3. Recommended: AT-SPI (`at-spi2-core`) and pyatspi for the accessibility tree, openbox as window manager, and fonts. At least 1 GB free in your temp folder. |
+| `remote-linux` | **Your computer:** Linux or macOS with the OpenSSH client, an SSH key in your agent or `~/.ssh`, and key login to the server (`ssh -o BatchMode=yes myserver true` works). `rsync` is optional. **Server:** 64-bit Linux (x86-64 or ARM64; 32-bit ARM only warns), a POSIX login shell or fish (not csh or tcsh), `tar`, `sha256sum`, `mktemp`, and `stat` (GNU coreutils or BusyBox), at least 2 GB of memory and 2 GB free at the session folder, Python 3.9 or newer, Xvfb, xdotool, ImageMagick, `dbus-run-session`, and PyGObject with GTK 3. Recommended: AT-SPI and pyatspi, openbox, fonts. |
+| `remote-linux-docker` | **Your computer:** as for `remote-linux`; Docker is not needed. **Server:** the same basics as for `remote-linux` (64-bit Linux, shell, file tools, 2 GB of memory), plus Docker Engine 29.0 or newer that the SSH user can use without `sudo`, and at least 5 GB free where Docker stores its data. The base image is built on the server (about 0.5 GB of downloads). |
+| `cua` | A Linux computer with at least 1 GB free in the temp folder. The open-source `cua` command-line tool (this release was written against version 0.7), a cua.ai account you are signed in to (`cua auth login`), and one of your own cloud accounts connected for sandboxes: AWS, Google Cloud, Hetzner, or Modal (`cua cloud connect <cloud> --default`), with that cloud's credentials on your computer. |
 
-### What setup checks for `docker-linux`
+## What setup checks
 
-`/gui-setup` and `/gui-doctor` run these checks in order and show each result as `pass`, `warn`, `fail`, or `blocked` (skipped because an earlier check failed), together with what they found and how to fix it.
+`/gui-setup` and `/gui-doctor` run the checks of a backend in order and show each result as `pass`, `warn`, `fail`, or `blocked` (skipped because an earlier check failed), together with what they found and how to fix it. Checks marked *optional* never stop setup; when they fail, the report says what works less well.
+
+### Checks every backend runs
 
 | Check | What it confirms |
 |---|---|
 | `pi.version` | Pi is 1.4.0 or newer. |
-| `host.os` | Your computer runs Linux. |
+| `host.os` | Your computer's operating system can run this backend. |
 | `config.writable` | Pi's agent folder can store the package's settings. |
-| `disk.free` | At least 5 GB are free. |
+| `disk.free` | Enough space is free in your temp folder: 5 GB for `docker-linux`, 1 GB for the other backends. |
+
+### `docker-linux`
+
+| Check | What it confirms |
+|---|---|
 | `docker.cli` | The `docker` command is installed. |
-| `docker.endpoint` | Docker is reached through a local Unix socket. |
-| `docker.daemon` | The Docker service is running. |
+| `docker.endpoint` | Docker is reached through a local Unix socket, or on Windows through a local named pipe. |
+| `docker.daemon` | The Docker service or Docker Desktop is running. |
 | `docker.permission` | You can use Docker without `sudo`. |
-| `docker.rootless` | Docker runs in rootful mode. |
+| `docker.rootless` | Docker runs in rootful mode. Docker Desktop passes with a note, because its engine is rootful inside its own Linux virtual machine. |
 | `docker.version` | The Docker server is 29.0 or newer. A newer major version only warns. |
 | `docker.ostype` | Docker runs Linux containers. |
 | `docker.arch` | Docker's processor type is supported. |
 | `image.base` | The base image exists and matches this package version. Setup builds it when it is missing or outdated. |
-| `docker.bind-uid` | Files in your project keep your user ID inside the container. |
+| `docker.bind-uid` | Files in your project keep your user inside the container. On Docker Desktop, this confirms that its file sharing reaches the folder. |
 | `isolation.inspect` | A test container gets every security restriction. It is created but never started, then removed. |
 
-After the checks, setup starts a small test app in a container, finds its button by name, clicks it, checks that a label changed, takes a screenshot, and confirms nothing is left behind.
+### `local-linux`
+
+Missing tools need `sudo`, so setup shows the exact install command for pacman, apt, dnf, or zypper and lets you run it.
+
+| Check | What it confirms |
+|---|---|
+| `linux.python` | Python 3.9 or newer is installed. |
+| `linux.xvfb` | Xvfb starts and stops on a free private display. |
+| `linux.xdotool` | xdotool is installed, for clicks and typing. |
+| `linux.xutils` | xprop and xwininfo are installed, for window queries. |
+| `linux.screenshot` | ImageMagick is installed (`magick`, or `import` and `convert`). |
+| `linux.dbus` | The D-Bus daemon is installed, for the private session bus. |
+| `linux.atspi` | *Optional.* `at-spi-bus-launcher` is installed. Without it, Pi gets no accessibility tree. |
+| `linux.pyatspi` | *Optional.* Python can import pyatspi. Without it, Pi gets no accessibility tree. |
+| `linux.wm` | *Optional.* openbox is installed. Without it, dialogs may open at the top-left corner and window activation may not work. |
+| `linux.fonts` | *Optional.* At least one font is installed. Without fonts, text may render as boxes. |
+| `linux.gtk-introspection` | PyGObject with GTK 3 works (the helper and the test app need it). |
+| `linux.wayland-scrub` | Apps started by the package see only the private display and bus, never your desktop's. A failure here is a bug; please report it. |
+
+### `remote-linux` and `remote-linux-docker`
+
+Both remote backends run these checks first.
+
+| Check | What it confirms |
+|---|---|
+| `local.ssh` | The OpenSSH client is installed on your computer. |
+| `local.rsync` | *Optional.* rsync is installed on your computer. Without it, every sync is a full copy. |
+| `ssh.config` | A server is chosen and `ssh -G` can resolve it. |
+| `local.sshkey` | An SSH key is in your agent or in `~/.ssh`. |
+| `ssh.hostkey` | The server's host key is already known. |
+| `ssh.auth` | Key login works without a password. |
+| `ssh.jump` | Every jump host (`ProxyJump`) is reachable. |
+| `ssh.multiplex` | *Optional.* SSH connection sharing works. Without it, every call opens its own connection. |
+| `ssh.clean-stdout` | *Optional.* The server prints nothing extra for non-interactive logins. |
+| `ssh.latency` | *Optional.* The median round trip is under 300 ms. |
+| `remote.os` | The server runs Linux. |
+| `remote.arch` | The server is x86-64 or ARM64. 32-bit ARM only warns. |
+| `remote.distro` | The distribution and its package manager are detected. |
+| `remote.path` | Tools are found on the PATH of non-interactive SSH sessions, not only in a login shell. |
+| `remote.hostkey-pinned` | The server's host key is recorded, so a changed key is noticed. |
+| `remote.sudo` | *Optional.* `sudo` works on the server without a password. Without it, package installs are shown as commands for you to run. |
+| `remote.mem` | The server has at least 2 GB of memory. Below 4 GB it warns. |
+| `remote.cpu` | *Optional.* The server has at least 2 CPU cores. |
+| `remote.limits` | *Optional.* The open-file and process limits are not tiny. |
+| `remote.coreutils` | `tar`, `sha256sum`, `mktemp`, and `stat` are installed on the server. |
+| `remote.session-root` | A private session folder can be created and removed on the server. |
+| `remote.exec` | Programs can run from that folder (it is not mounted `noexec`). |
+| `remote.rsync` | *Optional.* rsync is installed on the server. |
+| `sync.roundtrip` | A test folder with a link, a non-ASCII name, and an executable file arrives intact. |
+| `sync.exclusions` | A dry run of your project's sync contains no secret files. |
+| `remote.disk` | Enough space is free: 2 GB at the session folder for `remote-linux`, 5 GB where Docker stores its data for `remote-linux-docker`. |
+
+`remote-linux` then checks the server's tools:
+
+| Check | What it confirms |
+|---|---|
+| `remote.python` | Python 3.9 or newer is installed. |
+| `linux.xvfb`, `linux.xdotool`, `linux.screenshot`, `linux.dbus`, `linux.gtk-introspection` | Xvfb, xdotool, ImageMagick, `dbus-run-session`, and PyGObject with GTK 3 are installed. |
+| `linux.atspi`, `linux.pyatspi`, `linux.wm`, `linux.fonts` | *Optional.* As for `local-linux`. |
+| `xvfb.start` | A private virtual screen starts on a free display. |
+| `xvfb.not-host` | That display is never one in use, and never `:0`. |
+| `helper.deploy` | The package's helper copies to a session folder intact and starts. |
+
+`remote-linux-docker` then checks the server's Docker: `docker.cli`, `docker.endpoint`, `docker.daemon`, `docker.permission`, `docker.version`, `docker.ostype`, `docker.arch`, `image.base`, `docker.bind-uid`, and `isolation.inspect` work as for `docker-linux`, but on the server. In addition:
+
+| Check | What it confirms |
+|---|---|
+| `docker.rootless` | *Optional.* Records whether the server's Docker is rootful or rootless. `docker.bind-uid` decides whether sessions can work. |
+| `docker.image-arch` | The base image matches the server's processor type. |
+| `docker.egress` | *Optional.* The server can reach the base image's package mirror. Without it, the image cannot be built there. |
+
+### `cua`
+
+All `cua` checks only read. They create no sandbox and cost nothing.
+
+| Check | What it confirms |
+|---|---|
+| `cua.cli` | The `cua` command-line tool is installed. |
+| `cua.network` | The Cua service (`api.cua.ai`) is reachable. No credentials are sent. |
+| `cua.signin` | You are signed in to cua.ai. |
+| `cua.auth` | A signed-in, read-only Cua call works. |
+| `cua.cloud` | One of your cloud accounts is connected for sandboxes, and its credentials are on your computer. |
+| `cua.quota` | The cloud account passes Cua's own read-only test: credentials, permissions, quota, and region. |
+| `cua.targets` | Every platform you asked for is available. Windows and macOS are refused in this release. |
+| `cua.ttl` | *Optional.* Sandboxes in your cloud expire on their own, so one left by a crash stops billing eventually. |
+| `cua.rate` | *Optional.* An hourly price is known for the cost estimate, from Cua or from `--rate-usd-per-hour`. |
+| `cua.cost-ack` | You accepted the billing and the upload of project files for this cloud. |
+
+### The test after the checks
+
+After the checks, setup starts a small test app in the backend, finds its button by name, clicks it, checks that a label changed, takes a screenshot, and confirms nothing is left behind.
 
 ## Commands
 
 | Command | What it does |
 |---|---|
-| `/gui-setup [backend] [options]` | Checks everything the backend needs, proposes fixes, runs a short test, and saves the backend as ready. Without a backend, it shows the backends your computer supports; `/gui-cleanup` or quitting Pi also cancels that choice. |
-| `/gui-doctor [backend]` | Repeats all checks and the test, then lists anything earlier sessions left behind. Never asks questions, never applies fixes, and never changes your backend choice or project files. It only updates the record of whether the backend is ready. It may start short-lived test containers and removes them before it finishes. Afterwards, the backend is marked ready again, or not ready if a check failed. |
+| `/gui-setup [backend] [options]` | Checks everything the backend needs, proposes fixes, runs a short test, and saves the backend as ready. Without a backend, it lists every available backend to choose from; the `host.os` check then tells you whether your computer can run it. `/gui-cleanup` or quitting Pi also cancels that choice. |
+| `/gui-doctor [backend] [--host <server>]` | Repeats all checks and the test, then lists anything earlier sessions left behind. Never asks questions, never applies fixes, and never changes your backend choice or project files. It only updates the record of whether the backend is ready. It may start short-lived test resources and removes them before it finishes. |
 | `/gui-backend <backend> [--project]` | Switches to another backend that is already set up. |
 | `/gui-usage [session]` | Shows activity and estimated cost for current and recent sessions. |
 | `/gui-export <session> <folder>` | Copies screenshots, accessibility dumps, and logs from a running session into a folder you choose. Existing files are never overwritten. |
-| `/gui-cleanup [backend \| --all] [--deps]` | Cancels a running `/gui-setup` or `/gui-doctor`, stops this Pi's sessions (retrying any whose cleanup failed earlier), removes anything ended sessions left behind, then shows what remains. It also works when `.pi/gui.json` cannot be read: it warns and, without a backend, cleans every backend. `--deps` is reserved for the planned dependency cache. |
-| `/gui-reset <backend>` | Asks once, then removes the backend's base images, its ready status, and the backend choice. Lists system packages that setup installed so you can remove them yourself if you want. Works only where Pi can ask you: the interactive screen or an RPC client. |
+| `/gui-cleanup [backend \| --all] [--deps]` | Cancels a running `/gui-setup` or `/gui-doctor`, stops this Pi's sessions (retrying any whose cleanup failed earlier), removes anything ended sessions left behind, then shows what remains. Remote backends act on the configured server. It also works when `.pi/gui.json` cannot be read: it warns and, without a backend, cleans every backend. `--deps` also empties the whole dependency cache, for every project. |
+| `/gui-reset <backend>` | Asks once, then removes the backend's setup data, its ready status, and the backend choice. See the table below. Works only where Pi can ask you: the interactive screen or an RPC client. |
+
+What `/gui-reset` removes:
+
+| Backend | Removed | Stays |
+|---|---|---|
+| `docker-linux` | Base images | Docker itself |
+| `local-linux` | Only the ready status and backend choice | The system tools you installed |
+| `remote-linux` | Orphaned session folders on the server | Packages installed on the server |
+| `remote-linux-docker` | Base images and orphaned session folders on the server | Docker on the server |
+| `cua` | Sandboxes kept by `keepSandbox`, the billing acceptance, and the `cua` settings | The `cua` tool, your cua.ai sign-in, and your cloud connection. Use `cua auth logout` and `cua cloud disconnect` to remove them. |
 
 ### Keeping your personal settings out of Git
 
@@ -76,23 +187,34 @@ After the checks, setup starts a small test app in a container, finds its button
 
 Commands never ask questions in print mode (`pi -p`) or JSON mode (`pi --mode json`). There the report goes to standard error (print) or arrives as a message (JSON), and the exit code is 1 when a required check fails. In RPC mode the connected client can answer questions, so commands behave as in the interactive screen: setup may ask, the report arrives as a message, and the exit code is not changed. Close standard input when you script print mode (`pi -p "…" </dev/null`), because Pi otherwise waits for input.
 
+A setup that needs a decision without a way to ask stops with the option that would answer it, for example `re-run with /gui-setup cua --accept-billing`.
+
 ### `/gui-setup` options
 
 Every question setup can ask has an option, so a complete command runs without questions.
 
+| Option | Backends | Meaning |
+|---|---|---|
+| `--fix` | all | Apply every proposed fix that needs no password, without asking. |
+| `--no-fix` | all | Never apply fixes; only report. |
+| `--project` | all | Save the backend, server, and related settings for this project only (`.pi/gui.local.json`), instead of for all projects. |
+| `--host <alias or user@host>` | `remote-linux`, `remote-linux-docker` | The SSH server. Without it, setup uses `remote.host` from `.pi/gui.local.json`, then from your global settings, then lists the hosts in your `~/.ssh/config` (interactive screen only). Setup stores what you give, never the resolved address. |
+| `--purge-tooling` | `remote-linux-docker` | Remove the base image from the server after every session instead of keeping it. Stored as `remote.purgeTooling: true`. Running setup again without the option keeps the stored value; set the field to `false` or remove it to turn it off. |
+| `--accept-billing` | `cua` | You accept that each session creates a sandbox that bills your cloud account, and that the project files allowed by the sync rules are uploaded into it. Without it, the interactive screen asks once. |
+| `--cloud aws\|gcp\|hetzner\|modal` | `cua` | The cloud for sandboxes. Default: the cloud you chose with `cua cloud connect … --default`. |
+| `--rate-usd-per-hour <n>` | `cua` | Your cloud's price per sandbox hour, from 0 to 1000. Used for the cost estimate only when Cua reports no price. |
+| `--targets linux,windows,macos` | `cua` | The platforms to check. Only `linux` passes in this release. |
+| `--accept-windows-license` | *planned* | For `docker-windows`, which is not available yet. Refused. |
+
+An option that does not fit the chosen backend is refused with a message naming the backend it belongs to; it is never silently ignored. `--api-key-env` is always refused, because `cua` uses your `cua auth login` session and needs no API key.
+
+Passing `--fix` or `--accept-billing` counts as your explicit approval.
+
+### `/gui-doctor` options
+
 | Option | Meaning |
 |---|---|
-| `--host <alias or user@host>` | *Planned.* The SSH server for `remote-*` backends. Without it, setup lists the hosts from your `~/.ssh/config`. |
-| `--targets linux,windows,macos` | *Planned.* The platforms to prepare (`cua`). |
-| `--api-key-env <VAR>` | *Planned.* The environment variable holding your Cua API key. Default: `CUA_API_KEY`. |
-| `--accept-billing` | *Planned.* You accept that cloud sandboxes cost money and that your project files are uploaded for each session (`cua`). |
-| `--accept-windows-license` | *Planned.* You confirm that you are responsible for Windows licensing (`docker-windows`). |
-| `--fix` | Apply every proposed fix that needs no password, without asking. |
-| `--no-fix` | Never apply fixes; only report. |
-| `--project` | Save the backend and host for this project only, instead of for all projects. |
-| `--purge-tooling` | *Planned.* For `remote-linux-docker`: remove the base image from the server after every session instead of keeping it. |
-
-Passing `--fix` or an `--accept-*` option counts as your explicit approval.
+| `--host <alias or user@host>` | Remote backends only. Without it, doctor checks the configured server: `remote.host`, else the server recorded at setup. With a different server, doctor only checks it and leaves the ready status alone; the report says how to switch with `/gui-setup <backend> --host <server>`. |
 
 ### What setup never does for you
 
@@ -100,16 +222,17 @@ Some steps need a password or your judgment, so setup shows the exact command an
 
 - copying your SSH key to a server (asks for the server password once);
 - trusting a server's host key the first time;
-- anything that needs a `sudo` password;
+- anything that needs a `sudo` password, on your computer or on a server;
+- signing in to cua.ai or connecting a cloud account;
 - turning on hardware virtualization in your computer's firmware.
 
 Run `/gui-setup` again afterwards. It continues from the checks.
 
-## Using a server from your SSH config (planned)
+## Using a server from your SSH config
 
-This section describes the planned `remote-*` backends.
+The remote backends use your own `~/.ssh/config`: aliases, keys, agent, and jump hosts all work as they do for `ssh`.
 
-Setup reads the `Host` entries of `~/.ssh/config` (including files added with `Include`) and shows each server with its status: `ready`, `auth needed`, `host key unknown`, `unreachable`, or `not Linux`. It stores only the alias, so later changes to the server's address or key in your SSH config apply automatically. The package only reads that file. It never changes it or sends it anywhere.
+Without `--host`, setup reads the `Host` entries of `~/.ssh/config` (including files added with `Include`) and shows each server with its status: `ready`, `auth needed`, `host key unknown`, `host key changed`, `unreachable`, or `not Linux`. "Other host…" lets you type `user@host` or `ssh://user@host:port`, and the report shows a `Host` block you can add to your SSH config yourself. The package only reads that file. It never changes it or sends it anywhere.
 
 Before the first setup for a new server, do these two things once:
 
@@ -118,9 +241,59 @@ ssh-copy-id me@raspi5   # install your key; asks for the server password
 ssh me@raspi5           # check and accept the host key, then exit
 ```
 
-On Windows, where `ssh-copy-id` is missing, setup shows an equivalent PowerShell command.
+Every connection runs without password prompts (`BatchMode`), refuses unknown or changed host keys, adds nothing to `known_hosts`, and forwards no agent, X11, or ports. One shared connection serves each session and ends itself one minute after its last use, even if Pi crashes. Pi never connects to a server when it starts; leftovers on a server are removed by the next session start there or by `/gui-cleanup`.
 
-Your computer needs an SSH client. `rsync` is optional: without it, each sync copies all project files instead of only the changes. Docker is never needed on your computer for remote backends.
+Package installs on the server run automatically only when `sudo` works there without a password and you approve the fix. Otherwise setup shows a command such as `ssh -t myserver sudo apt-get install …` for you to run. Package names are known for pacman, apt, dnf, zypper, and apk.
+
+### How your project gets to the server
+
+- Each session start copies the project files allowed by the sync rules (see [Security and privacy](#security-and-privacy)) to a session folder on the server. The status line says how many files were sent, how many bytes, and how.
+- With rsync on both ends and an alias or `user@host` server, only changes are sent. Otherwise, and for `ssh://…:port` servers, a full copy is sent each time.
+- The copy on the server is the app's workspace. With `remote-linux` the app can write in it; with `remote-linux-docker` it is mounted read-only unless you use `"workspaceMode": "copy"`. Changes never come back to your computer.
+- `setup` commands run on the server: in the session folder for `remote-linux`, inside the container for `remote-linux-docker`. They never run on your computer.
+- With `remote-linux`, `setup` installs into the session's dependency folder: `pip install` works without a virtual environment, and `npm install -g` lands there too. `pip install --user` fails there; set your own `PIP_TARGET` in `deps.env` if you need a different location.
+
+## Cloud sandboxes with `cua`
+
+`cua` runs each session in a fresh sandbox that the `cua` tool creates in your own cloud account. Cua's hosted cloud service (and its API keys) ended on 18 October 2026; this backend uses the open-source `cua` tool with your own cloud instead.
+
+Set up once in a terminal, outside Pi:
+
+```bash
+cua auth login                                     # browser sign-in to cua.ai
+cua cloud connect aws --region us-west-2 --default # or gcp, hetzner, modal
+cua cloud test aws                                 # optional; creates nothing
+```
+
+Then run `/gui-setup cua`, or `/gui-setup cua --accept-billing` to accept billing and the upload without a question.
+
+What happens in each session:
+
+1. The sandbox is created in your cloud. Billing starts here. The first launch takes a few minutes.
+2. The package's helper is copied into the sandbox. Missing helper packages are installed inside the sandbox with `apt-get`, never on your computer.
+3. Your project files, without secrets, are uploaded once. Changes the app makes stay in the sandbox.
+4. `setup` commands run in the sandbox, then the app starts.
+5. When the session stops, the sandbox is deleted, unless `keepSandbox` is on.
+
+**Cost.** The estimate is sandbox time multiplied by the hourly price that `cua cloud status` reports for your cloud, or the price you gave with `--rate-usd-per-hour`. `/gui-usage` shows it. When it passes `usageCheck.warnSessionCostUsd` or `usageCheck.warnDailyCostUsd`, Pi gets a warning; it is never stopped. Your cloud's bill is what counts: minimum charges, disks, and network traffic are not in the estimate. Set a budget in your cloud account.
+
+**Cleanup.** The sandbox is deleted on `gui_stop`, a failed start, the idle timeout, quitting Pi, and `/gui-cleanup`. If Pi is killed, the next Pi start deletes it. At the latest, your cloud's expiry deletes it (`cua cloud connect <cloud> --ttl-hours 8`; 8 hours by default). `cua cloud sweep --delete` removes anything Cua itself recorded and left behind.
+
+**`keepSandbox`.** With `"keepSandbox": true` in `.pi/gui.local.json`, a stopped session keeps its sandbox, and the next session of the same project in the same cloud reuses it after clearing it and uploading the project again. A kept sandbox **keeps billing**, your project files stay in your cloud, and it still expires with your cloud's expiry time. An expired one is replaced automatically. `/gui-reset cua` deletes kept sandboxes.
+
+## Dependency cache
+
+When `.pi/gui.json` has `setup` commands, the first session runs them and stores what they installed on your computer. Later sessions of the same project restore it and skip `setup`.
+
+- **Backends:** `docker-linux`, `remote-linux`, and `remote-linux-docker`. `local-linux` never runs `setup`, and `cua` does not use the cache in this release (`keepSandbox` avoids reinstalls there).
+- **What is cached:** only the session's dependency folder: `/deps` in containers, the session's dependency folder on a `remote-linux` server. Changes `setup` makes in the home folder or `/tmp` are not restored on a later session.
+- **Writable workspaces:** when `setup` changes the project folder itself (for example `npm install` creating `node_modules` in `copy` mode or on `remote-linux`), the run is not stored, because restoring the cache could not repeat that change. The result says `not stored: setup changed the workspace, and only the deps dir is cached`.
+- **When a new entry is needed:** the cache key covers your lockfiles and manifests (`requirements*.txt`, `pyproject.toml`, `uv.lock`, `poetry.lock`, `package-lock.json`, `pnpm-lock.yaml`, `yarn.lock`, `Cargo.lock` in any folder), the `setup` commands, `deps.env`, the backend, the base image or helper version, the processor type, and the target's operating system, C library, and Python version. Changing any of them creates a new entry. Use `deps.keyFiles` (gitignore-style patterns) to choose the files yourself. Key files behind symbolic links, or inside `.git`, `node_modules`, virtual environments, or build folders, are not counted.
+- **What the result shows:** `gui_launch` prints a line such as `dependency cache: hit: restored 812 entries (143.2 MB) from the cache; setup skipped (key …)` or `dependency cache: miss: setup ran; …`.
+- **Size:** 5 GB in total for all projects by default (`depsCache.maxSizeGB`). The least recently used entries are removed first. An entry larger than the whole limit is not stored.
+- **Safety:** each entry is checked against its checksum before use. Your computer only stores and forwards the archives; they are unpacked inside the session under strict rules (nothing outside the dependency folder, no links out of it, no devices, no owners or setuid bits). A damaged or rejected entry is deleted and `setup` runs again.
+- **Problems never stop a session:** if the cache cannot be used, `setup` simply runs and the result says why.
+- **Turn it off** with `"depsCache": { "enabled": false }`. **Empty it** with `/gui-cleanup --deps`.
 
 ## Configuration
 
@@ -129,8 +302,9 @@ Settings are read in this order, field by field: options you pass to a command, 
 | File | Purpose | Commit it? |
 |---|---|---|
 | `.pi/gui.json` | How to set up and start this project's app | Yes |
-| `.pi/gui.local.json` | Your backend, server, and limits for this project | No. Setup offers to add it to `.gitignore`. |
-| `~/.pi/agent/gui/config.json` (inside Pi's agent folder; see `PI_CODING_AGENT_DIR` below) | Your default backend and the list of verified backends | — |
+| `.pi/gui.local.json` | Your backend, server, cache, and limits for this project | No. Setup offers to add it to `.gitignore`. |
+| `~/.pi/agent/gui/config.json` (inside Pi's agent folder; see `PI_CODING_AGENT_DIR` below) | Your default backend and settings, and the list of verified backends | — |
+| `~/.pi/agent/gui/cua.json` | Written by `/gui-setup cua`: when and for which cloud you accepted billing, the chosen cloud, the sandbox image, and the price you entered. Contains no credentials. | — |
 
 ### `.pi/gui.json`
 
@@ -148,24 +322,25 @@ Settings are read in this order, field by field: options you pass to a command, 
 
 | Field | Meaning |
 |---|---|
-| `targets` | Platforms the app should be tested on. |
-| `setup` | Commands that install the app's dependencies inside a container or on a server. In `docker-linux` they run inside the container at the start of every session, from the project folder, with up to 15 minutes per command. A failing command stops the session and shows its last output. They never run on your computer with `local-linux`. |
+| `targets` | Platforms the app should be tested on. Only `linux` works in this release. |
+| `setup` | Commands that install the app's dependencies in the session: inside the container, on the server, or in the sandbox. They run from the project folder, with up to 15 minutes per command. A failing command stops the session and shows its last output. With the dependency cache, they run only when the cache has no matching entry. `local-linux` never runs them and warns that they were skipped. |
 | `launch` | The default command that starts the app. |
-| `workspaceMode` | `mount` (default): containers see your whole project read-only, including files such as `.env` and keys. `copy`: containers get a writable copy that leaves out secret files, for apps that write next to their own files or when you want secrets kept out. |
-| `deps.keyFiles` | *Planned, for the dependency cache.* Files whose changes mean dependencies must be reinstalled. Default: the lockfiles and manifests found in the project. |
-| `deps.env` | Extra environment variables for the `setup` commands. |
+| `workspaceMode` | `mount` (default) or `copy`. What each one means depends on the backend; see [Security and privacy](#security-and-privacy). |
+| `deps.keyFiles` | Files whose changes mean dependencies must be reinstalled, as gitignore-style patterns. Default: the lockfiles and manifests listed under [Dependency cache](#dependency-cache). |
+| `deps.env` | Extra environment variables for the `setup` commands. They are part of the cache key. |
 | `sync.deny` | Extra files never sent to servers or sandboxes, or into the `copy`-mode workspace. |
 | `sync.allow` | Files sent or copied even though they match the built-in secret list. Use with care. |
-| `network` | `default`, or `none` to run the app without network access. |
+| `network` | `default`, or `none` to run the app without network access. `none` works with `docker-linux` and `remote-linux-docker`. `local-linux` and `cua` refuse it. `remote-linux` does not enforce it in this release: the app keeps the server's network. |
 
 Pi proposes `setup` and `launch` after its first working run and shows them to you before saving.
 
-### `.pi/gui.local.json`
+### `.pi/gui.local.json` and the global settings
 
 ```json
 {
   "backend": "remote-linux-docker",
-  "remote": { "host": "raspi5" },
+  "remote": { "host": "raspi5", "purgeTooling": false },
+  "depsCache": { "enabled": true, "maxSizeGB": 5 },
   "keepSandbox": false,
   "limits": { "maxConcurrentSessions": 2, "idleTimeoutMinutes": 15 },
   "usageCheck": { "warnSessionCostUsd": 1, "warnDailyCostUsd": 5 }
@@ -175,19 +350,26 @@ Pi proposes `setup` and `launch` after its first working run and shows them to y
 | Field | Default | Meaning |
 |---|---|---|
 | `backend` | none | The backend for this project. |
-| `remote.host` (planned) | none | SSH alias or `user@host` for `remote-*` backends. |
-| `keepSandbox` (planned) | `false` | Keep a stopped Cua sandbox between sessions. Faster, but your project files stay in the cloud. |
+| `remote.host` | none | SSH alias or `user@host` for the remote backends. Changing it after setup blocks new sessions until you run `/gui-doctor`. |
+| `remote.purgeTooling` | `false` | `remote-linux-docker`: remove the base image from the server after the last session ends. The next session rebuilds it, which takes several minutes. |
+| `depsCache.enabled` | `true` | `false`: `setup` runs every session, and nothing is read from or stored in the cache. |
+| `depsCache.maxSizeGB` | `5` | Size limit of the whole cache, for all projects, in GB (1024³ bytes). Above 0 and at most 10000. |
+| `keepSandbox` | `false` | `cua`: keep the sandbox after a session and reuse it. Faster, but it keeps billing and your project files stay in your cloud. |
 | `limits.maxConcurrentSessions` | `2` | Sessions that may run at the same time. |
 | `limits.idleTimeoutMinutes` | `15` | A session without activity for this long is shut down and cleaned up. There is no maximum session length. |
-| `usageCheck.warnSessionCostUsd` (planned) | `1` | Estimated Cua cost per session that triggers a warning. |
-| `usageCheck.warnDailyCostUsd` (planned) | `5` | Estimated Cua cost per day that triggers a warning. |
+| `usageCheck.warnSessionCostUsd` | `1` | Estimated `cua` cost per session that triggers a warning. |
+| `usageCheck.warnDailyCostUsd` | `5` | Estimated `cua` cost per day (since local midnight) that triggers a warning. |
 
 ### Environment variables
 
 | Variable | Meaning |
 |---|---|
-| `CUA_API_KEY` (planned) | Cua API key, unless setup was given another variable with `--api-key-env`. |
 | `PI_CODING_AGENT_DIR` | Pi's agent folder. The package keeps its settings in a `gui` folder inside it. Default: `~/.pi/agent`. |
+| `XDG_CACHE_HOME` | Moves the dependency cache to `$XDG_CACHE_HOME/pi-extension-gui-testing/deps`. |
+| `TMPDIR` | Where session folders are created. `local-linux` needs a short path here; see [Troubleshooting](#troubleshooting). |
+| `DOCKER_HOST` | Which Docker `docker-linux` uses, instead of the current `docker context`. |
+
+The `cua` tool reads its own variables and your cloud's credentials. The package passes `CUA_*` variables, your cloud's standard variables (`AWS_*`, `GOOGLE_*`, `CLOUDSDK_*`, `HCLOUD_*`, `MODAL_*`), and proxy settings through to it, and never stores them. `CUA_API_KEY` is no longer used.
 
 ## What Pi can do in a session
 
@@ -206,10 +388,18 @@ Pi uses these tools. You don't call them yourself, but their names appear in Pi'
 
 Every result names the backend that ran it. Sessions are called `gui-` followed by eight characters, for example `gui-1a2b3c4d`. Screenshots and accessibility dumps are saved in the session's temp folder as `screenshot-001.png`, `snapshot-001.json`, and so on.
 
+The `gui_launch` result also shows:
+
+- the processor type the app runs on (`arch:`), which on a server can differ from your computer's;
+- where the workspace is and whether the app can write to it, for example `the project directory itself (writable)` for `local-linux` or `read-only mount of the copy synced to raspi5` for `remote-linux-docker`;
+- the network mode;
+- the dependency cache result;
+- backend warnings, such as `setup` commands that `local-linux` skipped, in a list headed `<backend> warnings:`.
+
 ### Session rules
 
 - **Limits:** at most `limits.maxConcurrentSessions` sessions run at once. A session with no tool call for `limits.idleTimeoutMinutes` is stopped; a call that is still waiting or running counts as activity, so a long `gui_wait` is never cut off.
-- **After an update:** before each new session, the package compares the package, Pi, Docker, and base image versions with the ones recorded at setup. If anything changed, new sessions are refused until you run `/gui-doctor docker-linux`. Sessions that are already running continue. The first session after updating this package always asks for `/gui-doctor` once.
+- **After an update or a change:** before each new session, the package compares what setup recorded with what it finds now. That covers the package, Pi, and helper versions, and per backend the Docker versions and base image (`docker-linux`), the Python version (`local-linux`), the configured server (remote backends), or the `cua` tool version, cloud, and region (`cua`). If anything changed, new sessions are refused until you run `/gui-doctor <backend>`. Sessions that are already running continue. The first session after updating this package always asks for `/gui-doctor` once.
 - **Failed cleanup:** if stopping a session, or a failed start, leaves something behind, the message says what and names the session. The session stays listed and refuses other tools until `gui_stop` again, `/gui-cleanup`, or Pi's shutdown removes everything. It no longer counts against the session limit.
 - **Quitting Pi:** Pi cancels a running setup or session start, waits up to 20 seconds for it, then stops every session.
 - **Exports:** `gui_export` and `/gui-export` can be cancelled and stop after 2 minutes, even in the middle of a file. Files copied completely until then stay in the folder; a partly copied file is removed. A destination inside the session's temp folder, also through a symbolic link, is refused because it would be deleted with the session.
@@ -219,76 +409,189 @@ Every result names the backend that ran it. Sessions are called `gui-` followed 
 
 ## Where data is stored
 
-Your project data stays on your computer. Servers, sandboxes, and virtual machines hold it only while a session runs.
+Your project data stays on your computer. Servers, sandboxes, and containers hold it only while a session runs, except a `cua` sandbox you keep with `keepSandbox`.
 
 | Location | Contents | Lifetime |
 |---|---|---|
-| Your system's temp folder, `pi-gui-testing-*` | Screenshots, accessibility dumps, logs, sync staging for one session | Deleted when the session ends. Leftovers from a crash are deleted the next time Pi starts. |
+| Your system's temp folder, `pi-gui-testing-*` | Screenshots, accessibility dumps, logs, sync staging, and the SSH connection socket for one session. For `local-linux`, also the private screen's runtime files. | Deleted when the session ends. Leftovers from a crash are deleted the next time Pi starts. |
+| Your system's temp folder, `pi-gui-displays-<uid>` (`local-linux`) | Locks for the private screen numbers in use | Each lock is removed with its session. An empty folder may remain; that is expected. |
 | Docker image `pi-gui-testing-base:<package version>` | Tools only: the virtual screen, accessibility libraries, app runtimes, and the test app. No project files. | Kept so later sessions start fast. Removed by `/gui-reset docker-linux`. |
 | Docker container `pi-gui-testing-<session>` | The running session | Removed when the session ends, when Pi exits or crashes (the container stops by itself within about a minute), or by the next startup cleanup. The startup cleanup and `/gui-cleanup` look for leftover containers whenever a `docker` command is installed, even if setup never finished. |
-| *Planned:* `~/.cache/pi-extension-gui-testing/deps/` | Installed dependencies per project and platform, so later sessions start faster | Kept; up to 5 GB, oldest entries removed first. Clear with `/gui-cleanup --deps`. |
-| `~/.pi/agent/gui/` (or `gui/` inside `PI_CODING_AGENT_DIR`) | Settings, verified backends, pinned server host keys | Kept until `/gui-reset`. |
-| On a server: `$XDG_RUNTIME_DIR/pi-gui-testing`, else `/tmp/pi-gui-testing-<uid>`, else `~/.cache/pi-gui-testing-tmp` | One folder per session with your synced project and the helper | Deleted when the session ends or the connection drops. |
+| `~/.cache/pi-extension-gui-testing/deps/` (or under `XDG_CACHE_HOME`) | Installed dependencies per project and processor type, as `.tar.gz` archives with checksums | Kept; up to `depsCache.maxSizeGB` (5 GB), oldest entries removed first. Removed by `/gui-cleanup --deps`. |
+| `~/.pi/agent/gui/` (or `gui/` inside `PI_CODING_AGENT_DIR`) | Settings, verified backends, the recorded server host keys, `cua.json`, and `cua-sandboxes/` (one record per sandbox this computer created, so a crash can be cleaned up) | Kept until `/gui-reset`. A sandbox record is removed once its sandbox is deleted. |
+| On a server: `$XDG_RUNTIME_DIR/pi-gui-testing`, else `/tmp/pi-gui-testing-<uid>`, else `~/.cache/pi-gui-testing-tmp` | One folder per session with your synced project, the helper, installed dependencies, and runtime files | Deleted when the session stops, fails to start, times out, or Pi exits. The parent folder is removed when no session is left. After a lost connection, the next session start there or `/gui-cleanup` removes it. |
 | On a server: Docker base image (`remote-linux-docker`) | Tools only, no project files | Kept unless you use `--purge-tooling`. |
-| Cua | One sandbox per session | Deleted when the session ends, unless `keepSandbox` is on. |
+| On a server: system packages | Tools you agreed to install at setup | Kept. Remove them yourself if nothing else needs them. |
+| `cua`: one sandbox per session in your cloud | The helper, your synced project, installed dependencies | Deleted when the session ends, unless `keepSandbox` is on. |
 
 Screenshots that Pi already received are part of your Pi session history, not of this package's storage. Use `/gui-export` to keep files.
 
 ## Security and privacy
 
-- **Docker on your computer (`mount` mode):** the container can read every file in your project, including `.env` files and keys, and setup commands run with network access by default. The container cannot change your project files. The secret list below does not apply here. Use `workspaceMode: "copy"` to keep secret files out, or `network: "none"` when setup runs install scripts you don't trust.
+### What each backend can see and change
+
+| Backend | `mount` (default) | `copy` | Network |
+|---|---|---|---|
+| `docker-linux` | The container reads your whole project, including `.env` files and keys. It cannot change it. | The container gets a writable copy of the selected files, without secrets. | On; `"network": "none"` turns it off. |
+| `local-linux` | The app runs in your project folder as you and **can change any file there** and anything else your user can. | The app runs on a writable copy of the selected files, without secrets. Dependency folders are not copied. | Always on; `"network": "none"` is refused. |
+| `remote-linux` | The app gets a writable copy on the server, without secrets. | Same. | The server's network. `"network": "none"` is not enforced. |
+| `remote-linux-docker` | The container reads the copy on the server without secrets. | The container gets a writable copy on the server. | On; `"network": "none"` turns it off. |
+| `cua` | The app gets a writable copy in the sandbox, without secrets. | Same. | Always on; `"network": "none"` is refused. |
+
+### Containers on your computer (`docker-linux`)
+
+- **Mount mode** shows the container every file in your project, including `.env` files and keys, and setup commands run with network access by default. The secret list below does not apply. Use `workspaceMode: "copy"` to keep secret files out, or `network: "none"` when setup runs install scripts you don't trust.
 - **What mount mode refuses:** the file system root, your home folder or a folder above it, and system folders such as `/run/user`, `/run/dbus`, `/var/run`, or folders above `/tmp/.X11-unix`. It also refuses a project that contains a socket file anywhere, including inside `.git`, `node_modules`, or virtual environments, because the container could connect to it. If the full-folder check takes longer than 20 seconds or a folder cannot be read, the session is refused too. Each refusal suggests `copy` mode.
-- **Mount check:** in mount mode the package mounts the resolved project folder and confirms inside the container that `/workspace` is exactly the folder it checked, before setup or the app runs. If not, the session stops.
-- **Docker on your computer (`copy` mode):** the container gets a writable copy of the selected files in your session's temp folder. Your project itself is not mounted. Files inside a folder that is a symbolic link are never copied. If a file or folder changes into a link or another file during the copy, the session stops with `changed while the workspace was being copied`; try again.
-- **Git:** to list your project's files, the package runs Git with file-system monitor programs and hooks turned off, so a repository's own configuration cannot run programs on your computer.
-- **Container restrictions:** containers run as your own user ID, with no extra privileges, no access to your display, session bus, or Docker socket, and a read-only system. `isolation.inspect` confirms these restrictions before every session; a session that does not meet them is refused.
-- **What is sent or copied:** for `copy` mode and the planned remote and cloud backends, the files Git tracks plus new files that are not ignored. Outside Git, all files except common build and dependency folders. Symbolic links that point outside the project or to a left-out file are skipped.
-- **What is left out by default:** `.env*`, `*.pem`, `*.key`, `*.p12`, `*.pfx`, `id_*`, `*.kdbx`, `.npmrc`, `.pypirc`, `.netrc`, `credentials*`, `secrets*`, `.ssh/`, `.aws/`, `.gnupg/`, in any folder of your project. A file you list in `sync.allow` is sent anyway; `sync.deny` always wins over `sync.allow`.
+- **Docker Desktop on macOS** also refuses Docker Desktop's own folders (`~/.docker`, `~/Library/Containers/com.docker.docker`, `~/Library/Group Containers/group.com.docker`) and `/var/run`.
+- **Docker Desktop on Windows** refuses drive roots, network share roots, your user profile folder and the folders above it, Docker Desktop's folders (`%USERPROFILE%\.docker`, `%LOCALAPPDATA%\Docker`, `%APPDATA%\Docker`, `%APPDATA%\Docker Desktop`, `%ProgramData%\Docker`, `%ProgramData%\DockerDesktop`), and `C:\Windows`. Use copy mode, or open Pi in the project folder.
+- **Mount check:** after the container starts, the package confirms that `/workspace` is exactly the folder it checked, before setup or the app runs. If not, the session stops. On Docker Desktop, this check compares the folder's listing, because file sharing changes the file identity Linux uses.
+- **Copy mode** gives the container a writable copy of the selected files in your session's temp folder. Files inside a folder that is a symbolic link are never copied. If a file or folder changes into a link or another file during the copy, the session stops with `changed while the workspace was being copied`; try again.
+- **Container restrictions:** containers run as your own user ID (on Windows, as user 1000), with no extra privileges, no access to your display, session bus, or Docker socket, and a read-only system. `isolation.inspect` confirms these restrictions before every session; a session that does not meet them is refused.
+
+### Your computer without a container (`local-linux`)
+
+- The app runs **as you**, with your file access and your network. It runs on a private virtual screen (`:90` or higher, never `:0` or a screen in use) with its own session bus and accessibility bus, so nothing appears on your desktop, on X11 or Wayland. Each private screen has its own access cookie, so other users on the computer cannot connect to it.
+- The app sees a private, empty home folder and temp folder. It does not see your dotfiles, desktop settings, or `pip --user` packages, and single-instance apps cannot hand off to a copy running on your desktop.
+- Toolkits are forced to X11 (`GDK_BACKEND=x11`, `QT_QPA_PLATFORM=xcb`, `SDL_VIDEODRIVER=x11`, `ELECTRON_OZONE_PLATFORM_HINT=x11`), and the desktop's `WAYLAND_DISPLAY` is removed. The `env` of a launch cannot override these.
+- `setup` commands never run, and nothing is installed for your project. The app uses your project's existing virtual environment, `node_modules`, and system libraries.
+
+### Servers (`remote-linux`, `remote-linux-docker`)
+
 - **Passwords:** the package never asks for, stores, or sends SSH or `sudo` passwords. It uses your existing SSH keys and agent.
-- **Servers:** no network ports are opened on your server. Everything runs through your SSH connection.
+- **No open ports:** nothing listens on your server. Everything runs through your SSH connection.
+- **No desktop leaks:** commands on the server never get your computer's display, Wayland, session bus, or `XAUTHORITY`. The helper starts with a clean environment, and its access token never appears on any command line.
+- **Leftovers of other computers:** session folders and containers that another computer (or an earlier boot) left on the server are never removed while their programs run. A foreign folder with no running program is reported, and removed only after 24 hours.
+
+### Cloud sandboxes (`cua`)
+
+- **No credentials stored:** your cua.ai sign-in stays in the `cua` tool's own store or your system keychain, and your cloud credentials stay in your cloud's tool. The package stores, reads, and sends none of them.
+- **Upload:** the project files allowed by the sync rules are uploaded for every session. Secrets are never uploaded.
+- **Relay:** sandboxes connect to Cua's relay (`relay.cua.ai`) under your cua.ai account, so the sandbox opens no public port. The helper stream and uploaded files pass through that relay.
+- **Sandbox names** contain a short hash of your machine ID, not the ID itself, so a cloud listing can tell your computers apart.
+- **Costs:** your cloud bills sandbox time. The package has no spending cap; set a budget in your cloud account.
+
+### What is sent or copied
+
+- **Which files:** for `copy` mode, the remote backends, and `cua`, the files Git tracks plus new files that are not ignored. Outside Git, all files except common build and dependency folders. Symbolic links that point outside the project or to a left-out file are skipped.
+- **What is left out by default:** `.env*`, `*.pem`, `*.key`, `*.p12`, `*.pfx`, `id_*`, `*.kdbx`, `.npmrc`, `.pypirc`, `.netrc`, `credentials*`, `secrets*`, `.ssh/`, `.aws/`, `.gnupg/`, in any folder of your project. A file you list in `sync.allow` is sent anyway; `sync.deny` always wins over `sync.allow`.
+- **Git:** to list your project's files, the package runs Git with file-system monitor programs and hooks turned off, so a repository's own configuration cannot run programs on your computer.
+
+### For every backend
+
 - **Isolation:** apps run on their own virtual screen or in a container. They cannot open windows on your desktop or on a server's own screen.
-- **Cleanup check:** after every session, the package checks your computer and the server for leftovers and reports anything it finds.
-- **Costs:** Cua bills for sandbox time. The package has no spending cap; set one in your Cua account. It warns you when estimated cost passes your thresholds, or when Pi repeats the same action, the screen stops changing, or the app is restarted unusually often. These warnings never stop Pi; you decide whether to interrupt.
+- **Cleanup check:** after every session, the package checks your computer, the server, or your cloud for leftovers and reports anything it finds.
+- **Dependency cache:** it keeps what your `setup` commands installed, possibly including private packages, on your computer. It is only ever sent into your own sessions. A malicious `setup` could cache malicious packages for later sessions of the same project; that is the same trust as running `setup` itself.
+- **Usage warnings:** Pi gets a warning when estimated `cua` cost passes your thresholds, or when it repeats the same action, the screen stops changing, or the app is restarted unusually often. These warnings never stop Pi; you decide whether to interrupt.
 
 ## Limitations
 
+### All backends
+
+- **Only Linux apps** in this release. Windows apps need the planned `docker-windows`, `local-windows`, or Windows sandboxes with `cua`; macOS apps need the planned macOS sandboxes with `cua`.
 - **Tkinter apps** have no accessibility information, so Pi finds controls by screenshot and position instead of by name. This is slower and less precise.
 - Java Swing apps expose names only with the Java ATK wrapper installed in the environment.
-- **macOS apps** can only be tested with `cua`.
-- **Windows apps** need `cua`, `docker-windows` (Linux computer with KVM), or `local-windows`.
-- `local-windows` may show black screenshots for apps that draw with the graphics card, and some antivirus tools may flag its hidden desktop.
-- `local-windows` starts apps without administrator rights and never shows a UAC prompt. If Pi runs as administrator, it only starts an elevated app when you explicitly allow it. Screenshots that come out completely black are marked as such.
-- On a Raspberry Pi, the app runs on ARM. Apps that ship only x86 programs do not work there.
-- `docker-windows` needs about 80 GB of disk space, 8 GB of RAM, and a 15–30 minute Windows installation the first time.
 - Screenshots are taken at 1280×800 and sent to Pi at most 1280 pixels wide.
-- In this release, `setup` commands run again at the start of every session, because the dependency cache is not available yet.
-- Electron and Chromium apps get a larger shared-memory area only when `launch` starts `electron`, `npx electron`, or a Chromium browser directly. An app started through `npm start` may crash on load; call `electron` directly in `launch`.
-- The base image is built for your computer's processor type. x86-64 and ARM64 Linux computers are supported.
+- Electron and Chromium apps get a larger shared-memory area in containers only when `launch` starts `electron`, `npx electron`, or a Chromium browser directly. An app started through `npm start` may crash on load; call `electron` directly in `launch`.
+
+### `docker-linux`
+
+- Rootless Docker is not supported yet. Docker on another machine is not supported; use `remote-linux-docker` for that.
+- The base image is built for your Docker's processor type. x86-64 and ARM64 are supported.
 - `/gui-setup` measures free space in your temp folder, not in Docker's own storage folder.
+- **Docker Desktop on macOS:** the container runs as your user. Files outside the folders Docker Desktop shares by default (`/Users`, `/Volumes`, `/private`, `/tmp`, `/var/folders`) need to be added under Settings → Resources → File sharing.
+- **Docker Desktop on Windows:** only a local named pipe works as the Docker endpoint. The container runs as user 1000; files it writes in copy mode appear as yours through Desktop's file sharing. With the Hyper-V engine, the drive with your project and temp folder must be shared. The first cleanup after Pi starts may take a second or two.
+- **Several operating systems on one Docker Desktop** (for example Pi on Windows and Pi in WSL): each reports, but never removes, the other's leftover containers.
+
+### `local-linux`
+
+- No network isolation and no read-only view of your project.
+- Linux computers only. The helper runs with your system Python.
+- Without AT-SPI and pyatspi, `gui_snapshot` reports `coverage: none`; Pi then works from screenshots and positions. Without openbox, dialogs may open at the top-left corner and window activation may not work.
+- `copy` mode does not copy dependency folders such as `node_modules` or virtual environments, so the app may not find them.
+
+### Remote backends
+
+- Your computer must run Linux or macOS. Windows clients are planned.
+- On a Raspberry Pi or other ARM server, the app runs on ARM. Apps that ship only x86 programs do not work there. 32-bit ARM systems only get a warning and limited app support.
+- Login shells csh and tcsh are not supported.
+- Without rsync on both ends, every session start sends a full copy of the project.
+- **`--purge-tooling` makes every session start slow:** the base image is rebuilt on the server each time (several minutes). Only the last session of this Pi on that server removes the image; another computer using the same server may see a removal fail while its container uses the image, which is reported as a leftover. The test at the end of setup never removes the image, so the first real session does.
+- Pi never connects to a server at startup, so leftovers of a crashed Pi stay on the server until the next session start there or `/gui-cleanup <backend>`.
+- `/gui-doctor --host` compares names as written: `raspi5` and `me@raspi5` count as different servers.
+
+### `cua`
+
+- Linux apps only, from a Linux computer. Windows and macOS sandboxes, and macOS and Windows computers as clients, are planned.
+- `"network": "none"` is refused: sandboxes always have outbound network.
+- The sandbox image must contain the helper's packages or allow `apt-get` as root or with passwordless `sudo`; otherwise the start fails and names the missing packages.
+- The project is uploaded in full once per session; there is no incremental sync.
+- The first launch takes minutes: create, copy the helper, and upload.
+- Deleting the sandbox when Pi exits is best effort: it may take longer than Pi waits, and cloud credentials that exist only as environment variables are not available at that moment. The next Pi start, `/gui-cleanup cua`, or your cloud's expiry removes it. Until then it keeps billing.
+- If Pi's settings folder is deleted, the package can no longer tell which sandboxes it created; it reports them and never deletes them on its own. Your cloud's expiry and `cua cloud sweep --delete` still remove them.
+
+### Dependency cache
+
+- The key cannot see everything: system packages on a `remote-linux` server (for example after an `apt upgrade`), versions resolved without a lockfile (such as `pip install requests`), and files that `setup` reads but that are not key files. When dependencies look stale, run `/gui-cleanup --deps` or list the files in `deps.keyFiles`.
+- On a cache hit, files `setup` wrote outside the dependency folder (home folder, `/tmp`) are missing. Projects that depend on that need `"depsCache": { "enabled": false }`.
+- After a hit, the Python virtual environment in containers is recreated, which takes a few seconds.
 
 ## Troubleshooting
 
 | Message or symptom | Fix |
 |---|---|
 | `backend "<id>" is not set up` | Run `/gui-setup <id>`. |
+| `backend "<id>" is not available yet` | The backend is planned. Choose one of the listed backends. |
 | Setup ends with `needs-user-action` | Run the listed commands yourself, then run `/gui-setup` again. |
-| `auth needed` for a server | Install your key with `ssh-copy-id`, or the Windows command setup shows. |
-| `host key unknown` | Connect once with `ssh <host>` and check the fingerprint. |
-| Warning about output on SSH login | Your server prints text for non-interactive logins (for example from `.bashrc`). It still works; remove the output to silence the warning. |
-| Docker permission denied | Add your user to the `docker` group, then log in again. |
-| `rootless Docker is not supported` | Use the standard (rootful) Docker daemon for now. |
-| Docker reached over TCP or SSH | Point `DOCKER_HOST` or your `docker context` at the local Unix socket. Remote Docker hosts are planned. |
-| `Pi is shutting down (or restarted this extension); run the command again` | Pi quit or reloaded while the command was starting. Run it again. |
-| `the workspace contains Unix socket(s)` | Move the listed sockets out of the project, or use `workspaceMode: "copy"`. |
-| `cleanup did not finish; run gui_stop or /gui-cleanup to retry` | A container or file could not be removed. Retry; if it persists, the message names what remains. |
-| `changed while the workspace was being copied` | Something changed your project during a `copy`-mode start. Start the session again. |
-| `the directory mounted at /workspace is not the one that was checked` or `was replaced while it was scanned` | The project folder was moved or replaced while the session started. Start again; if it repeats on your file system, use `workspaceMode: "copy"`. |
-| `the workspace socket scan did not finish within 20 s` | Your project folder is very large. Use `workspaceMode: "copy"`. |
-| A `setup` command failed | The error shows the command's last output. Fix the command in `.pi/gui.json`, then start again. In mount mode the project is read-only: install into the environment, not into the project folder, or use `copy` mode. |
-| `backend "docker-linux" changed since setup` | The package or Docker changed. Run `/gui-doctor docker-linux`. |
+| `backend "<id>" changed since setup (…)` | The package, a tool version, the server, or the cloud changed. Run `/gui-doctor <id>`. |
 | `at most N GUI sessions can run at once` | Stop a session first, or raise `limits.maxConcurrentSessions` in `.pi/gui.local.json`. |
-| `Xvfb` missing (`local-linux`) | Let setup install it, or install `xorg-server-xvfb` (Arch), `xvfb` (Debian/Ubuntu), or `xorg-x11-server-Xvfb` (Fedora/openSUSE). |
+| `Pi is shutting down (or restarted this extension); run the command again` | Pi quit or reloaded while the command was starting. Run it again. |
+| `cleanup did not finish; run gui_stop or /gui-cleanup to retry` | A container, folder, or sandbox could not be removed. Retry; if it persists, the message names what remains. |
+| A `setup` command failed | The error shows the command's last output. Fix the command in `.pi/gui.json`, then start again. In mount mode with `docker-linux` the project is read-only: install into the environment, not into the project folder, or use `copy` mode. |
 | `app handed off to another instance` | The app is already running elsewhere and passed the request on. Close the other copy or start the app with its "new instance" option. |
 | `stale ref, take a new snapshot` | Pi used an element from an older view. It takes a new snapshot automatically. |
 | A usage warning appears | Pi may be stuck in a loop. Check what it is doing and interrupt if needed. |
 | Leftovers reported after a session | Run `/gui-cleanup`. If anything remains, the message names it. |
+| **`docker-linux`** | |
+| Docker permission denied | On Linux, add your user to the `docker` group, then log in again. On macOS, restart Docker Desktop. On Windows, add your account to `docker-users`. |
+| `rootless Docker daemon …; this version needs a rootful daemon` | Use the standard (rootful) Docker daemon for now. |
+| Docker reached over TCP or SSH | Point `DOCKER_HOST` or your `docker context` at the local socket (on Windows, the local named pipe). For Docker on a server, use `remote-linux-docker`. |
+| `docker.endpoint` fails on macOS or Windows | Run `docker context use desktop-linux`. |
+| `docker.ostype` fails on Windows | In Docker Desktop, choose "Switch to Linux containers". |
+| `docker.bind-uid` fails on Docker Desktop | Allow Docker Desktop's file sharing for your project and temp folder (Settings → Resources → File sharing). |
+| `the workspace contains Unix socket(s)` | Move the listed sockets out of the project, or use `workspaceMode: "copy"`. |
+| `changed while the workspace was being copied` | Something changed your project during a `copy`-mode start. Start the session again. |
+| `the directory mounted at /workspace is not the one that was checked` or `was replaced while it was scanned` | The project folder was moved or replaced while the session started. Start again; if it repeats on your file system, use `workspaceMode: "copy"`. |
+| `the workspace socket scan did not finish within 20 s` | Your project folder is very large. Use `workspaceMode: "copy"`. |
+| **`local-linux`** | |
+| `linux.xvfb` or another tool check fails | Install the listed package, for example `xorg-server-xvfb` (Arch), `xvfb` (Debian/Ubuntu), or `xorg-x11-server-Xvfb` (Fedora/openSUSE). The report shows the Xvfb error it saw. |
+| `local-linux never runs setup commands; …` | Expected. Install the app's dependencies in your project yourself, or use another backend. |
+| `local-linux cannot block the app's network` | Remove `"network": "none"`, or use `docker-linux` for an offline run. |
+| `… is too deep for the private bus sockets; set TMPDIR to a shorter path` | Start Pi with a short `TMPDIR`, such as `/tmp`. |
+| `display lock dir … belongs to uid …` | Another user created that folder. Remove it, or start Pi with a private `TMPDIR`. |
+| A crashed session left a display or processes | Run `/gui-cleanup local-linux`. |
+| **Remote backends** | |
+| `/gui-setup <id> needs an SSH host when there is no interactive UI` | Add `--host <alias>`. |
+| `no SSH host is configured for <id>` | Run `/gui-setup <id> --host <alias>`. |
+| `auth needed` or `Permission denied` | Install your key: `ssh-copy-id <host>`. |
+| `host key unknown` | Connect once with `ssh <host>` and check the fingerprint. |
+| `host key changed` | Check the new fingerprint with the server's owner, then run `ssh-keygen -R <host>` and connect once. |
+| `unreachable` | Check that the server is on and SSH runs. For jump hosts, `ssh.jump` names the failing hop. |
+| `remote.path` fails | Tools are only on the login shell's PATH. Add the listed folders for non-interactive shells. |
+| `ssh.clean-stdout` warns | Your server prints text for non-interactive logins (for example from `.bashrc`). It still works; remove the output to silence the warning. |
+| `pip install --user` fails in `setup` on `remote-linux` | Use plain `pip install`, or set `PIP_TARGET` in `deps.env`. |
+| Leftovers after a lost connection | Run `/gui-cleanup <id>` once the server is back. |
+| **`cua`** | |
+| `cua.cli` fails | Install the `cua` tool, then run `/gui-setup cua` again. |
+| `cua.signin` fails | Run `cua auth login` in a terminal. |
+| `cua.cloud` fails | Connect a cloud: `cua cloud connect aws --region <region> --default` (or `gcp`, `hetzner`, `modal`). |
+| `cua.quota` fails | Fix what `cua cloud test <cloud>` reports. |
+| `re-run with /gui-setup cua --accept-billing` | Billing was not accepted. Run setup with `--accept-billing`, or accept in the interactive screen. |
+| `billing was acknowledged for <cloud>, but sandboxes would run in <other cloud>` | Run `/gui-setup cua` again to accept billing for the new cloud. |
+| `"network": "none" is not available on cua` | Remove it, or use `docker-linux`. |
+| A sandbox is reported as having `no record in the local ledger` | It looks like one of yours but the package has no record of it. If it is yours, delete it with `cua sandbox rm <ref> --force`. |
+| A sandbox could not be deleted | Run `/gui-cleanup cua`. |
+| **Dependency cache** | |
+| `another Pi session is storing this entry right now` | Harmless; the next session uses the entry. |
+| `not stored: larger than the cache limit` | Raise `depsCache.maxSizeGB`. |
+| `not stored: setup changed the workspace, and only the deps dir is cached` | Expected when `setup` writes into the project, as `npm install` does. Install into the environment instead, or accept that `setup` runs each time. |
+| Dependencies look outdated | Run `/gui-cleanup --deps`, or add the relevant files to `deps.keyFiles`. |

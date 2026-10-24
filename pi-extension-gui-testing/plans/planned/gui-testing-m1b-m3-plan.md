@@ -58,7 +58,7 @@ F ──► (L ∥ R ∥ C) ──► integration ──► D ──► integrat
 | R | done 2026-10-24 (unregistered) | `claude-opus-5-5`, handoff `plans/handoffs/post-m1-R.md`: SSH ControlMaster transport, host picker, remote session dirs, rsync/tar sync, remote-linux (host mode), remote-linux-docker (docker code over SSH, no docker/** changes); loopback-ssh tests; no real sshd |
 | C | done 2026-10-24 (unregistered) | `claude-opus-5-5`, handoff `plans/handoffs/post-m1-C.md`: **Cua Cloud ended 2026-10-18**; backend built on the open-source `cua` CLI (user's own AWS/GCP/Hetzner/Modal account), helper over `cua sandbox exec -i`, sandbox ledger + cleanup paths; no API key stored; Linux only |
 | D | done 2026-10-24 | `claude-opus-5-5`, handoff `plans/handoffs/post-m1-D.md`: dependency cache (gzip, key, LRU, `depsCache.enabled`/`maxSizeGB`, `/gui-cleanup --deps`); **protocol 1 → 2** (6 deps methods, `ARCHIVE_REJECTED`, `TOO_LARGE`, `hello.platform`); Docker Desktop host support (macOS/Windows endpoints, bind-uid, path mapping, fingerprint workspace check, portable owner liveness). Owner rerun: 475/475 on Node 26 and 22; helper tests only `gi` errors. Package version 0.1.0 → 0.2.0 (helper change) |
-| W | not started | |
+| W | done 2026-10-24 | `claude-opus-5-5`, task `…gui-testing-post-m1-W-r1`, handoff `plans/handoffs/post-m1-W.md`: README (backend chooser, warnings), TECHNICAL (all backends, flags, config, storage, security, troubleshooting), DEVELOPMENT (architecture, adding a backend, designs, test matrix, pre-publish per §11), SKILL, protocol.md, spec Cua/§11/Q1/Q2, root catalog; doc checks clean |
 | Review | not started | |
 
 ## 6a. Decisions
@@ -73,7 +73,12 @@ Phase I (integration, `claude-opus-5-5`, handoff `plans/handoffs/post-m1-I.md`):
 
 ## 7. Reviews
 
-Not started.
+| Run | Provider / model | Task id | Status |
+|---|---|---|---|
+| P-A1 | Pi / `openai-codex/gpt-6.1-sol` (xhigh), seat A security | `…gui-testing-post-m1-review-A-r1` | **failed**: provider content filter ("flagged for possible cybersecurity risk"); relaunched with neutral robustness wording as P-A1b |
+| P-B1 | Pi / `openai-codex/gpt-6.1-sol` (xhigh), seat B lifecycle | `…gui-testing-post-m1-review-B-r1` | completed: **not ready**, 8 findings (7 blocking), all reproduced |
+
+Accepted fixes (round 1, seat B + docs-worker code reports): V1 B-F1 doctor `useHost` before guard / per-operation host binding; V2 B-F2 cua lookup failure treated as absence; V3 B-F3 (+W-1) remote-linux accepts `network: none`; V4 B-F4 remote workspace/deps not removed on helper-side teardown; V5 B-F5 kept-sandbox cost not tracked; V6 B-F6 session tools use active instead of session backend; V7 B-F7 cua `/deps` + venv provisioning; V8 B-F8 cua e2e false positives; V9 W-2 remote `linux.screenshot` passes with xwd only; V10 W-3 `cua.rate` fix text; V11 W-4 `cua.cli` minimum version; V12 W-5 picker lists unsupported backends; V13 W-6 cua image setting untracked for drift; V14 W-7 `--api-key-env` message on non-cua backends; V15 W-8 spec §4.8 `.tar.zst` → `.tar.gz` (owner).
 
 ## 8. Open live verification
 

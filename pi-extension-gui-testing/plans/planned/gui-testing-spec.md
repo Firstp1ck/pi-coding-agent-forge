@@ -63,7 +63,7 @@ with workstream IDs.
 | `local-linux` | Linux | Linux | Private Xvfb display + private D-Bus | M2 |
 | `remote-linux` | any with OpenSSH client | Linux (on the remote's arch) | Private Xvfb on a user-owned SSH host | M2b |
 | `remote-linux-docker` | any with OpenSSH client | Linux (on the remote's arch) | Container with Xvfb on a user-owned SSH host | M2b |
-| `cua` | any | Linux, Windows, macOS | Cua cloud sandbox | M3 |
+| `cua` | Linux (macOS, Windows planned) | Linux (Windows, macOS after S1) | Cua sandbox in the user's own cloud account, via the open-source `cua` CLI | M3 |
 | `docker-windows` | Linux with KVM | Windows | Windows VM in a container (dockur/windows) | M4 |
 | `local-windows` | Windows 10/11 | Windows | Hidden desktop (`CreateDesktop`) | M5 (after spike) |
 
@@ -233,14 +233,41 @@ monitor, GPU, or desktop environment is needed; Xvfb renders in RAM.
 
 ### 4.3 `cua`
 
-- Uses the Cua cloud sandbox API. **One sandbox per session, deleted by `gui_stop`**
-  and by every cleanup path (§7a). Keeping a stopped sandbox between sessions
-  (faster, but project data stays in the cloud) is opt-in only:
-  `keepSandbox: true` in `.pi/gui.json`.
-- Workspace sync: file set and exclusions per §4.7. Upload consent is given once at setup, together with the
-  billing acknowledgement (`--accept-billing`); later syncs do not prompt.
-- API key read from `CUA_API_KEY` or entered at setup via `ctx.ui.input()` and stored
-  with file mode 0600 (see open question Q1).
+> **Revised 2026-10-24.** Cua Cloud (the hosted sandbox API billed by Cua and
+> authenticated with `CUA_API_KEY`) ended on 2026-10-18 (cua.ai migration guide
+> "Cua Cloud ended"). This section describes the successor surface the backend
+> now targets; see the M1b–M3 plan §6a and `plans/handoffs/post-m1-C.md`.
+
+- Uses the open-source `cua` CLI (written against 0.7), which creates sandboxes
+  **in the user's own cloud account** (`--on aws|gcp|hetzner|modal`). The user's
+  cloud bills for them. Each sandbox joins Cua's relay (`relay.cua.ai`) under the
+  user's cua.ai sign-in, so nothing listens on the internet.
+- All Cua access goes through one interface (`CuaApi`) with a single production
+  adapter on the CLI (argv only, timeouts and abort signals, bounded output,
+  shape-validated JSON, redacted errors). There is no REST control plane; the
+  only direct network call is a credential-free reachability probe.
+- **No credential is stored, read, or sent by the package.** The cua.ai sign-in
+  (`cua auth login`) and the cloud credentials stay in the `cua` CLI's and the
+  cloud's own stores. `--api-key-env` and `CUA_API_KEY` are obsolete and refused.
+- **One sandbox per session, deleted by `gui_stop`** and by every cleanup path
+  (§7a): stop, failed start, idle timeout, shutdown, `/gui-cleanup`, a bounded
+  synchronous delete at process exit, the next Pi start's sweep (from a local
+  ledger of created sandboxes, written before each create), and finally the
+  cloud's own expiry (`cua cloud connect --ttl-hours`, default 8 h). Keeping a
+  stopped sandbox between sessions (faster, but it keeps billing and project data
+  stays in the cloud) is opt-in only: `keepSandbox: true` in `.pi/gui.local.json`
+  or the global config.
+- The Linux helper is deployed into the sandbox and spoken to over
+  `cua sandbox exec -i` (a documented stdio stream); the token is the first stdin
+  line, never argv. Protocol coverage is identical to Linux. Missing helper
+  packages are installed inside the sandbox only.
+- Workspace sync: file set and exclusions per §4.7, uploaded once per session as
+  a tar. Upload consent is given once at setup, together with the billing
+  acknowledgement (`--accept-billing` or one confirm dialog, recorded per cloud);
+  later syncs do not prompt.
+- `network: "none"` is refused (sandboxes always have egress).
+- Linux targets only until the Windows helper exists (S1); macOS sandboxes are
+  planned with it. Client: Linux in this version.
 
 ### 4.4 `docker-windows`
 
@@ -384,7 +411,7 @@ keeps installed dependencies **on the client** and ships them to the session.
 | Command | Purpose |
 |---|---|
 | `/gui-setup [backend] [flags]` | First-time setup. Without a backend, shows a `ctx.ui.select()` of backends supported on this host, with a one-line description each. |
-| `/gui-doctor [backend]` | Re-runs all checks and the smoke test. Never prompts, never remediates, and never changes configuration choices. It may create labelled temporary test resources, which it removes and audits before finishing. On success it refreshes the verified state; on failure it marks the backend unverified. |
+| `/gui-doctor [backend] [--host <host>]` | Re-runs all checks and the smoke test. Never prompts, never remediates, and never changes configuration choices. It may create labelled temporary test resources, which it removes and audits before finishing. On success it refreshes the verified state; on failure it marks the backend unverified. `--host` (remote backends only) checks another host without touching the verified state. |
 | `/gui-backend <id> [--project]` | Switches the active backend (must already be verified). Writes the global config, or `.pi/gui.local.json` with `--project`. |
 | `/gui-usage [session]` | Shows the usage/cost check (§8.1) for current and recent sessions. |
 | `/gui-reset <backend>` | Removes that backend's config, images, sandboxes, and VM volumes after confirmation. |
@@ -397,9 +424,11 @@ never prompts:
 | Flag | Replaces prompt |
 |---|---|
 | `--host <ssh-alias-or-user@host>` | host picker from `~/.ssh/config` (`remote-*`, §4.2a) |
-| `--targets linux,windows,macos` | target selection (`cua`) |
-| `--api-key-env <VAR>` | API key input (`cua`; default `CUA_API_KEY`) |
-| `--accept-billing` | billing + upload acknowledgement (`cua`) |
+| `--targets linux,windows,macos` | target selection (`cua`; only `linux` passes until S1) |
+| ~~`--api-key-env <VAR>`~~ | obsolete since Cua Cloud ended (§4.3); refused with an explanation |
+| `--accept-billing` | billing + upload acknowledgement for the chosen cloud (`cua`) |
+| `--cloud aws\|gcp\|hetzner\|modal` | cloud for sandboxes (`cua`; default: the `cua cloud connect --default` cloud) |
+| `--rate-usd-per-hour <n>` | hourly price for the cost estimate when `cua cloud status` reports none (`cua`) |
 | `--accept-windows-license` | licensing acknowledgement (`docker-windows`) |
 | `--fix` | approves every remediation that needs no password: package installs via passwordless sudo, image builds, key generation, VM install |
 | `--no-fix` | never remediate; report and stop |
@@ -418,7 +447,7 @@ passes and every required acknowledgement is given by flag or already recorded,
 setup runs start to finish with **zero prompts** and ends with one summary.
 
 1. **Resolve inputs** per field in this order: flags → `.pi/gui.local.json` →
-   global config → environment (`CUA_API_KEY`, `~/.ssh/config`) → prompt. Prompt
+   global config → environment (`~/.ssh/config`) → prompt. Prompt
    only for what is still missing. `.pi/gui.json` contributes only the shared
    fields listed in §7. Setup and launch use the same resolution.
 2. **Host detection**: OS, arch, distro/package manager, Pi version.
@@ -621,15 +650,20 @@ persisted so `/gui-doctor` can detect drift.
 | `cleanup.sweep` | yes | a deliberately orphaned session (dir, process, labelled container) is removed by the next session start |
 | `concurrency.lock` | yes | two simultaneous sessions get different displays/containers and do not interfere |
 
-**`cua`**
+**`cua`** (revised 2026-10-24 for the `cua` CLI, §4.3; every check is read-only and creates nothing)
 
 | Check | Required | Pass when | Remediation |
 |---|---|---|---|
-| `cua.network` | yes | API endpoint reachable | — |
-| `cua.key` | yes | key present | prompt via `ctx.ui.input()` |
-| `cua.auth` | yes | authenticated API call succeeds | re-enter key |
-| `cua.targets` | yes | each requested target OS available on the account | — (report which are missing) |
-| `cua.cost-ack` | yes | user acknowledged billing at setup | confirm dialog |
+| `cua.cli` | yes | `cua --version` works | install the `cua` CLI |
+| `cua.network` | yes | the Cua API host answers a credential-free request | network/proxy hint |
+| `cua.signin` | yes | `cua auth status` reports signed in (replaces `cua.key`) | `cua auth login` (manual) |
+| `cua.auth` | yes | an authenticated read-only call (`auth whoami`) succeeds | `cua auth login` (manual) |
+| `cua.cloud` | yes | a cloud account is connected and its credentials are found | `cua cloud connect <cloud> --default` (manual) |
+| `cua.quota` | yes | `cua cloud test <cloud>` passes | fix what it reports (manual) |
+| `cua.targets` | yes | each requested target OS is available (Windows, macOS refused until S1) | — (report which are missing) |
+| `cua.ttl` | no | sandboxes expire on their own | `cua cloud connect <cloud> --ttl-hours 8` |
+| `cua.rate` | no | an hourly price is known (from Cua or `--rate-usd-per-hour`) | `--rate-usd-per-hour` |
+| `cua.cost-ack` | yes | billing and upload acknowledged at setup for this cloud | confirm dialog or `--accept-billing` |
 
 **`docker-windows`**
 
@@ -739,7 +773,7 @@ event log {stream: stdout|stderr, source: app|setup, data}  # bounded, app outpu
 - Windows helper: small native exe (UI Automation, `PostMessage`, `PrintWindow`);
   inside `docker-windows` it may also use `SendInput` because the whole session is
   isolated.
-- `cua`: maps the same protocol onto the Cua API.
+- `cua`: runs the Linux helper inside the sandbox over `cua sandbox exec -i` (§4.3); no protocol mapping is needed.
 
 ## 7. Configuration and state
 
@@ -794,9 +828,9 @@ after use, or at the next startup if removal after use was not possible.
 
 | Where | Persists | Never persists |
 |---|---|---|
-| Client | global/project config (§7), verified-setup state, pinned host-key fingerprints, Cua API key (Q1), tooling images without project data (`docker-linux` base image, `docker-windows` base disk), the dependency cache (§4.8) | screenshots, accessibility dumps, logs, synced copies, sockets, session state |
+| Client | global/project config (§7), verified-setup state, pinned host-key fingerprints, `cua` settings (`cua.json`: acknowledgement, cloud, image, rate; no credential, Q1) and the sandbox ledger (`cua-sandboxes/`), tooling images without project data (`docker-linux` base image, `docker-windows` base disk), the dependency cache (§4.8) | screenshots, accessibility dumps, logs, synced copies, sockets, session state |
 | Remote SSH host | system packages installed at setup with user consent (tooling); the base image for `remote-linux-docker` (tooling, kept by default; `--purge-tooling` removes it after each session) | session dirs, helper copies, app processes, Xvfb displays/locks, containers, volumes, networks, project images, build cache, logs |
-| Cua | nothing (unless `keepSandbox: true`) | sandboxes, uploaded files |
+| Cua (user's cloud) | nothing (unless `keepSandbox: true`, which keeps billing) | sandboxes, uploaded files |
 | VM guest (`docker-windows`) | base disk (tooling) | session overlay, guest session dir |
 
 Tool output that the model already received (images and text in the transcript)
@@ -854,7 +888,7 @@ end of the smoke test, after every `gui_stop`, and in `/gui-doctor`.
 |---|---|
 | Client | `os.tmpdir()/pi-gui-testing-*` except live sessions; processes started by the package; Xvfb sockets/locks for displays the package started (`local-linux`); containers/volumes/networks/images labelled `pi-gui-testing.session` |
 | SSH remote | session root contents; processes owned by the user whose cmdline or env carries the session tag; `/tmp/.X11-unix/X<N>` and `/tmp/.X<N>-lock` for displays the package started; labelled Docker objects; labelled build cache |
-| Cua | sandboxes tagged with this client's id (unless `keepSandbox`) |
+| Cua | sandboxes in this client's ledger, named with this client's host tag (unless `keepSandbox`) |
 | `docker-windows` | session overlays; running session containers |
 | `local-windows` | session Job Objects and their processes; session private desktops; session temp dir |
 
@@ -898,11 +932,11 @@ setup does not complete.
 
 ### 8.1 Usage and loop check
 
-There is no hard cost cap (Cua enforces spending limits through its own account
+There is no hard cost cap (the user's cloud account enforces budgets and spending limits
 settings). Instead, a usage check detects unintended behaviour and never blocks:
 
 - **Tracked per session**: tool calls by type, actions, screenshots, bytes
-  synced, wall time; for `cua`, sandbox runtime × rate (from the API when
+  synced, wall time; for `cua`, sandbox runtime × rate (from `cua cloud status` when
   available, otherwise the rate entered at setup) as an estimated cost.
 - **Loop signals**: the same action on the same ref/coordinates more than 5 times
   in a row; more than 8 consecutive actions whose screenshots have identical
@@ -968,10 +1002,20 @@ Host-provided packages (`@earendil-works/pi-coding-agent`, `typebox`, …) go in
 | M1c | `docker-linux` on Docker Desktop (macOS, Windows hosts) | Smoke test passes on both |
 | M2 | `local-linux` | Same app matrix; Wayland-leak test passes on a Wayland host session |
 | M2b | `remote-linux` + `remote-linux-docker` | Smoke test passes against an amd64 server and a Raspberry Pi 5 (64-bit OS, no monitor, SSH-only); no ports opened on the remote; sync excludes secrets |
-| M3 | `cua` (Linux, Windows; macOS behind a flag) | Smoke test on each available target; sync excludes secrets; stop leaves no running billable sandbox |
+| M3 | `cua` (Linux, Windows; macOS behind a flag). Since Cua Cloud ended (§4.3): the user's own cloud via the `cua` CLI; Linux first, Windows/macOS after S1 | Smoke test on each available target; sync excludes secrets; stop leaves no running billable sandbox |
 | M4 | `docker-windows` | Unattended install from `/gui-setup` with no manual steps; smoke test passes; ports bound to localhost only |
 | S1 | Spike: hidden-desktop fidelity, using `@iiwate/pi-silent-gui` as-is on a Windows machine | Tk, PySide6, WinForms, Electron (with and without `--disable-gpu`), WPF launched, clicked, and captured; per-framework `all_black` rate and click delivery recorded; UIA reachability on the private desktop measured separately with a minimal UIA probe; result decides helper language (Q4) |
 | M5 | `local-windows` (only if S1 is acceptable) | Smoke test passes; foreground-unchanged assertion passes; AV behaviour documented |
+
+**Status (2026-10-24).** M1, M1b, M1c, M2, M2b, and M3 for the Linux target
+are implemented on branch `feat/gui-testing-milestones` and covered by unit,
+contract, and host-runnable helper tests with fakes. **Live verification is
+pending for every one of them**: no exit criterion above has been met on real
+Docker, Docker Desktop, an X server, an SSH server, or a Cua account yet (see
+`DEVELOPMENT.md` "Before publishing" and the M1b–M3 plan §8). S1, M4, M5, and
+the Windows/macOS targets of M3 are blocked on a Windows machine (S1 decides
+Q4). Recorded deviations: the dependency cache stores `.tar.gz`, not `.tar.zst`
+(§4.8; the helper's Python has no zstd), and M3 targets the `cua` CLI (§4.3).
 
 ## 12. Acceptance criteria
 
@@ -996,8 +1040,8 @@ Host-provided packages (`@earendil-works/pi-coding-agent`, `typebox`, …) go in
 
 | ID | Question |
 |---|---|
-| Q1 | Where should the Cua API key live: Pi's own credential store (if extensions can use it) or a 0600 file? Verify Pi 1.4.0 APIs. |
-| Q2 | Cua pricing and macOS availability: confirm current terms before M3. |
+| Q1 | ~~Where should the Cua API key live?~~ Resolved 2026-10-24: nothing to store. Cua Cloud and its API keys ended; the `cua` CLI keeps the cua.ai sign-in and the cloud credentials, and the package stores, reads, and sends none. |
+| Q2 | ~~Cua pricing and macOS availability?~~ Resolved 2026-10-24: pricing is the user's own cloud's (`usd_per_hour` per machine kind from `cua cloud status`, or `--rate-usd-per-hour`); billing is by that cloud. macOS sandboxes wait for the Windows/macOS helper work after S1. |
 | Q3 | dockur/windows: confirm the OEM install hook and shared-folder mechanism versions before M4. |
 | Q4 | Windows helper form: (a) native `.exe` (recommended; needs a code-signing certificate, owner to be decided) or (b) Python helper like the reference (no signing, but setup must download an embeddable Python automatically to keep install-and-use). Decide after S1. |
 | Q5 | ~~Docker Desktop hosts in M1?~~ Resolved: Linux hosts in M1, Docker Desktop hosts in M1c. |

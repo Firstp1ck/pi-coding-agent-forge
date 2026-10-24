@@ -1,11 +1,17 @@
 # Helper protocol (version 2)
 
-Contributor contract between the TypeScript client and the helper. The source of truth for types is [`src/protocol.ts`](../src/protocol.ts); this page explains the same contract for the Python helper. At the end of M1 this content moves into `DEVELOPMENT.md`.
+Contributor contract between the TypeScript client and the helper. The source of truth for types is [`src/protocol.ts`](../src/protocol.ts); this page explains the same contract for the Python helper. It stays a separate document because helper and client source comments cite it; [DEVELOPMENT.md](../DEVELOPMENT.md) links here.
 
 ## Process and transport
 
 - `docker-linux`: the image is built from a staged tar context streamed to `docker build -` that contains only the helper files and the GTK 3 smoke app (no buildx needed, no project data). The helper is the container entrypoint, `ENTRYPOINT ["tini", "--", "/opt/pi-gui-testing/helper"]`, with no `CMD`. The client starts it with `docker run -i --rm …` and talks over the container's stdin/stdout. The helper runs on the image's system `python3`.
 - The client treats the helper as an opaque executable with stdio. Nothing in the client assumes Python.
+- Other backends use the same helper and framing over other stdio transports:
+  - `local-linux`: the helper runs on the client in host mode (`PI_GUI_HELPER_MODE=host`), started directly with `python3 -I -B helper` and an allow-listed environment.
+  - `remote-linux`: the helper runs on the SSH host in host mode under `env -i`, over the session's ControlMaster connection. The token is written on stdin before the helper starts reading frames, never in argv.
+  - `remote-linux-docker`: `docker run -i --rm …` on the SSH host, as in `docker-linux`.
+  - `cua`: `cua sandbox exec -i <ref> -- sh -c 'IFS= read -r PI_GUI_TESTING_TOKEN && export PI_GUI_TESTING_TOKEN && exec "$@"' sh python3 -I <dir>/tools/helper`. The client writes the token as the first stdin line; the helper runs in container mode inside the sandbox.
+- Host mode (directories, display locks, forced environment, teardown, probes) is specified in the docstring of `helpers/linux/pi_gui_helper/hostmode.py` and summarised in [DEVELOPMENT.md](../DEVELOPMENT.md#helper-host-mode-contract). In host mode `exec` answers `BAD_REQUEST` unless the client sets `PI_GUI_ALLOW_EXEC=1` (`local-linux` never does), `/deps/venv` is never created, and the `/deps` environment below is replaced by the `PI_GUI_DEPS_DIR` variables.
 - The helper starts Xvfb, the private D-Bus session bus, `at-spi-bus-launcher`, and `openbox` itself, then sets `org.a11y.Status` `IsEnabled=true` and `ScreenReaderEnabled=true` on its private bus.
 
 ## Framing
