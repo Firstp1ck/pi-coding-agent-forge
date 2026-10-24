@@ -73,6 +73,24 @@ function leftoverLines(title: string, leftovers: readonly Leftover[]): string {
   return leftovers.length === 0 ? `${title}: empty` : `${title}:\n${leftovers.map((l) => `- ${formatLeftovers([l])}`).join("\n")}`;
 }
 
+/**
+ * The sweep findings a reset left in place: `/gui-reset` sweeps before its
+ * `resetData`, which may resolve some of them (cua deletes sandboxes pending
+ * deletion). A fresh audit decides; a finding it no longer reports is gone.
+ * When the audit fails, every finding stands, marked as possibly stale.
+ */
+async function stillThere(found: readonly Leftover[], audit: () => Promise<Leftover[]>, id: BackendId): Promise<Leftover[]> {
+  if (found.length === 0) return [];
+  let now: Leftover[];
+  try {
+    now = await audit();
+  } catch (error) {
+    return [...found, { kind: "audit", id, detail: `the audit after the reset failed, so these findings may be resolved already: ${(error as Error).message}` }];
+  }
+  const remaining = new Set(now.map((l) => `${l.kind}:${l.id}`));
+  return found.filter((l) => remaining.has(`${l.kind}:${l.id}`));
+}
+
 /** Sends one report for the running command (mode-aware, with config warnings appended). */
 type Emit = (report: string | RenderedReport, failed: boolean) => void;
 
@@ -509,8 +527,16 @@ export function createGuiCommands(pi: CommandPi, runtime: GuiRuntime): GuiComman
       const lines: string[] = [];
       const leftovers = await runtime.stopAll(id);
       const controller = new AbortController();
-      const sweep = await runtime.sweepNow([id], controller.signal, { [id]: backend });
+      // The client scope, then the backend's own sweep, whose findings resetData may resolve: they are
+      // reconciled with a fresh audit afterwards, so the report lists only what remains.
+      const sweep = await runtime.sweepNow([], controller.signal);
       leftovers.push(...sweep.leftovers);
+      let found: Leftover[] = [];
+      try {
+        found = await backend.sweepOrphans(controller.signal);
+      } catch (error) {
+        leftovers.push({ kind: "sweeper", id, detail: `sweep failed: ${(error as Error).message}` });
+      }
       if (resetCapability?.resetData) {
         try {
           const data = await resetCapability.resetData(controller.signal);
@@ -520,13 +546,16 @@ export function createGuiCommands(pi: CommandPi, runtime: GuiRuntime): GuiComman
           leftovers.push({ kind: "reset", id, detail: (error as Error).message });
         }
       }
+      leftovers.push(...(await stillThere(found, () => backend.auditOrphans(controller.signal), id)));
       await markUnverified(id, runtime.options.globalConfigPath);
       await updateGlobalConfig((c) => void (c.backend === id && delete c.backend), runtime.options.globalConfigPath);
       await updateLocalConfig(ctx.cwd, (c) => void (c.backend === id && delete c.backend)).catch(() => undefined);
       lines.push("removed the verified state and backend choice");
       if (resetCapability) lines.push(resetCapability.resetNote);
-      lines.push(leftoverLines("Leftovers", leftovers));
-      emit(`GUI testing reset ${id}:\n${lines.join("\n")}`, leftovers.length > 0);
+      // One line per leftover; the first report of one (the reset's own, before the audit's) is the most specific.
+      const unique = leftovers.filter((l, i) => leftovers.findIndex((o) => o.kind === l.kind && o.id === l.id) === i);
+      lines.push(leftoverLines("Leftovers", unique));
+      emit(`GUI testing reset ${id}:\n${lines.join("\n")}`, unique.length > 0);
     }),
   };
 

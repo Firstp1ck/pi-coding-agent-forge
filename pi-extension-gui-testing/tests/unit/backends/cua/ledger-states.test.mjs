@@ -7,7 +7,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { SandboxLedger } from "../../../../src/backends/cua/ledger.ts";
 import { auditCuaOrphans, deleteKeptSandboxes, hasDeadOwnerRecords, sweepCuaOrphans } from "../../../../src/backends/cua/orphans.ts";
@@ -219,4 +219,29 @@ test("AA2: a transition killed at any step leaves the old or the new record curr
     // Moves between the sets commit, then remove the old copy: two crash points; an in-place update has one.
     assert.equal(crashes, transition.post[0] === pre[0] ? 1 : 2, `${transition.name}: every crash point was exercised`);
   }
+});
+
+test("BB2: a removal killed between its unlinks never resurrects the stale copy: the stale copy goes first, the current record last (reviewer reproduction)", async (t) => {
+  const action = `const now = await ledger.read(${JSON.stringify(NAME)});
+await ledger.remove(${JSON.stringify(NAME)}, false, { sessionId: now.sessionId, phase: now.phase, generation: now.generation });`;
+  let crashes = 0;
+  for (let crashAt = 1; crashAt < 10; crashAt++) {
+    const { ledger } = await world(t);
+    // What a claim for deletion interrupted after its commit leaves: the current deleting record and an older kept copy.
+    await mkdir(ledger.dir, { recursive: true, mode: 0o700 });
+    await writeFile(join(ledger.dir, `${NAME}.kept.json`), JSON.stringify(record({ generation: 2, keptAt: "2026-10-24T01:00:00.000Z" })), { mode: 0o600 });
+    await writeFile(join(ledger.dir, `${NAME}.json`), JSON.stringify(record({ phase: "deleting", keep: false, generation: 3 })), { mode: 0o600 });
+    assert.deepEqual(await states(ledger), [["active", "deleting", "gui-old"]]);
+    const outcome = await runUntilCrash(t, ledger.dir, action, crashAt);
+    const label = `remove, killed before mutation ${crashAt}`;
+    const now = await states(ledger);
+    assert.equal(await claimLive(ledger), undefined, `${label}: nothing claimable is left`);
+    if (outcome === "done") {
+      assert.deepEqual(now, [], label);
+      break;
+    }
+    crashes++;
+    assert.deepEqual(now, [["active", "deleting", "gui-old"]], `${label}: the record is still pending deletion, never the stale kept copy`);
+  }
+  assert.equal(crashes, 2, "both unlinks were crash points");
 });

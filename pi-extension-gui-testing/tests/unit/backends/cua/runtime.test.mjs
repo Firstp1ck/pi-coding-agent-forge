@@ -14,6 +14,7 @@ import { LedgerLock } from "../../../../src/backends/cua/ledger-lock.ts";
 import { SandboxLedger } from "../../../../src/backends/cua/ledger.ts";
 import { CuaSettingsStore } from "../../../../src/backends/cua/settings.ts";
 import { BackendRegistry } from "../../../../src/backends/registry.ts";
+import { createGuiCommands } from "../../../../src/commands/commands.ts";
 import { DEFAULTS } from "../../../../src/config/types.ts";
 import { FakeCommandRunner } from "../../../../src/runner/fake.ts";
 import { GuiRuntime } from "../../../../src/tools/runtime.ts";
@@ -226,4 +227,40 @@ test("Y1: a deleted sandbox whose ledger record cannot be removed stays tracked 
   assert.deepEqual(runtime.list(), []);
   assert.deepEqual(await ledger.entries(), []);
   assert.deepEqual(api.deleted, [live.session.handle.ref], "deleted once");
+});
+
+/** `/gui-reset cua` from a second Pi instance sharing the ledger and cloud account; resolves the report text. */
+async function resetFromAnotherPi(t, runtime, env) {
+  const other = new GuiRuntime({ registry: new BackendRegistry([cuaEntry()]), tmpRoot: runtime.options.tmpRoot, globalConfigPath: runtime.options.globalConfigPath, backendOptions: runtime.options.backendOptions });
+  t.after(() => other.shutdown());
+  const messages = [];
+  const ctx = { cwd: env.project, hasUI: true, mode: "rpc", sessionManager: { getSessionId: () => "pi-2" }, ui: { confirm: async () => true, notify() {}, setStatus() {}, select: async () => undefined } };
+  const reset = createGuiCommands({ sendMessage: (m) => messages.push(m) }, other).find((c) => c.name === "gui-reset");
+  await reset.handler("cua", ctx);
+  return messages.at(-1).content;
+}
+
+test("BB3: /gui-reset cua lists only what remains: a pending deletion it deletes is not a leftover, one it cannot delete still is (reviewer reproduction)", async (t) => {
+  const { env, api, ledger, runtime, open } = await runtimeEnv(t);
+  const live = await open(false);
+  const ref = live.session.handle.ref;
+  // The first delete fails: an active record pending deletion, owned by this (running) Pi.
+  api.options.fail = { delete: "TRANSPORT" };
+  await runtime.closeSession(live.id);
+  assert.equal((await ledger.entries())[0].record.phase, "deleting");
+
+  // Still failing: the reset cannot delete it, so it remains and is reported once.
+  const failed = await resetFromAnotherPi(t, runtime, env);
+  assert.equal(api.sandboxes.size, 1);
+  const lines = failed.split("\n").filter((l) => l.includes(ref));
+  assert.equal(lines.length, 1, `reported once: ${failed}`);
+  assert.match(lines[0], /delete failed/, "with the reset's own failure, not the sweep's earlier finding");
+
+  // The reset deletes it: the sweep's "pending deletion" finding is resolved, not a leftover.
+  api.options.fail = {};
+  const report = await resetFromAnotherPi(t, runtime, env);
+  assert.equal(api.sandboxes.size, 0);
+  assert.deepEqual(await ledger.entries(), []);
+  assert.doesNotMatch(report, /pending deletion/);
+  assert.match(report, /Leftovers: empty/, report);
 });

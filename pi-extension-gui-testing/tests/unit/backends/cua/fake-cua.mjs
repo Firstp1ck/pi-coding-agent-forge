@@ -4,7 +4,8 @@
  * `FakeHelperChild` (real framing over in-memory pipes). Never runs `cua`,
  * never touches the network, never bills anything.
  */
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import fs, { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CuaApiError } from "../../../../src/backends/cua/api.ts";
@@ -190,3 +191,30 @@ export async function cuaEnv(t, options = {}) {
 export const LIVE_OWNER = formatOwnerLabel({ clientId: "c0ffee", pid: 4242, processStartTime: "1000", bootId: BOOT });
 export const DEAD_OWNER = formatOwnerLabel({ clientId: "dead00", pid: 999, processStartTime: "5", bootId: BOOT });
 export const HOST_TAG = "abcd1234";
+
+/**
+ * Runs `fn` while the first call of `fs/promises.<method>` on a path that
+ * `match` accepts fails with EIO (every module's named import sees it, through
+ * `syncBuiltinESMExports`). Resolves `{ value, injected }`, or rejects with
+ * `fn`'s error (with `injected` set on it).
+ */
+export async function withFsFailureOnce(method, match, fn) {
+  const original = fs[method];
+  let injected = false;
+  fs[method] = async (target, ...rest) => {
+    if (!injected && match(String(target))) {
+      injected = true;
+      throw Object.assign(new Error(`EIO: injected i/o error, ${method} '${target}'`), { code: "EIO" });
+    }
+    return original(target, ...rest);
+  };
+  syncBuiltinESMExports();
+  try {
+    return { value: await fn(), injected };
+  } catch (error) {
+    throw Object.assign(error, { injected });
+  } finally {
+    fs[method] = original;
+    syncBuiltinESMExports();
+  }
+}

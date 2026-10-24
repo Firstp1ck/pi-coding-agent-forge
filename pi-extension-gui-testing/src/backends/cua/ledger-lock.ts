@@ -182,10 +182,24 @@ export class LedgerLock {
       let released = false;
       return async () => {
         if (released) return;
-        released = true;
-        await writeFile(`${this.#file(next)}.free`, "", { mode: 0o600, flag: "wx" }).catch((error) => {
-          if (!isCode(error, "EEXIST")) throw error;
-        });
+        // Marked released only once the marker exists: a failed write keeps the
+        // release retryable instead of leaving a live process holding the lock.
+        let lastError: unknown;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            await writeFile(`${this.#file(next)}.free`, "", { mode: 0o600, flag: "wx" });
+            released = true;
+            return;
+          } catch (error) {
+            if (isCode(error, "EEXIST")) {
+              released = true;
+              return;
+            }
+            lastError = error;
+            await sleep(10 * (attempt + 1));
+          }
+        }
+        throw lastError;
       };
     }
   }

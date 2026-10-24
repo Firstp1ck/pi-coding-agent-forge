@@ -167,7 +167,7 @@ After the checks, setup starts a small test app in the backend, finds its button
 | `/gui-usage [session]` | Shows activity and estimated cost for current and recent sessions. |
 | `/gui-export <session> <folder>` | Copies screenshots, accessibility dumps, and logs from a running session into a folder you choose. Existing files are never overwritten. |
 | `/gui-cleanup [backend \| --all] [--deps]` | Cancels a running `/gui-setup` or `/gui-doctor`, stops this Pi's sessions (retrying any whose cleanup failed earlier), removes anything ended sessions left behind, then shows what remains. Remote backends act on the configured server. It also works when `.pi/gui.json` cannot be read: it warns and, without a backend, cleans every backend. `--deps` also empties the whole dependency cache, for every project. |
-| `/gui-reset <backend>` | Asks once, then removes the backend's setup data, its ready status, and the backend choice. See the table below. Works only where Pi can ask you: the interactive screen or an RPC client. |
+| `/gui-reset <backend>` | Asks once, then removes the backend's setup data, its ready status, and the backend choice. See the table below. Its report lists only what is still left after the reset. Works only where Pi can ask you: the interactive screen or an RPC client. |
 
 What `/gui-reset` removes:
 
@@ -177,7 +177,7 @@ What `/gui-reset` removes:
 | `local-linux` | Only the ready status and backend choice | The system tools you installed |
 | `remote-linux` | Orphaned session folders on the server | Packages installed on the server |
 | `remote-linux-docker` | Base images and orphaned session folders on the server | Docker on the server |
-| `cua` | Sandboxes kept by `keepSandbox`, the billing acceptance, and the `cua` settings | The `cua` tool, your cua.ai sign-in, and your cloud connection. Use `cua auth logout` and `cua cloud disconnect` to remove them. |
+| `cua` | Sandboxes kept by `keepSandbox`, sandboxes whose deletion did not finish (`pending deletion`), the billing acceptance, and the `cua` settings | The `cua` tool, your cua.ai sign-in, and your cloud connection. Use `cua auth logout` and `cua cloud disconnect` to remove them. |
 
 ### Keeping your personal settings out of Git
 
@@ -598,6 +598,7 @@ Screenshots that Pi already received are part of your Pi session history, not of
 | `"network": "none" is not available on cua` | Remove it, or use `docker-linux`. |
 | A sandbox is reported as having `no record in the local ledger` | It looks like one of yours but the package has no record of it. If it is yours, delete it with `cua sandbox rm <ref> --force`. |
 | A sandbox could not be deleted | Run `/gui-cleanup cua`. |
+| `stale copy of a sandbox record` | A change to the local sandbox records was saved, but the outdated copy it replaced could not be removed, for example because of a disk error. The outdated copy is ignored, nothing bills because of it, and the sandbox's next change (its next use, stop, or deletion) removes it. You can also delete the named file yourself. |
 | A sandbox is reported as `pending deletion` | Its deletion started but did not finish, for example because Pi stopped in between. It is never reused. `/gui-cleanup cua` or the next Pi start deletes it. If the report says its owner process still runs, another Pi process on this computer started the deletion; `/gui-reset cua` deletes it now, or it is deleted after that process ends. It keeps billing until then. |
 | **Dependency cache** | |
 | `another Pi session is storing this entry right now` | Harmless; the next session uses the entry. |

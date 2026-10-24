@@ -6,7 +6,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { LedgerLock } from "../../../../src/backends/cua/ledger-lock.ts";
@@ -129,4 +129,22 @@ process.stdout.write(String(wins));`;
   const entries = (await ledger.entries()).filter((e) => e.record?.name === NAME);
   assert.equal(entries.length, 1);
   assert.equal(entries[0].kept, true);
+});
+
+test("a failed release stays retryable: the lock is freed once the marker can be written", async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), "gui-lock-release-"));
+  t.after(async () => {
+    await chmod(dir, 0o700).catch(() => {});
+    await rm(dir, { recursive: true, force: true });
+  });
+  const lock = new LedgerLock(dir, { timeoutMs: 200 });
+  const release = await lock.acquire();
+  await chmod(dir, 0o500);
+  await assert.rejects(release(), (error) => error.code === "EACCES");
+  await chmod(dir, 0o700);
+  // Before the retry the lock is still held by this (live) process.
+  await assert.rejects(new LedgerLock(dir, { timeoutMs: 100 }).acquire(), /is locked by process/);
+  await release();
+  const again = await new LedgerLock(dir, { timeoutMs: 1_000 }).acquire();
+  await again();
 });

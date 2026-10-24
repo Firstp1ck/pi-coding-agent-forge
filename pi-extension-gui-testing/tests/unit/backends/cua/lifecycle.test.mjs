@@ -16,7 +16,7 @@ import { CuaSettingsStore } from "../../../../src/backends/cua/settings.ts";
 import { startLeftovers } from "../../../../src/backends/start-failure.ts";
 import { DEFAULTS } from "../../../../src/config/types.ts";
 import { FakeCommandRunner } from "../../../../src/runner/fake.ts";
-import { cuaEnv, FakeCuaApi, HOST_TAG, LIVE_OWNER, tinyHelperArchive } from "./fake-cua.mjs";
+import { cuaEnv, FakeCuaApi, HOST_TAG, LIVE_OWNER, tinyHelperArchive, withFsFailureOnce } from "./fake-cua.mjs";
 
 function config(overrides = {}) {
   return {
@@ -635,4 +635,50 @@ test("Y1: a start that cannot forget a claimed kept record whose sandbox is gone
   assert.deepEqual(await attached.session.stop(), []);
   assert.deepEqual(await ledger.entries(), []);
   assert.deepEqual(api.deleted, [], "nothing to delete");
+});
+
+const KEPT_NAME = `pi-gui-testing-${HOST_TAG}-gui-00000001`;
+
+test("BB1: a start whose kept-sandbox claim commits but cannot unlink the stale kept copy reuses the sandbox and tracks it (reviewer reproduction)", async (t) => {
+  const { api, ledger, start } = await setup(t);
+  const first = await start({ config: config({ keepSandbox: true }) });
+  await first.stop();
+  const stale = join(ledger.dir, `${KEPT_NAME}.kept.json`);
+  const { value: session, injected } = await withFsFailureOnce("rm", (path) => path === stale, () => start({ config: config({ keepSandbox: true }) }));
+  assert.equal(injected, true, "the stale kept copy's unlink failed once");
+  assert.equal(session.handle.ref, REF, "the kept sandbox is reused");
+  assert.equal(api.methods().filter((m) => m === "createSandbox").length, 1, "no new sandbox");
+  assert.deepEqual(await keptRecords(ledger), [{ kept: false, sessionId: "gui-00000002" }], "the claim is the current record");
+  assert.deepEqual(await ledger.staleCopies(), [stale]);
+  // The session owns the sandbox: its stop keeps it again, and that transition removes the stale copy.
+  assert.deepEqual(await session.stop(), []);
+  assert.deepEqual(await keptRecords(ledger), [{ kept: true, sessionId: "gui-00000002" }]);
+  assert.deepEqual(await ledger.staleCopies(), []);
+  assert.deepEqual(api.deleted, []);
+});
+
+test("BB1: a start whose kept-sandbox claim commits and then fails (releasing the ledger lock) fails with the claim attached; the retry returns it to the kept set", async (t) => {
+  const { env, api, ledger, start } = await setup(t, { lockTimeoutMs: 120 });
+  const first = await start({ config: config({ keepSandbox: true }) });
+  await first.stop();
+  const freeMarker = (path) => path.startsWith(join(env.ledgerDir, ".lock.")) && path.endsWith(".free");
+  const error = await withFsFailureOnce("writeFile", freeMarker, () => start({ config: config({ keepSandbox: true }) })).then(
+    () => assert.fail("the start succeeded"),
+    (e) => e,
+  );
+  assert.equal(error.injected, true);
+  assert.match(error.message, /claiming a kept sandbox/);
+  const attached = startLeftovers(error);
+  assert.ok(attached, "the committed claim is attached for the runtime to track and retry");
+  assert.equal(attached.leftovers[0].id, REF);
+  assert.match(attached.leftovers[0].detail, /moving its ledger record to the kept set failed/);
+  assert.deepEqual(await keptRecords(ledger), [{ kept: false, sessionId: "gui-00000002" }], "claimed, not yet returned");
+  assert.equal((await attached.session.auditFootprint()).length, 1, "reported while the claim is owed");
+  // The failed release left this process's lock generation unfreed; free it, as recovery after an exit would.
+  const top = Math.max(...(await readdir(env.ledgerDir)).map((f) => /^\.lock\.(\d+)$/.exec(f)?.[1]).filter(Boolean).map(Number));
+  await writeFile(join(env.ledgerDir, `.lock.${top}.free`), "");
+  assert.deepEqual(await attached.session.stop(), []);
+  assert.deepEqual(await keptRecords(ledger), [{ kept: true, sessionId: "gui-00000002" }]);
+  assert.deepEqual(api.deleted, []);
+  assert.equal(api.methods().filter((m) => m === "createSandbox").length, 1, "no new sandbox");
 });

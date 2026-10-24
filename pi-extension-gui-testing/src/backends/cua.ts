@@ -244,7 +244,12 @@ export class CuaBackend implements Backend, DriftCapability, ResetCapability, Sw
         try {
           claimed = await this.ledger.claimKept(location, project, owner, { image, exclude: tried });
         } catch (error) {
-          throw startError("claiming a kept sandbox", error);
+          const failure = startError("claiming a kept sandbox", error);
+          // The claim may have committed before the failure (for example in releasing the ledger lock): a
+          // record that now names this session goes back to the kept set, or is attached to the failure.
+          const committed = await this.#claimedBy(owner, tried);
+          if (committed) await settle(committed, "keep", failure);
+          throw failure;
         }
         if (!claimed) break;
         tried.add(claimed.name);
@@ -369,6 +374,12 @@ export class CuaBackend implements Backend, DriftCapability, ResetCapability, Sw
       throw error;
     }
     return session;
+  }
+
+  /** The active record a claim of `owner` committed (not one of `tried`, which are settled already), if any. */
+  async #claimedBy(owner: { ownerLabel: string; sessionId: string }, tried: ReadonlySet<string>): Promise<LedgerRecord | undefined> {
+    const entries = await this.ledger.entries().catch(() => []);
+    return entries.find((e) => !e.kept && e.record && e.record.sessionId === owner.sessionId && e.record.ownerLabel === owner.ownerLabel && e.record.phase === "created" && !tried.has(e.record.name))?.record;
   }
 
   /** Launch warnings for kept sandboxes of this project that cannot be reused with `image` (not already reported). */

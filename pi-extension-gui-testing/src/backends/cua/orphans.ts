@@ -37,6 +37,10 @@ function problemLeftover(entry: LedgerEntry): Leftover {
   return { kind: "ledger", id: entry.file, detail: `unreadable sandbox record (${entry.problem}); not acted on` };
 }
 
+/** Detail of a superseded copy of a record that a ledger change committed but could not remove. */
+export const STALE_COPY =
+  "stale copy of a sandbox record (superseded by its newer copy, so it is ignored); a ledger change could not remove it, or was interrupted first. The sandbox's next ledger change removes it; it does not bill";
+
 /** Detail of a record pending deletion whose owner process still runs (it may be deleting it right now). */
 const PENDING_LIVE_OWNER = "pending deletion; its owner process still runs, so the sweep leaves it to that process (/gui-reset cua deletes it now)";
 const PENDING = "pending deletion; the next sweep (/gui-cleanup cua) or /gui-reset cua deletes it";
@@ -69,7 +73,7 @@ async function unrecorded(options: OrphanOptions, entries: readonly LedgerEntry[
   }
 }
 
-/** Read-only: sandboxes pending deletion, dead owners' sandboxes, owners that cannot be judged, unreadable records, unrecorded sandboxes of this machine. */
+/** Read-only: sandboxes pending deletion, dead owners' sandboxes, owners that cannot be judged, unreadable records, stale record copies, unrecorded sandboxes of this machine. */
 export async function auditCuaOrphans(options: OrphanOptions): Promise<Leftover[]> {
   const procRoot = options.procRoot ?? DEFAULT_PROC_ROOT;
   const entries = await options.ledger.entries();
@@ -91,6 +95,7 @@ export async function auditCuaOrphans(options: OrphanOptions): Promise<Leftover[
     if (liveness === "dead") leftovers.push({ kind: "sandbox", id: entry.record.ref, detail: entry.record.keep ? "owner gone; will be kept (keepSandbox)" : "owner gone" });
     else if (liveness === "unknown") leftovers.push({ kind: "sandbox", id: entry.record.ref, detail: "owner unknown; not removed automatically" });
   }
+  for (const file of await options.ledger.staleCopies()) leftovers.push({ kind: "ledger", id: file, detail: STALE_COPY });
   leftovers.push(...(await unrecorded(options, entries)));
   return leftovers;
 }

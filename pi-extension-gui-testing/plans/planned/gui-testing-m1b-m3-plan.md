@@ -109,6 +109,11 @@ Round-3 fixes, accepted: Y1 cua `markKept` failure swallowed on stop/shutdown �
 
 AA1–AA3 accepted. Fix AA-r1 (`claude-opus-5-5`, handoff `plans/handoffs/post-m1-AA.md`): ledger generations + full-state CAS, `deleting` terminal; temp-file + rename commit point, `deleting` records anywhere treated as pending deletion; printable-ASCII byte check and exact session path match for remote display locks. Owner rerun: 542/542 on Node 26 and 22; helper tests only `gi` errors. Accepted residual: dot-prefixed temp files after a mid-write kill are ignored but not removed. Round 4 revalidation launched (P-A4, P-B4).
 
+| P-A4 | Pi / `openai-codex/gpt-6.1-sol` (xhigh), seat A | `…gui-testing-post-m1-review-A-r4` | completed: **ready after fixes**; AA1–AA3 fixed; 1 blocking (BB1) + 1 non-blocking (BB2) |
+| P-B4 | Pi / `openai-codex/gpt-6.1-sol` (xhigh), seat B | `…gui-testing-post-m1-review-B-r4` | completed: **not ready**; R3 items fixed; 1 blocking (same as BB1) + 1 non-blocking (BB3); concurrent suites 542/542 ×2 |
+
+Accepted: BB1 post-commit stale-copy removal failure in `claimKept` loses a committed claim (both seats); BB2 `remove()` must unlink the stale copy before the current one; BB3 `/gui-reset` report reconciles resolved leftovers + TECHNICAL reset table lists pending deletions. Fix BB-r1 (`claude-opus-5-5`, handoff `plans/handoffs/post-m1-BB.md`): post-commit stale-copy removal is best-effort GC with audit reporting and claim recovery at startup; `remove()` deletes the stale copy first; `/gui-reset` re-audits. Worker-reported lock-release bug (released flag set before the `.free` marker write) fixed by owner (BB4) with a fail-before/pass-after test. Owner rerun: 548/548 on Node 26 and 22. Round 5 revalidation launched (P-A5, P-B5).
+
 ## 8. Open live verification
 
 Filled in at completion.

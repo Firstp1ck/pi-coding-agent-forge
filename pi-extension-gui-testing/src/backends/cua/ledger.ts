@@ -12,9 +12,11 @@
  *
  * Every transition writes the new record to a temp file and renames it onto
  * its destination with a generation above the old one (the single commit
- * point), and only then removes the copy it replaced. A crash between the two
- * leaves both copies; the higher generation is the current one, and readers
- * and the next transition ignore or remove the stale copy. `deleting` is
+ * point), and only then removes the copy it replaced. A crash between the two,
+ * or a failure of that removal, leaves both copies; the higher generation is
+ * the current one, readers ignore the stale copy, the next transition removes
+ * it, and the orphan audit reports it meanwhile. Removing that copy is garbage
+ * collection: its failure never fails a committed transition. `deleting` is
  * terminal: such a record (in either set, also an older version's crash
  * residue in the kept set) is never kept, claimed, or reused again, only
  * deleted and removed.
@@ -245,7 +247,10 @@ export class SandboxLedger {
   async #commit(record: LedgerRecord, kept: boolean, loaded: Loaded): Promise<LedgerRecord> {
     const next: LedgerRecord = { ...record, generation: Math.max(loaded.active?.generation ?? 0, loaded.kept?.generation ?? 0) + 1 };
     await writeJsonAtomic(this.#file(record.name, kept), next, { mode: 0o600, dirMode: 0o700 });
-    if (kept ? loaded.active : loaded.kept) await rm(this.#file(record.name, !kept), { force: true });
+    // Committed. The replaced copy is now stale (a lower generation): removing it is best-effort garbage
+    // collection, so a failure here must not make the caller believe the transition did not happen.
+    // A copy left behind is ignored by readers, removed by the next transition, and reported by the audit.
+    if (kept ? loaded.active : loaded.kept) await rm(this.#file(record.name, !kept), { force: true }).catch(() => undefined);
     return next;
   }
 
@@ -298,9 +303,10 @@ export class SandboxLedger {
       const loaded = await this.#load(name);
       const now = loaded.current;
       if (expect && now && (now.kept !== kept || !matches(now.record, expect))) return false;
-      await rm(this.#file(name, kept), { force: true });
-      // A stale copy in the other set goes too, once the current record was in this one.
+      // A stale copy in the other set goes first, while the current record still outranks it: removing the
+      // current record first would let a crash in between make the stale (older) generation current again.
       if (now?.kept === kept && (kept ? loaded.active : loaded.kept)) await rm(this.#file(name, !kept), { force: true });
+      await rm(this.#file(name, kept), { force: true });
       return true;
     });
   }
@@ -372,6 +378,20 @@ export class SandboxLedger {
    * read or validated. A missing directory is an empty ledger.
    */
   async entries(): Promise<LedgerEntry[]> {
+    return (await this.#listed()).entries;
+  }
+
+  /**
+   * Files of stale copies: a record's other copy, superseded by its current
+   * one (a higher generation) and ignored by readers. One is left only when a
+   * transition was interrupted, or failed to remove it, after its commit; the
+   * sandbox's next transition removes it.
+   */
+  async staleCopies(): Promise<string[]> {
+    return (await this.#listed()).stale;
+  }
+
+  async #listed(): Promise<{ entries: LedgerEntry[]; stale: string[] }> {
     // A transition may replace a file between the listing and its read; list again then.
     for (let attempt = 0; ; attempt++) {
       const listed = await this.#list(attempt < 4);
@@ -379,12 +399,12 @@ export class SandboxLedger {
     }
   }
 
-  async #list(retryOnVanished: boolean): Promise<LedgerEntry[] | undefined> {
+  async #list(retryOnVanished: boolean): Promise<{ entries: LedgerEntry[]; stale: string[] } | undefined> {
     let names: string[];
     try {
       names = await readdir(this.dir);
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return { entries: [], stale: [] };
       throw error;
     }
     const entries: LedgerEntry[] = [];
@@ -420,11 +440,15 @@ export class SandboxLedger {
         entries.push({ file: path, kept, problem: `unreadable: ${(error as Error).message}` });
       }
     }
+    const stale: string[] = [];
     for (const pair of byName.values()) {
       const now = current(pair.active?.record, pair.kept?.record);
-      if (now) entries.push((now.kept ? pair.kept : pair.active)!);
+      if (!now) continue;
+      entries.push((now.kept ? pair.kept : pair.active)!);
+      const other = now.kept ? pair.active : pair.kept;
+      if (other) stale.push(other.file);
     }
-    return entries.sort((a, b) => (a.file < b.file ? -1 : a.file > b.file ? 1 : 0));
+    return { entries: entries.sort((a, b) => (a.file < b.file ? -1 : a.file > b.file ? 1 : 0)), stale: stale.sort() };
   }
 }
 
