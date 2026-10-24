@@ -33,8 +33,17 @@ export const NO_IMAGE_KEPT =
 const UNRECORDED =
   "carries this machine's name prefix but has no record in the local ledger (record lost or another Pi config dir); not removed automatically. Delete it with `cua sandbox rm <ref> --force` if it is yours";
 
+/**
+ * A copy of an unknown record (one of its copies cannot be read or
+ * validated): the sandbox may belong to a running session, so nothing acts
+ * on it; the user resolves it by hand.
+ */
 function problemLeftover(entry: LedgerEntry): Leftover {
-  return { kind: "ledger", id: entry.file, detail: `unreadable sandbox record (${entry.problem}); not acted on` };
+  return {
+    kind: "ledger",
+    id: entry.file,
+    detail: `unreadable sandbox record (${entry.problem}); its sandbox ${entry.name} is never reused, kept, or deleted automatically. If no Pi session uses it, delete the sandbox with \`cua sandbox rm <location>:${entry.name} --force\` (\`cua sandbox ls\` shows its location), then remove this file and the sandbox's other record file, if any`,
+  };
 }
 
 /** Detail of a superseded copy of a record that a ledger change committed but could not remove. */
@@ -52,17 +61,23 @@ const PENDING = "pending deletion; the next sweep (/gui-cleanup cua) or /gui-res
 async function finishDeletion(options: Omit<OrphanOptions, "procRoot">, record: LedgerRecord, kept: boolean, result: SweepResult, failed: string): Promise<void> {
   try {
     await options.api.deleteSandbox(record.ref, options.signal);
-    options.onDeleted?.(record.ref);
+  } catch (error) {
+    result.leftovers.push({ kind: "sandbox", id: record.ref, detail: `${failed}: ${redact((error as Error).message)}` });
+    return;
+  }
+  options.onDeleted?.(record.ref);
+  try {
     if (await options.ledger.remove(record.name, kept, expectedState(record))) result.deleted.push(record.ref);
     else result.leftovers.push({ kind: "ledger", id: record.ref, detail: "sandbox deleted, but its ledger record changed meanwhile; not removed" });
   } catch (error) {
-    result.leftovers.push({ kind: "sandbox", id: record.ref, detail: `${failed}: ${redact((error as Error).message)}` });
+    result.leftovers.push({ kind: "ledger", id: record.ref, detail: `sandbox deleted, but removing its ledger record failed: ${redact((error as Error).message)}` });
   }
 }
 
 /** Sandboxes with this machine's prefix that no ledger record names (read-only). */
 async function unrecorded(options: OrphanOptions, entries: readonly LedgerEntry[]): Promise<Leftover[]> {
-  const known = new Set(entries.map((e) => e.record?.name).filter(Boolean));
+  // Also the names of unknown records: their sandbox is recorded, only its record cannot be read.
+  const known = new Set(entries.map((e) => e.name));
   const prefix = hostPrefix(options.hostTag);
   try {
     return (await options.api.listSandboxes(options.signal))
@@ -174,8 +189,9 @@ export async function sweepCuaOrphans(options: OrphanOptions): Promise<SweepResu
  * `/gui-reset cua`: deletes every kept sandbox of this machine (each record
  * claimed first, as `deleting`) and every sandbox already pending deletion,
  * after the orphan sweep. A failed deletion stays recorded as `deleting`, so
- * the next sweep or reset retries it. Live sessions are stopped by the
- * runtime before this runs.
+ * the next sweep or reset retries it. An unknown record (unreadable copy) is
+ * left alone and reported with its manual remedy. Live sessions are stopped
+ * by the runtime before this runs.
  */
 export async function deleteKeptSandboxes(options: Omit<OrphanOptions, "procRoot">): Promise<SweepResult> {
   const { ledger, signal } = options;
@@ -184,7 +200,10 @@ export async function deleteKeptSandboxes(options: Omit<OrphanOptions, "procRoot
   for (const entry of await ledger.entries()) {
     if (signal.aborted) break;
     const record = entry.record;
-    if (!record) continue;
+    if (!record) {
+      result.leftovers.push(problemLeftover(entry));
+      continue;
+    }
     if (pendingDeletion(entry)) {
       await finishDeletion(options, record, entry.kept, result, failed);
       continue;

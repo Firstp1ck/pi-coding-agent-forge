@@ -28,6 +28,13 @@
  * record still has it (compare-and-swap). A sweep or a session working from
  * an older read can therefore never move, claim, or delete a record another
  * process has changed since. Reads (`read`, `entries`) take no lock.
+ *
+ * A record is unknown when any of its copies exists but cannot be read or
+ * validated: which copy is current, and so who owns the sandbox, cannot be
+ * told. Such a record fails closed. It is never claimed, kept, or replaced,
+ * transitions that would change it throw ({@link UnreadableRecordError}),
+ * `entries()` lists every copy of it as a problem (never as a record), and the
+ * audit, sweep, and reset only report it.
  */
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -154,6 +161,23 @@ export function defaultLedgerDir(): string {
 const ACTIVE = ".json";
 const KEPT = ".kept.json";
 
+/** One copy of a record as read: the record, or why it cannot be used. */
+type Copy = { record: LedgerRecord; problem?: undefined } | { problem: string; record?: undefined };
+
+/** The copy in `text` of the file of sandbox `name`. */
+function parseCopy(text: string, name: string): Copy {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(text);
+  } catch (error) {
+    return { problem: `unreadable: ${(error as Error).message}` };
+  }
+  const problem = recordProblem(raw);
+  if (problem) return { problem };
+  if ((raw as LedgerRecord).name !== name) return { problem: "file name and record disagree" };
+  return { record: raw as LedgerRecord };
+}
+
 function recordProblem(raw: unknown): string | undefined {
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return "not an object";
   const r = raw as Record<string, unknown>;
@@ -188,14 +212,32 @@ interface Loaded {
   current?: { record: LedgerRecord; kept: boolean };
   active?: LedgerRecord;
   kept?: LedgerRecord;
+  /** Set when a copy exists but cannot be read or validated: the record is unknown and is not changed. */
+  unknown?: string;
 }
 
 export interface LedgerEntry {
   record?: LedgerRecord;
-  /** Set when the file could not be read or validated; such entries are reported, never acted on. */
+  /**
+   * Set when the file could not be read or validated, or when the other copy
+   * of its record could not: such entries are reported, never acted on.
+   */
   problem?: string;
+  /** Sandbox name (from the file name). */
+  name: string;
   file: string;
   kept: boolean;
+}
+
+/** Detail of the readable copy of a record whose other copy cannot be read. */
+const OTHER_COPY_UNREADABLE = "its other copy cannot be read, so which copy is current is unknown";
+
+/** A transition refused because a copy of the record cannot be read or validated (the record is unknown). */
+export class UnreadableRecordError extends Error {
+  constructor(name: string, problem: string) {
+    super(`the ledger record of sandbox ${name} cannot be read (${problem}), so it is not changed; /gui-doctor lists it with the manual remedy`);
+    this.name = "UnreadableRecordError";
+  }
 }
 
 /** A record whose sandbox is to be deleted (wherever its file is): never kept, claimed, or reused. */
@@ -221,20 +263,33 @@ export class SandboxLedger {
     return join(this.dir, `${name}${kept ? KEPT : ACTIVE}`);
   }
 
-  async #readCopy(name: string, kept: boolean): Promise<LedgerRecord | undefined> {
-    let raw: unknown;
+  /** One copy; `undefined` only when its file does not exist. */
+  async #readCopy(name: string, kept: boolean): Promise<Copy | undefined> {
+    let text: string;
     try {
-      raw = JSON.parse(await readFile(this.#file(name, kept), "utf8"));
-    } catch {
-      return undefined;
+      text = await readFile(this.#file(name, kept), "utf8");
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+      return { problem: `unreadable: ${(error as Error).message}` };
     }
-    return recordProblem(raw) || (raw as LedgerRecord).name !== name ? undefined : (raw as LedgerRecord);
+    return parseCopy(text, name);
   }
 
   async #load(name: string): Promise<Loaded> {
-    const [active, kept] = await Promise.all([this.#readCopy(name, false), this.#readCopy(name, true)]);
+    const [activeCopy, keptCopy] = await Promise.all([this.#readCopy(name, false), this.#readCopy(name, true)]);
+    // Fail closed: a copy that exists but cannot be used may be the current one.
+    const problem = activeCopy?.problem ?? keptCopy?.problem;
+    if (problem !== undefined) return { unknown: `${activeCopy?.problem !== undefined ? `${name}${ACTIVE}` : `${name}${KEPT}`}: ${problem}` };
+    const active = activeCopy?.record;
+    const kept = keptCopy?.record;
     const now = current(active, kept);
     return { ...(now ? { current: now } : {}), ...(active ? { active } : {}), ...(kept ? { kept } : {}) };
+  }
+
+  /** `loaded`, unless its record is unknown: then the transition throws. */
+  #known(name: string, loaded: Loaded): Loaded {
+    if (loaded.unknown !== undefined) throw new UnreadableRecordError(name, loaded.unknown);
+    return loaded;
   }
 
   /**
@@ -261,7 +316,7 @@ export class SandboxLedger {
   async write(record: LedgerRecord): Promise<void> {
     this.#file(record.name, false);
     await this.#lock.run(async () => {
-      const loaded = await this.#load(record.name);
+      const loaded = this.#known(record.name, await this.#load(record.name));
       if (loaded.current?.record.phase === "deleting") throw new Error(`sandbox ${record.name} is pending deletion; its record is not replaced`);
       await this.#commit(record, false, loaded);
     });
@@ -270,12 +325,13 @@ export class SandboxLedger {
   /**
    * Changes the active record; only while it still has `expect`'s state, when
    * given. A record pending deletion takes no change other than `deleting`.
+   * Throws for an unknown record.
    */
   async update(name: string, change: Partial<LedgerRecord>, expect?: ExpectedOwner): Promise<LedgerRecord | undefined> {
     this.#file(name, false);
     const { generation: _ignored, name: _name, ...wanted } = change;
     return this.#lock.run(async () => {
-      const loaded = await this.#load(name);
+      const loaded = this.#known(name, await this.#load(name));
       const now = loaded.current;
       if (!now || now.kept || !matches(now.record, expect)) return undefined;
       const next = { ...now.record, ...wanted };
@@ -286,7 +342,7 @@ export class SandboxLedger {
     });
   }
 
-  /** The current record of `name` when it is in the active (or, with `kept`, the kept) set. Takes no lock. */
+  /** The current record of `name` when it is in the active (or, with `kept`, the kept) set; none when it is unknown. Takes no lock. */
   async read(name: string, kept = false): Promise<LedgerRecord | undefined> {
     const now = (await this.#load(name)).current;
     return now && now.kept === kept ? now.record : undefined;
@@ -295,12 +351,12 @@ export class SandboxLedger {
   /**
    * Removes a record once the sandbox is confirmed gone; with `expect`, only
    * while the current record is in that set and still has that state. `true`
-   * when no such record is left.
+   * when no such record is left. Throws for an unknown record, which stays.
    */
   async remove(name: string, kept = false, expect?: ExpectedOwner): Promise<boolean> {
     this.#file(name, kept);
     return this.#lock.run(async () => {
-      const loaded = await this.#load(name);
+      const loaded = this.#known(name, await this.#load(name));
       const now = loaded.current;
       if (expect && now && (now.kept !== kept || !matches(now.record, expect))) return false;
       // A stale copy in the other set goes first, while the current record still outranks it: removing the
@@ -314,14 +370,15 @@ export class SandboxLedger {
   /**
    * Moves the active record to the kept set (the sandbox stays), only while
    * it still belongs to `expect` (a session id, or the full state a sweep
-   * read) and is not pending deletion. `true` when it moved.
+   * read) and is not pending deletion. `true` when it moved. Throws for an
+   * unknown record.
    */
   async markKept(name: string, expect: string | ExpectedOwner): Promise<boolean> {
     const owner = typeof expect === "string" ? { sessionId: expect } : expect;
     if (typeof owner?.sessionId !== "string") throw new Error("markKept needs the session id of the record it keeps");
     this.#file(name, false);
     return this.#lock.run(async () => {
-      const loaded = await this.#load(name);
+      const loaded = this.#known(name, await this.#load(name));
       const now = loaded.current;
       if (!now || now.kept || now.record.phase === "deleting" || !matches(now.record, owner)) return false;
       await this.#commit({ ...now.record, keptAt: new Date().toISOString() }, true, loaded);
@@ -332,7 +389,7 @@ export class SandboxLedger {
   /**
    * Claims a kept sandbox for a new session: a kept record of `project` in
    * `location` (with `image`: recorded as made from that image; with
-   * `exclude`: none of those names), never one pending deletion. Returns the
+   * `exclude`: none of those names), never one pending deletion or unknown. Returns the
    * claimed record, now active with `phase: "created"` and the new owner.
    */
   async claimKept(location: string, project: string, owner: { ownerLabel: string; sessionId: string }, options: { image?: string; exclude?: ReadonlySet<string> } = {}): Promise<LedgerRecord | undefined> {
@@ -345,6 +402,7 @@ export class SandboxLedger {
       for (const name of candidates) {
         const loaded = await this.#load(name);
         const now = loaded.current;
+        // An unknown record has no current copy: its sandbox may be another session's.
         if (!now?.kept || !claimable(now.record)) continue;
         const claimed: LedgerRecord = { ...now.record, ...owner, phase: "created", keep: true };
         delete claimed.keptAt;
@@ -359,7 +417,7 @@ export class SandboxLedger {
    * `phase: "deleting"` (terminal), so no session reuses it and the sweep or
    * the next reset retries a failed deletion. Returns the committed record
    * (pass it to {@link expectedState} for the removal), or `undefined` when it
-   * is no longer kept.
+   * is no longer kept (or is unknown).
    */
   async claimForDeletion(name: string): Promise<LedgerRecord | undefined> {
     this.#file(name, true);
@@ -375,7 +433,9 @@ export class SandboxLedger {
   /**
    * Every record, active and kept: one entry per sandbox (its current copy;
    * a stale copy left by a crash is skipped), plus every file that cannot be
-   * read or validated. A missing directory is an empty ledger.
+   * read or validated. Every copy of an unknown record (one copy cannot be
+   * read or validated) is a problem entry, never a record. A missing
+   * directory is an empty ledger.
    */
   async entries(): Promise<LedgerEntry[]> {
     return (await this.#listed()).entries;
@@ -412,36 +472,30 @@ export class SandboxLedger {
     for (const file of names.sort()) {
       if (!file.startsWith(SANDBOX_PREFIX) || !file.endsWith(ACTIVE)) continue;
       const kept = file.endsWith(KEPT);
+      const name = file.slice(0, -(kept ? KEPT : ACTIVE).length);
       const path = join(this.dir, file);
-      let text: string;
+      let copy: Copy;
       try {
-        text = await readFile(path, "utf8");
+        copy = parseCopy(await readFile(path, "utf8"), name);
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code === "ENOENT") {
           if (retryOnVanished) return undefined;
           continue;
         }
-        entries.push({ file: path, kept, problem: `unreadable: ${(error as Error).message}` });
-        continue;
+        copy = { problem: `unreadable: ${(error as Error).message}` };
       }
-      try {
-        const raw: unknown = JSON.parse(text);
-        const problem = recordProblem(raw);
-        const expected = `${(raw as LedgerRecord)?.name}${kept ? KEPT : ACTIVE}`;
-        if (problem) entries.push({ file: path, kept, problem });
-        else if (expected !== file) entries.push({ file: path, kept, problem: "file name and record disagree" });
-        else {
-          const entry = { file: path, kept, record: raw as LedgerRecord };
-          const pair = byName.get(entry.record.name) ?? {};
-          pair[kept ? "kept" : "active"] = entry;
-          byName.set(entry.record.name, pair);
-        }
-      } catch (error) {
-        entries.push({ file: path, kept, problem: `unreadable: ${(error as Error).message}` });
-      }
+      const pair = byName.get(name) ?? {};
+      pair[kept ? "kept" : "active"] = { file: path, kept, name, ...copy };
+      byName.set(name, pair);
     }
     const stale: string[] = [];
     for (const pair of byName.values()) {
+      const copies = [pair.active, pair.kept].filter((c): c is LedgerEntry => c !== undefined);
+      if (copies.some((c) => c.problem !== undefined)) {
+        // Unknown: the unusable copy may be the current one, so no copy is acted on.
+        for (const c of copies) entries.push(c.problem !== undefined ? c : { file: c.file, kept: c.kept, name: c.name, problem: OTHER_COPY_UNREADABLE });
+        continue;
+      }
       const now = current(pair.active?.record, pair.kept?.record);
       if (!now) continue;
       entries.push((now.kept ? pair.kept : pair.active)!);

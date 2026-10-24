@@ -74,10 +74,18 @@ function leftoverLines(title: string, leftovers: readonly Leftover[]): string {
 }
 
 /**
+ * An audit leftover that reports the audit's own failure (some audits return
+ * one in-band, e.g. cua's failed sandbox listing or the remote Docker audit),
+ * so it could not establish what is gone.
+ */
+const AUDIT_FAILURE = /\bfailed\b/;
+
+/**
  * The sweep findings a reset left in place: `/gui-reset` sweeps before its
  * `resetData`, which may resolve some of them (cua deletes sandboxes pending
  * deletion). A fresh audit decides; a finding it no longer reports is gone.
- * When the audit fails, every finding stands, marked as possibly stale.
+ * When the audit fails (thrown, or reported as a leftover), every finding
+ * stands with the failure, marked as possibly stale and possibly incomplete.
  */
 async function stillThere(found: readonly Leftover[], audit: () => Promise<Leftover[]>, id: BackendId): Promise<Leftover[]> {
   if (found.length === 0) return [];
@@ -87,8 +95,14 @@ async function stillThere(found: readonly Leftover[], audit: () => Promise<Lefto
   } catch (error) {
     return [...found, { kind: "audit", id, detail: `the audit after the reset failed, so these findings may be resolved already: ${(error as Error).message}` }];
   }
-  const remaining = new Set(now.map((l) => `${l.kind}:${l.id}`));
-  return found.filter((l) => remaining.has(`${l.kind}:${l.id}`));
+  const key = (l: Leftover) => `${l.kind}:${l.id}`;
+  const before = new Set(found.map(key));
+  const failures = now.filter((l) => !before.has(key(l)) && AUDIT_FAILURE.test(l.detail ?? ""));
+  if (failures.length > 0) {
+    return [...found, ...failures, { kind: "audit", id, detail: "the audit after the reset could not finish, so this list may be incomplete and some findings may be resolved already" }];
+  }
+  const remaining = new Set(now.map(key));
+  return found.filter((l) => remaining.has(key(l)));
 }
 
 /** Sends one report for the running command (mode-aware, with config warnings appended). */

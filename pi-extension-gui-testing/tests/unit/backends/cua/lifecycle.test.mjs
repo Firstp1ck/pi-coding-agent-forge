@@ -657,17 +657,23 @@ test("BB1: a start whose kept-sandbox claim commits but cannot unlink the stale 
   assert.deepEqual(api.deleted, []);
 });
 
-test("BB1: a start whose kept-sandbox claim commits and then fails (releasing the ledger lock) fails with the claim attached; the retry returns it to the kept set", async (t) => {
+test("BB1/CC2: a start whose kept-sandbox claim commits and then fails (releasing the ledger lock) fails with the claim attached; the retry settles the owed lock release and returns it to the kept set", async (t) => {
   const { env, api, ledger, start } = await setup(t, { lockTimeoutMs: 120 });
   const first = await start({ config: config({ keepSandbox: true }) });
   await first.stop();
   const freeMarker = (path) => path.startsWith(join(env.ledgerDir, ".lock.")) && path.endsWith(".free");
-  // Every release attempt fails (the release retries a transient failure; see the next test).
-  const error = await withFsFailureOnce("writeFile", freeMarker, () => start({ config: config({ keepSandbox: true }) }), 3).then(
+  // Every release attempt of the claim fails (3 marker writes; the release retries a transient failure, see the
+  // next test), and so does the start's attempt to return the claim: the owed marker (1 write) and the lock file
+  // of the generation that would supersede it.
+  let frees = 0;
+  let tempFailed = false;
+  const failing = (path) => (freeMarker(path) ? ++frees <= 4 : path.includes("/.lock-tmp.") && frees >= 3 && !tempFailed && (tempFailed = true));
+  const error = await withFsFailureOnce("writeFile", failing, () => start({ config: config({ keepSandbox: true }) }), 5).then(
     () => assert.fail("the start succeeded"),
     (e) => e,
   );
   assert.equal(error.injected, true);
+  assert.equal([frees, tempFailed].join(), "4,true");
   assert.match(error.message, /claiming a kept sandbox/);
   const attached = startLeftovers(error);
   assert.ok(attached, "the committed claim is attached for the runtime to track and retry");
@@ -675,12 +681,30 @@ test("BB1: a start whose kept-sandbox claim commits and then fails (releasing th
   assert.match(attached.leftovers[0].detail, /moving its ledger record to the kept set failed/);
   assert.deepEqual(await keptRecords(ledger), [{ kept: false, sessionId: "gui-00000002" }], "claimed, not yet returned");
   assert.equal((await attached.session.auditFootprint()).length, 1, "reported while the claim is owed");
-  // The failed release left this process's lock generation unfreed; free it, as recovery after an exit would.
-  const top = Math.max(...(await readdir(env.ledgerDir)).map((f) => /^\.lock\.(\d+)$/.exec(f)?.[1]).filter(Boolean).map(Number));
-  await writeFile(join(env.ledgerDir, `.lock.${top}.free`), "");
+  // The filesystem is healthy again. No marker is written by hand: the retry's own acquisition settles the
+  // release this process owes.
   assert.deepEqual(await attached.session.stop(), []);
   assert.deepEqual(await keptRecords(ledger), [{ kept: true, sessionId: "gui-00000002" }]);
   assert.deepEqual(api.deleted, []);
+  assert.equal(api.methods().filter((m) => m === "createSandbox").length, 1, "no new sandbox");
+});
+
+test("CC2: a start whose claim commits but whose lock release fails three times returns the claim at once when the next lock acquisition can settle the owed release", async (t) => {
+  const { env, api, ledger, start } = await setup(t, { lockTimeoutMs: 120 });
+  const first = await start({ config: config({ keepSandbox: true }) });
+  await first.stop();
+  const freeMarker = (path) => path.startsWith(join(env.ledgerDir, ".lock.")) && path.endsWith(".free");
+  const error = await withFsFailureOnce("writeFile", freeMarker, () => start({ config: config({ keepSandbox: true }) }), 3).then(
+    () => assert.fail("the start succeeded"),
+    (e) => e,
+  );
+  assert.match(error.message, /claiming a kept sandbox/);
+  assert.equal(startLeftovers(error), undefined, "nothing is left to track: the claim went back to the kept set");
+  assert.deepEqual(await keptRecords(ledger), [{ kept: true, sessionId: "gui-00000002" }]);
+  // And the lock is free: the next start reuses the kept sandbox.
+  const third = await start({ config: config({ keepSandbox: true }) });
+  assert.deepEqual(await keptRecords(ledger), [{ kept: false, sessionId: "gui-00000003" }]);
+  assert.deepEqual(await third.stop(), []);
   assert.equal(api.methods().filter((m) => m === "createSandbox").length, 1, "no new sandbox");
 });
 

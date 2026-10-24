@@ -309,7 +309,7 @@ export class FakeSsh {
 /**
  * Writes `<sandbox>/bin/ssh`, a loopback `ssh` that runs the remote command
  * here under `/bin/sh -c` (as sshd runs it under the login shell), with
- * `XDG_RUNTIME_DIR`, `HOME`, and a fake `id` (uid/gid 4242424) inside the
+ * `XDG_RUNTIME_DIR`, `HOME`, and a fake `id` (uid/gid `options.uid`, default 4242424) inside the
  * sandbox, so remote scripts never touch the real `/tmp/pi-gui-testing-<uid>`.
  * `<sandbox>/unreachable` makes every connection fail with exit 255.
  *
@@ -325,7 +325,7 @@ export async function loopbackSsh(sandbox, options = {}) {
   const shell = options.loginShell ?? "/bin/sh";
   await writeFile(
     join(fakebin, "id"),
-    `#!/bin/sh\ncase "$1" in -u|-g) echo 4242424 ;; *) exec /usr/bin/id "$@" ;; esac\n`,
+    `#!/bin/sh\ncase "$1" in -u|-g) echo ${options.uid ?? 4242424} ;; *) exec /usr/bin/id "$@" ;; esac\n`,
   );
   await chmod(join(fakebin, "id"), 0o755);
   const script = `#!/bin/sh

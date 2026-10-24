@@ -30,19 +30,19 @@ const OWNER_DEAD = `c1:999999:123:${BOOT}`;
 const OWNER_ALIVE = `c2:4321:777:${BOOT}`;
 const OWNER_FOREIGN = "c3:55:66:ffffffff-0000-0000-0000-000000000000";
 
-async function sandbox(t) {
+async function sandbox(t, uid = 4242424) {
   const root = await mkdtemp("/tmp/pgt-lb-");
-  const lb = await loopbackSsh(root);
+  const lb = await loopbackSsh(root, { uid });
   const transport = new SshTransport({ destination: "loop", ssh: lb.ssh });
   const procRoot = join(root, "proc");
   fakeProc(procRoot, { 4321: 777 });
   t.after(async () => {
     await rm(root, { recursive: true, force: true });
     // The symlinked-root case falls back to the /tmp candidate of the fake uid.
-    const fallback = "/tmp/pi-gui-testing-4242424";
+    const fallback = `/tmp/pi-gui-testing-${uid}`;
     if ((await lstat(fallback).catch(() => undefined))?.uid === process.getuid()) await rm(fallback, { recursive: true, force: true });
   });
-  return { root, lb, transport, procRoot, base: join(lb.xdg, "pi-gui-testing") };
+  return { root, lb, transport, procRoot, uid, base: join(lb.xdg, "pi-gui-testing") };
 }
 
 function create(transport, name, owner = OWNER_DEAD) {
@@ -81,14 +81,15 @@ test("createRemoteSessionDir: private dir in the first usable root, owner record
 });
 
 test("a symlinked session root is never used", async (t) => {
-  const s = await sandbox(t);
+  // A uid of its own: the /tmp fallback is shared by every suite running at once.
+  const s = await sandbox(t, 4_200_000 + Math.floor(Math.random() * 40_000));
   const elsewhere = join(s.root, "elsewhere");
   await mkdir(elsewhere, { mode: 0o700 });
   await symlink(elsewhere, s.base);
   const remote = await create(s.transport, remoteSessionName("gui-link"));
   assert.notEqual(remote.base, s.base);
   assert.notEqual(remote.base, elsewhere);
-  assert.equal(remote.base, "/tmp/pi-gui-testing-4242424");
+  assert.equal(remote.base, `/tmp/pi-gui-testing-${s.uid}`);
 });
 
 test("removeRemoteSessions kills tagged processes, removes the dir and the empty root; audit is then empty", async (t) => {

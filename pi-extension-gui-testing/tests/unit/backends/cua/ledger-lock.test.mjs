@@ -12,6 +12,7 @@ import { join } from "node:path";
 import { LedgerLock } from "../../../../src/backends/cua/ledger-lock.ts";
 import { SandboxLedger } from "../../../../src/backends/cua/ledger.ts";
 import { readBootId, readProcessStartTime } from "../../../../src/cleanup/identity.ts";
+import { withFsFailureOnce } from "./fake-cua.mjs";
 
 const NAME = "pi-gui-testing-demo";
 const LOCK_MODULE = new URL("../../../../src/backends/cua/ledger-lock.ts", import.meta.url).href;
@@ -51,6 +52,18 @@ ${exitHolding ? "process.exit(0);" : "process.stdin.once('data', async () => { a
       await exited;
     },
   };
+}
+
+/** One acquisition attempt from another process: its error message, or "acquired". */
+async function acquireElsewhere(dir, timeoutMs = 150) {
+  const code = `import { LedgerLock } from ${JSON.stringify(LOCK_MODULE)};
+try { const release = await new LedgerLock(${JSON.stringify(dir)}, { timeoutMs: ${timeoutMs} }).acquire(); await release(); process.stdout.write("acquired"); }
+catch (error) { process.stdout.write(error.message); }`;
+  const child = spawn(process.execPath, ["--experimental-strip-types", "--no-warnings", "--input-type=module", "-e", code], { stdio: ["ignore", "pipe", "inherit"] });
+  let out = "";
+  child.stdout.on("data", (chunk) => (out += chunk));
+  await new Promise((resolve) => child.once("exit", resolve));
+  return out;
 }
 
 const lockFiles = async (dir) => (await readdir(dir)).filter((f) => f.startsWith(".lock")).sort();
@@ -142,9 +155,68 @@ test("a failed release stays retryable: the lock is freed once the marker can be
   await chmod(dir, 0o500);
   await assert.rejects(release(), (error) => error.code === "EACCES");
   await chmod(dir, 0o700);
-  // Before the retry the lock is still held by this (live) process.
-  await assert.rejects(new LedgerLock(dir, { timeoutMs: 100 }).acquire(), /is locked by process/);
+  // Before the retry the lock is still held by this (live) process: another process waits for it.
+  assert.match(await acquireElsewhere(dir), new RegExp(`is locked by process ${process.pid}`));
   await release();
-  const again = await new LedgerLock(dir, { timeoutMs: 1_000 }).acquire();
-  await again();
+  assert.equal(await acquireElsewhere(dir, 2_000), "acquired");
 });
+
+const isFree = (path) => path.includes("/.lock.") && path.endsWith(".free");
+
+test("CC2: a release whose marker writes all fail is owed; run() drops the closure, yet this process's next run() settles it once the filesystem recovers", async (t) => {
+  const dir = await ledgerDir(t);
+  const ledger = new SandboxLedger(dir, { lock: { timeoutMs: 300 } });
+  // All three marker writes of one transition fail: the transition committed, but run() rejects and keeps no closure.
+  const failed = await withFsFailureOnce("writeFile", isFree, () => ledger.write(record()), 3).catch((error) => error);
+  assert.equal(failed.code, "EIO");
+  assert.equal((await ledger.read(NAME))?.sessionId, "gui-old", "the transition committed");
+  // Another process never supersedes the live holder.
+  assert.match(await acquireElsewhere(dir), new RegExp(`is locked by process ${process.pid}`));
+  // The filesystem is healthy again: this process's next transition succeeds (no marker written by hand).
+  assert.equal(await ledger.markKept(NAME, "gui-old"), true);
+  assert.equal((await ledger.read(NAME, true))?.sessionId, "gui-old");
+  assert.equal(await acquireElsewhere(dir, 2_000), "acquired");
+});
+
+test("CC2: while the owed marker still cannot be written, this process supersedes only its own owed generation; a later run settles everything", async (t) => {
+  const dir = await ledgerDir(t);
+  const ledger = new SandboxLedger(dir, { lock: { timeoutMs: 300 } });
+  await assert.rejects(withFsFailureOnce("writeFile", isFree, () => ledger.write(record()), 3), { code: "EIO" });
+  // Still failing: the owed marker (1 write) and this transition's own release (3 writes). The transition still
+  // runs (it supersedes the owed generation instead of waiting for itself) and commits.
+  const second = await withFsFailureOnce("writeFile", isFree, () => ledger.markKept(NAME, "gui-old"), 4).catch((error) => error);
+  assert.equal(second.code, "EIO");
+  assert.equal((await ledger.read(NAME, true))?.sessionId, "gui-old", "the second transition ran and committed");
+  assert.match(await acquireElsewhere(dir), new RegExp(`is locked by process ${process.pid}`));
+  // A lock of this process that is not owed (an acquisition in progress) is waited for, not superseded.
+  const lock = new LedgerLock(dir, { timeoutMs: 300 });
+  const held = await lock.acquire();
+  await assert.rejects(new LedgerLock(dir, { timeoutMs: 100 }).acquire(), new RegExp(`is locked by process ${process.pid}`));
+  await held();
+  assert.equal(await ledger.claimKept("aws", "project", { ownerLabel: "new-owner", sessionId: "gui-new" }, { image: "linux" }).then((r) => r?.sessionId), "gui-new");
+  assert.equal(await acquireElsewhere(dir, 2_000), "acquired");
+  const files = await lockFiles(dir);
+  assert.equal(files.filter((f) => /^\.lock\.\d+$/.test(f)).length, 1, `one generation left: ${files}`);
+});
+
+for (const stage of ["temp file", "old generation's marker", "old generation"]) {
+  test(`CC3: a failure removing the ${stage} after the new generation is published does not fail acquire(); the lock is held and released normally`, async (t) => {
+    const dir = await ledgerDir(t);
+    const lock = new LedgerLock(dir, { timeoutMs: 300 });
+    await (await lock.acquire())(); // generation 1, released
+    const match = {
+      "temp file": (p) => p.includes("/.lock-tmp."),
+      "old generation's marker": (p) => p === join(dir, ".lock.1.free"),
+      "old generation": (p) => p === join(dir, ".lock.1"),
+    }[stage];
+    const { value: release, injected } = await withFsFailureOnce("rm", match, () => lock.acquire());
+    assert.equal(injected, true);
+    assert.equal(typeof release, "function");
+    // Held by generation 2 until released; then any process takes it.
+    assert.match(await acquireElsewhere(dir), new RegExp(`is locked by process ${process.pid}`));
+    await release();
+    assert.equal(await acquireElsewhere(dir, 2_000), "acquired");
+    // The next holder (generation 3 in the child) removed what the failed cleanup left of generation 1.
+    assert.ok(!(await lockFiles(dir)).some((f) => f === ".lock.1" || f === ".lock.1.free"), `${await lockFiles(dir)}`);
+  });
+}

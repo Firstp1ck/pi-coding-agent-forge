@@ -11,14 +11,23 @@
  * another start time). A holder that is alive, or whose liveness cannot be
  * judged, is never superseded: no file of a live holder is removed, renamed,
  * or rewritten, so stale-lock recovery cannot steal the lock. The new holder
- * removes the generations below its own.
+ * removes the generations below its own (best effort: once its generation is
+ * published it holds the lock, and a leftover lower generation is harmless).
+ *
+ * A release whose marker cannot be written (after retries) is owed: the
+ * process remembers the generation and its token, and its next acquisition
+ * of that directory first writes the owed marker again. While the marker
+ * still cannot be written, that acquisition may supersede the owed
+ * generation, but only its own (same process, same token, so no acquisition
+ * still in progress); another process still sees a live holder.
  */
 import { randomBytes } from "node:crypto";
 import { link, mkdir, open, readdir, rm, stat, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { DEFAULT_PROC_ROOT, ownerLiveness, readBootId, readProcessStartTime } from "../../cleanup/identity.ts";
 
 const GENERATION = /^\.lock\.(\d{1,15})$/;
+const MARKER = /^\.lock\.(\d{1,15})\.free$/;
 /** Largest lock file read (a holder record is about 150 bytes). */
 const MAX_LOCK_BYTES = 4096;
 
@@ -69,6 +78,12 @@ function parseHolder(text: string): Holder | undefined {
   }
 }
 
+/**
+ * Releases this process owes, per resolved lock directory: generation → token
+ * of the acquisition whose `.free` marker could not be written.
+ */
+const owedReleases = new Map<string, Map<number, string>>();
+
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function isCode(error: unknown, code: string): boolean {
@@ -90,10 +105,38 @@ export class LedgerLock {
     return join(this.dir, `.lock.${generation}`);
   }
 
-  async #generations(): Promise<number[]> {
+  /** The releases this process owes in this directory. */
+  #owed(): Map<number, string> {
+    const key = resolve(this.dir);
+    let owed = owedReleases.get(key);
+    if (!owed) owedReleases.set(key, (owed = new Map()));
+    return owed;
+  }
+
+  /** Writes the `.free` marker of `generation`; `true` once it exists. */
+  async #markFree(generation: number): Promise<boolean> {
+    try {
+      await writeFile(`${this.#file(generation)}.free`, "", { mode: 0o600, flag: "wx" });
+      return true;
+    } catch (error) {
+      if (isCode(error, "EEXIST")) return true;
+      throw error;
+    }
+  }
+
+  /** Retries every release this process owes here; a still-failing one stays owed. */
+  async #settleOwed(): Promise<void> {
+    const owed = this.#owed();
+    for (const generation of [...owed.keys()]) {
+      if (await this.#markFree(generation).catch(() => false)) owed.delete(generation);
+    }
+  }
+
+  /** The generations, and with `markers` also those named only by a `.free` marker left by a failed cleanup. */
+  async #generations(markers = false): Promise<number[]> {
     const generations: number[] = [];
     for (const name of await readdir(this.dir)) {
-      const match = GENERATION.exec(name);
+      const match = GENERATION.exec(name) ?? (markers ? MARKER.exec(name) : null);
       if (match) generations.push(Number(match[1]));
     }
     return generations;
@@ -140,13 +183,16 @@ export class LedgerLock {
       if (isCode(error, "EEXIST")) return false;
       throw error;
     } finally {
-      await rm(temp, { force: true });
+      // Best effort: after a successful link the generation is published, and the temp name is unique.
+      await rm(temp, { force: true }).catch(() => undefined);
     }
   }
 
   /** Waits for the lock; resolves to its release function. */
   async acquire(): Promise<() => Promise<void>> {
     await mkdir(this.dir, { recursive: true, mode: 0o700 });
+    await this.#settleOwed();
+    const owed = this.#owed();
     const { processStartTime, bootId } = identity();
     const deadline = Date.now() + this.#timeoutMs;
     let waitedOn: Holder | undefined;
@@ -156,7 +202,10 @@ export class LedgerLock {
       if (top > 0) {
         const { state, holder } = await this.#state(top);
         if (state === "gone") continue; // Removed by a newer holder: list again.
-        if (state === "live") {
+        // This process's own acquisition whose release is owed (its marker still cannot be written): nobody
+        // holds it, so this process may supersede it. Any other live holder is waited for.
+        const ownOwed = state === "live" && holder?.pid === process.pid && holder.token === owed.get(top);
+        if (state === "live" && !ownOwed) {
           waitedOn = holder;
           if (Date.now() >= deadline) {
             const who = waitedOn ? `process ${waitedOn.pid}` : "an unreadable lock record";
@@ -171,34 +220,46 @@ export class LedgerLock {
       if (!(await this.#take(next, holder))) continue;
       // A generation removed by a newer holder can be taken again: only the highest one holds the lock.
       if ((await this.#generations()).some((g) => g > next)) {
-        await rm(this.#file(next), { force: true });
+        // Below the top it holds nothing; a copy left by a failed removal goes with the next holder's cleanup.
+        await rm(this.#file(next), { force: true }).catch(() => undefined);
         continue;
       }
-      for (const old of generations) {
+      // Held from here on: removing the generations below is cleanup, and its failure must not lose the lock
+      // (a leftover lower generation or marker is ignored, and the next holder removes it).
+      for (const old of new Set([...generations, ...(await this.#generations(true).catch(() => []))])) {
         if (old >= next) continue;
-        await rm(`${this.#file(old)}.free`, { force: true });
-        await rm(this.#file(old), { force: true });
+        await rm(`${this.#file(old)}.free`, { force: true }).catch(() => undefined);
+        await rm(this.#file(old), { force: true }).catch(() => undefined);
       }
+      // Owed releases below this generation are superseded.
+      for (const generation of [...owed.keys()]) if (generation < next) owed.delete(generation);
       let released = false;
+      let wasOwed = false;
       return async () => {
         if (released) return;
+        // Settled meanwhile by a later acquisition of this process (marker written, or superseded).
+        if (wasOwed && owed.get(next) !== holder.token) {
+          released = true;
+          return;
+        }
         // Marked released only once the marker exists: a failed write keeps the
         // release retryable instead of leaving a live process holding the lock.
         let lastError: unknown;
         for (let attempt = 0; attempt < 3; attempt++) {
           try {
-            await writeFile(`${this.#file(next)}.free`, "", { mode: 0o600, flag: "wx" });
+            await this.#markFree(next);
             released = true;
+            owed.delete(next);
             return;
           } catch (error) {
-            if (isCode(error, "EEXIST")) {
-              released = true;
-              return;
-            }
             lastError = error;
             await sleep(10 * (attempt + 1));
           }
         }
+        // Owed: this process's next acquisition here retries it (or supersedes it), so the lock is not held
+        // until the process exits even when the closure is dropped (as `run()` does).
+        owed.set(next, holder.token);
+        wasOwed = true;
         throw lastError;
       };
     }

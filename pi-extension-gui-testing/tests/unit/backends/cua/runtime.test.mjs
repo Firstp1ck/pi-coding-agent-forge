@@ -7,7 +7,7 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, readdir } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { CUA_HOST_SUPPORT, CuaBackend } from "../../../../src/backends/cua.ts";
 import { LedgerLock } from "../../../../src/backends/cua/ledger-lock.ts";
@@ -263,4 +263,40 @@ test("BB3: /gui-reset cua lists only what remains: a pending deletion it deletes
   assert.deepEqual(await ledger.entries(), []);
   assert.doesNotMatch(report, /pending deletion/);
   assert.match(report, /Leftovers: empty/, report);
+});
+
+test("CC4: /gui-reset cua keeps an audit failure reported in-band: an unrecorded sandbox the sweep found stays listed when the post-reset listing fails (reviewer reproduction)", async (t) => {
+  const { env, api, ledger, runtime } = await runtimeEnv(t);
+  const name = `pi-gui-testing-${HOST_TAG}-gui-unrecorded`;
+  const ref = `aws:${name}`;
+  api.sandboxes.set(ref, { name, location: "aws", status: "ready", image: "linux" });
+  let lists = 0;
+  // The sweep lists the real unrecorded sandbox; the audit after the reset fails its read-only listing.
+  api.options.fail = { list: () => (++lists === 2 ? new Error("injected post-reset list failure") : undefined) };
+  const report = await resetFromAnotherPi(t, runtime, env);
+  assert.equal(lists, 2);
+  assert.equal(api.sandboxes.size, 1, "an unrecorded sandbox is never deleted");
+  assert.deepEqual(await ledger.entries(), []);
+  assert.doesNotMatch(report, /Leftovers: empty/, report);
+  assert.match(report, new RegExp(`${ref}.*no record in the local ledger`), "the sweep's finding stays");
+  assert.match(report, /listing sandboxes failed: injected post-reset list failure/, "the audit failure is reported");
+  assert.match(report, /may be incomplete/, report);
+});
+
+test("CC1: /gui-reset cua leaves a sandbox whose ledger record cannot be read and reports it with the manual remedy", async (t) => {
+  const { env, api, ledger, runtime, open } = await runtimeEnv(t);
+  const live = await open(true);
+  const ref = live.session.handle.ref;
+  await runtime.closeSession(live.id);
+  const [entry] = await ledger.entries();
+  assert.equal(entry.kept, true);
+  await writeFile(entry.file, "{ truncated");
+  const report = await resetFromAnotherPi(t, runtime, env);
+  assert.equal(api.sandboxes.size, 1, "the sandbox is not deleted");
+  assert.deepEqual(api.deleted, []);
+  assert.equal(await readFile(entry.file, "utf8"), "{ truncated", "the record file is unchanged");
+  const lines = report.split("\n").filter((l) => l.includes("unreadable sandbox record"));
+  assert.equal(lines.length, 1, report);
+  assert.match(lines[0], new RegExp(`cua sandbox rm <location>:${ref.split(":")[1]} --force`));
+  assert.doesNotMatch(report, /Leftovers: empty/);
 });
