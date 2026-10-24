@@ -154,16 +154,22 @@ test("probe failures report the helper's own error; a forged report for another 
   assert.match(byId["helper.uia"].observed, /answered for probe desktop, not uia/);
 });
 
-test("an elevated Pi is reported and passes helper.nonelevated through the Explorer token", async (t) => {
+test("an elevated Pi is reported and fails helper.nonelevated with the helper's reason", async (t) => {
   const { byId } = await run(t, {
     runnerOptions: {
       probes: {
         env: { probe: "env", ok: true, arch: "arm64", build: 26100, platform: "Windows 10.0.26100 arm64", elevated: true },
-        nonelevated: { probe: "nonelevated", ok: true, elevated: true, detail: "the helper is elevated; a non-elevated Explorer token of the same user is available" },
+        nonelevated: {
+          probe: "nonelevated",
+          ok: false,
+          elevated: true,
+          detail: "Pi runs elevated (as administrator); local-windows needs Pi started from a normal, non-administrator terminal",
+        },
       },
     },
   });
-  assert.match(byId["win.version"].observed, /Pi runs elevated, apps will run with the Explorer token/);
+  assert.match(byId["win.version"].observed, /Pi runs elevated \(local-windows refuses this/);
   assert.equal(byId["win.arch"].observed, "arm64");
-  assert.match(byId["helper.nonelevated"].observed, /Explorer token of the same user/);
+  assert.equal(byId["helper.nonelevated"].status, "fail");
+  assert.match(byId["helper.nonelevated"].observed, /needs Pi started from a normal, non-administrator terminal/);
 });

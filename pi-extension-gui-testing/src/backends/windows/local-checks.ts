@@ -190,7 +190,7 @@ export function localWindowsChecks(options: LocalWindowsCheckOptions): Check[] {
       const platform = reportString(outcome.report, "platform", 200);
       const elevated = reportBoolean(outcome.report, "elevated");
       if (build === undefined || build <= 0) return { status: "fail", observed: `the helper could not read the Windows build${platform ? ` (${platform})` : ""}` };
-      const detail = `build ${build}${platform ? ` (${platform})` : ""}${elevated ? "; Pi runs elevated, apps will run with the Explorer token" : ""}`;
+      const detail = `build ${build}${platform ? ` (${platform})` : ""}${elevated ? "; Pi runs elevated (local-windows refuses this; see helper.nonelevated)" : ""}`;
       if (build < MIN_WINDOWS_BUILD) return { status: "fail", observed: `${detail}; build ${MIN_WINDOWS_BUILD} or later is required` };
       return { status: "pass", observed: detail, facts: { "windows.build": String(build) } };
     },
@@ -234,7 +234,7 @@ export function localWindowsChecks(options: LocalWindowsCheckOptions): Check[] {
 
   const nonElevatedCheck: Check = {
     id: "helper.nonelevated",
-    description: "apps can run non-elevated (Explorer token when Pi is elevated)",
+    description: "Pi runs without administrator rights, so apps start with your normal rights",
     kind: "probe",
     required: true,
     dependsOn: ["win.version"],

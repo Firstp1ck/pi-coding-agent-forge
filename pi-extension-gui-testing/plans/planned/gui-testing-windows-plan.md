@@ -1,6 +1,6 @@
 # Implementation plan: GUI Testing for Pi — Windows (S1 harness, M4, M5, Cua Windows)
 
-Status: in progress · created 2026-10-24 · integration owner: main session (Claude Opus 5.5) · branch `feat/gui-testing-milestones`
+Status: implemented and reviewed; never run on Windows · created 2026-10-24 · integration owner: main session (Claude Opus 5.5) · branch `feat/gui-testing-milestones`
 
 - Spec: [gui-testing-spec.md](gui-testing-spec.md) §4.4, §4.5, §4.6, §5.4 (Windows checks), §7a, §11 (S1, M4, M5), Q4
 - Previous plans: [gui-testing-m1-plan.md](gui-testing-m1-plan.md), [gui-testing-m1b-m3-plan.md](gui-testing-m1b-m3-plan.md) (invariants still apply)
@@ -43,7 +43,7 @@ Order: WH → (WL ∥ WD ∥ WC) → I → review → fixes → report.
 | WD | done 2026-10-24 (unregistered, never run) | handoff `plans/handoffs/windows-WD.md`: dockurr/windows 6.06 by digest, unattended install with OEM OpenSSH + helper, QEMU `-snapshot` session overlay, SSH on random 127.0.0.1 port, `--cap-drop ALL` + listed caps, base volume as tooling; `network: none` refused; one session at a time; helper runs in session 0 over SSH (private desktop, not the interactive session — spec §4.4 deviation) |
 | WC | done 2026-10-24 (never run) | handoff `plans/handoffs/windows-WC.md`: Windows target in `cua` (target-aware ledger records, `windowsImage`, Windows rate, encoded PowerShell commands, StdinEnv start); Cua CLI 0.9.0 marks Windows unsupported on all four clouds, so `cua.targets` fails until Cua offers it |
 | I | done 2026-10-24 | `claude-opus-5-5`, handoff `plans/handoffs/windows-I.md`: `local-windows`, `docker-windows` registered, `cua` targets linux+windows, `SessionStartOptions.target`, `--accept-windows-license`, VM size flags, cua Windows image/rate flags, smoke test backend-neutral with foreground check, runner timing test hardened, docs (README/TECHNICAL/DEVELOPMENT/SKILL/spec/root catalog). Owner rerun on the settled tree: concurrent `npm run check` + Node 22 → 710/710 each; `npm pack` 212 files incl. 17 Windows helper files, no spikes/tests/plans; Markdown diff check clean |
-| Review | round 1 done 2026-10-24 | seat A (`…gui-testing-windows-review-A-r1`): **not ready**, 10 findings (9 blocking); seat B (`…-B-r1`): **ready after fixes**, 5 findings (3 blocking). All accepted as WF1–WF15 (below); fix run WF-r1 launched |
+| Review | done 2026-10-25 — final: seat A **ready** (`…windows-review-A-r6b`), seat B **ready** (`…-B-r4`); history below. Round 1 | seat A (`…gui-testing-windows-review-A-r1`): **not ready**, 10 findings (9 blocking); seat B (`…-B-r1`): **ready after fixes**, 5 findings (3 blocking). All accepted as WF1–WF15 (below); fix run WF-r1 launched |
 
 ## 5. Review round 1 dispositions
 
@@ -60,3 +60,15 @@ Round 3: seat B (`…windows-review-B-r3`) **ready** (1 non-blocking doc row), `
 Round 4: seat A (`…windows-review-A-r4`) **not ready** — round-3 item fixed; A4-F1 replaced directory ancestors redirect helper/client writes and teardown; A4-F2 `app.log` appends follow planted links; non-blocking: atomic-write test assumes the rename fails. Owner dispositions: A4-F2 fixed (`app.log` created once with `O_EXCL|O_APPEND` and written through a kept numeric descriptor — not a FileHandle, which throws when garbage-collected in Node 26 — closed on teardown and failed starts; regression test fails before / passes after); test fixed for Windows; **A4-F1 accepted as residual**: only `local-*` apps can reach these folders and they already run as the user with full file access, so redirecting a write grants nothing new; container/VM/remote/Cua apps cannot reach them (recorded in DEVELOPMENT "Known gaps"). Owner rerun (sequential): 737/737 on Node 26 and Node 22.
 
 Round 5: seat B (`…windows-review-B-r4`) **ready**, no findings, `npm run check` 737/737; seat A (`…windows-review-A-r5`) **not ready**: log fix verified; A5-F1 counterexample to the accepted residual — an elevated Pi writes into session folders on behalf of a non-elevated app, so a junction lets the app make Pi write where it cannot; A5-F2 (non-blocking) a late event during `close()` opened a descriptor after close. Owner fixes (direct): `local-windows` refuses an elevated Pi (every probe reports `elevated`; `nonelevated` probe fails when elevated; `startSession` refuses with `UNSUPPORTED` before creating anything, fails closed when elevation is unknown) — **spec §4.5 elevated opt-in deferred** (annotated in the spec); `close()` sets `#closing` synchronously; tests for both fail before / pass after; TECHNICAL/DEVELOPMENT updated. Owner rerun (sequential): 740/740 on Node 26 and Node 22. Final seat A check launched.
+
+Final round: seat A (`…windows-review-A-r6b`, after a content-filter failure of `…-A-r6`) **ready**, both fixes verified, 32 extra refusal/retry cases pass; non-blocking diagnostics (stale Explorer-token wording, probe `detail` not shown, outdated elevated-setup test) fixed by owner. Final owner validation: 740/740 on Node 26 and Node 22 (sequential); e2e 33 skipped; `npm pack` 214 files incl. 17 Windows helper files, no spikes/tests/plans; `git diff --check` clean.
+
+## 6. Open live verification (needs Windows / KVM / Cua)
+
+| Item | How |
+|---|---|
+| S1 | Run `spikes\s1\run-s1.ps1` on Windows 10/11 (see `spikes/s1/README.md`, repository checkout only); its report decides Q4 (keep PowerShell + C#, or a signed `.exe`) |
+| M5 `local-windows` | `npm run test:e2e -- tests/e2e/local-windows.test.mjs` on Windows 10/11 from a normal (non-administrator) terminal; check AV/EDR reaction |
+| M4 `docker-windows` | `PI_GUI_E2E_DOCKER_WINDOWS=1 PI_GUI_E2E_ACCEPT_WINDOWS_LICENSE=1 npm run test:e2e -- tests/e2e/docker-windows.test.mjs` on Linux with KVM and rootful Docker (30+ min); confirm the QEMU `-snapshot` overlay and black-capture rate in session 0 |
+| Cua Windows | `PI_GUI_TESTING_CUA_E2E=1 PI_GUI_TESTING_CUA_WINDOWS=1 npm run test:e2e -- tests/e2e/cua.test.mjs` once a cloud offers Windows in `cua cloud status` |
+| Deferred | spec §4.5 elevated opt-in (refused until session-folder writes are anchored to directory handles) |

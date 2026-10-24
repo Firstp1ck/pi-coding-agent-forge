@@ -119,7 +119,8 @@ export async function runHelperProbe(name: HelperProbeName, options: ProbeRunOpt
   }
   const ok = report.ok === true && result.exitCode === 0;
   if (ok) return { ok, report };
-  const error = reportString(report, "error", 300);
+  // A probe that ran but refused (for example nonelevated) explains itself in `detail`.
+  const error = reportString(report, "error", 300) ?? reportString(report, "detail", 300);
   return { ok: false, report, problem: error ?? `probe ${name} failed (exit ${result.exitCode ?? result.signal})` };
 }
 
