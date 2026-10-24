@@ -268,3 +268,18 @@ test("V12: the /gui-setup picker offers only the backends that run on this clien
   assert.match(last(none), /no backend of this build runs on aix/);
   assert.equal(none.uiCalls.filter(([kind]) => kind === "select").length, 0);
 });
+
+test("X7: /gui-usage shows each billed session's estimated cost and today's estimate; unbilled sessions show none", async (t) => {
+  const env = await multiEnv(t);
+  const plain = (await env.tools.gui_launch.execute("c", {}, undefined, undefined, env.ctx())).details.session;
+  await env.commands["gui-usage"].handler("", env.ctx());
+  assert.doesNotMatch(last(env), /estimated cost/, "a backend without cost tracking shows no estimate");
+  const billed = new Set();
+  env.runtime.backend("local-linux").estimateCost = (usage) => (billed.add(usage.session), { sessionUsd: 2.5, dailyUsd: 7.25 });
+  await env.commands["gui-usage"].handler("", env.ctx());
+  assert.match(last(env), new RegExp(`${plain} \\(local-linux, running, [\\d.]+ min\\): gui_launch 1; actions 0, screenshots 0, synced \\d+ bytes, estimated cost \\$2\\.50`));
+  assert.match(last(env), /\nestimated cost today: \$7\.25 \(local-linux; your cloud's bill is what counts\)$/);
+  assert.deepEqual([...billed], [plain]);
+  await env.commands["gui-usage"].handler(plain, env.ctx());
+  assert.match(last(env), /estimated cost today: \$7\.25/, "also for one session");
+});

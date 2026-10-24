@@ -225,28 +225,40 @@ export class CuaBackend implements Backend, DriftCapability, ResetCapability, Sw
     const keep = config.keepSandbox;
     const project = projectKey(options.projectRoot);
 
-    // A kept sandbox of this project is reused; it must still exist.
+    // A kept sandbox of this project is reused only when it was made from the configured image and still exists.
     let reused: LedgerRecord | undefined;
+    const warnings: string[] = [];
     if (keep) {
-      reused = await this.ledger.claimKept(location, project, { ownerLabel: options.ownerLabel, sessionId: options.sessionId });
-      if (reused) {
+      const owner = { ownerLabel: options.ownerLabel, sessionId: options.sessionId };
+      const tried = new Set<string>();
+      while (!reused) {
+        const claimed = await this.ledger.claimKept(location, project, owner, { image, exclude: tried });
+        if (!claimed) break;
+        tried.add(claimed.name);
         let exists: SandboxInfo | undefined;
         try {
-          exists = await this.api.getSandbox(reused.ref, signal);
+          exists = await this.api.getSandbox(claimed.ref, signal);
         } catch (error) {
           if (!(error instanceof CuaApiError && error.code === "NOT_FOUND")) {
             // Not a confirmed absence: the sandbox may still exist and bill. Keep its record (back in
             // the kept set) and fail without creating a new sandbox.
-            await this.ledger.markKept(reused.name, options.sessionId).catch(() => undefined);
-            throw startError(`checking the kept sandbox ${reused.ref} (kept; try again, or delete it with /gui-reset cua)`, error);
+            await this.ledger.markKept(claimed.name, options.sessionId).catch(() => undefined);
+            throw startError(`checking the kept sandbox ${claimed.ref} (kept; try again, or delete it with /gui-reset cua)`, error);
           }
         }
-        // Only a confirmed absence (expired or deleted elsewhere) forgets the record.
         if (!exists) {
-          await this.ledger.remove(reused.name);
-          reused = undefined;
+          // Only a confirmed absence (expired or deleted elsewhere) forgets the record; it no longer bills.
+          this.#onDeleted(claimed.ref);
+          await this.ledger.remove(claimed.name, false, { sessionId: options.sessionId });
+        } else if (exists.image !== undefined && exists.image !== image) {
+          // Cua reports another image than the record: never reuse it. It stays kept.
+          await this.ledger.markKept(claimed.name, options.sessionId);
+          warnings.push(`the kept sandbox ${claimed.ref} runs the image "${exists.image}", not "${image}", so a new sandbox was created; it keeps billing until it expires or you delete it with /gui-reset cua`);
+        } else {
+          reused = claimed;
         }
       }
+      if (!reused) warnings.push(...(await this.#unusableKept(location, project, image, tried)));
     }
     const name = reused?.name ?? sandboxName(options.sessionId, this.hostTag);
     const ref = reused?.ref ?? sandboxRef(location, name);
@@ -279,13 +291,14 @@ export class CuaBackend implements Backend, DriftCapability, ResetCapability, Sw
           phase: "creating",
           keep,
           createdAt: new Date().toISOString(),
+          image,
         });
         options.onExitCleanup?.(this.api.forceDeleteArgv(ref));
         this.cost.start(options.sessionId, rate, undefined, { id: ref });
         options.onStatus?.(`creating a Cua sandbox in your ${location} account (billed by ${location} until it is deleted)`);
         await this.api.createSandbox({ name, location, image }, signal);
         handle.markCreated();
-        await this.ledger.update(name, { phase: "created" });
+        await this.ledger.update(name, { phase: "created" }, { sessionId: options.sessionId });
         // With keepSandbox the exit handler leaves it alone from now on.
         options.onExitCleanup?.(handle.forceRemoveArgv());
       }
@@ -315,6 +328,7 @@ export class CuaBackend implements Backend, DriftCapability, ResetCapability, Sw
       packageVersion: this.version,
       sync,
       onLog,
+      warnings,
       ...(this.#options.readyTimeoutMs !== undefined ? { readyTimeoutMs: this.#options.readyTimeoutMs } : {}),
       ...(this.#options.heartbeatIntervalMs !== undefined ? { heartbeatIntervalMs: this.#options.heartbeatIntervalMs } : {}),
       ...(this.#options.exitWaitMs !== undefined ? { exitWaitMs: this.#options.exitWaitMs } : {}),
@@ -341,6 +355,18 @@ export class CuaBackend implements Backend, DriftCapability, ResetCapability, Sw
       throw error;
     }
     return session;
+  }
+
+  /** Launch warnings for kept sandboxes of this project that cannot be reused with `image` (not already reported). */
+  async #unusableKept(location: string, project: string, image: string, reported: ReadonlySet<string>): Promise<string[]> {
+    const warnings: string[] = [];
+    for (const entry of await this.ledger.entries().catch(() => [])) {
+      const r = entry.record;
+      if (!entry.kept || !r || r.location !== location || r.projectKey !== project || r.image === image || reported.has(r.name)) continue;
+      const why = r.image === undefined ? "was kept by an older version that did not record its image" : `was made from the image "${r.image}", not "${image}"`;
+      warnings.push(`the kept sandbox ${r.ref} ${why}, so it was not reused; it keeps billing until it expires or you delete it with /gui-reset cua`);
+    }
+    return warnings;
   }
 
   /**

@@ -109,6 +109,12 @@ export class UsageTracker {
     return [...this.#sessions.values()].map((u) => structuredClone(u));
   }
 
+  /** Estimated cost of one session and of its backend today, from {@link UsageTrackerOptions.estimateCost}; `undefined` when not tracked. */
+  estimate(session: string): CostEstimate | undefined {
+    const usage = this.#sessions.get(session);
+    return usage ? this.#options.estimateCost?.(usage) : undefined;
+  }
+
   /** Forgets a session (e.g. long after it stopped). */
   forget(session: string): void {
     this.#sessions.delete(session);

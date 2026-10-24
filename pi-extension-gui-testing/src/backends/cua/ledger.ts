@@ -10,10 +10,15 @@
  * (atomically, 0600) before `sandbox create` runs and removed only after the
  * deletion is confirmed, so a crash at any point leaves a record the next
  * sweep completes. Every move between the two sets is a single `rename`, so a
- * sandbox's record is in exactly one of them at any time and no step removes
- * a file another process may have just written: keeping is `rename(active →
- * kept)`, claiming a kept sandbox is `rename(kept → active)`, which only one
- * process can win.
+ * sandbox's record is in exactly one of them at any time.
+ *
+ * Every transition (write, update, keep, claim, delete) runs under the
+ * ledger's interprocess lock ({@link LedgerLock}) and re-reads the record
+ * inside it: a transition that names an expected owner (session id, and
+ * optionally owner label or `keptAt`) acts only when the record still has it
+ * (compare-and-swap). A sweep or a session working from an older read can
+ * therefore never move, claim, or delete a record another process has taken
+ * since. Reads (`read`, `entries`) take no lock.
  */
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -24,6 +29,7 @@ import { writeJsonAtomic } from "../../config/atomic.ts";
 import { globalConfigPath } from "../../config/types.ts";
 import { DEFAULT_PROC_ROOT, ownerLiveness } from "../../cleanup/identity.ts";
 import { parseOwnerLabel, type OwnerLiveness } from "../../owner.ts";
+import { LedgerLock, type LedgerLockOptions } from "./ledger-lock.ts";
 
 /** Prefix of every sandbox name this package creates. */
 export const SANDBOX_PREFIX = "pi-gui-testing-";
@@ -83,6 +89,25 @@ export interface LedgerRecord {
   createdAt: string;
   /** ISO 8601; set on kept records. */
   keptAt?: string;
+  /**
+   * Image the sandbox was created from. A kept sandbox is reused only for the
+   * same image; records written before images were recorded have none and are
+   * never reused.
+   */
+  image?: string;
+}
+
+/** The owner a transition expects the record to still have. */
+export interface ExpectedOwner {
+  sessionId: string;
+  ownerLabel?: string;
+  /** For kept records: the `keptAt` that was read. */
+  keptAt?: string;
+}
+
+function hasOwner(record: LedgerRecord, expect: ExpectedOwner | undefined): boolean {
+  if (!expect) return true;
+  return record.sessionId === expect.sessionId && (expect.ownerLabel === undefined || record.ownerLabel === expect.ownerLabel) && (expect.keptAt === undefined || record.keptAt === expect.keptAt);
 }
 
 /** Default ledger directory: `<agent dir>/gui/cua-sandboxes`. */
@@ -102,6 +127,7 @@ function recordProblem(raw: unknown): string | undefined {
   }
   if (!["creating", "created", "deleting"].includes(r.phase as string)) return "bad phase";
   if (typeof r.keep !== "boolean") return "bad keep";
+  if (r.image !== undefined && (typeof r.image !== "string" || r.image.length === 0 || r.image.length > 512)) return "bad image";
   if (!(r.name as string).startsWith(SANDBOX_PREFIX) || r.ref !== `${r.location}:${r.name}`) return "name and ref disagree";
   return undefined;
 }
@@ -114,11 +140,17 @@ export interface LedgerEntry {
   kept: boolean;
 }
 
+export interface SandboxLedgerOptions {
+  lock?: LedgerLockOptions;
+}
+
 export class SandboxLedger {
   readonly dir: string;
+  readonly #lock: LedgerLock;
 
-  constructor(dir: string = defaultLedgerDir()) {
+  constructor(dir: string = defaultLedgerDir(), options: SandboxLedgerOptions = {}) {
     this.dir = dir;
+    this.#lock = new LedgerLock(dir, options.lock);
   }
 
   #file(name: string, kept: boolean): string {
@@ -126,17 +158,26 @@ export class SandboxLedger {
     return join(this.dir, `${name}${kept ? KEPT : ACTIVE}`);
   }
 
-  /** Writes (or replaces) the active record. Resolves before the caller creates or deletes anything. */
-  async write(record: LedgerRecord): Promise<void> {
-    await writeJsonAtomic(this.#file(record.name, false), record, { mode: 0o600, dirMode: 0o700 });
+  async #put(record: LedgerRecord, kept = false): Promise<void> {
+    await writeJsonAtomic(this.#file(record.name, kept), record, { mode: 0o600, dirMode: 0o700 });
   }
 
-  async update(name: string, change: Partial<LedgerRecord>): Promise<LedgerRecord | undefined> {
-    const current = await this.read(name);
-    if (!current) return undefined;
-    const next = { ...current, ...change };
-    await this.write(next);
-    return next;
+  /** Writes (or replaces) the active record. Resolves before the caller creates or deletes anything. */
+  async write(record: LedgerRecord): Promise<void> {
+    this.#file(record.name, false);
+    await this.#lock.run(() => this.#put(record));
+  }
+
+  /** Changes the active record; only while it still has `expect`'s owner, when given. */
+  async update(name: string, change: Partial<LedgerRecord>, expect?: ExpectedOwner): Promise<LedgerRecord | undefined> {
+    this.#file(name, false);
+    return this.#lock.run(async () => {
+      const current = await this.read(name);
+      if (!current || !hasOwner(current, expect)) return undefined;
+      const next = { ...current, ...change };
+      await this.#put(next);
+      return next;
+    });
   }
 
   async read(name: string, kept = false): Promise<LedgerRecord | undefined> {
@@ -149,64 +190,84 @@ export class SandboxLedger {
     return recordProblem(raw) ? undefined : (raw as LedgerRecord);
   }
 
-  /** Removes the active record once the sandbox is confirmed gone. */
-  async remove(name: string, kept = false): Promise<void> {
-    await rm(this.#file(name, kept), { force: true });
-  }
-
   /**
-   * Moves the active record to the kept set (the sandbox stays). The record is
-   * stamped in place and then renamed, never copied and removed: a session
-   * that claims the kept record the moment it appears keeps its claim.
-   *
-   * @param sessionId When given, only that session's record is moved.
+   * Removes a record once the sandbox is confirmed gone; with `expect`, only
+   * while the record still has that owner. `true` when no such record is left.
    */
-  async markKept(name: string, sessionId?: string): Promise<void> {
-    const current = await this.read(name);
-    if (!current || (sessionId !== undefined && current.sessionId !== sessionId)) return;
-    await this.write({ ...current, keptAt: new Date().toISOString() });
-    try {
-      await rename(this.#file(name, false), this.#file(name, true));
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-    }
-  }
-
-  /**
-   * Claims a kept sandbox for a new session: the kept record of `project` in
-   * `location` whose rename succeeds first. Returns the claimed record, now
-   * active with `phase: "created"` and the new owner.
-   */
-  async claimKept(location: string, project: string, owner: { ownerLabel: string; sessionId: string }): Promise<LedgerRecord | undefined> {
-    for (const entry of await this.entries()) {
-      const r = entry.record;
-      if (!entry.kept || !r || r.location !== location || r.projectKey !== project) continue;
-      try {
-        await rename(entry.file, this.#file(r.name, false));
-      } catch {
-        continue; // Another session won it, or it is gone.
+  async remove(name: string, kept = false, expect?: ExpectedOwner): Promise<boolean> {
+    this.#file(name, kept);
+    return this.#lock.run(async () => {
+      if (expect) {
+        const current = await this.read(name, kept);
+        if (current && !hasOwner(current, expect)) return false;
       }
-      const claimed: LedgerRecord = { ...r, ...owner, phase: "created", keep: true };
-      delete claimed.keptAt;
-      await this.write(claimed);
-      return claimed;
-    }
-    return undefined;
+      await rm(this.#file(name, kept), { force: true });
+      return true;
+    });
   }
 
   /**
-   * Claims a kept record for deletion: renames it to the active set with
+   * Moves the active record to the kept set (the sandbox stays), only while
+   * it still belongs to `expect` (a session id, or the session and owner a
+   * sweep judged). `true` when it moved.
+   */
+  async markKept(name: string, expect: string | ExpectedOwner): Promise<boolean> {
+    const owner = typeof expect === "string" ? { sessionId: expect } : expect;
+    if (typeof owner?.sessionId !== "string") throw new Error("markKept needs the session id of the record it keeps");
+    this.#file(name, false);
+    return this.#lock.run(async () => {
+      const current = await this.read(name);
+      if (!current || !hasOwner(current, owner)) return false;
+      await this.#put({ ...current, keptAt: new Date().toISOString() });
+      await rename(this.#file(name, false), this.#file(name, true));
+      return true;
+    });
+  }
+
+  /**
+   * Claims a kept sandbox for a new session: a kept record of `project` in
+   * `location` (with `image`: recorded as made from that image; with
+   * `exclude`: none of those names). Returns the claimed record, now active
+   * with `phase: "created"` and the new owner.
+   */
+  async claimKept(location: string, project: string, owner: { ownerLabel: string; sessionId: string }, options: { image?: string; exclude?: ReadonlySet<string> } = {}): Promise<LedgerRecord | undefined> {
+    const { image, exclude } = options;
+    const wanted = (entry: LedgerEntry) => {
+      const r = entry.record;
+      return entry.kept && r !== undefined && r.location === location && r.projectKey === project && (image === undefined || r.image === image) && !exclude?.has(r.name);
+    };
+    // Nothing to claim: no lock (and no ledger dir) needed.
+    if (!(await this.entries()).some(wanted)) return undefined;
+    return this.#lock.run(async () => {
+      for (const entry of await this.entries()) {
+        if (!wanted(entry)) continue;
+        const r = entry.record!;
+        const claimed: LedgerRecord = { ...r, ...owner, phase: "created", keep: true };
+        delete claimed.keptAt;
+        await this.#put(claimed, true);
+        await rename(this.#file(r.name, true), this.#file(r.name, false));
+        return claimed;
+      }
+      return undefined;
+    });
+  }
+
+  /**
+   * Claims a kept record for deletion: moves it to the active set with
    * `phase: "deleting"`, so the sweep retries a failed deletion and no
-   * session reuses it. `false` when another process claimed it first.
+   * session reuses it. `false` when it is no longer kept.
    */
   async claimForDeletion(name: string): Promise<boolean> {
-    try {
+    this.#file(name, true);
+    return this.#lock.run(async () => {
+      const current = await this.read(name, true);
+      if (!current) return false;
+      const next: LedgerRecord = { ...current, phase: "deleting", keep: false };
+      delete next.keptAt;
+      await this.#put(next, true);
       await rename(this.#file(name, true), this.#file(name, false));
-    } catch {
-      return false;
-    }
-    await this.update(name, { phase: "deleting", keep: false });
-    return true;
+      return true;
+    });
   }
 
   /** Every record file, active and kept. A missing directory is an empty ledger. */

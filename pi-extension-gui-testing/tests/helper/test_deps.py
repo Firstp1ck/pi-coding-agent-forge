@@ -1,5 +1,6 @@
 """Dependency-cache transfers (protocol 2): pack/unpack roundtrip and malicious archives."""
 import base64
+import gzip
 import hashlib
 import io
 import os
@@ -355,6 +356,75 @@ class ArchiveMetadataBoundTests(DepsTestBase):
         reader.read(budget.limit)
         with self.assertRaises(deps.TooLarge):
             reader.read(10)
+
+
+def old_gnu_sparse_archive(extension_blocks):
+    """The reviewer's archive: an old GNU sparse ('S') member whose map continues in ``extension_blocks`` blocks."""
+    info = tarfile.TarInfo("sparse")
+    info.type = tarfile.GNUTYPE_SPARSE
+    info.size = 0
+    header = bytearray(info.tobuf(format=tarfile.GNU_FORMAT))
+    header[482] = 1  # isextended
+    header[483:495] = b"00000000000\0"
+    header[148:156] = b"        "
+    header[148:156] = ("%06o\0 " % sum(header)).encode()
+    block = bytearray(512)
+    for i in range(21):
+        block[i * 24:i * 24 + 24] = b"00000000001\00000000000001\0"
+    block[504] = 1
+    last = bytearray(block)
+    last[504] = 0
+    raw = bytes(header) + bytes(block) * (extension_blocks - 1) + bytes(last) + b"\0" * 1024
+    return gzip.compress(raw)
+
+
+class SparseMemberTests(DepsTestBase):
+    """X2: sparse members (old GNU and every PAX GNU.sparse variant) are refused before their maps are parsed."""
+
+    def assertRejectedSmall(self, archive, peak_limit=1024 * 1024, **kwargs):
+        tracemalloc.start()
+        try:
+            error = self.assertRejected(archive, **kwargs)
+            _, peak = tracemalloc.get_traced_memory()
+        finally:
+            tracemalloc.stop()
+        self.assertIn("sparse", error.message)
+        self.assertLess(peak, peak_limit, "the sparse map must never be parsed (peak %d bytes)" % peak)
+        return error
+
+    def test_old_gnu_sparse_with_extension_blocks_is_refused_before_its_map_is_read(self):
+        # 8192 extension blocks: 4 MiB of map that tarfile would parse into ~172 000 tuples.
+        self.assertRejectedSmall(old_gnu_sparse_archive(8192), max_bytes=8 * 1024 * 1024, max_entries=1)
+
+    def pax_sparse(self, headers, data=b""):
+        def build(tar):
+            info = tarfile.TarInfo("f")
+            info.size = len(data)
+            info.pax_headers = headers
+            tar.addfile(info, io.BytesIO(data) if data else None)
+
+        return gz_tar(build)
+
+    def test_pax_sparse_0_0_is_refused(self):
+        headers = {"GNU.sparse.size": "100", "GNU.sparse.numblocks": "1", "GNU.sparse.offset": "0", "GNU.sparse.numbytes": "1"}
+        self.assertRejectedSmall(self.pax_sparse(headers, b"x"))
+
+    def test_pax_sparse_0_1_is_refused(self):
+        sparse_map = ",".join(["0", "1"] * 2000)
+        self.assertRejectedSmall(self.pax_sparse({"GNU.sparse.map": sparse_map, "GNU.sparse.size": "100"}, b"x"))
+
+    def test_pax_sparse_1_0_with_a_large_map_in_the_data_is_refused_before_the_map_is_read(self):
+        count = 300000
+        data = ("%d\n" % count).encode() + b"0\n1\n" * count
+        headers = {"GNU.sparse.major": "1", "GNU.sparse.minor": "0", "GNU.sparse.name": "f", "GNU.sparse.realsize": "1"}
+        self.assertRejectedSmall(self.pax_sparse(headers, data), max_bytes=8 * 1024 * 1024)
+
+    def test_other_gnu_sparse_attributes_are_refused(self):
+        self.assertRejectedSmall(self.pax_sparse({"GNU.sparse.realsize": "5"}, b"x"))
+
+    def test_normal_pax_members_still_unpack(self):
+        archive = self.pax_sparse({"comment": "fine"}, b"data")
+        self.assertEqual(self.push(archive, max_entries=1, max_bytes=4), {"entries": 1, "bytes": 4})
 
 
 class SymlinkGraphTests(DepsTestBase):

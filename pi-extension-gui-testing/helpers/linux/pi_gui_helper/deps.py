@@ -612,13 +612,36 @@ class _BoundedReader:
         pass
 
 
+_SPARSE = "sparse files are not supported in deps archives"
+
+
 def _bounded_tarinfo(budget):
     class _BoundedTarInfo(tarfile.TarInfo):
         # Runs for every header (also the records a PAX or GNU long-name header chains to) before
         # tarfile reads the record's payload.
         def _proc_member(self, tar):
             budget.header(self)
+            # Old GNU sparse ('S'): tarfile would read every extension block of its map, unbounded.
+            if self.type == tarfile.GNUTYPE_SPARSE:
+                raise Rejected("member %s is a sparse file (%s)" % (self.name, _SPARSE))
             return super()._proc_member(tar)
+
+        # PAX GNU sparse 0.0, 0.1, and 1.0: _proc_pax calls these once the (bounded) PAX record is
+        # parsed and before any sparse map is read; 1.0 would read its map from the member data.
+        def _proc_gnusparse_00(self, next, *rest):
+            raise Rejected("member %s is a sparse file (GNU.sparse 0.0; %s)" % (next.name, _SPARSE))
+
+        def _proc_gnusparse_01(self, next, *rest):
+            raise Rejected("member %s is a sparse file (GNU.sparse 0.1; %s)" % (next.name, _SPARSE))
+
+        def _proc_gnusparse_10(self, next, *rest):
+            raise Rejected("member %s is a sparse file (GNU.sparse 1.0; %s)" % (next.name, _SPARSE))
+
+        # Any other GNU.sparse key (e.g. GNU.sparse.realsize alone would replace the member size).
+        def _apply_pax_info(self, pax_headers, encoding, errors):
+            if any(key.startswith("GNU.sparse.") for key in pax_headers):
+                raise Rejected("member %s has GNU sparse attributes (%s)" % (self.name, _SPARSE))
+            return super()._apply_pax_info(pax_headers, encoding, errors)
 
     return _BoundedTarInfo
 

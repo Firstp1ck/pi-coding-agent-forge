@@ -24,7 +24,7 @@ async function world(t) {
   const add = async (name, overrides = {}, { kept = false, inCloud = true } = {}) => {
     const r = record(name, overrides);
     await ledger.write(r);
-    if (kept) await ledger.markKept(name);
+    if (kept) await ledger.markKept(name, r.sessionId);
     if (inCloud) api.sandboxes.set(r.ref, { name, location: "aws", status: "ready" });
     return r;
   };
@@ -72,7 +72,7 @@ test("the audit lists dead and unknown owners, bad records, and unrecorded sandb
   await add(NAME("gui-dead"));
   await add(NAME("gui-live"), { ownerLabel: LIVE_OWNER });
   await add(NAME("gui-unknown"), { ownerLabel: "not-a-label" });
-  await add(NAME("gui-kept"), { keep: true }, { kept: true });
+  await add(NAME("gui-kept"), { keep: true, image: "linux" }, { kept: true });
   await writeFile(join(env.ledgerDir, `${NAME("gui-bad")}.json`), "[]");
   api.sandboxes.set(`aws:${NAME("gui-lost")}`, { name: NAME("gui-lost"), location: "aws", status: "ready" });
   api.sandboxes.set("aws:pi-gui-testing-ffff0000-gui-other", { name: "pi-gui-testing-ffff0000-gui-other", location: "aws", status: "ready" });

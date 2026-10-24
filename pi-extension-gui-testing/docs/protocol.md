@@ -10,7 +10,7 @@ Contributor contract between the TypeScript client and the helper. The source of
   - `local-linux`: the helper runs on the client in host mode (`PI_GUI_HELPER_MODE=host`), started directly with `python3 -I -B helper` and an allow-listed environment.
   - `remote-linux`: the helper runs on the SSH host in host mode under `env -i`, over the session's ControlMaster connection. The token is written on stdin before the helper starts reading frames, never in argv.
   - `remote-linux-docker`: `docker run -i --rm …` on the SSH host, as in `docker-linux`.
-  - `cua`: `cua sandbox exec -i <ref> -- sh -c 'IFS= read -r PI_GUI_TESTING_TOKEN && export PI_GUI_TESTING_TOKEN && exec "$@"' sh python3 -I <dir>/tools/helper`. The client writes the token as the first stdin line; the helper runs in container mode inside the sandbox.
+  - `cua`: `cua sandbox exec -i <ref> -- sh -c '<preamble>exec "$@"' sh python3 -I <dir>/tools/helper`. The preamble holds one `IFS= read -r <NAME> && export <NAME> && ` per variable of the helper's environment, in sorted name order: `PI_GUI_ALLOW_EXEC`, `PI_GUI_DEPS_DIR`, `PI_GUI_DISPLAY_LOCK_DIR`, `PI_GUI_HELPER_MODE`, `PI_GUI_RUNTIME_DIR`, `PI_GUI_TESTING_TOKEN`, `PI_GUI_WORKSPACE`. The client writes the values, one per line in the same order, as the first stdin lines, so no value is ever in an argv (a value with a line break is refused). The helper runs in host mode inside the sandbox.
 - Host mode (directories, display locks, forced environment, teardown, probes) is specified in the docstring of `helpers/linux/pi_gui_helper/hostmode.py` and summarised in [DEVELOPMENT.md](../DEVELOPMENT.md#helper-host-mode-contract). In host mode `exec` answers `BAD_REQUEST` unless the client sets `PI_GUI_ALLOW_EXEC=1` (`local-linux` never does), `/deps/venv` is never created, and the `/deps` environment below is replaced by the `PI_GUI_DEPS_DIR` variables.
 - The helper starts Xvfb, the private D-Bus session bus, `at-spi-bus-launcher`, and `openbox` itself, then sets `org.a11y.Status` `IsEnabled=true` and `ScreenReaderEnabled=true` on its private bus.
 
@@ -157,7 +157,7 @@ Unpacking first checks that the upload has exactly the announced size and SHA-25
 
 - absolute names, `..` components, NUL, names over 4096 bytes or components over 255 bytes, nesting over 128 levels;
 - members below a symlink or a file (every parent is opened with `O_NOFOLLOW` relative to the previous one), and members that collide with an existing entry;
-- hardlinks, character and block devices, FIFOs, contiguous and sparse files;
+- hardlinks, character and block devices, FIFOs, contiguous files, and sparse files in every encoding (old GNU `S` members and PAX `GNU.sparse.*` attributes of versions 0.0, 0.1, and 1.0), refused before their sparse maps are read;
 - symlinks with an absolute target or a target that leaves the deps dir, also when resolved the way the kernel will through the archive's other symlinks (`b -> .` then `a -> b/..`), and symlink loops or chains of more than 40 links;
 - a second archive root entry, or more than 4 metadata records (PAX, GNU long name or link) before one member;
 - data that is not gzip or tar, or ends early.

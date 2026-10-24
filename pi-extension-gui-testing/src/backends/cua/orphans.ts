@@ -23,6 +23,10 @@ export interface OrphanOptions {
   onDeleted?: (ref: string) => void;
 }
 
+/** Detail of a kept record written before images were recorded: it is never reused. */
+export const NO_IMAGE_KEPT =
+  "kept sandbox from an older version (its image is not recorded), so it is never reused; it keeps billing until it expires or you delete it with /gui-reset cua";
+
 const UNRECORDED =
   "carries this machine's name prefix but has no record in the local ledger (record lost or another Pi config dir); not removed automatically. Delete it with `cua sandbox rm <ref> --force` if it is yours";
 
@@ -53,7 +57,10 @@ export async function auditCuaOrphans(options: OrphanOptions): Promise<Leftover[
       leftovers.push(problemLeftover(entry));
       continue;
     }
-    if (entry.kept) continue;
+    if (entry.kept) {
+      if (entry.record.image === undefined) leftovers.push({ kind: "sandbox", id: entry.record.ref, detail: NO_IMAGE_KEPT });
+      continue;
+    }
     const liveness = recordOwnerLiveness(entry.record, procRoot);
     if (liveness === "dead") leftovers.push({ kind: "sandbox", id: entry.record.ref, detail: entry.record.keep ? "owner gone; will be kept (keepSandbox)" : "owner gone" });
     else if (liveness === "unknown") leftovers.push({ kind: "sandbox", id: entry.record.ref, detail: "owner unknown; not removed automatically" });
@@ -89,8 +96,11 @@ export async function sweepCuaOrphans(options: OrphanOptions): Promise<SweepResu
       // A kept sandbox that expired or was deleted elsewhere: forget it.
       try {
         if (!(await api.getSandbox(record.ref, signal))) {
-          await ledger.remove(record.name, true);
           options.onDeleted?.(record.ref);
+          // Only the record that was read: a session may have claimed and kept it again meanwhile.
+          await ledger.remove(record.name, true, { sessionId: record.sessionId, ...(record.keptAt ? { keptAt: record.keptAt } : {}) });
+        } else if (record.image === undefined) {
+          result.leftovers.push({ kind: "sandbox", id: record.ref, detail: NO_IMAGE_KEPT });
         }
       } catch {
         // Unreachable now; checked again by the next sweep.
@@ -103,16 +113,18 @@ export async function sweepCuaOrphans(options: OrphanOptions): Promise<SweepResu
       result.leftovers.push({ kind: "sandbox", id: record.ref, detail: "owner unknown; not removed automatically" });
       continue;
     }
+    // Every transition below acts only while the record still names the dead owner that was judged:
+    // another sweep or a new session may have kept or claimed it since this sweep read it.
+    const judged = { sessionId: record.sessionId, ownerLabel: record.ownerLabel };
     if (record.keep && record.phase === "created") {
-      await ledger.markKept(record.name);
-      result.kept.push(record.ref);
+      if (await ledger.markKept(record.name, judged)) result.kept.push(record.ref);
       continue;
     }
     try {
-      await ledger.update(record.name, { phase: "deleting" });
+      if (!(await ledger.update(record.name, { phase: "deleting" }, judged))) continue;
       await api.deleteSandbox(record.ref, signal);
       options.onDeleted?.(record.ref);
-      await ledger.remove(record.name);
+      await ledger.remove(record.name, false, judged);
       result.deleted.push(record.ref);
     } catch (error) {
       result.leftovers.push({ kind: "sandbox", id: record.ref, detail: `delete failed (it may keep billing): ${redact((error as Error).message)}` });

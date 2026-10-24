@@ -89,6 +89,15 @@ V15 applied by owner (spec §4.8). Seat A findings accepted as W1–W10: W1 A-F1
 
 Fix V-r2 (`claude-opus-5-5`, handoff `plans/handoffs/post-m1-V.md`): all 24 fixed with regression tests; kept the partial V-r1 edits after review; new `/gui-setup cua --image`. Owner rerun: 515/515 on Node 26 and Node 22, 0 cancelled; helper tests only `gi` errors; `git diff --check` clean. Round 2 review launched (P-A2, P-B2).
 
+| Run | Provider / model | Task id | Status |
+|---|---|---|---|
+| P-A2 | Pi / `openai-codex/gpt-6.1-sol` (xhigh), seat A | `…gui-testing-post-m1-review-A-r2` | completed: **not ready**; A-F1–F5, F7, F10 fixed; F6, F8, F9 partial; 3 blocking + 2 non-blocking |
+| P-B2 | Pi / `openai-codex/gpt-6.1-sol` (xhigh), seat B | `…gui-testing-post-m1-review-B-r2` | completed: **not ready**; B-F1–F4, F6–F8, V9–V12, V14 fixed; V5, V13 partial; 3 blocking + doc corrections |
+
+Round-2 fixes, accepted: X1 (A2-1, B2-B1) serialise cua ledger keep/claim/delete across processes with owner/session validation inside the lock, sweep passes session id; X2 (A2-2) reject GNU/PAX sparse members before their metadata parsers run; X3 (A2-3, B2-B2) kept-sandbox reuse only with the same image (old records without image are not reused); X4 (A2 non-blocking, B2-B3) stop cost record when a kept sandbox is confirmed missing; X5 (A2 non-blocking) parse remote display locks as JSON, not by spacing; X6 (B2 validation) remote exit-handler test timing robust under load; X7 (B2 docs) `/gui-usage` cost display (implement or correct docs), keepSandbox/deps wording, picker and Cua helper-mode descriptions, preamble description, spec `--image`/0.7 minimum/`CUA_API_KEY` statement, SKILL mount vs copy.
+
+Fix X-r1 (`claude-opus-5-5`, handoff `plans/handoffs/post-m1-X.md`): X1 ledger lock (`ledger-lock.ts`) with CAS inside the lock; X2 sparse members refused before map parsing; X3 image-matched reuse; X4 cost stop on confirmed absence; X5 JSON lock parsing; X6 robust timing test; X7 `/gui-usage` shows estimated cost + doc/spec fixes; Z3 test stabilised. Owner rerun: `npm run check` concurrently with Node 22 suite → 529/529 both; helper tests only `gi` errors. Owner decision: `/gui-cleanup` lists image-less kept sandboxes without deleting them (`/gui-reset cua` deletes). Round 3 review launched (P-A3, P-B3).
+
 ## 8. Open live verification
 
 Filled in at completion.

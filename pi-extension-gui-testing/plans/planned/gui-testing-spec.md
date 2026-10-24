@@ -238,7 +238,8 @@ monitor, GPU, or desktop environment is needed; Xvfb renders in RAM.
 > "Cua Cloud ended"). This section describes the successor surface the backend
 > now targets; see the M1b–M3 plan §6a and `plans/handoffs/post-m1-C.md`.
 
-- Uses the open-source `cua` CLI (written against 0.7), which creates sandboxes
+- Uses the open-source `cua` CLI, version 0.7 or newer (the `cua.cli` check
+  refuses older or unparseable versions), which creates sandboxes
   **in the user's own cloud account** (`--on aws|gcp|hetzner|modal`). The user's
   cloud bills for them. Each sandbox joins Cua's relay (`relay.cua.ai`) under the
   user's cua.ai sign-in, so nothing listens on the internet.
@@ -248,7 +249,12 @@ monitor, GPU, or desktop environment is needed; Xvfb renders in RAM.
   only direct network call is a credential-free reachability probe.
 - **No credential is stored, read, or sent by the package.** The cua.ai sign-in
   (`cua auth login`) and the cloud credentials stay in the `cua` CLI's and the
-  cloud's own stores. `--api-key-env` and `CUA_API_KEY` are obsolete and refused.
+  cloud's own stores. `--api-key-env` is obsolete and refused with an
+  explanation. `CUA_API_KEY` is no longer used by the backend; like every
+  `CUA_*` variable in Pi's environment it is passed through, unread and
+  unstored, to the `cua` CLI's own environment, and it never appears in an argv
+  (the exit handler's `env` prefix carries only an allowlist of non-secret
+  settings).
 - **One sandbox per session, deleted by `gui_stop`** and by every cleanup path
   (§7a): stop, failed start, idle timeout, shutdown, `/gui-cleanup`, a bounded
   synchronous delete at process exit, the next Pi start's sweep (from a local
@@ -256,10 +262,15 @@ monitor, GPU, or desktop environment is needed; Xvfb renders in RAM.
   cloud's own expiry (`cua cloud connect --ttl-hours`, default 8 h). Keeping a
   stopped sandbox between sessions (faster, but it keeps billing and project data
   stays in the cloud) is opt-in only: `keepSandbox: true` in `.pi/gui.local.json`
-  or the global config.
+  or the global config. A kept sandbox is reused only by the same project, in the
+  same cloud, created from the configured image (`--image`); one kept without an
+  image record is never reused and is reported until `/gui-reset cua` deletes it.
+  Ledger transitions are serialised across Pi processes.
 - The Linux helper is deployed into the sandbox and spoken to over
-  `cua sandbox exec -i` (a documented stdio stream); the token is the first stdin
-  line, never argv. Protocol coverage is identical to Linux. Missing helper
+  `cua sandbox exec -i` (a documented stdio stream); a guest shell preamble reads
+  the helper's environment (the session token and the host-mode directories),
+  one value per line, from the first stdin lines and exports it, so no value is
+  ever in an argv. Protocol coverage is identical to Linux. Missing helper
   packages are installed inside the sandbox only.
 - Workspace sync: file set and exclusions per §4.7, uploaded once per session as
   a tar. Upload consent is given once at setup, together with the billing
@@ -429,6 +440,7 @@ never prompts:
 | `--accept-billing` | billing + upload acknowledgement for the chosen cloud (`cua`) |
 | `--cloud aws\|gcp\|hetzner\|modal` | cloud for sandboxes (`cua`; default: the `cua cloud connect --default` cloud) |
 | `--rate-usd-per-hour <n>` | hourly price for the cost estimate when `cua cloud status` reports none (`cua`) |
+| `--image <image>` | sandbox image, a Cua image alias or registry reference (`cua`; default Cua's `linux` image); a changed image is drift until `/gui-doctor` |
 | `--accept-windows-license` | licensing acknowledgement (`docker-windows`) |
 | `--fix` | approves every remediation that needs no password: package installs via passwordless sudo, image builds, key generation, VM install |
 | `--no-fix` | never remediate; report and stop |
@@ -654,7 +666,7 @@ persisted so `/gui-doctor` can detect drift.
 
 | Check | Required | Pass when | Remediation |
 |---|---|---|---|
-| `cua.cli` | yes | `cua --version` works | install the `cua` CLI |
+| `cua.cli` | yes | `cua --version` reports 0.7 or newer | install or update the `cua` CLI |
 | `cua.network` | yes | the Cua API host answers a credential-free request | network/proxy hint |
 | `cua.signin` | yes | `cua auth status` reports signed in (replaces `cua.key`) | `cua auth login` (manual) |
 | `cua.auth` | yes | an authenticated read-only call (`auth whoami`) succeeds | `cua auth login` (manual) |

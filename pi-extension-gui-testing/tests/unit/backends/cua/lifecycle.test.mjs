@@ -6,7 +6,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { readdir, readFile } from "node:fs/promises";
+import { readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { CuaBackend } from "../../../../src/backends/cua.ts";
 import { CuaCostLedger } from "../../../../src/backends/cua/cost.ts";
@@ -404,4 +404,144 @@ test("the settings file stores no credential and records the acknowledgement", a
   const { stat } = await import("node:fs/promises");
   assert.equal((await stat(store.path)).mode & 0o777, 0o600);
   await assert.rejects(store.update({ location: "local" }), /invalid location/);
+});
+
+test("X1: a sweep that read a dead owner's record before a newer keep and claim leaves the live session's record alone (reviewer B interleaving)", async (t) => {
+  const { sweepCuaOrphans } = await import("../../../../src/backends/cua/orphans.ts");
+  const { DEAD_OWNER } = await import("./fake-cua.mjs");
+  const { api, ledger, start, env } = await setup(t);
+  const first = await start({ config: config({ keepSandbox: true }) });
+  await first.stop();
+  const name = first.handle.name;
+  // The owner crashed while the sandbox was in use: an active record of a dead owner that asked to keep it.
+  const saved = await ledger.read(name, true);
+  await ledger.write({ ...saved, ownerLabel: DEAD_OWNER });
+  await ledger.remove(name, true);
+  const slow = new SandboxLedger(env.ledgerDir);
+  const scan = slow.entries.bind(slow);
+  let entered, release;
+  const waiting = new Promise((r) => (entered = r));
+  const gate = new Promise((r) => (release = r));
+  slow.entries = async () => {
+    const entries = await scan();
+    entered();
+    await gate;
+    return entries;
+  };
+  const options = { api, ledger: slow, hostTag: HOST_TAG, procRoot: env.proc, signal: new AbortController().signal };
+  const staleSweep = sweepCuaOrphans(options);
+  await waiting;
+  await sweepCuaOrphans({ ...options, ledger });
+  const active = await start({ config: config({ keepSandbox: true }) });
+  t.after(() => active.stop());
+  assert.equal(active.handle.ref, first.handle.ref, "the kept sandbox was reused");
+  release();
+  const result = await staleSweep;
+  assert.deepEqual(result.kept, [], "the stale sweep moved nothing");
+  assert.deepEqual((await ledger.entries()).map((e) => [e.kept, e.record.sessionId]), [[false, active.id]], "the live session's record stays active");
+  const third = await start({ config: config({ keepSandbox: true }) });
+  t.after(() => third.stop());
+  assert.notEqual(third.handle.ref, active.handle.ref, "a second session never gets a sandbox in use");
+});
+
+test("X1: a stale sweep never deletes a sandbox whose record another session has claimed since", async (t) => {
+  const { sweepCuaOrphans } = await import("../../../../src/backends/cua/orphans.ts");
+  const { DEAD_OWNER } = await import("./fake-cua.mjs");
+  const { api, ledger, start, env } = await setup(t);
+  const first = await start({ config: config({ keepSandbox: true }) });
+  await first.stop();
+  const name = first.handle.name;
+  const saved = await ledger.read(name, true);
+  // A dead owner's record that did not ask to be kept: the sweep would delete it.
+  await ledger.write({ ...saved, ownerLabel: DEAD_OWNER, keep: false });
+  await ledger.remove(name, true);
+  const slow = new SandboxLedger(env.ledgerDir);
+  const scan = slow.entries.bind(slow);
+  let release;
+  const gate = new Promise((r) => (release = r));
+  let read;
+  const readDone = new Promise((r) => (read = r));
+  slow.entries = async () => {
+    const entries = await scan();
+    read();
+    await gate;
+    return entries;
+  };
+  const staleSweep = sweepCuaOrphans({ api, ledger: slow, hostTag: HOST_TAG, procRoot: env.proc, signal: new AbortController().signal });
+  await readDone;
+  // Meanwhile the record became a live session's kept record and was claimed again.
+  await ledger.write({ ...saved, ownerLabel: LIVE_OWNER, sessionId: "gui-livelive" });
+  await ledger.markKept(name, "gui-livelive");
+  const active = await start({ config: config({ keepSandbox: true }) });
+  t.after(() => active.stop());
+  assert.equal(active.handle.ref, first.handle.ref);
+  release();
+  const result = await staleSweep;
+  assert.deepEqual(result.deleted, []);
+  assert.deepEqual(api.deleted, [], "the sandbox in use was not deleted");
+  assert.equal((await ledger.read(name)).sessionId, active.id);
+});
+
+test("X3: a kept sandbox is reused only for the same image (reviewer reproduction)", async (t) => {
+  const { api, ledger, backend, start } = await setup(t);
+  const first = await start({ config: config({ keepSandbox: true }) });
+  await first.stop();
+  assert.equal((await ledger.read(first.handle.name, true)).image, "linux", "the record names its image");
+  await backend.recordSetupInputs({ image: "ghcr.io/me/desktop:2" });
+  const second = await start({ config: config({ keepSandbox: true }) });
+  t.after(() => second.stop());
+  assert.deepEqual(api.calls.filter((c) => c.method === "createSandbox").map((c) => c.args[0].image), ["linux", "ghcr.io/me/desktop:2"]);
+  assert.notEqual(second.handle.ref, first.handle.ref);
+  assert.equal(api.sandboxes.get(api.calls.filter((c) => c.method === "spawnHelper").at(-1).args[0]).image, "ghcr.io/me/desktop:2");
+  assert.equal((await ledger.read(first.handle.name, true))?.image, "linux", "the other image's sandbox stays kept");
+  assert.ok(second.warnings?.some((w) => w.includes(first.handle.ref) && w.includes('"linux"') && /gui-reset cua/.test(w)), JSON.stringify(second.warnings));
+});
+
+test("X3: a kept record without image metadata is never reused, is reported, and /gui-reset deletes it", async (t) => {
+  const { api, ledger, backend, start } = await setup(t);
+  const first = await start({ config: config({ keepSandbox: true }) });
+  await first.stop();
+  const old = await ledger.read(first.handle.name, true);
+  delete old.image;
+  await writeFile(join(ledger.dir, `${old.name}.kept.json`), JSON.stringify(old));
+  const second = await start({ config: config({ keepSandbox: true }) });
+  assert.equal(api.methods().filter((m) => m === "createSandbox").length, 2, "a new sandbox");
+  assert.ok(second.warnings?.some((w) => w.includes(old.ref) && /older version/.test(w)), JSON.stringify(second.warnings));
+  await second.stop();
+  const audit = await backend.auditOrphans(new AbortController().signal);
+  assert.ok(audit.some((l) => l.id === old.ref && /image is not recorded/.test(l.detail)), JSON.stringify(audit));
+  const swept = await backend.sweepOrphans(new AbortController().signal);
+  assert.ok(swept.some((l) => l.id === old.ref && /gui-reset cua/.test(l.detail)), JSON.stringify(swept));
+  await backend.resetData(new AbortController().signal);
+  assert.ok(api.deleted.includes(old.ref));
+  assert.deepEqual(await ledger.entries(), []);
+});
+
+test("X3: a kept sandbox whose reported image differs from the record is not reused and stays kept", async (t) => {
+  const { api, ledger, start } = await setup(t);
+  const first = await start({ config: config({ keepSandbox: true }) });
+  await first.stop();
+  api.sandboxes.get(first.handle.ref).image = "windows";
+  const second = await start({ config: config({ keepSandbox: true }) });
+  t.after(() => second.stop());
+  assert.notEqual(second.handle.ref, first.handle.ref);
+  assert.ok(await ledger.read(first.handle.name, true), "back in the kept set");
+  assert.ok(second.warnings?.some((w) => w.includes(first.handle.ref) && /"windows"/.test(w)), JSON.stringify(second.warnings));
+});
+
+test("X4: a kept sandbox confirmed missing stops billing (reviewer reproduction)", async (t) => {
+  for (const missing of ["undefined", "NOT_FOUND"]) {
+    const { api, cost, start, advance } = await setup(t);
+    const first = await start({ config: config({ keepSandbox: true }) });
+    await first.stop();
+    api.sandboxes.clear(); // TTL expiry
+    if (missing === "NOT_FOUND") api.options.fail = { get: "NOT_FOUND" };
+    advance(3_600_000);
+    const second = await start({ config: config({ keepSandbox: true }) });
+    api.options.fail = {};
+    const before = cost.dailyUsd();
+    advance(3_600_000);
+    assert.equal(cost.dailyUsd() - before, 0.5, `${missing}: only the new $0.50/h sandbox bills`);
+    await second.stop();
+  }
 });

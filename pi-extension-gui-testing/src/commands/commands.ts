@@ -402,12 +402,21 @@ export function createGuiCommands(pi: CommandPi, runtime: GuiRuntime): GuiComman
       const sessions = runtime.tracker.sessions().filter((s) => !parsed.session || s.session === parsed.session);
       if (parsed.session && sessions.length === 0) return emit(`/gui-usage: no usage recorded for session "${parsed.session}"`, true);
       const live = new Set(runtime.list().map((s) => s.id));
+      // Billing backends (cua) estimate each session and today's total of that backend.
+      const today = new Map<string, number>();
       const lines = sessions.map((s) => {
         const calls = Object.entries(s.toolCalls).map(([tool, n]) => `${tool} ${n}`).join(", ") || "no calls";
         const minutes = ((Date.now() - s.startedAt) / 60_000).toFixed(1);
+        const estimate = runtime.tracker.estimate(s.session);
+        if (estimate) today.set(s.backend, estimate.dailyUsd);
+        const cost = estimate ? `, estimated cost $${estimate.sessionUsd.toFixed(2)}` : "";
         const warn = s.warnings.length ? `\n  warnings: ${s.warnings.map((w) => w.signal).join(", ")}` : "";
-        return `${s.session} (${s.backend}, ${live.has(s.session) ? "running" : "stopped"}, ${minutes} min): ${calls}; actions ${s.actions}, screenshots ${s.screenshots}${s.allBlackScreenshots ? ` (${s.allBlackScreenshots} all black)` : ""}, synced ${s.bytesSynced} bytes${warn}`;
+        return `${s.session} (${s.backend}, ${live.has(s.session) ? "running" : "stopped"}, ${minutes} min): ${calls}; actions ${s.actions}, screenshots ${s.screenshots}${s.allBlackScreenshots ? ` (${s.allBlackScreenshots} all black)` : ""}, synced ${s.bytesSynced} bytes${cost}${warn}`;
       });
+      if (today.size > 0) {
+        const total = [...today.values()].reduce((sum, usd) => sum + usd, 0);
+        lines.push(`estimated cost today: $${total.toFixed(2)} (${[...today.keys()].join(", ")}; your cloud's bill is what counts)`);
+      }
       emit(lines.length ? `GUI testing usage:\n${lines.join("\n")}` : "GUI testing usage: no sessions in this Pi session yet", false);
     }),
   };

@@ -178,7 +178,8 @@ test("orphans: dead owners of this boot are swept; live, foreign, and unknown ow
   for (const kept of [alive, foreign, unknown, busyForeign]) await stat(kept.dir);
 });
 
-test("the exit-handler argv removes the dir and kills its processes within 5 s", async (t) => {
+test("X6: the exit-handler argv removes the dir and kills its processes; production bounds it by the 5 s exit-command limit", async (t) => {
+  const { EXIT_COMMAND_TIMEOUT_MS, runExitCleanupSync } = await import("../../../../src/cleanup/exit.ts");
   const s = await sandbox(t);
   const name = remoteSessionName("gui-exit");
   const remote = await create(s.transport, name);
@@ -186,11 +187,13 @@ test("the exit-handler argv removes the dir and kills its processes within 5 s",
   await new Promise((r) => setTimeout(r, 200));
   const resources = new RemoteResources({ transport: s.transport, auditTransport: s.transport, name });
   const argv = resources.exitArgv();
-  const started = Date.now();
-  const result = spawnSync(argv[0], argv.slice(1), { timeout: 5_000, encoding: "utf8" });
-  assert.equal(result.status, 0, result.stderr);
-  assert.ok(Date.now() - started < 5_000);
-  await proc.exited;
+  // The bound itself: the exit handler kills the command after EXIT_COMMAND_TIMEOUT_MS, and ssh gives up connecting after 3 s.
+  assert.equal(EXIT_COMMAND_TIMEOUT_MS, 5_000);
+  assert.ok(argv.includes("ConnectTimeout=3"), argv.join(" "));
+  // The work: run through the real exit handler, with an injected bound, since a loaded machine (two suites at
+  // once) can need more than 5 s for the loopback ssh alone. What matters here is that the one call does it all.
+  runExitCleanupSync({ commands: () => [argv] }, 60_000);
+  await within(proc.exited, 15_000, "the tagged process");
   await assert.rejects(stat(remote.dir));
 });
 
@@ -469,4 +472,51 @@ test("V4: remote-linux-docker: when docker run ends, the wrapper removes the ses
   assert.deepEqual((await readFile(log, "utf8")).trim().split("\n"), ["--host unix:///run/docker.sock run --rm -i img", "--host unix:///run/docker.sock rm -f -- pi-gui-testing-gui-docker"]);
   assert.throws(() => sessionWrappedArgv(remote, ["true"], { host: "-H", container: "x" }), /invalid container/);
   assert.throws(() => sessionWrappedArgv(remote, ["true"], { host: "h", container: "a b" }), /invalid container/);
+});
+
+test("X5: display lock records are parsed as JSON: compact, pretty, and reordered records are attributed and cleaned; invalid ones are not", async (t) => {
+  const { AUDIT_SCRIPT, REMOVE_SCRIPT } = await import("../../../../src/backends/remote/session-dir.ts");
+  const root = await mkdtemp("/tmp/pgt-x5-");
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const xdg = join(root, "xdg");
+  const base = join(xdg, "pi-gui-testing");
+  const bootId = (await readFile("/proc/sys/kernel/random/boot_id", "utf8")).trim();
+  const env = { PATH: "/usr/bin:/bin", HOME: join(root, "nohome"), XDG_RUNTIME_DIR: xdg };
+  const call = (script, args) => spawnSync("/bin/sh", ["-c", script, "sh", ...args], { env, encoding: "utf8", timeout: 20_000 });
+  const formats = {
+    compact: (r) => JSON.stringify(r),
+    pretty: (r) => JSON.stringify(r, null, 2),
+    reordered: (r) => `{ "infra" : { } ,\t"tag":"0123456789abcdef", "runtimeDir" :"${r.runtimeDir}" , "helper": "${r.helper}", "bootId": "${r.bootId}", "display": ${r.display}, "extra": [1, {"runtimeDir": "/nope"}, null, true, -1.5e3] }`,
+    escaped: (r) => JSON.stringify(r).replace(/\//g, "\\/").replace("run", "\\u0072un"),
+  };
+  let display = 9100;
+  for (const [format, render] of Object.entries(formats)) {
+    const name = `s-x5-${format}`;
+    await mkdir(join(base, "displays"), { recursive: true, mode: 0o700 });
+    await mkdir(join(base, name), { mode: 0o700 });
+    const lock = join(base, "displays", `display-${++display}.lock`);
+    const record = { version: 1, helper: "999999:10", bootId, tag: "0123456789abcdef", runtimeDir: join(base, name, "run"), display, infra: {} };
+    await writeFile(lock, `${render(record)}\n`, { mode: 0o600 });
+    assert.match(call(AUDIT_SCRIPT, [name]).stdout, new RegExp(`^lock=${lock}$`, "m"), `${format}: the audit attributes the lock`);
+    call(REMOVE_SCRIPT, ["fast", name]);
+    assert.equal(await exists(lock), false, `${format}: the dead helper's lock is removed`);
+    assert.doesNotMatch(call(AUDIT_SCRIPT, [name]).stdout, /^lock=/m, format);
+  }
+  // Not JSON, or ambiguous: never attributed, never removed.
+  const invalid = {
+    duplicate: (dir) => `{"runtimeDir": "${dir}", "runtimeDir": "${dir}", "helper": "999999:10"}`,
+    truncated: (dir) => `{"runtimeDir": "${dir}", "helper": "999999:10"`,
+    trailing: (dir) => `{"runtimeDir": "${dir}", "helper": "999999:10"} x`,
+    controlChar: (dir) => `{"runtimeDir": "${dir}\t", "helper": "999999:10"}`,
+  };
+  for (const [kind, render] of Object.entries(invalid)) {
+    const name = `s-x5-bad-${kind}`;
+    await mkdir(join(base, "displays"), { recursive: true, mode: 0o700 });
+    await mkdir(join(base, name), { mode: 0o700 });
+    const lock = join(base, "displays", `display-${++display}.lock`);
+    await writeFile(lock, `${render(join(base, name, "run"))}\n`, { mode: 0o600 });
+    assert.doesNotMatch(call(AUDIT_SCRIPT, [name]).stdout, /^lock=/m, `${kind}: not attributed`);
+    call(REMOVE_SCRIPT, ["fast", name]);
+    assert.equal(await exists(lock), true, `${kind}: left alone`);
+  }
 });

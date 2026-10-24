@@ -102,13 +102,13 @@ export class SandboxHandle {
       return [];
     }
     try {
-      await ledger.update(this.name, { phase: "deleting" }).catch(() => undefined);
+      await ledger.update(this.name, { phase: "deleting" }, { sessionId: this.#o.sessionId }).catch(() => undefined);
       await api.deleteSandbox(this.ref);
     } catch (error) {
       return [{ kind: "sandbox", id: this.ref, detail: `delete failed (it may keep billing; /gui-cleanup retries): ${redact((error as Error).message)}` }];
     }
     cost.stop(this.#o.sessionId);
-    await ledger.remove(this.name).catch(() => undefined);
+    await ledger.remove(this.name, false, { sessionId: this.#o.sessionId }).catch(() => undefined);
     this.#done = true;
     return [];
   }
@@ -150,6 +150,8 @@ export interface CuaSessionOptions {
   packageVersion: string;
   sync: SyncSummary;
   onLog(event: LogEvent): void;
+  /** `Session.warnings` (e.g. kept sandboxes that were not reused). */
+  warnings?: readonly string[];
   readyTimeoutMs?: number;
   heartbeatIntervalMs?: number;
   exitWaitMs?: number;
@@ -192,6 +194,7 @@ export class CuaSession extends HelperSession {
       workspaceDescription: "writable copy uploaded to the sandbox (changes stay there)",
       sync: options.sync,
       onLog: options.onLog,
+      ...(options.warnings?.length ? { warnings: options.warnings } : {}),
       // `cua sandbox exec -i` crosses the relay: allow more than the local 10 s for READY.
       readyTimeoutMs: options.readyTimeoutMs ?? 60_000,
       ...(options.heartbeatIntervalMs !== undefined ? { heartbeatIntervalMs: options.heartbeatIntervalMs } : {}),

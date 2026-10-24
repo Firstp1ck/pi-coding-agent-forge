@@ -261,6 +261,9 @@ test("Z3: the copy re-checks each file: a parent swapped for a symlink, a file s
     },
     "file replaced": async (root) => {
       await rm(join(root, "cfg", "app.txt"));
+      // File timestamps advance in coarse kernel ticks (a few ms): a replacement that reuses the inode within the
+      // same tick is indistinguishable by dev:ino:birthtime (a documented residual), so wait past one tick.
+      await new Promise((r) => setTimeout(r, 30));
       await writeFile(join(root, "cfg", "keep.txt"), "occupy the old inode\n");
       await writeFile(join(root, "cfg", "app.txt"), "NEW\n");
     },

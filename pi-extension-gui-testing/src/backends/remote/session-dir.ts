@@ -78,10 +78,52 @@ const TAGGED_FN = [
 ].join(" ");
 
 /**
+ * JSON reader of one display lock record, for POSIX awk (BusyBox, mawk, gawk;
+ * run with `LC_ALL=C`). It parses the whole record as JSON, whatever its
+ * spacing or key order, and prints `s:<path>=<value>` for string and
+ * `n:<path>=<value>` for number members of the top-level object and of nested
+ * objects (`infra.xvfb`); only keys of `[A-Za-z0-9_]` are printed. It fails
+ * (exit 1, nothing usable) on invalid JSON, a duplicate key, nesting deeper
+ * than 16, a top level that is not an object, and strings holding control
+ * characters or NUL, so such a record is never attributed to a session.
+ * `\uXXXX` escapes (Python's default `ensure_ascii`) are decoded to UTF-8.
+ * It holds no single quote, so it fits in a single-quoted shell word.
+ */
+const JSON_AWK = [
+  String.raw`function fail() { exit 1; }`,
+  String.raw`function ws() { while (p <= n && index(" \t\r\n", substr(s, p, 1)) > 0) p++; }`,
+  String.raw`function hex4(   i, d, v) { v = 0; for (i = 0; i < 4; i++) { d = index("0123456789abcdef", tolower(substr(s, p + i, 1))); if (d == 0) fail(); v = v * 16 + d - 1; } p += 4; return v; }`,
+  String.raw`function utf8(c) { if (c < 128) return sprintf("%c", c); if (c < 2048) return sprintf("%c%c", 192 + int(c / 64), 128 + c % 64); if (c < 65536) return sprintf("%c%c%c", 224 + int(c / 4096), 128 + int(c / 64) % 64, 128 + c % 64); return sprintf("%c%c%c%c", 240 + int(c / 262144), 128 + int(c / 4096) % 64, 128 + int(c / 64) % 64, 128 + c % 64); }`,
+  String.raw`function str(   out, c, e, u, l) { if (substr(s, p, 1) != "\"") fail(); p++; out = "";`,
+  String.raw`while (p <= n) { c = substr(s, p, 1); if (c == "\"") { p++; return out; }`,
+  String.raw`if (c == "\\") { e = substr(s, p + 1, 1); p += 2; if (e == "\"" || e == "\\" || e == "/") { out = out e; continue; } if (e != "u") fail(); u = hex4();`,
+  String.raw`if (u >= 55296 && u < 56320) { if (substr(s, p, 2) != "\\u") fail(); p += 2; l = hex4(); if (l < 56320 || l >= 57344) fail(); u = 65536 + (u - 55296) * 1024 + (l - 56320); } else if (u >= 56320 && u < 57344) fail();`,
+  String.raw`if (u < 32) fail(); out = out utf8(u); continue; }`,
+  String.raw`if (index(ctl, c) > 0) fail(); out = out c; p++; } fail(); }`,
+  String.raw`function put(t, k, v) { o = o t ":" k "=" v "\n"; }`,
+  String.raw`function value(path, emit, depth,   c, v) { if (depth > 16) fail(); ws(); c = substr(s, p, 1);`,
+  String.raw`if (c == "\"") { v = str(); if (emit) put("s", path, v); return; }`,
+  String.raw`if (c == "{") { obj(path, emit, depth + 1); return; }`,
+  String.raw`if (c == "[") { arr(depth + 1); return; }`,
+  String.raw`if (match(substr(s, p), /^-?[0-9]+([.][0-9]+)?([eE][-+]?[0-9]+)?/)) { v = substr(s, p, RLENGTH); p += RLENGTH; if (emit) put("n", path, v); return; }`,
+  String.raw`if (substr(s, p, 4) == "true" || substr(s, p, 4) == "null") { p += 4; return; } if (substr(s, p, 5) == "false") { p += 5; return; } fail(); }`,
+  String.raw`function obj(path, emit, depth,   k, kp, c, ok) { p++; ws(); if (substr(s, p, 1) == "}") { p++; return; }`,
+  String.raw`for (;;) { ws(); k = str(); ws(); if (substr(s, p, 1) != ":") fail(); p++; kp = path == "" ? k : path "." k; ok = emit && k ~ /^[A-Za-z0-9_]+$/;`,
+  String.raw`if (ok) { if (kp in seen) fail(); seen[kp] = 1; } value(kp, ok, depth); ws(); c = substr(s, p, 1); p++;`,
+  String.raw`if (c == "}") return; if (c != ",") fail(); } }`,
+  String.raw`function arr(depth,   c) { p++; ws(); if (substr(s, p, 1) == "]") { p++; return; } for (;;) { value("", 0, depth); ws(); c = substr(s, p, 1); p++; if (c == "]") return; if (c != ",") fail(); } }`,
+  String.raw`BEGIN { for (i = 1; i < 32; i++) ctl = ctl sprintf("%c", i); }`,
+  String.raw`{ s = s $0 "\n"; }`,
+  String.raw`END { n = length(s); p = 1; ws(); if (substr(s, p, 1) != "{") fail(); obj("", 1, 1); ws(); if (p <= n) fail(); printf "%s", o; }`,
+].join(" ");
+
+/**
  * Display lock records (`hostmode.py`: `<root>/displays/display-<N>.lock`,
- * JSON with sorted keys). `field K` prints string field `K` of `$rec`;
- * `locks_of P` sets `$locks` to this user's regular lock files (≤ 64 KiB, not
- * symlinks) whose `runtimeDir` is exactly `P/run`, `$tags` to their session
+ * JSON). `readrec F` parses this user's regular lock file `F` (≤ 64 KiB, not
+ * a symlink) with {@link JSON_AWK} into `$kv`; `field K` prints its string
+ * member `K`, `num K` its integer member `K`, `infra_of K` the
+ * `<pid>:<starttime>` of `infra.K`. `locks_of P` sets `$locks` to the lock
+ * files whose `runtimeDir` is exactly `P/run`, `$tags` to their session
  * tags, and `$infra` to the `<pid>:<starttime>` of their infrastructure
  * processes (Xvfb, buses, window manager) when the record is from this boot
  * (other boots' PIDs mean nothing); the helper itself is selected by its
@@ -92,14 +134,15 @@ const TAGGED_FN = [
  */
 const LOCK_FN = [
   'boot=$(cat /proc/sys/kernel/random/boot_id 2>/dev/null);',
-  'field() { printf "%s" "$rec" | sed -n "s/.*\\"$1\\": \\"\\([^\\"]*\\)\\".*/\\1/p"; };',
-  'num() { printf "%s" "$rec" | sed -n "s/.*\\"$1\\": \\([0-9][0-9]*\\).*/\\1/p"; };',
-  'infra_of() { printf "%s" "$rec" | sed -n "s/.*\\"infra\\": {\\([^}]*\\)}.*/\\1/p" | tr "," "\\n" | sed -n "s/.*\\"$1\\": \\"\\([0-9][0-9]*:[0-9][0-9]*\\)\\".*/\\1/p"; };',
-  'readrec() { rec=; { [ -f "$1" ] && [ ! -L "$1" ] && [ -O "$1" ]; } || return 1; sz=$(wc -c < "$1" 2>/dev/null) || return 1; [ $((sz + 0)) -le 65536 ] || return 1; rec=$(tr -d "\\n" < "$1" 2>/dev/null); };',
+  `json_awk='${JSON_AWK}';`,
+  'readrec() { kv=; { [ -f "$1" ] && [ ! -L "$1" ] && [ -O "$1" ]; } || return 1; sz=$(wc -c < "$1" 2>/dev/null) || return 1; [ $((sz + 0)) -le 65536 ] || return 1; kv=$(LC_ALL=C awk "$json_awk" < "$1" 2>/dev/null) || { kv=; return 1; }; };',
+  'field() { printf "%s\\n" "$kv" | sed -n "s/^s:$1=//p"; };',
+  'num() { printf "%s\\n" "$kv" | sed -n "s/^n:$1=\\([0-9][0-9]*\\)$/\\1/p"; };',
+  'infra_of() { printf "%s\\n" "$kv" | sed -n "s/^s:infra[.]$1=\\([0-9][0-9]*:[0-9][0-9]*\\)$/\\1/p"; };',
   'locks_of() { locks=; tags=; infra=; ld="$rb/displays"; { [ -d "$ld" ] && [ ! -L "$ld" ] && [ -O "$ld" ]; } || return 0;',
   'for l in "$ld"/display-*.lock; do readrec "$l" || continue; [ "$(field runtimeDir)" = "$1/run" ] || continue; locks="$locks $l";',
   't=$(field tag); case $t in ""|*[!A-Za-z0-9_-]*) ;; *) tags="$tags $t" ;; esac;',
-  'if [ -n "$boot" ] && [ "$(field bootId)" = "$boot" ]; then infra="$infra $(infra_of "[a-z]*")"; fi;',
+  'if [ -n "$boot" ] && [ "$(field bootId)" = "$boot" ]; then infra="$infra $(infra_of "[A-Za-z0-9_]*")"; fi;',
   'done; };',
   'lock_gone() { for l in $locks; do readrec "$l" || continue; same_boot=; [ -n "$boot" ] && [ "$(field bootId)" = "$boot" ] && same_boot=1;',
   'h=$(field helper); if [ -n "$same_boot" ] && [ -n "$(same "$h")" ]; then echo "left=display-lock $l helper ${h%%:*} still running"; continue; fi;',
