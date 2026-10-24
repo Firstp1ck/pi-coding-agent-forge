@@ -16,6 +16,14 @@ export const ROOT = join(HERE, "..", "..");
 export const READY_PREFIX = "PI-GUI-TESTING-READY";
 export const LOCAL_TEMP = "C:\\Users\\tester\\AppData\\Local\\Temp";
 
+
+/**
+ * Bound for waits that include the helper's Add-Type compile (ready line, or an exit
+ * before ready). pwsh compiles in a few seconds alone, but tens of seconds on a loaded
+ * host (two suites in parallel); these tests check protocol behaviour, not startup time.
+ */
+export const COMPILE_WAIT_MS = 60_000;
+
 /** PowerShell 7 for the tests: PI_GUI_PWSH, pwsh on PATH, or a copy under ~/.local/share/pi-tools. */
 export function findPwsh() {
   if (process.env.PI_GUI_PWSH) return existsSync(process.env.PI_GUI_PWSH) ? process.env.PI_GUI_PWSH : null;
@@ -143,7 +151,7 @@ export class Helper {
     }
   }
 
-  async waitReady(timeoutMs = 20000) {
+  async waitReady(timeoutMs = COMPILE_WAIT_MS) {
     let timer;
     const timeout = new Promise((_, reject) => {
       timer = setTimeout(() => reject(new Error(`no ready line within ${timeoutMs} ms; stderr:\n${this.stderr}`)), timeoutMs);

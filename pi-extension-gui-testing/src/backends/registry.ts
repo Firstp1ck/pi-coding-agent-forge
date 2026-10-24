@@ -13,8 +13,10 @@ import { CUA_HOST_SUPPORT, CuaBackend, type CuaBackendOptions } from "./cua.ts";
 import { SandboxLedger } from "./cua/ledger.ts";
 import { CuaSettingsStore } from "./cua/settings.ts";
 import { DockerLinuxBackend, type DockerLinuxOptions } from "./docker-linux.ts";
+import { DOCKER_WINDOWS_HOST_SUPPORT, DockerWindowsBackend, type DockerWindowsOptions } from "./docker-windows.ts";
 import { DOCKER_LINUX_HOST_SUPPORT, type HostSupport } from "./host-support.ts";
 import { LOCAL_LINUX_HOST_SUPPORT, LocalLinuxBackend, type LocalLinuxOptions } from "./local-linux.ts";
+import { LOCAL_WINDOWS_HOST_SUPPORT, LocalWindowsBackend, type LocalWindowsOptions } from "./local-windows.ts";
 import { RemoteLinuxDockerBackend, type RemoteLinuxDockerOptions } from "./remote-linux-docker.ts";
 import { RemoteLinuxBackend, type RemoteLinuxOptions } from "./remote-linux.ts";
 import { REMOTE_HOST_SUPPORT } from "./remote/host.ts";
@@ -182,9 +184,9 @@ const BUILT_IN: { [K in ImplementedBackendId]: Omit<BackendEntry, "id"> } = {
       }),
   },
   cua: {
-    description: "Linux apps in a Cua sandbox in your own cloud account (AWS, Google Cloud, Hetzner, Modal; billed by that cloud)",
+    description: "Linux and Windows apps in a Cua sandbox in your own cloud account (AWS, Google Cloud, Hetzner, Modal; billed by that cloud; Windows only where cua cloud status lists it)",
     hostSupport: CUA_HOST_SUPPORT,
-    targets: ["linux"],
+    targets: ["linux", "windows"],
     create: (ctx) => {
       // The sandbox ledger and settings follow the runtime's config dir (not always the real agent dir).
       const configDir = ctx.configDir ?? dirname(globalConfigPath());
@@ -196,6 +198,30 @@ const BUILT_IN: { [K in ImplementedBackendId]: Omit<BackendEntry, "id"> } = {
         ...(ctx.options as Partial<CuaBackendOptions> | undefined),
       });
     },
+  },
+  "local-windows": {
+    description: "Windows apps on this machine on a private hidden desktop (Windows 10 1809+ or 11; never your desktop)",
+    hostSupport: LOCAL_WINDOWS_HOST_SUPPORT,
+    targets: ["windows"],
+    create: (ctx) =>
+      new LocalWindowsBackend({
+        ownerLabel: ctx.ownerLabel,
+        ...(ctx.options as Partial<LocalWindowsOptions> | undefined),
+        ...(ctx.tmpRoot ? { genericTmpRoot: ctx.tmpRoot } : {}),
+      }),
+  },
+  "docker-windows": {
+    description: "Windows apps in a Windows VM that dockurr/windows runs in local Docker with KVM (Linux hosts; you license Windows)",
+    hostSupport: DOCKER_WINDOWS_HOST_SUPPORT,
+    targets: ["windows"],
+    create: (ctx) =>
+      new DockerWindowsBackend({
+        ownerLabel: ctx.ownerLabel,
+        // State (license acknowledgement, install record, guest SSH keys) follows the runtime's config dir.
+        configDir: ctx.configDir ?? dirname(globalConfigPath()),
+        ...(ctx.procRoot ? { procRoot: ctx.procRoot } : {}),
+        ...(ctx.options as Partial<DockerWindowsOptions> | undefined),
+      }),
   },
 };
 

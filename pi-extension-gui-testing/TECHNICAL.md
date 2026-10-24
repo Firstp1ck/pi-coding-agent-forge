@@ -4,7 +4,7 @@ Advanced user reference for commands, configuration, environments, storage, priv
 
 [Back to README](README.md) · [Development guide](DEVELOPMENT.md)
 
-> **Status:** early release. Five backends for Linux apps are available. Everything marked *planned* on this page describes later releases and does not work yet.
+> **Status:** early release. Five backends for Linux apps are available. The Windows backends (`local-windows`, `docker-windows`, and Windows sandboxes in `cua`) are available but **have not run on a real Windows machine, Docker with KVM, or Cua yet**; treat them as a preview. Everything marked *planned* on this page describes later releases and does not work yet.
 
 ## Environments
 
@@ -16,11 +16,13 @@ You choose one environment ("backend") explicitly. The package never switches to
 | `local-linux` | yes | on a private virtual screen on your computer | Linux | Linux |
 | `remote-linux` | yes | on a private virtual screen on your own server | Linux or macOS with an OpenSSH client | Linux, on the server's processor type |
 | `remote-linux-docker` | yes | in a Docker container on your own server | Linux or macOS with an OpenSSH client | Linux, on the server's processor type |
-| `cua` | yes, Linux apps only | in a Cua sandbox in your own cloud account | Linux | Linux. Windows and macOS sandboxes are planned. |
-| `docker-windows` | planned | in a Windows virtual machine inside Docker | Linux with hardware virtualization (KVM) | Windows |
-| `local-windows` | planned | on a hidden Windows desktop | Windows 10 or 11 | Windows |
+| `cua` | yes; Windows unverified | in a Cua sandbox in your own cloud account | Linux | Linux; Windows where Cua offers it for your cloud (as of `cua` 0.9: none). macOS sandboxes are planned. |
+| `local-windows` | yes, unverified | on a hidden desktop of your computer | Windows 10 1809 or newer, or Windows 11 (x64 or ARM64) | Windows |
+| `docker-windows` | yes, unverified | in a throwaway Windows virtual machine inside Docker on your computer | Linux (x86-64 or ARM64) with hardware virtualization (KVM) | Windows (Windows on ARM on ARM64 computers) |
 
-When you have not chosen a backend, the tools and `/gui-doctor` use `docker-linux`. A backend you chose that is not available yet is refused, never replaced. Windows apps, and Windows clients for the remote backends, wait on the Windows helper, which is not built yet.
+When you have not chosen a backend, the tools and `/gui-doctor` use `docker-linux`. A backend you chose that does not exist in your installed version is refused, never replaced. Windows clients for the remote backends are planned.
+
+Which platform a session runs is decided by `gui_launch`'s `target`, else the first entry of `targets` in `.pi/gui.json` (default `["linux"]`). A backend refuses a target it does not run: set `"targets": ["windows"]` for `local-windows` and `docker-windows`. With `cua`, `"targets": ["windows", "linux"]` makes Windows the default and still allows Linux.
 
 The server backends need no monitor, graphics card, or desktop environment on the server. A Raspberry Pi 4 or 5 with a 64-bit OS, set up over SSH only, works as a server.
 
@@ -34,7 +36,9 @@ All backends need Pi 1.4.0 or newer. Setup checks each requirement and tells you
 | `local-linux` | A Linux computer with Python 3.9 or newer, Xvfb, xdotool, xprop and xwininfo, ImageMagick, the D-Bus daemon, and PyGObject with GTK 3. Recommended: AT-SPI (`at-spi2-core`) and pyatspi for the accessibility tree, openbox as window manager, and fonts. At least 1 GB free in your temp folder. |
 | `remote-linux` | **Your computer:** Linux or macOS with the OpenSSH client, an SSH key in your agent or `~/.ssh`, and key login to the server (`ssh -o BatchMode=yes myserver true` works). `rsync` is optional. **Server:** 64-bit Linux (x86-64 or ARM64; 32-bit ARM only warns), a POSIX login shell or fish (not csh or tcsh), `tar`, `sha256sum`, `mktemp`, and `stat` (GNU coreutils or BusyBox), at least 2 GB of memory and 2 GB free at the session folder, Python 3.9 or newer, Xvfb, xdotool, ImageMagick, `dbus-run-session`, and PyGObject with GTK 3. Recommended: AT-SPI and pyatspi, openbox, fonts. |
 | `remote-linux-docker` | **Your computer:** as for `remote-linux`; Docker is not needed. **Server:** the same basics as for `remote-linux` (64-bit Linux, shell, file tools, 2 GB of memory), plus Docker Engine 29.0 or newer that the SSH user can use without `sudo`, and at least 5 GB free where Docker stores its data. The base image is built on the server (about 0.5 GB of downloads). |
-| `cua` | A Linux computer with at least 1 GB free in the temp folder. The open-source `cua` command-line tool (this release was written against version 0.7), a cua.ai account you are signed in to (`cua auth login`), and one of your own cloud accounts connected for sandboxes: AWS, Google Cloud, Hetzner, or Modal (`cua cloud connect <cloud> --default`), with that cloud's credentials on your computer. |
+| `cua` | A Linux computer with at least 1 GB free in the temp folder. The open-source `cua` command-line tool (this release was written against version 0.7; the Windows target against 0.9), a cua.ai account you are signed in to (`cua auth login`), and one of your own cloud accounts connected for sandboxes: AWS, Google Cloud, Hetzner, or Modal (`cua cloud connect <cloud> --default`), with that cloud's credentials on your computer. **Windows sandboxes** additionally need a cloud for which `cua cloud status` lists a supported Windows image, and an image with Windows PowerShell 5.1, Windows 10 1809 / Server 2019 (build 17763) or newer, and the system `tar.exe`. Nothing is installed in a Windows sandbox. |
+| `local-windows` | Windows 10 1809 (build 17763) or newer, or Windows 11, on x64 or ARM64. Windows PowerShell 5.1 (part of Windows) in full language mode, with no Group Policy that sets the execution policy to `AllSigned` or `Restricted` (`RemoteSigned` is fine). Pi runs in your own, non-elevated session with Explorer running and UAC on. At least 1 GB free in `%LOCALAPPDATA%\Temp`. Nothing is installed. |
+| `docker-windows` | A Linux computer (x86-64 or ARM64) with KVM: `/dev/kvm` readable and writable by you (usually through the `kvm` group), and VT-x or AMD-V turned on in the firmware (or nested virtualization when Linux itself runs in a VM). Docker Engine 29.0 or newer, rootful, on a local Unix socket, usable without `sudo`. At least 8 GB of RAM (4 GB go to the VM by default) and 80 GB free where Docker stores its data before the install (16 GB once Windows is installed). The OpenSSH client (`ssh`, `ssh-keygen`). Internet access during the install: about 6 GB of Windows from Microsoft, the dockurr/windows image (about 240 MB), and OpenSSH Server from Windows Update. |
 
 ## What setup checks
 
@@ -47,7 +51,7 @@ All backends need Pi 1.4.0 or newer. Setup checks each requirement and tells you
 | `pi.version` | Pi is 1.4.0 or newer. |
 | `host.os` | Your computer's operating system can run this backend. |
 | `config.writable` | Pi's agent folder can store the package's settings. |
-| `disk.free` | Enough space is free in your temp folder: 5 GB for `docker-linux`, 1 GB for the other backends. |
+| `disk.free` | Enough space is free in your temp folder: 5 GB for `docker-linux`, 1 GB for the other backends. `docker-windows` measures Docker's data folder instead (see below). |
 
 ### `docker-linux`
 
@@ -148,14 +152,51 @@ All `cua` checks only read. They create no sandbox and cost nothing.
 | `cua.auth` | A signed-in, read-only Cua call works. |
 | `cua.cloud` | One of your cloud accounts is connected for sandboxes, and its credentials are on your computer. |
 | `cua.quota` | The cloud account passes Cua's own read-only test: credentials, permissions, quota, and region. |
-| `cua.targets` | Every platform you asked for is available. Windows and macOS are refused in this release. |
+| `cua.targets` | Every platform you asked for (`--targets`, else the project's `targets`) is available. Windows passes only when `cua cloud status` lists a supported Windows image for the chosen cloud; otherwise it fails with Cua's reason, for example that the cloud offers no nested virtualization. macOS is refused in this release. |
 | `cua.ttl` | *Optional.* Sandboxes in your cloud expire on their own, so one left by a crash stops billing eventually. |
-| `cua.rate` | *Optional.* An hourly price is known for the cost estimate, from Cua or from `--rate-usd-per-hour`. |
+| `cua.rate` | *Optional.* An hourly price is known for the cost estimate, from Cua or from `--rate-usd-per-hour`; for Windows sandboxes, from Cua or from `--windows-rate-usd-per-hour`. |
 | `cua.cost-ack` | You accepted the billing and the upload of project files for this cloud. |
+
+### `local-windows`
+
+Setup installs nothing for this backend; every fix is a step for you or your administrator. Each helper check starts the helper once, which compiles it first, so these checks take seconds each.
+
+| Check | What it confirms |
+|---|---|
+| `win.powershell` | Windows PowerShell 5.1 (not PowerShell 7) is in `%SystemRoot%\System32\WindowsPowerShell\v1.0` and runs in full language mode. Constrained language mode, set by an AppLocker or WDAC policy, blocks the helper. |
+| `win.execution-policy` | No Group Policy sets PowerShell's execution policy to `AllSigned` or `Restricted`. The helper starts with `-ExecutionPolicy Bypass`, which a Group Policy overrides. |
+| `helper.present` | The package's 17 helper files are installed. The helper is an unsigned PowerShell script, so there is no signature to check. |
+| `win.version` | Windows 10 1809 (build 17763) or newer. The report also says whether Pi runs elevated. |
+| `win.arch` | Windows runs on x64 or ARM64. |
+| `helper.desktop` | The helper can create a private, hidden desktop. |
+| `helper.job` | The helper can contain apps in a Windows job, so they all end with the session. |
+| `helper.nonelevated` | Apps start without administrator rights, as the same user as your Explorer, even when Pi itself runs elevated. |
+| `helper.uia` | UI Automation (Windows' accessibility interface) works on the private desktop. |
+| `helper.av` | *Optional.* Security software did not block or kill the helper while it compiled itself. A warning names what happened. |
+
+### `docker-windows`
+
+| Check | What it confirms |
+|---|---|
+| `host.linux` | Your computer runs Linux. |
+| `docker.cli`, `docker.endpoint`, `docker.daemon`, `docker.permission`, `docker.rootless`, `docker.version`, `docker.ostype`, `docker.arch` | As for `docker-linux`: a local, rootful Docker Engine 29.0 or newer that you can use without `sudo`. |
+| `kvm.device` | `/dev/kvm` exists and you can read and write it. |
+| `kvm.cpu` | The processor offers hardware virtualization (VT-x or AMD-V on x86-64; on ARM64, `/dev/kvm` is enough). |
+| `mem.available` | At least 8 GB of RAM in total, and enough available for the VM (at least 4 GB, or the size you chose). |
+| `disk.free` | Free space where Docker stores its data: 80 GB before Windows is installed, 16 GB afterwards. |
+| `ports.free` | Programs can listen on `127.0.0.1`, where the VM's SSH port is published. |
+| `license.ack` | You confirmed that you are responsible for Windows licensing. |
+| `image.base` | The pinned dockurr/windows image (version 6.06, about 240 MB, without Windows) is present. Setup downloads it. |
+| `isolation.inspect` | A test container shaped like a session gets every restriction: no privileged mode, all capabilities dropped except the few the VM needs, only the KVM and network-tunnel devices, only the Windows volume, and every port on `127.0.0.1`. It is created but never started, then removed. |
+| `vm.installed` | Windows is installed in this computer's Windows volume, and the VM's keys are present. Setup installs it unattended (15–30 minutes, about 6 GB of downloads, up to 2 hours) and shows its progress. |
+
+### `cua` with Windows
+
+The same `cua` checks run. Ask for Windows with `/gui-setup cua --targets linux,windows` (or set `targets` in `.pi/gui.json`): `cua.targets` then also checks the Windows image, and `cua.rate` warns when no Windows price is known.
 
 ### The test after the checks
 
-After the checks, setup starts a small test app in the backend, finds its button by name, clicks it, checks that a label changed, takes a screenshot, and confirms nothing is left behind.
+After the checks, setup starts a small test app in the backend (GTK 3 for Linux, WinForms for the Windows backends), finds its button by name, clicks it, checks that a label changed, takes a screenshot, and confirms nothing is left behind. With `local-windows`, it also confirms that your own foreground window did not change. For `cua`, the test runs a Linux sandbox.
 
 ## Commands
 
@@ -177,7 +218,9 @@ What `/gui-reset` removes:
 | `local-linux` | Only the ready status and backend choice | The system tools you installed |
 | `remote-linux` | Orphaned session folders on the server | Packages installed on the server |
 | `remote-linux-docker` | Base images and orphaned session folders on the server | Docker on the server |
-| `cua` | Sandboxes kept by `keepSandbox`, sandboxes whose deletion did not finish (`pending deletion`), the billing acceptance, and the `cua` settings | The `cua` tool, your cua.ai sign-in, and your cloud connection. Use `cua auth logout` and `cua cloud disconnect` to remove them. |
+| `cua` | Sandboxes kept by `keepSandbox` (Linux and Windows), sandboxes whose deletion did not finish (`pending deletion`), the billing acceptance, and the `cua` settings | The `cua` tool, your cua.ai sign-in, and your cloud connection. Use `cua auth logout` and `cua cloud disconnect` to remove them. |
+| `local-windows` | Only the ready status and backend choice | Windows PowerShell and the .NET Framework, which are part of Windows |
+| `docker-windows` | The installed Windows disk (Docker volume `pi-gui-testing-windows-base`), a running install, the dockurr/windows image, this computer's VM keys, the licensing confirmation, and the VM size settings. The keys and settings are removed only when the volume is gone. | Docker and KVM |
 
 ### Keeping your personal settings out of Git
 
@@ -204,14 +247,22 @@ Every question setup can ask has an option, so a complete command runs without q
 | `--cloud aws\|gcp\|hetzner\|modal` | `cua` | The cloud for sandboxes. Default: the cloud you chose with `cua cloud connect … --default`. |
 | `--rate-usd-per-hour <n>` | `cua` | Your cloud's price per sandbox hour, from 0 to 1000. Used for the cost estimate only when Cua reports no price. |
 | `--image <image>` | `cua` | The sandbox image: a Cua image alias or a registry reference. Default: Cua's `linux` image. Your own image needs the helper's packages, or `apt-get` as root or with passwordless sudo. Changing the image later blocks new sessions until you run `/gui-doctor cua`. |
-| `--targets linux,windows,macos` | `cua` | The platforms to check. Only `linux` passes in this release. |
-| `--accept-windows-license` | *planned* | For `docker-windows`, which is not available yet. Refused. |
+| `--targets linux,windows,macos` | `cua` | The platforms to check. `windows` passes only where Cua offers Windows for your cloud; `macos` is refused in this release. |
+| `--windows-image <image>` | `cua` | The image of Windows sandboxes: a Cua image alias or a registry reference. Default: Cua's `windows` image (Windows Server 2022, without a license). Changing it later blocks new sessions until you run `/gui-doctor cua`. |
+| `--windows-rate-usd-per-hour <n>` | `cua` | Your cloud's price per Windows sandbox hour, from 0 to 1000, for the estimate when Cua reports none. The Linux price is never used for Windows. |
+| `--accept-windows-license` | `docker-windows` | You confirm that you are responsible for licensing the Windows that setup downloads and installs. Without it, the interactive screen asks once; in print or JSON mode setup stops with `needs-user-action`. |
+| `--windows-version <v>` | `docker-windows` | The Windows version dockurr/windows installs, for example `11` (default), `10`, or `2025` (letters, digits, `.`, `_`, `-`). Applies to the next install. |
+| `--vm-ram-gb <n>` | `docker-windows` | RAM of each VM in GB, 2 to 512 (default 4). Applies to every new session. |
+| `--vm-cpus <n>` | `docker-windows` | CPU cores of each VM, 1 to 128 (default 2). Applies to every new session. |
+| `--vm-disk-gb <n>` | `docker-windows` | Size of the Windows disk in GB, 64 to 4096 (default 64). Applies to the next install. |
+
+The VM options are stored when setup runs, even if a later check fails. To change the version or disk size of an installed Windows, run `/gui-reset docker-windows`, then `/gui-setup docker-windows` with the options again: the reset also removes the stored VM settings.
 
 An option that does not fit the chosen backend is refused with a message naming the backend it belongs to; it is never silently ignored. `--api-key-env` is always refused: for `cua` because it uses your `cua auth login` session and needs no API key, and for every other backend because it is not one of its options.
 
 Without a backend name, the interactive screen lists only the backends that run on your computer's operating system.
 
-Passing `--fix` or `--accept-billing` counts as your explicit approval.
+Passing `--fix`, `--accept-billing`, or `--accept-windows-license` counts as your explicit approval.
 
 ### `/gui-doctor` options
 
@@ -284,11 +335,64 @@ What happens in each session:
 
 **`keepSandbox`.** With `"keepSandbox": true` in `.pi/gui.local.json`, a stopped session keeps its sandbox, and the next session of the same project in the same cloud reuses it after clearing it and uploading the project again. It is reused only when it was made from the image you have configured now (`--image`); after you change the image, a new sandbox is created and the old one stays kept, and `gui_launch` names it. A sandbox kept by an earlier version of this package, which did not record its image, is never reused; `gui_launch`, `/gui-cleanup`, and `/gui-doctor` list it. Delete such sandboxes with `/gui-reset cua`. Reuse saves creating the sandbox and installing the helper's system packages, but `setup` still runs every session. A kept sandbox **keeps billing**, your project files stay in your cloud, and it still expires with your cloud's expiry time. An expired one is replaced automatically. If Cua cannot say whether the kept sandbox still exists (for example a network error), the start fails and the sandbox stays recorded, so no second sandbox is created; try again, or delete it with `/gui-reset cua`. `/gui-reset cua` deletes kept sandboxes, and any sandbox whose deletion did not finish.
 
+## Windows apps
+
+The Windows backends are new and have not run on real Windows yet. They work like the Linux ones: Pi finds controls through UI Automation (Windows' accessibility interface), clicks and types, and takes screenshots, without anything appearing on your own desktop.
+
+### `local-windows` sessions
+
+- The app runs on a private desktop that the package creates for the session. It is never shown on your screen and its windows are not on your taskbar. Clicks and typing go to the app's windows directly, not through your mouse and keyboard.
+- Each session start takes about 10–20 seconds: the helper compiles itself with Windows' built-in C# compiler before it answers (Pi waits up to 45 seconds).
+- In `mount` mode (default) the app runs in your project folder and can change files there. In `copy` mode it runs in a filtered copy without secrets and without dependency folders such as `node_modules` or `.venv`.
+- `setup` commands never run; the app uses what is already installed on your computer. `"network": "none"` is refused.
+- Before Pi gets the session, the package checks that the app is on the private desktop and that your foreground window did not change during the start. If you switched windows yourself during those seconds, the start is refused; start it again.
+- Session files live in `%LOCALAPPDATA%\Temp\pi-gui-testing-win-<id>`, readable only by you, and are removed when the session ends.
+
+### `docker-windows` install and sessions
+
+`/gui-setup docker-windows` installs Windows once:
+
+1. You confirm the licensing notice (or pass `--accept-windows-license`).
+2. Setup downloads the dockurr/windows image and creates the Docker volume `pi-gui-testing-windows-base`.
+3. dockurr/windows downloads Windows from Microsoft and installs it unattended. The package adds OpenSSH Server, this computer's key, and the GUI helper. The status line shows `Windows install (N min): …`. This takes 15–30 minutes, with a limit of 2 hours.
+4. Setup checks the helper files in the VM, shuts Windows down, and keeps the disk.
+
+If the install is cancelled or Pi stops, run `/gui-setup docker-windows` again: it continues on the same volume. A timeout, a wrong VM host key, or helper files that do not match discard the attempt, and the next setup starts over.
+
+Each session:
+
+- starts a new container from the installed disk. Everything the session changes in Windows, including your project copy, is written to a temporary layer and thrown away with the container. After the session, the package checks that the installed disk did not change.
+- copies the project files allowed by the sync rules into the VM. File names Windows cannot store (for example with `:` or `?`, a trailing dot, or `CON`) are skipped and named in the `gui_launch` result. Changes never come back.
+- boots Windows (expected to take one or two minutes; Pi waits up to 6 minutes), then starts the helper (up to 90 seconds).
+- runs the app on a private desktop inside the VM, as the VM's administrator account.
+- runs `setup` commands in the VM in every session, up to 15 minutes each. There is no dependency cache for Windows yet.
+
+Only one `docker-windows` session runs at a time. `workspaceMode` has no effect: the app always gets a writable copy.
+
+### Windows sandboxes with `cua`
+
+- Windows sandboxes start only on a cloud for which `cua cloud status` lists a supported Windows image. As of `cua` 0.9, none of AWS, Google Cloud, Hetzner, or Modal does; setup and `gui_launch` then refuse Windows with Cua's reason, before anything is created or billed.
+- The default image is Cua's `windows` image (Windows Server 2022, no license). Choose another with `--windows-image`.
+- Session files live in `C:\pi-gui-testing\<session>\` in the sandbox, readable only by the sandbox user and administrators. Nothing is installed in the sandbox. The helper's files are checked against this package before the project is uploaded.
+- The first launch takes minutes: Windows boots, then the helper compiles itself (Pi waits up to 3 minutes for it).
+- Apps run on a private desktop in the sandbox, with administrator rights: Cua's Windows image runs every command elevated.
+- Cost uses the Windows price Cua reports, else `--windows-rate-usd-per-hour`, else no estimate; never the Linux price. Windows licensing costs of your cloud are not in the estimate.
+- `keepSandbox` reuses a kept sandbox only for the same platform.
+
+### `setup` commands on Windows
+
+With `docker-windows` and Windows sandboxes in `cua`, each `setup` command runs as a Windows PowerShell 5.1 script in the workspace folder:
+
+- A failing PowerShell command (cmdlet) stops the script with exit code 1.
+- A failing program, such as `pip` or `npm`, does **not** stop it. The exit code is that of the last program. Add `if ($LASTEXITCODE) { exit $LASTEXITCODE }` after a program to stop on its failure.
+- With `cua`, one command can be about 2 900 characters at most; a longer one is refused before a sandbox is created.
+- A project that tests both Linux and Windows needs commands that work in both `sh` and PowerShell, because `setup` has no per-platform list.
+
 ## Dependency cache
 
 When `.pi/gui.json` has `setup` commands, the first session runs them and stores what they installed on your computer. Later sessions of the same project restore it and skip `setup`.
 
-- **Backends:** `docker-linux`, `remote-linux`, and `remote-linux-docker`. `local-linux` never runs `setup`, and `cua` does not use the cache in this release: `setup` runs and installs your project's dependencies in every `cua` session, also in a sandbox reused with `keepSandbox` (reuse only skips reinstalling the helper's system packages).
+- **Backends:** `docker-linux`, `remote-linux`, and `remote-linux-docker`. `local-linux` and `local-windows` never run `setup`; `docker-windows` and Windows sandboxes run it every session (no cache for Windows yet); and `cua` does not use the cache in this release: `setup` runs and installs your project's dependencies in every `cua` session, also in a sandbox reused with `keepSandbox` (reuse only skips reinstalling the helper's system packages).
 - **What is cached:** only the session's dependency folder: `/deps` in containers, the session's dependency folder on a `remote-linux` server. Changes `setup` makes in the home folder or `/tmp` are not restored on a later session.
 - **Writable workspaces:** when `setup` changes the project folder itself (for example `npm install` creating `node_modules` in `copy` mode or on `remote-linux`), the run is not stored, because restoring the cache could not repeat that change. The result says `not stored: setup changed the workspace, and only the deps dir is cached`.
 - **When a new entry is needed:** the cache key covers your lockfiles and manifests (`requirements*.txt`, `pyproject.toml`, `uv.lock`, `poetry.lock`, `package-lock.json`, `pnpm-lock.yaml`, `yarn.lock`, `Cargo.lock` in any folder), the `setup` commands, `deps.env`, the backend, the base image or helper version, the processor type, and the target's operating system, C library, and Python version. Changing any of them creates a new entry. Use `deps.keyFiles` (gitignore-style patterns) to choose the files yourself. Key files behind symbolic links, or inside `.git`, `node_modules`, virtual environments, or build folders, are not counted.
@@ -307,7 +411,8 @@ Settings are read in this order, field by field: options you pass to a command, 
 | `.pi/gui.json` | How to set up and start this project's app | Yes |
 | `.pi/gui.local.json` | Your backend, server, cache, and limits for this project | No. Setup offers to add it to `.gitignore`. |
 | `~/.pi/agent/gui/config.json` (inside Pi's agent folder; see `PI_CODING_AGENT_DIR` below) | Your default backend and settings, and the list of verified backends | — |
-| `~/.pi/agent/gui/cua.json` | Written by `/gui-setup cua`: when and for which cloud you accepted billing, the chosen cloud, the sandbox image, and the price you entered. Contains no credentials. | — |
+| `~/.pi/agent/gui/cua.json` | Written by `/gui-setup cua`: when and for which cloud you accepted billing, the chosen cloud, the Linux and Windows sandbox images, and the prices you entered. Contains no credentials. | — |
+| `~/.pi/agent/gui/docker-windows/settings.json` | Written by `/gui-setup docker-windows`: when you confirmed the licensing notice, the VM size settings, and the install record. Contains no password. | — |
 
 ### `.pi/gui.json`
 
@@ -325,7 +430,7 @@ Settings are read in this order, field by field: options you pass to a command, 
 
 | Field | Meaning |
 |---|---|
-| `targets` | Platforms the app should be tested on. Only `linux` works in this release. |
+| `targets` | Platforms the app should be tested on: `linux` (default), `windows`. The first one is the default target of `gui_launch`. `macos` is planned. |
 | `setup` | Commands that install the app's dependencies in the session: inside the container, on the server, or in the sandbox. They run from the project folder, with up to 15 minutes per command. A failing command stops the session and shows its last output. With the dependency cache, they run only when the cache has no matching entry. `local-linux` never runs them and warns that they were skipped. |
 | `launch` | The default command that starts the app. |
 | `workspaceMode` | `mount` (default) or `copy`. What each one means depends on the backend; see [Security and privacy](#security-and-privacy). |
@@ -333,7 +438,7 @@ Settings are read in this order, field by field: options you pass to a command, 
 | `deps.env` | Extra environment variables for the `setup` commands. They are part of the cache key. |
 | `sync.deny` | Extra files never sent to servers or sandboxes, or into the `copy`-mode workspace. |
 | `sync.allow` | Files sent or copied even though they match the built-in secret list. Use with care. |
-| `network` | `default`, or `none` to run the app without network access. `none` works with `docker-linux` and `remote-linux-docker`. `local-linux`, `remote-linux`, and `cua` refuse it, because they cannot enforce it; a session never starts with a network setting it does not apply. |
+| `network` | `default`, or `none` to run the app without network access. `none` works with `docker-linux` and `remote-linux-docker`. `local-linux`, `remote-linux`, `cua`, `local-windows`, and `docker-windows` refuse it, because they cannot enforce it; a session never starts with a network setting it does not apply. |
 
 Pi proposes `setup` and `launch` after its first working run and shows them to you before saving.
 
@@ -358,7 +463,7 @@ Pi proposes `setup` and `launch` after its first working run and shows them to y
 | `depsCache.enabled` | `true` | `false`: `setup` runs every session, and nothing is read from or stored in the cache. |
 | `depsCache.maxSizeGB` | `5` | Size limit of the whole cache, for all projects, in GB (1024³ bytes). Above 0 and at most 10000. |
 | `keepSandbox` | `false` | `cua`: keep the sandbox after a session and reuse it. Faster, but it keeps billing and your project files stay in your cloud. |
-| `limits.maxConcurrentSessions` | `2` | Sessions that may run at the same time. |
+| `limits.maxConcurrentSessions` | `2` | Sessions that may run at the same time. `docker-windows` runs at most one session at a time regardless. |
 | `limits.idleTimeoutMinutes` | `15` | A session without activity for this long is shut down and cleaned up. There is no maximum session length. |
 | `usageCheck.warnSessionCostUsd` | `1` | Estimated `cua` cost per session that triggers a warning. |
 | `usageCheck.warnDailyCostUsd` | `5` | Estimated `cua` cost per day (since local midnight) that triggers a warning. |
@@ -402,7 +507,7 @@ The `gui_launch` result also shows:
 ### Session rules
 
 - **Limits:** at most `limits.maxConcurrentSessions` sessions run at once. A session with no tool call for `limits.idleTimeoutMinutes` is stopped; a call that is still waiting or running counts as activity, so a long `gui_wait` is never cut off.
-- **After an update or a change:** before each new session, the package compares what setup recorded with what it finds now. That covers the package, Pi, and helper versions, and per backend the Docker versions and base image (`docker-linux`), the Python version (`local-linux`), the configured server (remote backends), or the `cua` tool version, cloud, and region (`cua`). If anything changed, new sessions are refused until you run `/gui-doctor <backend>`. Sessions that are already running continue. The first session after updating this package always asks for `/gui-doctor` once.
+- **After an update or a change:** before each new session, the package compares what setup recorded with what it finds now. That covers the package, Pi, and helper versions, and per backend the Docker versions and base image (`docker-linux`), the Python version (`local-linux`), the configured server (remote backends), the Docker versions, dockurr/windows image, and Windows install (`docker-windows`), or the `cua` tool version, cloud, region, and Linux and Windows sandbox images (`cua`). `local-windows` checks only the package, Pi, and helper versions; run `/gui-doctor local-windows` after a Windows feature update. If anything changed, new sessions are refused until you run `/gui-doctor <backend>`. Sessions that are already running continue. The first session after updating this package always asks for `/gui-doctor` once.
 - **Failed cleanup:** if stopping a session, or a failed start, leaves something behind, the message says what and names the session. The session stays listed and refuses other tools until `gui_stop` again, `/gui-cleanup`, or Pi's shutdown removes everything. It no longer counts against the session limit.
 - **Quitting Pi:** Pi cancels a running setup or session start, waits up to 20 seconds for it, then stops every session.
 - **Exports:** `gui_export` and `/gui-export` can be cancelled and stop after 2 minutes, even in the middle of a file. Files copied completely until then stay in the folder; a partly copied file is removed. A destination inside the session's temp folder, also through a symbolic link, is refused because it would be deleted with the session.
@@ -426,6 +531,11 @@ Your project data stays on your computer. Servers, sandboxes, and containers hol
 | On a server: Docker base image (`remote-linux-docker`) | Tools only, no project files | Kept unless you use `--purge-tooling`. |
 | On a server: system packages | Tools you agreed to install at setup | Kept. Remove them yourself if nothing else needs them. |
 | `cua`: one sandbox per session in your cloud | The helper, your synced project, installed dependencies | Deleted when the session ends, unless `keepSandbox` is on. |
+| `local-windows`: `%LOCALAPPDATA%\Temp\pi-gui-testing-win-<id>` | The session's runtime files and, in `copy` mode, the project copy. Only you can open it. | Deleted when the session ends. Leftovers of a crashed Pi are removed by the next Pi start or `/gui-cleanup local-windows`. |
+| `docker-windows`: `~/.pi/agent/gui/docker-windows/` (or inside `PI_CODING_AGENT_DIR`) | `settings.json`, this computer's key for the VM (`id_ed25519`, owner-only), the VM's public host key, and a `known_hosts` file used only for the VM. During the install, also the staged install files. | Kept until `/gui-reset docker-windows`. |
+| `docker-windows`: Docker volume `pi-gui-testing-windows-base` | The installed Windows disk with OpenSSH Server and the helper. Tools only, never project files. | Kept so later sessions start fast. Removed by `/gui-reset docker-windows`. |
+| `docker-windows`: Docker image `dockurr/windows` (6.06, pinned) | The container that runs the VM. It does not contain Windows. | Kept. Removed by `/gui-reset docker-windows`. |
+| `docker-windows`: containers `pi-gui-testing-win-<session>` and `pi-gui-testing-windows-install` | A running session's VM, or the running install | Removed when the session ends (with everything the session wrote) or the install finishes. Leftovers of a crashed Pi are removed by the next Pi start or `/gui-cleanup docker-windows`. |
 
 Screenshots that Pi already received are part of your Pi session history, not of this package's storage. Use `/gui-export` to keep files.
 
@@ -440,6 +550,8 @@ Screenshots that Pi already received are part of your Pi session history, not of
 | `remote-linux` | The app gets a writable copy on the server, without secrets. | Same. | The server's network. `"network": "none"` is refused. |
 | `remote-linux-docker` | The container reads the copy on the server without secrets. | The container gets a writable copy on the server. | On; `"network": "none"` turns it off. |
 | `cua` | The app gets a writable copy in the sandbox, without secrets. | Same. | Always on; `"network": "none"` is refused. |
+| `local-windows` | The app runs in your project folder as you and **can change any file there** and anything else your user can, including your Windows profile and registry. | The app runs on a writable copy of the selected files, without secrets. Dependency folders are not copied. | Always on; `"network": "none"` is refused. |
+| `docker-windows` | The app gets a writable copy in the VM, without secrets, thrown away with the session. | Same. | On, through Docker's network; `"network": "none"` is refused. |
 
 ### Containers on your computer (`docker-linux`)
 
@@ -473,6 +585,27 @@ Screenshots that Pi already received are part of your Pi session history, not of
 - **Sandbox names** contain a short hash of your machine ID, not the ID itself, so a cloud listing can tell your computers apart.
 - **Costs:** your cloud bills sandbox time. The package has no spending cap; set a budget in your cloud account.
 
+### Windows on your computer (`local-windows`)
+
+- The app runs **as you**, without administrator rights, on a private desktop of the session. It cannot draw on your desktop or read your screen through the package.
+- Unlike `local-linux`, the app sees your real user profile: `%APPDATA%`, `%LOCALAPPDATA%`, and the registry. Only `TEMP` and `TMP` point into the session folder. Settings an app saves, and data of Electron or Chromium apps, stay in your profile.
+- Every app the session starts is contained in Windows jobs that end with the session. Programs Windows starts on the app's behalf outside those jobs (for example Store apps such as Windows 11 Notepad, or COM servers) may run outside the private desktop and survive the session; the package reports what it recorded and cannot see.
+- The helper never runs elevated programs: when Pi itself runs as administrator, apps still start with your normal rights, and the helper refuses to start if that is not possible.
+- No API keys or other variables from Pi's environment reach the helper or the apps; only Windows' own system variables are passed.
+- Security software may react to the helper: it compiles itself with Windows' C# compiler into `%TEMP%` at every start, creates hidden desktops, and sends input to other windows. `helper.av` warns when it was blocked.
+
+### Windows VMs (`docker-windows`)
+
+- **Licensing:** dockurr/windows installs Windows with Microsoft's generic installation keys. Neither it nor this package gives you a license; you confirm at setup that you are responsible for it.
+- **Isolation:** the VM runs in a container with all Linux capabilities dropped except the few the VM's network needs, no privileged mode, and only the KVM and network-tunnel devices. Each session's changes to Windows are discarded with its container; the installed disk is checked after every session, and a change is reported.
+- **Network:** the VM's SSH port (and the optional web viewer) is published on `127.0.0.1` only, never on your network. The VM itself has internet access. The VM's SSH server accepts only this computer's key; passwords and forwarding are off. The VM account's password is random and never stored.
+- **Administrator rights:** apps and `setup` commands run as the VM's administrator account. That is why `"network": "none"` cannot be enforced inside the VM.
+- **Keys:** `id_ed25519` in the package's `docker-windows` folder lets this computer log in to the VM. Anyone who can read it, or who has Docker access on this computer, can reach a running VM. The VM's host key is created on your computer; its private half is deleted once the install finishes.
+
+### Windows sandboxes (`cua`)
+
+- Everything under [Cloud sandboxes](#cloud-sandboxes-cua) applies. In addition, apps and `setup` commands run elevated, because Cua's Windows image runs every command as an administrator.
+
 ### What is sent or copied
 
 - **Which files:** for `copy` mode, the remote backends, and `cua`, the files Git tracks plus new files that are not ignored. Outside Git, all files except common build and dependency folders. Symbolic links that point outside the project or to a left-out file are skipped.
@@ -490,7 +623,7 @@ Screenshots that Pi already received are part of your Pi session history, not of
 
 ### All backends
 
-- **Only Linux apps** in this release. Windows apps need the planned `docker-windows`, `local-windows`, or Windows sandboxes with `cua`; macOS apps need the planned macOS sandboxes with `cua`.
+- **Windows apps are a preview.** `local-windows`, `docker-windows`, and Windows sandboxes in `cua` have not run on real Windows yet. macOS apps need the planned macOS sandboxes with `cua`.
 - **Tkinter apps** have no accessibility information, so Pi finds controls by screenshot and position instead of by name. This is slower and less precise.
 - Java Swing apps expose names only with the Java ATK wrapper installed in the environment.
 - Screenshots are taken at 1280×800 and sent to Pi at most 1280 pixels wide.
@@ -522,9 +655,35 @@ Screenshots that Pi already received are part of your Pi session history, not of
 - Pi never connects to a server at startup, so leftovers of a crashed Pi stay on the server until the next session start there or `/gui-cleanup <backend>`.
 - `/gui-doctor --host` compares names as written: `raspi5` and `me@raspi5` count as different servers.
 
+### Windows apps (all Windows backends)
+
+- **Screenshots can be black** for apps drawn by the graphics card (some WPF, DirectX, or Electron apps without `--disable-gpu`). The result then marks the screenshot as all black; Pi works from the accessibility tree instead. The private desktop's "screen" is the app's windows on a black background.
+- Positions for clicks are measured in the whole window, including its title bar and borders.
+- Apps that read the keyboard directly (raw input, DirectInput, games) may not react to typed keys, because keys are sent to the window instead of the keyboard.
+- Windows Store apps and programs started through COM may open outside the session's private desktop.
+- The helper is an unsigned PowerShell script that compiles itself at every start. A Group Policy execution policy of `AllSigned` or `Restricted`, AppLocker or WDAC constrained language mode, or security software that blocks runtime compilation stops it. A signed helper program may follow.
+- There is no dependency cache for Windows targets.
+
+### `local-windows`
+
+- No network isolation and no read-only view of your project. Apps share your Windows profile.
+- Each session start takes 10–20 seconds (the helper compiles itself, twice when Pi runs elevated). Switching windows yourself during the start can make it fail; start again.
+- `setup` never runs.
+
+### `docker-windows`
+
+- One session at a time. The first install takes 15–30 minutes; each session boots Windows (one or two minutes expected, not yet measured).
+- The helper runs in the VM's background service session over SSH, not on the logged-in Windows desktop. Apps therefore run on a private desktop without the desktop's graphics composition, so screenshots of GPU-drawn apps are more likely to be black than on a real desktop.
+- The install needs Windows Update to install OpenSSH Server; offline or filtered networks make it time out after 2 hours.
+- `setup` commands run in every session. File names Windows cannot store are skipped.
+- `workspaceMode` has no effect; `"network": "none"` is refused.
+- Only Linux computers with KVM. The VM size options change the next install (version, disk) or the next session (RAM, CPUs).
+
 ### `cua`
 
-- Linux apps only, from a Linux computer. Windows and macOS sandboxes, and macOS and Windows computers as clients, are planned.
+- Linux apps from a Linux computer; Windows apps only where Cua offers Windows for your cloud (as of `cua` 0.9: nowhere). macOS sandboxes, and macOS and Windows computers as clients, are planned.
+- The test at the end of setup always runs a Linux sandbox, also when you set up Windows.
+- Windows sandboxes: project files whose names Windows forbids, or links the sandbox user cannot create, make the upload fail; very deep paths can hit Windows' path limits.
 - `"network": "none"` is refused: sandboxes always have outbound network.
 - The sandbox image must contain the helper's packages or allow `apt-get` as root or with passwordless `sudo`; otherwise the start fails and names the missing packages.
 - The project is uploaded in full once per session; there is no incremental sync.
@@ -597,6 +756,33 @@ Screenshots that Pi already received are part of your Pi session history, not of
 | `re-run with /gui-setup cua --accept-billing` | Billing was not accepted. Run setup with `--accept-billing`, or accept in the interactive screen. |
 | `billing was acknowledged for <cloud>, but sandboxes would run in <other cloud>` | Run `/gui-setup cua` again to accept billing for the new cloud. |
 | `"network": "none" is not available on cua` | Remove it, or use `docker-linux`. |
+| `windows on <cloud>: …` (`cua.targets` fails) | Cua offers no Windows sandboxes for that cloud; the text after the colon is Cua's reason. Remove `windows` from `--targets` and `targets`, or wait for Cua to offer it. |
+| `the sandbox did not start the Windows helper (it reported …); check the Windows image chosen at /gui-setup cua` | The image is not Windows, or not one the helper supports. Choose another with `/gui-setup cua --windows-image <image>`. |
+| `the Windows sandbox image lacks …` | The image misses Windows PowerShell 5.1, a recent enough Windows, or `tar.exe`. Choose another `--windows-image`. |
+| `the Windows helper in the sandbox does not match this package (missing or changed: …)` | Security software in the image changed or removed helper files. Use another image, or allow the files. |
+| **`local-windows`** | |
+| `win.powershell` fails with `Add-Type is blocked outside FullLanguage mode` | An AppLocker or WDAC policy puts PowerShell in constrained language mode. Ask your administrator to allow full language mode for your user; otherwise use `docker-windows`. |
+| `win.execution-policy` fails (`… blocks helper.ps1`) | A Group Policy sets `AllSigned` or `Restricted`. Ask your administrator to allow local scripts (`RemoteSigned` or less). |
+| `helper.nonelevated` fails | Start Pi from a normal, non-elevated window of your own user, with Explorer running and UAC on. |
+| `helper.av` warns, or checks fail with `not checked: the helper did not start (…)` | Security software blocked the helper. Allow `helper.ps1` and PowerShell's runtime compilation (`csc.exe` in `%TEMP%`) for the package's folder. |
+| `the user's foreground window changed while the helper started (…)` | You or another program switched windows during the start. Start the session again. |
+| `local-windows never runs setup commands; …` | Expected. Install the app's dependencies yourself, or use `docker-windows`. |
+| `local-windows cannot block the app's network` | Remove `"network": "none"`. |
+| `the Windows helper … is missing; reinstall the package` | Reinstall: `pi install npm:@firstpick/pi-extension-gui-testing`. |
+| A crashed session left processes or a folder | Run `/gui-cleanup local-windows`. |
+| **`docker-windows`** | |
+| `kvm.device` fails | Run `sudo usermod -aG kvm $USER`, then log out and back in. If `/dev/kvm` is missing, turn on VT-x or AMD-V in the firmware (or nested virtualization in your VM). |
+| `the Windows licensing acknowledgement is missing` or `The Windows licensing notice is not acknowledged; re-run with /gui-setup docker-windows --accept-windows-license` | Run `/gui-setup docker-windows --accept-windows-license`, or confirm in the interactive screen. |
+| `Windows is not installed yet; run /gui-setup docker-windows` | Run setup; it installs Windows (15–30 minutes). |
+| The install stops, or `… run /gui-setup docker-windows again to resume` | Run `/gui-setup docker-windows` again; it continues. |
+| `the Windows install did not finish within 120 minutes` | Check that the computer reaches Windows Update; the next setup starts a fresh install. |
+| `the Docker volume pi-gui-testing-windows-base exists but belongs to no install recorded here` | Another Pi configuration (another `PI_CODING_AGENT_DIR`) owns it, or the settings were deleted. Run `/gui-reset docker-windows`, then set up again. |
+| `the installed Windows disk changed during the session` | Reinstall: `/gui-reset docker-windows`, then `/gui-setup docker-windows`. |
+| `docker-windows runs one session at a time and … is still running` | Stop the other session with `gui_stop`, or `/gui-cleanup docker-windows` when its Pi is gone. |
+| `Windows did not answer over SSH within 360 s` | The computer is slow or short of memory. Close other programs, or lower the load; then start again. |
+| `the Windows guest refused this machine's pinned SSH identity` | The VM's keys no longer match. Reinstall with `/gui-reset docker-windows` and `/gui-setup docker-windows`. |
+| `docker-windows cannot run with "network": "none"` | Remove it, or use `docker-linux` for an offline Linux run. |
+| Leftover containers after a crash | Run `/gui-cleanup docker-windows`. |
 | A sandbox is reported as having `no record in the local ledger` | It looks like one of yours but the package has no record of it. If it is yours, delete it with `cua sandbox rm <ref> --force`. |
 | A sandbox could not be deleted | Run `/gui-cleanup cua`. |
 | `unreadable sandbox record` | A local sandbox record file (or the other copy of the same record) cannot be read or is damaged, so Pi cannot tell which session owns that sandbox. To be safe, Pi never reuses, keeps, or deletes that sandbox, and `/gui-cleanup cua` and `/gui-reset cua` leave it in place and keep reporting it. The sandbox may keep billing. If no Pi session is using it, delete it with `cua sandbox rm <location>:<name> --force` (`cua sandbox ls` shows its location), then remove the named record file and the sandbox's other record file, if there is one. If the file is only unreadable (for example its permissions changed), fixing the file is enough. |

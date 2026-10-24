@@ -1,9 +1,11 @@
 /**
  * Smoke test (spec §5.5) for any backend: start a session on an empty
- * workspace, launch the bundled GTK 3 app, find its button by name, click it,
- * see the label change, take a valid non-uniform screenshot, stop, and require
- * an empty footprint audit. Isolation is the backend's job and was checked
- * before (e.g. `isolation.inspect`). Where the app lives and which session
+ * workspace, launch the bundled test app (GTK 3 on Linux, WinForms on
+ * Windows), find its button by name, click it, see the label change, take a
+ * valid non-uniform screenshot, run the session's own isolation assertion when
+ * it has one ({@link IsolationAssertion}, e.g. local-windows' foreground
+ * check, spec §5.5 step 6), stop, and require an empty footprint audit. The
+ * rest of isolation is the backend's job and was checked before (e.g. `isolation.inspect`). Where the app lives and which session
  * options the backend needs come from its {@link SmokeCapability}; the
  * defaults fit the base image of the container backends.
  */
@@ -49,6 +51,23 @@ export interface SmokeOptions {
   onStatus?: (text: string | undefined) => void;
 }
 
+/**
+ * Optional session member: an isolation assertion the smoke test runs after
+ * the click and screenshot (local-windows: the user's foreground window did not change).
+ */
+export interface IsolationAssertion {
+  foregroundUnchanged(signal: AbortSignal): Promise<{ ok: boolean; observed: string }>;
+}
+
+function hasIsolationAssertion(session: object): session is IsolationAssertion {
+  return typeof (session as Partial<IsolationAssertion>).foregroundUnchanged === "function";
+}
+
+/** Name of the bundled smoke app of a target, for status and report texts. */
+export function smokeAppName(target: string | undefined): string {
+  return target === "windows" ? "WinForms test app" : "GTK 3 test app";
+}
+
 function findNode(tree: readonly TreeNode[], roles: readonly string[], name: string): TreeNode | undefined {
   return tree.find((n) => roles.includes(n.role) && n.name === name);
 }
@@ -61,6 +80,8 @@ export async function runSmokeTest(options: SmokeOptions): Promise<SmokeOutcome>
   const app: { cmd: string; args: readonly string[]; cwd?: string } = hasSmoke(backend) ? backend.smokeApp() : SMOKE_APP;
   const config = hasSmoke(backend) && backend.smokeConfig ? backend.smokeConfig(smokeConfig(app)) : smokeConfig(app);
   const status = (text: string) => options.onStatus?.(`smoke test: ${text}`);
+  const target = config.shared.targets[0];
+  const appName = smokeAppName(target);
   const empty = await mkdtemp(join(runtime.options.tmpRoot ?? tmpdir(), "pi-gui-probe-"));
   let live: LiveSession | undefined;
   const started = Date.now();
@@ -74,11 +95,12 @@ export async function runSmokeTest(options: SmokeOptions): Promise<SmokeOutcome>
       piSessionId: options.piSessionId,
       signal,
       transient: true,
+      ...(target ? { target } : {}),
       ...(options.onStatus ? { onStatus: options.onStatus } : {}),
     });
     const { session } = live;
     const step = (name: string) => status(name);
-    step("launching the GTK 3 test app");
+    step(`launching the ${appName}`);
     const launched = await session.request("launch", { cmd: app.cmd, args: [...app.args], env: {}, cwd: app.cwd ?? session.workspacePath ?? "/workspace" }, { signal });
     const firstScreenshotAfter = Date.now() - started;
     if (!launched.windows.some((w) => w.title === SMOKE_WINDOW_TITLE)) {
@@ -100,10 +122,17 @@ export async function runSmokeTest(options: SmokeOptions): Promise<SmokeOutcome>
     if (Math.abs(png.width - expected.width) > 1 || Math.abs(png.height - expected.height) > 1) {
       throw new Error(`screenshot is ${png.width}×${png.height}, expected ${expected.width}×${expected.height}`);
     }
-    if (isUniform(png.rgb)) throw new Error("screenshot is a single uniform colour");
+    if (isUniform(png.rgb)) throw new Error(`screenshot is a single uniform colour${shot.allBlack ? " (all black: this environment may not render the app for capture)" : ""}`);
+    let isolation = "";
+    if (hasIsolationAssertion(session)) {
+      step("checking isolation");
+      const kept = await session.foregroundUnchanged(signal);
+      if (!kept.ok) throw new Error(`isolation: ${kept.observed}`);
+      isolation = `, ${kept.observed}`;
+    }
     outcome = {
       ok: true,
-      observed: `GTK 3 app launched, button found by name, click changed the label, ${png.width}×${png.height} screenshot valid (launch ${firstScreenshotAfter} ms)`,
+      observed: `${appName} launched, button found by name, click changed the label, ${png.width}×${png.height} screenshot valid${isolation} (launch ${firstScreenshotAfter} ms)`,
       arch: session.arch,
       // Recorded for the drift check before each launch (see currentVersions of the backend).
       facts: { "smoke.arch": session.arch, protocol: String(PROTOCOL_VERSION), ...(typeof version === "string" && version ? { "package.version": version } : {}) },

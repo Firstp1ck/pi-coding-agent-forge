@@ -100,6 +100,8 @@ export interface BillingStatus {
   problem?: string;
   /** The sandbox image sessions would use (recorded in the verified inputs). */
   image?: string;
+  /** The image of Windows sandboxes (recorded in the verified inputs; drift like `image`). */
+  windowsImage?: string;
 }
 
 /** Choices `/gui-setup` passes to a billing backend (`--cloud`, `--rate-usd-per-hour`, `--image`). Never secrets. */
@@ -108,6 +110,45 @@ export interface BillingSetupInputs {
   rateUsdPerHour?: number;
   /** Sandbox image (`--image`). */
   image?: string;
+  /** Image of Windows sandboxes (`--windows-image`). */
+  windowsImage?: string;
+  /** Hourly price of a Windows sandbox when the provider reports none (`--windows-rate-usd-per-hour`). */
+  windowsRateUsdPerHour?: number;
+}
+
+/**
+ * A backend that runs an operating system the user must license (spec §5.1
+ * `--accept-windows-license`). `/gui-setup` takes the flag, or shows
+ * {@link LicenseCapability.licenseStatus}'s text in one confirm dialog; without
+ * a UI and without the flag it never prompts and the backend's checks report
+ * the missing acknowledgement.
+ */
+export interface LicenseCapability {
+  /** Whether the notice was acknowledged, and its text; `pending` VM settings are shown as if stored. */
+  licenseStatus(pending?: Partial<VmSettings>): Promise<{ acknowledged: boolean; text: string }>;
+  acknowledgeLicense(): Promise<void>;
+}
+
+/** VM size and version of a backend that runs a VM (`--windows-version`, `--vm-ram-gb`, `--vm-cpus`, `--vm-disk-gb`). */
+export interface VmSettings {
+  version: string;
+  ramGb: number;
+  cpuCores: number;
+  diskGb: number;
+}
+
+/** A backend with stored VM settings. `setVm` validates and persists them (rejects with the reason). */
+export interface VmSettingsCapability {
+  setVm(vm: Partial<VmSettings>): Promise<unknown>;
+}
+
+/**
+ * A backend that runs some remediations itself instead of through the runner
+ * (e.g. an unattended OS install whose displayed command holds placeholders).
+ * `undefined` for checks it does not handle.
+ */
+export interface RemediationCapability {
+  remediate(checkId: string, signal: AbortSignal, onLine?: (line: string) => void): Promise<RunResult> | undefined;
 }
 
 /**
@@ -125,7 +166,7 @@ export interface BillingCapability {
 
 /** A backend with every optional capability it may have. */
 export type RuntimeBackend = Backend &
-  Partial<ImageCapability & DriftCapability & ResetCapability & SweepAvailability & OrphanAuditGate & RunnerCapability & SmokeCapability & CostCapability & BillingCapability>;
+  Partial<ImageCapability & DriftCapability & ResetCapability & SweepAvailability & OrphanAuditGate & RunnerCapability & SmokeCapability & CostCapability & BillingCapability & LicenseCapability & VmSettingsCapability & RemediationCapability>;
 
 const isFunction = (value: unknown): boolean => typeof value === "function";
 
@@ -164,6 +205,19 @@ export function hasCost(backend: Backend): backend is Backend & CostCapability {
 export function hasBilling(backend: Backend): backend is Backend & BillingCapability {
   const b = backend as Partial<BillingCapability>;
   return isFunction(b.billingStatus) && isFunction(b.recordSetupInputs);
+}
+
+export function hasLicense(backend: Backend): backend is Backend & LicenseCapability {
+  const b = backend as Partial<LicenseCapability>;
+  return isFunction(b.licenseStatus) && isFunction(b.acknowledgeLicense);
+}
+
+export function hasVmSettings(backend: Backend): backend is Backend & VmSettingsCapability {
+  return isFunction((backend as Partial<VmSettingsCapability>).setVm);
+}
+
+export function hasRemediation(backend: Backend): backend is Backend & RemediationCapability {
+  return isFunction((backend as Partial<RemediationCapability>).remediate);
 }
 
 export function hasSmoke(backend: Backend): backend is Backend & SmokeCapability {

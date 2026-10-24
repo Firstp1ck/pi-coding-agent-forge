@@ -67,7 +67,7 @@ test("S1/S3 (unit): /gui-setup docker-linux --fix builds the image, re-checks, p
   assert.match(report, /GUI testing setup: docker-linux — verified/);
   assert.match(report, /Checks before fixes:[\s\S]*fail +image\.base[\s\S]*Checks after fixes:[\s\S]*pass +image\.base/);
   assert.match(report, /Fixes applied:\n- image\.base: ok/);
-  assert.match(report, /Smoke test: passed — GTK 3 app launched, button found by name, click changed the label, 64×40 screenshot valid/);
+  assert.match(report, /Smoke test: passed — GTK 3 test app launched, button found by name, click changed the label, 64×40 screenshot valid/);
   const build = env.spawner.children.find((c) => c.argv.includes("build"));
   assert.ok(build, "image built through the staged-context build");
   const config = JSON.parse(await readFile(env.globalConfigPath, "utf8"));
@@ -182,7 +182,7 @@ test("/gui-backend requires a verified backend; /gui-usage and /gui-export repor
   await byName["gui-backend"].handler("cua", env.ctx());
   assert.match(out.text(), /backend "cua" is not verified; run \/gui-setup cua first/);
   await byName["gui-backend"].handler("docker-windows", env.ctx());
-  assert.match(out.text(), /backend "docker-windows" is not available yet/);
+  assert.match(out.text(), /backend "docker-windows" is not verified; run \/gui-setup docker-windows first/);
   await byName["gui-backend"].handler("--bogus", env.ctx());
   assert.match(out.text(), /\/gui-backend: unknown flag --bogus; valid flags: --project/);
 
@@ -507,7 +507,7 @@ test("P3: /gui-cleanup stops live sessions and sweeps even when .pi/gui.json is 
     await byName["gui-cleanup"].handler(args, ctx);
     const report = messages.at(-1).content;
     // A broken config, or --all, cleans every backend; an explicit backend only that one.
-    assert.match(report, args === "docker-linux" ? /GUI testing cleanup \(docker-linux\)/ : /GUI testing cleanup \(docker-linux, local-linux, remote-linux, remote-linux-docker, cua\)/, `/gui-cleanup ${args}`);
+    assert.match(report, args === "docker-linux" ? /GUI testing cleanup \(docker-linux\)/ : /GUI testing cleanup \(docker-linux, local-linux, remote-linux, remote-linux-docker, cua, local-windows, docker-windows\)/, `/gui-cleanup ${args}`);
     assert.match(report, new RegExp(`stopped sessions: ${session}`));
     assert.match(report, /warning: could not read the GUI testing config \(.*gui\.json.*malformed JSON/);
     assert.match(report, /Footprint audit: empty/);

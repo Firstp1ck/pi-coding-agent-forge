@@ -18,7 +18,7 @@ import { installExitCleanup } from "../cleanup/exit.ts";
 import { createSessionDir, type SessionDir } from "../cleanup/session-dir.ts";
 import { auditClientOrphans, auditSession, sweepClientOrphans, type SweepReport } from "../cleanup/sweep.ts";
 import { loadConfigSources, resolveConfig } from "../config/load.ts";
-import { DEFAULTS, globalConfigPath, type BackendId, type GlobalConfig, type ResolvedConfig, type UsageCheckConfig } from "../config/types.ts";
+import { DEFAULTS, globalConfigPath, type BackendId, type GlobalConfig, type ResolvedConfig, type TargetOs, type UsageCheckConfig } from "../config/types.ts";
 import { notSetUpMessage, verificationState } from "../config/verified.ts";
 import { formatOwnerLabel, type OwnerLabel } from "../owner.ts";
 import type { Leftover, LogEvent } from "../protocol.ts";
@@ -80,6 +80,8 @@ export interface OpenSessionOptions {
   signal?: AbortSignal;
   onStatus?: (text: string | undefined) => void;
   transient?: boolean;
+  /** Target OS of the app (`gui_launch`'s choice); handed to the backend as `SessionStartOptions.target`. */
+  target?: TargetOs;
   /**
    * The runtime generation ({@link GuiRuntime.signal}) the caller captured
    * before its first await; a start for a generation that has shut down is refused.
@@ -499,6 +501,7 @@ export class GuiRuntime {
         onLog: (event: LogEvent) => sessionLogs.add(event),
         ...(options.onStatus ? { onStatus: options.onStatus } : {}),
         signal,
+        ...(options.target ? { target: options.target } : {}),
         // The backend registers the endpoint-bound removal before it creates the container.
         onExitCleanup: (argv) => void this.#starting.set(id, argv),
       };

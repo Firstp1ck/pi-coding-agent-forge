@@ -13,7 +13,7 @@ import { createHash } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { decodeTreeDump } from "../../src/backends/response.ts";
-import { Helper, HelperError, HERE, LOCAL_TEMP, baseEnv, checkResponse, decodePng, fakePattern, findPwsh } from "./client.mjs";
+import { Helper, HelperError, HERE, LOCAL_TEMP, baseEnv, checkResponse, COMPILE_WAIT_MS, decodePng, fakePattern, findPwsh } from "./client.mjs";
 
 const PWSH = findPwsh();
 const skip = PWSH ? false : "pwsh not found (set PI_GUI_PWSH)";
@@ -344,7 +344,7 @@ async function startupFailure(extra, { stdinEnv, lines = [], expectCode: code = 
   helper.readyPromise.catch(() => {});
   for (const line of lines) helper.sendRaw(line);
   helper.closeStdin();
-  const exit = await helper.waitExit(20000);
+  const exit = await helper.waitExit(COMPILE_WAIT_MS);
   assert.equal(helper.ready, false, "no ready line");
   assert.equal(exit, code, helper.stderr);
   return helper.stderr;
@@ -364,7 +364,7 @@ test("probe prints one JSON line without the protocol", { skip }, async () => {
   const { env, token } = baseEnv();
   const helper = Helper.start({ env, token, args: ["-Probe", "desktop"] });
   helper.readyPromise.catch(() => {});
-  assert.equal(await helper.waitExit(20000), 0);
+  assert.equal(await helper.waitExit(COMPILE_WAIT_MS), 0);
   assert.deepEqual(JSON.parse(helper.diagnostics[0]), { probe: "desktop", ok: true });
 });
 

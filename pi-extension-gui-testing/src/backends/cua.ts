@@ -56,13 +56,11 @@ const unreadableClaimLeftover: Leftover = {
 export { CUA_HOST_SUPPORT } from "./cua/checks.ts";
 
 /**
- * Session start options with the launch's target OS. `target` is not (yet) a
- * field of {@link SessionStartOptions}: without it a session runs the first of
- * the project's `targets` (what `gui_launch` picks when its call names none).
+ * Session start options of cua. `target` is now a field of
+ * {@link SessionStartOptions}; without it a session runs the first of the
+ * project's `targets` (what `gui_launch` picks when its call names none).
  */
-export interface CuaSessionStartOptions extends SessionStartOptions {
-  target?: TargetOs;
-}
+export type CuaSessionStartOptions = SessionStartOptions;
 
 /** The target OS of a session start. */
 export function sessionTarget(options: CuaSessionStartOptions): TargetOs {
@@ -187,7 +185,8 @@ export class CuaBackend implements Backend, DriftCapability, ResetCapability, Sw
     const image = inputs.image ?? settings.image ?? DEFAULT_IMAGE;
     const rate = reportedRate(providers, chosen.location, image) ?? inputs.rateUsdPerHour ?? settings.rateUsdPerHour;
     const acknowledged = settings.billingAcceptedAt !== undefined && (settings.billingLocation === undefined || settings.billingLocation === chosen.location);
-    return { location: chosen.location, acknowledged, text: billingAcknowledgementText(chosen.location, rate), image };
+    const windowsImage = inputs.windowsImage ?? settings.windowsImage ?? DEFAULT_WINDOWS_IMAGE;
+    return { location: chosen.location, acknowledged, text: billingAcknowledgementText(chosen.location, rate), image, windowsImage };
   }
 
   /**
@@ -195,7 +194,7 @@ export class CuaBackend implements Backend, DriftCapability, ResetCapability, Sw
    * Windows image and rate (`windowsImage`, `windowsRateUsdPerHour`), and the
    * acknowledgement in `cua.json`.
    */
-  async recordSetupInputs(inputs: BillingSetupInputs & { acknowledgedLocation?: string; windowsImage?: string; windowsRateUsdPerHour?: number }): Promise<void> {
+  async recordSetupInputs(inputs: BillingSetupInputs & { acknowledgedLocation?: string }): Promise<void> {
     if (inputs.location !== undefined && !isCloudLocation(inputs.location)) throw new Error(`unknown cloud "${inputs.location}"`);
     if (inputs.acknowledgedLocation !== undefined && !isCloudLocation(inputs.acknowledgedLocation)) throw new Error(`unknown cloud "${inputs.acknowledgedLocation}"`);
     const change: Parameters<CuaSettingsStore["update"]>[0] = {};

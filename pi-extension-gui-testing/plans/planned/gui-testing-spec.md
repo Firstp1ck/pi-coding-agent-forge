@@ -298,6 +298,30 @@ monitor, GPU, or desktop environment is needed; Xvfb renders in RAM.
 - Setup requires an explicit acknowledgement that the user is responsible for
   Windows licensing.
 
+**As implemented in M4 (2026-10-24, not yet run; deviations from the bullets
+above).**
+
+- Overlay: dockurr has no snapshot option, so sessions pass QEMU's own
+  `-snapshot` through dockurr's `ARGUMENTS`; every guest write goes to a
+  temporary overlay in the container's writable layer, discarded with the
+  container (`--rm`). A base-disk stamp before and after each session reports a
+  changed base. One session at a time (the base volume stays mounted read-write
+  for dockurr's state files).
+- Helper and transport: the OEM `install.bat` installs OpenSSH Server and the
+  Windows helper; the client reaches the guest with a pinned key over SSH on a
+  `127.0.0.1`-bound port.
+- **Deviation from "real interactive session":** over sshd the helper runs in
+  session 0 on a private desktop (no DWM), not in the logged-on interactive
+  session. `SendInput`, GPU rendering, and focus therefore behave as on
+  `local-windows`, not as on a desktop; captures may be black (`allBlack`). A
+  helper started inside the autologon session (e.g. a scheduled task) would meet
+  the bullet and is a follow-up.
+- Workspace: synced like `cua` (tar over SSH into the guest; names Windows cannot
+  store are skipped and reported), not a shared folder.
+- No dependency cache: the Windows helper has no `deps` capability yet, so
+  `setup` runs in every session.
+- `"network": "none"` is refused (the guest is reached through a container port).
+
 ### 4.5 `local-windows`
 
 - **Reference design**: [`@iiwate/pi-silent-gui`](https://www.npmjs.com/package/@iiwate/pi-silent-gui)
@@ -306,7 +330,8 @@ monitor, GPU, or desktop environment is needed; Xvfb renders in RAM.
   a runtime dependency**: it exposes its own tools instead of our `gui_*` interface,
   has no UI Automation, no text typing (single key actions only), and requires Python plus a manual
   `pip install pycaw`. Reused code keeps its MIT attribution.
-- Signed helper `.exe` (see Q4) creates a private desktop with a session-unique name
+- Signed helper `.exe` (see Q4; **as implemented: a PowerShell 5.1 host with a C#
+  core compiled at runtime, Q4 option c**) creates a private desktop with a session-unique name
   the caller cannot choose and launches itself and the app on it
   (`STARTUPINFO.lpDesktop`). Never calls `SwitchDesktop`, `SendInput`, or clipboard
   APIs.
@@ -1029,6 +1054,22 @@ the Windows/macOS targets of M3 are blocked on a Windows machine (S1 decides
 Q4). Recorded deviations: the dependency cache stores `.tar.gz`, not `.tar.zst`
 (§4.8; the helper's Python has no zstd), and M3 targets the `cua` CLI (§4.3).
 
+**Status, Windows (2026-10-24).** By user decision of 2026-10-24 the gate "M5
+only if S1 is acceptable" was overridden: the Windows work is implemented
+**unverified**, with fakes, a fake helper platform, and compile checks only
+(plan: `gui-testing-windows-plan.md`).
+
+- **S1:** the harness (`spikes/s1/`) is ready but has **not been run**; it needs
+  a Windows 10/11 machine. Its report decides whether the Q4 resolution stands.
+- **M4 (`docker-windows`), M5 (`local-windows`), M3 Windows target (`cua`):**
+  implemented and registered, never run against Docker/KVM, Windows, or Cua.
+  The `cua` Windows target also waits for Cua: cua 0.9 offers Windows on none of
+  the four clouds, so `cua.targets` fails with Cua's reason until it does.
+  macOS stays planned.
+- Recorded deviations: helper form (Q4 → option c), M4 helper in session 0 over
+  SSH and workspace synced instead of shared (§4.4), no dependency cache for
+  Windows targets (§4.4, §4.8).
+
 ## 12. Acceptance criteria
 
 - A fresh user can go from `pi install` to a passing smoke test using only
@@ -1054,8 +1095,8 @@ Q4). Recorded deviations: the dependency cache stores `.tar.gz`, not `.tar.zst`
 |---|---|
 | Q1 | ~~Where should the Cua API key live?~~ Resolved 2026-10-24: nothing to store. Cua Cloud and its API keys ended; the `cua` CLI keeps the cua.ai sign-in and the cloud credentials, and the package stores, reads, and sends none. |
 | Q2 | ~~Cua pricing and macOS availability?~~ Resolved 2026-10-24: pricing is the user's own cloud's (`usd_per_hour` per machine kind from `cua cloud status`, or `--rate-usd-per-hour`); billing is by that cloud. macOS sandboxes wait for the Windows/macOS helper work after S1. |
-| Q3 | dockur/windows: confirm the OEM install hook and shared-folder mechanism versions before M4. |
-| Q4 | Windows helper form: (a) native `.exe` (recommended; needs a code-signing certificate, owner to be decided) or (b) Python helper like the reference (no signing, but setup must download an embeddable Python automatically to keep install-and-use). Decide after S1. |
+| Q3 | ~~dockur/windows: confirm the OEM install hook and shared-folder mechanism versions before M4.~~ Resolved 2026-10-24 from dockurr/windows v6.06 sources: `/oem` → `C:\OEM`, `install.bat` runs at first logon; the shared folder (Samba) is not used, the workspace is synced over SSH instead (§4.4). Still to confirm live in M4. |
+| Q4 | Windows helper form: (a) native `.exe` (recommended; needs a code-signing certificate, owner to be decided) or (b) Python helper like the reference (no signing, but setup must download an embeddable Python automatically to keep install-and-use). **Resolved provisionally 2026-10-24 (owner): (c) Windows PowerShell 5.1 host with a C# core compiled at runtime with `Add-Type`**: ships with every Windows 10/11, so no download and no signing certificate; the C# sources can later be compiled into a signed `.exe` without a rewrite. **Revisit after S1**: AV/EDR reaction to runtime compilation and hidden desktops, startup time, and Group Policy execution policy or Constrained Language mode can rule it out. |
 | Q5 | ~~Docker Desktop hosts in M1?~~ Resolved: Linux hosts in M1, Docker Desktop hosts in M1c. |
 | Q6 | ~~Remote host scope?~~ Resolved: global config or `.pi/gui.local.json`; never the committed file. |
 | Q7 | ~~Remote tooling retention?~~ Resolved: keep the base image by default; `--purge-tooling` opts out. |

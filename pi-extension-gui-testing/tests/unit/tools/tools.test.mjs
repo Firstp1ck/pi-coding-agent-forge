@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { createGuiTools } from "../../../src/tools/tools.ts";
+import { BackendRegistry, DEFAULT_REGISTRY } from "../../../src/backends/registry.ts";
 import { fakeEnv, VERIFIED } from "../backends/env.mjs";
 
 function tools(runtime) {
@@ -37,8 +38,10 @@ test("S9: every tool refuses with the spec's text when docker-linux is not verif
 });
 
 test("a backend that this build lacks is refused as not available, never replaced by another (R6)", async (t) => {
-  const env = await fakeEnv(t, { local: { backend: "docker-windows" } });
-  await assert.rejects(call(tools(env.runtime).gui_launch, {}, env.ctx()), /backend "docker-windows" is not available yet; available: docker-linux, local-linux, remote-linux, remote-linux-docker, cua/);
+  // Every known id is registered in this build, so a registry without docker-windows stands in for an older build.
+  const registry = new BackendRegistry(DEFAULT_REGISTRY.entries().filter((e) => e.id !== "docker-windows"));
+  const env = await fakeEnv(t, { local: { backend: "docker-windows" }, runtime: { registry } });
+  await assert.rejects(call(tools(env.runtime).gui_launch, {}, env.ctx()), /backend "docker-windows" is not available yet; available: docker-linux, local-linux, remote-linux, remote-linux-docker, cua, local-windows/);
   // A registered backend that is not verified is refused too; docker-linux (verified) is never used instead.
   const local = await fakeEnv(t, { local: { backend: "local-linux" } });
   await assert.rejects(call(tools(local.runtime).gui_launch, {}, local.ctx()), /backend "local-linux" is not set up; ask the user to run \/gui-setup local-linux/);

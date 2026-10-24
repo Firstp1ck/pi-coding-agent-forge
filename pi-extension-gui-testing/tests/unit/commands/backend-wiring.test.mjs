@@ -470,7 +470,7 @@ test("I: the real cua factory keeps its ledger and settings in the runtime's con
   assert.equal(cua.settings.path, join(root, "agent", "gui", "cua.json"));
 });
 
-test("I: the startup sweep over all five registered backends runs no command and makes no network call on a host without the tools", async (t) => {
+test("I: the startup sweep over all seven registered backends runs no command and makes no network call on a host without the tools", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "gui-sweep-"));
   const empty = join(root, "bin");
   await mkdir(empty);
@@ -499,11 +499,13 @@ test("I: the startup sweep over all five registered backends runs no command and
   });
   await mkdir(join(root, "tmp"));
   const runtime = new GuiRuntime({ globalConfigPath: join(root, "agent", "gui", "config.json"), tmpRoot: join(root, "tmp") });
-  assert.deepEqual(runtime.registry.ids, ["docker-linux", "local-linux", "remote-linux", "remote-linux-docker", "cua"]);
+  assert.deepEqual(runtime.registry.ids, ["docker-linux", "local-linux", "remote-linux", "remote-linux-docker", "cua", "local-windows", "docker-windows"]);
+  // A machine that once set up docker-windows: its startup gate still needs docker on PATH, and local-windows needs win32.
+  await mkdir(join(root, "agent", "gui", "docker-windows"), { recursive: true });
   const report = await runtime.sweep();
   assert.ok(report, "the sweep finished");
   assert.deepEqual(report.leftovers, []);
-  // No docker on PATH, remote backends never sweep at startup, cua has no ledger record: nothing external runs.
+  // No docker on PATH, remote backends never sweep at startup, cua has no ledger record, local-windows needs a Windows host: nothing external runs.
   assert.deepEqual(await runtime.sweepableBackends(runtime.registry.ids, { startup: true }), process.platform === "linux" ? ["local-linux"] : []);
   assert.deepEqual(spawned, []);
   await runtime.shutdown();

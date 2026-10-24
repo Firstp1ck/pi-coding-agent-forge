@@ -39,6 +39,22 @@ test("parseSetupArgs: backend and every flag from the spec table", () => {
   assert.equal(parseSetupArgs("docker-linux --no-fix").noFix, true);
 });
 
+test("parseSetupArgs: the Windows flags of docker-windows and cua", () => {
+  const vm = parseSetupArgs("docker-windows --accept-windows-license --windows-version 2025 --vm-ram-gb 8 --vm-cpus 4 --vm-disk-gb=128");
+  assert.equal(vm.backend, "docker-windows");
+  assert.deepEqual([vm.acceptWindowsLicense, vm.windowsVersion, vm.vmRamGb, vm.vmCpus, vm.vmDiskGb], [true, "2025", 8, 4, 128]);
+  const cua = parseSetupArgs("cua --windows-image ghcr.io/trycua/windows:2022 --windows-rate-usd-per-hour 0.75");
+  assert.deepEqual([cua.windowsImage, cua.windowsRateUsdPerHour], ["ghcr.io/trycua/windows:2022", 0.75]);
+  assert.throws(() => parseSetupArgs("--vm-ram-gb 1"), /--vm-ram-gb must be a whole number from 2 to 512/);
+  assert.throws(() => parseSetupArgs("--vm-ram-gb 513"), /--vm-ram-gb must be a whole number from 2 to 512/);
+  assert.throws(() => parseSetupArgs("--vm-cpus 0"), /--vm-cpus must be a whole number from 1 to 128/);
+  assert.throws(() => parseSetupArgs("--vm-cpus 1e2"), /--vm-cpus must be a whole number/);
+  assert.throws(() => parseSetupArgs("--vm-disk-gb 63"), /--vm-disk-gb must be a whole number from 64 to 4096/);
+  assert.throws(() => parseSetupArgs("--windows-version 11;rm"), /--windows-version must be a dockurr\/windows VERSION value/);
+  assert.throws(() => parseSetupArgs("--windows-image -x"), /--windows-image (must be|needs a value)/);
+  assert.throws(() => parseSetupArgs("--windows-rate-usd-per-hour abc"), /--windows-rate-usd-per-hour must be a number from 0 to 1000/);
+});
+
 test("parseSetupArgs rejects bad input with clear messages", () => {
   assert.throws(() => parseSetupArgs("docker-linux --fix --no-fix"), /--fix and --no-fix cannot be combined/);
   assert.throws(() => parseSetupArgs("--yes"), (e) => e instanceof FlagError && /unknown flag --yes; valid flags: --host, --targets.*--purge-tooling/.test(e.message));

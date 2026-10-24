@@ -29,9 +29,14 @@ test("F: the default registry matches IMPLEMENTED_BACKENDS and holds docker-linu
   assert.equal(docker.hostSupport, DOCKER_LINUX_HOST_SUPPORT);
   assert.deepEqual(docker.targets, ["linux"]);
   assert.equal(BACKEND_DESCRIPTIONS["docker-linux"], docker.description);
-  assert.deepEqual(DEFAULT_REGISTRY.ids, ["docker-linux", "local-linux", "remote-linux", "remote-linux-docker", "cua"]);
-  assert.equal(DEFAULT_REGISTRY.has("docker-windows"), false);
-  assert.match(DEFAULT_REGISTRY.notAvailableMessage("docker-windows"), /backend "docker-windows" is not available yet; available: docker-linux, local-linux, remote-linux, remote-linux-docker, cua/);
+  assert.deepEqual(DEFAULT_REGISTRY.ids, ["docker-linux", "local-linux", "remote-linux", "remote-linux-docker", "cua", "local-windows", "docker-windows"]);
+  // Every known backend id is registered now; the "not available" text still names the registry's backends.
+  assert.match(DEFAULT_REGISTRY.notAvailableMessage("macos-x"), /backend "macos-x" is not available yet; available: docker-linux, local-linux, remote-linux, remote-linux-docker, cua, local-windows, docker-windows/);
+  assert.deepEqual(DEFAULT_REGISTRY.entry("cua").targets, ["linux", "windows"]);
+  assert.deepEqual(DEFAULT_REGISTRY.entry("local-windows").targets, ["windows"]);
+  assert.deepEqual(DEFAULT_REGISTRY.entry("docker-windows").targets, ["windows"]);
+  assert.deepEqual(DEFAULT_REGISTRY.entry("local-windows").hostSupport.platforms, ["win32"]);
+  assert.deepEqual(DEFAULT_REGISTRY.entry("docker-windows").hostSupport.platforms, ["linux"]);
 });
 
 test("F: the docker-linux factory merges the M1 option names, backendOptions, and the context's tmpRoot; creating runs nothing", async () => {

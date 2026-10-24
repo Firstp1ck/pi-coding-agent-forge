@@ -7,7 +7,7 @@
  * a UI sets `process.exitCode = 1` (spec §5.2 "Modes").
  */
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
-import { hasBilling, hasImage, hasOrphanAuditGate, hasReset, hasRunner, IMAGE_CHECK_ID } from "../backends/capabilities.ts";
+import { hasBilling, hasImage, hasLicense, hasOrphanAuditGate, hasRemediation, hasReset, hasRunner, hasVmSettings, IMAGE_CHECK_ID } from "../backends/capabilities.ts";
 import { bindHost, hasRemoteHost } from "../backends/remote/host.ts";
 import { DEFAULT_REGISTRY } from "../backends/registry.ts";
 import { requiredChecksPass } from "../checks/runner.ts";
@@ -39,7 +39,7 @@ import { createSetupUi } from "../setup/ui.ts";
 import { exportArtifacts } from "../tools/export.ts";
 import { formatLeftovers } from "../tools/format.ts";
 import { assertCurrent, type BackendViews, type GuiRuntime, type RuntimeBackend } from "../tools/runtime.ts";
-import { configuredHost, configuredView, hasRemoteSudo, setupFlagProblem } from "./backend-inputs.ts";
+import { configuredHost, configuredView, hasRemoteSudo, setupFlagProblem, vmSettingsOf } from "./backend-inputs.ts";
 import { offerLocalConfigIgnore } from "./gitignore.ts";
 
 type CommandPi = Pick<ExtensionAPI, "sendMessage">;
@@ -158,12 +158,20 @@ export function createGuiCommands(pi: CommandPi, runtime: GuiRuntime): GuiComman
 
   const applyWith = (backend: RuntimeBackend, setStatus: (text: string) => void) => async (item: PlanItem, signal: AbortSignal): Promise<RunResult> => {
     if (item.checkId === IMAGE_CHECK_ID && hasImage(backend)) {
-      setStatus("building the base image (this can take several minutes)");
+      setStatus("preparing the base image (this can take several minutes)");
       return backend.buildImage(signal, (line) => {
         const trimmed = line.trim();
-        if (trimmed) setStatus(`building the base image: ${trimmed.slice(0, 100)}`);
+        if (trimmed) setStatus(`preparing the base image: ${trimmed.slice(0, 100)}`);
       });
     }
+    // Remediations the backend runs itself (docker-windows' unattended install): the displayed command is never run literally.
+    const own = hasRemediation(backend)
+      ? backend.remediate(item.checkId, signal, (line) => {
+          const trimmed = line.trim();
+          if (trimmed) setStatus(trimmed.slice(0, 120));
+        })
+      : undefined;
+    if (own) return own;
     return runnerOf(backend).run(item.remediation.command!, { timeoutMs: item.remediation.timeoutMs ?? 60_000, signal });
   };
 
@@ -244,14 +252,56 @@ export function createGuiCommands(pi: CommandPi, runtime: GuiRuntime): GuiComman
           if (remoteHost) inputs.host = remoteHost;
         }
 
+        // Licensed-OS backends: one acknowledgement (--accept-windows-license or one confirm); never a prompt without a UI.
+        const vm = vmSettingsOf(parsed);
+        if (hasLicense(backend)) {
+          const status = await backend.licenseStatus(vm);
+          let acknowledge = false;
+          if (!status.acknowledged) {
+            if (parsed.acceptWindowsLicense) acknowledge = true;
+            else if (ctx.hasUI) {
+              let ok: boolean;
+              try {
+                ok = await ui.confirm("Acknowledge Windows licensing?", status.text, { flags: ["--accept-windows-license"] });
+              } catch (error) {
+                const cancelled = cancelledBy(error, controller);
+                if (!cancelled) throw error;
+                return emit(cancelled, false);
+              }
+              if (!ok) return emit(`GUI setup cancelled: the Windows licensing notice was not acknowledged; nothing was changed (or run /gui-setup ${backendId} --accept-windows-license)`, false);
+              acknowledge = true;
+            } else notes.push(`The Windows licensing notice is not acknowledged; re-run with /gui-setup ${backendId} --accept-windows-license`);
+          }
+          controller.signal.throwIfAborted();
+          assertCurrent(generation);
+          if (acknowledge) await backend.acknowledgeLicense();
+          if (status.acknowledged || acknowledge) inputs.windowsLicense = "acknowledged";
+        }
+        // VM backends: sizes are stored before the checks, which read them (memory minimum, install size).
+        if (Object.keys(vm).length > 0 && hasVmSettings(backend)) {
+          controller.signal.throwIfAborted();
+          assertCurrent(generation);
+          await backend.setVm(vm);
+          const stored = Object.entries(vm).map(([k, v]) => `${k} ${v}`).join(", ");
+          notes.push(
+            `VM settings stored: ${stored}.` +
+              (vm.version !== undefined || vm.diskGb !== undefined
+                ? ` --windows-version and --vm-disk-gb apply when Windows is installed; if it is installed already, run /gui-reset ${backendId}, then this /gui-setup again with the same flags.`
+                : "") +
+              (vm.ramGb !== undefined || vm.cpuCores !== undefined ? " RAM and CPU apply to every new session." : ""),
+          );
+        }
+
         // Billing backends: one acknowledgement (--accept-billing or one confirm); never a prompt without a UI.
         if (hasBilling(backend)) {
           const choices = {
             ...(parsed.cloud !== undefined ? { location: parsed.cloud } : {}),
             ...(parsed.rateUsdPerHour !== undefined ? { rateUsdPerHour: parsed.rateUsdPerHour } : {}),
             ...(parsed.image !== undefined ? { image: parsed.image } : {}),
+            ...(parsed.windowsImage !== undefined ? { windowsImage: parsed.windowsImage } : {}),
+            ...(parsed.windowsRateUsdPerHour !== undefined ? { windowsRateUsdPerHour: parsed.windowsRateUsdPerHour } : {}),
           };
-          const status = await backend.billingStatus(choices, controller.signal).catch((error: Error) => ({ acknowledged: false, problem: error.message }) as { acknowledged: boolean; location?: string; text?: string; problem?: string; image?: string });
+          const status = await backend.billingStatus(choices, controller.signal).catch((error: Error) => ({ acknowledged: false, problem: error.message }) as { acknowledged: boolean; location?: string; text?: string; problem?: string; image?: string; windowsImage?: string });
           let acknowledgedLocation: string | undefined;
           if (!status.acknowledged && status.location) {
             if (parsed.acceptBilling) acknowledgedLocation = status.location;
@@ -273,6 +323,7 @@ export function createGuiCommands(pi: CommandPi, runtime: GuiRuntime): GuiComman
           await backend.recordSetupInputs({ ...choices, ...(acknowledgedLocation ? { acknowledgedLocation } : {}) });
           if (status.location) inputs.cloud = parsed.cloud ?? status.location;
           if (parsed.image ?? status.image) inputs.image = (parsed.image ?? status.image)!;
+          if (parsed.windowsImage ?? status.windowsImage) inputs.windowsImage = (parsed.windowsImage ?? status.windowsImage)!;
           if (parsed.targets) inputs.targets = parsed.targets.join(",");
         }
 

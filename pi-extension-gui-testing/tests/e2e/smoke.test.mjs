@@ -62,7 +62,7 @@ test("S1/S3: /gui-setup docker-linux --fix verifies with zero prompts and one su
   for (const id of ["docker.endpoint", "docker.rootless", "docker.bind-uid", "docker.version", "image.base", "isolation.inspect"]) {
     assert.match(report, new RegExp(`pass +${id.replace(".", "\\.")} `), id);
   }
-  assert.match(report, /Smoke test: passed — GTK 3 app launched, button found by name, click changed the label/);
+  assert.match(report, /Smoke test: passed — GTK 3 test app launched, button found by name, click changed the label/);
   const config = JSON.parse(await readFile(globalConfigPath, "utf8"));
   assert.equal(config.backend, "docker-linux");
   assert.ok(config.verified["docker-linux"].toolVersions["image.id"]);

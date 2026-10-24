@@ -128,6 +128,18 @@ export interface SetupArgs {
   rateUsdPerHour?: number;
   /** `cua`: the sandbox image (`--image`, default Cua's `linux` image). */
   image?: string;
+  /** `cua`: the image of Windows sandboxes (`--windows-image`, default Cua's `windows` image). */
+  windowsImage?: string;
+  /** `cua`: hourly Windows sandbox price when Cua reports none (`--windows-rate-usd-per-hour`). */
+  windowsRateUsdPerHour?: number;
+  /** `docker-windows`: Windows version for the next install (`--windows-version`, dockurr `VERSION`). */
+  windowsVersion?: string;
+  /** `docker-windows`: RAM of each VM in GB (`--vm-ram-gb`). */
+  vmRamGb?: number;
+  /** `docker-windows`: CPU cores of each VM (`--vm-cpus`). */
+  vmCpus?: number;
+  /** `docker-windows`: disk size of the next install in GB (`--vm-disk-gb`). */
+  vmDiskGb?: number;
 }
 
 export const SETUP_FLAGS: Record<string, FlagSpec> = {
@@ -143,10 +155,31 @@ export const SETUP_FLAGS: Record<string, FlagSpec> = {
   "--cloud": { value: true },
   "--rate-usd-per-hour": { value: true },
   "--image": { value: true },
+  "--windows-image": { value: true },
+  "--windows-rate-usd-per-hour": { value: true },
+  "--windows-version": { value: true },
+  "--vm-ram-gb": { value: true },
+  "--vm-cpus": { value: true },
+  "--vm-disk-gb": { value: true },
 };
 
 export const SETUP_USAGE =
-  "/gui-setup [backend] [--fix|--no-fix] [--project] [--host <ssh-alias-or-user@host>] [--purge-tooling] [--targets linux,windows,macos] [--accept-billing] [--cloud aws|gcp|hetzner|modal] [--rate-usd-per-hour <n>] [--image <cua-image>] [--accept-windows-license]";
+  "/gui-setup [backend] [--fix|--no-fix] [--project] [--host <ssh-alias-or-user@host>] [--purge-tooling] [--targets linux,windows,macos] [--accept-billing] [--cloud aws|gcp|hetzner|modal] [--rate-usd-per-hour <n>] [--image <cua-image>] [--windows-image <cua-image>] [--windows-rate-usd-per-hour <n>] [--accept-windows-license] [--windows-version <v>] [--vm-ram-gb <n>] [--vm-cpus <n>] [--vm-disk-gb <n>]";
+
+/** Whole-number VM flags of docker-windows and their ranges (the backend validates the same ranges). */
+const VM_INT_FLAGS = [
+  ["--vm-ram-gb", "vmRamGb", 2, 512, "GB of RAM per VM"],
+  ["--vm-cpus", "vmCpus", 1, 128, "CPU cores per VM"],
+  ["--vm-disk-gb", "vmDiskGb", 64, 4096, "GB of Windows disk"],
+] as const;
+
+const IMAGE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:/@-]{0,255}$/;
+
+function parseRate(command: string, flag: string, rate: string): number {
+  const value = Number(rate);
+  if (!/^\d+(\.\d+)?$/.test(rate) || !Number.isFinite(value) || value > 1_000) throw new FlagError(`${command}: ${flag} must be a number from 0 to 1000 (USD per sandbox hour)`);
+  return value;
+}
 
 /** Parses `/gui-setup` arguments. `--fix` and `--no-fix` are mutually exclusive. */
 export function parseSetupArgs(input: string): SetupArgs {
@@ -176,15 +209,26 @@ export function parseSetupArgs(input: string): SetupArgs {
     args.cloud = cloud as CloudLocation;
   }
   const rate = flags.get("--rate-usd-per-hour");
-  if (typeof rate === "string") {
-    const value = Number(rate);
-    if (!/^\d+(\.\d+)?$/.test(rate) || !Number.isFinite(value) || value > 1_000) throw new FlagError(`${command}: --rate-usd-per-hour must be a number from 0 to 1000 (USD per sandbox hour)`);
-    args.rateUsdPerHour = value;
+  if (typeof rate === "string") args.rateUsdPerHour = parseRate(command, "--rate-usd-per-hour", rate);
+  const windowsRate = flags.get("--windows-rate-usd-per-hour");
+  if (typeof windowsRate === "string") args.windowsRateUsdPerHour = parseRate(command, "--windows-rate-usd-per-hour", windowsRate);
+  for (const [flag, key] of [["--image", "image"], ["--windows-image", "windowsImage"]] as const) {
+    const image = flags.get(flag);
+    if (typeof image !== "string") continue;
+    if (!IMAGE_PATTERN.test(image)) throw new FlagError(`${command}: ${flag} must be an image alias or registry reference (letters, digits, and . _ : / @ -)`);
+    args[key] = image;
   }
-  const image = flags.get("--image");
-  if (typeof image === "string") {
-    if (!/^[A-Za-z0-9][A-Za-z0-9._:/@-]{0,255}$/.test(image)) throw new FlagError(`${command}: --image must be an image alias or registry reference (letters, digits, and . _ : / @ -)`);
-    args.image = image;
+  const version = flags.get("--windows-version");
+  if (typeof version === "string") {
+    if (!/^[A-Za-z0-9._-]{1,32}$/.test(version)) throw new FlagError(`${command}: --windows-version must be a dockurr/windows VERSION value such as 11, 10, or 2025 (letters, digits, and . _ -)`);
+    args.windowsVersion = version;
+  }
+  for (const [flag, key, min, max, what] of VM_INT_FLAGS) {
+    const raw = flags.get(flag);
+    if (typeof raw !== "string") continue;
+    const value = Number(raw);
+    if (!/^\d+$/.test(raw) || value < min || value > max) throw new FlagError(`${command}: ${flag} must be a whole number from ${min} to ${max} (${what})`);
+    args[key] = value;
   }
   const targets = flags.get("--targets");
   if (typeof targets === "string") {

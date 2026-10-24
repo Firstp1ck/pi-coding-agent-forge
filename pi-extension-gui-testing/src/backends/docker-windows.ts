@@ -185,10 +185,14 @@ export class DockerWindowsBackend
 
   // ---- licensing and VM settings (setup plumbing, see the WD handoff) ----
 
-  /** Whether the licensing notice was acknowledged, and its text for the confirm dialog. */
-  async licenseStatus(): Promise<{ acknowledged: boolean; text: string }> {
+  /**
+   * Whether the licensing notice was acknowledged, and its text for the
+   * confirm dialog; `pending` VM settings (setup flags not stored yet) are shown as if stored.
+   */
+  async licenseStatus(pending?: Partial<WindowsVmSettings>): Promise<{ acknowledged: boolean; text: string }> {
     const settings = await this.store.read();
-    return { acknowledged: settings.licenseAcceptedAt !== undefined, text: licenseAcknowledgementText(resolveVm(settings, this.#o.vm)) };
+    const vm = resolveVm({ vm: { ...settings.vm, ...pending } }, this.#o.vm);
+    return { acknowledged: settings.licenseAcceptedAt !== undefined, text: licenseAcknowledgementText(vm) };
   }
 
   /** Records the acknowledgement (`--accept-windows-license` or the confirm dialog). */

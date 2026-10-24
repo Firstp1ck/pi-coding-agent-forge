@@ -4,8 +4,9 @@
  * step 1) and the flags that only some backends accept.
  */
 import type { Backend } from "../backend.ts";
-import { hasBilling, hasImage } from "../backends/capabilities.ts";
+import { hasBilling, hasImage, hasLicense, hasVmSettings } from "../backends/capabilities.ts";
 import { bindHost, hasRemoteHost, type RemoteHostCapability } from "../backends/remote/host.ts";
+import type { VmSettings } from "../backends/capabilities.ts";
 import type { SetupArgs } from "../config/flags.ts";
 import type { BackendId, GlobalConfig, ResolvedConfig } from "../config/types.ts";
 
@@ -38,12 +39,38 @@ export function setupFlagProblem(id: BackendId, backend: Backend, parsed: SetupA
       parsed.cloud !== undefined ? "--cloud" : undefined,
       parsed.rateUsdPerHour !== undefined ? "--rate-usd-per-hour" : undefined,
       parsed.image !== undefined ? "--image" : undefined,
+      parsed.windowsImage !== undefined ? "--windows-image" : undefined,
+      parsed.windowsRateUsdPerHour !== undefined ? "--windows-rate-usd-per-hour" : undefined,
       parsed.targets !== undefined ? "--targets" : undefined,
     ].filter((f): f is string => f !== undefined);
     if (billing.length > 0) return `/gui-setup: ${billing.join(", ")} only ${billing.length === 1 ? "applies" : "apply"} to cua, not ${id}`;
   }
-  if (parsed.acceptWindowsLicense) return "/gui-setup: --accept-windows-license only applies to docker-windows, which is not available yet";
+  if (parsed.acceptWindowsLicense && !hasLicense(backend)) return `/gui-setup: --accept-windows-license only applies to docker-windows, not ${id}`;
+  if (!hasVmSettings(backend)) {
+    const vm = vmFlags(parsed);
+    if (vm.length > 0) return `/gui-setup: ${vm.join(", ")} only ${vm.length === 1 ? "applies" : "apply"} to docker-windows, not ${id}`;
+  }
   return undefined;
+}
+
+/** The VM flags given (`--windows-version`, `--vm-ram-gb`, `--vm-cpus`, `--vm-disk-gb`). */
+function vmFlags(parsed: SetupArgs): string[] {
+  return [
+    parsed.windowsVersion !== undefined ? "--windows-version" : undefined,
+    parsed.vmRamGb !== undefined ? "--vm-ram-gb" : undefined,
+    parsed.vmCpus !== undefined ? "--vm-cpus" : undefined,
+    parsed.vmDiskGb !== undefined ? "--vm-disk-gb" : undefined,
+  ].filter((f): f is string => f !== undefined);
+}
+
+/** The VM settings the setup flags choose (empty when none is given). */
+export function vmSettingsOf(parsed: SetupArgs): Partial<VmSettings> {
+  return {
+    ...(parsed.windowsVersion !== undefined ? { version: parsed.windowsVersion } : {}),
+    ...(parsed.vmRamGb !== undefined ? { ramGb: parsed.vmRamGb } : {}),
+    ...(parsed.vmCpus !== undefined ? { cpuCores: parsed.vmCpus } : {}),
+    ...(parsed.vmDiskGb !== undefined ? { diskGb: parsed.vmDiskGb } : {}),
+  };
 }
 
 /**

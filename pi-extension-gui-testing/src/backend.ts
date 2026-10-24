@@ -3,7 +3,7 @@
  * audits its own footprint. Tools never talk to Docker or a helper directly.
  */
 import type { Check } from "./checks/types.ts";
-import type { BackendId, ResolvedConfig } from "./config/types.ts";
+import type { BackendId, ResolvedConfig, TargetOs } from "./config/types.ts";
 import type { ErrorCode, Leftover, LogEvent, Method, Params, Result } from "./protocol.ts";
 
 export interface SessionStartOptions {
@@ -31,6 +31,13 @@ export interface SessionStartOptions {
    * call wins.
    */
   onExitCleanup?(argv: string[]): void;
+  /**
+   * Optional (added with the Windows backends). Target OS of the app this
+   * session runs, as `gui_launch` chose it (its `target`, else the first of
+   * the project's `targets`). Backends with one target may ignore it; when
+   * absent, a backend uses the first of `config.shared.targets`.
+   */
+  target?: TargetOs;
 }
 
 /** Summary of a workspace sync (`copy` mode, remote backends). */

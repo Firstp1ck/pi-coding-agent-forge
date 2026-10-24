@@ -20,7 +20,7 @@ export type BackendId =
  * Ids of the backends implemented in this build, in picker order. Each needs
  * an entry in `src/backends/registry.ts`; the type check fails when the two differ.
  */
-export const IMPLEMENTED_BACKEND_IDS = ["docker-linux", "local-linux", "remote-linux", "remote-linux-docker", "cua"] as const satisfies readonly BackendId[];
+export const IMPLEMENTED_BACKEND_IDS = ["docker-linux", "local-linux", "remote-linux", "remote-linux-docker", "cua", "local-windows", "docker-windows"] as const satisfies readonly BackendId[];
 
 export type ImplementedBackendId = (typeof IMPLEMENTED_BACKEND_IDS)[number];
 

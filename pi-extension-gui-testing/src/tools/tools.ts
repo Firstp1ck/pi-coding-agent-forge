@@ -236,6 +236,7 @@ async function launchApp(params: Static<typeof LAUNCH_PARAMS>, rt: GuiRuntime, c
     projectRoot: ctx.cwd,
     config: sessionConfig,
     piSessionId: ctx.sessionManager.getSessionId(),
+    target: target as TargetOs,
     ...(signal ? { signal } : {}),
     generation,
     onStatus: (s) => s && onStatus(s),
