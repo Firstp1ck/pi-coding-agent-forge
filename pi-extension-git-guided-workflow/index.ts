@@ -11,6 +11,9 @@ import {
   GuidedGitError,
   captureBoundStagedState,
   classifyPostCommitHead,
+  countCommitsMissingFromRemote,
+  countUnpushedCommits,
+  describeCommit,
   discoverPushDestination,
   parseGeneratedOutput,
   planPush,
@@ -324,6 +327,12 @@ function stagedPreview(state: RepositoryState): string {
   return shown.length ? shown.join("\n") : "• staged paths are bound by the captured index fingerprint";
 }
 
+const VERIFICATION_REMINDER = "This workflow did not run checks. Review your own verification status before committing.";
+
+function verificationNote(preferences: GuidedGitPreferences): string {
+  return preferences.verification === "ask" ? `\n\n${VERIFICATION_REMINDER}` : "";
+}
+
 async function finishScreen(ctx: ExtensionCommandContext, stage: StageName, message: string): Promise<void> {
   await showActionScreen(ctx, stage, "Workflow finished", message, [{ value: "finish", label: "Finish" }]);
 }
@@ -332,53 +341,91 @@ async function executePlan(root: string, args: readonly string[], timeoutMs: num
   return await runGit(root, args, { timeoutMs, maxStdoutBytes: 1024 * 1024, maxStderrBytes: 128 * 1024 });
 }
 
+function plural(count: number, noun: string): string {
+  return `${count} ${noun}${count === 1 ? "" : "s"}`;
+}
+
+async function commitSummaryText(root: string, oid: string): Promise<string> {
+  try {
+    const summary = await describeCommit(root, oid);
+    const size = `${plural(summary.filesChanged, "file")} changed, +${summary.insertions} −${summary.deletions}`;
+    return `${summary.shortOid} "${confirmationValue(summary.subject)}" (${size})`;
+  } catch {
+    return oid;
+  }
+}
+
+function pushFailureMessage(diagnostic: string): string {
+  const authenticationHelp = /could not read (?:Username|Password)|authentication failed|terminal prompts disabled|failed to execute prompt script/iu.test(diagnostic)
+    ? "\nGit could not obtain credentials. Guided Git cannot accept terminal credential input. Authenticate with your normal Git credential helper in an external terminal. For GitHub CLI authentication, run gh auth login, then gh auth setup-git. Inspect the remote before starting a new Push entry; no new commit is needed."
+    : "";
+  return `Push result is uncertain: ${diagnostic}\nThe remote may have received the commit. Do not retry automatically; verify the remote externally.${authenticationHelp}`;
+}
+
+type StagedSelection = { state: RepositoryState; fingerprint: string };
+type StageResult = StagedSelection | { kind: "push"; state: RepositoryState; headOid: string } | null;
+
+/** With a clean tree, continue to Push when HEAD has commits that no remote-tracking ref contains. */
+async function nothingToCommit(ctx: ExtensionCommandContext, active: ActiveWorkflow, state: RepositoryState): Promise<StageResult> {
+  if (!state.headOid) {
+    await finishScreen(ctx, "Stage", "Nothing to commit. The repository has no commits yet.");
+    return null;
+  }
+  if ((await readRemotes(state.root)).length === 0) {
+    assertCurrent(active);
+    ctx.ui.notify("Nothing to commit. No remote is configured; continuing to Push, where you can publish or finish.", "info");
+    return { kind: "push", state, headOid: state.headOid };
+  }
+  const unpushed = await countUnpushedCommits(state.root);
+  assertCurrent(active);
+  if (unpushed > 0) {
+    ctx.ui.notify(`Nothing to commit. ${unpushed} local commit${unpushed === 1 ? " is" : "s are"} not on any remote yet; continuing to Push.`, "info");
+    return { kind: "push", state, headOid: state.headOid };
+  }
+  await finishScreen(ctx, "Stage", "Nothing to commit or push. The working tree is clean and every local commit is already on a remote.");
+  return null;
+}
+
 async function chooseStage(
   ctx: ExtensionCommandContext,
   active: ActiveWorkflow,
   preferences: GuidedGitPreferences,
-): Promise<{ state: RepositoryState; fingerprint: string } | null> {
+  options: { showScreen?: boolean } = {},
+): Promise<StageResult> {
+  // The Stage screen is skipped only when there is nothing to choose. Back to Stage and
+  // capture failures keep it visible so a changing index cannot loop without a user boundary.
+  let showScreen = options.showScreen ?? false;
   while (true) {
     assertCurrent(active);
     const state = await preflightRepository(ctx.cwd);
     const hasOtherChanges = state.status.unstaged + state.status.untracked > 0;
-    const preserve = { value: "continue", label: "Use current staged changes", description: "Keep the current index exactly as staged" };
-    const stageAll = { value: "stage-all", label: "Stage all changes", description: "Run git add --all after confirmation" };
-    const actions: Action[] = [];
-    if (preferences.staging === "all" && hasOtherChanges) actions.push(stageAll);
-    if (state.status.staged > 0) actions.push(preserve);
-    if (preferences.staging !== "all" && hasOtherChanges) actions.push(stageAll);
-    actions.push({ value: "finish", label: "Finish", description: "Leave the repository unchanged from this point" });
-    const choice = await showActionScreen(ctx, "Stage", "Choose staged content", `${state.root}\n${statusSummary(state)}`, actions);
-    assertCurrent(active);
-    if (!choice || choice === "finish") return null;
-    if (choice === "stage-all") {
-      const { staged, unstaged, untracked, conflicted } = state.status;
-      const confirmed = await showConfirmationOverlay(
-        ctx,
-        "Stage",
-        "Stage all repository changes?",
-        `Repository: ${confirmationValue(state.root)}\nBranch: ${confirmationValue(state.branch)}\nStaged: ${staged}\nUnstaged: ${unstaged}\nUntracked: ${untracked}\nConflicted: ${conflicted}\n\nThis runs: git add --all --`,
-        "Stage all changes",
-      );
+    if (!hasOtherChanges && state.status.staged === 0) return await nothingToCommit(ctx, active, state);
+    if (hasOtherChanges || showScreen) {
+      const preserve = { value: "continue", label: "Use current staged changes", description: "Commit only what is already staged" };
+      const stageAll = { value: "stage-all", label: "Stage all changes", description: "Runs git add --all" };
+      const actions: Action[] = [];
+      if (preferences.staging === "all" && hasOtherChanges) actions.push(stageAll);
+      if (state.status.staged > 0) actions.push(preserve);
+      if (preferences.staging !== "all" && hasOtherChanges) actions.push(stageAll);
+      actions.push({ value: "finish", label: "Finish", description: "Leave the repository unchanged from this point" });
+      const choice = await showActionScreen(ctx, "Stage", "Choose staged content", `${state.root}\n${statusSummary(state)}`, actions);
       assertCurrent(active);
-      if (!confirmed) continue;
-      const refreshed = await preflightRepository(ctx.cwd);
-      const countsChanged = (["staged", "unstaged", "untracked", "conflicted"] as const)
-        .some((key) => refreshed.status[key] !== state.status[key]);
-      if (refreshed.root !== state.root || refreshed.branch !== state.branch || countsChanged) {
-        ctx.ui.notify("Repository status changed after confirmation. Returning to Stage for a fresh summary before staging.", "warning");
+      if (!choice || choice === "finish") return null;
+      if (choice === "stage-all") {
+        const plan = planStageAll();
+        const result = await executePlan(state.root, plan.args, 30_000);
+        if (result.exitCode !== 0 || result.timedOut) throw new GuidedGitError("STAGE_ALL_FAILED", errorMessage(result.stderr));
+        // Stage all was this step's decision; the next iteration captures the index directly.
+        showScreen = false;
         continue;
       }
-      const plan = planStageAll();
-      const result = await executePlan(refreshed.root, plan.args, 30_000);
-      if (result.exitCode !== 0 || result.timedOut) throw new GuidedGitError("STAGE_ALL_FAILED", errorMessage(result.stderr));
-      continue;
     }
     try {
       return await captureBoundStagedState(ctx.cwd);
     } catch (error) {
       if (isCode(error, "NOTHING_STAGED") || isCode(error, "STAGED_STATE_CHANGED")) {
         ctx.ui.notify(`${errorMessage(error)} Returning to Stage for a fresh summary.`, "warning");
+        showScreen = true;
         continue;
       }
       throw error;
@@ -571,7 +618,6 @@ async function chooseMessage(
   generation: WorkflowGenerationConfig | null,
   generationUnavailableNotice?: string,
 ): Promise<string | null> {
-  let current: string | undefined;
   let artifacts = null;
   try { artifacts = await readCommitMessageFilePreview(state.root); }
   catch (error) { ctx.ui.notify(`Commit artifacts cannot be reused: ${errorMessage(error)} Manual entry remains available.`, "warning"); }
@@ -581,9 +627,8 @@ async function chooseMessage(
   while (true) {
     assertCurrent(active);
     const actions: Action[] = [];
-    if (current) actions.push({ value: "continue", label: "Use selected message", description: current.split("\n", 1)[0] });
     if (generation) actions.push({ value: "generate", label: "Generate short and long candidates", description: `Sends the complete staged diff to ${generationTargetName(generation.primary)}` });
-    actions.push({ value: "manual", label: current ? "Edit message" : "Write message manually", description: "Uses Pi's native editor; no model is required" });
+    actions.push({ value: "manual", label: "Write message manually", description: "Uses Pi's native editor; no model is required" });
     if (automaticDefault) actions.push({ value: "default", label: `Use deterministic default: ${automaticDefault.message}`, description: "Available only for one unambiguous staged file with no extra changes" });
     if (artifacts) {
       const variants = preferences.commit.defaultVariant === "short" ? [artifacts.short, artifacts.long] : [artifacts.long, artifacts.short];
@@ -599,20 +644,19 @@ async function chooseMessage(
       ctx,
       "Message",
       "Choose a commit message",
-      `${statusSummary(state)}${generationUnavailableNotice ? `\n${generationUnavailableNotice}` : ""}${current ? `\nSelected: ${current}` : ""}${artifacts ? "\nSaved artifacts are old candidates until the commit rebinds the selected text to the current index." : ""}`,
+      `${statusSummary(state)}${generationUnavailableNotice ? `\n${generationUnavailableNotice}` : ""}${artifacts ? "\nSaved artifacts are old candidates until the commit rebinds the selected text to the current index." : ""}`,
       actions,
     );
     assertCurrent(active);
     if (!choice || choice === "finish") return null;
     if (choice === "back") throw new GuidedGitError("RETURN_TO_STAGE", "Return to Stage");
-    if (choice === "continue" && current) return current;
-    if (choice === "default" && automaticDefault) { current = automaticDefault.message; continue; }
-    if (choice === "artifact:short" && artifacts) { current = artifacts.short.message; continue; }
-    if (choice === "artifact:long" && artifacts) { current = artifacts.long.message; continue; }
+    if (choice === "default" && automaticDefault) return automaticDefault.message;
+    if (choice === "artifact:short" && artifacts) return artifacts.short.message;
+    if (choice === "artifact:long" && artifacts) return artifacts.long.message;
     if (choice === "manual") {
-      const edited = await editMessage(ctx, current ?? "");
+      const edited = await editMessage(ctx, "");
       assertCurrent(active);
-      if (edited) current = edited;
+      if (edited) return edited;
       continue;
     }
     if (choice === "generate" && generation) {
@@ -649,7 +693,7 @@ async function chooseMessage(
       }
       const first = preferences.commit.defaultVariant;
       const second = first === "short" ? "long" : "short";
-      const candidateChoice = await showActionScreen(ctx, "Message", "Generated candidates", `Short:\n${candidates.short}\n\nLong:\n${candidates.long}`, [
+      const candidateChoice = await showActionScreen(ctx, "Message", "Generated candidates", `Short:\n${candidates.short}\n\nLong:\n${candidates.long}\n\nStaged summary:\n${stagedPreview(state)}${verificationNote(preferences)}`, [
         { value: first, label: `Use ${first} candidate` },
         { value: second, label: `Use ${second} candidate` },
         { value: "edit-short", label: "Edit short candidate" },
@@ -660,12 +704,12 @@ async function chooseMessage(
       assertCurrent(active);
       if (!candidateChoice || candidateChoice === "back") continue;
       if (candidateChoice === "finish") return null;
-      if (candidateChoice === "short") current = candidates.short;
-      if (candidateChoice === "long") current = candidates.long;
+      if (candidateChoice === "short") return candidates.short;
+      if (candidateChoice === "long") return candidates.long;
       if (candidateChoice === "edit-short" || candidateChoice === "edit-long") {
         const edited = await editMessage(ctx, candidateChoice === "edit-short" ? candidates.short : candidates.long);
         assertCurrent(active);
-        if (edited) current = edited;
+        if (edited) return edited;
       }
     }
   }
@@ -683,17 +727,8 @@ async function commitStage(
 ): Promise<CommitResult> {
   let message = initialMessage;
   const binding: CommitBinding = { root: state.root, branch: state.branch, headOid: state.headOid, fingerprint };
-  if (preferences.verification === "ask") {
-    const reminder = await showActionScreen(ctx, "Commit", "Verification reminder", "This workflow did not run checks. Review your own verification status before committing.", [
-      { value: "continue", label: "Continue to commit review" },
-      { value: "stage", label: "Back to Stage" },
-      { value: "finish", label: "Finish" },
-    ]);
-    if (reminder === "stage") return { kind: "stage" };
-    if (reminder !== "continue") return { kind: "finish" };
-  }
   while (true) {
-    const choice = await showActionScreen(ctx, "Commit", "Review commit", `Message (exact):\n${message}\n\nStaged summary:\n${stagedPreview(state)}`, [
+    const choice = await showActionScreen(ctx, "Commit", "Review commit", `Message (exact):\n${message}\n\nStaged summary:\n${stagedPreview(state)}${verificationNote(preferences)}`, [
       { value: "commit", label: "Commit staged changes", description: "Normal Git hooks and signing remain enabled" },
       { value: "edit", label: "Edit message" },
       { value: "stage", label: "Back to Stage" },
@@ -708,15 +743,6 @@ async function commitStage(
       if (edited) message = edited;
       continue;
     }
-    const confirmed = await showConfirmationOverlay(
-      ctx,
-      "Commit",
-      "Create this Git commit?",
-      `Repository: ${confirmationValue(state.root)}\nBranch: ${confirmationValue(state.branch)}\n\nExact message:\n${message}\n\nStaged summary:\n${stagedPreview(state)}\n\nGit hooks and signing will run.`,
-      "Create commit",
-    );
-    assertCurrent(active);
-    if (!confirmed) continue;
     let plan;
     try {
       plan = await prepareCommitPlan(ctx.cwd, binding, message);
@@ -750,7 +776,8 @@ async function commitStage(
     const classification = classifyPostCommitHead(binding.headOid, after, outcome);
     if (classification.classification === "head-advanced" && classification.commitOid) {
       if (outcome !== "success") ctx.ui.notify("The commit command reported a problem, but HEAD advanced. The created commit was preserved and will not be retried.", "warning");
-      else ctx.ui.notify(`Created commit ${classification.commitOid}.`, "info");
+      else ctx.ui.notify(`Created commit ${await commitSummaryText(state.root, classification.commitOid)} on ${confirmationValue(state.branch)}.
+Full ID: ${classification.commitOid}`, "info");
       return { kind: "created", oid: classification.commitOid };
     }
     if (classification.classification === "not-created") {
@@ -791,6 +818,8 @@ async function publishRepository(
   if (!confirmed) return;
   const outcome = await executeRepositoryPublication(plan, { assertCurrent: () => assertCurrent(active) });
   if (outcome.status === "published") {
+    ctx.ui.notify(`Published ${plan.visibility} repository ${exactTarget} and pushed ${confirmationValue(plan.branch)}. HEAD is ${await commitSummaryText(state.root, plan.headOid)}.
+Full ID: ${plan.headOid}`, "info");
     await finishScreen(ctx, "Push", `Published ${exactTarget} and pushed ${plan.headOid}.`);
   } else {
     await finishScreen(ctx, "Push", `Publication result is uncertain: ${outcome.diagnostic}\nDo not retry automatically. Inspect GitHub and local remotes first.`);
@@ -847,31 +876,22 @@ async function pushStage(
     const resolved = await resolvePushDestination(ctx, active, state.root, state.branch, createdOid);
     if (!resolved) return;
     const { destination, selectedRemote } = resolved;
-    const choice = await showActionScreen(ctx, "Push", "Review push", `Commit: ${createdOid}\nRemote: ${destination.remote}\nBranch: ${destination.branch}\nRefspec: ${destination.refspec}`, [
-      { value: "push", label: "Push commit", description: "No force option and no automatic retry" },
-      { value: "finish", label: "Finish without pushing" },
-    ]);
-    assertCurrent(active);
-    if (!choice || choice === "finish") return;
     const safeOid = confirmationValue(createdOid);
     const safeRemote = confirmationValue(destination.remote);
     const safeBranch = confirmationValue(destination.branch);
     const safeRefspec = confirmationValue(destination.refspec);
-    const confirmed = await showConfirmationOverlay(
-      ctx,
-      "Push",
-      "Push this exact commit?",
-      `Commit: ${safeOid}\nRemote: ${safeRemote}\nBranch: ${safeBranch}\nRefspec: ${safeRefspec}\n\nCommand: git push -- ${safeRemote} ${safeRefspec}\n\nNo force option will be used.`,
-      "Push exact commit",
-    );
+    const choice = await showActionScreen(ctx, "Push", "Review push", `Commit: ${safeOid}\nRemote: ${safeRemote}\nBranch: ${safeBranch}\nRefspec: ${safeRefspec}\n\nCommand: git push -- ${safeRemote} ${safeRefspec}`, [
+      { value: "push", label: "Continue and push", description: "No force option and no automatic retry" },
+      { value: "finish", label: "Finish without pushing" },
+    ]);
     assertCurrent(active);
-    if (!confirmed) return await finishScreen(ctx, "Push", "Push cancelled. The created commit remains local.");
+    if (!choice || choice === "finish") return;
     const currentHead = await readHeadOid(state.root);
     let verifiedDestination: PushDestination;
     try {
       const refreshed = await preflightRepository(ctx.cwd);
       if (refreshed.root !== state.root || refreshed.branch !== state.branch || refreshed.headOid !== createdOid) {
-        throw new GuidedGitError("STALE_PUSH_HEAD", "Repository root, branch, or HEAD changed after confirmation");
+        throw new GuidedGitError("STALE_PUSH_HEAD", "Repository root, branch, or HEAD changed after review");
       }
       verifiedDestination = await discoverPushDestination(state.root, {
         branch: state.branch,
@@ -888,19 +908,24 @@ async function pushStage(
       || verifiedDestination.branch !== destination.branch
       || verifiedDestination.refspec !== destination.refspec
     ) {
-      ctx.ui.notify("Push destination changed after confirmation. No push was attempted. Review the refreshed destination and confirm again to continue.", "warning");
+      ctx.ui.notify("Push destination changed after review. No push was attempted. Review the refreshed destination to continue.", "warning");
       continue;
     }
     const plan = planPush(verifiedDestination, createdOid, currentHead);
+    const outgoing = await countCommitsMissingFromRemote(state.root, createdOid, verifiedDestination.remote);
     try {
       const result = await executePlan(state.root, plan.args, PUSH_TIMEOUT_MS);
       if (result.exitCode === 0 && !result.timedOut) {
+        const target = `${confirmationValue(verifiedDestination.remote)}/${confirmationValue(verifiedDestination.branch)}`;
+        const count = outgoing === null ? "" : outgoing === 0 ? " (the remote already had these commits)" : ` (${plural(outgoing, "new commit")})`;
+        ctx.ui.notify(`Pushed to ${target}${count}. HEAD is ${await commitSummaryText(state.root, createdOid)}.
+Full ID: ${createdOid}`, "info");
         await finishScreen(ctx, "Push", `Pushed ${createdOid}\nRemote: ${verifiedDestination.remote}\nBranch: ${verifiedDestination.branch}\nRefspec: ${verifiedDestination.refspec}`);
         return;
       }
-      await finishScreen(ctx, "Push", `Push result is uncertain: ${errorMessage(result.stderr.length ? result.stderr : result.stdout)}\nThe remote may have received the commit. Do not retry automatically; verify the remote externally.`);
+      await finishScreen(ctx, "Push", pushFailureMessage(errorMessage(result.stderr.length ? result.stderr : result.stdout)));
     } catch (error) {
-      await finishScreen(ctx, "Push", `Push result is uncertain: ${errorMessage(error)}\nThe remote may have received the commit. Do not retry automatically; verify the remote externally.`);
+      await finishScreen(ctx, "Push", pushFailureMessage(errorMessage(error)));
     }
     return;
   }
@@ -1247,17 +1272,27 @@ export default function gitGuidedWorkflow(pi: ExtensionAPI): void {
           await pushStage(ctx, active, entry.state, entry.state.headOid);
           return;
         }
-        let staged = entry.entry === "initialize"
-          ? await initializeRepositoryFlow(ctx, active)
-          : entry.entry === "stage"
-            ? await chooseStage(ctx, active, preferences)
-            : await stagedEntry(ctx, entry.state);
+        let staged: StageResult;
+        if (entry.entry === "initialize") staged = await initializeRepositoryFlow(ctx, active);
+        else if (entry.entry === "stage") staged = await chooseStage(ctx, active, preferences);
+        else {
+          try { staged = await stagedEntry(ctx, entry.state); }
+          catch (error) {
+            // Message and Commit entries need staged content; let Stage offer staging or continue to Push.
+            if (!isCode(error, "NOTHING_STAGED")) throw error;
+            staged = await chooseStage(ctx, active, preferences);
+          }
+        }
         while (staged) {
+          if ("kind" in staged) {
+            await pushStage(ctx, active, staged.state, staged.headOid);
+            return;
+          }
           let message: string | null;
           try { message = await chooseMessage(ctx, active, staged.state, staged.fingerprint, preferences, generation, generationUnavailableNotice); }
           catch (error) {
             if (isCode(error, "RETURN_TO_STAGE")) {
-              staged = await chooseStage(ctx, active, preferences);
+              staged = await chooseStage(ctx, active, preferences, { showScreen: true });
               continue;
             }
             throw error;
@@ -1265,7 +1300,7 @@ export default function gitGuidedWorkflow(pi: ExtensionAPI): void {
           if (!message) return;
           const committed = await commitStage(ctx, active, staged.state, staged.fingerprint, message, preferences);
           if (committed.kind === "stage") {
-            staged = await chooseStage(ctx, active, preferences);
+            staged = await chooseStage(ctx, active, preferences, { showScreen: true });
             continue;
           }
           if (committed.kind === "finish") return;

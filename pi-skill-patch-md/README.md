@@ -10,7 +10,7 @@ Package a code change as a repeatable, reviewable patch with checks and rollback
 
 ## What to share with Pi
 
-- The intended change and target files
+- The intended change, target app or files, and its configuration location
 - How success should be checked
 - Any version, safety, or rollback requirements
 
@@ -20,7 +20,7 @@ Package a code change as a repeatable, reviewable patch with checks and rollback
 
 ## What you’ll get
 
-- A structured patch package
+- A complete patch package saved in the app's configuration directory when patching an app
 - Checks for unexpected file changes
 - Apply, verify, and rollback instructions
 

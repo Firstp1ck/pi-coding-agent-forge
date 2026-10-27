@@ -19,7 +19,7 @@ Pi Web UI keeps the normal Pi agent experience while giving you more room to man
 | --- | --- |
 | **Sessions and workspaces** | Run several isolated Pi sessions, resume prior work in a new terminal without replacing the current one, switch projects, preserve per-tab drafts, add another tab directly from the tab strip, and create branch worktrees. |
 | **Live agent work** | Follow streaming Markdown with syntax highlighting for code blocks, grouped consecutive thinking, tool output, queues, todo progress, managed agent runs, and direct agent-to-agent conversations without leaving the browser. |
-| **Models and controls** | Change models and thinking effort, manage scoped models, configure tools and skills, and use the command palette. |
+| **Models and controls** | Change models and thinking effort, check Codex CLI subscription usage, manage scoped models, configure tools and skills, and use the command palette. |
 | **Files and prompts** | Upload or paste files and images, edit text attachments, use slash-command suggestions, browse project files, and reference project paths with `@`. |
 | **Git workflows** | Inspect changes, switch branches, review diffs, stage work, generate commit messages with an optional one-shot fallback model, push, and prepare pull requests through guided steps. |
 | **Project utilities** | Launch detected app runners, manage working directories, search files and transcripts, and customize themes. |
@@ -244,9 +244,13 @@ Ask a quick side question without derailing the main agent flow, then transfer u
 
 ![Pi Web UI Codex usage widget showing subscription usage windows and reset timers](https://raw.githubusercontent.com/Firstp1ck/pi-coding-agent-forge/main/pi-package-webui/images/Webui_CodexUsage_v0.4.8.png)
 
-**Optional feature needed:** None for usage reporting, which is included in Pi Web UI core for supported Codex authentication. The Normal/Fast/Ultrafast selector requires `@firstpick/pi-extension-codex-fast-mode`.
+**Optional feature needed:** No Pi companion package for usage reporting. Install [Codex CLI](https://developers.openai.com/codex/cli) and sign in with ChatGPT to use the preferred usage source. The Normal/Fast/Ultrafast selector requires `@firstpick/pi-extension-codex-fast-mode`.
 
-Monitor subscription usage windows and reset times. With the companion enabled, choose a speed under Codex Usage and click Apply. Ultrafast is offered only for subscription-backed GPT-6 Astra and asks for cost confirmation.
+Run `codex login`, check the login with `codex login status`, then choose **Refresh usage** under **Codex Usage**. Web UI shows the CLI account's subscription usage windows and reset times without starting a model turn. The panel labels the source because Codex CLI's login is separate from Pi's; do not assume its limits match Pi's newer ChatGPT-plan allowance.
+
+If Codex CLI cannot provide usage, Web UI tries a compatible legacy Pi Codex login. Pi's newer **OpenAI → Sign in with ChatGPT** token cannot supply that fallback. See [authentication compatibility](TECHNICAL.md#codex-subscription-usage) for configuration and troubleshooting, or check [ChatGPT usage](https://chatgpt.com/settings/usage) directly.
+
+With the companion enabled, choose a speed under Codex Usage and click Apply. Ultrafast is offered only for subscription-backed GPT-6 Astra and asks for cost confirmation.
 
 **Ultrafast costs more:** it requires Pro $500 or eligible Enterprise/Edu access and uses 8× Standard included usage or 6× purchased-credit/pay-as-you-go usage. Workspace terms may differ. The selector shows your preference, not confirmation of upstream acceptance.
 

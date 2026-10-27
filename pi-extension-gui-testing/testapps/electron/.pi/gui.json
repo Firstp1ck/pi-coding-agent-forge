@@ -1,0 +1,16 @@
+{
+  "targets": [
+    "linux"
+  ],
+  "workspaceMode": "copy",
+  "setup": [
+    "npm install --no-audit --no-fund"
+  ],
+  "launch": {
+    "cmd": "./node_modules/.bin/electron",
+    "args": [
+      ".",
+      "--no-sandbox"
+    ]
+  }
+}

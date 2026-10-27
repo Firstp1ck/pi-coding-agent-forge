@@ -1,6 +1,6 @@
 {
   "name": "@firstpick/pi-extension-stats",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "description": "Token and cost usage analytics command for Pi session history.",
   "license": "MIT",
   "homepage": "https://github.com/Firstp1ck/pi-coding-agent-forge/tree/main/pi-extension-stats#readme",

@@ -10,6 +10,7 @@ import { readJsonSafe, writeJsonFileAtomic, writeJsonFileAtomicSync } from "../s
 import { pathExists, samePath, xdgConfigHome, xdgDataHome } from "../src/paths.ts";
 import { detachChildProcess, isProcessRunning, killGracefully, readLines, terminateProcessTree } from "../src/process.ts";
 import { normalizeTimestampMs } from "../src/time.ts";
+import { jsonToolResult, textToolResult } from "../src/tool-result.ts";
 import {
   decodeXmlEntities,
   escapeRegExp,
@@ -23,6 +24,14 @@ import {
   truncate,
   truncateWithFlag,
 } from "../src/text.ts";
+
+assert.deepEqual(textToolResult("hello"), { content: [{ type: "text", text: "hello" }], details: undefined });
+assert.equal(Object.hasOwn(textToolResult("hello"), "details"), true, "Pi requires an explicit details field even without structured data");
+assert.deepEqual(textToolResult("failed", null, { isError: true }), { content: [{ type: "text", text: "failed" }], details: null, isError: true });
+const jsonPayload = { count: 2 };
+const jsonResult = jsonToolResult(jsonPayload, { space: 0 });
+assert.equal(jsonResult.details, jsonPayload);
+assert.equal(jsonResult.content[0].text, '{"count":2}');
 
 assert.equal(escapeRegExp("a+b[1]?"), "a\\+b\\[1\\]\\?");
 assert.equal(new RegExp(escapeRegExp("a+b[1]?")).test("a+b[1]?"), true);

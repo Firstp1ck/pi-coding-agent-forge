@@ -13,7 +13,11 @@ npm run smoke
 npm pack --dry-run --json
 ```
 
-Tests cover taxonomy and strict decision parsing, bounded classifier input and reasons, continuation decision reuse, feature-only bridge injection without reason interpolation, parent fail-closed language, child-session bypass, lifecycle resets, structured RPC statuses, and inert registration.
+Tests cover taxonomy and strict decision parsing, bounded classifier input and reasons, continuation decision reuse, feature-only bridge injection without reason interpolation, T3 delegation compatibility without gate waivers, parent fail-closed language, child-session bypass, lifecycle resets, structured RPC statuses, and inert registration.
+
+## Pi 1.2 custom-message starts
+
+`before_agent_start` now runs for custom messages with `triggerTurn: true`. These events have no `prompt`. The classifier skips them without clearing the previous user classification or RPC status, so a later real user continuation can still reuse its decision. Prompt classification remains user-only. Tests cover custom starts before and after a classified user request.
 
 ## Additional implementation details
 
@@ -23,7 +27,7 @@ The extension treats `PI_SUBAGENT_CHILD=1` as a trusted Pi runtime marker. In th
 
 - The local fast path receives only the current request and does not persist it.
 - The model classifier receives only bounded current request text and, for a conservative continuation, bounded previous request text plus its effective classification.
-- The nested classifier uses an in-memory Pi session, no tools, and a minimal resource loader to avoid recursive extension loading.
+- The nested classifier uses an in-memory Pi session, no tools, and a minimal resource loader to avoid recursive extension loading. Its SDK source getters return `undefined` and an empty list because its inline instructions have no file provenance.
 - The extension does not read the enabled skill during classification or send skill contents to the classifier.
 - The untrusted classifier reason is used only in the serialized RPC status. It is never interpolated into the privileged system prompt; routing and injected complexity context use only the validated exact kind.
 - Classification telemetry and prompt text are not persisted by this extension.
@@ -61,6 +65,8 @@ If no active model is available, the classifier fails, times out, or returns mal
 A successfully classified parent feature receives the bridge only after the availability check passes. If the enabled skill is missing from the parent system prompt or a required file is unavailable, unreadable, or empty, the extension injects a configuration-error policy directing the parent not to implement the feature until configuration is restored. Child subagent processes skip this parent-only route instead of misclassifying an intentionally stripped child prompt as broken configuration.
 
 The availability check is machine-enforced; following the loaded policy remains an agent instruction rather than an authorization system.
+
+The routing bridge recognizes an available T3 `delegate_task`, including harness-prefixed tool names, as the skill's Pi delegation capability. This is conditional prompt guidance, not tool detection or an authorization bypass. The skill's Pi adapter owns provider/model preflight and the unchanged worker, independent-review and completion requirements.
 
 ## License
 

@@ -59,7 +59,7 @@ Production publication remains blocked on this evidence. Additional representati
 
 - Native Excel mutation remains disabled. Its `.xlsx` no-op serialization changed merged-cell styles, and its `.xlsm` no-op serialization changed `xl/vbaProject.bin`; safety-harness success does not waive fidelity failure. See `tests/corpus/LAST-NATIVE-BAKEOFF.json`.
 - Aspose.Cells remains an optional deferred capability tier. No license or Java/native runtime is installed automatically; the selected OOXML-safe backend and documented tiers satisfy the current cross-platform deliverable.
-- VBA source parsing, mutation, and execution remain absent. OOXML-safe reports project/signature part metadata and hashes while explicitly reporting module/reference/project-protection metadata unavailable. Any future source capability requires the separate reviewed design in `docs/VBA-THREAT-MODEL.md`.
+- VBA execution remains absent. OOXML-safe still reports only project/signature part metadata and hashes. Since 0.2.0, separate Windows-only `workbook_vba_*` tools list and edit modules through desktop Excel under the boundary in `docs/VBA-THREAT-MODEL.md`. Their real-Excel acceptance run (`npm run test:vba`) has not been performed; the user waived it for 0.2.0 on 2026-10-16.
 
 ## Bounded-fidelity constraints
 

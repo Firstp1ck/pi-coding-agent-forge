@@ -94,6 +94,7 @@ async function executeSmokeTest(params: { maxSearchResults?: number } = {}) {
 
 export default function hyprlandWikiExtension(pi: ExtensionAPI) {
   pi.on?.("before_agent_start", async (event, ctx) => {
+    if ("messageType" in event && event.messageType === "custom") return;
     const skillLoaded = event.systemPromptOptions.skills?.some((skill) => skill.name === "hyprland-local") ?? false;
     const looksHyprland = /\b(hyprland|hyprctl|hyprpm|hyprland\.conf|hyprpaper|hyprlock|hypridle|hyprshot|hyprpicker|xdg-desktop-portal-hyprland|wayland compositor|windowrule|workspace rule)\b/i.test(event.prompt ?? "");
     if (!skillLoaded && !looksHyprland) return;

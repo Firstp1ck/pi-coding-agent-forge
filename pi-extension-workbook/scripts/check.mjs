@@ -21,7 +21,9 @@ const required = [
   "src/schemas.ts",
   "src/backends/ooxml-safe.ts",
   "src/backends/excel-native.ts",
+  "src/backends/excel-vba.ts",
   "workers/excel-native.ps1",
+  "workers/excel-vba.ps1",
   "src/core/transaction.ts",
   "src/ooxml/package.ts",
   "src/ooxml/edit.ts",
@@ -37,7 +39,7 @@ assert.match(skill, /^---\nname: workbook-editor\ndescription: .+\n---\n/);
 assert.match(skill, /expectedSha256/);
 assert.match(skill, /Never execute macros/);
 const index = await fs.readFile(path.join(root, "index.ts"), "utf8");
-for (const tool of ["workbook_inspect", "workbook_read", "workbook_render", "workbook_edit", "workbook_diff", "workbook_validate"]) assert.match(index, new RegExp(`name: "${tool}"`));
+for (const tool of ["workbook_inspect", "workbook_read", "workbook_render", "workbook_edit", "workbook_diff", "workbook_validate", "workbook_vba_read", "workbook_vba_edit"]) assert.match(index, new RegExp(`name: "${tool}"`));
 assert.doesNotMatch(index, /child_process|ActiveWorkbook|Workbooks\.Open|AutomationSecurity/);
 const nativeWorker = await fs.readFile(path.join(root, "workers/excel-native.ps1"), "utf8");
 assert.match(nativeWorker, /\$excel\.AutomationSecurity = 3/);
@@ -49,4 +51,22 @@ assert.match(nativeWorker, /Workbooks\.Open\(\$inputFullPath, 0, \$readOnly\)/);
 assert.match(nativeWorker, /sourceHashBefore/);
 assert.match(nativeWorker, /sourceHashAfter/);
 assert.doesNotMatch(nativeWorker, /New-SelfSignedCertificate|Cert:\\|Set-ItemProperty|New-ItemProperty|RefreshAll|VBProject|CodeModule/);
-console.log(`package_check=PASS required_files=${required.length} tools=6 native_worker_safety=PASS`);
+const vbaWorker = await fs.readFile(path.join(root, "workers/excel-vba.ps1"), "utf8");
+for (const setting of ["Visible", "DisplayAlerts", "EnableEvents", "AskToUpdateLinks"]) assert.match(vbaWorker, new RegExp(`\\$excel\\.${setting} = \\$false`));
+assert.match(vbaWorker, /\$excel\.AutomationSecurity = 3/);
+assert.match(vbaWorker, /\$excel\.Calculation = -4135/);
+assert.match(vbaWorker, /\$excel\.CalculateBeforeSave = \$false/);
+assert.match(vbaWorker, /\[Environment\]::UserInteractive/);
+assert.match(vbaWorker, /GetWindowThreadProcessId/);
+assert.match(vbaWorker, /Write-ControlFile \$ownedExcelInstance/);
+assert.match(vbaWorker, /if \(-not \$ownedExcelInstance\) \{ throw/);
+assert.match(vbaWorker, /Workbooks\.Open\(\$inputFullPath, 0, \$true\)/);
+assert.match(vbaWorker, /Workbooks\.Open\(\$outputFullPath, 0, \$true\)/);
+assert.ok(vbaWorker.indexOf("$excel.AutomationSecurity = 3") < vbaWorker.indexOf("$excel.Workbooks.Open("));
+assert.match(vbaWorker, /sourceHashBefore/);
+assert.match(vbaWorker, /sourceHashAfter/);
+assert.match(vbaWorker, /PI_SENTINEL_EXECUTED/);
+assert.match(vbaWorker, /FinalReleaseComObject/);
+assert.match(vbaWorker, /\$excel\.Quit\(\)/);
+assert.doesNotMatch(vbaWorker, /Application\s*\.\s*Run|\.\s*Run\s*\(|RefreshAll|\bCalculate\b|AccessVBOM|VBE\s*\.\s*MainWindow|Certificate|Cert:\\|\b(?:Get|Set|New|Remove|Clear|Copy|Move|Rename)-ItemProperty\b|\b(?:Get|Set|New|Remove|Clear|Copy|Move|Rename)-Item\b[^\r\n]*(?:HKCU:|HKLM:|Registry::)/i);
+console.log(`package_check=PASS required_files=${required.length} tools=8 native_worker_safety=PASS vba_worker_safety=PASS`);

@@ -1,0 +1,24 @@
+{
+  "name": "@firstpick/pi-extension-model-research",
+  "version": "0.1.0",
+  "description": "Research two model providers, exchange evidence-based reviews, and draft a model-routing skill in Pi or T3 Code.",
+  "type": "module",
+  "license": "MIT",
+  "homepage": "https://github.com/Firstp1ck/pi-coding-agent-forge/tree/main/pi-extension-model-research#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Firstp1ck/pi-coding-agent-forge.git",
+    "directory": "pi-extension-model-research"
+  },
+  "keywords": ["pi-package", "pi", "pi-coding-agent", "extension", "model-research", "skills", "t3-code"],
+  "pi": { "extensions": ["./index.ts"] },
+  "scripts": {
+    "test": "node --experimental-strip-types --test tests/*.test.mjs",
+    "typecheck": "tsc -p tsconfig.json",
+    "check": "npm test && npm run typecheck"
+  },
+  "devDependencies": { "@types/node": "^26.1.2", "typescript": "^6.0.3" },
+  "peerDependencies": { "@earendil-works/pi-coding-agent": "*", "typebox": "*" },
+  "engines": { "node": ">=22.19.0" },
+  "files": ["index.ts", "src", "README.md", "TECHNICAL.md", "DEVELOPMENT.md", "LICENSE"]
+}

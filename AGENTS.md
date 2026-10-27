@@ -1,6 +1,6 @@
-# Repository documentation rules
+# Repository rules
 
-This file applies to the whole repository. A more specific `AGENTS.md` in a package directory may add package-specific rules, but it must not weaken the documentation layers defined here.
+This file applies to the whole repository. A more specific `AGENTS.md` in a package directory may add package-specific rules, but it must not weaken the documentation layers or dependency rules defined here.
 
 ## Documentation goal
 
@@ -186,7 +186,7 @@ Every skill must have distinct examples and advice. Do not copy the same generic
 When adding a new first-party package:
 
 1. Create its user-facing `README.md`.
-2. Add `TECHNICAL.md` when users need advanced commands, configuration, compatibility, security, or troubleshooting.
+2. Create `TECHNICAL.md` for every new package. It holds the advanced user reference: complete commands and options, configuration, requirements and supported platforms, storage locations, security and privacy behavior, limitations, and troubleshooting. It must add reference detail beyond the README, not repeat it.
 3. Add `DEVELOPMENT.md` when implementation or contributor material exists.
 4. Link the documents in both directions.
 5. Add the package to the correct group in the repository `README.md`.
@@ -194,7 +194,7 @@ When adding a new first-party package:
 7. Include requirements and safety warnings before users encounter a failure or risk.
 8. Keep nested fixture, template, test, worker, and vendored READMEs scoped to their own specialized audience.
 
-Do not create an empty `DEVELOPMENT.md`. Do not create `TECHNICAL.md` merely to repeat the README.
+Do not create an empty `DEVELOPMENT.md`. Every new package gets a `TECHNICAL.md`; write it as a reference that goes beyond the README instead of repeating it.
 
 ## Documenting a change
 
@@ -277,3 +277,26 @@ git diff --check -- '*.md' ':(exclude)**/node_modules/**' ':(exclude)**/vendor/*
 ```
 
 For large documentation changes, also check local links and scan `TECHNICAL.md` files for internal endpoint calls, payload/schema descriptions, source paths, test commands, and development-only headings.
+
+## Dependency rules
+
+### Keep first-party dependency ranges current
+
+Packages in this repository depend on each other, most often on `@firstpick/pi-utils`. An existing install keeps any copy that still satisfies the declared range, even after a newer version is published. A range such as `^0.3.0` lets users keep `0.3.0`. If a package imports something that does not exist in its declared minimum version, it fails at runtime for those users.
+
+After every change, check dependencies before considering the work complete:
+
+1. When a package starts using a new export, option, or behavior of another first-party package, raise its dependency range to the first version that provides it. For example, use `^0.3.2` instead of `^0.3.0` when the export first shipped in `0.3.2`.
+2. When you change a shared package such as `pi-utils`, find every package that uses the changed or added code and update its range in the same change.
+3. Bump the version of every package whose dependency range changed, so the fix can be published.
+4. Confirm that the required version of the dependency is published on npm before publishing a package that depends on it.
+5. Do not leave long-stale ranges in place when touching a package. Update them to the current version of the dependency once you have checked the package still works with it.
+
+To check that the declared minimum version provides what the package imports, list the published versions and inspect the minimum one:
+
+```bash
+npm view @firstpick/pi-utils versions --json
+npm pack @firstpick/pi-utils@<minimum-version>
+```
+
+Extract the downloaded archive in an empty directory and confirm each imported export exists.

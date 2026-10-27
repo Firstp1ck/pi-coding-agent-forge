@@ -1,6 +1,6 @@
 {
   "name": "@firstpick/pi-extension-raspberrypi-wiki-local",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "Local Raspberry Pi Documentation search and retrieval tools for Pi backed by a local documentation corpus.",
   "license": "MIT",
   "homepage": "https://github.com/Firstp1ck/pi-coding-agent-forge/tree/main/pi-extension-raspberrypi-wiki-local#readme",

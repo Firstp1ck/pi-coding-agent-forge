@@ -1,6 +1,6 @@
 {
   "name": "@firstpick/pi-extension-release-npm",
-  "version": "0.4.6",
+  "version": "0.5.0",
   "description": "Pi command to run npm package release workflow with publish confirmation.",
   "license": "MIT",
   "homepage": "https://github.com/Firstp1ck/pi-coding-agent-forge/tree/main/pi-extension-release-npm#readme",
@@ -23,22 +23,29 @@
   },
   "scripts": {
     "check": "npm test",
-    "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types tests/process-tree.test.mjs && node tests/npm-pack-json.test.mjs && node tests/bundled-dependencies.test.mjs"
+    "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types tests/process-tree.test.mjs && node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types tests/compact-release-output.test.mjs && node tests/npm-pack-json.test.mjs && node tests/bundled-dependencies.test.mjs && node tests/plan-workspace.test.mjs && node tests/plan-targets.test.mjs"
   },
   "dependencies": {
-    "@firstpick/pi-utils": "^0.2.4"
+    "@firstpick/pi-utils": "^0.3.2"
   },
   "peerDependencies": {
-    "@earendil-works/pi-coding-agent": "*"
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*"
   },
   "peerDependenciesMeta": {
     "@earendil-works/pi-coding-agent": {
+      "optional": true
+    },
+    "@earendil-works/pi-tui": {
       "optional": true
     }
   },
   "files": [
     "index.ts",
     "process-tree.ts",
+    "compact-release-output.ts",
+    "publish-picker.ts",
+    "release-output-overlay.ts",
     "*.sh",
     "README.md",
     "LICENSE"

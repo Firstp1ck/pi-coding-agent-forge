@@ -2,7 +2,7 @@
 
 Advanced user setup, configuration, compatibility, security, and troubleshooting information.
 
-[Back to the human-friendly README](README.md)
+[Back to the human-friendly README](README.md) · [Contributor and implementation guide](DEVELOPMENT.md)
 
 Firstpick's custom theme bundle for the Pi coding agent.
 
@@ -56,6 +56,12 @@ Select a theme in `/settings` or set it in `~/.pi/agent/settings.json`:
 ```
 
 This bundle adds themes only; it registers no commands or model tools.
+
+## Compatibility
+
+The bundled palettes work with Pi 1.2's stricter theme validation. After updating a local copy, run `/reload` or restart Pi to rediscover the themes.
+
+Catppuccin Mocha and Matrix keep their background images in the updated Pi WebUI. Update WebUI together with this bundle to retain those backgrounds; the terminal palettes do not depend on WebUI.
 
 ## Example view
 

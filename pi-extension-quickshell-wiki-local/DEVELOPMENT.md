@@ -4,6 +4,10 @@ Contributor-only implementation, API, architecture, testing, and maintenance inf
 
 [Back to README](README.md) · [Advanced user technical reference](TECHNICAL.md)
 
+## Pi 1.2 start events
+
+Prompt-based routing skips `before_agent_start` events with `messageType: "custom"` before inspecting prompt text or reading documentation status. User events and legacy events without `messageType` retain normal routing. The repository's `tests/pi-wiki-start-compat.test.mjs` covers this boundary for all five local-wiki extensions.
+
 ## Scope and sources
 
 Version 0.2 replaces guide-only setup with published-site acquisition. The ArchWiki and Hyprland packages remain the model for local-first search, bounded extraction and citations. No shared wiki engine or sibling package is changed.

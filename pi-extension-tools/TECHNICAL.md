@@ -12,7 +12,7 @@ Advanced user setup, configuration, compatibility, and troubleshooting informati
 2. **Global default**
 3. **Model default**
 
-Session choices take precedence over an exact case-sensitive provider/model profile. A model profile takes precedence over the global default, which takes precedence over Pi's runtime tool set. **Use inherited defaults** removes the selected override. An empty saved selection intentionally enables no tools.
+Session choices take precedence over an exact case-sensitive provider/model profile. A model profile takes precedence over the global default, which takes precedence over Pi's runtime tool set. **Use inherited defaults** removes the selected override. An empty saved selection intentionally enables no Pi tools. Compatible T3 chat sessions retain T3's own tools, as described below.
 
 The selector separates tool names, discovery values, and enabled status into three columns. Discovery values distinguish Pi built-ins, SDK custom tools, and extension-provided tools. The selected tool's description appears below the list.
 
@@ -37,11 +37,17 @@ The selector keeps saved names that are temporarily unavailable so reinstalling 
 
 The extension applies scoped tool choices in TUI mode. Model changes and session-tree navigation recompute inherited choices immediately. No reload is required after saving.
 
-A saved selection limits which tools the model can use, including tools registered later. Excluded tools are removed from model requests and their calls are blocked even if another extension reactivates them. Selected tools can still be held inactive by the extension that provides them. When every scope inherits Pi's runtime default, dynamic tool activation remains unrestricted.
+The package includes compatibility for legacy T3 RPC chat launches that explicitly load T3's bridge and provide its normal runtime environment. No separate compatibility extension is needed. TUI and helper launches do not enable that compatibility path.
+
+A compatible T3 chat launcher also applies the same defaults to its Pi session. T3 reads changed defaults before each new prompt; an unchanged selection keeps selected tools inactive when their providing extension holds them inactive. Session choices come only from the active T3 Pi session branch. Other RPC clients, WebUI, print and JSON modes keep their existing behavior. TUI timing stays unchanged.
+
+A saved selection limits which Pi tools the model can use, including tools registered later. Excluded tools are removed from model requests and their calls are blocked even if another extension reactivates them. Selected tools can still be held inactive by the extension that provides them. When every scope inherits Pi's runtime default, dynamic tool activation remains unrestricted.
+
+Inside a compatible T3 chat session, T3's native orchestration, preview and other app tools stay available regardless of the saved Pi selection. This includes empty session, model or global selections and tools registered after startup. Native tool discovery follows the same exception. Your saved profiles are not rewritten, skill choices are unchanged, and tools hidden or held inactive by their provider are not forced active. T3 authentication and permission checks still apply. Ordinary Pi TUI sessions do not receive this exception.
 
 The selector shows the scope you are editing. A disabled tool in **Global default** can still be allowed by a higher-priority model or session selection. Save with **Ctrl+S** before testing the change.
 
-To disable model access through MCP, exclude every MCP gateway and direct tool, including `mcp`, `mcpScript`, and any individual server tools. Disabling only a direct tool does not prevent an enabled gateway from calling the same service. These choices do not unload extensions, stop background work, or disconnect servers. They are not a security sandbox.
+To disable ordinary MCP access through these selections, exclude every MCP gateway and direct tool, including `mcp`, `mcpScript`, and any individual server tools. In compatible T3 sessions, use T3's controls for its native tools instead. Disabling only a direct tool does not prevent an enabled gateway from calling the same service. These choices do not unload extensions, stop background work, or disconnect servers. They are not a security sandbox.
 
 If reading defaults fails, Pi reports the error and retains the last successfully applied selection. If no selection has been loaded yet, runtime tools remain unchanged. Fix the settings error before relying on the exclusions.
 

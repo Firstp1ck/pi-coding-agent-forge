@@ -33,10 +33,10 @@ Open Pi inside the repository you want to work with. To use the guided flow, run
 In Pi's native terminal interface:
 
 1. Choose a direct entry. A directory outside Git can be initialized on `main`; an existing repository is never renamed.
-2. Preserve the current index or confirm **Stage all changes**. Starter files are created and staged only when you select them.
-3. Write a message, generate candidates, explicitly reuse `dev/COMMIT/` files, or choose the one-file default when it is safe. The generated long candidate starts with the short summary, followed by `feat:`, `fix:`, and other relevant change bullets.
-4. Review the exact message and staged summary, then confirm the commit.
-5. Push the bound HEAD to the shown destination. When no remote exists, you may explicitly select Public or Private and publish once through system `gh`.
+2. Keep the current index or choose **Stage all changes**, which stages everything immediately. When only staged changes exist, this step is skipped. When there is nothing to commit but your branch has commits that aren't on the remote yet, or no remote exists, the workflow goes straight to Push. Starter files are created and staged only when you select them.
+3. Write a message, generate candidates, explicitly reuse `dev/COMMIT/` files, or choose the one-file default when it is safe. Choosing a message goes straight to the commit review. The generated long candidate starts with the short summary, followed by `feat:`, `fix:`, and other relevant change bullets.
+4. Review the exact message and staged summary, then choose **Commit staged changes**. Pi posts a short note in the main window with the new commit's short ID, subject, branch, and size.
+5. Review the shown destination, then choose **Continue and push** to push the exact commit. It never force-pushes and never retries automatically. After a successful push, Pi posts a note naming the remote branch, how many new commits it received, and the pushed commit. When no remote exists, you may explicitly select Public or Private and publish once through system `gh`.
 
 Run `/git-guided-workflow-setup` to edit native-only defaults in a bordered popup with its own background. Press `Ctrl+S` to save or Escape to cancel. Saving does not switch Pi's active model or reasoning effort. Until setup is saved, generation uses the active model and manual entry remains available.
 
@@ -57,6 +57,8 @@ Run `/pr` on your feature branch and review the saved draft before posting it. I
 ## Before you start
 
 This extension runs Git with your user permissions. Review staged changes and displayed destinations carefully. The guided TUI never force-pushes, but a normal push still changes a remote repository.
+
+Set up Git authentication before pushing. Guided Git uses your normal Git credential helpers, but cannot accept a username, password, or token through a terminal prompt. If authentication fails, follow the [push authentication recovery steps](TECHNICAL.md#push-cannot-read-a-username-or-password) before using direct Push entry to send your existing commit.
 
 Manual, reused, and deterministic messages never need a model. Model generation sends the required complete, bounded Git or repository context directly to the selected model provider only after you select generation or invoke a generation command. Direct commands use the active Pi model. Native and browser setup profiles run independently without changing the parent session's model or reasoning effort. If native setup includes a fallback, the overlay identifies both providers and warns that one eligible provider failure will resend the same evidence once. Cancellation, invalid output, invalid settings, repository drift, Git errors, and artifact errors never trigger fallback. That content may contain private code, commit text, filenames, or a pull-request template. Do not generate unless sharing that content with the selected provider is acceptable.
 

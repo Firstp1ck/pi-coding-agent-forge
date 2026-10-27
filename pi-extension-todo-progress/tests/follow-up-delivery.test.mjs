@@ -64,6 +64,7 @@ function createHarness(extension, options = {}) {
     registerTool(tool) {
       tools.set(tool.name, tool);
     },
+    getActiveTools: options.activeToolsUnavailable ? undefined : () => options.activeTools || [],
     registerShortcut() {},
     registerCommand(name, command) {
       commands.set(name, command);
@@ -233,6 +234,248 @@ async function startToolGoal(harness, goal = "Implement and verify the requested
 function latestGoal(harness) {
   return harness.entries.findLast((entry) => entry.customType === "todo-progress-goal-state")?.data;
 }
+
+function latestTodo(harness) {
+  return harness.entries.findLast((entry) => entry.customType === "todo-progress-state")?.data;
+}
+
+test("todo_update replaces full snapshots, completes and clears the existing scrolling widget", async () => {
+  const h = createHarness(await loadExtension(), { hasUI: true, activeTools: ["todo_update"] });
+  await h.emit("agent_start", {});
+  const params = { tasks: Array.from({ length: 12 }, (_, i) => ({ text: `  Task  ${i}\n`, status: i === 0 ? "in_progress" : "pending" })), goal: "  Verify\n the result  " };
+  const first = await h.executeTool("todo_update", "first", params);
+  assert.deepEqual(first.details, { type: "todo-progress", version: 1, tasks: params.tasks.map((task, i) => ({ text: `Task ${i}`, status: task.status })), goal: "Verify the result" });
+  assert.equal(first.content[0].text, "Todo progress updated: 0/12 completed.");
+  assert.equal(first.terminate, undefined);
+  assert.deepEqual(Object.keys(first.details).sort(), ["goal", "tasks", "type", "version"]);
+  assert.deepEqual(latestTodo(h).items[0], { text: "Task 0", status: "partial" });
+  assert.equal(h.widgets.at(-1).lines.at(-1), "Scroll 1-5 of 12");
+  assert.match(await h.injectedContext(), /Use todo_update/);
+  const saved = structuredClone(latestTodo(h));
+  params.tasks[0].text = "Caller mutation";
+  params.goal = "Caller label mutation";
+  first.details.tasks[0].text = "Result mutation";
+  first.details.tasks.push({ text: "Extra", status: "completed" });
+  first.details.goal = "Result label mutation";
+  assert.deepEqual(latestTodo(h), saved, "Input and result references cannot mutate persistence");
+
+  const completed = await h.executeTool("todo_update", "finish", { tasks: [{ text: "Different work", status: "completed" }] });
+  assert.deepEqual(completed.details, { type: "todo-progress", version: 1, tasks: [{ text: "Different work", status: "completed" }] });
+  assert.equal(latestTodo(h).awaitingGoalCheck, true);
+  assert.equal(latestTodo(h).allowNextListReplacement, false);
+  assert.match(h.widgets.at(-1).lines[1], /1\/1 done · check goal/);
+  assert.match(await h.injectedContext(), /Before any additional tool call/);
+  assert.deepEqual(h.entries.find(entry => entry.customType === "todo-progress-state").data, saved);
+
+  const cleared = await h.executeTool("todo_update", "clear", { tasks: [] });
+  assert.deepEqual(cleared.details, { type: "todo-progress", version: 1, tasks: [] });
+  assert.equal(cleared.content[0].text, "Todo checklist cleared.");
+  assert.deepEqual(latestTodo(h).items, []);
+  assert.equal(latestTodo(h).visible, false);
+  assert.equal(latestTodo(h).awaitingGoalCheck, false);
+  assert.equal(latestTodo(h).offset, 0);
+  assert.equal(h.widgets.at(-1).lines, undefined);
+});
+
+test("todo_update rejects malformed and cancelled input before checklist or goal mutation", async () => {
+  const contextAbort = new AbortController();
+  const h = createHarness(await loadExtension(), { hasUI: true, signal: contextAbort.signal });
+  await h.executeTool("todo_update", "initial", { tasks: [{ text: "Keep this", status: "pending" }], goal: "Label only" });
+  const before = structuredClone(h.entries);
+  const widgets = structuredClone(h.widgets);
+  const invalid = [undefined, null, [], {}, { tasks: null }, { tasks: {} }, { tasks: Array(13).fill({ text: "x", status: "pending" }) },
+    ...[null, [], {}, { text: "x" }, { status: "pending" }, { text: " \n\t", status: "pending" }, { text: 1, status: "pending" },
+      { text: "x".repeat(1001), status: "pending" }, { text: "x", status: "todo" }, { text: "x", status: "partial" }, { text: "x", status: "done" },
+      { text: "x", status: "running" }, { text: "x", status: "pending", extra: true }].map(task => ({ tasks: [task] })),
+    ...[undefined, null, 1, "", " \n\t", "g".repeat(2001)].map(goal => ({ tasks: [], goal })),
+    { tasks: [], extra: true }, { tasks: [{ text: "Valid first", status: "completed" }, { text: "", status: "pending" }] }, { tasks: Array(1) },
+  ];
+  for (const input of invalid) {
+    await assert.rejects(h.tools.get("todo_update").execute("invalid", input, undefined, undefined, {
+      hasUI: true, ui: {}, signal: contextAbort.signal,
+    }));
+    assert.deepEqual(h.entries, before);
+    assert.deepEqual(h.widgets, widgets);
+  }
+  const cancelled = AbortSignal.abort();
+  await assert.rejects(h.tools.get("todo_update").execute("cancel", { tasks: [] }, cancelled, undefined, { signal: contextAbort.signal }), /cancelled/);
+  contextAbort.abort();
+  await assert.rejects(h.tools.get("todo_update").execute("cancel", { tasks: [] }, undefined, undefined, { signal: contextAbort.signal }), /cancelled/);
+  assert.deepEqual(h.entries, before);
+  assert.deepEqual(h.widgets, widgets);
+  assert.equal(latestGoal(h), undefined, "A checklist label never starts durable execution");
+});
+
+test("todo_update uses checklist progress once and never changes active goal ownership or budgets", async () => {
+  const h = createHarness(await loadExtension(), { hasUI: true });
+  await startToolGoal(h, "Canonical user goal");
+  const initial = structuredClone(latestGoal(h));
+  const params = { tasks: [{ text: "Verify", status: "pending" }], goal: "Attempted replacement" };
+  const first = await h.executeTool("todo_update", "first", params);
+  assert.equal(first.details.goal, initial.goal);
+  assert.equal(latestTodo(h).goal, initial.goal);
+  assert.equal(h.widgets.at(-1).lines[0], `Goal: ${initial.goal}`);
+  assert.deepEqual(latestGoal(h), { ...initial, progressRevision: initial.progressRevision + 1, seenProgress: latestGoal(h).seenProgress });
+  assert.equal(latestGoal(h).seenProgress.length, 1);
+  const after = structuredClone(latestGoal(h));
+  const entries = h.entries.length;
+  const widgetCount = h.widgets.length;
+  const same = await h.executeTool("todo_update", "same", params);
+  assert.deepEqual(same.details, first.details);
+  assert.equal(h.entries.length, entries, "No-op update does not append persistent state");
+  assert.equal(h.widgets.length, widgetCount);
+  assert.deepEqual(latestGoal(h), after, "No generic successful-tool progress for acknowledgements");
+  await h.executeTool("todo_update", "bad-label-noop", { ...params, goal: "Another label" });
+  assert.equal(h.entries.length, entries);
+  await assert.rejects(h.executeTool("todo_update", "invalid", { tasks: [{ text: "Bad", status: "done" }] }));
+  await assert.rejects(h.executeTool("todo_update", "cancel", { tasks: [] }, { signal: AbortSignal.abort() }), /cancelled/);
+  assert.deepEqual(latestGoal(h), after);
+  assert.deepEqual(same.details, first.details);
+  await h.executeTool("todo_update", "complete", { tasks: [{ text: "Verify", status: "completed" }] });
+  assert.equal(latestGoal(h).status, "running", "Completing tasks is not a durable checkpoint");
+  assert.equal(latestGoal(h).progressRevision, initial.progressRevision + 2);
+  await h.executeTool("todo_update", "clear", { tasks: [] });
+  assert.equal(latestTodo(h).goal, initial.goal);
+  assert.equal(latestGoal(h).goalId, initial.goalId);
+  assert.equal(latestGoal(h).runId, initial.runId);
+  assert.equal(h.userMessages.length, 0);
+});
+
+test("todo_update bounds display labels without truncating canonical durable goals", async () => {
+  for (const length of [2000, 2001, 100_000]) {
+    const h = createHarness(await loadExtension(), { hasUI: true });
+    const goal = "g".repeat(length);
+    await startToolGoal(h, goal);
+    const identity = structuredClone(latestGoal(h));
+    const result = await h.executeTool("todo_update", "long-goal", {
+      tasks: [{ text: "Verify task progress", status: "in_progress" }], goal: "Replacement label",
+    });
+    assert.deepEqual(result.details.tasks, [{ text: "Verify task progress", status: "in_progress" }]);
+    assert.equal(Object.hasOwn(result.details, "goal"), length <= 2000);
+    if (length <= 2000) assert.equal(result.details.goal, goal);
+    assert.equal(latestTodo(h).goal, goal);
+    assert.equal(latestGoal(h).goal, goal);
+    assert.equal(latestGoal(h).goalId, identity.goalId);
+    assert.equal(latestGoal(h).runId, identity.runId);
+    assert.equal(h.widgets.at(-1).lines[0], `Goal: ${goal}`);
+    assert.ok((await h.goalContext()).includes(`Explicit goal: ${goal}\n`));
+  }
+});
+
+test("todo_update is headless, restores cloned branch state, and preserves existing final/interrupt lifecycle", async () => {
+  const h = createHarness(await loadExtension());
+  await h.emit("agent_start", {});
+  const input = { tasks: [{ text: "a".repeat(1000), status: "in_progress" }], goal: "g".repeat(2000) };
+  const result = await h.executeTool("todo_update", "headless", input);
+  assert.deepEqual(result.details, { type: "todo-progress", version: 1, ...input });
+  assert.equal(h.widgets.length, 0);
+  await h.emit("agent_end", { messages: [assistantMessage("Interrupted", "aborted")] });
+  assert.equal(latestTodo(h).items.length, 1);
+  const saved = structuredClone(h.entries.filter(entry => entry.customType === "todo-progress-state"));
+  const restored = createHarness(await loadExtension(), { branch: saved, hasUI: true });
+  await restored.emit("session_start", {});
+  assert.equal(restored.widgets.at(-1).lines[2], `[-] ${input.tasks[0].text}`);
+  await restored.executeTool("todo_update", "new", { tasks: [{ text: "Replaced", status: "pending" }] });
+  assert.equal(saved.at(-1).data.items[0].text, input.tasks[0].text);
+  await h.emit("agent_end", { messages: [assistantMessage("Done", "stop")] });
+  assert.deepEqual(latestTodo(h).items, []);
+  await h.executeTool("todo_update", "again", input);
+  await h.emit("message_start", { message: userMessage("A new ordinary request") });
+  assert.deepEqual(latestTodo(h).items, []);
+});
+
+test("checklist guidelines and injected context route to active tools or Markdown fallback", async () => {
+  for (const options of [{ activeTools: ["todo_update"] }, { activeTools: [] }, { activeToolsUnavailable: true }]) {
+    const h = createHarness(await loadExtension(), options);
+    const prompt = (await h.emit("before_agent_start", { systemPrompt: "Base prompt" })).systemPrompt;
+    await h.executeTool("todo_update", "seed", { tasks: [{ text: "Inspect", status: "pending" }] });
+    const context = await h.injectedContext();
+    if (options.activeTools?.includes("todo_update")) {
+      assert.match(prompt, /Use todo_update for checklist creation and changes/);
+      assert.doesNotMatch(prompt, /Emit markdown checklist lines/);
+      assert.match(context, /Use todo_update/);
+      assert.doesNotMatch(context, /emit checklist lines/);
+    } else {
+      assert.match(prompt, /If todo_update is unavailable or disabled, emit markdown checklist lines/);
+      assert.match(context, /If todo_update is unavailable or disabled, before the next execution step/);
+      assert.doesNotMatch(context, /^todo_update is unavailable or disabled\./m);
+      assert.match(context, /emit checklist lines only for items/);
+      const changed = await h.emit("message_end", { message: assistantMessage("- [x] Inspect", "toolUse") });
+      assert.equal(latestTodo(h).items[0].status, "done");
+      assert.doesNotMatch(changed.message.content[0].text, /\[x\]/);
+    }
+    assert.match(h.tools.get("todo_update").promptGuidelines.join("\n"), /full ordered snapshot/);
+  }
+});
+
+for (const status of ["paused", "blocked", "waiting", "completed"]) {
+  test(`todo_update never starts or resumes a restored ${status} goal`, async () => {
+    const original = (await import("../goal-runtime.ts")).createGoalRuntime("Canonical stopped goal", "original-goal", "original-run");
+    original.status = status;
+    original.pauseReason = undefined;
+    original.checkpoint = undefined;
+    if (status === "waiting") original.checkpoint = { goalId: original.goalId, runId: original.runId, status: "waiting", summary: "Waiting", waitingFor: "Native job", jobId: "job" };
+    if (status === "blocked") original.checkpoint = { goalId: original.goalId, runId: original.runId, status: "blocked", summary: "Blocked", blockerCause: "Missing permission", requiredIntervention: "User approval" };
+    if (status === "completed") original.checkpoint = { goalId: original.goalId, runId: original.runId, status: "completed", summary: "Done", coverage: ["All work"], verificationEvidence: ["Fixture passed"] };
+    const h = createHarness(await loadExtension(), { branch: [{ type: "custom", customType: "todo-progress-goal-state", data: original }] });
+    await h.emit("session_start", {});
+    const restored = structuredClone(original);
+    // Existing restore policy pauses waiting goals. The checklist tool must leave that policy intact.
+    if (status === "waiting") {
+      restored.status = "paused";
+      restored.pauseReason = "Session reload or branch restoration requires explicit resume";
+    }
+    const result = await h.executeTool("todo_update", "label", { tasks: [{ text: "Independent checklist", status: "pending" }], goal: "Different label" });
+    assert.equal(result.details.goal, status === "completed" ? "Different label" : original.goal);
+    await h.command("goal-status");
+    assert.match(h.notifications.at(-1).message, new RegExp(`status ${restored.status}`));
+    await h.emit("session_shutdown", {});
+    assert.deepEqual(latestGoal(h), restored);
+    assert.deepEqual(original.status, status, "Restore and updates do not mutate branch data");
+    assert.equal(h.userMessages.length, 0);
+  });
+}
+
+for (const status of ["completed", "blocked", "waiting"]) {
+  test(`todo_update preserves same-run ${status} terminal checkpoints without continuation`, async () => {
+    const h = createHarness(await loadExtension());
+    const started = await startToolGoal(h, "Finish without restarting");
+    await executeCheckpoint(h, `terminal-${status}`, {
+      ...started.details, status, summary: "Terminal checkpoint",
+      coverage: ["All requested work"], verificationEvidence: ["Verified"],
+      blockerCause: "Needs approval", requiredIntervention: "User approval",
+      waitingFor: "Native notification", jobId: "job-terminal",
+    });
+    const terminal = structuredClone(latestGoal(h));
+    await h.executeTool("todo_update", "final-list", { tasks: [{ text: "Verification complete", status: "completed" }] });
+    assert.deepEqual(latestGoal(h), terminal, "Display-only progress cannot reopen terminal execution");
+    await h.executeTool("todo_update", "clear-list", { tasks: [] });
+    await assert.rejects(h.executeTool("todo_update", "invalid-list", { tasks: [{ text: "Invalid", status: "done" }] }));
+    await h.emit("agent_end", { messages: [assistantMessage("Here is the final result.")] });
+    await h.emit("agent_settled", {});
+    assert.deepEqual(latestGoal(h), terminal);
+    assert.equal(h.userMessages.length, 0, "No automatic continuation after a display-only update");
+  });
+}
+
+test("repeated todo_update snapshots cannot defeat the durable no-progress limit", async () => {
+  const h = createHarness(await loadExtension());
+  await startToolGoal(h);
+  const params = { tasks: [{ text: "Unchanged", status: "pending" }] };
+  await h.executeTool("todo_update", "initial", params);
+  for (let run = 0; run < 4; run++) {
+    for (let update = 0; update < 3; update++) await h.executeTool("todo_update", `repeat-${run}-${update}`, params);
+    await h.emit("agent_end", { messages: [assistantMessage("Continuing", "toolUse")] });
+    await h.emit("agent_settled", {});
+    if (latestGoal(h).status === "paused") break;
+    const continuation = customMessagesOfType(h, "todo-progress-goal-continuation").at(-1);
+    await h.emit("agent_start", {});
+    await h.emit("message_start", { message: deliveredCustomMessage(continuation) });
+  }
+  assert.equal(latestGoal(h).status, "paused");
+  assert.equal(latestGoal(h).noProgressRuns, 3);
+  assert.equal(latestGoal(h).progressRevision, 1);
+});
 
 test("goal tool activates /goal's controller in the current run without a synthetic user message", async () => {
   const harness = createHarness(await loadExtension(), { hasUI: true });
@@ -1312,8 +1555,23 @@ test("native Pi startup preserves hooks and pause cancels a delayed continuation
     _modelRuntime: { hasConfiguredAuth: () => true },
     _baseSystemPromptOptions: { selectedTools: [] },
     _baseSystemPrompt: "Required external policy",
-    agent: { state: {} },
+    agent: { state: {}, prompt: async (messages) => native._runAgentPrompt(messages) },
     _pendingNextTurnMessages: [],
+    _pendingToolNames: new Set(),
+    _recordSelection() {},
+    _resolveIdleWaitIfIdle() {},
+    _handlePostAgentRun: async () => false,
+    _runBeforeSettleBoundary: async () => false,
+    _finishCancelledRetry() {},
+    _startRun: AgentSession.prototype._startRun,
+    async _prepareRun(trigger) {
+      harness.runtime.idle = false;
+      return AgentSession.prototype._prepareRun.call(this, trigger);
+    },
+    async _emitAgentSettled() {
+      this._isAgentRunActive = false;
+      harness.runtime.idle = true;
+    },
     _flushPendingBashMessages() {},
     _flushPendingCustomMessages() {},
     _findLastAssistantMessage() {},
@@ -1333,7 +1591,8 @@ test("native Pi startup preserves hooks and pause cancels a delayed continuation
         return { action: "transform", text: `Fixture input policy\n${text}`, images };
       },
       async emitBeforeAgentStart(prompt, images) {
-        const result = await harness.emit("before_agent_start", { prompt, images, systemPrompt: "Required external policy" });
+        const trigger = typeof prompt === "object" ? prompt : { messageType: "user", prompt, images };
+        const result = await harness.emit("before_agent_start", { ...trigger, systemPrompt: "Required external policy" });
         policies.push(result.systemPrompt);
         return { messages: [], systemPrompt: result.systemPrompt, systemPromptOptions: { selectedTools: [] } };
       },
@@ -1386,10 +1645,11 @@ test("native Pi startup preserves hooks and pause cancels a delayed continuation
   const delayed = AgentSession.prototype.sendUserMessage.call(native, delayedContinuation.content, delayedContinuation.options);
   await entered;
   await harness.command("goal-pause");
-  assert.equal(harness.runtime.abortCount, 0, "Pi is still idle during asynchronous preflight");
+  const startupIsBusy = typeof AgentSession.prototype._startRun === "function";
+  assert.equal(harness.runtime.abortCount, startupIsBusy ? 1 : 0, "Pi 1.2 counts asynchronous startup as busy, so pause requests abort immediately");
   releaseStartup();
   await delayed;
-  assert.equal(harness.runtime.abortCount, 1, "Canceled owned delivery must request native abort before model work");
+  assert.equal(harness.runtime.abortCount, startupIsBusy ? 2 : 1, "The canceled owned delivery must also request native abort before model work");
   assert.equal(modelContexts.length, 2, "Delayed canceled continuation cannot reach the model boundary");
   const filtered = await harness.emit("context", { messages: [userMessage(delayedContinuation.content)] });
   assert.ok(filtered.messages.every((message) => message.customType !== "todo-progress-goal-continuation"));

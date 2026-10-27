@@ -28,6 +28,8 @@ type TodoState = {
   allowNextListReplacement: boolean;
 };
 type PersistedTodoState = TodoState & { version: 1 };
+type TodoTaskStatus = "pending" | "in_progress" | "completed";
+type TodoSnapshot = { tasks: Array<{ text: string; status: TodoTaskStatus }>; goal?: string };
 
 const KEY = "todo-progress";
 const STATE_KEY = "todo-progress-state";
@@ -38,6 +40,34 @@ const GOAL_KICKOFF_KEY = "todo-progress-goal-kickoff";
 const GOAL_CONTINUATION_KEY = "todo-progress-goal-continuation";
 const MAX_ROWS = 5;
 const MAX_ITEMS = 12;
+const MAX_TASK_TEXT_LENGTH = 1000;
+const MAX_CHECKLIST_GOAL_LENGTH = 2000;
+const CHECKPOINT_PRESERVING_TOOLS = new Set(["goal_checkpoint", "goal", "goal_resume", "todo_update"]);
+
+const TODO_UPDATE_PARAMETERS = {
+  type: "object",
+  additionalProperties: false,
+  required: ["tasks"],
+  properties: {
+    tasks: {
+      type: "array", minItems: 0, maxItems: MAX_ITEMS,
+      items: {
+        type: "object", additionalProperties: false, required: ["text", "status"],
+        properties: {
+          text: { type: "string", minLength: 1, maxLength: MAX_TASK_TEXT_LENGTH, pattern: "\\S" },
+          status: { type: "string", enum: ["pending", "in_progress", "completed"] },
+        },
+      },
+    },
+    goal: { type: "string", minLength: 1, maxLength: MAX_CHECKLIST_GOAL_LENGTH, pattern: "\\S", description: "Optional checklist label only; never starts or changes durable goal execution" },
+  },
+} as any;
+
+const TODO_UPDATE_GUIDELINES = [
+  "Use todo_update for checklist creation and changes. Send the full ordered snapshot with pending, in_progress, or completed statuses; tasks: [] explicitly clears it.",
+  "Do not repeat the checklist in assistant chat or send unchanged snapshots before each tool call. The progress display and injected context already contain it.",
+  "The optional goal is only a checklist label. It never starts, resumes, or replaces a durable goal; reuse the active durable goal and its goal controls.",
+];
 
 const GOAL_CHECKPOINT_PARAMETERS = {
   type: "object",
@@ -67,22 +97,57 @@ const GOAL_TOOL_GUIDELINES = [
   "The goal tool cannot replace or resume an unfinished goal. Only the user can replace it with /goal; when the user asks to resume, use goal_resume instead.",
 ];
 
-const TODO_POLICY = [
-  "",
-  "",
-  "[TODO PROGRESS POLICY] For multi-step work:",
-  "- When goal and goal_checkpoint are available, use the goal tool to set the work goal before creating a checklist or starting execution. Reuse an active goal; do not replace it for each checklist.",
-  "- When the user indicates they want to resume a paused, blocked, or waiting goal, call goal_resume before continuing work. Do not ask them to type /goal-resume when goal_resume is available. Status questions and clarifications alone do not authorize resuming.",
-  "- Without those tools, or if the user requests no automatic continuation, formulate a concise one-sentence `Goal: ...` as a checklist label only.",
-  "- Create concise, agent-authored checklists with 2-6 short items. Keep the goal separate; the todo list does not need to contain the goal.",
-  "- Emit markdown checklist lines exactly like `- [ ] item`, `- [-] item`, or `- [x] item` only when starting a list or when item status/text changes; do not re-emit unchanged checklist items before every tool call.",
-  "- Do not copy raw user-prompt lines as todos; rewrite them into clear action items.",
-  "- Update checklist markers as work changes. Mark the active/current step `[-]` when useful and completed steps `[x]`; emitting only the changed checklist line(s) is enough.",
-  "- When every item in the current list is `[x]`, explicitly check whether the goal is reached before doing more work.",
-  "- If the goal is reached, stop creating todo lists. For a durable goal, call goal_checkpoint with completed and verification evidence; otherwise produce the final output. If the goal is not reached, create a new short checklist before the next execution step.",
-  "- Multiple todo lists may be created during one session; each new list replaces the previous list in the progress widget.",
-  "- Todo checklists are session progress: still emit `[x]` updates when possible; after a normal final assistant response the extension clears the widget automatically so stale partial lists do not persist.",
-].join("\n");
+function todoPolicy(structured: boolean): string {
+  return [
+    "",
+    "",
+    "[TODO PROGRESS POLICY] For multi-step work:",
+    "- When goal and goal_checkpoint are available, use the goal tool to set the work goal before creating a checklist or starting execution. Reuse an active goal; do not replace it for each checklist.",
+    "- When the user indicates they want to resume a paused, blocked, or waiting goal, call goal_resume before continuing work. Do not ask them to type /goal-resume when goal_resume is available. Status questions and clarifications alone do not authorize resuming.",
+    "- Without those tools, or if the user requests no automatic continuation, formulate a concise one-sentence `Goal: ...` as a checklist label only.",
+    "- Create concise, agent-authored checklists with 2-6 short items. Keep the goal separate; the todo list does not need to contain the goal.",
+    structured
+      ? "- Use todo_update for checklist creation and changes: send the full ordered tasks snapshot with pending, in_progress, or completed statuses. Send tasks: [] to clear. Do not repeat the checklist in assistant chat or send unchanged snapshots before each tool call."
+      : "- If todo_update is unavailable or disabled, emit markdown checklist lines exactly like `- [ ] item`, `- [-] item`, or `- [x] item` only when starting a list or when item status/text changes; do not re-emit unchanged checklist items before every tool call.",
+    "- Do not copy raw user-prompt lines as todos; rewrite them into clear action items.",
+    structured
+      ? "- Mark active work in_progress and finished work completed in todo_update. Its optional goal is only a checklist label and cannot start, resume, replace, or override a durable goal."
+      : "- Update checklist markers as work changes. Mark the active/current step `[-]` when useful and completed steps `[x]`; emitting only the changed checklist line(s) is enough.",
+    "- When every item in the current list is complete, explicitly check whether the goal is reached before doing more work.",
+    "- If the goal is reached, stop creating todo lists. For a durable goal, call goal_checkpoint with completed and verification evidence; otherwise produce the final output. If the goal is not reached, create a new short checklist before the next execution step.",
+    "- Multiple todo lists may be created during one session; each new list replaces the previous list in the progress widget.",
+    "- Todo checklists are session progress: still record completion when possible; after a normal final assistant response the extension clears the widget automatically so stale partial lists do not persist.",
+  ].join("\n");
+}
+
+function validateTodoSnapshot(value: unknown): TodoSnapshot {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("todo_update requires an object");
+  const input = value as Record<string, unknown>;
+  if (Object.keys(input).some((key) => key !== "tasks" && key !== "goal")) throw new Error("Unknown todo_update parameter");
+  if (!Array.isArray(input.tasks) || input.tasks.length > MAX_ITEMS) throw new Error(`tasks must be an array of zero to ${MAX_ITEMS} entries`);
+  const normalize = (text: unknown, limit: number, label: string): string => {
+    if (typeof text !== "string" || !text.trim()) throw new Error(`${label} must be a nonblank string`);
+    if (text.length > limit) throw new Error(`${label} must be at most ${limit} characters`);
+    return text.trim().replace(/\s+/g, " ");
+  };
+  const tasks = Array.from(input.tasks, (task: unknown): TodoSnapshot["tasks"][number] => {
+    if (!task || typeof task !== "object" || Array.isArray(task)) throw new Error("Each task must be an object");
+    const item = task as Record<string, unknown>;
+    if (Object.keys(item).some((key) => key !== "text" && key !== "status")) throw new Error("Unknown task parameter");
+    const text = normalize(item.text, MAX_TASK_TEXT_LENGTH, "Task text");
+    if (item.status !== "pending" && item.status !== "in_progress" && item.status !== "completed") throw new Error("Task status must be pending, in_progress, or completed");
+    return { text, status: item.status };
+  });
+  return { tasks, ...(Object.hasOwn(input, "goal") ? { goal: normalize(input.goal, MAX_CHECKLIST_GOAL_LENGTH, "Checklist goal") } : {}) };
+}
+
+function todoSnapshot(s: TodoState): TodoSnapshot {
+  return {
+    tasks: s.items.map((item) => ({ text: item.text, status: item.status === "done" ? "completed" : item.status === "partial" ? "in_progress" : "pending" })),
+    // Durable goals can exceed the display contract without losing their full context.
+    ...(s.goal && s.goal.length <= MAX_CHECKLIST_GOAL_LENGTH ? { goal: s.goal } : {}),
+  };
+}
 
 function statusLabel(status: TodoStatus): string {
   if (status === "done") return "[x]";
@@ -364,11 +429,12 @@ function render(ctx: ExtensionContext, s: TodoState, explicitGoal?: string) {
   ctx.ui.setWidget(KEY, lines);
 }
 
-function buildInjectedContext(s: TodoState, explicitGoal?: string): string {
+function buildInjectedContext(s: TodoState, explicitGoal?: string, structured = false): string {
   const lines = ["[TODO PROGRESS CONTEXT]"];
   const goal = explicitGoal ?? s.goal;
   lines.push(goal ? `Goal: ${goal}` : "Goal: not formulated yet. Use the goal tool when available before creating the first checklist or starting work.");
   if (!explicitGoal) lines.push("This is a checklist label, not a running durable goal. Use the goal tool for multi-step work when goal and goal_checkpoint are available, unless the user requests no automatic continuation.");
+  if (structured) lines.push("Use todo_update for any checklist creation or change, including replacement or clearing. Send a full snapshot; do not repeat the checklist in assistant chat.");
 
   if (s.items.length > 0) {
     lines.push("", "Current todo list injected before the next step:");
@@ -386,10 +452,14 @@ function buildInjectedContext(s: TodoState, explicitGoal?: string): string {
   } else if (s.items.length > 0) {
     lines.push(
       "",
-      "Before the next execution step or tool call, emit checklist lines only for items whose status/text changed. If the checklist did not change, do not re-emit unchanged checklist lines.",
+      structured
+        ? "Use todo_update only when the checklist changes, with the full ordered snapshot. Do not repeat checklist text in assistant chat or send unchanged snapshots."
+        : "If todo_update is unavailable or disabled, before the next execution step or tool call, emit checklist lines only for items whose status/text changed. If the checklist did not change, do not re-emit unchanged checklist lines.",
     );
     if (s.allowNextListReplacement) {
-      lines.push("Compaction just completed. If the current plan needs to be restated, emit a complete new 2-6 item checklist; it may replace the previous list.");
+      lines.push(structured
+        ? "Compaction just completed. If the plan changes, use todo_update with a full replacement snapshot."
+        : "Compaction just completed. If the current plan needs to be restated, emit a complete new 2-6 item checklist; it may replace the previous list.");
     }
   }
 
@@ -516,6 +586,10 @@ export default function todoProgress(pi: ExtensionAPI) {
   const toolBatchSizes = new Map<string, number>();
   const toolInputs = new Map<string, { name: string; args: unknown }>();
   const observedAbortSignals = new WeakMap<AbortSignal, Set<string>>();
+
+  function todoToolActive() {
+    return typeof pi.getActiveTools === "function" && pi.getActiveTools().includes("todo_update");
+  }
 
   function persistState() {
     pi.appendEntry(STATE_KEY, snapshotState(state));
@@ -707,6 +781,48 @@ export default function todoProgress(pi: ExtensionAPI) {
   }
 
   pi.registerTool({
+    name: "todo_update",
+    label: "Update todo progress",
+    description: "Replace the session checklist with a full ordered snapshot of zero to 12 tasks. An empty tasks array clears it. Works with or without the terminal widget. The optional goal is a checklist label only and never starts, resumes, replaces, or overrides a durable goal.",
+    promptSnippet: "Update the checklist progress display with a full task snapshot",
+    promptGuidelines: TODO_UPDATE_GUIDELINES,
+    parameters: TODO_UPDATE_PARAMETERS,
+    async execute(_toolCallId, params, signal, _onUpdate, ctx) {
+      if (signal?.aborted || ctx.signal?.aborted) throw new Error("Todo update cancelled");
+      const snapshot = validateTodoSnapshot(params);
+      const items: TodoItem[] = snapshot.tasks.map((task) => ({
+        text: task.text,
+        status: task.status === "completed" ? "done" : task.status === "in_progress" ? "partial" : "todo",
+      }));
+      const goal = goalState && goalState.status !== "completed" ? goalState.goal : snapshot.goal;
+      const visible = items.length > 0;
+      const offset = Math.min(state.offset, Math.max(0, items.length - MAX_ROWS));
+      const awaitingGoalCheck = isDoneList(items);
+      const changed = !sameTodoItems(state.items, items) || state.goal !== goal || state.visible !== visible ||
+        state.offset !== offset || state.awaitingGoalCheck !== awaitingGoalCheck || state.allowNextListReplacement;
+      // No await between cancellation preflight and mutation: one atomic snapshot.
+      if (signal?.aborted || ctx.signal?.aborted) throw new Error("Todo update cancelled");
+      if (changed) {
+        const itemsChanged = !sameTodoItems(state.items, items);
+        state.items = items;
+        state.goal = goal;
+        state.visible = visible;
+        state.offset = offset;
+        state.awaitingGoalCheck = awaitingGoalCheck;
+        state.allowNextListReplacement = false;
+        if (itemsChanged && goalState?.status === "running" && recordObservableProgress(goalState, progressDigest("todo", items))) persistGoalState();
+        renderCurrent(ctx);
+        persistState();
+      }
+      const done = items.filter((item) => item.status === "done").length;
+      return {
+        content: [{ type: "text", text: items.length === 0 ? "Todo checklist cleared." : `Todo progress updated: ${done}/${items.length} completed.` }],
+        details: { type: "todo-progress", version: 1, ...todoSnapshot(state) },
+      };
+    },
+  });
+
+  pi.registerTool({
     name: "goal",
     label: "Goal",
     description: "Set a concise work goal and start the same durable execution controller as /goal in the current run. Enables bounded automatic continuation. Reuses an identical running goal without resetting progress; cannot replace or resume unfinished goals. Goal previews are limited to 2000 characters.",
@@ -835,7 +951,7 @@ export default function todoProgress(pi: ExtensionAPI) {
 
   pi.on("before_agent_start", async (event, ctx) => {
     captureAbortSignal(ctx);
-    return { systemPrompt: event.systemPrompt + TODO_POLICY };
+    return { systemPrompt: event.systemPrompt + todoPolicy(todoToolActive()) };
   });
 
   pi.on("agent_start", async (_event, ctx) => {
@@ -879,7 +995,7 @@ export default function todoProgress(pi: ExtensionAPI) {
       additions.push({
         role: "custom",
         customType: CONTEXT_KEY,
-        content: buildInjectedContext(state, explicitGoal),
+        content: buildInjectedContext(state, explicitGoal, todoToolActive()),
         display: false,
         timestamp: Date.now(),
       });
@@ -902,8 +1018,9 @@ export default function todoProgress(pi: ExtensionAPI) {
 
     if (event.message.role === "assistant") {
       assistantSequence += 1;
-      // A post-checkpoint text reply is the expected final answer, not new work.
-      if (checkpointAssistantSequence >= 0 && assistantSequence > checkpointAssistantSequence && assistantHasToolCalls(event.message)) invalidateTerminalCheckpoint();
+      // Final replies and display/controller tools are not new execution.
+      const startsWork = event.message.content.some((part) => part.type === "toolCall" && !CHECKPOINT_PRESERVING_TOOLS.has(part.name));
+      if (checkpointAssistantSequence >= 0 && assistantSequence > checkpointAssistantSequence && startsWork) invalidateTerminalCheckpoint();
       return;
     }
 
@@ -1053,14 +1170,15 @@ export default function todoProgress(pi: ExtensionAPI) {
   pi.on("tool_execution_start", async (event, ctx) => {
     captureAbortSignal(ctx);
     toolInputs.set(event.toolCallId, { name: event.toolName, args: event.args });
-    if (!["goal_checkpoint", "goal", "goal_resume"].includes(event.toolName)) invalidateTerminalCheckpoint();
+    if (!CHECKPOINT_PRESERVING_TOOLS.has(event.toolName)) invalidateTerminalCheckpoint();
   });
 
   pi.on("tool_execution_end", async (event, ctx) => {
     captureAbortSignal(ctx);
     const input = toolInputs.get(event.toolCallId);
     toolInputs.delete(event.toolCallId);
-    if (["goal_checkpoint", "goal", "goal_resume"].includes(event.toolName)) return;
+    // Display-only snapshots neither reopen execution nor count their acknowledgements as progress.
+    if (CHECKPOINT_PRESERVING_TOOLS.has(event.toolName)) return;
     invalidateTerminalCheckpoint();
     if (!event.isError && goalState?.status === "running") {
       const observableResult = event.result?.content ?? event.result;

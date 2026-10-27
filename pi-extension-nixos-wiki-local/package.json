@@ -1,6 +1,6 @@
 {
   "name": "@firstpick/pi-extension-nixos-wiki-local",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "Local NixOS/Nix documentation search and retrieval tools for Pi backed by minimal sparse clones of official repositories.",
   "license": "MIT",
   "homepage": "https://github.com/Firstp1ck/pi-coding-agent-forge/tree/main/pi-extension-nixos-wiki-local#readme",

@@ -174,6 +174,7 @@ const smokeParams = Type.Object({ maxSearchResults: Type.Optional(Type.Number({ 
 
 export default function localWikiExtension(pi: ExtensionAPI) {
   pi.on?.("before_agent_start", async (event, ctx) => {
+    if ("messageType" in event && event.messageType === "custom") return;
     if (!shouldRouteLocalWikiPrompt(event.prompt ?? "", CONFIG.promptDetection)) return;
 
     if (!await wiki.available()) {

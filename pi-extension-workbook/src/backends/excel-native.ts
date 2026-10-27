@@ -60,7 +60,7 @@ export type NativeCleanupResult = {
   warnings: string[];
 };
 
-function bounded(value: string, max = 12_000): string {
+export function bounded(value: string, max = 12_000): string {
   return value.length <= max ? value : value.slice(-max);
 }
 
@@ -72,7 +72,7 @@ async function readControl(controlPath: string): Promise<NativeWorkerControl | u
   }
 }
 
-async function stopOwnedExcel(controlPath: string): Promise<{ attempted: boolean; killed: boolean; control?: NativeWorkerControl; warning?: string }> {
+export async function stopOwnedExcel(controlPath: string): Promise<{ attempted: boolean; killed: boolean; control?: NativeWorkerControl; warning?: string }> {
   const control = await readControl(controlPath);
   if (!control?.owned || !Number.isInteger(control.excelPid) || !control.excelStartTimeUtc) return { attempted: false, killed: false, control };
   const script = [
@@ -88,7 +88,7 @@ async function stopOwnedExcel(controlPath: string): Promise<{ attempted: boolean
   return { attempted: true, killed: result.ok, control, ...(result.ok ? {} : { warning: `Owned Excel cleanup failed: ${result.stderr || result.error || result.exitCode}` }) };
 }
 
-async function cleanupWorker(workerPid: number | undefined, controlPath: string): Promise<NativeCleanupResult> {
+export async function cleanupWorker(workerPid: number | undefined, controlPath: string): Promise<NativeCleanupResult> {
   const warnings: string[] = [];
   const excel = await stopOwnedExcel(controlPath);
   if (excel.warning) warnings.push(excel.warning);

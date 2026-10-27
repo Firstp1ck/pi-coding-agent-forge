@@ -41,6 +41,10 @@ No required configuration.
 - `/stats-cost-trend [days|all]` — show cost trend and projections.
 - `/stats-cache [days|all]` — show cached-input share and token mix. Cached-input share is `cacheRead / (input + cacheRead + cacheWrite)`; it is not a request-level cache hit rate or a monetary savings estimate.
 
+## Pi 1.2 custom-message starts
+
+`before_agent_start` refreshes structured prompt options for user and custom runs. Custom starts clear pending first-user calibration because they carry no `prompt` or `images`. Their assistant usage remains part of recorded session totals, but cannot train the user-prompt estimate. `tests/stats-payload.test.mjs` covers both real user calibration and custom starts.
+
 ## Prompt input estimate
 
 `/stats-pi` and the `PI: ~X tok` value in `/stats` estimate the full initial model input, not just raw prompt text. `/stats-pi` prefers Pi's own HTML export data for the exact exported system prompt and active tool definitions; it falls back to live context data when a temporary export cannot be produced, so it can still be run before any LLM prompt in a fresh session.

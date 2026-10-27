@@ -1,6 +1,7 @@
 import { StringEnum } from "@earendil-works/pi-ai";
 import { Type } from "typebox";
 import { WORKBOOK_CONTRACT_VERSION } from "./contracts.ts";
+import { VBA_LIMITS } from "./vba/limits.ts";
 
 const WorkbookPath = Type.String({ minLength: 1, description: "Workbook path. Leading @, ~, relative, and absolute paths are supported." });
 const Sheet = Type.String({ minLength: 1, maxLength: 31, description: "Worksheet name (not a numeric index)." });
@@ -181,3 +182,25 @@ export const DiffSchema = Type.Object({
   limits: LimitsSchema,
 }, { additionalProperties: false });
 export const ValidateSchema = Type.Object({ path: WorkbookPath, baselinePath: Type.Optional(WorkbookPath), limits: LimitsSchema }, { additionalProperties: false });
+
+const VbaModuleName = Type.String({ pattern: "^[A-Za-z][A-Za-z0-9_]{0,30}$", maxLength: 31 });
+const VbaCode = Type.String({ maxLength: VBA_LIMITS.maxModuleCodeBytes, pattern: "^[\\t\\r\\n\\x20-\\x7E]*$" });
+const VbaOperationSchema = Type.Union([
+  Type.Object({ type: Type.Literal("addModule"), name: VbaModuleName, kind: StringEnum(["standard", "class"] as const), code: VbaCode }, { additionalProperties: false }),
+  Type.Object({ type: Type.Literal("replaceModuleCode"), name: VbaModuleName, code: VbaCode }, { additionalProperties: false }),
+  Type.Object({ type: Type.Literal("removeModule"), name: VbaModuleName }, { additionalProperties: false }),
+]);
+export const VbaReadSchema = Type.Object({
+  path: WorkbookPath,
+  includeCode: Type.Optional(Type.Boolean({ default: false })),
+  modules: Type.Optional(Type.Array(VbaModuleName, { minItems: 1, maxItems: 1000, uniqueItems: true })),
+  maxCodeChars: Type.Optional(Type.Integer({ minimum: 1, maximum: VBA_LIMITS.maxReadCodeChars, default: 20000 })),
+}, { additionalProperties: false });
+export const VbaEditSchema = Type.Object({
+  path: WorkbookPath,
+  expectedSha256: Type.Optional(Type.String({ pattern: "^[a-fA-F0-9]{64}$" })),
+  outputPath: Type.Optional(WorkbookPath),
+  dryRun: Type.Optional(Type.Boolean({ default: true })),
+  allowSignatureRemoval: Type.Optional(Type.Boolean({ default: false })),
+  operations: Type.Array(VbaOperationSchema, { minItems: 1, maxItems: VBA_LIMITS.maxOperations }),
+}, { additionalProperties: false });

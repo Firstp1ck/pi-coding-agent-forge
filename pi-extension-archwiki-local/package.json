@@ -1,6 +1,6 @@
 {
   "name": "@firstpick/pi-extension-archwiki-local",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "description": "Local ArchWiki search and retrieval tools for Pi using the installed arch-wiki-docs package.",
   "license": "MIT",
   "homepage": "https://github.com/Firstp1ck/pi-coding-agent-forge/tree/main/pi-extension-archwiki-local#readme",

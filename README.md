@@ -54,8 +54,10 @@ Extensions add commands, tools, interface elements, or automatic behavior to Pi.
 - **[Git Footer Status for Pi](pi-extension-git-footer-status/README.md)** — Shows Git state, token use, context use, and model information in Pi’s footer.
 - **[Guided Git workflow for Pi](pi-extension-git-guided-workflow/README.md)** — Guides staged changes through message, commit, and push with explicit safety checks and confirmations.
 - **[Grill Me for Pi](pi-extension-grill-me/README.md)** — Turns an early idea into a focused design interview so important decisions are made before implementation.
+- **[GUI Testing for Pi](pi-extension-gui-testing/README.md)** — Lets Pi run your desktop app in a private container, SSH host, or cloud sandbox, click through it, and check screenshots without touching your desktop (in development).
 - **[Hyprland Wiki Local for Pi](pi-extension-hyprland-wiki-local/README.md)** — Lets Pi search a local copy of the official Hyprland Wiki first.
 - **[Image generation for Pi](pi-extension-image-generation/README.md)** lets you configure OpenRouter image defaults and privacy, choose a model, confirm the prompt, and save the image locally.
+- **[Model Research for Pi](pi-extension-model-research/README.md)** — Compare any two model names with configured research workers, exchange evidence-linked reviews, and create an uninstalled skill draft with task-by-task model choices in Pi TUI or T3 Code.
 - **[NixOS Wiki Local for Pi](pi-extension-nixos-wiki-local/README.md)** — Lets Pi search local NixOS and Nix documentation before using the public web.
 - **[Notes for Pi](pi-extension-notes/README.md)** — Keep small local notes inside Pi and optionally use selected notes as operating rules.
 - **[Plan Executor for Pi](pi-extension-plan-executor/README.md)** — Works through a PLAN.md checklist and keeps going until the plan is complete or needs your input.
@@ -76,7 +78,7 @@ Extensions add commands, tools, interface elements, or automatic behavior to Pi.
 - **[Tools for Pi](pi-extension-tools/README.md)** — Turn Pi tools on or off from an interactive selector.
 - **[Upgrade Extensions for Pi](pi-extension-upgrade-extensions/README.md)** — Check and update npm-installed Pi extensions from inside Pi.
 - **[Wiki Tools for Pi](pi-extension-wiki-tools/README.md)** — Create and maintain local documentation-search extensions from a reusable template.
-- **[Workbook for Pi](pi-extension-workbook/README.md)** — Lets Pi inspect and carefully edit Excel workbooks with visual checks and validation.
+- **[Workbook for Pi](pi-extension-workbook/README.md)** — Lets Pi inspect and carefully edit Excel workbooks with visual checks and validation, including user-approved macro edits on Windows.
 - **[Workflows for Pi](pi-extension-workflows/README.md)** — Run saved, repeatable Pi workflows without putting all workflow logic in one large prompt.
 
 ### Skills
@@ -109,6 +111,8 @@ Skills give Pi a reusable workflow for a particular kind of work. You normally a
 - **[Repo Explorer](pi-skill-repo-explorer/README.md)** — Map an unfamiliar repository and return the files, symbols, risks, and evidence needed for the next step.
 - **[Requirements engineering](pi-skill-requirements-engineering/README.md)** helps you find the problem behind feature requests, prepare interviews, turn notes into traceable requirements, and settle conflicts and changes with stakeholders.
 - **[Research Orchestration](pi-skill-research-orchestration/README.md)** — Coordinate broad research across several claims, sources, and verification passes.
+- **[Rewrite in Rust](pi-skill-rust-rewrite/README.md)** — Assess and carry out Rust migrations with compatibility requirements, ownership analysis, and verification against the original.
+- **[Sailfish OS](pi-skill-sailfishos/README.md)** — Diagnose and maintain Sailfish devices with capability checks, safer package workflows, and privacy-aware diagnostics.
 - **[Server Audit](pi-skill-server-audit/README.md)** — Review a Linux server for exposed services, weak access controls, and practical hardening opportunities.
 - **[Shoo Auth](pi-skill-shoo-auth/README.md)** — Implement or troubleshoot Shoo Google sign-in in browser applications.
 - **[Spec vs Impl Checker](pi-skill-spec-vs-impl-checker/README.md)** — Check whether code actually matches a specification, plan, README, or issue.
@@ -120,6 +124,10 @@ Skills give Pi a reusable workflow for a particular kind of work. You normally a
 - **[Test Plan Generator](pi-skill-test-plan-generator/README.md)** — Turn a change or specification into a prioritized, practical test plan.
 - **[Unslop](pi-skill-unslop/README.md)** — Strip AI writing tells from prose and restore a human voice.
 - **[Vulnerability Scanner](pi-skill-vulnerability-scanner/README.md)** — Check software, containers, and services for known vulnerabilities and explain the risk.
+
+### Local patch packages
+
+- **[Native Tasks for Pi in T3](patches/t3-pi-native-todo/README.md)** — A reviewed PATCH.md v2 package for compatible Linux desktop updates, with explicit approval, offline verification and receipt-based rollback. Keep the complete canonical package under T3's config outside userdata; the repository copy is a development mirror.
 
 ### Shared utilities
 

@@ -1,6 +1,6 @@
 {
   "name": "@firstpick/pi-themes-bundle",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "Firstpick's custom Pi coding agent themes.",
   "license": "MIT",
   "homepage": "https://github.com/Firstp1ck/pi-coding-agent-forge/tree/main/pi-package-themes-bundle#readme",
@@ -26,9 +26,15 @@
       "./themes"
     ]
   },
+  "scripts": {
+    "test": "node --test tests/*.test.mjs"
+  },
   "files": [
     "themes",
+    "webui-backgrounds.json",
     "README.md",
+    "TECHNICAL.md",
+    "DEVELOPMENT.md",
     "LICENSE"
   ]
 }

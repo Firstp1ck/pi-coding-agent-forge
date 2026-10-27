@@ -13,6 +13,12 @@ const LOCK_RETRY_MS = 25;
 const INVALID_RECORD_GRACE_MS = 1_000;
 const updateQueues = new Map();
 
+// The injected T3 extension binds the launch request before session_start.
+// A bound marker inherited by a child must never confer ownership on that child.
+export function isT3ResourceProfileContext(ctx, env = process.env, pid = process.pid) {
+  return ctx.mode === "rpc" && env.T3_PI_RESOURCE_PROFILES === `t3-v1:${pid}`;
+}
+
 export function cleanResourceString(value, maxLength) {
   return typeof value === "string" ? value.trim().slice(0, maxLength) : "";
 }
@@ -92,6 +98,7 @@ export function exactModelProfile(resourceDefaults, provider, modelId) {
     .find((profile) => profile.provider === provider && profile.modelId === modelId) || null;
 }
 
+/** @param {string[] | null} runtimeDefault */
 export function resolveResourceSelection(resourceDefaults, resourceType, provider, modelId, runtimeDefault = null) {
   const selectionKey = resourceType === "tools" ? "enabledTools" : "enabledSkills";
   const profile = exactModelProfile(resourceDefaults, provider, modelId);

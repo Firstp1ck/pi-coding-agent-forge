@@ -1,6 +1,6 @@
 {
   "name": "@firstpick/pi-skill-patch-md",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "Agents should invoke this skill to create, update, or implement standardized PATCH.md documents that describe reproducible source code patches.",
   "license": "MIT",
   "homepage": "https://github.com/Firstp1ck/pi-coding-agent-forge/tree/main/pi-skill-patch-md#readme",

@@ -4,6 +4,12 @@ Contributor-only implementation, API, architecture, testing, and maintenance inf
 
 [Back to README](README.md) · [Advanced user technical reference](TECHNICAL.md)
 
+## Pi 1.2 theme compatibility
+
+Bundled native theme JSON now uses `https://pi.dev/schemas/theme.schema.json`. Pi 1.2 rejects WebUI-only fields inside a native theme's `export` object at startup. The theme bundle publishes those fields separately in `webui-backgrounds.json`, outside its `pi.themes` directory. `readBundledThemes()` reads that optional file next to the themes directory and merges only `WEBUI_THEME_EXPORT_FIELDS` into catalog exports. Native export colors cannot be overridden by this metadata. Older bundles with inline background fields still load through the existing bundled-only compatibility path.
+
+`tests/theme-contract.test.mjs` reads the published `schemas/theme.schema.json` first and falls back to the pre-1.2 schema location only on `ENOENT`. `tests/http-endpoints-harness.test.mjs` checks separate background metadata and rejects unrelated fields.
+
 ## Host-provided dependencies
 
 Declare `@earendil-works/pi-ai`, `@earendil-works/pi-coding-agent`, `@earendil-works/pi-tui`, and `typebox` as `peerDependencies` with a `"*"` range. Pi supplies them to extensions. Regular runtime dependencies can install duplicate Pi modules and trigger an extension warning. Keep versioned development dependencies for checkout tests and standalone CLI development, and regenerate the npm and Bun lockfiles after changing the manifest.
@@ -585,6 +591,30 @@ Normal output is the default. In the sidebar, open **Controls → Output process
 The browser negotiates `compact-v1` per EventSource connection (`outputMode=auto&outputModeProtocol=1`), so normal and compact clients can share one Pi tab. A browser only enables compact handling after the protocol-1 acknowledgement; an older server gets one normal-mode reconnect instead. The server default applies only to `auto` clients, and active auto streams change representation at a semantic boundary.
 
 The included compact-mode metric measures deterministic post-parse serialized JSON byte-work only (`R + 2×S`) and semantic parity; it does not claim wall-clock improvement, lower DOM CPU, reduced network latency, or higher model token/s.
+
+### Codex subscription usage authentication
+
+`lib/codex-usage-auth.mjs` resolves the legacy `openai-codex` credential first. If that login is absent or its provider no longer supports OAuth, it checks `openai` only when the runtime advertises subscription OAuth. A usable legacy login keeps precedence. Reads and lock-safe refreshes use the selected provider's storage key; the adapter never copies or migrates credentials and never resolves the unified OpenAI provider's API-key fallback for subscription usage. Login guidance follows the runtime's available subscription provider.
+
+The new Sign in with ChatGPT flow stores `clientId` and scopes including `chatgpt.tokens.use.direct`. Those credentials target the public OpenAI API, not the existing `https://chatgpt.com/backend-api/wham/usage` fetcher. The adapter returns `unsupportedReason: "chatgpt-direct-token"` without refreshing or returning an access token. It repeats that check inside and after the credential lock to handle concurrent login changes. The legacy reader returns a sanitized `501` explanation before any backend request when given this direct-flow credential. The public usage route first tries Codex CLI and can succeed independently of Pi's login. Do not forward direct-flow tokens to ChatGPT backend endpoints; see [OpenAI's models and inference guidance](https://developers.openai.com/siwc/token-sharing-open-source/models-and-inference).
+
+`lib/codex-cli-usage.mjs` launches `codex app-server --listen stdio://` without a shell, normalizing standard Windows npm shims to Node plus the installed Codex entry point. Its JSONL session sends `initialize`, the `initialized` notification, `account/read` with `refreshToken: false`, and `account/rateLimits/read` with null params. Only a `chatgpt` account can reach the rate-limit read. It never starts threads or turns, starts login flows, consumes reset credits, or supplies credentials to unsolicited server requests. CLI-managed authentication may perform its own normal refresh.
+
+The client bounds each stdout record to 1 MiB and total stdout and stderr to 4 MiB each. Stderr is drained but never retained or published. A 15-second overall deadline bounds the request sequence. Cleanup closes stdin, waits 300 ms, terminates the owned process tree if necessary, and waits another second before destroying pipes. Windows tree termination uses the existing bounded taskkill helper. A scoped parent-exit handler also terminates an in-flight child and is removed after cleanup. Only allowlisted, bounded quota windows, plan labels, bucket labels, and numeric credit balances survive the projection; raw account data and provider error bodies are discarded.
+
+`lib/codex-usage-source.mjs` coalesces concurrent reads and caches successful normalized snapshots for 30 seconds. `?refresh=1` bypasses a completed cache but joins an in-flight check. CLI success returns `source: "codex-cli"` and does not resolve Pi authentication. CLI failure tries the existing legacy reader, whose `source: "chatgpt.com"` snapshot gains a static `sourceNotice`. When both fail, only sanitized CLI guidance and a generic fallback explanation reach the browser. The browser includes source and notice in its structural signature so equal-shaped results still redraw when the account source changes. It displays the CLI-account warning without trying to compare identities or infer equivalence with Pi's direct ChatGPT allowance.
+
+Focused coverage includes provider compatibility, refresh and lock races, protocol framing, login-mode gating, secret stripping, read-only method sequences, malformed and oversized output, timeout, cancellation, process-tree cleanup, cache expiry and coalescing, source changes, and the actual HTTP route. `tests/fixtures/fake-codex-app-server.mjs` supplies deterministic peers without real authentication or inference. Run these from the package:
+
+```bash
+node tests/codex-cli-usage.test.mjs
+node tests/codex-usage-source.test.mjs
+node tests/codex-usage-http.test.mjs
+node tests/codex-usage-auth.test.mjs
+node tests/mobile-static.test.mjs
+```
+
+Protocol reference: [Codex App Server](https://developers.openai.com/codex/app-server). A live usage-only smoke check with Codex CLI 0.162.1 returned a subscription snapshot; no thread or model turn was created.
 
 ### Codex subscription Fast mode
 

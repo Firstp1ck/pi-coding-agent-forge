@@ -1,5 +1,12 @@
 # Migration notes
 
+## 0.1.x to 0.2.0: optional VBA module editing
+
+- Nothing changes unless you use the new tools. `workbook_edit` still preserves VBA byte-for-byte.
+- New tools: `workbook_vba_read`, `workbook_vba_edit`. New command: `/workbook-vba [status|enable|disable]`. New setting: `PI_WORKBOOK_VBA_EDITING`.
+- VBA editing needs Windows, desktop Excel, and *Trust access to the VBA project object model*. Other platforms report it as unavailable.
+- Rollback: run `/workbook-vba disable`, or reinstall 0.1.6. Files written by 0.2.0 are ordinary `.xlsm` workbooks.
+
 ## Preview contract to expanded operation matrix
 
 The public workbook contract remains `1.0`. This release is additive: the original value/formula/style/dimension/merge operations keep their exact field shapes, while additional strict operation variants are added to the same discriminated union. Stored calls using the original schema therefore require no argument migration.

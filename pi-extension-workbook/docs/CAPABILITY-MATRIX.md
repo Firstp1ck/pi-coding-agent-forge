@@ -10,6 +10,7 @@ Capabilities are selected per file and per requested operation. `supported` neve
 |---|---|---|
 | Tier 1 — `ooxml-safe` | Node.js 24+ on Windows, Linux, and macOS | Enabled for declared surgical operations on `.xlsx` and `.xlsm`; all baseline protected active-content parts remain byte-identical. |
 | Tier 2 — native Excel | Controlled interactive Windows only | Disabled. The safety harness passed, but strict no-op `.xlsx` and `.xlsm` fidelity failed. It is not selected by public tools. |
+| Tier 2b — VBA module editing | Interactive Windows with desktop Excel and user-enabled programmatic VBA project access | Separate `workbook_vba_read`/`workbook_vba_edit` tools. Off until the user allows it for the session or persistently; every commit needs its own approval dialog. Excel's full save is accepted and unrelated part changes are reported. Real-Excel acceptance pending. |
 | Tier 3 — Aspose.Cells | Not provisioned | Explicitly deferred; no license or Java/native runtime is installed automatically. |
 
 ## Operation matrix

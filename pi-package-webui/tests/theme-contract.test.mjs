@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   PI_THEME_EXPORT_FIELDS,
+  PI_THEME_SCHEMA_URL,
   REQUIRED_THEME_TOKENS,
   THEME_TOKEN_GROUPS,
   ThemeContractError,
@@ -18,8 +19,9 @@ import {
   xterm256ToRgb,
 } from "../public/theme-contract.mjs";
 
-const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const schemaPath = join(root, "node_modules", "@earendil-works", "pi-coding-agent", "dist", "modes", "interactive", "theme", "theme-schema.json");
+const piRoot = join(dirname(fileURLToPath(import.meta.resolve("@earendil-works/pi-coding-agent"))), "..");
+const schemaPath = join(piRoot, "schemas", "theme.schema.json");
+const legacySchemaPath = join(piRoot, "dist", "modes", "interactive", "theme", "theme-schema.json");
 
 function fixture(overrides = {}) {
   return {
@@ -36,7 +38,11 @@ assert.equal(new Set(REQUIRED_THEME_TOKENS).size, 51, "required tokens must be u
 assert.equal(THEME_TOKEN_GROUPS.length, 7, "the documented token inventory has seven groups");
 assert.deepEqual(THEME_TOKEN_GROUPS.map(({ tokens }) => tokens.length), [11, 11, 10, 3, 9, 6, 1]);
 
-const installedSchema = JSON.parse(await readFile(schemaPath, "utf8"));
+const installedSchema = JSON.parse(await readFile(schemaPath, "utf8").catch((error) => {
+  if (error.code !== "ENOENT") throw error;
+  return readFile(legacySchemaPath, "utf8");
+}));
+assert.equal(PI_THEME_SCHEMA_URL, "https://pi.dev/schemas/theme.schema.json");
 assert.deepEqual(
   [...REQUIRED_THEME_TOKENS].sort(),
   [...installedSchema.properties.colors.required].sort(),
@@ -58,6 +64,7 @@ const explicitMax = fixture({ colors: { ...valid.colors, thinkingMax: "primary" 
 assert.equal(effectiveThemeColors(explicitMax).thinkingMax, "primary");
 
 const native = canonicalizeTheme(valid);
+assert.equal(native.$schema, PI_THEME_SCHEMA_URL);
 assert.deepEqual(Object.keys(native.export), ["pageBg", "cardBg", "infoBg"]);
 assert.equal(Object.hasOwn(native.export, "backgroundImage"), false, "WebUI-only export fields must not enter Pi-native files");
 assert.deepEqual(Object.keys(native.colors), REQUIRED_THEME_TOKENS, "canonical colors must retain documented order");

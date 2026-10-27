@@ -53,6 +53,113 @@ async function fixture(t, { todo = false, enableTools = false, factories = [], e
   return { session, requests, errors, provider, fauxAssistantMessage };
 }
 
+nativeTest("native todo_update delivers full normalized public snapshots and cloned session persistence", async t => {
+  const f = await fixture(t, { todo: true, enableTools: true });
+  const initial = { tasks: Array.from({ length: 12 }, (_, i) => ({ text: `  Step\n ${i}  `, status: i === 0 ? "in_progress" : "pending" })), goal: "  Checklist\n only  " };
+  const normalized = { type: "todo-progress", version: 1, tasks: initial.tasks.map((task, i) => ({ text: `Step ${i}`, status: task.status })), goal: "Checklist only" };
+  const tool = (id, args) => f.fauxAssistantMessage({ type: "toolCall", id, name: "todo_update", arguments: args }, { stopReason: "toolUse" });
+  const results = () => f.session.sessionManager.getEntries().filter(entry => entry.type === "message" && entry.message.role === "toolResult" && entry.message.toolName === "todo_update").map(entry => entry.message);
+  const states = () => f.session.sessionManager.getEntries().filter(entry => entry.customType === "todo-progress-state");
+  let firstState;
+  let stateCount;
+  f.provider.setResponses([
+    context => {
+      f.requests.push(structuredClone(context));
+      assert.match(f.session.systemPrompt, /Use todo_update for checklist creation and changes/);
+      assert.doesNotMatch(f.session.systemPrompt, /Emit markdown checklist lines/);
+      return tool("create", initial);
+    },
+    context => {
+      f.requests.push(structuredClone(context));
+      assert.equal(results()[0].isError, false);
+      assert.deepEqual(results()[0].details, normalized);
+      assert.equal(results()[0].content[0].text, "Todo progress updated: 0/12 completed.");
+      assert.match(context.messages.map(textOf).join("\n"), /Use todo_update for any checklist creation/);
+      assert.ok(!f.session.sessionManager.getEntries().some(entry => entry.customType === "todo-progress-goal-state"), "A label never starts a durable goal");
+      firstState = states().at(-1).data;
+      stateCount = states().length;
+      return tool("unchanged", { tasks: normalized.tasks, goal: normalized.goal });
+    },
+    context => {
+      f.requests.push(structuredClone(context));
+      assert.equal(states().length, stateCount, "Identical native snapshots do not append state");
+      assert.deepEqual(results()[1].details, normalized);
+      results()[0].details.tasks[0].text = "Mutated tool result";
+      assert.equal(firstState.items[0].text, "Step 0", "Native SessionManager retains independent tool and state objects");
+      return tool("replacement", { tasks: [{ text: "Final verification", status: "completed" }] });
+    },
+    context => {
+      f.requests.push(structuredClone(context));
+      assert.deepEqual(results()[2].details, { type: "todo-progress", version: 1, tasks: [{ text: "Final verification", status: "completed" }] });
+      assert.equal(states().at(-1).data.awaitingGoalCheck, true);
+      assert.equal(firstState.items.length, 12);
+      assert.equal(firstState.items[0].status, "partial");
+      return tool("clear", { tasks: [] });
+    },
+    context => {
+      f.requests.push(structuredClone(context));
+      assert.deepEqual(results()[3].details, { type: "todo-progress", version: 1, tasks: [] });
+      assert.deepEqual(states().at(-1).data.items, []);
+      assert.equal(states().at(-1).data.visible, false);
+      return f.fauxAssistantMessage("Verification complete.", { stopReason: "stop" });
+    },
+  ]);
+  await f.session.prompt("Track this work without automatic continuation.");
+  await f.session.waitForIdle();
+  assert.deepEqual(f.errors, []);
+  assert.equal(f.provider.state.callCount, 5, f.session.sessionManager.getEntries().findLast(entry => entry.type === "message" && entry.message.role === "assistant")?.message.errorMessage);
+  assert.equal(f.session.sessionManager.getEntries().findLast(entry => entry.type === "message" && entry.message.role === "assistant").message.errorMessage, undefined, "Faux callbacks must not swallow assertion failures");
+  assert.deepEqual(initial.tasks[0], { text: "  Step\n 0  ", status: "in_progress" });
+});
+
+nativeTest("native todo_update rejects schema-invalid results without changing prior progress", async t => {
+  const f = await fixture(t, { todo: true, enableTools: true });
+  const tool = (id, args) => f.fauxAssistantMessage({ type: "toolCall", id, name: "todo_update", arguments: args }, { stopReason: "toolUse" });
+  let snapshot;
+  f.provider.setResponses([
+    tool("valid", { tasks: [{ text: "Keep current work", status: "pending" }] }),
+    () => {
+      snapshot = structuredClone(f.session.sessionManager.getEntries().findLast(entry => entry.customType === "todo-progress-state").data);
+      return tool("invalid", { tasks: [{ text: "Bad", status: "done" }] });
+    },
+    () => {
+      const entries = f.session.sessionManager.getEntries();
+      const failed = entries.findLast(entry => entry.type === "message" && entry.message.role === "toolResult").message;
+      assert.equal(failed.isError, true);
+      assert.equal(failed.details?.type, undefined, "SDK errors must not carry a successful todo-progress discriminator");
+      assert.equal(failed.details?.tasks, undefined);
+      assert.deepEqual(entries.findLast(entry => entry.customType === "todo-progress-state").data, snapshot);
+      return f.fauxAssistantMessage("Preserve recovery state.", { stopReason: "error" });
+    },
+  ]);
+  await f.session.prompt("Track work without automatic continuation.");
+  await f.session.waitForIdle();
+  assert.deepEqual(f.errors, []);
+  assert.equal(f.provider.state.callCount, 3);
+  assert.equal(f.session.sessionManager.getEntries().findLast(entry => entry.type === "message" && entry.message.role === "assistant").message.errorMessage, undefined);
+});
+
+nativeTest("native active tool selection routes guidelines and disabled mode keeps Markdown parsing", async t => {
+  const f = await fixture(t, { todo: true, enableTools: true });
+  f.session.setActiveToolsByName([]);
+  f.provider.setResponses([
+    context => {
+      assert.match(f.session.systemPrompt, /If todo_update is unavailable or disabled, emit markdown checklist lines/);
+      assert.doesNotMatch(f.session.systemPrompt, /Use todo_update for checklist creation and changes/);
+      assert.doesNotMatch(f.session.systemPrompt, /Send the full ordered snapshot/);
+      return f.fauxAssistantMessage("Goal: Fallback only\n- [ ] Inspect\n- [-] Verify", { stopReason: "error" });
+    },
+  ]);
+  await f.session.prompt("Track work without automatic continuation.");
+  await f.session.waitForIdle();
+  const entries = f.session.sessionManager.getEntries();
+  assert.equal(entries.findLast(entry => entry.type === "message" && entry.message.role === "assistant").message.errorMessage, undefined);
+  assert.deepEqual(entries.findLast(entry => entry.customType === "todo-progress-state").data.items, [
+    { text: "Inspect", status: "todo" }, { text: "Verify", status: "partial" },
+  ]);
+  assert.deepEqual(f.errors, []);
+});
+
 nativeTest("native goal_resume continues restored work in the current run and checkpoints the new identity", async t => {
   const { createGoalRuntime } = await import("../goal-runtime.ts");
   const stopped = { ...createGoalRuntime("Verify the original scope", "native-goal", "stopped-run"), status: "paused" };

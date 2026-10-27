@@ -159,6 +159,9 @@ await writeFile(artifactManifest, JSON.stringify({ artifact: { schema: "pi.artif
 await mkdir(managedThemeDir, { recursive: true });
 await writeFile(path.join(managedThemePackageRoot, "package.json"), JSON.stringify({ name: "@firstpick/pi-themes-bundle", version: "0.0.0-test", pi: { themes: ["./themes"] } }));
 await writeFile(path.join(managedThemeDir, "managed-fixture.json"), serializeTheme(themeFixture("managed-fixture")));
+await writeFile(path.join(managedThemePackageRoot, "webui-backgrounds.json"), JSON.stringify({
+  "managed-fixture": { backgroundImage: "url(\"/matrix-background.webp\")", backgroundSize: "cover", pageBg: "#ffffff", arbitrary: "ignored" },
+}));
 await writeFile(path.join(workflowPolicyAgentDir, "trust.json"), `${JSON.stringify({ [cwd]: true }, null, 2)}\n`);
 await chmod(fakePi, 0o755);
 await mkdir(fakeOpenBinDir, { recursive: true });
@@ -513,6 +516,11 @@ try {
   assert.deepEqual(managedThemesResponse.body?.data?.themes?.map(({ name }) => name), ["managed-fixture"], "themes installed only under PI_CODING_AGENT_DIR/npm/node_modules should be exposed to the browser");
   assert.equal(managedThemesResponse.body?.data?.themes?.[0]?.colors?.accent, "#123456");
   assert.equal(managedThemesResponse.body?.data?.themes?.[0]?.scope, "bundled");
+  const managedExport = managedThemesResponse.body.data.themes[0].export;
+  assert.equal(managedExport.backgroundImage, "url(\"/matrix-background.webp\")", "separate WebUI metadata must preserve bundled backgrounds");
+  assert.equal(managedExport.backgroundSize, "cover");
+  assert.notEqual(managedExport.pageBg, "#ffffff", "background metadata must not replace native Pi export colors");
+  assert.equal(Object.hasOwn(managedExport, "arbitrary"), false, "only supported background fields may enter the catalog");
 
   const themeTabs = await request("127.0.0.1", "/api/tabs");
   const themeTabId = themeTabs.body?.data?.tabs?.[0]?.id;

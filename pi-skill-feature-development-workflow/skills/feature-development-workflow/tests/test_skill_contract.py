@@ -127,10 +127,33 @@ class FeatureDevelopmentWorkflowContractTests(unittest.TestCase):
         self.assertEqual(marker, "## Pi Adapter")
         self.assertTrue(adapter.strip())
         self.assertIsNone(re.search(r"\bPi\b", core), "Pi-specific name outside adapter")
-        for term in ["`subagent`", "pi install", "plans/planned/"]:
+        for term in [
+            "`subagent`",
+            "`delegate_task`",
+            "`orchestrator_capabilities`",
+            "T3 Code",
+            "pi install",
+            "plans/planned/",
+        ]:
             self.assertNotIn(term, core, f"Pi-specific term outside adapter: {term}")
         self.assertIn("`subagent` capability", adapter)
         self.assertIn("pi install <absolute-path-to-package>", adapter)
+
+    def test_pi_adapter_accepts_t3_delegation_without_weakening_required_outcomes(self):
+        adapter = SKILL.read_text(encoding="utf-8").split("## Pi Adapter", 1)[1]
+        for phrase in [
+            "Outside T3 Code, verify the `subagent` capability is active",
+            "Inside T3 Code, use its app-owned `delegate_task` capability",
+            "including harness-prefixed tool names",
+            "Discover current provider/model support with `orchestrator_capabilities`",
+            "do not infer usability merely from a catalog entry",
+            "An available T3 `delegate_task` satisfies the `subagent` capability requirement",
+            "do not ask for a waiver or extra implementation approval solely because Pi's native `subagent` tool is absent",
+            "not required worker outcomes, review independence, authorization, or completion evidence",
+            "If the selected harness cannot provide a mandatory delegation outcome, stop before that phase",
+            "explicit scoped waiver or approval of a named alternative",
+        ]:
+            self.assertIn(phrase, adapter)
 
     def test_bundled_resources_and_metadata_exist(self):
         for path in [SKILL, CONTRACT, ROUTING, README, PACKAGE_JSON, LICENSE, Path(__file__)]:

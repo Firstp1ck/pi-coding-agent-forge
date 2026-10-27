@@ -39,7 +39,7 @@ function createHarness(cwd, options = {}) {
     getAllTools() {
       return [...["read", "grep", "find", "ls", "bash", "powershell", "write", "edit"].map((name) => ({
         name,
-        sourceInfo: { source: "builtin", path: `<builtin:${name}>` },
+        sourceInfo: { source: "builtin", path: options.builtinPaths === "current" ? `builtin:${name}` : `<builtin:${name}>` },
       })), ...(options.registeredControls ? [...tools.keys()].map(name => ({ name, sourceInfo: { source: "extension", path: "reliability-fixture" } })) : [])];
     },
     getCommands() {
@@ -368,10 +368,10 @@ test("installed Pi navigation blocks unbound evidence create and update while pe
   }
 });
 
-test("installed SessionManager reconciles only after its tool result is persisted", async () => {
+test("installed SessionManager reconciles current builtin:bash results only after persistence", async () => {
   const cwd = tempCwd();
   try {
-    const harness = createHarness(cwd, { installedHost: true });
+    const harness = createHarness(cwd, { installedHost: true, builtinPaths: "current" });
     await harness.emit("session_start");
     await harness.commands.get("reliability").handler("on verify installed host lifecycle", harness.ctx);
     const scopeTool = harness.tools.get("reliability_scope");
@@ -747,6 +747,25 @@ test("adaptive mode escalates long work to supervised mode", async () => {
     assert.match(before.at(-1).systemPrompt, /SUPERVISOR \/ WORKER SPLIT/);
     await harness.commands.get("reliability").handler("status", harness.ctx);
     assert.match(harness.notifications.at(-1).message, /mode supervised/);
+  } finally {
+    cleanup(cwd);
+  }
+});
+
+test("Pi 1.2 custom starts preserve reliability supervision without granting input authority", async () => {
+  const cwd = tempCwd();
+  try {
+    const harness = createHarness(cwd, { installedHost: true });
+    await harness.emit("session_start");
+    await harness.commands.get("reliability").handler("on refactor multiple modules and verify the test suite", harness.ctx);
+    const [taskId] = taskIds(cwd);
+    const statePath = join(cwd, ".pi", "tasks", taskId, "state.json");
+    const before = JSON.parse(readFileSync(statePath, "utf8")).authoritative_instructions;
+    const result = await harness.emit("before_agent_start", {
+      messageType: "custom", message: { customType: "reliability-plan-continuation", content: "Continue", display: false }, systemPrompt: "sys",
+    });
+    assert.match(result.at(-1).systemPrompt, /RELIABILITY HARNESS INSTRUCTIONS/);
+    assert.deepEqual(JSON.parse(readFileSync(statePath, "utf8")).authoritative_instructions, before);
   } finally {
     cleanup(cwd);
   }

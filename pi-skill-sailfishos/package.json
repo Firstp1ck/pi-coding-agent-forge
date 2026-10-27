@@ -1,0 +1,35 @@
+{
+  "name": "@firstpick/pi-skill-sailfishos",
+  "version": "0.1.0",
+  "description": "Portable Agent Skill for safe Sailfish OS diagnostics, packages, repositories, services, apps, and SDK workflows.",
+  "license": "MIT",
+  "author": "Firstpick",
+  "homepage": "https://github.com/Firstp1ck/pi-coding-agent-forge/tree/main/pi-skill-sailfishos#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Firstp1ck/pi-coding-agent-forge.git",
+    "directory": "pi-skill-sailfishos"
+  },
+  "bugs": {
+    "url": "https://github.com/Firstp1ck/pi-coding-agent-forge/issues"
+  },
+  "keywords": ["pi-package", "pi", "pi-coding-agent", "agent-skill", "skill", "sailfishos", "sailfish", "mobile-linux", "rpm", "pkcon", "ssu"],
+  "pi": {
+    "skills": ["./skills"]
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "test": "python3 -B -m unittest discover -s tests -p \"test_*.py\" -v"
+  },
+  "files": [
+    "skills/sailfishos/SKILL.md",
+    "skills/sailfishos/references/*.md",
+    "skills/sailfishos/scripts/*.sh",
+    "README.md",
+    "TECHNICAL.md",
+    "DEVELOPMENT.md",
+    "LICENSE"
+  ]
+}

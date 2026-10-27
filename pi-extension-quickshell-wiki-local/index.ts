@@ -342,6 +342,7 @@ const maxChars = Type.Optional(Type.Number({ minimum: 1000, maximum: 12000 }));
 export default function quickshellWikiExtension(pi: ExtensionAPI) {
   const wiki = createWiki();
   pi.on("before_agent_start", async (event) => {
+    if ("messageType" in event && event.messageType === "custom") return;
     if (!CONFIG.promptDetection.test(event.prompt || "")) return;
     const status = await wiki.status();
     const guidance = status.available

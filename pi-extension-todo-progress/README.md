@@ -6,7 +6,7 @@ Follow live checklist progress while Pi sets a work goal and continues unfinishe
 
 ## What you can do
 
-- Follow a compact checklist while Pi works through a multi-step request.
+- Follow checklist updates in Pi's compact terminal widget, or T3 Code's native Tasks panel with an updated Pi adapter.
 - Let Pi set a durable goal from your multi-step request, or start one yourself with `/goal`.
 - Inspect or pause a goal with dedicated commands, then ask Pi to resume it.
 - Get a normal final reply after Pi records completion, a blocker, or a waiting job, with the details that matter to you.
@@ -28,7 +28,9 @@ Ask Pi as usual, for example:
 
 > Fix the failing parser tests and verify the change without modifying the public API.
 
-For multi-step work, Pi is instructed to use the `goal` tool to set an outcome from your request and start durable execution. You do not need to type `/goal`. Pi then updates the checklist as work progresses and records whether the goal is complete, blocked, waiting, or needs more work. After recording a final status, Pi should still reply in its own words with the result, checks, and anything you need to do next.
+For multi-step work, Pi is instructed to use the `goal` tool to set an outcome from your request and start durable execution. You do not need to type `/goal`. Pi then uses `todo_update` to keep the progress display current without repeating the checklist in chat, and records whether the goal is complete, blocked, waiting, or needs more work. After recording a final status, Pi should still reply in its own words with the result, checks, and anything you need to do next.
+
+Try asking: "Track the parser fix and verification in the progress display, and keep the final reply focused on the result." If `todo_update` is disabled or unavailable, Pi can still update the terminal widget through Markdown checklists. T3's native Tasks panel requires both this extension and a T3 Pi adapter that supports these updates; changing extension source alone does not update a running installation.
 
 Simple conversational replies do not need a goal. To keep a task checklist-only, ask: "Do this without automatic continuation."
 

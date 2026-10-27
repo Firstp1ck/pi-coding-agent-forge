@@ -16,7 +16,7 @@ function run(command, args, options = {}) {
     maxBuffer: 8 * 1024 * 1024,
     ...options,
   });
-  assert.equal(result.status, 0, [result.stderr, result.stdout].filter(Boolean).join("\n"));
+  assert.equal(result.status, 0, [result.error?.message, result.stderr, result.stdout].filter(Boolean).join("\n"));
   return result.stdout.trim();
 }
 
@@ -26,19 +26,16 @@ function writeJson(file, value) {
 
 function packFixture(realNpm, packageDirectory, destination) {
   fs.mkdirSync(destination, { recursive: true });
-  const filename = run(realNpm, ["pack", "--silent", "--pack-destination", destination], {
+  const filename = run("bash", ["-c", 'exec "$REAL_NPM" "$@"', "pack-fixture", "pack", "--silent", "--pack-destination", destination], {
     cwd: packageDirectory,
+    env: { ...process.env, REAL_NPM: realNpm },
   }).split(/\r?\n/u).at(-1);
   assert.ok(filename);
   return path.join(destination, filename);
 }
 
 function comparePackage(packageDirectory, packageName, version, env) {
-  const command = [
-    `source ${JSON.stringify(helperPath)}`,
-    `package_has_publishable_changes ${JSON.stringify(packageDirectory)} ${JSON.stringify(packageName)} ${JSON.stringify(version)}`,
-  ].join("; ");
-  return run("bash", ["-c", command], { env });
+  return run("bash", ["-c", 'source "$1"; package_has_publishable_changes "$2" "$3" "$4"', "compare-package", helperPath, packageDirectory, packageName, version], { env });
 }
 
 test("pack lifecycle packages compare generated publish artifacts", () => {
@@ -123,9 +120,10 @@ test("packages without pack hooks retain the source-file fast path", () => {
       name: "@test/plain-package",
       version: "1.0.0",
       type: "module",
-      files: ["index.js"],
+      files: ["index.js", "binary data.bin"],
     });
     fs.writeFileSync(path.join(packageDirectory, "index.js"), "export const value = true;\n", "utf8");
+    fs.writeFileSync(path.join(packageDirectory, "binary data.bin"), Buffer.from([0, 255, 10]));
     const remoteTarball = packFixture(realNpm, packageDirectory, remoteDirectory);
 
     const npmLog = path.join(root, "npm.log");
@@ -133,6 +131,10 @@ test("packages without pack hooks retain the source-file fast path", () => {
     fs.writeFileSync(npmWrapper, `#!/usr/bin/env bash
 set -euo pipefail
 printf '%s\\n' "$*" >> "$NPM_LOG"
+if [[ "\${FAKE_UNREADABLE_LIST:-}" == 1 && " $* " == *" --dry-run "* ]]; then
+  printf '%s\\n' '{"files":[{"path":"index.js"},{"path":"package.json"},{"path":"binary data.bin"}]}'
+  exit 0
+fi
 if [[ "\${1:-}" == "pack" && "\${2:-}" == "@test/plain-package@1.0.0" ]]; then
   cp "$REMOTE_TARBALL" .
   basename "$REMOTE_TARBALL"
@@ -155,14 +157,34 @@ exec "$REAL_NPM" "$@"
       name: "@test/plain-package",
       version: "1.0.1",
       type: "module",
-      files: ["index.js"],
+      files: ["index.js", "binary data.bin"],
     });
     assert.equal(comparePackage(packageDirectory, "@test/plain-package", "1.0.0", env), "no");
     assert.match(fs.readFileSync(npmLog, "utf8"), /--dry-run --json --ignore-scripts/u);
     assert.doesNotMatch(fs.readFileSync(npmLog, "utf8"), /--pack-destination/u);
 
+    fs.writeFileSync(path.join(packageDirectory, "binary data.bin"), Buffer.from([0, 254, 10]));
+    assert.equal(comparePackage(packageDirectory, "@test/plain-package", "1.0.0", env), "yes");
+    fs.writeFileSync(path.join(packageDirectory, "binary data.bin"), Buffer.from([0, 255, 10]));
+
     fs.writeFileSync(path.join(packageDirectory, "index.js"), "export const value = false;\n", "utf8");
     assert.equal(comparePackage(packageDirectory, "@test/plain-package", "1.0.0", env), "yes");
+
+    fs.writeFileSync(path.join(packageDirectory, "index.js"), "export const value = true;\n", "utf8");
+    const manifestPath = path.join(packageDirectory, "package.json");
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+    writeJson(manifestPath, { ...manifest, description: "Changed metadata" });
+    assert.equal(comparePackage(packageDirectory, "@test/plain-package", "1.0.0", env), "yes");
+    writeJson(manifestPath, { ...manifest, files: ["index.js", "extra file.bin"] });
+    fs.writeFileSync(path.join(packageDirectory, "extra file.bin"), Buffer.from([0, 255, 10]));
+    assert.equal(comparePackage(packageDirectory, "@test/plain-package", "1.0.0", env), "yes");
+    writeJson(manifestPath, manifest);
+    fs.unlinkSync(path.join(packageDirectory, "index.js"));
+    assert.equal(comparePackage(packageDirectory, "@test/plain-package", "1.0.0", env), "yes");
+    assert.equal(comparePackage(packageDirectory, "@test/plain-package", "1.0.0", { ...env, FAKE_UNREADABLE_LIST: "1" }), "unknown");
+    fs.writeFileSync(path.join(packageDirectory, "index.js"), "export const value = true;\n");
+    fs.writeFileSync(manifestPath, "{invalid json");
+    assert.equal(comparePackage(packageDirectory, "@test/plain-package", "1.0.0", { ...env, FAKE_UNREADABLE_LIST: "1" }), "unknown");
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }

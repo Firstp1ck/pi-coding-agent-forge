@@ -1,6 +1,6 @@
 {
   "name": "@firstpick/pi-extension-feature-system-prompt",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "Classify Pi requests and inject a feature-workflow prompt only for feature work.",
   "type": "module",
   "license": "MIT",

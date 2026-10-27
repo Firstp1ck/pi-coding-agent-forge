@@ -90,56 +90,49 @@ process.stdin.on("end", () => {
     return 0
   fi
 
-  local remote_files=()
-  local local_files_sorted=()
-  mapfile -t remote_files < <(cd "$remote_root" && find . -type f -printf '%P\n' | sort)
-  mapfile -t local_files_sorted < <(printf '%s\n' "${local_files[@]}" | sort)
-
-  local local_list remote_list
-  local_list="$(printf '%s\n' "${local_files_sorted[@]}")"
-  remote_list="$(printf '%s\n' "${remote_files[@]}")"
-
-  if [[ "$local_list" != "$remote_list" ]]; then
-    rm -rf "$tmpdir"
-    echo "yes"
-    return 0
-  fi
-
-  local file
-  for file in "${local_files_sorted[@]}"; do
-    local local_path="$local_root/$file"
-    local remote_path="$remote_root/$file"
-
-    if [[ ! -f "$local_path" || ! -f "$remote_path" ]]; then
-      rm -rf "$tmpdir"
-      echo "yes"
-      return 0
-    fi
-
-    if [[ "$file" == "package.json" ]]; then
-      if ! node -e '
+  # One Node process compares all paths and bytes, avoiding a cmp process per file
+  # (particularly expensive under Git Bash on Windows). NUL separates file names.
+  printf '%s\0' "${local_files[@]}" > "$tmpdir/local-files"
+  local comparison
+  comparison="$(node - "$local_root" "$remote_root" "$tmpdir/local-files" <<'NODE'
 const fs = require("fs");
-const [a, b] = process.argv.slice(1);
-const ja = JSON.parse(fs.readFileSync(a, "utf8"));
-const jb = JSON.parse(fs.readFileSync(b, "utf8"));
-delete ja.version;
-delete jb.version;
-process.exit(JSON.stringify(ja) === JSON.stringify(jb) ? 0 : 1);
-' "$local_path" "$remote_path" >/dev/null 2>&1; then
-        rm -rf "$tmpdir"
-        echo "yes"
-        return 0
-      fi
-      continue
-    fi
-
-    if ! cmp -s "$local_path" "$remote_path"; then
-      rm -rf "$tmpdir"
-      echo "yes"
-      return 0
-    fi
-  done
+const path = require("path");
+const [localRoot, remoteRoot, filesPath] = process.argv.slice(2);
+try {
+  const localFiles = fs.readFileSync(filesPath, "utf8").split("\0").filter(Boolean).sort();
+  const remoteFiles = [];
+  function list(dir, prefix = "") {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const relative = prefix + entry.name;
+      if (entry.isDirectory()) list(path.join(dir, entry.name), relative + "/");
+      else if (entry.isFile()) remoteFiles.push(relative);
+    }
+  }
+  list(remoteRoot);
+  remoteFiles.sort();
+  let changed = JSON.stringify(localFiles) !== JSON.stringify(remoteFiles);
+  for (const file of localFiles) {
+    if (changed) break;
+    const local = fs.readFileSync(path.join(localRoot, file));
+    const remote = fs.readFileSync(path.join(remoteRoot, file));
+    if (file === "package.json") {
+      const a = JSON.parse(local.toString("utf8"));
+      const b = JSON.parse(remote.toString("utf8"));
+      delete a.version;
+      delete b.version;
+      changed = JSON.stringify(a) !== JSON.stringify(b);
+    } else {
+      changed = !local.equals(remote);
+    }
+  }
+  console.log(changed ? "yes" : "no");
+} catch {
+  // Read/parse failures cannot establish whether an artifact is safe to release.
+  console.log("unknown");
+}
+NODE
+)" || comparison="unknown"
 
   rm -rf "$tmpdir"
-  echo "no"
+  echo "$comparison"
 }

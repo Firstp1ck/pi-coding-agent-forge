@@ -1,0 +1,16 @@
+{
+  "catppuccin-mocha": {
+    "backgroundImage": "url(\"/catppuccin-mocha-background.png\")",
+    "backgroundOverlay": "linear-gradient(180deg, rgba(17, 17, 27, 0.04), rgba(17, 17, 27, 0.18))",
+    "backgroundSize": "cover",
+    "backgroundPosition": "center center",
+    "backgroundRepeat": "no-repeat"
+  },
+  "matrix": {
+    "backgroundImage": "url(\"/matrix-background.webp\")",
+    "backgroundOverlay": "linear-gradient(180deg, rgba(0, 5, 0, 0.18), rgba(0, 5, 0, 0.62))",
+    "backgroundSize": "cover",
+    "backgroundPosition": "center center",
+    "backgroundRepeat": "no-repeat"
+  }
+}

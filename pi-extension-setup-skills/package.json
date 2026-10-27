@@ -1,6 +1,6 @@
 {
   "name": "@firstpick/pi-extension-setup-skills",
-  "version": "0.2.8",
+  "version": "0.3.0",
   "description": "Interactive Pi command to enable or disable local skills from a multi-selection list.",
   "license": "MIT",
   "homepage": "https://github.com/Firstp1ck/pi-coding-agent-forge/tree/main/pi-extension-setup-skills#readme",
@@ -23,13 +23,13 @@
     ]
   },
   "dependencies": {
-    "@firstpick/pi-utils": "^0.3.0"
+    "@firstpick/pi-utils": "^0.3.2"
   },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "*"
   },
   "scripts": {
-    "test": "bun test"
+    "test": "bun test && node tests/t3-preflight-regression.mjs --no-skills"
   },
   "files": [
     "index.ts",

@@ -1,13 +1,13 @@
 export type TextToolResult<T = unknown> = {
   content: Array<{ type: "text"; text: string }>;
-  details?: T;
+  details: T | undefined;
   isError?: boolean;
 };
 
 export function textToolResult<T = unknown>(text: string, details?: T, options: { isError?: boolean } = {}): TextToolResult<T> {
   return {
     content: [{ type: "text", text }],
-    ...(details === undefined ? {} : { details }),
+    details,
     ...(options.isError === undefined ? {} : { isError: options.isError }),
   };
 }

@@ -184,6 +184,20 @@ Behavior and limits:
 - Coloring is intentionally approximate rather than a full language parser. Unusual constructs such as nested string interpolation, shell heredocs, PowerShell here-strings, or embedded scripts inside markup may be colored imprecisely; the code text itself is never altered.
 - Fenced `mermaid` and `mmd` blocks keep rendering as diagrams instead of highlighted source.
 
+## Codex subscription usage
+
+The **Codex Usage** panel prefers your installed Codex CLI as its usage source. Run `codex login` and sign in with ChatGPT, verify with `codex login status`, then choose **Refresh usage** in Web UI. It reports the CLI account's subscription windows and reset times without starting a model turn, opening a Codex conversation, or redeeming usage resets. API-key and other provider logins cannot supply these subscription numbers.
+
+Codex CLI's login is separate from Pi's. The panel labels **Codex CLI account** and warns that these limits may differ from Pi's newer ChatGPT-plan allowance. Sign into the intended account in Codex CLI. Web UI does not compare or display account IDs or email addresses, and choosing this source does not change Pi's login or model.
+
+Codex CLI must be available to the account and environment running Web UI. It uses the CLI's existing configuration and `CODEX_HOME` if you have set it. Set `PI_WEBUI_CODEX_BIN` to an executable path if `codex` is not on that environment's PATH. Windows native executables and the standard npm installation are supported without a command shell; custom Windows script launchers need an executable or JavaScript entry point instead. Restart the Web UI after changing its launch environment. The adapter was verified with Codex CLI 0.162.1; older or incompatible versions fall back rather than starting model work.
+
+The CLI check has a 15-second deadline plus bounded process cleanup. Concurrent requests share one check, successful results are cached for 30 seconds, and **Refresh usage** requests a fresh check. Failures are not cached. A missing CLI, missing ChatGPT login, timeout, or unusable response triggers the legacy fallback. Its source label makes the change visible.
+
+The fallback uses a supported legacy Pi Codex subscription OAuth login. Keep Pi and Web UI on the same `PI_CODING_AGENT_DIR` when using a custom configuration location. Pi's newer **OpenAI → Sign in with ChatGPT** token cannot supply this legacy usage reader and is never refreshed or forwarded for that purpose. If neither source works, check [ChatGPT usage](https://chatgpt.com/settings/usage) directly.
+
+Codex CLI manages its own authentication and normal token refresh. Web UI does not read its credential files, request a login flow, scrape terminal output, or publish raw CLI diagnostics. Tokens, email addresses, account IDs, and other raw account details never reach the browser. The legacy reader keeps Pi OAuth credentials server-side too.
+
 ## Codex subscription Fast mode
 
 The optional `@firstpick/pi-extension-codex-fast-mode` companion adds a **Normal / Fast / Ultrafast** selector under **Codex Usage**. Normal is the default. The preference belongs to the active Pi session branch, and changes are blocked while that tab is busy. The displayed mode is a preference, not proof that OpenAI accepted the tier.
@@ -387,6 +401,8 @@ The side-panel **Git** section groups repositories represented by open terminal 
 ## Themes
 
 Use **Controls → Interface → Theme** to choose a theme.
+
+Update WebUI and `@firstpick/pi-themes-bundle` together when moving to Pi 1.2. The updated bundle keeps native palettes valid under Pi's stricter theme checks, while WebUI retains the Catppuccin Mocha and Matrix background images.
 
 ### Custom themes
 

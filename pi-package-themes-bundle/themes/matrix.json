@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/earendil-works/pi/main/packages/coding-agent/src/modes/interactive/theme/theme-schema.json",
+  "$schema": "https://pi.dev/schemas/theme.schema.json",
   "name": "matrix",
   "vars": {
     "accent": "#00ff41",
@@ -80,11 +80,6 @@
   "export": {
     "pageBg": "#000500",
     "cardBg": "#06150d",
-    "infoBg": "#0a2515",
-    "backgroundImage": "url(\"/matrix-background.webp\")",
-    "backgroundOverlay": "linear-gradient(180deg, rgba(0, 5, 0, 0.18), rgba(0, 5, 0, 0.62))",
-    "backgroundSize": "cover",
-    "backgroundPosition": "center center",
-    "backgroundRepeat": "no-repeat"
+    "infoBg": "#0a2515"
   }
 }

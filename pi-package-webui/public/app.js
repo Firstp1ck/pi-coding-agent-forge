@@ -25300,6 +25300,8 @@ function codexUsageStructureSignature() {
   return JSON.stringify({
     state: "data",
     plan: formatCodexPlanType(latestCodexUsage.planType),
+    source: latestCodexUsage.source || "",
+    sourceNotice: latestCodexUsage.sourceNotice || "",
     buckets: codexUsageBuckets(latestCodexUsage).map((bucket) => [bucket.key, bucket.label]),
     rateLimitReachedType: latestCodexUsage.rateLimitReachedType || "",
     error: codexUsageError?.message || String(codexUsageError || ""),
@@ -25367,6 +25369,12 @@ function renderCodexUsage() {
     make("span", "codex-usage-fetched", latestCodexUsage.fetchedAt ? `updated ${formatDurationParts(Date.now() - new Date(latestCodexUsage.fetchedAt).getTime())} ago` : "updated now"),
   );
   box.append(header);
+  if (latestCodexUsage.source === "codex-cli") {
+    box.append(make("div", "codex-usage-detail", "Source: Codex CLI account. Its login is separate from Pi; these limits may differ from Pi's ChatGPT-plan allowance."));
+  } else {
+    box.append(make("div", "codex-usage-detail", "Source: Pi's legacy Codex login."));
+  }
+  if (latestCodexUsage.sourceNotice) box.append(make("div", "codex-usage-detail", latestCodexUsage.sourceNotice));
 
   if (buckets.length === 0) {
     box.append(make("div", "codex-usage-detail", "No Codex rate-limit windows were returned."));

@@ -1,6 +1,6 @@
 {
   "name": "@firstpick/pi-extension-hyprland-wiki-local",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "description": "Local Hyprland Wiki search and retrieval tools for Pi backed by a cloned official hyprland-wiki repository.",
   "license": "MIT",
   "homepage": "https://github.com/Firstp1ck/pi-coding-agent-forge/tree/main/pi-extension-hyprland-wiki-local#readme",

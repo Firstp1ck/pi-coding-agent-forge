@@ -1,0 +1,46 @@
+{
+  "name": "@firstpick/pi-skill-rust-rewrite",
+  "version": "0.2.0",
+  "description": "Assess, plan, and verify behavior-preserving Rust migrations with a portable Agent Skill, a user-decision catalogue, record shapes, and a large-scale port path.",
+  "license": "MIT",
+  "homepage": "https://github.com/Firstp1ck/pi-coding-agent-forge/tree/main/pi-skill-rust-rewrite#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Firstp1ck/pi-coding-agent-forge.git",
+    "directory": "pi-skill-rust-rewrite"
+  },
+  "keywords": [
+    "pi-package",
+    "pi",
+    "pi-coding-agent",
+    "skill",
+    "agent-skill",
+    "rust",
+    "rust-migration",
+    "rewrite-in-rust",
+    "riir"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "pi": {
+    "skills": [
+      "./skills"
+    ]
+  },
+  "scripts": {
+    "test": "node --test tests/package.test.mjs"
+  },
+  "files": [
+    "skills/rewrite-in-rust/SKILL.md",
+    "skills/rewrite-in-rust/references/DECISIONS.md",
+    "skills/rewrite-in-rust/references/EXAMPLES.md",
+    "skills/rewrite-in-rust/references/LARGE-SCALE.md",
+    "skills/rewrite-in-rust/references/RECORDS.md",
+    "skills/rewrite-in-rust/references/SOURCE-LANGUAGES.md",
+    "README.md",
+    "TECHNICAL.md",
+    "DEVELOPMENT.md",
+    "LICENSE"
+  ]
+}

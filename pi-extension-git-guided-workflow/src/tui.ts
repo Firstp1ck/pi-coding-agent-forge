@@ -428,7 +428,7 @@ async function showSetupSettingsScreen(
       },
       {
         id: "staging", label: "Staging default", currentValue: draft.staging, values: [...GUIDED_GIT_STAGING_DEFAULTS],
-        description: "Prefer the current index or offer stage-all first. Staging all changes still requires confirmation.",
+        description: "Prefer the current index or offer stage-all first.",
       },
       {
         id: "entry", label: "Default entry stage", currentValue: draft.defaultEntry, values: [...GUIDED_GIT_ENTRY_STAGES],

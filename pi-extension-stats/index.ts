@@ -1505,6 +1505,10 @@ export default function statsExtension(pi: ExtensionAPI) {
 
   pi.on("before_agent_start", async (event, ctx) => {
     latestSystemPromptOptions = event.systemPromptOptions;
+    if ("messageType" in event && event.messageType === "custom") {
+      pendingInitialPromptMeasurement = null;
+      return;
+    }
 
     if (!branchHasAssistantUsage(ctx)) {
       pendingInitialPromptMeasurement = {

@@ -1,4 +1,5 @@
 import type { WorkbookLimits } from "./core/limits.ts";
+import type { VbaOperation } from "./backends/excel-vba.ts";
 
 export const WORKBOOK_CONTRACT_VERSION = "1.0" as const;
 
@@ -169,6 +170,22 @@ export type WorkbookDiffRequest = {
 
 export type WorkbookValidateRequest = WorkbookInspectRequest & {
   baselinePath?: string;
+};
+
+export type WorkbookVbaReadRequest = {
+  path: string;
+  includeCode?: boolean;
+  modules?: string[];
+  maxCodeChars?: number;
+};
+
+export type WorkbookVbaEditRequest = {
+  path: string;
+  expectedSha256?: string;
+  outputPath?: string;
+  dryRun?: boolean;
+  allowSignatureRemoval?: boolean;
+  operations: VbaOperation[];
 };
 
 export type WorkbookEngine = {

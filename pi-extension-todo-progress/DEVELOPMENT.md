@@ -11,13 +11,51 @@ Contributor-only implementation, API, architecture, testing, and maintenance inf
 - `tests/follow-up-delivery.test.mjs` provides the extension lifecycle harness and end-to-end controller regressions without model or network calls.
 - `tests/goal-runtime.test.mjs` covers pure state, checkpoint, progress, restore, and bound behavior.
 
+## Pi 1.2 startup compatibility
+
+The native startup regression uses the selected SDK's `_startRun` and `_prepareRun` methods when present, alongside the older startup path. Its event adapter accepts the new discriminated trigger and legacy prompt arguments. Pi 1.2 marks preflight busy; pausing during a held `before_agent_start` therefore requests abort immediately, and the canceled controller delivery must still never reach the model boundary. Installed-session tests in `tests/pi-087-compat.test.mjs` independently cover durable resume, canonical history and actionable boundaries.
+
 ## Checklist flow
+
+The registered `todo_update` tool supplies full snapshots in all Pi modes. It validates and normalizes the entire input before mutation, checks both the tool and context abort signals, translates public statuses to the existing private checklist statuses, and replaces the ordered list directly. It updates visibility, clamps the existing scroll offset, records completion guidance, and consumes the post-compaction replacement allowance. It does not apply the Markdown overlap or status-delta heuristics. Identical snapshots do not append state or redraw the widget.
+
+The tool reuses the existing state, cloned persistence snapshots, and TUI rendering. It does not start, resume, or replace a durable goal. An unfinished goal supplies the canonical label regardless of the submitted checklist label. Omitting the optional label removes a previous checklist-only label; explicit empty tasks clear the list while preserving an unfinished durable goal.
 
 Assistant Markdown is split into checklist blocks outside fenced code. The best block is merged with the active list, favoring overlap with prior items. Status-only deltas can update existing items but cannot replace an active list with unrelated work. A completed list requires a goal check before another list starts. Successful compaction permits one complete replacement list.
 
 Checklist lines are stripped from the finalized visible assistant text after they are copied into widget state. The injected hidden checklist context keeps the current list available to the model. Ordinary final assistant text clears the widget; interrupted and tool-use endings preserve it.
 
 Checklist state is stored as version-1 `todo-progress-state` custom entries. These entries do not enter model context. The current active branch supplies the latest valid snapshot during restore.
+
+## `todo_update` integration contract
+
+Parameters:
+
+```typescript
+{
+  tasks: Array<{ text: string; status: "pending" | "in_progress" | "completed" }>;
+  goal?: string;
+}
+```
+
+`tasks` is required and accepts zero to 12 entries. `text` must be nonblank and no longer than 1,000 characters; optional `goal` must be nonblank and no longer than 2,000 characters. Additional properties are rejected in the outer object and task entries. Runtime validation also protects direct extension calls that bypass SDK schema validation. Length limits apply before normalization; trimming and collapsing whitespace apply consistently to task text and labels. A zero-task array explicitly clears the checklist. A successful update emits a concise count acknowledgement or clearing acknowledgement, with no duplicate Markdown checklist.
+
+Successful tool result `details` has exactly this shape:
+
+```typescript
+{
+  type: "todo-progress";
+  version: 1;
+  tasks: Array<{ text: string; status: "pending" | "in_progress" | "completed" }>;
+  goal?: string;
+}
+```
+
+This is the full current normalized task snapshot, independently cloned from input and persisted checklist state. The optional result label is limited to 2,000 characters; an oversized canonical durable goal is omitted from these display details, not truncated or changed in internal state, the terminal widget, or goal context. Empty tasks remain explicit. Internal `todo`, `partial`, and `done` values are never exposed in these details. There are no tool-supplied plan, node, turn, or run identities. Validation and cancellation failures throw and never emit successful snapshot details.
+
+The T3 consumer must inspect successful completed `todo_update` results and validate the type discriminator, version, and snapshot before projecting them into its existing native Tasks UI. The extension itself does not emit T3 events or implement a T3 panel. Both the extension and supporting T3 Pi adapter must be deployed for native Tasks display.
+
+`promptGuidelines` belongs to the registered tool and Pi includes it when active. The policy injected at `before_agent_start` and the checklist `context` hook also check `pi.getActiveTools()` on each invocation. They prefer full structured snapshots and prohibit duplicate checklist chat only while `todo_update` is active. Disabled tools or runtimes without the active-tool query retain Markdown guidance and parsing. The existing hidden checklist and goal contexts remain available, including completion checks and compaction recovery.
 
 ## Goal state and identities
 
@@ -116,6 +154,8 @@ A waiting checkpoint suppresses automatic continuation. A later non-controller c
 
 Checklist states and successful non-controller tool input/output are serialized in stable key order, hashed with SHA-256, and persisted only as bounded digests. Duplicate digests do not advance the progress revision. Neither checkpoint prose nor goal-creation or resume tool calls count as progress.
 
+`todo_update` records changed task snapshots through the same checklist digest used by Markdown extraction. Its generic tool acknowledgement is excluded from tool progress so a changed snapshot counts once, and labels, errors, cancellations, and repeated snapshots cannot evade the no-progress limit. Display-only `todo_update` calls preserve terminal checkpoints at assistant-message, tool-start and tool-end boundaries; completion/clearing acknowledgements cannot reopen a completed, blocked or waiting goal. Ordinary late execution tools still invalidate premature terminal checkpoints. Other goal controller transitions remain intact.
+
 Restore clamps continuation, no-progress, revision, and settled-revision numbers to finite bounds. Malformed terminal states, identifiers, checkpoint fields, oversized progress signatures, and incompatible versions are rejected or restored paused as appropriate.
 
 ## Verification
@@ -151,3 +191,5 @@ Resume-tool regressions cover paused/blocked/waiting transitions within the curr
 `tests/pi-087-compat.test.mjs` runs native sessions with a bounded fake provider from the selected SDK. It verifies that `goal_resume` resumes a restored goal, completes using the new identity, and produces no duplicate run or user message. It also checks that automatic continuation waits for all asynchronous settled handlers, and that pause cancels a deferred continuation. It also covers canonical session restoration, context-edit omission and replacement, tree navigation, expanded turn boundary fields, chained context previews, and `agent_before_settle`. These four tests skip on older SDKs without context-edit support; select Pi 0.87.0 through `PI_GOAL_TEST_RUNTIME` to run them.
 
 The harness intentionally makes no live provider, network, TUI, or background-job calls.
+
+Structured checklist regressions cover 12-item and length boundaries, all public statuses, replacement, completion, clearing, no-op suppression, malformed input, both cancellation signals, independent input/result/persistence objects, headless execution, the existing five-row widget, restore, final and interrupted endings, active/disabled/unavailable guideline routing, legacy Markdown fallback, durable goal ownership and stopped-goal invariants, and the no-progress bound. Native SDK sessions load the actual extension with the SDK's faux provider to verify completed tool-result details, schema failures, cloned `SessionManager` entries, and active tool selection without network calls.

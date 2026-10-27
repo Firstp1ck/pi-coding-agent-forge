@@ -544,7 +544,7 @@ export default function reliabilityHarnessExtension(pi: ExtensionAPI): void {
     try {
       const builtinBash = pi.getAllTools().find((tool) => tool.name === "bash"
         && tool.sourceInfo.source === "builtin"
-        && tool.sourceInfo.path === "<builtin:bash>");
+        && (tool.sourceInfo.path === "builtin:bash" || tool.sourceInfo.path === "<builtin:bash>"));
       return builtinBash ? "pi-builtin-bash" : "unknown";
     } catch {
       return "unknown";
@@ -2508,7 +2508,7 @@ export default function reliabilityHarnessExtension(pi: ExtensionAPI): void {
     if (pause || !activeTask) return { systemPrompt: `${event.systemPrompt}\n\n[RELIABILITY PAUSED]\n${pause ?? INPUT_CONFIRMATION_REQUIRED}\nDo not perform consequential work or claim completion.\n[/RELIABILITY PAUSED]` };
     const state = activeTask;
     syncTaskSession(state, ctx);
-    setSupervisionModeForTask(state, event.prompt);
+    setSupervisionModeForTask(state, "messageType" in event && event.messageType === "custom" ? "" : event.prompt);
     let extraPrompt: string;
     if (activeSupervisionMode === "supervised") {
       selectNextStep(state);

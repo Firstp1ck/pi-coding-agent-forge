@@ -12,6 +12,9 @@ import {
   acquireStableStagedSnapshot,
   captureBoundStagedState,
   classifyPostCommitHead,
+  countCommitsMissingFromRemote,
+  countUnpushedCommits,
+  describeCommit,
   discoverPushDestination,
   parseGeneratedOutput,
   parsePorcelainStatus,
@@ -161,6 +164,48 @@ test("explicit path staging and remote reads retain bounded argv contracts", asy
   assert.deepEqual(await readRemotes(root), ["origin"]);
 });
 
+test("countUnpushedCommits counts HEAD commits missing from every remote-tracking ref without fetching", async () => {
+  const unborn = await tempDir("unpushed-unborn");
+  git(unborn, "init", "-b", "main");
+  assert.equal(await countUnpushedCommits(unborn), 0);
+  const root = await repository("unpushed");
+  const bare = await tempDir("unpushed-remote.git");
+  git(bare, "init", "--bare");
+  git(root, "remote", "add", "origin", bare);
+  assert.equal(await countUnpushedCommits(root), 1);
+  git(root, "push", "origin", "main");
+  assert.equal(await countUnpushedCommits(root), 0);
+  await writeFile(path.join(root, "tracked.txt"), "second\n");
+  git(root, "commit", "-am", "test: second");
+  await writeFile(path.join(root, "tracked.txt"), "third\n");
+  git(root, "commit", "-am", "test: third");
+  assert.equal(await countUnpushedCommits(root), 2);
+  const fakeRunner = async (cwd, args) => args[0] === "rev-parse"
+    ? { exitCode: 0, timedOut: false, stdout: Buffer.from(`${"a".repeat(40)}\n`), stderr: Buffer.alloc(0) }
+    : { exitCode: 0, timedOut: false, stdout: Buffer.from("many\n"), stderr: Buffer.alloc(0) };
+  await assertCode(countUnpushedCommits(root, fakeRunner), "GIT_OUTPUT_INVALID");
+});
+
+test("describeCommit and countCommitsMissingFromRemote summarize a commit and its outgoing count", async () => {
+  const root = await repository("describe");
+  const first = git(root, "rev-parse", "HEAD");
+  assert.deepEqual(await describeCommit(root, first), { shortOid: first.slice(0, 7), subject: "test: initial", filesChanged: 1, insertions: 1, deletions: 0 });
+  await writeFile(path.join(root, "tracked.txt"), "changed\n");
+  await writeFile(path.join(root, "added.txt"), "a\nb\n");
+  git(root, "add", "--all");
+  git(root, "commit", "-m", "feat: \u001b[31mcolored subject");
+  const second = git(root, "rev-parse", "HEAD");
+  assert.deepEqual(await describeCommit(root, second), { shortOid: second.slice(0, 7), subject: "feat: colored subject", filesChanged: 2, insertions: 3, deletions: 1 });
+  await assertCode(describeCommit(root, "HEAD"), "INVALID_HEAD");
+  const bare = await tempDir("describe-remote.git");
+  git(bare, "init", "--bare");
+  git(root, "remote", "add", "origin", bare);
+  assert.equal(await countCommitsMissingFromRemote(root, second, "origin"), 2);
+  git(root, "push", "origin", `${first}:refs/heads/main`);
+  assert.equal(await countCommitsMissingFromRemote(root, second, "origin"), 1);
+  assert.equal(await countCommitsMissingFromRemote(root, second, "orig*"), null);
+});
+
 test("package-domain fingerprint detects staged path, mode, blob, and content changes, including unborn repositories", async () => {
   assert.equal(STAGED_FINGERPRINT_DOMAIN, "firstpick/git-guided-workflow/staged-content/v1\0");
   const root = await repository("fingerprint");
@@ -239,6 +284,43 @@ test("stable snapshots bind before/diff/after, refuse races, and refuse rather t
   };
   await assertCode(acquireStableStagedSnapshot(root, { runner: racingRunner }), "STAGED_STATE_CHANGED");
   await assertCode(acquireStableStagedSnapshot(root, { maxBytes: 32 }), "GENERATION_INPUT_TOO_LARGE");
+});
+
+test("runGit uses system credential helpers and honors an inherited system-config opt-out", async () => {
+  const root = await tempDir("system-credentials");
+  const systemConfig = path.join(root, "system.gitconfig");
+  const globalConfig = path.join(root, "global.gitconfig");
+  const helper = "!f() { printf '%s\\n' 'username=fixture-user' 'password=fixture-only-token'; }; f";
+  git(root, "config", "--file", systemConfig, "credential.helper", helper);
+  await writeFile(globalConfig, "");
+  const keys = ["GIT_CONFIG_SYSTEM", "GIT_CONFIG_GLOBAL", "GIT_CONFIG_NOSYSTEM", "GIT_ASKPASS", "SSH_ASKPASS", "GIT_TERMINAL_PROMPT"];
+  const original = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  try {
+    process.env.GIT_CONFIG_SYSTEM = systemConfig;
+    process.env.GIT_CONFIG_GLOBAL = globalConfig;
+    delete process.env.GIT_CONFIG_NOSYSTEM;
+    process.env.GIT_ASKPASS = "";
+    process.env.SSH_ASKPASS = "";
+    process.env.GIT_TERMINAL_PROMPT = "1";
+    const args = ["-c", "core.askPass=", "-c", "alias.fixture-credentials=!printf 'protocol=https\\nhost=credentials.example.invalid\\n\\n' | git credential fill", "fixture-credentials"];
+    const result = await runGit(root, args);
+    assert.equal(result.exitCode, 0, result.stderr.toString());
+    assert.match(result.stdout.toString(), /username=fixture-user/u);
+    assert.match(result.stdout.toString(), /password=fixture-only-token/u);
+    assert.equal(result.stderr.length, 0);
+
+    process.env.GIT_CONFIG_NOSYSTEM = "1";
+    const withoutSystem = await runGit(root, args);
+    assert.notEqual(withoutSystem.exitCode, 0);
+    assert.match(withoutSystem.stderr.toString(), /terminal prompts disabled/u);
+    assert.doesNotMatch(withoutSystem.stderr.toString(), /\/dev\/tty/u);
+    assert.doesNotMatch(withoutSystem.stdout.toString(), /fixture-only-token/u);
+  } finally {
+    for (const key of keys) {
+      if (original[key] === undefined) delete process.env[key];
+      else process.env[key] = original[key];
+    }
+  }
 });
 
 test("runGit settles output-limit errors only after close and bounds unconfirmed termination", async () => {

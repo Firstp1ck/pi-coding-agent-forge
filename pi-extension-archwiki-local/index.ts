@@ -109,6 +109,7 @@ async function executeSmokeTest(params: { maxSearchResults?: number } = {}) {
 
 export default function archWikiLocalExtension(pi: ExtensionAPI) {
   pi.on?.("before_agent_start", async (event, ctx) => {
+    if ("messageType" in event && event.messageType === "custom") return;
     const skillLoaded = event.systemPromptOptions.skills?.some((skill) => skill.name === "arch-linux-local") ?? false;
     if (!skillLoaded && !ARCH_LINUX_PROMPT_RE.test(event.prompt ?? "")) return;
     if (!await wiki.available()) { const warning = `${MISSING_DOCS_MESSAGE}. Aborting ArchWiki-local troubleshooting until the docs are installed. You can also run /archwiki-local-setup.`; ctx.ui.notify(warning, "warning"); ctx.abort(); return { message: { customType: "archwiki-local-missing-docs", content: warning, display: true }, systemPrompt: `${event.systemPrompt}\n\nArchWiki-local setup required: ${warning} Do not continue with ArchWiki-local troubleshooting until the user installs arch-wiki-docs.` }; }

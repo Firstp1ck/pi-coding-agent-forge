@@ -58,7 +58,7 @@ async function buildPayload(files, args, fixture = {}) {
     let payload;
     const tools = fixture.tools ?? [];
     const pi = {
-      appendEntry() {},
+      appendEntry(customType, data) { fixture.appendedEntries?.push({ customType, data }); },
       getActiveTools() { return fixture.activeTools ?? tools.map((tool) => tool.name); },
       getAllTools() { return tools; },
       on(name, handler) { eventHandlers.set(name, handler); },
@@ -90,11 +90,13 @@ async function buildPayload(files, args, fixture = {}) {
       await eventHandlers.get("before_agent_start")?.({
         systemPrompt: fixture.systemPrompt ?? "",
         systemPromptOptions: fixture.systemPromptOptions,
-        prompt: "test",
-        images: [],
+        ...(fixture.messageType === "custom"
+          ? { messageType: "custom", message: { customType: "continuation", content: "Continue", display: false } }
+          : { messageType: "user", prompt: "test", images: [] }),
       }, ctx);
     }
     if (fixture.resetAfterOptions) await eventHandlers.get("session_start")?.({}, ctx);
+    if (fixture.assistantMessage) await eventHandlers.get("message_end")?.({ message: fixture.assistantMessage }, ctx);
 
     const commandName = fixture.commandName ?? "stats-webui";
     await commands.get(commandName).handler(args, ctx);
@@ -425,6 +427,21 @@ test("structured context paths use portable relative or basename-only display va
     ["docs\\AGENTS.md", "external.md", "nested/guide.md"],
   );
   assert.doesNotMatch(JSON.stringify(payload.promptContext), /private-user|D:\\\\private/);
+});
+
+test("Pi 1.2 custom starts retain prompt inventory but do not calibrate a nonexistent user prompt", async () => {
+  const fixture = {
+    systemPrompt: "Starting instructions. ".repeat(200),
+    systemPromptOptions: { skills: [{ name: "current-skill", description: "Current", filePath: "/skills/current/SKILL.md" }] },
+    assistantMessage: { role: "assistant", provider: "test", model: "test", usage: { input: 1200 } },
+    appendedEntries: [],
+  };
+  await buildPayload({}, "all", fixture);
+  assert.equal(fixture.appendedEntries.length, 1, "a real first user turn should still produce a calibration sample");
+  fixture.appendedEntries = [];
+  const payload = await buildPayload({}, "all", { ...fixture, messageType: "custom" });
+  assert.equal(fixture.appendedEntries.length, 0, "custom-message usage must not calibrate user prompt estimates");
+  assert.equal(payload.promptContext.snapshot.skills.items[0].name, "current-skill");
 });
 
 test("session start clears stale system prompt options before building structured inventory", async () => {

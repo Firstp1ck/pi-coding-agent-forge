@@ -41,6 +41,8 @@ When Pi starts with `--no-skills` or `-ns`, `/skills` lists only the skills Pi l
 
 Model changes and session-tree navigation recompute inherited choices immediately. No reload is required after saving. The next prompt applies the selection to both the model's skill list and the current skill list shown in a new HTML export.
 
+A compatible T3 chat launcher applies these same defaults to its Pi session, reading changes before each new prompt and explicit skill invocation. Skill selections stay independent of tool selections. Keeping T3's native tools available does not enable extra skills, create separate T3 skill profiles or automatically hide delegation skills. Session choices come only from the active T3 Pi session branch. Empty selections advertise and allow no skills; inherited runtime choices allow newly loaded skills. Normal discovery restrictions still apply. Installed-skill discovery refreshes at model and session-tree changes, rather than scanning all skill locations on each prompt. Concurrent T3 input and prompt preparation use queued profile reads. A context change is retried once; if it cannot be resolved consistently, that prompt advertises no skills and an explicit skill command asks you to retry instead of silently discarding the input. Other RPC clients, WebUI, print and JSON modes keep their existing behavior. TUI timing stays unchanged.
+
 If an older export lists disabled skills, it may reflect an outdated stored skill list rather than the filtered prompt sent to the model. After updating this extension, run `/reload`, send a message, and export again. Existing export files and earlier transcript entries remain historical snapshots.
 
 ## Storage and WebUI compatibility

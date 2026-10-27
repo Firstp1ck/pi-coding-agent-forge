@@ -25,3 +25,5 @@ npm pack --dry-run --json
 ```
 
 Tests require Python 3.10+ and use only the standard library. The package has no npm runtime dependencies.
+
+The adapter contract tests preserve native Pi `subagent` support while accepting T3's app-owned `delegate_task`, including harness-prefixed names. They also require provider/model discovery through `orchestrator_capabilities`, retain fail-closed delegation outcomes and keep harness-specific mechanics outside the portable workflow.

@@ -6,7 +6,11 @@ Advanced user behavior, controls, limits, safety, and troubleshooting informatio
 
 ## Checklist behavior
 
-The extension asks Pi to call the `goal` tool with a concise outcome before beginning multi-step work, then publish short Markdown checklists with these markers:
+The extension asks Pi to call the `goal` tool with a concise outcome before beginning multi-step work, then use `todo_update` to keep the progress display current. Each update replaces the whole ordered checklist, including task text and status. An empty list clears it. Pi is instructed to update only when something changes and avoid repeating checklist text in chat.
+
+Checklists support up to 12 tasks, with nonblank task text up to 1,000 characters each. An optional checklist label can contain up to 2,000 characters. Whitespace is trimmed and repeated whitespace becomes a single space. Invalid or cancelled submissions leave the checklist untouched. Checklist labels never start, resume, or replace durable execution, and an unfinished durable goal remains the canonical goal shown in the widget and model context.
+
+When `todo_update` is disabled or unavailable, Pi can still publish short Markdown checklists with these markers:
 
 - `- [ ]` — not started
 - `- [-]` — in progress
@@ -15,6 +19,12 @@ The extension asks Pi to call the `goal` tool with a concise outcome before begi
 The widget shows up to five rows. It keeps the current list through tool-use, aborted, failed, and length-limited endings so work can be recovered. A normal final response or a newly delivered ordinary user request clears stale display state. After compaction, one complete checklist may replace the previous list.
 
 Checklist tracking alone does not enable automatic continuation. If the goal tools are unavailable or you request no automatic continuation, Pi uses a plain `Goal:` label instead. Writing that label never starts execution by itself.
+
+### T3 Code and headless use
+
+Checklist updates work in headless Pi sessions as well as the terminal. T3 Code's native Tasks panel requires a T3 Pi adapter that understands the extension's structured checklist updates. Both components must be updated; extension source edits alone do not change the running extension or T3 app. The native terminal widget remains available in Pi, and this integration does not add terminal widgets to T3.
+
+With an older T3 adapter, checklist tracking and session persistence still work in Pi, but structured updates will not populate the native Tasks panel. Disabling `todo_update` restores Markdown guidance for Pi's terminal widget.
 
 ## Durable goals
 
@@ -89,4 +99,5 @@ State follows the active session branch. Old checklist-only sessions remain read
 - **A waiting goal did not wake:** Confirm that the native job mechanism emitted a Pi notification, or use `/goal-resume` to reassess manually. The extension does not poll external work.
 - **A queued goal was paused before delivery:** Its canceled kickoff is removed from model context and does not activate the controller. Unrelated queued messages remain untouched.
 - **The checklist remains visible after interruption:** This preserves recovery context. Hide it with `Ctrl+Alt+X` or continue with a new request.
+- **T3's Tasks panel does not show the checklist:** Confirm that the extension is loaded, `todo_update` is enabled, and the running T3 Pi adapter supports structured checklist updates. The terminal widget and native Tasks panel require different host support.
 - **Startup failed but the goal still says running:** Pi's asynchronous prompt API cannot report every startup failure back to the controller. Resolve the reported provider or startup error, then use `/goal-pause` and `/goal-resume`.

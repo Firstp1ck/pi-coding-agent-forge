@@ -1,5 +1,6 @@
 export type WorkbookErrorCode =
   | "ABORTED"
+  | "AUTHORIZATION_REQUIRED"
   | "BACKEND_UNAVAILABLE"
   | "CONFLICT"
   | "ENCRYPTED_PACKAGE"

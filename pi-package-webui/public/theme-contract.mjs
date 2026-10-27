@@ -1,4 +1,4 @@
-export const PI_THEME_SCHEMA_URL = "https://raw.githubusercontent.com/earendil-works/pi/main/packages/coding-agent/src/modes/interactive/theme/theme-schema.json";
+export const PI_THEME_SCHEMA_URL = "https://pi.dev/schemas/theme.schema.json";
 
 export const THEME_TOKEN_GROUPS = Object.freeze([
   { id: "core", label: "Core UI", tokens: [

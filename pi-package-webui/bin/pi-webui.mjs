@@ -14,6 +14,7 @@ import { brotliCompress, brotliCompressSync, constants as zlibConstants, gzip, g
 import { SessionManager, SettingsManager, DefaultPackageManager } from "@earendil-works/pi-coding-agent";
 import {
   ThemeContractError,
+  WEBUI_THEME_EXPORT_FIELDS,
   canonicalizeTheme,
   normalizeThemeFileName,
   serializeTheme,
@@ -28,7 +29,9 @@ import {
   validateAppendSystemSelection,
   validateSavedAppendSystemSelection,
 } from "../lib/append-system-selection.mjs";
-import { resolveCodexUsageAuth } from "../lib/codex-usage-auth.mjs";
+import { CODEX_USAGE_DIRECT_TOKEN_MESSAGE, codexUsageLoginGuidance, resolveCodexUsageAuth } from "../lib/codex-usage-auth.mjs";
+import { readCodexCliUsage } from "../lib/codex-cli-usage.mjs";
+import { createCodexUsageReader } from "../lib/codex-usage-source.mjs";
 import { codexSpeedModeFromIntent, codexSpeedModeFromStatus } from "../public/codex-speed-mode.mjs";
 import { AgentRunIndex, canonicalAgentRunId, normalizeAgentInstance } from "../lib/agent-run-protocol.mjs";
 import { AgentRunRegistry } from "../lib/agent-run-registry.mjs";
@@ -5318,7 +5321,7 @@ function normalizeCodexUsagePayload(rawPayload) {
   };
 
   const directRateLimits = firstDefined(payload.rateLimits, payload.rate_limits);
-  if (directRateLimits && typeof directRateLimits === "object" && (directRateLimits.primary || directRateLimits.primary_window || directRateLimits.primaryWindow)) {
+  if (directRateLimits && typeof directRateLimits === "object" && (directRateLimits.primary || directRateLimits.secondary || directRateLimits.primary_window || directRateLimits.secondary_window || directRateLimits.primaryWindow || directRateLimits.secondaryWindow)) {
     addSnapshot(makeCodexUsageSnapshot({
       limitId: firstDefined(directRateLimits.limitId, directRateLimits.limit_id, "codex"),
       limitName: firstDefined(directRateLimits.limitName, directRateLimits.limit_name),
@@ -5382,26 +5385,33 @@ function normalizeCodexUsagePayload(rawPayload) {
 
 async function getOpenAICodexUsageCredentials({ forceRefresh = false } = {}) {
   const { modelRuntime } = await authContext();
+  const loginGuidance = codexUsageLoginGuidance(modelRuntime);
   let resolved;
   try {
     resolved = await resolveCodexUsageAuth(modelRuntime, OPENAI_CODEX_PROVIDER_ID, { forceRefresh });
   } catch {
     // Client-facing auth failures must not include provider stack traces,
     // refresh tokens, or raw upstream error details.
-    throw makeHttpError(401, "OpenAI Codex OAuth token refresh failed. Run /login and choose ChatGPT Plus/Pro (Codex Subscription) to re-authenticate.");
+    throw makeHttpError(401, `OpenAI Codex OAuth token refresh failed. ${loginGuidance}`);
   }
 
+  if (resolved.unsupportedReason === "chatgpt-direct-token") {
+    throw makeHttpError(501, CODEX_USAGE_DIRECT_TOKEN_MESSAGE);
+  }
   const accessToken = resolved.accessToken;
   if (!accessToken) {
-    const status = modelRuntime.getProviderAuthStatus(OPENAI_CODEX_PROVIDER_ID);
-    if (status.configured) throw makeHttpError(401, "OpenAI Codex OAuth token is expired or unavailable. Run /login to refresh credentials.");
-    throw makeHttpError(401, "OpenAI Codex OAuth is not configured. Run /login and choose ChatGPT Plus/Pro (Codex Subscription).");
+    if (resolved.providerId === "openai" && resolved.credential?.type === "api_key") {
+      throw makeHttpError(401, `Codex subscription usage requires ChatGPT OAuth, not an OpenAI API key. ${loginGuidance}`);
+    }
+    const status = modelRuntime.getProviderAuthStatus(resolved.providerId);
+    if (status.configured) throw makeHttpError(401, `OpenAI Codex OAuth token is expired or unavailable. ${loginGuidance}`);
+    throw makeHttpError(401, `OpenAI Codex OAuth is not configured. ${loginGuidance}`);
   }
 
   const latest = resolved.credential || {};
   const accountId = latest.accountId || codexAccountIdFromAccessToken(accessToken);
   if (!accountId) {
-    throw makeHttpError(401, "OpenAI Codex account id is unavailable. Run /login and choose ChatGPT Plus/Pro (Codex Subscription) again.");
+    throw makeHttpError(401, `OpenAI Codex account id is unavailable. ${loginGuidance}`);
   }
 
   return {
@@ -5447,7 +5457,7 @@ async function fetchOpenAICodexUsagePayload(credentials) {
   }
 }
 
-async function getOpenAICodexUsageStatus({ forceRefresh = false } = {}) {
+async function getLegacyOpenAICodexUsageStatus({ forceRefresh = false } = {}) {
   let credentials = await getOpenAICodexUsageCredentials({ forceRefresh });
   let rawPayload;
   try {
@@ -5474,6 +5484,21 @@ async function getOpenAICodexUsageStatus({ forceRefresh = false } = {}) {
     ...normalizeCodexUsagePayload(rawPayload),
   };
 }
+
+const getOpenAICodexUsageStatus = createCodexUsageReader({
+  readCli: async () => {
+    const payload = await readCodexCliUsage();
+    return {
+      available: true,
+      providerId: OPENAI_CODEX_PROVIDER_ID,
+      source: "codex-cli",
+      fetchedAt: new Date().toISOString(),
+      auth: { source: "codex-cli" },
+      ...normalizeCodexUsagePayload(payload),
+    };
+  },
+  readLegacy: getLegacyOpenAICodexUsageStatus,
+});
 
 const CLAUDE_USAGE_MONTHS = new Map([
   ["jan", 1], ["january", 1], ["feb", 2], ["february", 2],
@@ -9128,12 +9153,24 @@ async function readBundledThemes() {
   const dir = await resolveBundledThemesDir();
   if (!dir) return { source: "@firstpick/pi-themes-bundle", themes: [] };
   const themes = [];
+  let backgrounds = {};
+  try {
+    const metadata = JSON.parse(await readFile(path.join(dir, "..", "webui-backgrounds.json"), "utf8"));
+    if (metadata && typeof metadata === "object" && !Array.isArray(metadata)) backgrounds = metadata;
+  } catch (error) {
+    if (error?.code !== "ENOENT") console.error(`Skipping invalid bundled theme backgrounds: ${sanitizeError(error)}`);
+  }
   for (const fileName of (await readdir(dir)).filter((file) => file.endsWith(".json")).sort((a, b) => a.localeCompare(b))) {
     try {
       const target = path.join(dir, fileName);
       const info = await lstat(target);
       if (info.isSymbolicLink() || !info.isFile()) continue;
-      themes.push(catalogTheme(JSON.parse(await readFile(target, "utf8")), fileName, "bundled"));
+      const entry = catalogTheme(JSON.parse(await readFile(target, "utf8")), fileName, "bundled");
+      const background = Object.hasOwn(backgrounds, entry.name) ? backgrounds[entry.name] : null;
+      for (const key of WEBUI_THEME_EXPORT_FIELDS) {
+        if (background && typeof background[key] === "string") entry.export[key] = background[key];
+      }
+      themes.push(entry);
     } catch (error) {
       console.error(`Skipping invalid bundled theme ${fileName}: ${sanitizeError(error)}`);
     }

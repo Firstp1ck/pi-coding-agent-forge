@@ -34,7 +34,7 @@ No configuration is required.
 
 Pi’s own exported session information is preferred when available. Before a first model response, or when export is unavailable, the command uses a conservative estimate and displays a range.
 
-Calibration compares an estimate with provider-reported usage from a real first response. Provider-reported session usage remains the authoritative value after a model call.
+Calibration compares an estimate with provider-reported usage from a real first response. Runs started by extension-generated custom messages do not train the first-user-prompt estimate. Their recorded usage still counts toward session totals. Provider-reported session usage remains the authoritative value after a model call.
 
 ## Cost data and coverage
 

@@ -1,6 +1,6 @@
 {
   "name": "@firstpick/pi-skill-research-orchestration",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "Agents should invoke this skill for broad multi-claim research projects needing planning, parallel investigation, source merging, gap closure, citation audit, and final synthesis when narrower research skills are insufficient.",
   "license": "MIT",
   "homepage": "https://github.com/Firstp1ck/pi-coding-agent-forge/tree/main/pi-skill-research-orchestration#readme",

@@ -51,6 +51,10 @@ Every declared coding command must have its own current receipt, even when comma
 
 Executable microplans have explicit allowed scope and exit conditions. A step becomes complete only through `reliability_record_progress` or `reliability_submit_worker_result` with matching current receipts or artifacts; Markdown checklists are audit context only. Step completion checks the current contract, scope, workspace and branch. Completed historical stages retain their immutable exit-contract evidence through planned downstream edits; final behavioral criteria still require fresh verification. New authoritative requirements invalidate affected completed proofs.
 
+## Pi 1.2 compatibility
+
+Custom `before_agent_start` events have no user `prompt`. They still receive reliability policy and retain supervision mode, but do not grant input authority. Bash provenance accepts `builtin:bash` from Pi 0.99 and later, plus the legacy `<builtin:bash>` spelling, only when `sourceInfo.source` is `builtin`. Tests cover the custom-message start and real installed-host receipt reconciliation.
+
 ## Input authority and retained-session plan artifacts
 
 Pi 0.85.1 exposes no ingress/admission/delivery correlation. `input` handlers observe progressively transformed text; queued steering/follow-up delivery can skip `before_agent_start`, and direct queue APIs can bypass the input hook. `src/input-authority.ts` therefore consumes only current persisted command/native-confirmation receipts. Historical interactive/RPC queue guesses remain untrusted history. `message_start` user events detect ambiguity without reconstructing raw text. Reliability continuations use custom messages, not synthetic user instructions; internal continuation commands explicitly enable command dispatch.

@@ -33,6 +33,17 @@ Tests and fixtures are required for package-version or layout-dependent patches.
 
 Use `PATCH-TEMPLATE.md`, `TOOL-CALL-SPEC.md`, and `patch-manifest-v2.schema.json`.
 
+## App-specific package location
+
+For an app-specific patch, the app's verified configuration/home directory is the canonical package location, normally `<app-config>/patches/<patch-id>/`.
+
+- Resolve the actual config/home from the app's documented runtime settings, launch options, or verified environment overrides before assuming a default. Ask when the location cannot be established safely.
+- Save the complete reconstructable package there: `PATCH.md`, manifest, lifecycle handlers, transformation profiles/assets, documentation, and required tests/fixtures. Do not deliver only a note that depends on a checkout, temporary capture, or versioned app-install directory.
+- A repository may retain a development mirror, but report the app-config package as the canonical artifact. Keep runtime assets package-relative and verify the copied package independently.
+- For T3 Code, use its resolved T3 home (`T3CODE_HOME` when configured, otherwise the verified `~/.t3` default), for example `~/.t3/patches/<patch-id>/`. Keep patch artifacts outside live `userdata`; storing a patch never authorizes editing app settings or runtime state.
+- Do not silently move existing patches, receipts, or backups. Preserve their explicit state directory for rollback, and use `--state-dir` when a separately chosen config-local state directory is intended.
+- Patch storage is not patch application. After an app update, run fresh read-only status/plan and obtain plan-bound approval before any installed mutation; never silently reapply.
+
 ## Lifecycle Commands
 
 Resolve paths relative to this skill directory:
@@ -52,7 +63,7 @@ Choose the lifecycle mode below from the user's request and current patch state.
 
 ## Mode A — Create or Migrate
 
-1. Discover actual runtime entrypoints and package dependency graphs.
+1. Discover actual runtime entrypoints, package dependency graphs, and the verified app-config package destination when the target is an app.
 2. Define stable logical targets instead of user-specific absolute paths.
 3. Add package support ranges and semantic fingerprints.
 4. Implement three-way status: applicable, already-applied/upstreamed, or unsupported.
@@ -144,4 +155,5 @@ Report:
 - modified targets and before/after hashes;
 - verification results;
 - receipt or rollback archive path;
-- unsupported targets, deferred live checks, and restart requirements.
+- unsupported targets, deferred live checks, and restart requirements;
+- the canonical app-config package path and confirmation that all reconstruction files were saved and the copied package was verified (or the exact storage blocker).

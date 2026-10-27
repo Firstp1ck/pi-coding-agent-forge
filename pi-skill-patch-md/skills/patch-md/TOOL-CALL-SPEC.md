@@ -1,5 +1,11 @@
 # PATCH.md v2 Tool and Lifecycle Specification
 
+## Package location
+
+App-specific packages belong under the app's verified configuration/home directory, normally `<app-config>/patches/<patch-id>/`. Resolve documented overrides before defaults. For T3 Code, use the resolved T3 home and a `patches/` child outside live `userdata`.
+
+Save all reconstruction files, including local handlers, profiles/assets, docs and required fixtures/tests. Repository directories may be development mirrors, but must not be the only deliverable. Keep executable dependencies package-relative, verify the copied canonical package, and report its location. Do not silently relocate existing receipt/backups; the runner's explicit `--state-dir` remains the state source of truth. Storage never grants application or restart approval.
+
 ## Files
 
 - Human document: `PATCH.md`

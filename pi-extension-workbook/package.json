@@ -1,7 +1,7 @@
 {
   "name": "@firstpick/pi-extension-workbook",
-  "version": "0.1.6",
-  "description": "High-fidelity, fail-closed XLSX/XLSM inspection, rendering, editing, diffing, and validation tools for Pi agents.",
+  "version": "0.2.0",
+  "description": "High-fidelity, fail-closed XLSX/XLSM inspection, rendering, editing, diffing, and validation tools for Pi agents, with user-approved VBA module editing on Windows Excel.",
   "type": "module",
   "license": "MIT",
   "homepage": "https://github.com/Firstp1ck/pi-coding-agent-forge/tree/main/pi-extension-workbook#readme",
@@ -19,7 +19,8 @@
     "excel",
     "xlsx",
     "xlsm",
-    "ooxml"
+    "ooxml",
+    "vba"
   ],
   "pi": {
     "extensions": [
@@ -33,6 +34,7 @@
     "check": "tsc -p tsconfig.json && node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/check.mjs",
     "test": "tsx --test tests/*.test.mjs",
     "test:excel": "tsx tests/corpus/excel-host-test.mjs",
+    "test:vba": "tsx tests/corpus/vba-host-test.mjs",
     "test:corpus": "tsx tests/corpus/corpus-bakeoff.mjs",
     "test:signed-vba": "tsx tests/corpus/signed-vba-bakeoff.mjs",
     "test:native": "tsx tests/corpus/native-bakeoff.mjs",
@@ -40,7 +42,7 @@
     "pack:dry": "npm pack --dry-run"
   },
   "dependencies": {
-    "@firstpick/pi-utils": "^0.2.4",
+    "@firstpick/pi-utils": "^0.3.2",
     "@xmldom/xmldom": "^0.9.10",
     "fflate": "^0.8.3"
   },

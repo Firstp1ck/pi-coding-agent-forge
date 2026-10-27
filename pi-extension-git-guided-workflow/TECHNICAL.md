@@ -37,7 +37,7 @@ Unknown or extra arguments are rejected before repository data is read or a mode
 
 `/pr` defaults to English and writes one file under `dev/PR/`. The current branch is encoded as a single safe filename, so `feat/example` becomes `dev/PR/feat%2Fexample.md`.
 
-The three generation commands generate files only. They do not stage, commit, create or switch branches, push, or run GitHub CLI. The guided workflow performs only the mutations you confirm.
+The three generation commands generate files only. They do not stage, commit, create or switch branches, push, or run GitHub CLI. The guided workflow performs only the mutations you choose.
 
 ## Native generation and privacy
 
@@ -125,13 +125,15 @@ In Pi's native TUI, its stages are:
 Initialize → Stage → Message → Commit → Push
 ```
 
-Every screen is a centered, width-bounded and height-bounded overlay. Workflow menus, confirmations, commit-message editing, and generation-progress popups have an accented box frame, padding, and a theme-colored background that separates them from the conversation. Short terminals prioritize controls over top and bottom borders. Lists and settings use Pi's native list components, and commit text uses the native editor. Press Escape to cancel without mutation. Choose **Finish** to stop. Stage all, initialization, starter creation and staging, commit, push, and publication have explicit confirmation boundaries. The workflow rejects conflicts, detached HEAD, bare repositories, and active merge, rebase, cherry-pick, revert, or bisect operations.
+Every screen is a centered, width-bounded and height-bounded overlay. Workflow menus, confirmations, commit-message editing, and generation-progress popups have an accented box frame, padding, and a theme-colored background that separates them from the conversation. Short terminals prioritize controls over top and bottom borders. Lists and settings use Pi's native list components, and commit text uses the native editor. Press Escape to cancel without mutation. Choose **Finish** to stop. Initialization, starter creation and staging, and publication ask for explicit confirmation. Stage all, commit, and push run as soon as you choose them on their review screens. When the index already holds all changes, the Stage screen is skipped; when there is nothing to commit, the workflow continues to Push if no remote is configured (so you can publish or finish) or if HEAD has commits that no remote-tracking branch contains, and finishes otherwise. This check uses your local remote-tracking branches from every remote and does not fetch, so run `git fetch` first if they may be out of date. A commit already present on any remote-tracking branch counts as pushed, even if it is on a different branch or remote than the one Push would target; use the Push entry directly in that case. A Message or Commit entry with nothing staged starts at Stage instead of stopping. **Back to Stage** always shows the Stage screen, even when only staged changes exist. The workflow rejects conflicts, detached HEAD, bare repositories, and active merge, rebase, cherry-pick, revert, or bisect operations.
 
-Manual message entry uses Pi's native editor and needs no model. Press `Shift+Enter` or `Ctrl+J` to insert a body newline; Enter submits the editor. If the terminal is too short for the native editor and its cursor, editing and submission pause until you resize it; Escape still cancels and the unchanged document regains focus after the terminal grows. Existing paired `dev/COMMIT/` files can be previewed and explicitly reused, but remain labeled unverified for the current index. One clean staged added, modified, or deleted file with no other changes can offer `created`, `updated`, or `deleted` plus the exact path. That status and repository identity are captured between matching staged fingerprints after your Stage or direct-entry selection. Mixed, renamed, conflicted, unsafe, and overlong paths get no automatic message. Every selected message is reviewed and rebound to a fresh staged fingerprint before commit.
+Manual message entry uses Pi's native editor and needs no model. Press `Shift+Enter` or `Ctrl+J` to insert a body newline; Enter submits the editor. If the terminal is too short for the native editor and its cursor, editing and submission pause until you resize it; Escape still cancels and the unchanged document regains focus after the terminal grows. Existing paired `dev/COMMIT/` files can be previewed and explicitly reused, but remain labeled unverified for the current index. One clean staged added, modified, or deleted file with no other changes can offer `created`, `updated`, or `deleted` plus the exact path. That status and repository identity are captured between matching staged fingerprints after you enter Stage or choose a direct entry. Mixed, renamed, conflicted, unsafe, and overlong paths get no automatic message. Every selected message is reviewed and rebound to a fresh staged fingerprint before commit.
 
 Optional TUI generation sends the complete stable staged diff only after you select generation. It accepts up to 16 MiB, using one request at or below 1 MiB and sequential analysis of chunks up to 512 KiB followed by final synthesis above that threshold. It reports the request count before analysis starts. Large diffs can take longer and cost more, with at most 35 requests including one optional final presentation rewrite. The guided TUI does not write message artifacts and still rejects unsafe or empty first responses without a correction request. Safe responses missing the requested layout get the best-effort rewrite described above. Generation failures, cancellation, and diffs above 16 MiB leave manual entry available. The workflow rechecks root, branch, HEAD, operation state, and staged content before commit.
 
-Push can bind either the commit created in this invocation or an existing HEAD chosen through direct Push entry. The workflow rechecks canonical root, branch, immutable HEAD, remote, and refspec after confirmation. Force options are never used and uncertain push outcomes are never retried automatically.
+Push can bind either the commit created in this invocation or an existing HEAD chosen through direct Push entry. The workflow rechecks canonical root, branch, immutable HEAD, remote, and refspec after you choose **Continue and push**. If the destination changed, nothing is pushed and a fresh Review push appears. Force options are never used and uncertain push outcomes are never retried automatically.
+
+After a successful commit, push, or publication, a note appears in Pi's main window. It gives the abbreviated commit ID, subject, files changed, lines added and removed, and the full commit ID. Commit notes also name the branch. Push notes name the remote branch and count the commits that no remote-tracking branch of that remote contained before the push. The count uses local remote-tracking branches without fetching, so it can be high when they are out of date. It is left out when Git cannot report it safely, for example for a remote name containing glob characters.
 
 For a directory outside Git, Initialize binds the directory identity, refuses parent or existing repositories, runs `git init --initial-branch=main --`, and never renames an existing branch. Optional root `README.md` and `.gitignore` starters never overwrite files or follow symlinks. Only selected newly created starter paths can be staged.
 
@@ -145,7 +147,7 @@ In a compatible WebUI RPC session, `/git-guided-workflow` emits a one-shot activ
 
 Setup and its model picker use an accented frame with a padded, theme-colored background to separate them from the conversation. Every setting has a description. The popup keeps the same height while you navigate, search, or open the model picker; resizing the terminal adjusts its available space. On very short terminals, the top and bottom borders give way to the controls; the side borders and background remain.
 
-You can select an available primary model and supported reasoning effort, an optional different fallback profile, English or German, automatic/never/required scope, short or long default variant, preserve or stage-all ordering, default entry stage, and an ask/none verification reminder. Unconfigured generation uses the active Pi model. A configured unavailable model or effort disables generation with a warning instead of substituting the active model; manual, saved-artifact, deterministic, initialization, and push flows remain available.
+You can select an available primary model and supported reasoning effort, an optional different fallback profile, English or German, automatic/never/required scope, short or long default variant, preserve or stage-all ordering, default entry stage, and an ask/none verification reminder. With `ask`, the reminder appears on the generated-candidates and commit review screens; it does not add a separate screen. Unconfigured generation uses the active Pi model. A configured unavailable model or effort disables generation with a warning instead of substituting the active model; manual, saved-artifact, deterministic, initialization, and push flows remain available.
 
 Fallback is limited to one final eligible provider failure. The overlay identifies both profiles and warns before work that fallback resends the staged evidence. Cancellation, invalid output, invalid preferences, drift, Git failures, and artifact failures do not use fallback. Manual entry remains available without any model.
 
@@ -170,6 +172,29 @@ Read the exact failure notification. Check for staged, HEAD, branch, base, or te
 ### A commit or push result is uncertain
 
 Do not repeat the operation blindly. Inspect local HEAD and the remote branch with your normal Git tools. The extension deliberately avoids pull, fetch, merge, rebase, reset, amend, stash, and force-push recovery actions.
+
+### Push cannot read a username or password
+
+An error mentioning `/dev/tty`, `failed to execute prompt script`, `could not read Username`, or `terminal prompts disabled` means Git could not obtain credentials without terminal input. Guided Git keeps your normal system, global, and repository Git configuration, including credential helpers such as Git Credential Manager. It cannot accept terminal credential input; authenticate outside Pi first. A configured graphical credential helper or askpass program can still work.
+
+In an external terminal, check which credential helper Git uses:
+
+```bash
+git config --show-origin --get-all credential.helper
+```
+
+For GitHub, you can configure an installed GitHub CLI to supply Git credentials:
+
+```bash
+gh auth login
+gh auth setup-git
+```
+
+The first command signs you into GitHub; the second connects that authentication to Git. Signing into `gh` alone may not configure Git authentication. You can instead authenticate through your existing Git credential helper. Keep tokens out of remote URLs and commit messages.
+
+Check the remote branch with your normal Git tools before trying again. Then run `/git-guided-workflow`, choose Push entry, and review the existing HEAD and destination. You do not need to create another commit. Authentication errors still stop without automatic retry because the workflow cannot prove the remote outcome from a diagnostic alone.
+
+An inherited `GIT_CONFIG_NOSYSTEM=1` still disables system configuration. If you deliberately set it before starting Pi, make sure your helper is configured at another scope. A configured askpass script that opens `/dev/tty` also needs an external terminal or replacement with a helper that works without terminal input.
 
 ## Removal and recovery
 
