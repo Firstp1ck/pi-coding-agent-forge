@@ -50,7 +50,7 @@ function validateScenarios(inputData, rubricData) {
       assert(entry[key].every((item) => typeof item === 'string' && item.trim().length > 20));
     }
   }
-  for (const id of ['empty-volunteers', 'shop-returns', 'shop-shipping', 'portal-unconfirmed', 'portal-decline', 'portal-accept', 'portal-partial', 'refund-unconfirmed', 'refund-confirmed', 'questionnaire-cancelled', 'questionnaire-clarification', 'term-boundary', 'term-ready-not-released', 'term-disputed', 'write-failure', 'readiness-gaps', 'changed-source']) {
+  for (const id of ['empty-volunteers', 'shop-returns', 'shop-shipping', 'portal-unconfirmed', 'plan-refused', 'refund-unconfirmed', 'refund-confirmed', 'questionnaire-cancelled', 'questionnaire-clarification', 'term-boundary', 'term-ready-not-released', 'term-disputed', 'write-failure', 'readiness-gaps', 'changed-source', 'solution-first', 'transcript-privacy', 'moscow-decision', 'roleplay-stakeholder']) {
     assert(inputIds.includes(id), `missing branch: ${id}`);
   }
 }
@@ -108,10 +108,15 @@ test('manifest and skill resource paths are portable and complete', () => {
   }
   assert(!manifest.files.some((filename) => /\.pdf$/i.test(filename)));
   // These checks guard explicit safety instructions, not compliance by a language model.
-  assert.match(skill, /confirm.*before.*(?:following|changing)/i);
-  assert.match(skill, /[Ii]f a write is declined or fails[\s\S]{0,240}[Dd]o not claim saved state/);
-  assert.match(skill, /[Aa] clear, testable requirement may be content-ready but not approved/);
+  assert.match(skill, /Get confirmation before following or changing a plan/);
+  assert.match(skill, /confirmation from the responsible person before changing an agreed requirement/);
+  assert.match(skill, /If a write is declined or fails[\s\S]{0,240}Do not claim saved state/);
+  assert.match(skill, /A clear, testable requirement may be content-ready but not approved/);
   assert.match(skill, /If the user cancels, stop that dialog/);
+  assert.match(skill, /Do not invent participants, sessions, answers/);
+  assert.match(skill, /Role-play[^.]*never replaces a stakeholder/);
+  assert.match(skill, /do not set priorities yourself/);
+  assert.doesNotMatch(skill, /Grill Me|grill-me/i);
 });
 
 function checkMarkdown(relative, text) {

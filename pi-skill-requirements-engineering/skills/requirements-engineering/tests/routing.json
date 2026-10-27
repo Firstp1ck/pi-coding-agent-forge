@@ -2,9 +2,11 @@
   "skill": "requirements-engineering",
   "shouldTrigger": [
     "Start requirements work for my empty volunteer scheduling project.",
-    "Resume RE from the saved plan and unfinished interview draft.",
+    "Customers want an Excel export. What do they actually need?",
+    "Help me prepare the interview with support about refunds.",
+    "Evaluate these meeting notes and turn them into requirements.",
+    "Sales and support disagree on scope. How do we reach agreement?",
     "REQ-17 changed: trace impact before touching the agreed version.",
-    "Draft a neutral interview guide for support staff about refunds.",
     "What does system boundary mean in this project?",
     "Review whether REQ-8 has an exception path and testable acceptance method."
   ],
@@ -18,6 +20,6 @@
   "ambiguous": [
     {"prompt":"Continue the project.","decision":"List candidate continuation plans and ask which one or no plan; do not adopt a plan by recency."},
     {"prompt":"Make a questionnaire.","decision":"Ask whether it is a stakeholder survey draft or a bounded owner choice and what decision it supports."},
-    {"prompt":"Improve the requirements.","decision":"Confirm the operation and any candidate plan before making a change."}
+    {"prompt":"Improve the requirements.","decision":"Ask which mode and scope is meant and confirm any candidate plan before making a change."}
   ]
 }
