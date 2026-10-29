@@ -1,5 +1,7 @@
 # Requirements-engineering evaluation record
 
+> **Historical record.** This evaluation covers version 0.1.0, the English plan-gate skill with optional Grill Me. The skill was later rewritten as a mode-based skill, and several cases changed. None of the results below apply to the current `SKILL.md`; re-run the scenarios before claiming behavior.
+
 ## Method and evidence limits
 
 On 2026-09-24, two retained model runs generated responses to the fictional inputs. Runtime status identifies both as `openai-codex/gpt-6-luna`, xhigh thinking. They processed alternating cases in batches, not isolated sessions per case. They read the implementation plan, which contains expected example behavior, so this is not a blind evaluation. Neither ran a live questionnaire, Grill Me interview, scenario filesystem, or project implementation. These are observed model-generated transcript simulations, not evidence of tool execution or guaranteed future behavior.

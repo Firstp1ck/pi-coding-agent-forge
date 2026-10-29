@@ -83,7 +83,7 @@ Change the next action to understand the shipping-notification problem and sourc
 
 Do not report the workflow complete because the note says so. Do not claim users rejected later steps because code lacks them. Do not choose returns as the current priority for the user.
 
-## C. Competing portal plans and optional Grill Me
+## C. Competing portal plans
 
 ### Prompt and evidence
 
@@ -96,39 +96,26 @@ The user says:
 
 > Continue the portal requirements work.
 
-No completed Grill Me result is linked to either plan.
-
 ### Expected conversation
 
 1. Read only enough plan metadata and nearby status to show each purpose, status, next step, and path.
-2. Ask the user to choose self-service, billing, another plan, a new RE effort, or stop. Do not choose by recency.
-3. After the user chooses self-service, record that confirmation and check only plan-specific Grill Me evidence.
-4. Explain that no completed interview is linked to the selected plan. Ask whether the user wants Grill Me first, wants to continue without it, or needs to inspect partial evidence.
-
-### If the user declines Grill Me
-
-Honor the choice. Read the confirmed self-service plan and related records, reconcile unfinished drafts, and continue its next ready stakeholder-review step. The decline is not a blocker.
+2. Ask the user to choose self-service, billing, another plan, a new requirements effort, or stop. Do not choose by recency.
+3. After the user chooses self-service, record that confirmation, read the confirmed plan and its related records, reconcile unfinished drafts, and continue its stakeholder-review step.
 
 Expected workflow checkpoint:
 
 ```markdown
 - Selected continuation plan: plans/planned/self-service-portal.md, confirmed by user in current session
-- Grill Me outcome for that plan: declined
-- Grill Me evidence: none required after informed decline
 - Next ready step: Prepare the stakeholder review named by the confirmed plan
 ```
 
-### If the user accepts Grill Me
+### If the user declines both plans
 
-Offer a user-approved handoff. Do not issue `/grill-me` or write interview state on the user's behalf. When a result exists, reconcile only decisions tied to the self-service plan. Keep stakeholder evidence and requirement approval separate.
-
-### If interview evidence is partial
-
-Show which decisions are saved and which remain open. Ask whether to use the partial decisions, start a new interview with the overwrite risk explained, or skip it. Preserve the partial state until the user chooses.
+Leave both plans untouched and start ordinary intake for the new effort. Do not copy decisions from either plan into it.
 
 ### Prohibited outcome
 
-Do not select the newest plan, edit either plan before confirmation, launch Grill Me silently, treat a generic `GRILL-ME.md` as plan-specific completion, copy billing decisions into self-service records, or overwrite partial interview state.
+Do not select the newest plan, edit either plan before confirmation, or copy billing decisions into self-service records.
 
 ## D. Refund approval changes mid-project
 

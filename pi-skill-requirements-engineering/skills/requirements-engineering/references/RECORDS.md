@@ -140,8 +140,6 @@ Do not invent a date to make an open item look owned. If a high-impact unknown b
 - Last confirmed checkpoint: <date, result, and evidence>
 - Current focus: <goal or question>
 - Selected continuation plan: <path and user confirmation, or none>
-- Grill Me outcome for that plan: offered | accepted | declined | completed | partial | unavailable | not applicable
-- Grill Me evidence: <plan-specific link or none>
 - Canonical tracker or records: <links>
 - Working drafts: <links and status>
 

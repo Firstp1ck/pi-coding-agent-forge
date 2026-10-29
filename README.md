@@ -109,7 +109,7 @@ Skills give Pi a reusable workflow for a particular kind of work. You normally a
 - **[Project README](pi-skill-project-readme/README.md)** — Create, update, or review evidence-based project READMEs for the right audience.
 - **[Refactoring Advisor](pi-skill-refactoring-advisor/README.md)** — Plan small, safe refactors that preserve behavior while improving maintainability.
 - **[Repo Explorer](pi-skill-repo-explorer/README.md)** — Map an unfamiliar repository and return the files, symbols, risks, and evidence needed for the next step.
-- **[Requirements engineering](pi-skill-requirements-engineering/README.md)** helps you start, update, or resume requirements work with traceable evidence, stakeholder checks, and draft working documents.
+- **[Requirements engineering](pi-skill-requirements-engineering/README.md)** helps you find the problem behind feature requests, prepare interviews, turn notes into traceable requirements, and settle conflicts and changes with stakeholders.
 - **[Research Orchestration](pi-skill-research-orchestration/README.md)** — Coordinate broad research across several claims, sources, and verification passes.
 - **[Rewrite in Rust](pi-skill-rust-rewrite/README.md)** — Assess and carry out Rust migrations with compatibility requirements, ownership analysis, and verification against the original.
 - **[Sailfish OS](pi-skill-sailfishos/README.md)** — Diagnose and maintain Sailfish devices with capability checks, safer package workflows, and privacy-aware diagnostics.
