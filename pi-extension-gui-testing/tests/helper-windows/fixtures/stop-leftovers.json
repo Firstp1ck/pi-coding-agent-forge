@@ -1,0 +1,17 @@
+{
+  "method": "stop",
+  "response": {
+    "id": 1,
+    "ok": true,
+    "result": {
+      "ok": false,
+      "leftovers": [
+        {
+          "kind": "process",
+          "id": "4242:132000000000000000",
+          "detail": "fake survivor"
+        }
+      ]
+    }
+  }
+}

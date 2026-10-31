@@ -1,0 +1,10 @@
+{
+  "method": "cancel",
+  "response": {
+    "id": 4,
+    "ok": true,
+    "result": {
+      "ok": true
+    }
+  }
+}

@@ -1,0 +1,19 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'unsafe-inline'" />
+    <title>S1 Electron</title>
+    <style>
+      html, body { margin: 0; height: 100%; font: 16px "Segoe UI", sans-serif; }
+      body { display: flex; flex-direction: column; }
+      #label { flex: 1; display: flex; align-items: center; justify-content: center; }
+      #press { flex: 3; font-size: 18px; }
+    </style>
+  </head>
+  <body>
+    <div id="label" role="status">Not pressed</div>
+    <button id="press">Press me</button>
+    <script src="renderer.js"></script>
+  </body>
+</html>

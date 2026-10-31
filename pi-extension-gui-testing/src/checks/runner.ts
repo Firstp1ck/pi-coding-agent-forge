@@ -3,6 +3,7 @@
  * in parallel, a timeout per check, `blocked` for dependents of failures, and
  * `warn` + `degrades` for optional checks.
  */
+import type { TargetOs } from "../config/types.ts";
 import type { CommandRunner, DockerEndpoint } from "../runner/types.ts";
 import { DEFAULT_CHECK_TIMEOUT_MS, type Check, type CheckContext, type CheckOutcome, type CheckResult } from "./types.ts";
 
@@ -51,6 +52,8 @@ export interface RunChecksOptions {
   runner: CommandRunner;
   backend: string;
   projectRoot: string;
+  /** `CheckContext.targets` (from `/gui-setup --targets`). */
+  targets?: readonly TargetOs[];
   /** Aborting it stops the run; {@link runChecks} then rejects with the abort reason. */
   signal: AbortSignal;
   /**
@@ -176,6 +179,7 @@ async function runOne(
     dependencies,
     projectRoot: options.projectRoot,
   };
+  if (options.targets) ctx.targets = options.targets;
   if (dockerEndpoint) ctx.dockerEndpoint = dockerEndpoint;
   const start = Date.now();
   let timer: NodeJS.Timeout | undefined;

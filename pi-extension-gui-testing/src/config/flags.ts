@@ -3,6 +3,7 @@
  * arguments as one string; these parsers turn it into typed options and reject
  * anything unknown with the list of valid flags.
  */
+import { CLOUD_LOCATIONS, type CloudLocation } from "../backends/cua/api.ts";
 import type { BackendId, TargetOs } from "./types.ts";
 import { ALL_BACKENDS, TARGET_OSES } from "./validate.ts";
 
@@ -121,6 +122,24 @@ export interface SetupArgs {
   noFix: boolean;
   project: boolean;
   purgeTooling: boolean;
+  /** `cua`: the cloud for sandboxes (`--cloud`). */
+  cloud?: CloudLocation;
+  /** `cua`: hourly sandbox price for the cost estimate when Cua reports none (`--rate-usd-per-hour`). */
+  rateUsdPerHour?: number;
+  /** `cua`: the sandbox image (`--image`, default Cua's `linux` image). */
+  image?: string;
+  /** `cua`: the image of Windows sandboxes (`--windows-image`, default Cua's `windows` image). */
+  windowsImage?: string;
+  /** `cua`: hourly Windows sandbox price when Cua reports none (`--windows-rate-usd-per-hour`). */
+  windowsRateUsdPerHour?: number;
+  /** `docker-windows`: Windows version for the next install (`--windows-version`, dockurr `VERSION`). */
+  windowsVersion?: string;
+  /** `docker-windows`: RAM of each VM in GB (`--vm-ram-gb`). */
+  vmRamGb?: number;
+  /** `docker-windows`: CPU cores of each VM (`--vm-cpus`). */
+  vmCpus?: number;
+  /** `docker-windows`: disk size of the next install in GB (`--vm-disk-gb`). */
+  vmDiskGb?: number;
 }
 
 export const SETUP_FLAGS: Record<string, FlagSpec> = {
@@ -133,9 +152,34 @@ export const SETUP_FLAGS: Record<string, FlagSpec> = {
   "--no-fix": { value: false },
   "--project": { value: false },
   "--purge-tooling": { value: false },
+  "--cloud": { value: true },
+  "--rate-usd-per-hour": { value: true },
+  "--image": { value: true },
+  "--windows-image": { value: true },
+  "--windows-rate-usd-per-hour": { value: true },
+  "--windows-version": { value: true },
+  "--vm-ram-gb": { value: true },
+  "--vm-cpus": { value: true },
+  "--vm-disk-gb": { value: true },
 };
 
-const SETUP_USAGE = "/gui-setup [backend] [--fix|--no-fix] [--project] [--host <host>] [--targets linux,windows,macos] [--api-key-env <VAR>] [--accept-billing] [--accept-windows-license] [--purge-tooling]";
+export const SETUP_USAGE =
+  "/gui-setup [backend] [--fix|--no-fix] [--project] [--host <ssh-alias-or-user@host>] [--purge-tooling] [--targets linux,windows,macos] [--accept-billing] [--cloud aws|gcp|hetzner|modal] [--rate-usd-per-hour <n>] [--image <cua-image>] [--windows-image <cua-image>] [--windows-rate-usd-per-hour <n>] [--accept-windows-license] [--windows-version <v>] [--vm-ram-gb <n>] [--vm-cpus <n>] [--vm-disk-gb <n>]";
+
+/** Whole-number VM flags of docker-windows and their ranges (the backend validates the same ranges). */
+const VM_INT_FLAGS = [
+  ["--vm-ram-gb", "vmRamGb", 2, 512, "GB of RAM per VM"],
+  ["--vm-cpus", "vmCpus", 1, 128, "CPU cores per VM"],
+  ["--vm-disk-gb", "vmDiskGb", 64, 4096, "GB of Windows disk"],
+] as const;
+
+const IMAGE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:/@-]{0,255}$/;
+
+function parseRate(command: string, flag: string, rate: string): number {
+  const value = Number(rate);
+  if (!/^\d+(\.\d+)?$/.test(rate) || !Number.isFinite(value) || value > 1_000) throw new FlagError(`${command}: ${flag} must be a number from 0 to 1000 (USD per sandbox hour)`);
+  return value;
+}
 
 /** Parses `/gui-setup` arguments. `--fix` and `--no-fix` are mutually exclusive. */
 export function parseSetupArgs(input: string): SetupArgs {
@@ -159,6 +203,33 @@ export function parseSetupArgs(input: string): SetupArgs {
     if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(apiKeyEnv)) throw new FlagError(`${command}: --api-key-env must be an environment variable name`);
     args.apiKeyEnv = apiKeyEnv;
   }
+  const cloud = flags.get("--cloud");
+  if (typeof cloud === "string") {
+    if (!(CLOUD_LOCATIONS as readonly string[]).includes(cloud)) throw new FlagError(`${command}: unknown cloud "${cloud}"; valid clouds: ${CLOUD_LOCATIONS.join(", ")}`);
+    args.cloud = cloud as CloudLocation;
+  }
+  const rate = flags.get("--rate-usd-per-hour");
+  if (typeof rate === "string") args.rateUsdPerHour = parseRate(command, "--rate-usd-per-hour", rate);
+  const windowsRate = flags.get("--windows-rate-usd-per-hour");
+  if (typeof windowsRate === "string") args.windowsRateUsdPerHour = parseRate(command, "--windows-rate-usd-per-hour", windowsRate);
+  for (const [flag, key] of [["--image", "image"], ["--windows-image", "windowsImage"]] as const) {
+    const image = flags.get(flag);
+    if (typeof image !== "string") continue;
+    if (!IMAGE_PATTERN.test(image)) throw new FlagError(`${command}: ${flag} must be an image alias or registry reference (letters, digits, and . _ : / @ -)`);
+    args[key] = image;
+  }
+  const version = flags.get("--windows-version");
+  if (typeof version === "string") {
+    if (!/^[A-Za-z0-9._-]{1,32}$/.test(version)) throw new FlagError(`${command}: --windows-version must be a dockurr/windows VERSION value such as 11, 10, or 2025 (letters, digits, and . _ -)`);
+    args.windowsVersion = version;
+  }
+  for (const [flag, key, min, max, what] of VM_INT_FLAGS) {
+    const raw = flags.get(flag);
+    if (typeof raw !== "string") continue;
+    const value = Number(raw);
+    if (!/^\d+$/.test(raw) || value < min || value > max) throw new FlagError(`${command}: ${flag} must be a whole number from ${min} to ${max} (${what})`);
+    args[key] = value;
+  }
   const targets = flags.get("--targets");
   if (typeof targets === "string") {
     const list = targets.split(",").map((t) => t.trim()).filter(Boolean);
@@ -173,12 +244,16 @@ export function parseSetupArgs(input: string): SetupArgs {
   return args;
 }
 
-/** Parses `/gui-doctor [backend]`. */
-export function parseDoctorArgs(input: string): { backend?: BackendId } {
+/** Parses `/gui-doctor [backend] [--host <host>]`. */
+export function parseDoctorArgs(input: string): { backend?: BackendId; host?: string } {
   const command = "/gui-doctor";
-  const { positionals } = parseTokens(command, tokenizeArgs(input), {});
-  maxPositionals(command, positionals, 1, "/gui-doctor [backend]");
-  return positionals[0] === undefined ? {} : { backend: parseBackendId(command, positionals[0]) };
+  const { flags, positionals } = parseTokens(command, tokenizeArgs(input), { "--host": { value: true } });
+  maxPositionals(command, positionals, 1, "/gui-doctor [backend] [--host <ssh-alias-or-user@host>]");
+  const result: { backend?: BackendId; host?: string } = {};
+  if (positionals[0] !== undefined) result.backend = parseBackendId(command, positionals[0]);
+  const host = flags.get("--host");
+  if (typeof host === "string") result.host = host;
+  return result;
 }
 
 /** Parses `/gui-backend <id> [--project]`. */
