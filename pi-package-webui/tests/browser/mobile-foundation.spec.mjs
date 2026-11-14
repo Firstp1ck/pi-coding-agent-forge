@@ -856,14 +856,14 @@ test("shell modules survive the service-worker offline cache and online refresh"
   await page.evaluate(() => navigator.serviceWorker.ready);
   await page.reload();
   await expect.poll(() => page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true);
-  const modules = ['shell-actions', 'shell-navigation', 'shell-preferences', 'shell-view-host', 'shell-surfaces', 'session-context', 'session-composer-store', 'session-attention-scheduler', 'platform-event-stream', 'session-extension-requests'];
+  const modules = ['shell-workspace', 'shell-tools-launcher', 'focused-shell-adapter', 'shell-actions', 'shell-navigation', 'shell-preferences', 'shell-view-host', 'shell-surfaces', 'session-context', 'session-composer-store', 'session-attention-scheduler', 'platform-event-stream', 'session-extension-requests'];
   const cacheState = await page.evaluate(async names => {
     const cacheNames = await caches.keys();
     const active = cacheNames.find(name => name.startsWith('pi-webui-pwa-'));
     const cache = await caches.open(active);
     return { active, modules: await Promise.all(names.map(async name => !!await cache.match(`/${name}.mjs`))), api: (await cache.keys()).some(request => new URL(request.url).pathname.startsWith('/api/')) };
   }, modules);
-  assert.equal(cacheState.active, 'pi-webui-pwa-v159');
+  assert.equal(cacheState.active, 'pi-webui-pwa-v160');
   assert.deepEqual(cacheState.modules, modules.map(() => true));
   assert.equal(cacheState.api, false);
   try {
