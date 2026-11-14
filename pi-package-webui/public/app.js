@@ -1683,6 +1683,8 @@ let shellPreferenceState = (() => {
 })();
 let focusedShell = null;
 const focusedFeatureRecords = [];
+const focusedWidgetPlacements = new Map();
+let focusedAgentWidgetHost = null;
 let focusedShellRenderPending = false;
 let focusedShellState = { destination: "conversation", inspector: null };
 const shellHistory = createShellHistory({ window, onPopState: restoreShellNavigation });
@@ -2093,7 +2095,7 @@ function scheduleFocusedShellRender() {
 
 function focusedSectionDestination(id) {
   if (["controls", "optional-features"].includes(id)) return "settings";
-  if (["files", "git", "artifacts"].includes(id)) return "project";
+  if (["files", "git", "runners", "release", "artifacts"].includes(id)) return "project";
   if (["session", "sampling", "commands"].includes(id)) return "conversation";
   return "activity";
 }
@@ -2111,11 +2113,68 @@ function initializeFocusedFeatureRecords() {
   content.append(make("p", "muted focused-artifact-empty", "Open a document artifact from a message to inspect its pages here."), projectArtifacts.element);
   parking.append(content);
   focusedFeatureRecords.push({ id: "artifacts", label: "Documents", content });
+  for (const [id, label, empty] of [
+    ["runners", "Runners", "No app runner is active. Choose a detected command above, or open runner help to configure one."],
+    ["release", "Release", "No release is active. Available release commands appear above; configure missing companions in Settings."],
+    ["progress", "Progress", "No workflow or task progress is active for this session."],
+    ["conversations", "Conversations", "No side question is active. Agent conversations remain available from the conversation tags."],
+    ["extensions", "Extensions", "No extension widgets are active for this session."],
+  ]) {
+    const content = make("section", "focused-feature-host");
+    content.dataset.featureHost = id;
+    const controls = make("div", "focused-feature-controls");
+    const placeholder = make("p", "muted focused-feature-empty", empty);
+    const widgets = make("div", "focused-feature-widgets");
+    content.append(controls, placeholder, widgets);
+    parking.append(content);
+    focusedFeatureRecords.push({ id, label, content, controls, placeholder, widgets });
+  }
+  focusedAgentWidgetHost = make("div", "focused-feature-widgets");
+  sidePanelSectionRecords().find(record => record.id === "subagents")?.content.append(focusedAgentWidgetHost);
+}
+
+function featureWidgetRoots() {
+  return [elements.widgetArea, focusedAgentWidgetHost, ...focusedFeatureRecords.map(record => record.widgets)].filter(Boolean);
+}
+
+function featureWidgetElements(selector) {
+  return featureWidgetRoots().flatMap(root => [...root.querySelectorAll(selector)]);
+}
+
+function appendFeatureWidget(node, destination) {
+  if (!node) return;
+  elements.widgetArea.append(node);
+  focusedWidgetPlacements.set(node, destination);
+}
+
+function restoreFocusedWidgetsForRender() {
+  for (const node of focusedWidgetPlacements.keys()) canonicalViewHost.restore(node);
+  focusedWidgetPlacements.clear();
+}
+
+function syncFocusedWidgetPlacement() {
+  const enabled = focusedShell?.active === true;
+  for (const [node, id] of focusedWidgetPlacements) {
+    const host = id === "subagents" ? focusedAgentWidgetHost : focusedFeatureRecords.find(record => record.id === id)?.widgets;
+    if (enabled && host) canonicalViewHost.move(node, host);
+    else canonicalViewHost.restore(node);
+  }
+  for (const record of focusedFeatureRecords) {
+    if (record.placeholder) record.placeholder.hidden = record.widgets.childElementCount > 0;
+  }
+  for (const [id, nodes] of [["runners", [elements.appRunnerMenuPanel, elements.appRunnerInfoButton]], ["release", [elements.publishMenu]]]) {
+    const host = focusedFeatureRecords.find(record => record.id === id)?.controls;
+    for (const node of nodes) {
+      if (!node) continue;
+      if (enabled && host) canonicalViewHost.move(node, host);
+      else canonicalViewHost.restore(node);
+    }
+  }
 }
 
 function focusedInspectorTopics(destination) {
   const labels = { git: "Changes", subagents: "Agents", queue: "Queues", "codex-usage": "Codex usage", "claude-usage": "Claude usage" };
-  const order = ["files", "git", "artifacts", "subagents", "queue", "events", "codex-usage", "claude-usage", "session", "sampling", "commands"];
+  const order = ["files", "git", "runners", "release", "artifacts", "subagents", "queue", "progress", "conversations", "extensions", "events", "codex-usage", "claude-usage", "session", "sampling", "commands"];
   return focusedInspectorRecords().filter(record => focusedSectionDestination(record.id) === destination)
     .sort((left, right) => order.indexOf(left.id) - order.indexOf(right.id))
     .map(record => ({ id: record.id, label: labels[record.id] || record.label || record.button?.querySelector(".side-panel-section-label")?.textContent || record.id }));
@@ -2140,6 +2199,7 @@ function renderFocusedShell() {
     homeCollapsed: workspaceDashboardCollapsed,
   });
   syncDocumentArtifactHost();
+  syncFocusedWidgetPlacement();
   if (wasActive !== focusedShell.active) {
     syncMobileComposerDisclosureLayout();
     setComposerActionsOpen(false);
@@ -10864,13 +10924,14 @@ function setWorkflowOverlayMinimized(minimized) {
   const tabId = activeTabId;
   if (minimized) workflowOverlayMinimizedByTab.add(tabId);
   else workflowOverlayMinimizedByTab.delete(tabId);
+  if (!minimized && focusedShell?.active) navigateFocusedShell("activity", "progress");
   renderWidgets();
   renderWorkflowModeControls();
   requestAnimationFrame(() => {
     if (activeTabId !== tabId) return;
     const focusTarget = minimized
       ? elements.workflowOverlayOpenButton
-      : elements.widgetArea.querySelector(".workflow-overlay-close-button");
+      : featureWidgetElements(".workflow-overlay-close-button")[0];
     focusTarget?.focus({ preventScroll: true });
   });
 }
@@ -26498,6 +26559,7 @@ async function openSubagentOverlay(tab, run, agent) {
     subagentOverlayData = null;
     subagentOverlayError = "";
     subagentOverlayRequestSerial += 1;
+    if (focusedShell?.active) navigateFocusedShell("activity", "subagents");
     renderWidgets();
     await refreshSubagentOverlay();
     scheduleSubagentOverlayRefresh();
@@ -29325,7 +29387,7 @@ function workflowInspectorSetMinimized(minimized) {
   renderWidgets();
   requestAnimationFrame(() => {
     if (activeTabId !== tabId) return;
-    elements.widgetArea.querySelector(".workflow-inspector-minimize-button")?.focus({ preventScroll: true });
+    featureWidgetElements(".workflow-inspector-minimize-button")[0]?.focus({ preventScroll: true });
   });
 }
 
@@ -29548,7 +29610,7 @@ function workflowSubprocessSetMinimized(minimized) {
   renderWidgets();
   requestAnimationFrame(() => {
     if (activeTabId !== tabId) return;
-    elements.widgetArea.querySelector(".workflow-subprocess-minimize-button")?.focus({ preventScroll: true });
+    featureWidgetElements(".workflow-subprocess-minimize-button")[0]?.focus({ preventScroll: true });
   });
 }
 
@@ -29661,8 +29723,9 @@ async function refreshAppRunners(tabContext = activeTabContext()) {
   if (result.reason === "error") throw result.error;
 }
 
-async function runAppRunner(runnerId) {
-  const target = projectTargetFromContext();
+async function runAppRunner(runnerId, target = projectTargetFromContext()) {
+  if (!isCurrentProjectTarget(target)) return;
+  if (focusedShell?.active) navigateFocusedShell("project", "runners");
   setComposerActionsOpen(false);
   setAppRunnerMenuOpen(false);
   return projectRunners.start(runnerId, target);
@@ -29755,7 +29818,7 @@ function renderAppRunnerContextForm(run) {
 
 function captureAppRunnerInputFocus() {
   const input = document.activeElement;
-  if (!input?.classList?.contains("app-runner-stdin-input") || !elements.widgetArea?.contains(input)) return null;
+  if (!input?.classList?.contains("app-runner-stdin-input") || !featureWidgetRoots().some(root => root.contains(input))) return null;
   return {
     source: input,
     context: activeTabContext(),
@@ -29772,7 +29835,7 @@ function captureAppRunnerInputFocus() {
 function restoreAppRunnerInputFocus(state) {
   if (!state?.runId || !isCurrentTabContext(state.context) || state.source?.isConnected) return;
   if (isMeaningfulConnectedFocus(document.activeElement)) return;
-  const input = [...elements.widgetArea.querySelectorAll(".app-runner-stdin-input")]
+  const input = featureWidgetElements(".app-runner-stdin-input")
     .find((candidate) => candidate.dataset.runId === state.runId);
   if (!input) return;
   projectRunners.setInputDraft(state.context.tabId, state.runId, state.value);
@@ -30425,7 +30488,9 @@ function renderAppRunnerControls() {
     const runnerDisplayCommand = runner.shortDisplayCommand || runner.displayCommand;
     const runnerSource = appRunnerSourceLabel(runner, runnerDisplayCommand);
     item.title = [runnerDisplayCommand, runnerSource, runner.description].filter(Boolean).join("\n");
-    item.addEventListener("click", () => runAppRunner(runner.id));
+    const target = projectTargetFromContext();
+    item.disabled = running;
+    item.addEventListener("click", () => runAppRunner(runner.id, target));
     const label = make("span", "app-runner-menu-item-label", runner.label || runnerDisplayCommand);
     const command = make("span", "app-runner-menu-item-command", runnerDisplayCommand);
     item.append(label, command);
@@ -30540,7 +30605,7 @@ function patchAppRunnerWidgetInPlace(tabId, previousRun, nextRun) {
   if (!previousRun || !nextRun || previousRun.id !== nextRun.id) return false;
   if (appRunnerIsRunning(previousRun) !== appRunnerIsRunning(nextRun)) return false;
   if ((previousRun.status || "") !== (nextRun.status || "") || Boolean(previousRun.truncated) !== Boolean(nextRun.truncated)) return false;
-  const widget = elements.widgetArea?.querySelector(".app-runner-widget");
+  const widget = featureWidgetElements(".app-runner-widget")[0];
   const terminal = widget?.querySelector(".release-npm-terminal");
   if (!widget || !terminal) return false;
   const previousLines = appRunnerOutputLines(previousRun);
@@ -32485,32 +32550,34 @@ function attachWorkflowOverlayCloseButton(widget) {
 function renderWidgets() {
   if (deferUiRenderDuringPointerActivation("widgets", renderWidgets)) return;
   const appRunnerInputFocus = captureAppRunnerInputFocus();
+  for (const root of featureWidgetRoots()) captureScopedScrollContinuity(root);
+  restoreFocusedWidgetsForRender();
   captureScopedScrollContinuity(elements.widgetArea);
   elements.widgetArea.replaceChildren();
   const releaseOutput = renderReleaseNpmOutputWidget();
-  if (releaseOutput) elements.widgetArea.append(releaseOutput);
+  if (releaseOutput) appendFeatureWidget(releaseOutput, "release");
   const releaseLog = renderReleaseNpmLogWidget();
-  if (releaseLog) elements.widgetArea.append(releaseLog);
+  if (releaseLog) appendFeatureWidget(releaseLog, "release");
   const releaseAurOutput = renderReleaseAurOutputWidget();
-  if (releaseAurOutput) elements.widgetArea.append(releaseAurOutput);
+  if (releaseAurOutput) appendFeatureWidget(releaseAurOutput, "release");
   const releaseAurLog = renderReleaseAurLogWidget();
-  if (releaseAurLog) elements.widgetArea.append(releaseAurLog);
+  if (releaseAurLog) appendFeatureWidget(releaseAurLog, "release");
   const aurReviewWidget = renderAurReviewWidget();
-  if (aurReviewWidget) elements.widgetArea.append(aurReviewWidget);
+  if (aurReviewWidget) appendFeatureWidget(aurReviewWidget, "release");
   if (!workflowOverlayIsMinimized()) {
     const workflowInspectorWidget = renderWorkflowInspectorWidget();
     const workflowSubprocessWidget = renderWorkflowSubprocessWidget();
     attachWorkflowOverlayCloseButton(workflowInspectorWidget || workflowSubprocessWidget);
-    if (workflowInspectorWidget) elements.widgetArea.append(workflowInspectorWidget);
-    if (workflowSubprocessWidget) elements.widgetArea.append(workflowSubprocessWidget);
+    if (workflowInspectorWidget) appendFeatureWidget(workflowInspectorWidget, "progress");
+    if (workflowSubprocessWidget) appendFeatureWidget(workflowSubprocessWidget, "progress");
   }
   renderWorkflowOverlayControls();
   const appRunnerWidget = renderAppRunnerWidget();
-  if (appRunnerWidget) elements.widgetArea.append(appRunnerWidget);
+  if (appRunnerWidget) appendFeatureWidget(appRunnerWidget, "runners");
   const subagentWidget = renderSubagentOverlayWidgetSafely();
-  if (subagentWidget) elements.widgetArea.append(subagentWidget);
+  if (subagentWidget) appendFeatureWidget(subagentWidget, "subagents");
   const btwWidget = renderBtwOutputWidget();
-  if (btwWidget) elements.widgetArea.append(btwWidget);
+  if (btwWidget) appendFeatureWidget(btwWidget, "conversations");
 
   for (const [key, value] of widgets) {
     // pi-subagents publishes this machine-readable status for native TUI
@@ -32526,15 +32593,16 @@ function renderWidgets() {
     if (key === "pi-remote-webui") continue;
     const specialized = key === "todo-progress" && isOptionalFeatureEnabled("todoProgressWidget") ? renderTodoProgressWidget(key, lines) : null;
     if (specialized) {
-      elements.widgetArea.append(specialized);
+      appendFeatureWidget(specialized, "progress");
       continue;
     }
 
     const node = make("div", "widget");
     const cleanLines = lines.map(stripAnsi);
     node.textContent = `${key}\n${cleanLines.join("\n")}`;
-    elements.widgetArea.append(node);
+    appendFeatureWidget(node, "extensions");
   }
+  syncFocusedWidgetPlacement();
   restoreAppRunnerInputFocus(appRunnerInputFocus);
   if (mobilePhoneExperienceInstalled && isMobileShellV2Active()) renderMobilePhoneExperience();
 }
@@ -49547,6 +49615,7 @@ elements.gitWorkflowButton.addEventListener("click", () => {
 });
 const publishMenuContainer = elements.publishButton.parentElement;
 elements.publishButton.addEventListener("click", () => {
+  if (focusedShell?.active) { setComposerActionsOpen(false); navigateFocusedShell("project", "release"); return; }
   clearComposerMenuDismissal(elements.publishButton.parentElement);
   setNativeCommandMenuOpen(false);
   setAppRunnerMenuOpen(false);
@@ -49613,7 +49682,8 @@ elements.appRunnerMenuButton?.addEventListener("click", async () => {
   try {
     await refreshAppRunners(tabContext);
     if (!isCurrentTabContext(tabContext)) return;
-    if (appRunnerMenuCanOpen()) setAppRunnerMenuOpen(true);
+    if (focusedShell?.active) { setComposerActionsOpen(false); navigateFocusedShell("project", "runners"); }
+    else if (appRunnerMenuCanOpen()) setAppRunnerMenuOpen(true);
     else if (!appRunnerIsRunning(activeAppRunnerData().activeRun)) openAppRunnerInfoDialog();
   } catch (error) {
     if (isCurrentTabContext(tabContext)) addEvent(error.message || String(error), "error");

@@ -119,7 +119,7 @@ assert.match(renderGitWorkflow, /captureGitWorkflowInputFocus\(\)[\s\S]*deferUiR
 
 assert.match(captureAppRunnerInput, /activeTabContext\(\)[\s\S]*selectionDirection:[\s\S]*scrollTop:[\s\S]*scrollLeft:/, "app-runner input capture must include its tab context and complete text-control state");
 assert.match(restoreAppRunnerInput, /isCurrentTabContext\(state\.context\) \|\| state\.source\?\.isConnected/, "app-runner input restore must reject stale tab contexts and connected sources");
-assert.match(restoreAppRunnerInput, /isMeaningfulConnectedFocus\(document\.activeElement\)[\s\S]*elements\.widgetArea\.querySelectorAll\("\.app-runner-stdin-input"\)[\s\S]*candidate\.dataset\.runId === state\.runId/, "app-runner input restore must stay inside the widget root and match runner identity");
+assert.match(restoreAppRunnerInput, /isMeaningfulConnectedFocus\(document\.activeElement\)[\s\S]*featureWidgetElements\("\.app-runner-stdin-input"\)[\s\S]*candidate\.dataset\.runId === state\.runId/, "app-runner input restore must stay inside canonical feature widget roots and match runner identity");
 assert.match(captureGitInput, /activeTabContext\(\)[\s\S]*selectionDirection:[\s\S]*scrollTop:[\s\S]*scrollLeft:/, "Guided Git input capture must include its context and complete text-control state");
 assert.match(restoreGitInput, /state\.tabId !== activeTabId \|\| state\.runId !== gitWorkflow\?\.runId \|\| !isCurrentTabContext\(state\.context\) \|\| state\.source\?\.isConnected/, "Guided Git input restore must require the exact tab, run, and current context");
 

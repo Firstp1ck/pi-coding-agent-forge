@@ -54,7 +54,7 @@ test('Activity topics preserve queue controls and Events filter through navigati
 });
 
 
-test('runner input and drafts survive destination changes and only explicit Stop ends the process', async ({ page, ownership }) => {
+test('runner input and drafts survive destination changes and only explicit Stop ends the process', async ({ page, ownership }, testInfo) => {
   await writeFile(join(ownership.tabs[0].cwd, 'runner-test.sh'), '#!/usr/bin/env bash\nprintf "runner-ready\\n"\nwhile IFS= read -r line; do printf "echo:%s\\n" "$line"; done\n');
   await page.reload();
   await expect(page.locator('#modelSelect')).not.toBeEmpty();
@@ -68,11 +68,24 @@ test('runner input and drafts survive destination changes and only explicit Stop
   await input.press('Enter');
   await expect(widget).toContainText('echo:submitted-line');
   await input.fill('keep stdin draft');
+  await expect(page.locator('[data-feature-host="runners"] .app-runner-widget')).toBeVisible();
+  await expect(page.locator('#widgetArea .app-runner-widget')).toHaveCount(0);
+  await expect(page.locator('#appRunnerInfoButton')).toHaveCSS('opacity', '1');
+  await page.locator('#appRunnerInfoButton').click();
+  await expect(page.locator('#appRunnerInfoDialog')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(input).toHaveValue('keep stdin draft');
+  await page.screenshot({ path: testInfo.outputPath('runner-inspector.png') });
   const rail = page.getByRole('navigation', { name: 'Workspace destinations' });
   await rail.getByRole('button', { name: 'Settings', exact: true }).click();
   const hiddenRun = await ownership.api(`/api/app-runners?tab=${encodeURIComponent(ownership.tabs[0].id)}`);
   expect(hiddenRun.activeRun.status).toBe('running');
-  await rail.getByRole('button', { name: 'Conversation', exact: true }).click();
+  await rail.getByRole('button', { name: 'Project', exact: true }).click();
+  await page.getByRole('tab', { name: 'Runners', exact: true }).click();
+  await expect(input).toHaveValue('keep stdin draft');
+  await rail.getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.locator('#desktopShellSelect').selectOption('classic');
+  await expect(page.locator('#widgetArea .app-runner-widget')).toBeVisible();
   await expect(input).toHaveValue('keep stdin draft');
   await widget.getByRole('button', { name: 'Stop', exact: true }).click();
   await expect(widget.getByRole('button', { name: 'Stop', exact: true })).toHaveCount(0);

@@ -62,3 +62,16 @@ html[data-desktop-shell="focused"] #focusedWorkspace { height: var(--visual-view
 #focusedWorkspace .focused-artifacts-host .document-artifact-semantic { min-width: 0; max-width: 100%; }
 #focusedWorkspace .focused-artifacts-host .document-artifact-thumbnail span { white-space: nowrap; }
 #focusedWorkspace .focused-artifacts-host .document-artifact-toolbar button { min-height: 1.75rem; padding: .3rem .45rem; font-size: var(--text-xs); }
+
+#focusedWorkspace .focused-feature-host { min-width: 0; padding: .6rem; }
+#focusedWorkspace .focused-feature-controls { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; margin-bottom: .6rem; }
+#focusedWorkspace .focused-feature-controls .composer-publish-menu-panel { display: flex; position: static; flex: 1 1 100%; flex-direction: column; min-width: 0; max-width: 100%; width: 100%; max-height: none; box-shadow: none; border: 0; padding: 0; background: transparent; transform: none; }
+#focusedWorkspace .focused-feature-controls .composer-publish-menu-item { min-width: 0; width: 100%; white-space: normal; }
+#focusedWorkspace .focused-feature-widgets { min-width: 0; }
+#focusedWorkspace .focused-feature-widgets > * { min-width: 0; max-width: 100%; }
+#focusedWorkspace .focused-feature-widgets .release-npm-output-details { min-width: 0; }
+#focusedWorkspace .focused-feature-empty { font-size: var(--text-xs); line-height: 1.5; }
+
+#focusedWorkspace .focused-feature-controls .composer-app-runner-info-button { position: static; opacity: 1; pointer-events: auto; transform: none; }
+#focusedWorkspace .focused-feature-widgets .app-runner-stdin-form { display: grid; grid-template-columns: 1fr auto; }
+#focusedWorkspace .focused-feature-widgets .app-runner-stdin-input { grid-column: 1 / -1; width: 100%; }
