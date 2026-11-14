@@ -439,7 +439,7 @@ The parent validates actual browser measurements and coverage before accepting W
 
 ### Current contract summary
 
-The reviewed plan, approved mock reference, source inventory and browser/layout baselines are integrated. The inventory's ten tests, one parent browser integration case and all thirteen layout cases pass. Four layout cases deliberately characterize existing defects; they are not product acceptance passes. W0-D is collecting the remaining populated-capability evidence. Production code is unchanged. Classic remains the sole current desktop presentation; shell implementation is gated behind W0 acceptance. No implementation reviews have run. The complete overhaul remains incomplete.
+The reviewed plan, approved mock reference, source inventory and all four baseline workstreams are integrated. Parent checks passed for all ten inventory tests, one original browser integration case, thirteen layout cases and twenty capability cases. Known-defect and partial-fixture cases retain those statuses; they are not product acceptance passes. Production code is unchanged. Classic remains the sole current desktop presentation; shell implementation is gated behind W0 review acceptance. The complete overhaul remains incomplete.
 
 
 ### W0 baseline check and BUG-001
@@ -520,3 +520,18 @@ Integrated worker `6ab2e562e07d73e0cbbf26de485dbc4355681b97` as `1ce53e75` after
 | BUG-002, tablet-v2 attachment clipping | Accepted as corroboration of the existing finding. Initial geometry remains clipped even though Playwright can scroll the layout sideways to complete a trial click. Keep the original W3 assignment. |
 
 The supplement's exact defect assertions are historical baseline characterizations. W3 adds positive corrected-behavior regression checks; it must not keep asserting the defect as a release gate. The frozen source-only capture commands are not intended to run unchanged after production extraction. True browser zoom and native keyboards remain explicitly unmeasured. W7 must report their verification status separately from equivalent viewport reflow tests.
+
+### W0-D integration and evidence limits
+
+Integrated worker `c0b13789da2ffdd391dc39e49c40e0409621b3d8` as `67bc04b8` after inspecting its complete four-file diff, fixture boundaries and handoff. The parent copied all 38 screenshots/raw artifacts and inspected the agent gate, phone approval recovery and long-transcript screenshots. This supplements the original crowding/performance reference; it does not alter its counts or budgets.
+
+The twenty cases cover real resource-profile writes at session/model/global scopes, three model-selector paths, representative Guided Git/stats/agent/gate projections, exact background-approval response targets, common phone actions, 200-message reading continuity and a 120-file tree. Model/command catalogs and companion events are explicitly simulated. The existing fake process acknowledges a model change but returns its fixed model afterward, so the three model cases remain partial. All fake processes also share `fake-session`; aggregate agent rows do not prove agent-session isolation. W2 must add opt-in fixture behavior for retained model state and distinct session identities before claiming these ownership contracts pass. Neither limitation blocks pure W1 extraction, but both remain open verification work.
+
+| Finding | Parent disposition and required follow-through |
+| --- | --- |
+| CAP-001 → BUG-003, undiscovered background approval | Accepted. Server `attachRpcToTab` emits only to that tab's SSE clients; browser `syncTabPolling` stops when no known tab is working/blocked. Parent verified these source paths and the exact-target characterization. W2 must provide bounded background attention reconciliation without replacing the active-tab stream or exposing another tab's dialog over the current conversation. Its regression test must discover a blocker from an initially idle client without manual reload. |
+| CAP-002 → BUG-004, phone notification overlap | Accepted. Parent screenshot inspection confirms recovery toasts cover bottom navigation; the recorded hit test identifies the toast at the Sessions target. W3 must place notices outside mandatory navigation/composer hit areas, including stacked notices. Existing top Sessions access is a workaround, not corrected behavior. |
+
+Installed companion/provider combinations and native devices remain unverified. W7 records those limits independently from fixture-based parity. The background-approval recovery counts describe observed workarounds, not acceptable focused-shell targets. Preserve the source-tab draft and exact request/tab response checks when adding positive discovery coverage.
+
+Parent verification: all twenty supplemental capability tests passed in 46.7 seconds on the integrated branch, without overwriting the committed reference. Fourteen scenarios are verified within the documented simulation boundary, three model paths remain partial, and three approval paths characterize the known discovery defect. Log: `/tmp/webui-overhaul-w0-d-integration.log`. Round 1 now reviews the combined W0 evidence and its readiness for W1 with two independent Sol runs. No product implementation acceptance is implied.
