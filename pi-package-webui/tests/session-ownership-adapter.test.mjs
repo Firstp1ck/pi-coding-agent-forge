@@ -2,12 +2,13 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { test } from 'node:test';
+import { createExtensionRequestStore } from '../public/session-extension-requests.mjs';
 import { createSessionContext } from '../public/session-context.mjs';
 import { createSessionComposerStore } from '../public/session-composer-store.mjs';
 
 const source = readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');
 const names = ['activeTabContext', 'isCurrentTabContext', 'reconcileReplacedSession',
-  'observeSessionState', 'invalidateActiveSession', 'api', 'refreshState'];
+  'observeSessionState', 'invalidateActiveSession', 'retireSessionDialogs', 'api', 'refreshState'];
 const functions = names.map(name => {
   const start = source.search(new RegExp(`^(?:async )?function ${name}\\(`, 'm'));
   assert.ok(start >= 0, name);
@@ -15,10 +16,14 @@ const functions = names.map(name => {
 }).join('\n');
 
 function fixture() {
-  const context = vm.createContext({ assert, createSessionContext, createSessionComposerStore });
+  const context = vm.createContext({ assert, createSessionContext, createSessionComposerStore, createExtensionRequestStore });
   vm.runInContext(`
 const sessionContext = createSessionContext();
 const composerStore = createSessionComposerStore();
+const extensionRequests = createExtensionRequestStore(), promptRoutingTabs = new Set();
+const guidedGitLaunchPermits = {clearTab(){}};
+let activeDialogCancel=null;
+const elements={dialog:{open:false}};
 let activeTabId = 'tab-a';
 sessionContext.activate(activeTabId);
 let activeTabGeneration = sessionContext.generation;

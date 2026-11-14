@@ -115,3 +115,20 @@ test("captures are detached values and public state is read-only and instance-lo
   assert.equal(other.observeSession("a", "session-a2").changed, false);
   assert.deepEqual(owner.capture(), { tabId: "a", generation: 1 });
 });
+
+test('session lifetime survives tab navigation but changes on explicit or observed replacement', () => {
+  const owner = createSessionContext();
+  owner.activate('a');
+  owner.observeSession('a', 'first');
+  const original = owner.captureLifetime();
+  owner.activate('b');
+  assert.equal(owner.isLifetimeCurrent(original), true);
+  owner.observeSession('a', 'second');
+  assert.equal(owner.isLifetimeCurrent(original), false);
+  const replacement = owner.captureLifetime('a');
+  owner.invalidate('a');
+  assert.equal(owner.isLifetimeCurrent(replacement), false);
+  assert.equal(owner.activeTabId, 'b');
+  assert.equal(owner.isLifetimeCurrent(null), false);
+  assert.equal(owner.isLifetimeCurrent(owner.captureLifetime(null)), false);
+});

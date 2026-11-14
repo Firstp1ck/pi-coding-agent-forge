@@ -5998,7 +5998,7 @@ function chooseWorkspaceReplacement(workspace) {
 function retireClosedWorkspaceTabContexts(closedIds) {
   const closed = new Set(Array.isArray(closedIds) ? closedIds.filter((id) => typeof id === "string" && id) : []);
   if (!closed.size) return;
-  tabs = tabs.filter((tab) => !closed.has(tab.id));
+  applyAuthoritativeTabSnapshot(tabs.filter((tab) => !closed.has(tab.id)));
   syncTabMetadata(tabs);
   for (const id of closed) {
     clearAttachments(id);
@@ -12367,6 +12367,9 @@ function isCurrentTabContext(context) {
 
 function reconcileReplacedSession(context) {
   activeTabGeneration = context.generation;
+  retireSessionDialogs(context.tabId);
+  promptRoutingTabs.delete(context.tabId);
+  guidedGitLaunchPermits.clearTab(context.tabId);
   clearRefreshTimers();
   cancelNormalStreamRenders();
   resetStreamBubble();
@@ -15884,8 +15887,15 @@ function syncTabMetadata(nextTabs = []) {
   pruneSkillUsageForKnownTabs(liveIds);
 }
 
+function applyAuthoritativeTabSnapshot(nextTabs) {
+  // A completed mutation is newer than every metadata request already in flight.
+  tabsRefreshSerial += 1;
+  tabs = nextTabs;
+}
+
 function applyTabMetadata(tab) {
   if (!tab?.id) return false;
+  tabsRefreshSerial += 1;
   const index = tabs.findIndex((item) => item.id === tab.id);
   if (index === -1) tabs.push(tab);
   else tabs[index] = { ...tabs[index], ...tab };
@@ -15906,7 +15916,7 @@ function applyResponseTab(response) {
 function syncResponseTabs(response) {
   const payload = response?.data || {};
   if (Array.isArray(payload.tabs)) {
-    tabs = payload.tabs;
+    applyAuthoritativeTabSnapshot(payload.tabs);
     syncTabMetadata(tabs);
   }
   const tab = response?.tab || payload.tab || null;
@@ -17910,7 +17920,7 @@ async function splitTerminalTab(tabId, { triggerButton = null } = {}) {
   if (triggerButton) triggerButton.disabled = true;
   try {
     const response = await api("/api/tabs", { method: "POST", body: { cwd: resolvedCwd }, scoped: false });
-    tabs = response.data?.tabs || tabs;
+    applyAuthoritativeTabSnapshot(response.data?.tabs || tabs);
     syncTabMetadata(tabs);
     const tab = response.data?.tab;
     if (tab?.id) {
@@ -17938,7 +17948,7 @@ async function createTerminalTab(cwd = currentDirectoryForNewTab(), { triggerBut
   for (const button of disabledButtons) button.disabled = true;
   try {
     const response = await api("/api/tabs", { method: "POST", body: { cwd: resolvedCwd }, scoped: false });
-    tabs = response.data?.tabs || tabs;
+    applyAuthoritativeTabSnapshot(response.data?.tabs || tabs);
     syncTabMetadata(tabs);
     const tab = response.data?.tab;
     if (tab?.id && customGroupId && terminalCustomGroups.has(customGroupId)) addTabsToTerminalCustomGroup(customGroupId, [tab.id]);
@@ -18043,7 +18053,7 @@ async function closeTerminalTabs(tabIds, { label = "selected terminal tabs", all
     if (closedActiveTab) sessionEvents.close();
     const response = await api("/api/tabs/close", { method: "POST", body: { ids: targetIds, allowEmpty }, scoped: false });
     const closedIds = response.data?.closedIds || targetIds;
-    tabs = response.data?.tabs || tabs.filter((item) => !closedIds.includes(item.id));
+    applyAuthoritativeTabSnapshot(response.data?.tabs || tabs.filter((item) => !closedIds.includes(item.id)));
     syncTabMetadata(tabs);
     for (const id of closedIds) {
       clearAttachments(id);
@@ -23633,7 +23643,7 @@ async function openWorktreeResponseTab(response, { branchName = "", action = "op
   if (!response.ok) throw new Error(response.error || `Failed to ${action} branch worktree`);
   const payload = response.data || {};
   if (Array.isArray(payload.tabs)) {
-    tabs = payload.tabs;
+    applyAuthoritativeTabSnapshot(payload.tabs);
     syncTabMetadata(tabs);
   }
   if (payload.tab) applyTabMetadata(payload.tab);
@@ -25065,7 +25075,7 @@ async function changeActiveTabCwd() {
     return;
   }
 
-  tabs = response.data?.tabs || tabs;
+  applyAuthoritativeTabSnapshot(response.data?.tabs || tabs);
   syncTabMetadata(tabs);
   const changedTabId = response.data?.tab?.id || tab.id;
   const changedCwd = response.data?.tab?.cwd || cwd;
@@ -34698,7 +34708,7 @@ async function loadGitWorkflowBranchName({ requireFresh = false, retries = 0, ru
 
 function syncGitWorkflowWorktreeTabs(result) {
   if (Array.isArray(result?.tabs)) {
-    tabs = result.tabs;
+    applyAuthoritativeTabSnapshot(result.tabs);
     syncTabMetadata(tabs);
   }
   if (result?.tab) applyTabMetadata(result.tab);
@@ -48217,6 +48227,7 @@ async function sendPrompt(kind = "prompt", explicitMessage, { targetTabId = acti
   if (!targetTabId) return;
   if (voiceConversationActiveFor(targetTabId)) voiceConversation.handleUserActivity();
   const tabContext = activeTabContext(targetTabId);
+  const lifetime = sessionContext.captureLifetime(targetTabId);
   const attachments = usesPromptInput ? [...attachmentsForTab(targetTabId)] : [];
   const unavailableAttachments = attachments.filter((attachment) => attachment.requiresReselect);
   if (unavailableAttachments.length) {
@@ -48226,6 +48237,7 @@ async function sendPrompt(kind = "prompt", explicitMessage, { targetTabId = acti
   }
   if (!originalMessage && attachments.length === 0) return;
   if (kind === "prompt" && attachments.length === 0 && await handleNativeSlashSelectorCommand(originalMessage, { usesPromptInput })) return;
+  if (!sessionContext.isLifetimeCurrent(lifetime)) return;
   const userBash = kind === "prompt" && attachments.length === 0 ? parseUserBashInput(originalMessage) : null;
   if (userBash) {
     await sendUserBashCommand(userBash, { usesPromptInput, targetTabId });
@@ -48271,6 +48283,7 @@ async function sendPrompt(kind = "prompt", explicitMessage, { targetTabId = acti
   let dispatchedRequest = null;
   try {
     const prepared = attachments.length ? await prepareAttachmentsForPrompt(attachments, targetTabId) : { images: [], uploadedFiles: [], inlineImageIds: new Set() };
+    if (!sessionContext.isLifetimeCurrent(lifetime)) return;
     message = composeMessageWithAttachments(originalMessage, prepared.uploadedFiles, prepared.inlineImageIds);
     // Dispatch against the captured target tab, never the tab that happened
     // to become active while attachments/requests were resolving.
@@ -48299,6 +48312,7 @@ async function sendPrompt(kind = "prompt", explicitMessage, { targetTabId = acti
       dispatchedRequest = { kind, body, tabId: targetTabId, inputMessage };
       response = await api("/api/prompt", { method: "POST", body, tabId: targetTabId });
     }
+    if (!sessionContext.isLifetimeCurrent(lifetime)) return;
     applyResponseTab(response);
     // A successful RPC response ends prompt-routing ownership even when an
     // extension command handled the input without starting an agent turn.
@@ -48321,7 +48335,11 @@ async function sendPrompt(kind = "prompt", explicitMessage, { targetTabId = acti
     if (targetStillActive && response?.command === "native_slash_command") {
       applyNativeSlashCommandEffects(response, message, tabContext);
     }
-    if (usesPromptInput) clearAttachments(targetTabId);
+    if (usesPromptInput) {
+      for (const attachment of attachments) {
+        if (attachmentsForTab(targetTabId).includes(attachment)) removeAttachment(attachment.id, targetTabId);
+      }
+    }
     persistMobileContinuityState();
     if (targetStillActive) {
       hideCommandSuggestions();
@@ -48330,6 +48348,10 @@ async function sendPrompt(kind = "prompt", explicitMessage, { targetTabId = acti
       scheduleRefreshTabs(300);
     }
   } catch (error) {
+    if (!sessionContext.isLifetimeCurrent(lifetime)) {
+      if (throwOnError) throw error;
+      return;
+    }
     if (guidedGitPermitGranted) guidedGitLaunchPermits.clearTab(targetTabId);
     restorePromptInputAfterRoutingError(inputMessage, { usesPromptInput, targetTabId, tabContext });
     if (dispatchedRequest?.kind === "prompt" && dispatchedRequest.body?.requestId && error?.backendOffline === true && isMobileShellV2Active()) {
@@ -48349,6 +48371,16 @@ async function sendPrompt(kind = "prompt", explicitMessage, { targetTabId = acti
       addTransientMessage({ role: "error", title: message.startsWith("/") ? message.split(/\s+/, 1)[0] : "error", content: error.message, level: "error" });
     }
     if (throwOnError) throw error;
+  }
+}
+
+function retireSessionDialogs(tabId) {
+  const requests = [extensionRequests.active, ...extensionRequests.pending()]
+    .filter((request) => request?.tabId === tabId);
+  const { activeRemoved } = extensionRequests.remove(tabId, requests.map((request) => request.id));
+  if (activeRemoved) {
+    activeDialogCancel = null;
+    if (elements.dialog.open) elements.dialog.close();
   }
 }
 
@@ -48497,18 +48529,20 @@ function handleExtensionUiRequest(request) {
   }
 }
 
-async function sendDialogResponse(payload) {
+async function sendDialogResponse(payload, request = extensionRequests.active, lifetime = sessionContext.captureLifetime(payload.tabId || activeTabId)) {
+  if (!request || extensionRequests.active !== request || !sessionContext.isLifetimeCurrent(lifetime)) return;
   const { tabId = activeTabId, ...body } = payload;
   const tabContext = activeTabContext(tabId);
   const responseId = String(body.id || "");
   try {
     const response = await api("/api/extension-ui-response", { method: "POST", body, tabId });
+    if (extensionRequests.active !== request || !sessionContext.isLifetimeCurrent(lifetime)) return;
     if (!applyResponseTab(response) && decrementTabPendingBlockerCount(tabId)) renderTabs();
   } catch (error) {
     if (isCurrentTabContext(tabContext)) addEvent(error.message, "error");
   } finally {
     if (!isCurrentTabContext(tabContext)) return;
-    if (responseId && extensionRequests.active && String(extensionRequests.active.id || "") !== responseId) return;
+    if (extensionRequests.active !== request || !sessionContext.isLifetimeCurrent(lifetime)) return;
     if (elements.dialog.open) elements.dialog.close();
     extensionRequests.remove(tabId, [responseId || extensionRequests.active?.id || ""]);
     activeDialogCancel = null;
@@ -48529,10 +48563,10 @@ function cancelActiveExtensionDialog(event) {
   return activeDialogCancel();
 }
 
-function createDialogResponder(sendResponse) {
+function createDialogResponder(sendResponse, isCurrent = () => true) {
   let responseSent = false;
   return (response, onAccept) => {
-    if (responseSent) return false;
+    if (responseSent || !isCurrent()) return false;
     responseSent = true;
     onAccept?.();
     sendResponse(response);
@@ -48746,9 +48780,10 @@ function showNextDialog() {
   elements.dialogBody.replaceChildren();
   elements.dialogActions.replaceChildren();
 
+  const requestLifetime = sessionContext.captureLifetime(request.tabId);
   const respondToDialog = createDialogResponder((response) => {
-    sendDialogResponse({ type: "extension_ui_response", id: request.id, tabId: request.tabId, ...response });
-  });
+    sendDialogResponse({ type: "extension_ui_response", id: request.id, tabId: request.tabId, ...response }, request, requestLifetime);
+  }, () => extensionRequests.active === request && sessionContext.isLifetimeCurrent(requestLifetime));
   const cancel = () => respondToDialog({ cancelled: true });
   activeDialogCancel = cancel;
 

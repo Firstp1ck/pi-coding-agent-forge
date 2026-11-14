@@ -1151,7 +1151,7 @@ assert.match(app, /function hasQueuedDialogRequest\(id, tabId = activeTabId\)/, 
 assert.match(app, /if \(request\.replayed\) addEvent\(`recovered pending \$\{request\.method\} request`, "warn"\)/, "frontend should surface replayed extension UI blockers");
 assert.match(app, /case "webui_extension_ui_cancelled":/, "frontend should close dialogs cancelled by backend abort handling");
 assert.match(app, /case "webui_extension_ui_resolved":[\s\S]*?removeQueuedDialogRequests\(\[event\.id\], event\.tabId \|\| activeTabId\)/, "frontend should close dialogs resolved by another connected browser");
-assert.match(app, /if \(responseId && extensionRequests\.active && String\(extensionRequests\.active\.id \|\| ""\) !== responseId\) return;/, "dialog response cleanup should not close the next queued dialog after a resolve-event race");
+assert.match(app, /if \(extensionRequests\.active !== request \|\| !sessionContext\.isLifetimeCurrent\(lifetime\)\) return;/, "dialog response cleanup should not close the next queued dialog after a resolve-event race");
 assert.match(app, /if \(runIndicatorIsActive\(\)\) \{\s*setRunIndicatorActivity\("Continuing after your response…"\);[\s\S]*?scheduleRefreshState\(120, tabContext\);\s*\}/, "extension UI responses should promptly reconcile canonical state so background release commands cannot leave a stale running indicator");
 assert.match(app, /function parseTodoProgressWidget\(lines\)/, "todo-progress widgets should be parsed from extension widget lines");
 assert.ok(app.includes("const goalLine = cleanLines.find((line) => /^Goal\\s*[:：]/i.test(line));"), "todo-progress parser should preserve an optional Goal line from extension widget lines");
