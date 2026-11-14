@@ -440,3 +440,17 @@ The parent validates actual browser measurements and coverage before accepting W
 ### Current contract summary
 
 Only the reviewed plan and approved mock reference are present. Production code is unchanged. Classic remains the sole current desktop presentation; all new shell work is gated behind W0/W1 and the documented opt-in migration. No reviews of implementation have run. The complete overhaul remains incomplete.
+
+
+### W0 baseline check and BUG-001
+
+| Bug | Severity | Module | Status | Summary |
+| --- | --- | --- | --- | --- |
+| BUG-001 | Minor | Optional-feature static check | FIXED | Stale exact companion-version assertion failed on unchanged source |
+
+**Spec reference:** W0 reproducible baseline; no production behavior change.
+**Found during:** `npm --prefix pi-package-webui run check` on the integration worktree, Node v22.23.5, Linux. Full output: `/tmp/webui-overhaul-w0-node-check.log`.
+
+Reproduction: on source revision `06351edae0d87829dfa8c747d31a061825568b0e`, run `node pi-package-webui/tests/feature-system-prompt-optional-feature-static.test.mjs`. Reproduced in both the new worktree and original checkout without changing the original. Expected: package identity/version assertion agrees with the checked-in companion manifest. Actual: `AssertionError: '0.1.7' !== '0.1.6'`, line 12. The companion manifest was already bumped to 0.1.7; the test retained its previous exact version.
+
+Parent accepted this as a pre-existing test-maintenance defect and updated only the expected literal to 0.1.7. All integration, enablement, availability and catalog assertions remain unchanged. The focused test now exits 0; `git diff --check` exits 0. The full unchanged baseline ran all 213 files: 212 passed, this one failed. A redundant full rerun is deferred to the next integrated wave because the only fix changes that test's version literal. This is not described as an all-green full-suite run. No production code has changed.
