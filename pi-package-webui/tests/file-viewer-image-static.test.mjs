@@ -64,6 +64,6 @@ assert.match(technical, /supported raster images[\s\S]*2 MiB/i, "the advanced re
 assert.match(development, /kind: "image"[\s\S]*base64/i, "the contributor guide should document the image response contract");
 assert.match(serviceWorker, /const CACHE_NAME = "pi-webui-pwa-v160"/, "changed viewer assets should advance the PWA cache identity");
 assert.match(html, /styles\.css\?v=155/, "changed image styles should advance the stylesheet revision");
-assert.match(html, /app\.js\?v=188/, "changed image rendering should advance the app revision");
+assert.match(html, /app\.js\?v=189/, "changed image rendering should advance the app revision");
 
 console.log("file viewer image static tests passed");

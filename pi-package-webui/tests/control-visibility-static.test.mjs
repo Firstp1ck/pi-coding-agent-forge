@@ -352,6 +352,6 @@ assert.match(
   "browser asset changes should advance the PWA cache identity",
 );
 assert.match(html, /styles\.css\?v=155/, "visibility styles should advance the stylesheet query revision");
-assert.match(html, /data-app-src="\/app\.js\?v=188"/, "visibility behavior should advance the app query revision");
+assert.match(html, /data-app-src="\/app\.js\?v=189"/, "visibility behavior should advance the app query revision");
 
 console.log("control-visibility-static.test.mjs passed");

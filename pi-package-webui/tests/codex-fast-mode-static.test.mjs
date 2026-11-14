@@ -57,6 +57,6 @@ assert.match(development, /### Codex subscription Fast mode[\s\S]*?service_tier:
 assert.match(technical, /Normal \/ Fast \/ Ultrafast[\s\S]*?Pro \$500/, "technical reference should document the third mode and subscription eligibility");
 // Intent preserved: browser-asset changes must advance the coherent cache tuple.
 assert.match(serviceWorker, /pi-webui-pwa-v160[\s\S]*?"\/codex-speed-mode\.mjs"/, "PWA should refresh and cache the shared mode helper");
-assert.match(html, /data-app-src="\/app\.js\?v=188"/, "browser module URL should be cache-busted for speed-mode wiring");
+assert.match(html, /data-app-src="\/app\.js\?v=189"/, "browser module URL should be cache-busted for speed-mode wiring");
 
 console.log("codex-fast-mode-static.test.mjs passed");

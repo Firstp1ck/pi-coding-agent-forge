@@ -273,6 +273,6 @@ assert.match(
 
 assert.match(serviceWorker, /const CACHE_NAME = "pi-webui-pwa-v160"/, "changed browser assets should advance the PWA cache identity");
 assert.match(html, /styles\.css\?v=155/, "the page should request the updated layout stylesheet revision");
-assert.match(html, /data-app-src="\/app\.js\?v=188"/, "the boot loader should request the updated app module revision");
+assert.match(html, /data-app-src="\/app\.js\?v=189"/, "the boot loader should request the updated app module revision");
 
 console.log("persistent-ui-layout-static.test.mjs passed");
