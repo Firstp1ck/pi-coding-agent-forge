@@ -5,9 +5,9 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
-import { buildInventory, scanDomConstruction, scanMarkup, scanPersistence, serializeInventory } from "../scripts/overhaul-inventory.mjs";
+import { buildInventory, scanDomConstruction, scanMarkup, scanPersistence, serializeInventory } from "../overhaul-inventory.mjs";
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const script = path.join(root, "pi-package-webui/scripts/overhaul-inventory.mjs");
 const inventory = await buildInventory(root);
 const evidencePath = path.join(root, "pi-package-webui/docs/overhaul/capability-inventory.json");

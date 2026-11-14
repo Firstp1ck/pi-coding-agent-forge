@@ -17,7 +17,7 @@ From the repository root, with Node 22.19 or later:
 ```bash
 node pi-package-webui/scripts/overhaul-inventory.mjs
 node pi-package-webui/scripts/overhaul-inventory.mjs --check
-node --test pi-package-webui/tests/overhaul-inventory.test.mjs
+node --test pi-package-webui/scripts/tests/overhaul-inventory.test.mjs
 git diff --check
 ```
 
@@ -187,3 +187,5 @@ The focused inventory test exercises reconciliation, source/symbol identity stab
 After changing any scanned source or the canonical plan, regenerate JSON and review the changed classifications and paths. The scanner’s contracts must be updated deliberately when a named function moves, a catalog format changes or a plan family is added. The ledger is a reviewed human artifact; regeneration updates JSON only. Reconcile this ledger’s matrix/counts when evidence changes. Do not rename source IDs merely to make the inventory pass.
 
 W0-A does not run the full Node suite, browser tests, a server, performance checks, screenshots, security probes or live companion commands. W0-B owns rendered baseline evidence; the parent owns the unchanged Node suite, interface decisions, independent review and integrated W0 acceptance. No whole-wave completion, runtime parity, GUI improvement or rollout readiness is claimed.
+
+The inventory test lives under `scripts/tests/` because it needs repository-only evidence and the canonical plan. It is run explicitly during overhaul verification, outside the npm-shipped application test suite. Moving it here avoids publishing a test whose scanner and plan dependencies are absent from the package.
