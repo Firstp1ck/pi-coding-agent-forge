@@ -1,3 +1,4 @@
+import { createProjectGitToolsController, GIT_TOOLS_SECTIONS } from "./project-git-tools-controller.mjs";
 import { createProjectRunnersController, APP_RUNNER_CONTEXT_DEFAULT_LINES, APP_RUNNER_CONTEXT_MAX_LINES, normalizeAppRunnerContextLineCount } from "./project-runners-controller.mjs";
 import { createActivityEventsController, EVENT_DISPLAY_MODE_STORAGE_KEY, EVENT_FILTER_STORAGE_KEY } from "./activity-events-controller.mjs";
 import { createFocusedShellAdapter } from "./focused-shell-adapter.mjs";
@@ -1128,7 +1129,20 @@ const drawerSurfaceCoordinator = createSurfaceCoordinator({
 });
 let activeGitPrDialogResolve = null;
 let gitChangesState = { loading: false, pulling: false, fetching: false, error: "", errorCode: "", errorHint: "", message: "", pullResult: null, data: null, operation: null, lastFetch: null, tabId: null, mode: "changes", commit: null };
-let gitToolsState = { tabId: null, openSections: new Set(), cache: {}, busy: new Set(), notice: {} };
+let gitToolsDialogEpoch = 0;
+const projectGitTools = createProjectGitToolsController({
+  api,
+  captureTarget: captureGitToolsTarget,
+  isTargetCurrent: isCurrentGitToolsTarget,
+  confirm: appConfirmText,
+  addEvent,
+  onChange: renderGitChangesDialog,
+  onRefreshChanges: (target) => loadGitChangesDialog(target),
+  onRefreshFooter: (target) => requestGitFooterWebuiPayload(target, { force: true }),
+  onMessage(message, target) {
+    if (isCurrentGitToolsTarget(target)) gitChangesState = { ...gitChangesState, message };
+  },
+});
 let gitPanelState = {
   expandedCardKey: "",
   discovery: new Map(),
@@ -21966,6 +21980,7 @@ function renderGitChangesDialog() {
 }
 
 async function loadGitChangesDialog(tabContext = activeTabContext()) {
+  const target = captureGitToolsTarget(tabContext.tabId || activeTabId);
   const requestSerial = ++gitChangesRequestSerial;
   gitChangesUntrackedContentRequests.clear();
   if (gitChangesState.tabId !== (tabContext.tabId || activeTabId)) gitChangesCollapsedFiles.clear();
@@ -21976,7 +21991,7 @@ async function loadGitChangesDialog(tabContext = activeTabContext()) {
       api("/api/git-changes", { tabId: tabContext.tabId }),
       api("/api/git-operation", { tabId: tabContext.tabId }).catch(() => null),
     ]);
-    if (requestSerial !== gitChangesRequestSerial) return;
+    if (requestSerial !== gitChangesRequestSerial || !isCurrentGitToolsTarget(target)) return;
     if (!response.ok) throw new Error(response.error || "Failed to load git changes");
     gitChangesState = {
       ...gitChangesState,
@@ -21993,7 +22008,7 @@ async function loadGitChangesDialog(tabContext = activeTabContext()) {
       tabId: tabContext.tabId || activeTabId,
     };
   } catch (error) {
-    if (requestSerial !== gitChangesRequestSerial) return;
+    if (requestSerial !== gitChangesRequestSerial || !isCurrentGitToolsTarget(target)) return;
     gitChangesState = { ...gitChangesState, loading: false, error: error.message || String(error) };
   }
   renderGitChangesDialog();
@@ -22004,7 +22019,6 @@ function openGitChangesDialog(requestedTabId = activeTabId) {
   hideFooterTooltip();
   const tabId = typeof requestedTabId === "string" && requestedTabId ? requestedTabId : activeTabId;
   const tabContext = activeTabContext(tabId);
-  if (gitToolsState.tabId !== tabId) resetGitToolsState(tabId);
   gitChangesState = {
     ...gitChangesState,
     loading: true,
@@ -22024,6 +22038,7 @@ function openGitChangesDialog(requestedTabId = activeTabId) {
   };
   renderGitChangesDialog();
   if (!elements.gitChangesDialog.open) elements.gitChangesDialog.showModal();
+  resetGitToolsState(tabId);
   loadGitChangesDialog(tabContext).catch((error) => addEvent(error.message || String(error), "error"));
 }
 
@@ -22046,6 +22061,8 @@ async function loadGitCommitDialog(tabId, commit) {
 
 function openGitCommitDialog(tabId, commit) {
   if (!elements.gitChangesDialog || !tabId || !commit?.hash) return;
+  gitToolsDialogEpoch += 1;
+  projectGitTools.reset(null);
   hideFooterTooltip();
   gitChangesState = { ...gitChangesState, loading: true, pulling: false, fetching: false, error: "", message: "", data: null, operation: null, tabId, mode: "commit", commit };
   renderGitChangesDialog();
@@ -22105,6 +22122,8 @@ async function pullGitChangesDialog() {
 }
 
 function closeGitChangesDialog() {
+  gitToolsDialogEpoch += 1;
+  projectGitTools.reset(null);
   gitChangesRequestSerial += 1;
   gitChangesUntrackedContentRequests.clear();
   gitChangesState = { ...gitChangesState, loading: false, pulling: false, fetching: false };
@@ -22261,30 +22280,35 @@ function renderGitConflictPreview(preview) {
   return make("pre", "git-conflict-preview", text);
 }
 
-async function runGitOperationRequest(url, body, successLabel) {
-  const tabId = gitChangesState.tabId || activeTabId;
-  gitToolsState.busy.add("operation");
-  renderGitChangesDialog();
+async function runGitOperationRequest(url, body, successLabel, token = projectGitTools.capture()) {
+  if (!projectGitTools.isCurrent(token) || projectGitTools.getState().busy.has("operation")) return;
+  const target = captureGitToolsTarget();
+  projectGitTools.setBusy("operation", true, token);
   try {
-    const response = await api(url, { method: "POST", body, tabId });
+    const response = await api(url, { method: "POST", body, tabId: target.tabId });
+    if (!projectGitTools.isCurrent(token)) return;
     if (!response.ok) throw new Error([response.error, response.hint].filter(Boolean).join("\n") || "git operation failed");
-    gitToolsState.busy.delete("operation");
+    projectGitTools.setBusy("operation", false, token);
     addEvent(`${successLabel}.`, "success");
-    await loadGitChangesDialog({ tabId });
+    await loadGitChangesDialog(target);
+    if (!projectGitTools.isCurrent(token)) return;
     gitChangesState = { ...gitChangesState, message: `${successLabel}.` };
     renderGitChangesDialog();
-    requestGitFooterWebuiPayload(activeTabContext(tabId), { force: true });
+    requestGitFooterWebuiPayload(target, { force: true });
   } catch (error) {
-    gitToolsState.busy.delete("operation");
+    if (!projectGitTools.isCurrent(token)) return;
+    projectGitTools.setBusy("operation", false, token);
     gitChangesState = { ...gitChangesState, error: error.message || String(error) };
     renderGitChangesDialog();
   }
 }
 
 function renderGitOperationPanel(operation) {
+  const token = projectGitTools.capture();
+  const runOperation = (url, body, label) => runGitOperationRequest(url, body, label, token);
   const kind = operation?.operation;
   if (!kind) return null;
-  const busy = gitToolsState.busy.has("operation") || gitToolsState.busy.has("conflict-agent") || gitChangesState.loading || gitChangesState.pulling || gitChangesState.fetching;
+  const busy = projectGitTools.getState().busy.has("operation") || projectGitTools.getState().busy.has("conflict-agent") || gitChangesState.loading || gitChangesState.pulling || gitChangesState.fetching;
   const conflicts = operation.conflicts || [];
   const panel = make("section", "git-operation-panel");
   const header = make("div", "git-operation-header");
@@ -22302,7 +22326,7 @@ function renderGitOperationPanel(operation) {
       button.type = "button";
       button.disabled = busy;
       button.title = `git bisect ${verdict}`;
-      button.addEventListener("click", () => runGitOperationRequest("/api/git-operation/bisect", { verdict }, `Marked the current revision as ${verdict}`));
+      button.addEventListener("click", () => runOperation("/api/git-operation/bisect", { verdict }, `Marked the current revision as ${verdict}`));
       row.append(button);
     }
     const reset = make("button", "git-operation-button danger", "Reset bisect");
@@ -22311,7 +22335,7 @@ function renderGitOperationPanel(operation) {
     reset.title = "git bisect reset";
     reset.addEventListener("click", async () => {
       if (!(await appConfirmText(`Reset the bisect session in ${operation.root}?\n\nCommand: git bisect reset\nThis returns to the pre-bisect checkout.`, { affected: operation.root, confirmLabel: "Reset bisect" }))) return;
-      runGitOperationRequest("/api/git-operation/bisect", { verdict: "reset", confirmed: true }, "Reset the bisect session");
+      runOperation("/api/git-operation/bisect", { verdict: "reset", confirmed: true }, "Reset the bisect session");
     });
     row.append(reset);
     panel.append(row);
@@ -22332,7 +22356,7 @@ function renderGitOperationPanel(operation) {
         {
           label: "Mark resolved",
           title: `git add -- ${conflict.path}`,
-          onClick: () => runGitOperationRequest("/api/git-operation/stage-file", { path: conflict.path }, `Marked ${conflict.path} as resolved`),
+          onClick: () => runOperation("/api/git-operation/stage-file", { path: conflict.path }, `Marked ${conflict.path} as resolved`),
         },
       ]);
       if (actions) summary.append(actions);
@@ -22360,20 +22384,22 @@ function renderGitOperationPanel(operation) {
     resolveWithAgent.title = `Open a new Pi tab in ${operation.root} and send it the ${kind} conflict context`;
     resolveWithAgent.addEventListener("click", async () => {
       const sourceTabId = gitChangesState.tabId || activeTabId;
-      gitToolsState.busy.add("conflict-agent");
+      if (!projectGitTools.isCurrent(token)) return;
+      projectGitTools.setBusy("conflict-agent", true, token);
       renderGitChangesDialog();
       try {
         const response = await api("/api/git-operation/resolve-with-agent", { method: "POST", body: {}, tabId: sourceTabId });
+        if (!projectGitTools.isCurrent(token)) return;
         if (!response.ok) throw new Error(response.error || "Failed to open a conflict-resolution agent");
         closeGitChangesDialog();
         const targetTab = await switchToResponseTab(response);
         addEvent(`Opened ${targetTab?.title || "a new Pi tab"} and sent the ${kind} conflict context.`, "success");
       } catch (error) {
+        if (!projectGitTools.isCurrent(token)) return;
         gitChangesState = { ...gitChangesState, error: error.message || String(error) };
         renderGitChangesDialog();
       } finally {
-        gitToolsState.busy.delete("conflict-agent");
-        if (elements.gitChangesDialog?.open) renderGitChangesDialog();
+        projectGitTools.setBusy("conflict-agent", false, token);
       }
     });
     row.append(resolveWithAgent);
@@ -22383,7 +22409,7 @@ function renderGitOperationPanel(operation) {
   cont.type = "button";
   cont.disabled = busy || operation.canContinue !== true;
   cont.title = operation.canContinue ? operation.commands?.continue || "" : "Resolve and stage every conflicted file first.";
-  cont.addEventListener("click", () => runGitOperationRequest("/api/git-operation/continue", {}, `Continued the ${kind}`));
+  cont.addEventListener("click", () => runOperation("/api/git-operation/continue", {}, `Continued the ${kind}`));
   row.append(cont);
 
   if (operation.canSkip) {
@@ -22393,7 +22419,7 @@ function renderGitOperationPanel(operation) {
     skip.title = operation.commands?.skip || "";
     skip.addEventListener("click", async () => {
       if (!(await appConfirmText(`Skip the current ${kind} step?\n\nCommand: ${operation.commands?.skip || `git ${kind} --skip`}\nThe skipped commit is left out of the result.`, { affected: operation.root, confirmLabel: `Skip ${kind} step` }))) return;
-      runGitOperationRequest("/api/git-operation/skip", {}, `Skipped the current ${kind} step`);
+      runOperation("/api/git-operation/skip", {}, `Skipped the current ${kind} step`);
     });
     row.append(skip);
   }
@@ -22412,7 +22438,7 @@ function renderGitOperationPanel(operation) {
       "",
       "This discards the in-progress operation state and returns to the pre-operation HEAD.",
     ].join("\n"), { affected: operation.root, confirmLabel: `Abort ${kind}` }))) return;
-    runGitOperationRequest("/api/git-operation/abort", { confirmed: true }, `Aborted the ${kind}`);
+    runOperation("/api/git-operation/abort", { confirmed: true }, `Aborted the ${kind}`);
   });
   row.append(abort);
   panel.append(row);
@@ -22446,72 +22472,27 @@ function renderGitDivergedBar(data) {
 
 // ---- Git tools (stash, undo, worktrees, submodules, tags, signing) ----
 
-const GIT_TOOLS_SECTIONS = [
-  { key: "stash", title: "Stash", detail: "List, apply, pop, drop, or create stashes." },
-  { key: "undo", title: "Undo & recovery", detail: "Undo the last unpushed commit, amend its message, review recent HEAD history." },
-  { key: "worktrees", title: "Worktrees", detail: "Health, removal, and pruning of git worktrees." },
-  { key: "submodules", title: "Submodules", detail: "Status and recursive update." },
-  { key: "tags", title: "Tags", detail: "Recent tags and annotated tag creation." },
-  { key: "signing", title: "Signing", detail: "Commit signing configuration and diagnostics." },
-];
+function captureGitToolsTarget(tabId = gitChangesState.tabId || activeTabId) {
+  return { ...projectTargetFromContext(activeTabContext(tabId)), root: gitChangesState.data?.root || "", dialogEpoch: gitToolsDialogEpoch };
+}
 
-const GIT_TOOLS_ENDPOINTS = {
-  stash: "/api/git-stash",
-  undo: "/api/git-undo",
-  worktrees: "/api/git-worktrees",
-  submodules: "/api/git-submodules",
-  tags: "/api/git-tags",
-  signing: "/api/git-signing",
-};
+function isCurrentGitToolsTarget(target) {
+  return target?.dialogEpoch === gitToolsDialogEpoch && target.generation === activeTabGeneration
+    && sessionContext.isLifetimeCurrent(target.lifetime)
+    && tabs.some(tab => tab.id === target.tabId && (tab.cwd || "") === target.cwd);
+}
 
 function resetGitToolsState(tabId) {
-  gitToolsState = { tabId, openSections: new Set(), cache: {}, busy: new Set(), notice: {} };
+  gitToolsDialogEpoch += 1;
+  projectGitTools.reset(captureGitToolsTarget(tabId));
 }
 
-async function loadGitToolsSection(key, { force = false } = {}) {
-  const tabId = gitChangesState.tabId || activeTabId;
-  if (!force && gitToolsState.cache[key]) return;
-  if (gitToolsState.busy.has(`load:${key}`)) return;
-  gitToolsState.busy.add(`load:${key}`);
-  try {
-    const response = await api(GIT_TOOLS_ENDPOINTS[key], { tabId });
-    if (!response.ok) throw new Error(response.error || `Failed to load ${key}`);
-    gitToolsState.cache[key] = response.data;
-    if (key === "undo") {
-      const reflog = await api("/api/git-reflog", { tabId }).catch(() => null);
-      gitToolsState.cache.reflog = reflog?.ok ? reflog.data : null;
-    }
-    gitToolsState.notice[key] = "";
-  } catch (error) {
-    gitToolsState.notice[key] = error.message || String(error);
-  } finally {
-    gitToolsState.busy.delete(`load:${key}`);
-    renderGitChangesDialog();
-  }
+function loadGitToolsSection(key, options = {}) {
+  return projectGitTools.load(key, options);
 }
 
-async function runGitToolAction(sectionKey, { url, method = "POST", body, confirm, success, successMessage, refreshChanges = false }) {
-  const tabId = gitChangesState.tabId || activeTabId;
-  if (confirm && !(await appConfirmText(confirm, { affected: gitChangesState.data?.root || "the current repository", confirmLabel: success || "Continue" }))) return;
-  gitToolsState.busy.add(sectionKey);
-  renderGitChangesDialog();
-  try {
-    const response = await api(url, { method, body, tabId });
-    if (!response.ok) throw new Error([response.error, response.hint].filter(Boolean).join("\n") || "git action failed");
-    const finalMessage = (typeof successMessage === "function" ? successMessage(response) : "") || success;
-    gitToolsState.notice[sectionKey] = "";
-    gitToolsState.busy.delete(sectionKey);
-    addEvent(finalMessage, "success");
-    await loadGitToolsSection(sectionKey, { force: true });
-    if (refreshChanges) await loadGitChangesDialog({ tabId });
-    gitChangesState = { ...gitChangesState, message: finalMessage };
-    renderGitChangesDialog();
-    requestGitFooterWebuiPayload(activeTabContext(tabId), { force: true });
-  } catch (error) {
-    gitToolsState.busy.delete(sectionKey);
-    gitToolsState.notice[sectionKey] = error.message || String(error);
-    renderGitChangesDialog();
-  }
+function runGitToolAction(sectionKey, options, token = projectGitTools.capture()) {
+  return projectGitTools.run(sectionKey, options, token);
 }
 
 function gitToolsButton(label, { className = "", disabled = false, title = "" } = {}, handler) {
@@ -22519,13 +22500,17 @@ function gitToolsButton(label, { className = "", disabled = false, title = "" } 
   button.type = "button";
   button.disabled = disabled;
   if (title) button.title = title;
-  button.addEventListener("click", handler);
+  const token = projectGitTools.capture();
+  button.addEventListener("click", (event) => {
+    if (projectGitTools.isCurrent(token)) handler(event);
+  });
   return button;
 }
 
 // Apply/pop/drop always show the stash's --stat preview in the confirmation,
 // so no stash is modified sight-unseen.
-async function confirmGitStashActionWithPreview(stash, question) {
+async function confirmGitStashActionWithPreview(stash, question, token = projectGitTools.capture()) {
+  if (!projectGitTools.isCurrent(token)) return false;
   const tabId = gitChangesState.tabId || activeTabId;
   let statText = "";
   try {
@@ -22534,6 +22519,7 @@ async function confirmGitStashActionWithPreview(stash, question) {
   } catch {
     // Preview is best-effort; the confirmation still shows the stash subject.
   }
+  if (!projectGitTools.isCurrent(token)) return false;
   return appConfirmText([
     question,
     "",
@@ -22544,12 +22530,15 @@ async function confirmGitStashActionWithPreview(stash, question) {
 }
 
 function renderGitStashTools(body, data, busy) {
+  const token = projectGitTools.capture();
+  const runAction = (section, options) => runGitToolAction(section, options, token);
+  const confirmPreview = (stash, question) => confirmGitStashActionWithPreview(stash, question, token);
   const row = make("div", "git-operation-actions");
   row.append(
     gitToolsButton("Stash tracked changes", { disabled: busy, title: "git stash push" }, () =>
-      runGitToolAction("stash", { url: "/api/git-stash/save", body: {}, success: "Stashed tracked changes.", refreshChanges: true })),
+      runAction("stash", { url: "/api/git-stash/save", body: {}, success: "Stashed tracked changes.", refreshChanges: true })),
     gitToolsButton("Stash incl. untracked", { disabled: busy, title: "git stash push --include-untracked" }, () =>
-      runGitToolAction("stash", { url: "/api/git-stash/save", body: { includeUntracked: true }, success: "Stashed tracked and untracked changes.", refreshChanges: true })),
+      runAction("stash", { url: "/api/git-stash/save", body: { includeUntracked: true }, success: "Stashed tracked and untracked changes.", refreshChanges: true })),
   );
   body.append(row);
   const stashes = data.stashes || [];
@@ -22565,34 +22554,35 @@ function renderGitStashTools(body, data, busy) {
       {
         label: "Apply",
         title: `git stash apply ${stash.ref}`,
-        onClick: () => confirmGitStashActionWithPreview(stash, `Apply ${stash.ref} to the working tree?`).then((confirmed) => {
-          if (confirmed) runGitToolAction("stash", { url: "/api/git-stash/apply", body: { ref: stash.ref }, success: `Applied ${stash.ref}.`, refreshChanges: true });
+        onClick: () => confirmPreview(stash, `Apply ${stash.ref} to the working tree?`).then((confirmed) => {
+          if (confirmed) runAction("stash", { url: "/api/git-stash/apply", body: { ref: stash.ref }, success: `Applied ${stash.ref}.`, refreshChanges: true });
         }),
       },
       {
         label: "Pop",
         title: `git stash pop ${stash.ref}`,
-        onClick: () => confirmGitStashActionWithPreview(stash, `Pop ${stash.ref}? This applies the stash and removes the entry on success.`).then((confirmed) => {
-          if (confirmed) runGitToolAction("stash", { url: "/api/git-stash/pop", body: { ref: stash.ref }, success: `Popped ${stash.ref}.`, refreshChanges: true });
+        onClick: () => confirmPreview(stash, `Pop ${stash.ref}? This applies the stash and removes the entry on success.`).then((confirmed) => {
+          if (confirmed) runAction("stash", { url: "/api/git-stash/pop", body: { ref: stash.ref }, success: `Popped ${stash.ref}.`, refreshChanges: true });
         }),
       },
       {
         label: "Drop",
         className: "danger",
         title: `git stash drop ${stash.ref}`,
-        onClick: () => confirmGitStashActionWithPreview(stash, `Drop ${stash.ref}? This permanently deletes the stash entry.`).then((confirmed) => {
-          if (confirmed) runGitToolAction("stash", { url: "/api/git-stash/drop", body: { ref: stash.ref, confirmed: true }, success: `Dropped ${stash.ref}.` });
+        onClick: () => confirmPreview(stash, `Drop ${stash.ref}? This permanently deletes the stash entry.`).then((confirmed) => {
+          if (confirmed) runAction("stash", { url: "/api/git-stash/drop", body: { ref: stash.ref, confirmed: true }, success: `Dropped ${stash.ref}.` });
         }),
       },
     ]);
     if (actions) summary.append(actions);
     item.append(summary);
     item.addEventListener("toggle", async () => {
-      if (!item.open || item.dataset.previewLoaded) return;
+      if (!item.isConnected || !projectGitTools.isCurrent(token) || !item.open || item.dataset.previewLoaded) return;
       item.dataset.previewLoaded = "1";
       const placeholder = make("pre", "git-conflict-preview muted", "Loading stash preview…");
       item.append(placeholder);
       const preview = await api(`/api/git-stash/show?ref=${encodeURIComponent(stash.ref)}`, { tabId: gitChangesState.tabId || activeTabId }).catch(() => null);
+      if (!projectGitTools.isCurrent(token)) return;
       const text = preview?.ok ? [preview.data?.stat, preview.data?.patch].filter(Boolean).join("\n\n") : "Preview unavailable.";
       placeholder.textContent = text || "Empty stash preview.";
       placeholder.classList.toggle("muted", !preview?.ok);
@@ -22603,13 +22593,15 @@ function renderGitStashTools(body, data, busy) {
 }
 
 function renderGitUndoTools(body, data, busy) {
+  const token = projectGitTools.capture();
+  const runAction = (section, options) => runGitToolAction(section, options, token);
   const last = data.lastCommit;
   body.append(make("div", "git-tools-note", last ? `Last commit: ${last.hash} ${last.subject}` : "No commits yet."));
   const row = make("div", "git-operation-actions");
   row.append(gitToolsButton(
     "Undo last commit (keep changes)",
     { disabled: busy || !data.canUndoLastCommit, title: data.canUndoLastCommit ? "git reset --soft HEAD~1" : "Requires an unpushed commit with a parent and no operation in progress." },
-    () => runGitToolAction("undo", {
+    () => runAction("undo", {
       url: "/api/git-undo/last-commit",
       body: { confirmed: true },
       confirm: [
@@ -22633,8 +22625,8 @@ function renderGitUndoTools(body, data, busy) {
     { disabled: busy || !data.canAmendMessage, title: data.canAmendMessage ? "git commit --amend -m <message>" : "Requires an unpushed commit and an empty staging area." },
     async () => {
       const message = await appPromptText({ title: "Amend last commit message", summary: `git commit --amend -m <message> · current: ${last?.subject || ""}`, defaultValue: last?.subject || "", confirmLabel: "Amend", validate: (value) => (String(value || "").trim() ? "" : "A commit message is required.") });
-      if (!message || !message.trim()) return;
-      runGitToolAction("undo", {
+      if (!projectGitTools.isCurrent(token) || !message || !message.trim()) return;
+      runAction("undo", {
         url: "/api/git-undo/amend-message",
         body: { confirmed: true, message: message.trim() },
         confirm: `Rewrite the last commit message?\n\nOld: ${last?.subject || ""}\nNew: ${message.trim()}`,
@@ -22648,7 +22640,7 @@ function renderGitUndoTools(body, data, busy) {
     },
   ));
   body.append(row);
-  const reflog = gitToolsState.cache.reflog;
+  const reflog = projectGitTools.getState().cache.reflog;
   if (reflog?.entries?.length) {
     const details = make("details", "git-tools-item");
     details.append(make("summary", "git-tools-item-summary", `Recent HEAD history (${reflog.entries.length})`));
@@ -22660,6 +22652,8 @@ function renderGitUndoTools(body, data, busy) {
 }
 
 function renderGitWorktreeTools(body, data, busy) {
+  const token = projectGitTools.capture();
+  const runAction = (section, options) => runGitToolAction(section, options, token);
   const worktrees = data.worktrees || [];
   for (const worktree of worktrees) {
     const item = make("div", "git-tools-row");
@@ -22680,7 +22674,7 @@ function renderGitWorktreeTools(body, data, busy) {
           label: "Remove",
           className: "danger",
           title: `git worktree remove ${worktree.path}`,
-          onClick: () => runGitToolAction("worktrees", {
+          onClick: () => runAction("worktrees", {
             method: "DELETE",
             url: "/api/git-worktrees",
             body: { path: worktree.path, confirmed: true },
@@ -22703,6 +22697,7 @@ function renderGitWorktreeTools(body, data, busy) {
     const tabId = gitChangesState.tabId || activeTabId;
     try {
       const preview = await api("/api/git-worktrees/prune", { tabId });
+      if (!projectGitTools.isCurrent(token)) return;
       const previewData = preview?.data || preview || {};
       const output = String(previewData.output || "").trim();
       const prunable = previewData.prunable || [];
@@ -22711,15 +22706,14 @@ function renderGitWorktreeTools(body, data, busy) {
         return;
       }
       const lines = prunable.map((item) => `${item.path}${item.reason ? ` (${item.reason})` : ""}`).join("\n");
-      runGitToolAction("worktrees", {
+      runAction("worktrees", {
         url: "/api/git-worktrees/prune",
         body: { confirmed: true },
         confirm: `Prune stale worktree records?\n\nDry run:\n${output || lines || "(no output)"}\n\nThis removes administrative records for worktree directories that no longer exist.`,
         success: "Pruned stale worktree records.",
       });
     } catch (error) {
-      gitToolsState.notice.worktrees = error.message || String(error);
-      renderGitChangesDialog();
+      projectGitTools.setNotice("worktrees", error.message || String(error), token);
     }
   }));
   body.append(row);
@@ -22727,6 +22721,8 @@ function renderGitWorktreeTools(body, data, busy) {
 }
 
 function renderGitSubmoduleTools(body, data, busy) {
+  const token = projectGitTools.capture();
+  const runAction = (section, options) => runGitToolAction(section, options, token);
   if (!data.hasSubmodules) {
     body.append(make("div", "git-changes-empty", "This repository has no submodules."));
     return body;
@@ -22754,7 +22750,7 @@ function renderGitSubmoduleTools(body, data, busy) {
   }
   const row = make("div", "git-operation-actions");
   row.append(gitToolsButton("Update / init recursively…", { disabled: busy, title: "git submodule update --init --recursive" }, () =>
-    runGitToolAction("submodules", {
+    runAction("submodules", {
       url: "/api/git-submodules/update",
       body: { confirmed: true },
       confirm: "Run git submodule update --init --recursive?\n\nThis can check out new commits in every submodule and may take a while.",
@@ -22766,6 +22762,8 @@ function renderGitSubmoduleTools(body, data, busy) {
 }
 
 function renderGitTagTools(body, data, busy) {
+  const token = projectGitTools.capture();
+  const runAction = (section, options) => runGitToolAction(section, options, token);
   const tags = data.tags || [];
   if (!tags.length) body.append(make("div", "git-changes-empty", "No tags."));
   for (const tag of tags.slice(0, 15)) {
@@ -22779,10 +22777,10 @@ function renderGitTagTools(body, data, busy) {
   const row = make("div", "git-operation-actions");
   row.append(gitToolsButton("Create annotated tag…", { disabled: busy, title: "git tag -a <name> -m <message> (never pushed automatically)" }, async () => {
     const name = await appPromptText({ title: "Create annotated tag", summary: "git tag -a <name> -m <message> at HEAD. Tags are never pushed automatically.", placeholder: "v1.2.3", confirmLabel: "Next", validate: (value) => (String(value || "").trim() ? "" : "A tag name is required.") });
-    if (!name || !name.trim()) return;
+    if (!projectGitTools.isCurrent(token) || !name || !name.trim()) return;
     const message = await appPromptText({ title: `Tag message for ${name.trim()}`, defaultValue: name.trim(), confirmLabel: "Create tag" });
-    if (message === null) return;
-    runGitToolAction("tags", {
+    if (!projectGitTools.isCurrent(token) || message === null) return;
+    runAction("tags", {
       url: "/api/git-tags/create",
       body: { confirmed: true, name: name.trim(), message: (message || name).trim() },
       confirm: `Create annotated tag ${name.trim()} at HEAD?\n\nTags are not pushed automatically; push explicitly with: git push origin ${name.trim()}`,
@@ -22812,10 +22810,10 @@ function renderGitSigningTools(body, data) {
 
 function renderGitToolsSectionBody(key) {
   const body = make("div", "git-tools-body");
-  const notice = gitToolsState.notice[key];
+  const notice = projectGitTools.getState().notice[key];
   if (notice) body.append(make("div", "git-changes-empty error", notice));
-  const data = gitToolsState.cache[key];
-  const busy = gitToolsState.busy.has(key) || gitToolsState.busy.has(`load:${key}`);
+  const data = projectGitTools.getState().cache[key];
+  const busy = projectGitTools.getState().busy.has(key) || projectGitTools.getState().busy.has(`load:${key}`);
   if (!data) {
     if (!notice) body.append(make("div", "git-changes-empty", "Loading…"));
     return body;
@@ -22844,19 +22842,21 @@ function renderGitToolsSection() {
   for (const section of GIT_TOOLS_SECTIONS) {
     const details = make("details", "git-tools-section");
     details.dataset.gitTools = section.key;
-    details.open = gitToolsState.openSections.has(section.key);
+    details.open = projectGitTools.getState().openSections.has(section.key);
     const summary = make("summary", "git-tools-summary");
     summary.append(make("span", "git-tools-title", section.title), make("span", "git-tools-detail", section.detail));
     details.append(summary);
     if (details.open) details.append(renderGitToolsSectionBody(section.key));
+    const token = projectGitTools.capture();
     details.addEventListener("toggle", () => {
+      if (!details.isConnected || !projectGitTools.isCurrent(token)) return;
       if (details.open) {
-        if (gitToolsState.openSections.has(section.key)) return;
-        gitToolsState.openSections.add(section.key);
+        if (projectGitTools.getState().openSections.has(section.key)) return;
+        projectGitTools.setSectionOpen(section.key, true, token);
         loadGitToolsSection(section.key);
         renderGitChangesDialog();
       } else {
-        gitToolsState.openSections.delete(section.key);
+        projectGitTools.setSectionOpen(section.key, false, token);
       }
     });
     wrapper.append(details);
@@ -22878,7 +22878,7 @@ function gitToolsSectionForExtraChip(value = "") {
 
 function openGitToolsFromFooter(section = "stash") {
   openGitChangesDialog();
-  gitToolsState.openSections.add(section);
+  projectGitTools.setSectionOpen(section, true);
   loadGitToolsSection(section);
   renderGitChangesDialog();
 }
@@ -51207,6 +51207,9 @@ elements.gitChangesDialog?.addEventListener("cancel", (event) => {
   closeGitChangesDialog();
 });
 elements.gitChangesDialog?.addEventListener("close", () => {
+  if (elements.gitChangesDialog.open) return;
+  gitToolsDialogEpoch += 1;
+  projectGitTools.reset(null);
   gitChangesRequestSerial += 1;
   gitChangesState = { ...gitChangesState, loading: false, pulling: false };
 });
