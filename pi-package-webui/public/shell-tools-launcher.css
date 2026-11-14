@@ -1,0 +1,82 @@
+#shellToolsLauncher {
+  box-sizing: border-box;
+  width: min(700px, calc(100% - 24px));
+  max-width: none;
+  max-height: min(740px, calc(100dvh - 24px));
+  padding: 0;
+  overflow: hidden;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 24px 90px var(--shadow, #0008);
+  font: inherit;
+  font-size: var(--text-sm, 0.875rem);
+}
+
+#shellToolsLauncher[open] { display: flex; flex-direction: column; }
+#shellToolsLauncher::backdrop { background: #080810aa; backdrop-filter: blur(3px); }
+#shellToolsLauncher * { box-sizing: border-box; min-width: 0; }
+#shellToolsLauncher [hidden] { display: none !important; }
+#shellToolsLauncher button, #shellToolsLauncher input { font: inherit; color: inherit; }
+#shellToolsLauncher button { cursor: pointer; border-radius: 5px; }
+#shellToolsLauncher :is(.tools-launcher-close, .tools-launcher-categories button, .tools-launcher-action, .tools-launcher-pin) {
+  box-shadow: none;
+  transform: none;
+  transition: none;
+}
+#shellToolsLauncher button:disabled { cursor: default; opacity: 0.65; }
+#shellToolsLauncher :is(button, input):focus-visible { outline: 2px solid var(--accent-2, var(--accent)); outline-offset: -2px; }
+
+#shellToolsLauncher .tools-launcher-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px 4px;
+  flex-shrink: 0;
+}
+#shellToolsLauncher h2 { margin: 0; font-size: 1rem; font-weight: 600; }
+#shellToolsLauncher .tools-launcher-close { padding: 6px 9px; border: 1px solid var(--border); background: var(--panel); }
+#shellToolsLauncher .tools-launcher-context { margin: 0; padding: 0 16px 8px; color: var(--muted); overflow-wrap: anywhere; flex-shrink: 0; }
+#shellToolsLauncher .tools-launcher-search {
+  flex-shrink: 0;
+  width: calc(100% - 32px);
+  margin: 8px 16px 12px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+}
+#shellToolsLauncher .tools-launcher-search::placeholder { color: var(--muted); }
+#shellToolsLauncher .tools-launcher-run-controls { flex-shrink: 0; max-height: 25dvh; overflow: auto; overflow-wrap: anywhere; }
+#shellToolsLauncher .tools-launcher-run-controls:not(:empty) { padding: 8px 16px; border-top: 1px solid var(--border); }
+#shellToolsLauncher .tools-launcher-body { display: flex; min-height: 0; height: 440px; border-top: 1px solid var(--border); }
+#shellToolsLauncher .tools-launcher-categories { width: 145px; flex-shrink: 0; display: flex; flex-direction: column; gap: 3px; padding: 10px 8px; overflow: auto; border-right: 1px solid var(--border); }
+#shellToolsLauncher .tools-launcher-categories button { flex-shrink: 0; text-align: left; overflow-wrap: anywhere; border: 0; background: transparent; padding: 9px; }
+#shellToolsLauncher .tools-launcher-categories button[aria-pressed="true"] { background: var(--panel-2); color: var(--accent); }
+#shellToolsLauncher .tools-launcher-results { flex: 1; overflow: auto; padding: 10px 8px; overscroll-behavior: contain; }
+#shellToolsLauncher .tools-launcher-status { margin: 0 8px 8px; color: var(--muted); font-size: var(--text-xs, 0.75rem); }
+#shellToolsLauncher .tools-launcher-list { display: grid; gap: 3px; margin: 0; padding: 0; list-style: none; }
+#shellToolsLauncher .tools-launcher-row { display: flex; align-items: center; border-radius: 5px; }
+#shellToolsLauncher .tools-launcher-row:is(:hover, :focus-within) { background: var(--panel-2); }
+#shellToolsLauncher .tools-launcher-action-content { flex: 1; }
+#shellToolsLauncher .tools-launcher-action { display: block; width: 100%; text-align: left; border: 0; background: transparent; padding: 9px 8px; overflow-wrap: anywhere; }
+#shellToolsLauncher .tools-launcher-label { display: block; font-weight: 550; }
+#shellToolsLauncher .tools-launcher-description { display: block; margin-top: 2px; color: var(--muted); font-size: var(--text-xs, 0.75rem); }
+#shellToolsLauncher .tools-launcher-category { display: block; color: var(--accent-2, var(--accent)); font-size: var(--text-xs, 0.75rem); margin-top: 3px; }
+#shellToolsLauncher .tools-launcher-reason { color: var(--warning); margin: 0 8px 9px; font-size: var(--text-xs, 0.75rem); overflow-wrap: anywhere; }
+#shellToolsLauncher .tools-launcher-pin { flex-shrink: 0; align-self: flex-start; min-width: 36px; min-height: 40px; padding: 8px; background: transparent; border: 0; font-size: 1.125rem; }
+#shellToolsLauncher .tools-launcher-pin[aria-pressed="true"] { color: var(--accent-2, var(--accent)); }
+#shellToolsLauncher .tools-launcher-empty { color: var(--muted); padding: 8px; overflow-wrap: anywhere; }
+#shellToolsLauncher .tools-launcher-footer { flex-shrink: 0; padding: 10px 16px; border-top: 1px solid var(--border); color: var(--muted); font-size: var(--text-xs, 0.75rem); }
+
+@media (max-width: 600px) {
+  #shellToolsLauncher { width: calc(100% - 16px); max-height: calc(100dvh - 16px); }
+  #shellToolsLauncher .tools-launcher-categories { width: 98px; padding: 8px 4px; }
+  #shellToolsLauncher .tools-launcher-categories button { padding: 10px 5px; }
+  #shellToolsLauncher .tools-launcher-results { padding: 10px 3px; }
+  #shellToolsLauncher .tools-launcher-header { padding: 10px 12px 4px; }
+  #shellToolsLauncher .tools-launcher-context { padding-inline: 12px; }
+  #shellToolsLauncher .tools-launcher-footer { padding: 8px 12px; }
+}
