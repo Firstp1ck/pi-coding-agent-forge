@@ -13,7 +13,7 @@ const ICONS = {
 /** Creates presentation chrome. The caller owns mounting, slot contents and state. */
 export function createFocusedWorkspace({
   document, onNavigate, onTools, onToggleNavigation, onSessionMenu,
-  onProjectMenu, onInspectorClose, onConversation,
+  onProjectMenu, onInspectorClose, onConversation, onInspectorSelect,
 }) {
   const listeners = [];
   const rememberedFocus = new Map();
@@ -122,7 +122,33 @@ export function createFocusedWorkspace({
   inspectorTitle.id = 'focusedWorkspaceInspectorTitle';
   inspectorHeader.append(inspectorTitle, button('Close inspector', 'close', onInspectorClose));
   const inspectorContent = node('div', 'focused-inspector-content');
-  inspector.append(inspectorHeader, inspectorContent);
+  inspectorContent.id = 'focusedWorkspaceInspectorPanel';
+  const inspectorTopics = node('div', 'focused-inspector-topics');
+  inspectorTopics.setAttribute('role', 'tablist');
+  inspectorTopics.setAttribute('aria-label', 'Inspector topics');
+  const topicButtons = new Map();
+  const selectTopic = event => {
+    const control = event.target.closest('button');
+    if (!control || control.parentNode !== inspectorTopics || control.disabled) return;
+    onInspectorSelect?.(control.dataset.topic);
+  };
+  const focusTopic = event => {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+    const controls = [...inspectorTopics.children].filter(control => !control.disabled);
+    const index = controls.indexOf(event.target);
+    if (index < 0) return;
+    event.preventDefault();
+    const next = event.key === 'Home' ? 0 : event.key === 'End' ? controls.length - 1
+      : (index + (event.key === 'ArrowRight' ? 1 : -1) + controls.length) % controls.length;
+    for (const control of controls) control.tabIndex = -1;
+    controls[next].tabIndex = 0;
+    controls[next].focus();
+    controls[next].scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  };
+  inspectorTopics.addEventListener('click', selectTopic);
+  inspectorTopics.addEventListener('keydown', focusTopic);
+  listeners.push(() => inspectorTopics.removeEventListener('click', selectTopic), () => inspectorTopics.removeEventListener('keydown', focusTopic));
+  inspector.append(inspectorHeader, inspectorTopics, inspectorContent);
   body.append(conversation, centralPages.home.page, centralPages.settings.page, inspector);
   element.append(rail, navigation, header, body);
 
@@ -142,6 +168,41 @@ export function createFocusedWorkspace({
   const onFocus = (event) => rememberFocus(event.target);
   element.addEventListener('focusin', onFocus);
   listeners.push(() => element.removeEventListener('focusin', onFocus));
+
+  function updateInspectorTopics(topics = [], selectedId) {
+    const ids = new Set(topics.map(topic => topic.id));
+    for (const [id, control] of topicButtons) {
+      if (!ids.has(id)) { control.remove(); topicButtons.delete(id); }
+    }
+    const selected = topics.find(topic => topic.id === selectedId && topic.available !== false)
+      || topics.find(topic => topic.available !== false);
+    topics.forEach((topic, index) => {
+      let control = topicButtons.get(topic.id);
+      if (!control) {
+        control = node('button');
+        control.type = 'button';
+        control.dataset.topic = topic.id;
+        control.id = `focusedInspectorTopic-${encodeURIComponent(topic.id)}`;
+        control.setAttribute('role', 'tab');
+        control.setAttribute('aria-controls', inspectorContent.id);
+        topicButtons.set(topic.id, control);
+      }
+      control.textContent = topic.label;
+      control.disabled = topic.available === false;
+      control.title = control.disabled ? topic.unavailableReason || 'Unavailable' : topic.label;
+      control.setAttribute('aria-selected', String(topic.id === selected?.id));
+      control.tabIndex = topic.id === selected?.id ? 0 : -1;
+      if (inspectorTopics.children[index] !== control) inspectorTopics.insertBefore(control, inspectorTopics.children[index] || null);
+    });
+    inspectorTopics.hidden = topics.length === 0;
+    if (selected) {
+      inspectorContent.setAttribute('role', 'tabpanel');
+      inspectorContent.setAttribute('aria-labelledby', topicButtons.get(selected.id).id);
+    } else {
+      inspectorContent.removeAttribute('role');
+      inspectorContent.removeAttribute('aria-labelledby');
+    }
+  }
 
   function update(snapshot = {}) {
     if (disposed) return;
@@ -173,6 +234,7 @@ export function createFocusedWorkspace({
     context.textContent = String(state.context ?? '');
     contextButton.title = context.textContent ? `Project actions: ${context.textContent}` : 'Project actions';
     inspectorTitle.textContent = String(state.inspectorTitle ?? '');
+    updateInspectorTopics(state.inspectorTopics, state.inspector);
     const count = Number.isSafeInteger(state.attentionCount) ? Math.max(0, state.attentionCount) : 0;
     attention.hidden = count === 0;
     attention.textContent = count > 99 ? '99+' : String(count);
@@ -207,6 +269,7 @@ export function createFocusedWorkspace({
     for (const removeListener of listeners) removeListener();
     listeners.length = 0;
     rememberedFocus.clear();
+    topicButtons.clear();
     // The parent restores canonical views and owns removal of the root.
   }
 

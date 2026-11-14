@@ -156,6 +156,10 @@
 #focusedWorkspace .focused-inspector-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 42px; padding: 5px 12px; border-bottom: 1px solid var(--border); }
 #focusedWorkspace .focused-inspector-header strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-sm, 0.875rem); }
 #focusedWorkspace .focused-inspector-content { flex: 1; min-height: 0; min-width: 0; overflow: auto; padding: 12px; }
+#focusedWorkspace .focused-inspector-topics { display: flex; flex: 0 0 auto; gap: 2px; overflow-x: auto; padding: 4px 8px; border-bottom: 1px solid var(--border); }
+#focusedWorkspace .focused-inspector-topics[hidden] { display: none; }
+#focusedWorkspace .focused-inspector-topics button { flex: 0 0 auto; min-height: 30px; padding: 4px 8px; border-color: transparent; background: transparent; font-size: var(--text-xs, 0.75rem); }
+#focusedWorkspace .focused-inspector-topics button[aria-selected="true"] { color: var(--accent); border-color: var(--border); background: var(--panel); }
 
 #focusedWorkspace[data-nav-collapsed="true"],
 #focusedWorkspace[data-navigation="top"] { grid-template-columns: 46px minmax(0, 1fr); }

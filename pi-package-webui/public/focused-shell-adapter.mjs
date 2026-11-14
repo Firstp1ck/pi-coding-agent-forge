@@ -28,6 +28,7 @@ export function createFocusedShellAdapter({ document, viewHost, nodes, sections,
     onProjectMenu: () => openTools('Project'),
     onInspectorClose: () => onNavigate('conversation', null),
     onConversation: () => onNavigate('conversation', null),
+    onInspectorSelect: id => onNavigate(snapshot.destination, id),
   });
   workspace.element.hidden = true;
   document.body.append(workspace.element, tools.element);

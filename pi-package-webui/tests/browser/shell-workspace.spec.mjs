@@ -72,6 +72,7 @@ window.shell = createFocusedWorkspace({ document,
   onToggleNavigation: () => { events.push(['toggle']); shell.update({ navCollapsed: shell.element.dataset.navCollapsed !== 'true' }); },
   onSessionMenu: () => events.push(['session']),
   onProjectMenu: () => events.push(['project']),
+  onInspectorSelect: id => { events.push(['inspector', id]); shell.update({ inspector: id }); },
   onInspectorClose: () => { events.push(['close']); shell.update({ destination: 'conversation', inspectorOpen: false }); },
   onConversation: () => { events.push(['conversation']); shell.update({ destination: 'conversation', inspectorOpen: false }); },
 });
@@ -320,4 +321,57 @@ test('light tokens and Settings retain visible run controls and keyboard focus',
   await page.keyboard.press('Enter');
   await expect(page.locator('#canonicalConversation')).toBeVisible();
   await expect(page.locator('#draft')).toHaveValue('Keep my unfinished prompt and selection.');
+});
+
+
+test('inspector topics retain canonical content and support manual keyboard selection', async ({ page }, testInfo) => {
+  await page.evaluate(() => {
+    shell.update({ destination: 'project', inspector: 'files', inspectorTitle: 'Project', inspectorTopics: [
+      { id: 'files', label: 'Files' }, { id: 'git', label: 'Changes' },
+      { id: 'runners', label: 'Runners', available: false, unavailableReason: 'Choose a session first' },
+      { id: 'release', label: 'Release' },
+    ] });
+    window.originalEditor = document.querySelector('#editor');
+  });
+  const files = page.getByRole('tab', { name: 'Files', exact: true });
+  const changes = page.getByRole('tab', { name: 'Changes', exact: true });
+  await expect(files).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('tabpanel', { name: 'Files', exact: true }).locator('#editor')).toBeVisible();
+  await files.focus();
+  await page.keyboard.press('ArrowRight');
+  await expect(changes).toBeFocused();
+  await expect(files).toHaveAttribute('aria-selected', 'true');
+  await page.keyboard.press('Enter');
+  await expect(changes).toHaveAttribute('aria-selected', 'true');
+  await page.keyboard.press('ArrowRight');
+  await expect(page.getByRole('tab', { name: 'Release', exact: true })).toBeFocused();
+  await expect(page.getByRole('tab', { name: 'Runners', exact: true })).toBeDisabled();
+  await expect(page.getByRole('tab', { name: 'Runners', exact: true })).toHaveAttribute('title', 'Choose a session first');
+  expect(await page.evaluate(() => events.filter(event => event[0] === 'inspector'))).toEqual([['inspector', 'git']]);
+  expect(await page.locator('#editor').evaluate(node => node === window.originalEditor)).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath('project-topics.png') });
+});
+
+test('inspector topic updates preserve buttons and remove obsolete keyboard targets', async ({ page }) => {
+  await page.evaluate(() => {
+    shell.update({ destination: 'activity', inspector: 'queue', inspectorTopics: [
+      { id: 'subagents', label: 'Agents' }, { id: 'queue', label: 'Queues' }, { id: 'events', label: 'Events' },
+    ] });
+  });
+  const queues = page.getByRole('tab', { name: 'Queues', exact: true });
+  await queues.evaluate(node => { window.originalQueueTab = node; });
+  await queues.focus();
+  await page.evaluate(() => shell.update({ title: 'New status', inspectorTopics: [
+    { id: 'subagents', label: 'Agents (2)' }, { id: 'queue', label: 'Queues' },
+  ] }));
+  await expect(queues).toBeFocused();
+  expect(await queues.evaluate(node => node === window.originalQueueTab)).toBe(true);
+  await expect(page.getByRole('tab', { name: 'Events', exact: true })).toHaveCount(0);
+  await page.keyboard.press('Home');
+  await expect(page.getByRole('tab', { name: 'Agents (2)', exact: true })).toBeFocused();
+  await page.keyboard.press('End');
+  await expect(queues).toBeFocused();
+  await page.evaluate(() => shell.update({ inspectorTopics: [] }));
+  await expect(page.getByRole('tablist', { name: 'Inspector topics' })).toBeHidden();
+  await expect(page.locator('#editor')).toBeVisible();
 });

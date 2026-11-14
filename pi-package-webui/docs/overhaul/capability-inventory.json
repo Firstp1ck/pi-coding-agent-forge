@@ -394,8 +394,8 @@
     },
     {
       "file": "pi-package-webui/public/focused-shell-adapter.mjs",
-      "bytes": 6161,
-      "sha256": "5711718f02b1bde1ba3d8668185b033a79b5bb9c9c3d3e8235ba05ddc0e33aad"
+      "bytes": 6228,
+      "sha256": "a3657298f6fa34d97b295ba8659946971d91a285b0d4077f84ca80f3dee3e642"
     },
     {
       "file": "pi-package-webui/public/guided-git-command-state.mjs",
@@ -499,8 +499,8 @@
     },
     {
       "file": "pi-package-webui/public/shell-workspace.mjs",
-      "bytes": 10727,
-      "sha256": "e43c24b1674eddf036a742dc01982267b5008ccd54789bf8764d7a7674f037be"
+      "bytes": 13990,
+      "sha256": "f3197461bb61192d6cc522ee4e10fe33363af7255c33ce20cdb763f76f6b54bd"
     },
     {
       "file": "pi-package-webui/public/stream-derived-output.mjs",
@@ -569,17 +569,17 @@
     },
     {
       "file": "plans/planned/webui-design-architecture-overhaul.md",
-      "bytes": 147290,
-      "sha256": "ad113c2e665d98c894232ed3ed3f6ddeaf68121a305763ab8004f3f209638d4c"
+      "bytes": 148445,
+      "sha256": "9e719c62ef3aa5f57355f85800e6224a7a96a600341afa6a95610b4bb9c7ea75"
     }
   ],
   "reconciliation": {
-    "records": 1289,
+    "records": 1292,
     "classifications": {
       "family": 725,
       "shared-chrome": 50,
       "non-action": 5,
-      "dynamic-template": 509,
+      "dynamic-template": 512,
       "unresolved": 0
     },
     "staticDialogs": 29,
@@ -683,10 +683,13 @@
         "pi-package-webui/public/index.html#id:workspaceReplaceTargetName",
         "pi-package-webui/public/index.html#id:workspaceSaveButton",
         "pi-package-webui/public/shell-workspace.mjs#createFocusedWorkspace/computed-construction:document.createElement:tag);",
+        "pi-package-webui/public/shell-workspace.mjs#createFocusedWorkspace/data-assignment:control:topic",
         "pi-package-webui/public/shell-workspace.mjs#createFocusedWorkspace/data-assignment:element:destination",
         "pi-package-webui/public/shell-workspace.mjs#createFocusedWorkspace/data-assignment:element:navCollapsed",
         "pi-package-webui/public/shell-workspace.mjs#createFocusedWorkspace/data-assignment:element:navigation",
+        "pi-package-webui/public/shell-workspace.mjs#createFocusedWorkspace/id-assignment:control:`focusedInspectorTopic-${encodeURIComponent(topic.id)}`",
         "pi-package-webui/public/shell-workspace.mjs#createFocusedWorkspace/id-assignment:element:'focusedWorkspace'",
+        "pi-package-webui/public/shell-workspace.mjs#createFocusedWorkspace/id-assignment:inspectorContent:'focusedWorkspaceInspectorPanel'",
         "pi-package-webui/public/shell-workspace.mjs#createFocusedWorkspace/id-assignment:inspectorTitle:'focusedWorkspaceInspectorTitle'",
         "pi-package-webui/public/shell-workspace.mjs#createFocusedWorkspace/id-assignment:navigation:'focusedWorkspaceNavigation'"
       ],
@@ -10880,7 +10883,7 @@
       "anchor": {
         "file": "pi-package-webui/public/focused-shell-adapter.mjs",
         "symbol": "createFocusedShellAdapter",
-        "line": 118
+        "line": 119
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -24974,6 +24977,22 @@
       "family": "sessions"
     },
     {
+      "id": "pi-package-webui/public/shell-workspace.mjs#createFocusedWorkspace/data-assignment:control:topic",
+      "sourceId": null,
+      "tag": null,
+      "actionable": false,
+      "data": {},
+      "expression": "control.dataset.topic = topic.id;",
+      "anchor": {
+        "file": "pi-package-webui/public/shell-workspace.mjs",
+        "symbol": "createFocusedWorkspace",
+        "line": 184
+      },
+      "ancestors": [],
+      "classification": "dynamic-template",
+      "family": "sessions"
+    },
+    {
       "id": "pi-package-webui/public/shell-workspace.mjs#createFocusedWorkspace/data-assignment:element:destination",
       "sourceId": null,
       "tag": null,
@@ -24983,7 +25002,7 @@
       "anchor": {
         "file": "pi-package-webui/public/shell-workspace.mjs",
         "symbol": "createFocusedWorkspace",
-        "line": 155
+        "line": 216
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -24999,7 +25018,7 @@
       "anchor": {
         "file": "pi-package-webui/public/shell-workspace.mjs",
         "symbol": "createFocusedWorkspace",
-        "line": 157
+        "line": 218
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -25015,7 +25034,23 @@
       "anchor": {
         "file": "pi-package-webui/public/shell-workspace.mjs",
         "symbol": "createFocusedWorkspace",
-        "line": 156
+        "line": 217
+      },
+      "ancestors": [],
+      "classification": "dynamic-template",
+      "family": "sessions"
+    },
+    {
+      "id": "pi-package-webui/public/shell-workspace.mjs#createFocusedWorkspace/id-assignment:control:`focusedInspectorTopic-${encodeURIComponent(topic.id)}`",
+      "sourceId": null,
+      "tag": null,
+      "actionable": false,
+      "data": {},
+      "expression": "control.id = `focusedInspectorTopic-${encodeURIComponent(topic.id)}`;",
+      "anchor": {
+        "file": "pi-package-webui/public/shell-workspace.mjs",
+        "symbol": "createFocusedWorkspace",
+        "line": 185
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -25032,6 +25067,22 @@
         "file": "pi-package-webui/public/shell-workspace.mjs",
         "symbol": "createFocusedWorkspace",
         "line": 57
+      },
+      "ancestors": [],
+      "classification": "dynamic-template",
+      "family": "sessions"
+    },
+    {
+      "id": "pi-package-webui/public/shell-workspace.mjs#createFocusedWorkspace/id-assignment:inspectorContent:'focusedWorkspaceInspectorPanel'",
+      "sourceId": "focusedWorkspaceInspectorPanel",
+      "tag": null,
+      "actionable": false,
+      "data": {},
+      "expression": "inspectorContent.id = 'focusedWorkspaceInspectorPanel';",
+      "anchor": {
+        "file": "pi-package-webui/public/shell-workspace.mjs",
+        "symbol": "createFocusedWorkspace",
+        "line": 125
       },
       "ancestors": [],
       "classification": "dynamic-template",
