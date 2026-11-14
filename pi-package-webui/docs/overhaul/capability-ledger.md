@@ -57,7 +57,7 @@ These counts are not the browser baseline’s crowding denominator. Hidden contr
 
 | Concern | Current owner and app adapter | Preservation contract |
 | --- | --- | --- |
-| Action discovery | `shell-actions.mjs`; `buildCommandPaletteItems` / `executeCommandPaletteItem` | Stable IDs, original matching/order/handlers, captured session generation and project cwd, current catalog checked before execution |
+| Action discovery | `shell-actions.mjs`; `buildCommandPaletteItems` / `executeCommandPaletteItem` | Stable IDs, original matching/order/handlers, captured session identity/activation generation and project cwd, current catalog checked before execution |
 | Browser navigation | `shell-navigation.mjs`; `commitMobileNavigation` / `restoreMobileNavigation` | One history listener, unrelated state preserved, failed write leaves current view unchanged, no new SSE connection for same-tab navigation |
 | Preview preference | `shell-preferences.mjs`; `isMobileShellV2Active` | Separate `pi-webui-shell-preferences-v1` record, no read-time writes, conservative Classic fallback, independent phone/tablet flags, `shell=classic` recovery |
 | Canonical DOM | `shell-view-host.mjs`; mobile canonical/widget adapters | Same nodes and resources, original homes, input values/selection/scroll retained; app owns section attributes |

@@ -85,8 +85,8 @@ test("discovery preserves unavailable entries and never mutates records or runs 
   assert.notEqual(filterActionItems(items, ""), items);
 });
 
-const currentTarget = Object.freeze({ tabId: "tab-a", generation: 4, cwd: "/project", liveTabIds: Object.freeze(["tab-a", "tab-b"]) });
-const sessionTarget = Object.freeze({ tabId: "tab-a", generation: 4 });
+const currentTarget = Object.freeze({ tabId: "tab-a", generation: 4, sessionIdentity: "session-a", cwd: "/project", liveTabIds: Object.freeze(["tab-a", "tab-b"]) });
+const sessionTarget = Object.freeze({ tabId: "tab-a", generation: 4, sessionIdentity: "session-a" });
 
 function assertRejected(action, current, reasonPattern) {
   const result = checkActionTarget(action, current);
@@ -105,7 +105,7 @@ test("browser and server actions require no session identity", () => {
 
 test("session actions require the captured tab and numeric nonnegative integer generation", () => {
   assert.deepEqual(checkActionTarget({ scope: "session", target: sessionTarget }, currentTarget), { ok: true, reason: "" });
-  assert.deepEqual(checkActionTarget({ scope: "session", target: { tabId: "tab-a", generation: 0 } }, { tabId: "tab-a", generation: 0 }), { ok: true, reason: "" });
+  assert.deepEqual(checkActionTarget({ scope: "session", target: { tabId: "tab-a", generation: 0, sessionIdentity: "session-a" } }, { tabId: "tab-a", generation: 0, sessionIdentity: "session-a" }), { ok: true, reason: "" });
   assertRejected({ scope: "session", target: sessionTarget }, { ...currentTarget, generation: 5 }, /session/i);
   assertRejected({ scope: "session", target: sessionTarget }, { ...currentTarget, tabId: "tab-b" }, /tab/i);
   for (const generation of [undefined, null, "4", -1, 1.5, NaN, Infinity, -Infinity, false]) {
@@ -169,4 +169,14 @@ test("target checks retain no state, mutate no records and never execute handler
   assert.deepEqual(checkActionTarget(action, currentTarget), { ok: true, reason: "" });
   assertRejected(action, { ...currentTarget, generation: 5 });
   assert.deepEqual(checkActionTarget(action, currentTarget), { ok: true, reason: "" });
+});
+
+test("same-tab session identity changes invalidate session and project actions", () => {
+  for (const scope of ["session", "project"]) {
+    const action = { scope, target: { ...sessionTarget, cwd: "/project" } };
+    for (const sessionIdentity of ["session-b", "", undefined, null]) {
+      assertRejected(action, { ...currentTarget, sessionIdentity }, /session/i);
+    }
+    assertRejected({ ...action, target: { ...action.target, sessionIdentity: undefined } }, currentTarget, /session/i);
+  }
 });

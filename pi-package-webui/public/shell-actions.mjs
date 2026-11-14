@@ -74,6 +74,9 @@ export function checkActionTarget(action, currentTarget) {
   if (target.generation !== currentTarget?.generation) {
     return { ok: false, reason: "The session has changed. Choose the action again." };
   }
+  if (!nonemptyString(target.sessionIdentity) || target.sessionIdentity !== currentTarget?.sessionIdentity) {
+    return { ok: false, reason: "The session has changed. Choose the action again." };
+  }
   if (scope === "project") {
     if (!nonemptyString(target.cwd)) return { ok: false, reason: "This action is missing its target working directory." };
     if (target.cwd !== currentTarget?.cwd) {

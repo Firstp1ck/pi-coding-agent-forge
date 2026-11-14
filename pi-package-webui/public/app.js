@@ -631,6 +631,8 @@ let tabWorkspaceCache = new Map();
 let tabs = [];
 let activeTabId = null;
 let activeTabGeneration = 0;
+let shellActionSessionEpoch = 0;
+const pendingManualCompactions = new Set();
 const intercomConversationSummariesByTab = new Map();
 let intercomSummaryRequestSerial = 0;
 let intercomSummaryRefreshTimer = null;
@@ -22824,7 +22826,9 @@ function appendContextMeterFill(meter, snapshot) {
 async function requestManualCompaction({ triggerButton = null } = {}) {
   const tabContext = activeTabContext();
   if (!tabContext.tabId) return;
+  if (currentState?.isCompacting || pendingManualCompactions.has(tabContext.tabId)) return;
   const buttons = [...new Set([elements.compactButton, triggerButton].filter(Boolean))];
+  pendingManualCompactions.add(tabContext.tabId);
   try {
     for (const button of buttons) {
       button.disabled = true;
@@ -22852,6 +22856,7 @@ async function requestManualCompaction({ triggerButton = null } = {}) {
       addEvent(error.message, "error");
     }
   } finally {
+    pendingManualCompactions.delete(tabContext.tabId);
     if (isCurrentTabContext(tabContext)) {
       for (const button of buttons) {
         button.disabled = !!currentState?.isCompacting;
@@ -47325,7 +47330,7 @@ function commandPaletteCoreItems() {
     { id: "session:new-tab-directory", scope: "server", destination: "conversation", kind: "Action", label: "Choose directory for new tab", description: "Pick a cwd before starting a tab", keywords: "cwd folder workspace", run: () => createTerminalTabFromChosenDirectory({ triggerButton: elements.commandPaletteButton }) },
     { id: "project:branch-worktree", scope: "project", destination: "project", kind: "Git", label: "Branch worktree", description: "Create or open a Git worktree tab for parallel branch work", keywords: "git branch worktree parallel checkout", run: () => openBranchWorktreePicker() },
     { id: "session:new", scope: "session", destination: "conversation", kind: "Action", label: "New session", description: "Start a fresh session in the active tab", keywords: "/new clear", run: () => elements.newSessionButton.click() },
-    { id: "session:compact", scope: "session", destination: "conversation", kind: "Action", label: "Compact context", description: contextUsageDetail(), keywords: "/compact context window tokens", run: () => requestManualCompaction() },
+    { id: "session:compact", scope: "session", destination: "conversation", available: !currentState?.isCompacting && !pendingManualCompactions.has(activeTabId), unavailableReason: "Context compaction is already running. Wait for it to finish.", kind: "Action", label: "Compact context", description: contextUsageDetail(), keywords: "/compact context window tokens", run: () => requestManualCompaction() },
     { id: "session:auto-compaction", scope: "session", destination: "conversation", kind: "Action", label: footerAutoCompactionEnabled() ? "Disable auto-compaction" : "Enable auto-compaction", description: footerAutoCompactionToggleAction(), keywords: "context automatic", run: () => toggleFooterAutoCompaction() },
     { id: "home:toggle", scope: "browser", destination: "home", kind: "Action", label: workspaceDashboardCollapsed ? "Show workspace dashboard" : "Hide workspace dashboard", description: "Toggle the launch/workspace overview", keywords: "home overview", run: () => setWorkspaceDashboardCollapsed(!workspaceDashboardCollapsed) },
     { id: "layout:control-deck", scope: "browser", destination: "settings", kind: "Action", label: document.body.classList.contains("side-panel-collapsed") ? "Show side panel" : "Hide side panel", description: "Toggle the Control Deck", keywords: "controls settings", run: () => setSidePanelCollapsed(!document.body.classList.contains("side-panel-collapsed"), { focusPanel: true }) },
@@ -47410,9 +47415,14 @@ function commandPaletteSlashItems() {
   }));
 }
 
+function invalidateShellSessionActions(tabId = activeTabId) {
+  if (tabId === activeTabId) shellActionSessionEpoch += 1;
+}
+
 function shellActionTarget() {
   return {
     ...activeTabContext(),
+    sessionIdentity: `${shellActionSessionEpoch}:${currentState?.sessionId || currentState?.sessionFile || ""}`,
     cwd: tabs.find((tab) => tab.id === activeTabId)?.cwd || "",
     liveTabIds: tabs.map((tab) => tab.id),
   };
@@ -47429,7 +47439,7 @@ function buildCommandPaletteItems() {
     if (item.scope !== "session" && item.scope !== "project") return item;
     return {
       ...item,
-      target: { tabId: context.tabId, generation: context.generation, ...(item.scope === "project" ? { cwd: context.cwd } : {}) },
+      target: { tabId: context.tabId, generation: context.generation, sessionIdentity: context.sessionIdentity, ...(item.scope === "project" ? { cwd: context.cwd } : {}) },
     };
   });
 }
@@ -49359,6 +49369,7 @@ function handleEvent(event) {
           applyOptimisticThinkingSelection(event.data, tabContext);
         } else if (event.command === "new_session") {
           const tabId = event.tabId || activeTabId;
+          invalidateShellSessionActions(tabId);
           clearContextUsageUnknownAfterCompaction(tabId);
           forgetLastUserPrompt(tabId);
           resetGitWorkflowForTab(tabId);
@@ -50258,6 +50269,7 @@ elements.newSessionButton.addEventListener("click", async () => {
   }))) return;
   try {
     const response = await api("/api/new-session", { method: "POST", body: {}, tabId: tabContext.tabId });
+    invalidateShellSessionActions(tabContext.tabId);
     applyResponseTab(response);
     forgetLastUserPrompt(tabContext.tabId);
     resetGitWorkflowForTab(tabContext.tabId);
