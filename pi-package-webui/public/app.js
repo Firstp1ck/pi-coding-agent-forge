@@ -2109,13 +2109,21 @@ function navigateFocusedShell(destination, inspector = undefined, { replace = fa
   renderFocusedShell();
 }
 
+function focusedNavigationFromSearch(search) {
+  const params = new URLSearchParams(search);
+  const destination = params.get("view");
+  if (!["conversation", "home", "project", "activity", "settings"].includes(destination)) return { destination: "conversation", inspector: null };
+  const inspector = params.get("inspector");
+  return { destination, inspector: sidePanelSectionRecords().some(({ id }) => id === inspector) ? inspector : destination === "project" ? "files" : destination === "activity" ? "subagents" : null };
+}
+
 function restoreShellNavigation(event) {
   restoreMobileNavigation(event);
   const state = event.state?.focusedShellState;
   if (state && ["conversation", "home", "project", "activity", "settings"].includes(state.destination)) {
     focusedShellState = { destination: state.destination, inspector: sidePanelSectionRecords().some(({ id }) => id === state.inspector) ? state.inspector : null };
   } else {
-    focusedShellState = { destination: "conversation", inspector: null };
+    focusedShellState = focusedNavigationFromSearch(window.location.search);
   }
   renderFocusedShell();
 }
@@ -2153,10 +2161,12 @@ async function invokeFocusedTool(captured) {
 }
 
 function initializeFocusedShell() {
-  const destination = initialUrlParams.get("view");
-  const inspector = initialUrlParams.get("inspector");
-  if (["conversation", "home", "project", "activity", "settings"].includes(destination)) {
-    focusedShellState = { destination, inspector: sidePanelSectionRecords().some(({ id }) => id === inspector) ? inspector : destination === "project" ? "files" : destination === "activity" ? "subagents" : null };
+  const initial = focusedNavigationFromSearch(window.location.search);
+  try {
+    if (isFocusedShellRequested()) shellHistory.write({ state: { focusedShellState: initial }, replace: true });
+    focusedShellState = initial;
+  } catch (error) {
+    addEvent(`Initial navigation could not be saved. ${error.message || error}`, "error");
   }
   focusedShell = createFocusedShellAdapter({
     document, viewHost: canonicalViewHost,
@@ -7839,7 +7849,10 @@ function syncMobileComposerDisclosureLayout() {
     restoreMobileComposerOriginalPositions();
     return;
   }
-  for (const node of mobileComposerSecondaryNodes()) elements.composerActionsPanel.append(node);
+  for (const node of mobileComposerSecondaryNodes()) {
+    if (focusedShell?.active && node === elements.conversationModeEndButton) continue;
+    elements.composerActionsPanel.append(node);
+  }
 }
 
 function setComposerActionsOpen(open, { restoreFocus = false } = {}) {
@@ -51114,6 +51127,10 @@ function stepChatSearch(step) {
 
 function openChatSearch() {
   if (!elements.chatSearchBar) return;
+  if (focusedShell?.active && ["home", "settings"].includes(focusedShellState.destination)) {
+    navigateFocusedShell("conversation");
+    if (focusedShellState.destination !== "conversation") return;
+  }
   closeFileViewerSearch({ restoreFocus: false });
   const searchesAgentOutput = chatSearchRoot() === elements.subagentTerminalTranscript;
   elements.chatSearchInput.placeholder = searchesAgentOutput ? "Search agent output…" : "Search transcript…";
@@ -51272,7 +51289,7 @@ window.addEventListener("resize", scheduleControlDeckPresentationReconciliation,
 window.addEventListener("keydown", (event) => {
   if (event.key !== "Escape") return;
   if (event.defaultPrevented) return;
-  if (elements.dialog?.open || elements.pathPickerDialog?.open || elements.gitChangesDialog?.open || elements.commandPaletteDialog?.open || elements.editRetryDialog?.open) return;
+  if (document.querySelector("dialog:modal")) return;
   if (followUpQueueOpen) {
     event.preventDefault();
     setFollowUpQueueOpen(false, { restoreFocus: true });

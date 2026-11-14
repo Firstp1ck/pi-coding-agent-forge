@@ -33,6 +33,7 @@ export function createToolsLauncher({ document, onInvoke, onPinsChange, onClose 
   search.setAttribute('aria-controls', 'shellToolsLauncherResults');
   search.autofocus = true;
   const runControls = node('div', 'tools-launcher-run-controls');
+  runControls.setAttribute('role', 'group');
   const body = node('div', 'tools-launcher-body');
   const categories = node('nav', 'tools-launcher-categories');
   categories.setAttribute('aria-label', 'Tool categories');

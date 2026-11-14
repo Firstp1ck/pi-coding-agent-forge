@@ -1,4 +1,5 @@
 import { expect } from '@playwright/test';
+import AxeBuilder from '@axe-core/playwright';
 import { test } from './session-fixture.mjs';
 
 test.use({ video: 'off', serviceWorkers: 'block', viewport: { width: 1440, height: 900 }, reducedMotion: 'reduce' });
@@ -78,6 +79,10 @@ test('running session can be aborted from Settings and All tools without changin
   await expect(page.locator('.focused-run-controls #abortButton')).toBeVisible();
   await rail.getByRole('button', { name: 'All tools', exact: true }).click();
   await expect(page.locator('#shellToolsLauncher #abortButton')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#shellToolsLauncher')).toBeHidden();
+  await expect(page.locator('.focused-run-controls #abortButton')).toBeVisible();
+  await rail.getByRole('button', { name: 'All tools', exact: true }).click();
   await page.locator('#shellToolsLauncher').getByRole('button', { name: 'Choose directory for new tab', exact: true }).click();
   await expect(page.locator('dialog:modal #abortButton')).toBeVisible();
   const response = page.waitForResponse(response => new URL(response.url()).pathname === '/api/abort' && response.request().method() === 'POST');
@@ -137,4 +142,68 @@ test('compact navigation remains usable at 1100 and 1920 pixels with top and col
   await rail.getByRole('button', { name: 'Expand sessions', exact: true }).click();
   await expect(page.locator('#focusedWorkspaceNavigation')).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('compact-top-navigation.png') });
+});
+
+test('initial Project deep link survives Back and Forward with unrelated URL and history data', async ({ page, ownership }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('pi-webui-shell-preferences-v1', JSON.stringify({ v: 1, desktopLayout: 'focused' }));
+    history.replaceState({ external: 'keep' }, '');
+  });
+  await page.goto(`${ownership.baseURL}/?view=project&inspector=git&tab=${ownership.tabs[0].id}&custom=keep#fragment`);
+  await expect(page.locator('#focusedWorkspace')).toHaveAttribute('data-destination', 'project');
+  await expect(page.locator('#sidePanelSectionGit')).toBeVisible();
+  await page.getByRole('navigation', { name: 'Workspace destinations' }).getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.goBack();
+  await expect(page.locator('#focusedWorkspace')).toHaveAttribute('data-destination', 'project');
+  await expect(page.locator('#sidePanelSectionGit')).toBeVisible();
+  expect(new URL(page.url()).searchParams.get('tab')).toBe(ownership.tabs[0].id);
+  expect(new URL(page.url()).searchParams.get('custom')).toBe('keep');
+  expect(new URL(page.url()).hash).toBe('#fragment');
+  expect(await page.evaluate(() => history.state.external)).toBe('keep');
+  await page.goForward();
+  await expect(page.locator('#focusedWorkspace')).toHaveAttribute('data-destination', 'settings');
+});
+
+test('End conversation stays canonical and reachable through More, Settings and native tools', async ({ page, ownership }) => {
+  await openFocused(page, ownership);
+  await page.locator('#promptInput').fill('/talk on');
+  await page.locator('#sendButton').click();
+  const end = page.locator('#conversationModeEndButton');
+  await expect(end).toBeVisible();
+  await end.evaluate(node => { window.originalEnd = node; });
+  await page.locator('#composerActionsButton').click();
+  await page.locator('#composerActionsButton').click();
+  await expect(page.locator('.focused-run-controls #conversationModeEndButton')).toBeVisible();
+  const rail = page.getByRole('navigation', { name: 'Workspace destinations' });
+  for (const destination of ['Home', 'Settings']) {
+    await rail.getByRole('button', { name: destination, exact: true }).click();
+    await expect(end).toBeVisible();
+  }
+  await rail.getByRole('button', { name: 'All tools', exact: true }).click();
+  await expect(page.locator('#shellToolsLauncher #conversationModeEndButton')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.focused-run-controls #conversationModeEndButton')).toBeVisible();
+  expect(await end.evaluate(node => node === window.originalEnd)).toBe(true);
+  const response = page.waitForResponse(response => new URL(response.url()).pathname === '/api/conversation-mode' && response.request().method() === 'POST');
+  await end.click();
+  expect((await response).request().postDataJSON()).toEqual({ enabled: false });
+  await expect(end).toBeHidden();
+});
+
+
+test('Search transcript reveals Conversation from Settings and launcher run controls have an accessible group', async ({ page, ownership }, testInfo) => {
+  await openFocused(page, ownership);
+  const rail = page.getByRole('navigation', { name: 'Workspace destinations' });
+  await rail.getByRole('button', { name: 'Settings', exact: true }).click();
+  await rail.getByRole('button', { name: 'All tools', exact: true }).click();
+  const dialog = page.locator('#shellToolsLauncher');
+  await expect(dialog.getByRole('group', { name: /^Run controls for / })).toBeAttached();
+  expect((await new AxeBuilder({ page }).include('#shellToolsLauncher').analyze()).violations).toEqual([]);
+  await page.getByRole('searchbox', { name: 'Search all tools' }).fill('Search transcript');
+  await dialog.getByRole('button', { name: 'Search transcript', exact: true }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.locator('#focusedWorkspace')).toHaveAttribute('data-destination', 'conversation');
+  await expect(page.locator('#chatSearchInput')).toBeVisible();
+  await expect(page.locator('#chatSearchInput')).toBeFocused();
+  await page.screenshot({ path: testInfo.outputPath('compact-transcript-search.png') });
 });

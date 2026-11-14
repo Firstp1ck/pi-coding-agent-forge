@@ -98,7 +98,7 @@ assert.match(css, /@media \(max-width: 720px\)[\s\S]*\.composer-intercom-tag \{ 
 
 assert.match(html, /\/styles\.css\?v=155/, "the stylesheet URL should advance for the bounded conversation tags");
 assert.match(html, /data-app-src="\/app\.js\?v=188"/, "the guarded app URL should advance for current browser wiring");
-assert.match(serviceWorker, /const CACHE_NAME = "pi-webui-pwa-v159"/, "the PWA cache identity should advance with browser assets");
+assert.match(serviceWorker, /const CACHE_NAME = "pi-webui-pwa-v160"/, "the PWA cache identity should advance with browser assets");
 
 assert.match(readme, /one compact tag per conversation appears beneath the composer/i, "the README should explain the user-visible entry point");
 assert.match(technical, /## Agent conversation viewer[\s\S]*Attachments, tool calls and results, thinking, stdout\/stderr, filesystem paths, raw session records/i, "the advanced guide should document privacy exclusions");

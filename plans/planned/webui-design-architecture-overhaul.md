@@ -710,3 +710,22 @@ W3 mobile correction evidence: instrumented focus events showed the browser blur
 Focused native feature dialogs now receive the same canonical Abort/End controls through a bounded modal stack observed on dialog `open` changes. This preserves their existing handlers when a tool opens a second modal after the launcher closes. The app's resources and native focus ownership remain unchanged. The actual Abort scenario is being rerun through a real directory picker as well as Settings and All tools.
 
 W3 candidate verification: the combined launcher/app/mobile run passed 17/18 cases; the remaining case typed before initial session activation and consequently exercised startup rather than keyboard layout. Parent added the same model-catalog readiness gate used by the other actual-app cases. The rerun passed all sixteen cases across the complete workspace component suite and six real-app scenarios, including 1100/1920 widths, top/collapsed navigation, session drafts and actual Abort in the directory-picker modal. Parent displayed and inspected the actual 1100px Project and 1920px top-navigation screenshots. The prior ten launcher cases remain passing. Log `/tmp/webui-w3-rendered.log`; full package repeat remains in progress.
+
+
+### W3 round-1 dispositions and final verification
+
+Both fresh-context Sol reviewers completed. Parent verified every finding against production code and actual-app evidence. Round 1A reviewed `dc331ae1`; round 1B reviewed `8b01b2e` after mobile corrections.
+
+| Finding | Disposition | Parent correction and evidence |
+| --- | --- | --- |
+| A-001, canonical End conversation moved into hidden More | Accepted | Reproduced through production functions; focused composer disclosure now leaves End with the adapter's run-control owner. Actual `/talk on` and `/api/conversation-mode` disable flows pass across More, Home, Settings and the launcher. |
+| A-002, initial Project URL lost on Back | Accepted | Reproduced URL/state mismatch. Startup replaces the current history entry through the existing owner; entries without focused state recover from the current URL. Back/Forward retains Project/Git, tab, custom query, fragment and unrelated history state. |
+| B-001, End conversation hidden | Accepted, same defect as A-001 | Covered by the same correction and real-app regression. No separate implementation or review round. |
+| B-002, Search transcript opens in hidden Conversation | Accepted | Parent confirmed the inline search handler did not reveal its host. It now navigates from Home/Settings before focusing, preserving the current visible conversation/agent context elsewhere. Failed history writes do not focus hidden content. Settings → All tools → Search transcript passes with visible, focused canonical input. |
+| B-003, launcher run-control label lacks a naming role | Accepted | Parent confirmed the generic div and reproduced the missing group. Added `role="group"`; the integrated launcher passes axe with no rule exclusions. |
+
+The End regression also exposed the existing global Escape handler intercepting native launcher dismissal during active work. Parent changed its dialog guard to the actual modal selector. Both active Abort and active End cases now dismiss All tools and restore their canonical header controls. An initial test incorrectly waited for `/api/prompt`; parent corrected it to the existing `/api/conversation-mode` contract and asserts `{enabled:false}`. No production endpoint changed.
+
+Log `/tmp/webui-w3-review-fixes.log`: **9 actual-app Chromium cases passed**, including the previous six compact/responsive cases and three review regressions. The earlier candidate full check passed all 226 test files with exit 0 at `/tmp/webui-w3-check-2.exit`. The post-review full check is separate and remains pending until its exit file is observed. Asset identity advances to PWA v160/app query189; package module names and routes remain unchanged. Minor trailing whitespace in the shared test fixture was removed.
+
+W3 round 2 is limited to these accepted findings and regressions from their fixes. It is the final allowed review round for this wave. W4-W7 remain outstanding, and no full-overhaul acceptance or new-install default rollout is claimed.
