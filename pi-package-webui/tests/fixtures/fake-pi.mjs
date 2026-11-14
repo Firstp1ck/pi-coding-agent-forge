@@ -23,9 +23,12 @@
 //   prompt and emit a generic Intercom tool stream with visible unrelated output.
 // - FAKE_PI_GUIDED_GIT_ACTIVATION=1: advertise the Guided Git extension and
 //   prompt companion, then emit its exact transient set/clear activation status.
+// - FAKE_PI_SESSION_OWNERSHIP=1: retain model choices and give each process its
+//   own session identity, or a stable identity for a normalized session path.
 import { createHash, randomUUID } from "node:crypto";
 import { createInterface } from "node:readline";
 import { appendFileSync } from "node:fs";
+import { resolve } from "node:path";
 import {
   BUILTIN_SAMPLING_APIS,
   filterSupportedSamplingParameters,
@@ -38,6 +41,11 @@ const sessionIndex = process.argv.indexOf("--session");
 const sessionFile = sessionIndex !== -1
   ? process.argv[sessionIndex + 1]
   : process.env.FAKE_PI_CONTINUITY_MODE === "1" ? process.env.FAKE_PI_CONTINUITY_SESSION_FILE || undefined : undefined;
+const sessionOwnershipEnabled = process.env.FAKE_PI_SESSION_OWNERSHIP === "1";
+let ownedSessionId = sessionOwnershipEnabled
+  ? `fake-session-${sessionFile ? createHash("sha256").update(resolve(sessionFile)).digest("hex") : randomUUID()}`
+  : "fake-session";
+let selectedModel = { provider: "fake", id: "fake-model" };
 
 let activeBash = 0;
 let peakBash = 0;
@@ -1575,14 +1583,14 @@ rl.on("line", (line) => {
       respond({
         ...base,
         data: {
-          model: codexFixtureModel || { provider: "fake", id: "fake-model" },
+          model: codexFixtureModel || (sessionOwnershipEnabled ? selectedModel : { provider: "fake", id: "fake-model" }),
           thinkingLevel,
           isStreaming: scriptedStreaming || guidedGitStateMode === "streaming",
           isCompacting: guidedGitStateMode === "compacting",
           steeringMode: "one-at-a-time",
           followUpMode: "one-at-a-time",
           sessionFile,
-          sessionId: "fake-session",
+          sessionId: ownedSessionId,
           sessionName: "fake",
           autoCompactionEnabled: false,
           messageCount: 0,
@@ -1688,10 +1696,20 @@ rl.on("line", (line) => {
       return;
     case "set_model":
       if (command.modelId === "missing-model") respond({ ...base, success: false, error: "Model not found: fake/missing-model" });
-      else respond({ ...base, data: { provider: command.provider, id: command.modelId } });
+      else {
+        if (sessionOwnershipEnabled) selectedModel = { provider: command.provider, id: command.modelId };
+        respond({ ...base, data: { provider: command.provider, id: command.modelId } });
+      }
       return;
     case "get_available_models":
-      respond({ ...base, data: { models: [{ provider: "fake", id: "fake-model", name: "Fake Model" }] } });
+      respond({ ...base, data: { models: [
+        { provider: "fake", id: "fake-model", name: "Fake Model" },
+        ...(sessionOwnershipEnabled ? [{ provider: "fake", id: "fake-model-alt", name: "Fake Alternate Model" }] : []),
+      ] } });
+      return;
+    case "new_session":
+      if (sessionOwnershipEnabled) ownedSessionId = `fake-session-${randomUUID()}`;
+      respond({ ...base, data: {} });
       return;
     case "get_session_stats":
       respond({
