@@ -8,6 +8,7 @@ const APP_SHELL = [
   "/issue-bot-client.mjs",
   "/mobile-shell-state.mjs",
   "/activity-events-controller.mjs",
+  "/activity-usage-controller.mjs",
   "/project-git-tools-controller.mjs",
   "/project-runners-controller.mjs",
   "/project-file-viewer-controller.mjs",

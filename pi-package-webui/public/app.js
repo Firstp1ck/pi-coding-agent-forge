@@ -1,3 +1,4 @@
+import { createActivityUsageController } from "./activity-usage-controller.mjs";
 import { createProjectArtifactController } from "./project-artifact-controller.mjs";
 import { createProjectFileViewerController, gitFileDiffCategory, resolveFileViewerMode } from "./project-file-viewer-controller.mjs";
 import { createProjectGitToolsController, GIT_TOOLS_SECTIONS } from "./project-git-tools-controller.mjs";
@@ -1261,18 +1262,12 @@ let networkStatusLoaded = false;
 let webuiVersion = "";
 let piVersion = "";
 let webuiDevServer = false;
-let latestCodexUsage = null;
-let codexUsageError = null;
-let codexUsageLoading = false;
-let refreshCodexUsageTimer = null;
-let codexUsageRenderTimer = null;
-let codexUsageRenderSignature = "";
-let latestClaudeUsage = null;
-let claudeUsageError = null;
-let claudeUsageLoading = false;
-let refreshClaudeUsageTimer = null;
-let claudeUsageRenderTimer = null;
-let claudeUsageRenderSignature = "";
+const activityUsage = createActivityUsageController({
+  document,
+  nodes: elements,
+  api,
+  getFooterPayload: () => parseGitFooterWebuiPayload(),
+});
 let latestSubagents = null;
 let subagentsError = null;
 let subagentsLoading = false;
@@ -1634,10 +1629,6 @@ const STICKY_USER_PROMPT_TOP_GAP_PX = 12;
 const CHAT_FOLLOW_SETTLE_DELAY_MS = 80;
 const CHAT_PROGRAMMATIC_SCROLL_GRACE_MS = 500;
 const CHAT_USER_SCROLL_INTENT_MS = 700;
-const CODEX_USAGE_REFRESH_MS = 5 * 60 * 1000;
-const CODEX_USAGE_RENDER_TICK_MS = 30 * 1000;
-const CLAUDE_USAGE_REFRESH_MS = 5 * 60 * 1000;
-const CLAUDE_USAGE_RENDER_TICK_MS = 30 * 1000;
 const SUBAGENTS_ACTIVE_REFRESH_MS = 1500;
 const SUBAGENTS_IDLE_REFRESH_MS = 4000;
 const SUBAGENTS_HIDDEN_REFRESH_MS = 10_000;
@@ -2200,6 +2191,7 @@ function renderFocusedShell() {
   });
   syncDocumentArtifactHost();
   syncFocusedWidgetPlacement();
+  syncUsageVisibility();
   if (wasActive !== focusedShell.active) {
     syncMobileComposerDisclosureLayout();
     setComposerActionsOpen(false);
@@ -4973,6 +4965,7 @@ function restoreSidePanelSectionVisibility() {
 function setSidePanelSectionCollapsed(record, collapsed, { persist = true } = {}) {
   record.section.classList.toggle("collapsed", collapsed);
   record.content.hidden = collapsed;
+  syncUsageVisibility();
   record.button.setAttribute("aria-expanded", collapsed ? "false" : "true");
   updateSidePanelSectionEditAffordance(record);
   if (!collapsed && record.id === "events") clearUnreadEvents();
@@ -8606,6 +8599,7 @@ function setSidePanelCollapsed(collapsed, { persist = true, focusPanel = false, 
   updateSidePanelResizeHandle(currentSidePanelWidth(targetSide), targetSide);
   reconcileControlDeckHosts();
   requestAnimationFrame(syncResizablePanelWidthsForViewport);
+  syncUsageVisibility();
   if (collapsed) closeSidePanelContextMenu({ returnFocus: false });
   if (focusPanel && !collapsed) (targetSide === "left" ? elements.toggleSidePanelLeftButton : elements.toggleSidePanelButton)?.focus?.({ preventScroll: true });
   if (!persist || presentation === "overlay") return;
@@ -18634,6 +18628,12 @@ function eventsSectionRecord() {
   return sidePanelSectionRecords().find((record) => record.id === "events") || null;
 }
 
+function syncUsageVisibility() {
+  for (const [provider, box] of [["codex", elements.codexUsageBox], ["claude", elements.claudeUsageBox]]) {
+    activityUsage.setVisible(provider, !!box?.getClientRects().length && !box.closest("[hidden], [inert]") && getComputedStyle(box).visibility !== "hidden");
+  }
+}
+
 function eventsSectionIsVisibleAndExpanded() {
   const log = elements.eventLog;
   return !!log?.getClientRects().length && !log.closest("[hidden], [inert]") && getComputedStyle(log).visibility !== "hidden";
@@ -25183,8 +25183,8 @@ function flushSemanticReconcile() {
     // is tab-scoped and may run after the user has switched away.
     if (dirty.workflow) reconcileGitWorkflowContinuation(tabContext.tabId);
     if (dirty.usage) {
-      scheduleRefreshCodexUsage(2200);
-      scheduleRefreshClaudeUsage(2200);
+      activityUsage.scheduleCodex(2200);
+      activityUsage.scheduleClaude(2200);
     }
 
     // DOM and active-session fetches are valid only for the still-current tab
@@ -25216,233 +25216,6 @@ function reconcileGitWorkflowContinuation(workflowTabId = activeTabId) {
     prepareGitInitFiles({ afterReadmePrompt: true, runId: workflow.runId, tabId: workflowTabId });
   } else if (workflow.step === "gitignoreGenerating") {
     prepareGitInitFiles({ afterGitignorePrompt: true, runId: workflow.runId, tabId: workflowTabId });
-  }
-}
-
-function formatCodexPlanType(value) {
-  const text = String(value || "").trim();
-  if (!text) return "unknown plan";
-  const normalized = text.replace(/[\s_-]+/g, "").toLowerCase();
-  if (normalized === "prolite") return "Usage";
-  return text.replace(/[_-]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
-
-function formatCodexPercent(value) {
-  const number = Number(value);
-  return Number.isFinite(number) ? `${Math.max(0, Math.min(100, Math.round(number)))}%` : "—";
-}
-
-function codexWindowDurationMinutes(window) {
-  const minutes = Number(window?.windowDurationMins);
-  if (Number.isFinite(minutes) && minutes > 0) return minutes;
-  const seconds = Number(window?.windowDurationSeconds);
-  return Number.isFinite(seconds) && seconds > 0 ? seconds / 60 : null;
-}
-
-function formatCodexWindowDuration(window) {
-  const minutes = codexWindowDurationMinutes(window);
-  if (!minutes) return "window";
-  if (minutes >= 280 && minutes <= 320) return "5h window";
-  if (minutes >= 9500 && minutes <= 10550) return "weekly window";
-  if (minutes >= 60 * 24) {
-    const days = minutes / (60 * 24);
-    return `${days >= 10 ? Math.round(days) : Number(days.toFixed(1))}d window`;
-  }
-  if (minutes >= 60) {
-    const hours = minutes / 60;
-    return `${Number.isInteger(hours) ? hours : Number(hours.toFixed(1))}h window`;
-  }
-  return `${Math.round(minutes)}m window`;
-}
-
-function formatDurationParts(milliseconds) {
-  if (!Number.isFinite(Number(milliseconds))) return "now";
-  const totalMinutes = Math.max(0, Math.ceil(Number(milliseconds) / 60000));
-  if (totalMinutes <= 1) return "<1m";
-  if (totalMinutes < 60) return `${totalMinutes}m`;
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
-  if (hours < 48) return minutes ? `${hours}h ${minutes}m` : `${hours}h`;
-  const days = Math.floor(hours / 24);
-  const remHours = hours % 24;
-  return remHours ? `${days}d ${remHours}h` : `${days}d`;
-}
-
-function codexWindowResetDate(window) {
-  const resetAt = window?.resetsAt ? new Date(window.resetsAt) : null;
-  if (resetAt && Number.isFinite(resetAt.getTime())) return resetAt;
-  const resetAfterSeconds = Number(window?.resetAfterSeconds);
-  if (Number.isFinite(resetAfterSeconds) && resetAfterSeconds >= 0) return new Date(Date.now() + resetAfterSeconds * 1000);
-  return null;
-}
-
-function formatCodexReset(window) {
-  const resetDate = codexWindowResetDate(window);
-  if (!resetDate) return "reset unknown";
-  const diff = resetDate.getTime() - Date.now();
-  if (diff <= 0) return "resetting now";
-  return `resets in ${formatDurationParts(diff)}`;
-}
-
-function codexSnapshotName(snapshot) {
-  return snapshot?.limitName || snapshot?.limitId || "codex";
-}
-
-function codexUsageBuckets(data) {
-  const buckets = [];
-  const selected = data?.selected || data?.rateLimits || null;
-  const snapshots = Array.isArray(data?.snapshots) ? data.snapshots : selected ? [selected] : [];
-  const selectedKey = selected?.limitId || selected?.limitName || "codex";
-  const pushWindow = (snapshot, kind, window, { prefix } = {}) => {
-    if (!window) return;
-    const durationLabel = formatCodexWindowDuration(window);
-    const baseLabel = kind === "secondary" && durationLabel === "window" ? "secondary window" : durationLabel;
-    buckets.push({
-      key: `${snapshot?.limitId || snapshot?.limitName || buckets.length}-${kind}`,
-      label: prefix ? `${prefix} · ${baseLabel}` : baseLabel,
-      window,
-    });
-  };
-
-  if (selected) {
-    pushWindow(selected, "primary", selected.primary);
-    pushWindow(selected, "secondary", selected.secondary);
-  }
-  for (const snapshot of snapshots) {
-    const key = snapshot?.limitId || snapshot?.limitName;
-    if (!snapshot || snapshot === selected || key === selectedKey) continue;
-    const name = codexSnapshotName(snapshot);
-    pushWindow(snapshot, "primary", snapshot.primary, { prefix: name });
-    pushWindow(snapshot, "secondary", snapshot.secondary, { prefix: name });
-  }
-  return buckets.slice(0, 6);
-}
-
-function codexUsageStructureSignature() {
-  if (!latestCodexUsage) return JSON.stringify({ state: codexUsageLoading ? "loading" : codexUsageError ? "error" : "empty", error: codexUsageError?.message || String(codexUsageError || "") });
-  return JSON.stringify({
-    state: "data",
-    plan: formatCodexPlanType(latestCodexUsage.planType),
-    source: latestCodexUsage.source || "",
-    sourceNotice: latestCodexUsage.sourceNotice || "",
-    buckets: codexUsageBuckets(latestCodexUsage).map((bucket) => [bucket.key, bucket.label]),
-    rateLimitReachedType: latestCodexUsage.rateLimitReachedType || "",
-    error: codexUsageError?.message || String(codexUsageError || ""),
-  });
-}
-
-function updateCodexUsageValues(box, buckets) {
-  if (!latestCodexUsage || !box.querySelector(".codex-usage-summary")) return false;
-  const fetched = box.querySelector(".codex-usage-fetched");
-  if (fetched) fetched.textContent = latestCodexUsage.fetchedAt ? `updated ${formatDurationParts(Date.now() - new Date(latestCodexUsage.fetchedAt).getTime())} ago` : "updated now";
-  const rendered = [...box.querySelectorAll(".codex-usage-bucket[data-codex-usage-key]")];
-  if (rendered.length !== buckets.length) return false;
-  for (const bucket of buckets) {
-    const item = rendered.find((node) => node.dataset.codexUsageKey === bucket.key);
-    if (!item) return false;
-    const usedPercent = Number(bucket.window?.usedPercent);
-    const fillPercent = Number.isFinite(usedPercent) ? Math.max(0, Math.min(100, usedPercent)) : 0;
-    const percent = item.querySelector(".codex-usage-percent");
-    const fill = item.querySelector(".codex-usage-meter-fill");
-    const reset = item.querySelector(".codex-usage-reset");
-    if (!percent || !fill || !reset) return false;
-    percent.textContent = formatCodexPercent(usedPercent);
-    fill.style.width = `${fillPercent}%`;
-    reset.textContent = formatCodexReset(bucket.window);
-  }
-  return true;
-}
-
-function renderCodexUsage() {
-  const box = elements.codexUsageBox;
-  if (!box) return;
-  if (elements.refreshCodexUsageButton) {
-    elements.refreshCodexUsageButton.disabled = codexUsageLoading;
-    elements.refreshCodexUsageButton.textContent = codexUsageLoading ? "Refreshing…" : "Refresh usage";
-  }
-
-  const buckets = codexUsageBuckets(latestCodexUsage);
-  const structureSignature = codexUsageStructureSignature();
-  if (structureSignature === codexUsageRenderSignature && updateCodexUsageValues(box, buckets)) {
-    box.classList.toggle("muted", !latestCodexUsage);
-    return;
-  }
-  codexUsageRenderSignature = structureSignature;
-  box.replaceChildren();
-  box.classList.toggle("muted", !latestCodexUsage);
-
-  if (!latestCodexUsage && codexUsageLoading) {
-    box.textContent = "Checking Codex usage…";
-    return;
-  }
-  if (!latestCodexUsage && codexUsageError) {
-    const title = make("div", "codex-usage-unavailable", "Usage unavailable");
-    const detail = make("div", "codex-usage-detail", codexUsageError.message || String(codexUsageError));
-    box.append(title, detail);
-    return;
-  }
-  if (!latestCodexUsage) {
-    box.textContent = "Codex usage has not loaded yet.";
-    return;
-  }
-
-  const header = make("div", "codex-usage-summary");
-  header.append(
-    make("span", "codex-usage-plan", formatCodexPlanType(latestCodexUsage.planType)),
-    make("span", "codex-usage-fetched", latestCodexUsage.fetchedAt ? `updated ${formatDurationParts(Date.now() - new Date(latestCodexUsage.fetchedAt).getTime())} ago` : "updated now"),
-  );
-  box.append(header);
-  if (latestCodexUsage.source === "codex-cli") {
-    box.append(make("div", "codex-usage-detail", "Source: Codex CLI account. Its login is separate from Pi; these limits may differ from Pi's ChatGPT-plan allowance."));
-  } else {
-    box.append(make("div", "codex-usage-detail", "Source: Pi's legacy Codex login."));
-  }
-  if (latestCodexUsage.sourceNotice) box.append(make("div", "codex-usage-detail", latestCodexUsage.sourceNotice));
-
-  if (buckets.length === 0) {
-    box.append(make("div", "codex-usage-detail", "No Codex rate-limit windows were returned."));
-  } else {
-    for (const bucket of buckets) {
-      const usedPercent = Number(bucket.window?.usedPercent);
-      const fillPercent = Number.isFinite(usedPercent) ? Math.max(0, Math.min(100, usedPercent)) : 0;
-      const item = make("div", "codex-usage-bucket");
-      item.dataset.codexUsageKey = bucket.key;
-      const row = make("div", "codex-usage-row");
-      row.append(
-        make("span", "codex-usage-label", bucket.label),
-        make("strong", "codex-usage-percent", formatCodexPercent(bucket.window?.usedPercent)),
-      );
-      const meter = make("div", "codex-usage-meter");
-      const fill = make("span", "codex-usage-meter-fill");
-      fill.style.width = `${fillPercent}%`;
-      meter.append(fill);
-      item.append(row, meter, make("div", "codex-usage-reset", formatCodexReset(bucket.window)));
-      box.append(item);
-    }
-  }
-
-  if (latestCodexUsage.rateLimitReachedType) {
-    box.append(make("div", "codex-usage-warning", `Limit status: ${latestCodexUsage.rateLimitReachedType}`));
-  }
-  if (codexUsageError) {
-    box.append(make("div", "codex-usage-detail", `Latest refresh failed: ${codexUsageError.message || codexUsageError}`));
-  }
-}
-
-async function refreshCodexUsage({ forceAuthRefresh = false } = {}) {
-  if (codexUsageLoading) return;
-  codexUsageLoading = true;
-  renderCodexUsage();
-  try {
-    const suffix = forceAuthRefresh ? "?refresh=1" : "";
-    const response = await api(`/api/codex-usage${suffix}`, { scoped: false });
-    latestCodexUsage = response.data || null;
-    codexUsageError = null;
-  } catch (error) {
-    codexUsageError = error;
-  } finally {
-    codexUsageLoading = false;
-    renderCodexUsage();
   }
 }
 
@@ -25634,245 +25407,6 @@ async function disableCodexFastModeIntegration() {
     if (!codexFastModeConfirmedOff(response.data)) throw new Error(`tab ${tabId} did not confirm Codex Fast mode off`);
     if (tabId === activeTabId) applyCodexFastModeData(response.data);
   }
-}
-
-function scheduleRefreshCodexUsage(delay = CODEX_USAGE_REFRESH_MS) {
-  clearTimeout(refreshCodexUsageTimer);
-  refreshCodexUsageTimer = setTimeout(() => {
-    refreshCodexUsage().finally(() => scheduleRefreshCodexUsage());
-  }, delay);
-}
-
-function initializeCodexUsage() {
-  renderCodexUsage();
-  refreshCodexUsage().finally(() => scheduleRefreshCodexUsage());
-  clearInterval(codexUsageRenderTimer);
-  codexUsageRenderTimer = setInterval(renderCodexUsage, CODEX_USAGE_RENDER_TICK_MS);
-}
-
-function claudeUsageWindowFromProvider(window, capturedAt) {
-  if (!window) return null;
-  const resetAt = Number(window.resetAt);
-  const resetAfterSeconds = Number(window.resetAfterSeconds);
-  const resetsAt = Number.isFinite(resetAt) && resetAt >= 0
-    ? new Date(resetAt).toISOString()
-    : Number.isFinite(resetAfterSeconds) && resetAfterSeconds >= 0
-      ? new Date(capturedAt + resetAfterSeconds * 1000).toISOString()
-      : undefined;
-  return {
-    label: window.label || "Usage window",
-    usedPercent: window.usedPercent,
-    ...(Number.isFinite(window.windowMinutes) ? { windowMinutes: window.windowMinutes } : {}),
-    ...(resetsAt ? { resetsAt } : {}),
-  };
-}
-
-function claudeUsageFromGitFooterPayload(payload = parseGitFooterWebuiPayload()) {
-  const providerUsage = payload?.providerUsage;
-  if (providerUsage?.provider !== "anthropic") return null;
-  const capturedAt = Number(providerUsage.capturedAt);
-  if (!Number.isFinite(capturedAt) || capturedAt <= 0) return null;
-  const windows = [providerUsage.primary, providerUsage.secondary]
-    .map((window) => claudeUsageWindowFromProvider(window, capturedAt))
-    .filter(Boolean);
-  if (windows.length === 0) return null;
-  return {
-    available: true,
-    providerId: "claude-code",
-    source: "git-footer-status-provider-headers",
-    fetchedAt: new Date(capturedAt).toISOString(),
-    summary: "Live Anthropic subscription usage from provider response headers.",
-    windows,
-    activityTitle: "",
-    activity: [],
-    notes: [],
-  };
-}
-
-function syncClaudeUsageFromGitFooterPayload(payload = parseGitFooterWebuiPayload()) {
-  const usage = claudeUsageFromGitFooterPayload(payload);
-  if (!usage) return false;
-  latestClaudeUsage = usage;
-  claudeUsageError = null;
-  renderClaudeUsage();
-  return true;
-}
-
-function claudeUsageResetDate(window) {
-  const resetAt = window?.resetsAt ? new Date(window.resetsAt) : null;
-  if (resetAt && Number.isFinite(resetAt.getTime())) return resetAt;
-  const resetAfterSeconds = Number(window?.resetAfterSeconds);
-  if (Number.isFinite(resetAfterSeconds) && resetAfterSeconds >= 0) return new Date(Date.now() + resetAfterSeconds * 1000);
-  return null;
-}
-
-function formatClaudeUsageReset(window) {
-  const resetDate = claudeUsageResetDate(window);
-  if (resetDate) {
-    const diff = resetDate.getTime() - Date.now();
-    if (diff <= 0) return "resetting now";
-    return `resets in ${formatDurationParts(diff)}`;
-  }
-  return window?.resetText ? `resets ${window.resetText}` : "reset unknown";
-}
-
-function renderClaudeUsageWindow(box, window, key = "") {
-  const usedPercent = Number(window?.usedPercent);
-  const fillPercent = Number.isFinite(usedPercent) ? Math.max(0, Math.min(100, usedPercent)) : 0;
-  const item = make("div", "claude-usage-bucket");
-  if (key) item.dataset.claudeUsageKey = key;
-  const row = make("div", "claude-usage-row");
-  row.append(
-    make("span", "claude-usage-label", window?.label || "Usage window"),
-    make("strong", "claude-usage-percent", formatCodexPercent(usedPercent)),
-  );
-  const meter = make("div", "claude-usage-meter");
-  const fill = make("span", "claude-usage-meter-fill");
-  fill.style.width = `${fillPercent}%`;
-  meter.append(fill);
-  item.append(row, meter, make("div", "claude-usage-reset", formatClaudeUsageReset(window)));
-  box.append(item);
-}
-
-function renderClaudeUsageActivity(box, activity) {
-  if (!Array.isArray(activity) || activity.length === 0) return;
-  const title = make("div", "claude-usage-activity-title", latestClaudeUsage?.activityTitle || "What's contributing to your limits usage?");
-  box.append(title);
-  for (const item of activity.slice(0, 2)) {
-    const group = make("div", "claude-usage-activity-group");
-    const row = make("div", "claude-usage-row");
-    row.append(
-      make("span", "claude-usage-label", item.label || "Activity"),
-      make("span", "claude-usage-reset", `${Number(item.requests || 0)} requests · ${Number(item.sessions || 0)} sessions`),
-    );
-    group.append(row);
-    for (const detail of (Array.isArray(item.details) ? item.details : []).slice(0, 4)) {
-      group.append(make("div", "claude-usage-detail", detail?.text || String(detail || "")));
-    }
-    box.append(group);
-  }
-}
-
-function claudeUsageStructureSignature() {
-  if (!latestClaudeUsage) return JSON.stringify({ state: claudeUsageLoading ? "loading" : claudeUsageError ? "error" : "empty", error: claudeUsageError?.message || String(claudeUsageError || "") });
-  const windows = Array.isArray(latestClaudeUsage.windows) ? latestClaudeUsage.windows : [];
-  return JSON.stringify({
-    state: "data",
-    summary: latestClaudeUsage.summary || "",
-    windows: windows.slice(0, 6).map((window, index) => [String(window?.id || index), window?.label || "Usage window"]),
-    activityTitle: latestClaudeUsage.activityTitle || "",
-    activity: latestClaudeUsage.activity || [],
-    error: claudeUsageError?.message || String(claudeUsageError || ""),
-  });
-}
-
-function updateClaudeUsageValues(box, windows) {
-  if (!latestClaudeUsage || !box.querySelector(".claude-usage-summary")) return false;
-  const fetched = box.querySelector(".claude-usage-fetched");
-  if (fetched) fetched.textContent = latestClaudeUsage.fetchedAt ? `updated ${formatDurationParts(Date.now() - new Date(latestClaudeUsage.fetchedAt).getTime())} ago` : "updated now";
-  const rendered = [...box.querySelectorAll(".claude-usage-bucket[data-claude-usage-key]")];
-  if (rendered.length !== windows.length) return false;
-  for (const [index, window] of windows.entries()) {
-    const key = String(window?.id || index);
-    const item = rendered.find((node) => node.dataset.claudeUsageKey === key);
-    if (!item) return false;
-    const usedPercent = Number(window?.usedPercent);
-    const fillPercent = Number.isFinite(usedPercent) ? Math.max(0, Math.min(100, usedPercent)) : 0;
-    const percent = item.querySelector(".claude-usage-percent");
-    const fill = item.querySelector(".claude-usage-meter-fill");
-    const reset = item.querySelector(".claude-usage-reset");
-    if (!percent || !fill || !reset) return false;
-    percent.textContent = formatCodexPercent(usedPercent);
-    fill.style.width = `${fillPercent}%`;
-    reset.textContent = formatClaudeUsageReset(window);
-  }
-  return true;
-}
-
-function renderClaudeUsage() {
-  const box = elements.claudeUsageBox;
-  if (!box) return;
-  if (elements.refreshClaudeUsageButton) {
-    elements.refreshClaudeUsageButton.disabled = claudeUsageLoading;
-    elements.refreshClaudeUsageButton.textContent = claudeUsageLoading ? "Refreshing…" : "Refresh usage";
-  }
-
-  const windows = Array.isArray(latestClaudeUsage?.windows) ? latestClaudeUsage.windows.slice(0, 6) : [];
-  const structureSignature = claudeUsageStructureSignature();
-  if (structureSignature === claudeUsageRenderSignature && updateClaudeUsageValues(box, windows)) {
-    box.classList.toggle("muted", !latestClaudeUsage);
-    return;
-  }
-  claudeUsageRenderSignature = structureSignature;
-  box.replaceChildren();
-  box.classList.toggle("muted", !latestClaudeUsage);
-
-  if (!latestClaudeUsage && claudeUsageLoading) {
-    box.textContent = "Checking Claude usage…";
-    return;
-  }
-  if (!latestClaudeUsage && claudeUsageError) {
-    const title = make("div", "claude-usage-unavailable", "Usage unavailable");
-    const detail = make("div", "claude-usage-detail", claudeUsageError.message || String(claudeUsageError));
-    box.append(title, detail);
-    return;
-  }
-  if (!latestClaudeUsage) {
-    box.textContent = "Claude usage has not loaded yet.";
-    return;
-  }
-
-  const header = make("div", "claude-usage-summary");
-  header.append(
-    make("span", "claude-usage-plan", "Claude Code"),
-    make("span", "claude-usage-fetched", latestClaudeUsage.fetchedAt ? `updated ${formatDurationParts(Date.now() - new Date(latestClaudeUsage.fetchedAt).getTime())} ago` : "updated now"),
-  );
-  box.append(header);
-
-  if (latestClaudeUsage.summary) box.append(make("div", "claude-usage-detail", latestClaudeUsage.summary));
-  if (windows.length === 0) {
-    box.append(make("div", "claude-usage-detail", "No Claude usage windows were returned."));
-  } else {
-    for (const [index, window] of windows.entries()) renderClaudeUsageWindow(box, window, String(window?.id || index));
-  }
-
-  renderClaudeUsageActivity(box, latestClaudeUsage.activity);
-  if (claudeUsageError) {
-    box.append(make("div", "claude-usage-detail", `Latest refresh failed: ${claudeUsageError.message || claudeUsageError}`));
-  }
-}
-
-async function refreshClaudeUsage({ forceCli = false } = {}) {
-  if (!forceCli && syncClaudeUsageFromGitFooterPayload()) return;
-  if (claudeUsageLoading) return;
-  claudeUsageLoading = true;
-  renderClaudeUsage();
-  try {
-    const response = await api("/api/claude-usage", { scoped: false });
-    if (!forceCli && syncClaudeUsageFromGitFooterPayload()) return;
-    latestClaudeUsage = response.data || null;
-    claudeUsageError = null;
-  } catch (error) {
-    if (!forceCli && syncClaudeUsageFromGitFooterPayload()) return;
-    claudeUsageError = error;
-  } finally {
-    claudeUsageLoading = false;
-    renderClaudeUsage();
-  }
-}
-
-function scheduleRefreshClaudeUsage(delay = CLAUDE_USAGE_REFRESH_MS) {
-  clearTimeout(refreshClaudeUsageTimer);
-  refreshClaudeUsageTimer = setTimeout(() => {
-    refreshClaudeUsage().finally(() => scheduleRefreshClaudeUsage());
-  }, delay);
-}
-
-function initializeClaudeUsage() {
-  renderClaudeUsage();
-  refreshClaudeUsage().finally(() => scheduleRefreshClaudeUsage());
-  clearInterval(claudeUsageRenderTimer);
-  claudeUsageRenderTimer = setInterval(renderClaudeUsage, CLAUDE_USAGE_RENDER_TICK_MS);
 }
 
 const SUBAGENT_LAUNCHER_LABELS = Object.freeze({
@@ -48321,7 +47855,7 @@ function handleExtensionUiRequest(request) {
             validPayload ? "ready" : "failed",
             validPayload ? "" : "Git footer returned invalid status data — refresh to retry",
           );
-          if (footerPayload) syncClaudeUsageFromGitFooterPayload(footerPayload);
+          if (footerPayload) activityUsage.syncFooter(footerPayload);
         }
       } else {
         statusEntries.delete(statusKey);
@@ -51135,10 +50669,10 @@ elements.gitChangesDialog?.addEventListener("close", () => {
 });
 
 elements.refreshCodexUsageButton?.addEventListener("click", () => {
-  refreshCodexUsage({ forceAuthRefresh: true }).finally(() => scheduleRefreshCodexUsage());
+  activityUsage.refreshCodex({ forceAuthRefresh: true }).finally(() => activityUsage.scheduleCodex());
 });
 elements.refreshClaudeUsageButton?.addEventListener("click", () => {
-  refreshClaudeUsage({ forceCli: true }).finally(() => scheduleRefreshClaudeUsage());
+  activityUsage.refreshClaude({ forceCli: true }).finally(() => activityUsage.scheduleClaude());
 });
 elements.fileTreeRefreshButton?.addEventListener("click", () => refreshFileTreeRoot().catch((error) => addEvent(error.message || String(error), "error")));
 elements.fileTreeRoot?.addEventListener("keydown", handleFileTreeKeydown);
@@ -51681,8 +51215,8 @@ reconcileControlDeckHosts();
 setSidePanelSectionEditMode(false);
 bindSidePanelSectionToggles();
 restoreSidePanelState();
-initializeCodexUsage();
-initializeClaudeUsage();
+activityUsage.start();
+syncUsageVisibility();
 initializeSubagents();
 initializeSubagentLaunchSlots();
 initializeSamplingParameters();
