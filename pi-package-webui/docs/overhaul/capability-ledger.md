@@ -63,7 +63,7 @@ These counts are not the browser baseline’s crowding denominator. Hidden contr
 | Canonical DOM | `shell-view-host.mjs`; mobile canonical/widget adapters | Same nodes and resources, original homes, input values/selection/scroll retained; app owns section attributes |
 | Drawer focus | `shell-surfaces.mjs`; drawer activation adapters | One keyboard listener, nested Escape first, native modal precedence, no resource shutdown, stale focus return invalidated |
 
-These contracts summarize the integrated W1 modules. They do not claim W2 domain extraction or the W3 focused shell is complete. HTTP/SSE, settings/layout persistence, session lifetime and semantic extension UI remain with their existing owners. Future workers read this summary and their wave contract; earlier handoffs are supporting evidence only.
+These contracts summarize the accepted W1 modules. W2 integration is under verification; the W3 focused shell is not implemented. HTTP/SSE, settings/layout persistence, session lifetime and semantic extension UI remain with their existing owners. Future workers read this summary and their wave contract; earlier handoffs are supporting evidence only.
 
 ## Migration matrix
 
@@ -201,3 +201,16 @@ After changing any scanned source or the canonical plan, regenerate JSON and rev
 W0-A does not run the full Node suite, browser tests, a server, performance checks, screenshots, security probes or live companion commands. W0-B owns rendered baseline evidence; the parent owns the unchanged Node suite, interface decisions, independent review and integrated W0 acceptance. No whole-wave completion, runtime parity, GUI improvement or rollout readiness is claimed.
 
 The inventory test lives under `scripts/tests/` because it needs repository-only evidence and the canonical plan. It is run explicitly during overhaul verification, outside the npm-shipped application test suite. Moving it here avoids publishing a test whose scanner and plan dependencies are absent from the package.
+
+
+### W2 ownership under integration
+
+| Owner | App contract |
+| --- | --- |
+| `session-context.mjs` | Activation and observed session identity invalidate captured asynchronous work. Same-tab replacement rebinds SSE and reconciles authoritative state; view navigation does neither. Legacy active-tab variables are read projections, assigned only from the owner. Scoped GET sharing includes activation generation. |
+| `session-composer-store.mjs` | Draft strings, attachment references and pending compaction belong to their tab. Existing persistence, sending, URL revocation and editor cleanup remain in adapters. Closing a tab cleans resources before dropping owner state. |
+| `session-attention-scheduler.mjs` | One abortable scheduled metadata request: visible working 1.5s, multiple idle 10s, hidden 30s, open menus defer 600ms. Direct user/bootstrap refreshes retain their paths; request serials prevent older metadata from replacing newer results. |
+| `platform-event-stream.mjs` | One EventSource with source/context checks and detached old callbacks. Parent retains parsing, replay validation, output-mode negotiation, transcript barriers and reconnect policy. |
+| `session-extension-requests.mjs` | FIFO and deduplication use exact originating tab/request identity. Parent retains semantic dialog rendering, responses and explicit reset cancellation; moving views has no response side effects. |
+
+Module tests and the parent session adapter tests pass. Whole-wave browser/full-suite evidence and independent review remain pending; this table is an integration contract, not W2 acceptance.

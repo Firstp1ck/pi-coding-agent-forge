@@ -56,7 +56,7 @@ assert.match(app, /workspaceReplaceDiscardButton[\s\S]*?replaceOpenTabs: true, d
 assert.match(loadFlow, /const decision = await chooseWorkspaceReplacement[\s\S]*?Object\.keys\(decision\)\.length[\s\S]*?body: decision/, "Open-tab loading must send the WS1 decision body while zero-tab loading keeps an empty body");
 assert.match(loadFlow, /workspace with that name already exists[\s\S]*?confirmLabel: "Overwrite & load"[\s\S]*?overwrite: true/, "Duplicate save-and-load names must confirm overwrite before retrying");
 assert.match(loadFlow, /data\.closedIds[\s\S]*?retireClosedWorkspaceTabContexts\(closedIds\)[\s\S]*?data\.savedCurrent\?\.workspaces/, "The client must reconcile closed tabs and optional saved-current workspace metadata");
-assert.match(app, /function retireClosedWorkspaceTabContexts[\s\S]*?tabDrafts\.delete[\s\S]*?clearAttachments[\s\S]*?fileViewersByTab\.delete[\s\S]*?removeSubagentTerminalViewsForParent/, "Workspace replacement must retire per-tab client state along with closed tabs");
+assert.match(app, /function retireClosedWorkspaceTabContexts[\s\S]*?clearAttachments[\s\S]*?composerStore\.clearTab[\s\S]*?fileViewersByTab\.delete[\s\S]*?removeSubagentTerminalViewsForParent/, "Workspace replacement must retire per-tab client state along with closed tabs");
 
 assert.match(css, /body\.terminal-tabs-left \.terminal-sidebar-actions \{[\s\S]*?grid-template-columns: repeat\(4, minmax\(0, 1fr\)\)/, "The left tab layout must provide four action slots");
 assert.match(css, /\.workspace-saved-workspaces/, "Saved-workspace picker styles must be scoped");

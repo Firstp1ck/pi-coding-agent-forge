@@ -1,3 +1,8 @@
+import { createSessionContext } from "./session-context.mjs";
+import { createSessionComposerStore } from "./session-composer-store.mjs";
+import { createAttentionScheduler } from "./session-attention-scheduler.mjs";
+import { createSessionEventStream } from "./platform-event-stream.mjs";
+import { createExtensionRequestStore } from "./session-extension-requests.mjs";
 import { filterActionItems, checkActionTarget } from "./shell-actions.mjs";
 import { createShellHistory } from "./shell-navigation.mjs";
 import { readShellPreferences, resolveShellMode } from "./shell-preferences.mjs";
@@ -629,18 +634,19 @@ let tabStateCache = new Map();
 let tabStatsCache = new Map();
 let tabWorkspaceCache = new Map();
 let tabs = [];
-let activeTabId = null;
-let activeTabGeneration = 0;
+const sessionContext = createSessionContext();
+// Legacy renderers read this projection; the session owner alone changes identity.
+let activeTabId = sessionContext.activeTabId;
+let activeTabGeneration = sessionContext.generation;
 let shellActionSessionEpoch = 0;
-const pendingManualCompactions = new Set();
+const composerStore = createSessionComposerStore();
 const intercomConversationSummariesByTab = new Map();
 let intercomSummaryRequestSerial = 0;
 let intercomSummaryRefreshTimer = null;
 let intercomDetailRequestSerial = 0;
 let intercomDetailRefreshTimer = null;
 let intercomConversationDialogState = null;
-let tabDrafts = new Map();
-let tabAttachments = new Map();
+
 let activeTextAttachmentEditor = null;
 let activeSkillEditor = null;
 let fileTreeState = { root: "", entriesByPath: new Map(), expanded: new Set(), loading: new Set(), selectedPath: "", requestSerial: 0, searchQuery: "", searchEntries: [], searchLoading: false, searchTruncated: false, searchTotal: 0, gitStatusRoot: "", gitStatusByPath: new Map() };
@@ -1062,7 +1068,12 @@ let refreshFooterTimer = null;
 const mainOutputLoadingRequests = new Set();
 let mainOutputLoadingRevealTimer = null;
 const MAIN_OUTPUT_LOADING_REVEAL_DELAY_MS = 120;
-let refreshTabsTimer = null;
+let tabsRefreshSerial = 0;
+const attentionScheduler = createAttentionScheduler({
+  refresh: ({ signal }) => refreshTabs({ signal }),
+  getState: () => ({ tabCount: tabs.length, working: hasWorkingTab(), visible: document.visibilityState !== "hidden", menuOpen: !!openTerminalTabGroupKey }),
+  onError: (error) => addEvent(error.message || String(error), "error"),
+});
 let tabsRenderFrame = null;
 let foregroundReconcileTimer = null;
 let foregroundSupplementalRefreshCancel = null;
@@ -1071,14 +1082,20 @@ let foregroundTranscriptSuppressedEvents = 0;
 let eventStreamPausedForBackground = false;
 let backgroundReconnectSnapshotFresh = false;
 let foregroundReconnectSnapshotFreshUntil = 0;
-let eventSource = null;
+const sessionEvents = createSessionEventStream({
+  createSource: (url) => new EventSource(url),
+  isCurrent: isCurrentTabContext,
+  onOpen: handleSessionStreamOpen,
+  onMessage: handleSessionStreamMessage,
+  onError: handleSessionStreamError,
+});
 const supervisorEventCursors = new Map();
 const supervisorRetiredEpochs = new Map();
 const supervisorGapWarnings = new Set();
 const supervisorContinuityRefreshes = new Map();
 const closingTerminalTabIds = new Set();
 const supervisorEnvelopeWarnings = new Set();
-let activeDialog = null;
+const extensionRequests = createExtensionRequestStore();
 let activeDialogCancel = null;
 let activeConfirmationResolve = null;
 let activeWorkspaceReplacementResolve = null;
@@ -1376,7 +1393,6 @@ let abortLongPressReleasePending = false;
 let abortLongPressHandled = false;
 let escapeAbortHoldSuppressesDoubleEscape = false;
 let suppressEmptyPromptEscapeUntil = 0;
-const dialogQueue = [];
 const SIDE_PANEL_STORAGE_KEY = "pi-webui-side-panel-collapsed";
 const INTERFACE_DENSITY_STORAGE_KEY = "pi-webui-interface-density";
 const SIDE_PANEL_SECTION_STORAGE_KEY = "pi-webui-side-panel-sections-collapsed";
@@ -1759,13 +1775,13 @@ function persistMobileContinuityState() {
   clearTimeout(mobileContinuityPersistTimer);
   mobileContinuityPersistTimer = null;
   if (!isMobileShellV2Active()) return;
-  if (activeTabId) tabDrafts.set(activeTabId, elements.promptInput?.value || "");
+  if (activeTabId) composerStore.setDraft(activeTabId, elements.promptInput?.value || "");
   const liveIds = new Set(tabs.map((tab) => tab.id));
   const orderedIds = [activeTabId, ...tabs.map((tab) => tab.id)].filter((id, index, values) => id && liveIds.has(id) && values.indexOf(id) === index).slice(0, MOBILE_CONTINUITY_MAX_SESSIONS);
   const drafts = {};
   const attachments = {};
   for (const tabId of orderedIds) {
-    const draft = String(tabDrafts.get(tabId) || "");
+    const draft = String(composerStore.getDraft(tabId) || "");
     if (draft) drafts[tabId] = draft.slice(0, 200_000);
     const metadata = attachmentsForTab(tabId).map(mobileAttachmentMetadata).slice(0, ATTACHMENT_MAX_FILES);
     if (metadata.length) attachments[tabId] = metadata;
@@ -1800,11 +1816,11 @@ function persistDesktopDrafts() {
   clearTimeout(desktopDraftPersistTimer);
   desktopDraftPersistTimer = null;
   if (isMobileShellV2Active()) return;
-  if (activeTabId && elements.promptInput) tabDrafts.set(activeTabId, elements.promptInput.value || "");
+  if (activeTabId && elements.promptInput) composerStore.setDraft(activeTabId, elements.promptInput.value || "");
   const liveIds = new Set(tabs.map((tab) => tab.id));
   const drafts = {};
   let count = 0;
-  for (const [tabId, draft] of tabDrafts) {
+  for (const [tabId, draft] of composerStore.draftEntries()) {
     if (!liveIds.has(tabId) || !draft || count >= DESKTOP_DRAFT_MAX_TABS) continue;
     drafts[tabId] = String(draft).slice(0, 200_000);
     count += 1;
@@ -1833,7 +1849,7 @@ function restoreDesktopDrafts() {
   if (!stored || stored.v !== 1 || !stored.drafts || typeof stored.drafts !== "object") return;
   const liveIds = new Set(tabs.map((tab) => tab.id));
   for (const [tabId, draft] of Object.entries(stored.drafts)) {
-    if (liveIds.has(tabId) && !tabDrafts.get(tabId) && typeof draft === "string" && draft) tabDrafts.set(tabId, draft);
+    if (liveIds.has(tabId) && !composerStore.getDraft(tabId) && typeof draft === "string" && draft) composerStore.setDraft(tabId, draft);
   }
 }
 
@@ -1842,10 +1858,10 @@ function restoreMobileContinuityState() {
   if (!stored) return;
   const liveIds = new Set(tabs.map((tab) => tab.id));
   for (const [tabId, draft] of Object.entries(stored.drafts || {})) {
-    if (liveIds.has(tabId) && !tabDrafts.has(tabId) && typeof draft === "string") tabDrafts.set(tabId, draft);
+    if (liveIds.has(tabId) && !composerStore.hasDraft(tabId) && typeof draft === "string") composerStore.setDraft(tabId, draft);
   }
   for (const [tabId, metadata] of Object.entries(stored.attachments || {})) {
-    if (!liveIds.has(tabId) || tabAttachments.has(tabId) || !Array.isArray(metadata)) continue;
+    if (!liveIds.has(tabId) || composerStore.hasAttachments(tabId) || !Array.isArray(metadata)) continue;
     const restored = metadata.slice(0, ATTACHMENT_MAX_FILES).map((item, index) => ({
       id: `restored-${index}-${Date.now()}`,
       ...mobileAttachmentMetadata(item),
@@ -1853,7 +1869,7 @@ function restoreMobileContinuityState() {
       requiresReselect: true,
       file: null,
     }));
-    if (restored.length) tabAttachments.set(tabId, restored);
+    if (restored.length) composerStore.setAttachments(tabId, restored);
   }
   if (!initialUrlParams.has("mobileRoute") && !pendingMobileNavigationTarget && ["chat", "sessions", "activity", "project"].includes(stored.route)) {
     mobileShellState = reduceMobileShellState(mobileShellState, { type: "route", route: stored.route, replace: true });
@@ -2761,7 +2777,7 @@ function setMobileContinuityNotice(message = "", level = "info") {
 
 function mobileTargetBlockerExists(blockerId) {
   if (!blockerId) return true;
-  return String(activeDialog?.id || "") === blockerId || dialogQueue.some((request) => String(request?.id || "") === blockerId);
+  return extensionRequests.has(activeTabId, blockerId);
 }
 
 async function applyPendingMobileNavigationTarget() {
@@ -5985,8 +6001,9 @@ function retireClosedWorkspaceTabContexts(closedIds) {
   tabs = tabs.filter((tab) => !closed.has(tab.id));
   syncTabMetadata(tabs);
   for (const id of closed) {
-    tabDrafts.delete(id);
     clearAttachments(id);
+    composerStore.clearTab(id);
+    sessionContext.invalidate(id);
     fileViewersByTab.delete(id);
     fileViewerSelectionsByTab.delete(id);
     btwWidgetDismissedIdsByTab.delete(id);
@@ -8932,12 +8949,13 @@ const inFlightGetRequests = new Map();
 async function api(path, { method = "GET", body, tabId = activeTabId, scoped = true, signal } = {}) {
   const url = scoped ? scopedApiPath(path, tabId) : path;
   if (method === "GET" && !signal) {
-    const pending = inFlightGetRequests.get(url);
+    const requestKey = scoped ? `${activeTabGeneration}:${url}` : url;
+    const pending = inFlightGetRequests.get(requestKey);
     if (pending) return pending;
     const request = apiUncached(url, { method, body, signal }).finally(() => {
-      if (inFlightGetRequests.get(url) === request) inFlightGetRequests.delete(url);
+      if (inFlightGetRequests.get(requestKey) === request) inFlightGetRequests.delete(requestKey);
     });
-    inFlightGetRequests.set(url, request);
+    inFlightGetRequests.set(requestKey, request);
     return request;
   }
   return apiUncached(url, { method, body, signal });
@@ -9623,13 +9641,12 @@ function isEditableTextAttachment(attachment) {
 }
 
 function attachmentsForTab(tabId = activeTabId) {
-  return tabId ? tabAttachments.get(tabId) || [] : [];
+  return tabId ? composerStore.getAttachments(tabId) || [] : [];
 }
 
 function ensureAttachmentsForTab(tabId = activeTabId) {
   if (!tabId) return [];
-  if (!tabAttachments.has(tabId)) tabAttachments.set(tabId, []);
-  return tabAttachments.get(tabId);
+  return composerStore.ensureAttachments(tabId);
 }
 
 function hasComposerPayload() {
@@ -9697,7 +9714,7 @@ function removeAttachment(id, tabId = activeTabId) {
   const [removed] = attachments.splice(index, 1);
   if (removed?.previewUrl) URL.revokeObjectURL(removed.previewUrl);
   if (activeTextAttachmentEditor?.tabId === tabId && activeTextAttachmentEditor?.attachmentId === id) closeTextAttachmentEditor({ force: true });
-  if (attachments.length === 0) tabAttachments.delete(tabId);
+  if (attachments.length === 0) composerStore.deleteAttachments(tabId);
   if (tabId === activeTabId) renderAttachmentTray();
   persistMobileContinuityState();
 }
@@ -9708,7 +9725,7 @@ function clearAttachments(tabId = activeTabId) {
     if (attachment.previewUrl) URL.revokeObjectURL(attachment.previewUrl);
   }
   if (activeTextAttachmentEditor?.tabId === tabId) closeTextAttachmentEditor({ force: true });
-  if (tabId) tabAttachments.delete(tabId);
+  if (tabId) composerStore.deleteAttachments(tabId);
   if (tabId === activeTabId) renderAttachmentTray();
   persistMobileContinuityState();
 }
@@ -12272,7 +12289,7 @@ function activeTab() {
 }
 
 function activeTabContext(tabId = activeTabId) {
-  return { tabId: tabId || null, generation: activeTabGeneration };
+  return sessionContext.capture(tabId);
 }
 
 function transcriptStreamOwner(tabId = activeTabId, generation = activeTabGeneration) {
@@ -12325,7 +12342,6 @@ function reconcileUnknownTranscriptEvidenceAtBarrier(event) {
 function setActiveTabId(tabId, { remember = false } = {}) {
   const nextTabId = tabId || null;
   if (nextTabId !== activeTabId) {
-    activeTabGeneration += 1;
     intercomSummaryRequestSerial += 1;
     clearTimeout(intercomSummaryRefreshTimer);
     intercomSummaryRefreshTimer = null;
@@ -12333,7 +12349,9 @@ function setActiveTabId(tabId, { remember = false } = {}) {
     closeFeatureDecisionDialog({ restoreFocus: false });
     closeSessionSummaryOverlay({ restoreFocus: false });
   }
-  activeTabId = nextTabId;
+  const context = sessionContext.activate(nextTabId);
+  activeTabId = context.tabId;
+  activeTabGeneration = context.generation;
   renderMainOutputLoading();
   bindGitWorkflowToActiveTab();
   renderIntercomConversationTags(nextTabId);
@@ -12344,7 +12362,44 @@ function setActiveTabId(tabId, { remember = false } = {}) {
 }
 
 function isCurrentTabContext(context) {
-  return !!context && context.tabId === activeTabId && context.generation === activeTabGeneration;
+  return sessionContext.isCurrent(context);
+}
+
+function reconcileReplacedSession(context) {
+  activeTabGeneration = context.generation;
+  clearRefreshTimers();
+  cancelNormalStreamRenders();
+  resetStreamBubble();
+  latestMessages = [];
+  latestMessagesSessionKey = "";
+  transientMessages = [];
+  liveToolRuns.clear();
+  tabMessagesCache.delete(context.tabId);
+  tabStatsCache.delete(context.tabId);
+  latestStats = null;
+  resetChatOutput();
+  connectEvents(context);
+  // Replacement invalidates in-flight refreshes; rebuild from the new session only.
+  queueMicrotask(() => {
+    if (isCurrentTabContext(context)) refreshAll(context).catch((error) => {
+      if (isCurrentTabContext(context)) addEvent(error.message || String(error), "error");
+    });
+  });
+}
+
+function observeSessionState(context, state) {
+  const observed = sessionContext.observeSession(context.tabId, state?.sessionId || state?.sessionFile);
+  if (observed.changed && context.tabId === activeTabId) reconcileReplacedSession(observed.context);
+  return observed.context;
+}
+
+function invalidateActiveSession(context) {
+  if (!isCurrentTabContext(context)) return null;
+  const replacement = sessionContext.invalidate(context.tabId);
+  currentState = null;
+  tabStateCache.delete(context.tabId);
+  reconcileReplacedSession(replacement);
+  return replacement;
 }
 
 function normalizeFileTreePath(value = "") {
@@ -15896,24 +15951,11 @@ function hasWorkingTab() {
 }
 
 function scheduleRefreshTabs(delay = 1500) {
-  clearTimeout(refreshTabsTimer);
-  refreshTabsTimer = setTimeout(() => {
-    refreshTabsTimer = null;
-    if (openTerminalTabGroupKey) {
-      scheduleRefreshTabs(600);
-      return;
-    }
-    refreshTabs().catch((error) => addEvent(error.message, "error"));
-  }, delay);
+  attentionScheduler.request(delay);
 }
 
 function syncTabPolling() {
-  if (hasWorkingTab()) {
-    if (!refreshTabsTimer) scheduleRefreshTabs();
-  } else {
-    clearTimeout(refreshTabsTimer);
-    refreshTabsTimer = null;
-  }
+  attentionScheduler.sync();
 }
 
 function markTabWorkingLocally(tabId = activeTabId, { runStarted = false } = {}) {
@@ -16082,14 +16124,14 @@ function updateDocumentTitle() {
 }
 
 function saveActiveDraft() {
-  if (activeTabId) tabDrafts.set(activeTabId, elements.promptInput.value || "");
+  if (activeTabId) composerStore.setDraft(activeTabId, elements.promptInput.value || "");
   persistMobileContinuityState();
   persistDesktopDrafts();
 }
 
 function restoreActiveDraft() {
   resetPromptHistoryNavigation();
-  elements.promptInput.value = activeTabId ? tabDrafts.get(activeTabId) || "" : "";
+  elements.promptInput.value = activeTabId ? composerStore.getDraft(activeTabId) || "" : "";
   resizePromptInput();
   renderCommandSuggestions();
   renderAttachmentTray();
@@ -16120,8 +16162,7 @@ function clearRefreshTimers() {
 }
 
 function cancelPendingDialogs() {
-  const pending = activeDialog ? [activeDialog] : [];
-  pending.push(...dialogQueue.splice(0));
+  const pending = extensionRequests.clear();
   for (const request of pending) {
     if (!request?.id || !EXTENSION_UI_BLOCKING_METHODS.has(request.method)) continue;
     api("/api/extension-ui-response", {
@@ -16130,7 +16171,6 @@ function cancelPendingDialogs() {
       tabId: request.tabId || activeTabId,
     }).catch((error) => console.warn("failed to cancel stale extension dialog", error));
   }
-  activeDialog = null;
   activeDialogCancel = null;
   if (elements.dialog.open) elements.dialog.close();
 }
@@ -16243,8 +16283,7 @@ function cachedStateForTabSwitch(tabId = activeTabId) {
 
 function resetActiveTabUi() {
   clearRefreshTimers();
-  eventSource?.close();
-  eventSource = null;
+  sessionEvents.close();
   setControlsPendingModel("");
   setControlsPendingThinking("");
   currentState = cachedStateForTabSwitch(activeTabId);
@@ -17691,12 +17730,14 @@ function tabsRenderSnapshotSignature(tabList = []) {
   }));
 }
 
-async function refreshTabs({ selectStored = false } = {}) {
+async function refreshTabs({ selectStored = false, signal } = {}) {
+  const serial = ++tabsRefreshSerial;
   const previousTabs = tabs;
   const previousTabsSignature = tabsSnapshotSignature(previousTabs);
   const previousTabsRenderSignature = tabsRenderSnapshotSignature(previousTabs);
   const previousActiveTabId = activeTabId;
-  const response = await api("/api/tabs", { scoped: false });
+  const response = await api("/api/tabs", { scoped: false, signal });
+  if (signal?.aborted || serial !== tabsRefreshSerial) return tabs;
   const nextTabs = response.data?.tabs || [];
   const tabsChanged = previousTabsSignature !== tabsSnapshotSignature(nextTabs);
   const tabsRenderChanged = previousTabsRenderSignature !== tabsRenderSnapshotSignature(nextTabs);
@@ -17999,14 +18040,15 @@ async function closeTerminalTabs(tabIds, { label = "selected terminal tabs", all
   const fallbackTabId = tabs.find((item) => !targetIds.includes(item.id))?.id || null;
   for (const id of targetIds) closingTerminalTabIds.add(id);
   try {
-    if (closedActiveTab) eventSource?.close();
+    if (closedActiveTab) sessionEvents.close();
     const response = await api("/api/tabs/close", { method: "POST", body: { ids: targetIds, allowEmpty }, scoped: false });
     const closedIds = response.data?.closedIds || targetIds;
     tabs = response.data?.tabs || tabs.filter((item) => !closedIds.includes(item.id));
     syncTabMetadata(tabs);
     for (const id of closedIds) {
-      tabDrafts.delete(id);
       clearAttachments(id);
+      composerStore.clearTab(id);
+      sessionContext.invalidate(id);
       clearGitWorkflowForTab(id);
       clearFeatureDecisionStateForTab(id);
       commandCatalogsByTab.delete(id);
@@ -22831,9 +22873,9 @@ function appendContextMeterFill(meter, snapshot) {
 async function requestManualCompaction({ triggerButton = null } = {}) {
   const tabContext = activeTabContext();
   if (!tabContext.tabId) return;
-  if (currentState?.isCompacting || pendingManualCompactions.has(tabContext.tabId)) return;
+  if (currentState?.isCompacting || composerStore.isCompactionPending(tabContext.tabId)) return;
   const buttons = [...new Set([elements.compactButton, triggerButton].filter(Boolean))];
-  pendingManualCompactions.add(tabContext.tabId);
+  composerStore.beginCompaction(tabContext.tabId);
   try {
     for (const button of buttons) {
       button.disabled = true;
@@ -22861,7 +22903,7 @@ async function requestManualCompaction({ triggerButton = null } = {}) {
       addEvent(error.message, "error");
     }
   } finally {
-    pendingManualCompactions.delete(tabContext.tabId);
+    composerStore.endCompaction(tabContext.tabId);
     if (isCurrentTabContext(tabContext)) {
       for (const button of buttons) {
         button.disabled = !!currentState?.isCompacting;
@@ -40244,7 +40286,7 @@ async function sendBtwQuestion(question, { clearComposerDraft = false } = {}) {
       hideCommandSuggestions();
       saveActiveDraft();
     } else {
-      tabDrafts.set(targetTabId, "");
+      composerStore.setDraft(targetTabId, "");
     }
   }
   return true;
@@ -46138,6 +46180,7 @@ async function refreshState(tabContext = activeTabContext()) {
   if (!isCurrentTabContext(tabContext)) return;
   const previousState = currentState;
   currentState = response.data || null;
+  tabContext = observeSessionState(tabContext, currentState);
   if (currentState) tabStateCache.set(tabContext.tabId, currentState);
   else tabStateCache.delete(tabContext.tabId);
   if (latestMessages.length) {
@@ -47335,7 +47378,7 @@ function commandPaletteCoreItems() {
     { id: "session:new-tab-directory", scope: "server", destination: "conversation", kind: "Action", label: "Choose directory for new tab", description: "Pick a cwd before starting a tab", keywords: "cwd folder workspace", run: () => createTerminalTabFromChosenDirectory({ triggerButton: elements.commandPaletteButton }) },
     { id: "project:branch-worktree", scope: "project", destination: "project", kind: "Git", label: "Branch worktree", description: "Create or open a Git worktree tab for parallel branch work", keywords: "git branch worktree parallel checkout", run: () => openBranchWorktreePicker() },
     { id: "session:new", scope: "session", destination: "conversation", kind: "Action", label: "New session", description: "Start a fresh session in the active tab", keywords: "/new clear", run: () => elements.newSessionButton.click() },
-    { id: "session:compact", scope: "session", destination: "conversation", available: !currentState?.isCompacting && !pendingManualCompactions.has(activeTabId), unavailableReason: "Context compaction is already running. Wait for it to finish.", kind: "Action", label: "Compact context", description: contextUsageDetail(), keywords: "/compact context window tokens", run: () => requestManualCompaction() },
+    { id: "session:compact", scope: "session", destination: "conversation", available: !currentState?.isCompacting && !composerStore.isCompactionPending(activeTabId), unavailableReason: "Context compaction is already running. Wait for it to finish.", kind: "Action", label: "Compact context", description: contextUsageDetail(), keywords: "/compact context window tokens", run: () => requestManualCompaction() },
     { id: "session:auto-compaction", scope: "session", destination: "conversation", kind: "Action", label: footerAutoCompactionEnabled() ? "Disable auto-compaction" : "Enable auto-compaction", description: footerAutoCompactionToggleAction(), keywords: "context automatic", run: () => toggleFooterAutoCompaction() },
     { id: "home:toggle", scope: "browser", destination: "home", kind: "Action", label: workspaceDashboardCollapsed ? "Show workspace dashboard" : "Hide workspace dashboard", description: "Toggle the launch/workspace overview", keywords: "home overview", run: () => setWorkspaceDashboardCollapsed(!workspaceDashboardCollapsed) },
     { id: "layout:control-deck", scope: "browser", destination: "settings", kind: "Action", label: document.body.classList.contains("side-panel-collapsed") ? "Show side panel" : "Hide side panel", description: "Toggle the Control Deck", keywords: "controls settings", run: () => setSidePanelCollapsed(!document.body.classList.contains("side-panel-collapsed"), { focusPanel: true }) },
@@ -47595,7 +47638,7 @@ function scheduleForegroundSupplementalRefresh(tabContext) {
 
 function ensureActiveEventStream(tabContext = activeTabContext()) {
   if (!tabContext.tabId || !isCurrentTabContext(tabContext)) return;
-  if (!eventSource || eventSource.readyState === EventSource.CLOSED) connectEvents(tabContext);
+  if (!sessionEvents.source || sessionEvents.source.readyState === EventSource.CLOSED) connectEvents(tabContext);
 }
 
 async function reconcileForegroundState(reason = "resume") {
@@ -47978,7 +48021,7 @@ function clearComposerAfterUserBash({ usesPromptInput, targetTabId, tabContext }
     elements.promptInput.value = "";
     resizePromptInput();
   } else {
-    tabDrafts.set(targetTabId, "");
+    composerStore.setDraft(targetTabId, "");
   }
 }
 
@@ -48091,7 +48134,7 @@ async function sendUserBashCommand(parsed, { usesPromptInput = false, targetTabI
 
 function clearPromptInputForRouting({ usesPromptInput, targetTabId, tabContext }) {
   if (!usesPromptInput) return;
-  tabDrafts.set(targetTabId, "");
+  composerStore.setDraft(targetTabId, "");
   if (!isCurrentTabContext(tabContext)) return;
   elements.promptInput.value = "";
   resizePromptInput();
@@ -48104,10 +48147,10 @@ function restorePromptInputAfterRoutingError(message, { usesPromptInput, targetT
     if (elements.promptInput.value) return;
     elements.promptInput.value = message;
     resizePromptInput();
-    tabDrafts.set(targetTabId, message);
+    composerStore.setDraft(targetTabId, message);
     return;
   }
-  if (!tabDrafts.get(targetTabId)) tabDrafts.set(targetTabId, message);
+  if (!composerStore.getDraft(targetTabId)) composerStore.setDraft(targetTabId, message);
 }
 
 function createBrowserPromptRequestId() {
@@ -48141,7 +48184,7 @@ async function retryMobileFailedSend() {
     applyResponseTab(response);
     if (pending.tabId === activeTabId && elements.promptInput.value.trim() === pending.inputMessage.trim()) {
       elements.promptInput.value = "";
-      tabDrafts.set(pending.tabId, "");
+      composerStore.setDraft(pending.tabId, "");
       resizePromptInput();
     }
     clearAttachments(pending.tabId);
@@ -48309,26 +48352,17 @@ async function sendPrompt(kind = "prompt", explicitMessage, { targetTabId = acti
   }
 }
 
-function hasQueuedDialogRequest(id) {
-  if (!id) return false;
-  const key = String(id);
-  return String(activeDialog?.id || "") === key || dialogQueue.some((request) => String(request?.id || "") === key);
+function hasQueuedDialogRequest(id, tabId = activeTabId) {
+  return !!id && extensionRequests.has(tabId, String(id));
 }
 
-function removeQueuedDialogRequests(ids = []) {
-  const idSet = new Set(ids.map((id) => String(id)).filter(Boolean));
-  if (idSet.size === 0) return false;
-  for (let i = dialogQueue.length - 1; i >= 0; i -= 1) {
-    if (idSet.has(String(dialogQueue[i]?.id || ""))) dialogQueue.splice(i, 1);
-  }
-  if (activeDialog && idSet.has(String(activeDialog.id || ""))) {
-    if (elements.dialog.open) elements.dialog.close();
-    activeDialog = null;
-    activeDialogCancel = null;
-    showNextDialog();
-    return true;
-  }
-  return false;
+function removeQueuedDialogRequests(ids = [], tabId = activeTabId) {
+  const { activeRemoved } = extensionRequests.remove(tabId, ids.map(String).filter(Boolean));
+  if (!activeRemoved) return false;
+  activeDialogCancel = null;
+  if (elements.dialog.open) elements.dialog.close();
+  showNextDialog();
+  return true;
 }
 
 function handleExtensionUiRequest(request) {
@@ -48447,7 +48481,7 @@ function handleExtensionUiRequest(request) {
     case "input":
     case "editor":
       if (isRemoteWebuiQrPopupLoading()) closeRemoteWebuiQrPopup();
-      if (hasQueuedDialogRequest(request.id)) return;
+      if (hasQueuedDialogRequest(request.id, request.tabId)) return;
       if (request.pendingExtensionUiRequestCount === undefined) {
         const tab = tabs.find((item) => item.id === request.tabId);
         if (setTabPendingBlockerCount(request.tabId, Math.max(1, tabPendingBlockerCount(tab) + 1))) renderTabs();
@@ -48455,7 +48489,7 @@ function handleExtensionUiRequest(request) {
       if (!request.replayed) notifyBlockedTab(request.tabId, { request, count: request.pendingExtensionUiRequestCount });
       if (request.replayed) addEvent(`recovered pending ${request.method} request`, "warn");
       setRunIndicatorActivity(`Waiting for your ${request.method} response…`);
-      dialogQueue.push(request);
+      extensionRequests.enqueue(request);
       showNextDialog();
       return;
     default:
@@ -48474,9 +48508,9 @@ async function sendDialogResponse(payload) {
     if (isCurrentTabContext(tabContext)) addEvent(error.message, "error");
   } finally {
     if (!isCurrentTabContext(tabContext)) return;
-    if (responseId && activeDialog && String(activeDialog.id || "") !== responseId) return;
+    if (responseId && extensionRequests.active && String(extensionRequests.active.id || "") !== responseId) return;
     if (elements.dialog.open) elements.dialog.close();
-    activeDialog = null;
+    extensionRequests.remove(tabId, [responseId || extensionRequests.active?.id || ""]);
     activeDialogCancel = null;
     if (runIndicatorIsActive()) {
       setRunIndicatorActivity("Continuing after your response…");
@@ -48490,7 +48524,7 @@ async function sendDialogResponse(payload) {
 }
 
 function cancelActiveExtensionDialog(event) {
-  if (!activeDialog || typeof activeDialogCancel !== "function") return false;
+  if (!extensionRequests.active || typeof activeDialogCancel !== "function") return false;
   event?.preventDefault?.();
   return activeDialogCancel();
 }
@@ -48689,10 +48723,9 @@ function renderWorkflowScriptPreview(request, respondToDialog) {
 }
 
 function showNextDialog() {
-  if (activeDialog || dialogQueue.length === 0) return;
-  activeDialog = dialogQueue.shift();
+  const request = extensionRequests.takeNext();
+  if (!request) return;
   activeDialogCancel = null;
-  const request = activeDialog;
 
   const prompt = normalizeDialogPrompt(request);
   const detectedReleasePrompt = request.method === "select" ? releaseDialogPromptParts(prompt) : null;
@@ -48946,11 +48979,9 @@ function beginForegroundTranscriptCatchUp() {
   backgroundReconnectSnapshotFresh = false;
   flushNormalStreamRenders("visibility-hidden");
   streamOutputController.cancel();
-  if (!eventSource) return;
+  if (!sessionEvents.source) return;
   eventStreamPausedForBackground = true;
-  const source = eventSource;
-  eventSource = null;
-  source.close();
+  sessionEvents.close();
 }
 
 function dispatchTranscriptStreamEvent(event) {
@@ -49089,14 +49120,14 @@ function handleEvent(event) {
       }, 500);
       break;
     case "webui_extension_ui_cancelled":
-      removeQueuedDialogRequests(event.ids || []);
+      removeQueuedDialogRequests(event.ids || [], event.tabId || activeTabId);
       addEvent(`cancelled ${event.ids?.length || 0} pending extension UI request(s)`, "warn");
       break;
     case "webui_extension_ui_resolved": {
-      const closedActiveDialog = removeQueuedDialogRequests([event.id]);
+      const closedActiveDialog = removeQueuedDialogRequests([event.id], event.tabId || activeTabId);
       if (closedActiveDialog) {
         addEvent("extension UI request resolved");
-        if (runIndicatorIsActive() && !activeDialog) setRunIndicatorActivity("Continuing after extension UI response…");
+        if (runIndicatorIsActive() && !extensionRequests.active) setRunIndicatorActivity("Continuing after extension UI response…");
       }
       break;
     }
@@ -49362,6 +49393,7 @@ function handleEvent(event) {
       if (event.success === false) surfaceRuntimeDiagnostic(`${event.command || "Pi command"} failed`, event.error || "Unknown RPC command error.");
       else if (event.command === "get_state" && event.tabId === activeTabId) {
         currentState = event.data || currentState;
+        observeSessionState(tabContext, currentState);
         syncActiveTabActivityFromState(currentState);
         syncRunIndicatorFromState(currentState);
         renderStatus();
@@ -49375,6 +49407,7 @@ function handleEvent(event) {
         } else if (event.command === "new_session") {
           const tabId = event.tabId || activeTabId;
           invalidateShellSessionActions(tabId);
+          invalidateActiveSession(tabContext);
           clearContextUsageUnknownAfterCompaction(tabId);
           forgetLastUserPrompt(tabId);
           resetGitWorkflowForTab(tabId);
@@ -49389,11 +49422,36 @@ function handleEvent(event) {
   }
 }
 
+function handleSessionStreamOpen(event, tabContext) {
+  if (!eventStreamPausedForBackground) refreshOptionalFeaturePackageStatuses().catch(() => {});
+  scheduleIntercomConversationRefresh(tabContext, 0);
+}
+
+function handleSessionStreamMessage(message, tabContext) {
+  try {
+    const event = JSON.parse(message.data);
+    if (!acceptSupervisorEvent(event, tabContext.tabId)) return;
+    handleEvent(event);
+  } catch (error) {
+    if (isCurrentTabContext(tabContext)) addEvent(error.message, "error");
+  }
+}
+
+function handleSessionStreamError() {
+  streamOutputController.flush();
+  flushNormalStreamRenders("disconnect");
+  streamOutputController.cancel();
+  fallbackStreamDerivedOutput("disconnect");
+  if (compactOutputActive()) compactLiveScheduler.flushNow();
+  addEvent("event stream disconnected; browser will retry", "warn");
+  fetch("/api/health", { cache: "no-store" }).catch((error) => setBackendOffline(true, error));
+}
+
 function connectEvents(tabContext = activeTabContext(), { requestedMode = "auto", fallbackAttempted = false } = {}) {
+  if (!isCurrentTabContext(tabContext)) return;
   flushNormalStreamRenders("reconnect");
   cancelNormalStreamRenders();
-  eventSource?.close();
-  eventSource = null;
+  sessionEvents.close();
   streamOutputController.cancel();
   fallbackStreamDerivedOutput("reconnect");
   resetCompactLiveOutput();
@@ -49401,39 +49459,13 @@ function connectEvents(tabContext = activeTabContext(), { requestedMode = "auto"
   outputModeAcknowledged = false;
   eventSourceOutputModeRequest = requestedMode === "normal" ? "normal" : "auto";
   eventSourceOutputModeFallbackAttempted = !!fallbackAttempted;
-  if (!tabContext.tabId || !isCurrentTabContext(tabContext)) return;
+  if (!tabContext.tabId) return;
   const parameters = new URLSearchParams({
     tab: tabContext.tabId,
     outputMode: eventSourceOutputModeRequest,
     outputModeProtocol: "1",
   });
-  const source = new EventSource(`/api/events?${parameters.toString()}`);
-  eventSource = source;
-  source.onopen = () => {
-    if (eventSource !== source || !isCurrentTabContext(tabContext)) return;
-    if (!eventStreamPausedForBackground) refreshOptionalFeaturePackageStatuses().catch(() => {});
-    scheduleIntercomConversationRefresh(tabContext, 0);
-  };
-  source.onmessage = (message) => {
-    if (eventSource !== source || !isCurrentTabContext(tabContext)) return;
-    try {
-      const event = JSON.parse(message.data);
-      if (!acceptSupervisorEvent(event, tabContext.tabId)) return;
-      handleEvent(event);
-    } catch (error) {
-      if (isCurrentTabContext(tabContext)) addEvent(error.message, "error");
-    }
-  };
-  source.onerror = () => {
-    if (eventSource !== source || !isCurrentTabContext(tabContext)) return;
-    streamOutputController.flush();
-    flushNormalStreamRenders("disconnect");
-    streamOutputController.cancel();
-    fallbackStreamDerivedOutput("disconnect");
-    if (compactOutputActive()) compactLiveScheduler.flushNow();
-    addEvent("event stream disconnected; browser will retry", "warn");
-    fetch("/api/health", { cache: "no-store" }).catch((error) => setBackendOffline(true, error));
-  };
+  sessionEvents.connect(`/api/events?${parameters.toString()}`, tabContext);
 }
 
 elements.copyServerCommandButton?.addEventListener("click", copyServerStartCommand);
@@ -50278,9 +50310,8 @@ elements.newSessionButton.addEventListener("click", async () => {
     applyResponseTab(response);
     forgetLastUserPrompt(tabContext.tabId);
     resetGitWorkflowForTab(tabContext.tabId);
-    if (!isCurrentTabContext(tabContext)) return;
-    await refreshAll(tabContext);
-    if (isCurrentTabContext(tabContext)) focusPromptInput({ defer: true });
+    const replacement = invalidateActiveSession(tabContext);
+    if (replacement) focusPromptInput({ defer: true });
   } catch (error) {
     if (isCurrentTabContext(tabContext)) addEvent(error.message, "error");
   }
@@ -50934,6 +50965,7 @@ window.addEventListener("keydown", (event) => {
 
 window.addEventListener("keydown", handleNativeAppShortcut, { capture: true });
 document.addEventListener("visibilitychange", () => {
+  syncTabPolling();
   if (document.visibilityState === "visible") {
     flushNormalStreamRenders("visibility-recovery");
     scheduleForegroundReconcile("visibility resume", 0);

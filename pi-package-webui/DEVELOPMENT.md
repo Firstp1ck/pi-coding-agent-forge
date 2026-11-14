@@ -1076,3 +1076,14 @@ Restarting only the Web UI normally keeps managed Pi tabs, working directories, 
 ## Settings and private data
 
 Web UI settings are stored under `~/.pi/webui/` by default. Private runtime state, update records, authentication data, and supervisor details are not exposed to browsers. Do not delete private runtime files while managed tabs are still active.
+
+
+### Session owners during the compact workspace migration
+
+The browser uses flat native modules for session identity, composer state, attention reconciliation, EventSource lifetime and extension request queuing. Their adapter contract is maintained in [the overhaul capability ledger](docs/overhaul/capability-ledger.md#w2-ownership-under-integration). HTTP/SSE shapes, supervisor ownership and settings storage are unchanged.
+
+A captured tab context becomes stale when that tab replaces its session, as well as when the active tab changes. Replacement clears conversation projections, reconnects the single stream and schedules authoritative refresh. It preserves drafts, attachment objects and project editor buffers. Scoped GET deduplication cannot share a request across context generations. Extension responses continue to use the originating tab and request ID.
+
+The attention owner reconciles multiple idle tabs every ten seconds to discover later blockers. It forwards an AbortSignal through metadata fetches, limits each scheduled request to ten seconds, defers open group menus and backs off failures. Ordinary bootstrap and explicit user refreshes remain separate; their result serial protects against older responses.
+
+Focused ownership checks are the `session-*.test.mjs`, `platform-event-stream.test.mjs` and `shell-action-adapter.test.mjs` tests. Browser adoption uses the opt-in `FAKE_PI_SESSION_OWNERSHIP=1` fixture; this is a test-only switch and makes no provider calls. The complete package check and separate Chromium tests remain integration gates.

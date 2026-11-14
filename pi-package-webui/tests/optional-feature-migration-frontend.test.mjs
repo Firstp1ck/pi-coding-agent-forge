@@ -63,7 +63,7 @@ assert.match(progressRecoverySource, /progress\.restartDeferred === true[\s\S]*o
 assert.match(progressRecoverySource, /progress\.autoRestarted === true && !optionalFeatureMigrationCompletionIsDismissed\(snapshot\)[\s\S]*optionalFeatureRestartNotice/, "cached progress should rehydrate an undismissed completed restart notice");
 assert.match(progressRecoverySource, /optionalFeatureMigrationCompletionIsDismissed\(snapshot\)[\s\S]*optionalFeatureRestartNotice = null/, "cached progress must not resurrect a dismissed completion notice");
 assert.match(app, /OPTIONAL_FEATURE_MIGRATION_DISMISS_STORAGE_KEY[\s\S]*storedDismissedOptionalFeatureMigrationKey[\s\S]*localStorage\.setItem\(OPTIONAL_FEATURE_MIGRATION_DISMISS_STORAGE_KEY, key\)/, "completion dismissal should survive reloads in browser storage");
-assert.match(app, /source\.onopen[\s\S]*refreshOptionalFeaturePackageStatuses\(\)/, "event-stream reconnect should recover the current cached server snapshot");
+assert.match(app, /function handleSessionStreamOpen[\s\S]*refreshOptionalFeaturePackageStatuses\(\)/, "event-stream reconnect should recover the current cached server snapshot");
 const elapsedTimerSource = sourceBetween("function refreshOptionalFeatureMigrationElapsedText", "function clearOptionalFeatureReadyDismissTimer");
 const dismissalTimerSource = sourceBetween("function clearOptionalFeatureReadyDismissTimer", "function optionalFeatureMigrationAction");
 assert.doesNotMatch(elapsedTimerSource, /renderOptionalFeatureMigrationSurface\(\)/, "elapsed ticks must not replace and re-announce the entire live region");

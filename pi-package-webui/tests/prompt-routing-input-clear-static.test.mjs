@@ -15,7 +15,7 @@ function functionSource(name, nextName) {
 
 const clearSource = functionSource("clearPromptInputForRouting", "restorePromptInputAfterRoutingError");
 assert.match(clearSource, /if \(!usesPromptInput\) return;/, "programmatic prompt sends should preserve the visible draft");
-assert.match(clearSource, /tabDrafts\.set\(targetTabId, ""\);[\s\S]*elements\.promptInput\.value = "";[\s\S]*resizePromptInput\(\);[\s\S]*hideCommandSuggestions\(\);/, "input-backed sends should immediately clear their tab draft, textarea, and stale suggestions");
+assert.match(clearSource, /composerStore\.setDraft\(targetTabId, ""\);[\s\S]*elements\.promptInput\.value = "";[\s\S]*resizePromptInput\(\);[\s\S]*hideCommandSuggestions\(\);/, "input-backed sends should immediately clear their tab draft, textarea, and stale suggestions");
 
 const sendSource = functionSource("sendPrompt", "hasQueuedDialogRequest");
 const clearIndex = sendSource.indexOf("clearPromptInputForRouting({ usesPromptInput, targetTabId, tabContext });");

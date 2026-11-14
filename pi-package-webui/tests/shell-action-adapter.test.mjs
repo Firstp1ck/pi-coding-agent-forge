@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { test } from 'node:test';
+import { createSessionContext } from '../public/session-context.mjs';
+import { createSessionComposerStore } from '../public/session-composer-store.mjs';
 import { checkActionTarget } from '../public/shell-actions.mjs';
 
 const source = readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');
@@ -19,12 +21,17 @@ const functions = names.map(name => {
 }).join('\n');
 
 function fixture() {
-  const context = vm.createContext({ checkActionTarget, console, assert });
+  const context = vm.createContext({ checkActionTarget, createSessionContext, createSessionComposerStore, console, assert });
   vm.runInContext(`
 let activeTabId='tab_12345678', activeTabGeneration=4, shellActionSessionEpoch=0;
-const pendingManualCompactions = new Set();
+const sessionContext = createSessionContext();
+sessionContext.activate(activeTabId);
+activeTabGeneration=sessionContext.generation;
+const composerStore = createSessionComposerStore();
+const observeSessionState = (context,state) => {sessionContext.observeSession(context.tabId,state?.sessionId); return sessionContext.capture(context.tabId);};
 let tabs=[{id:activeTabId,title:'A',cwd:'/project'}];
 let currentState={sessionId:'session-A',isCompacting:false};
+sessionContext.observeSession(activeTabId,currentState.sessionId);
 let responseState=currentState, requests=[], errors=[], latestMessages=[];
 let tabStateCache=new Map(), availableModels=[];
 let workspaceDashboardCollapsed=false, thinkingOutputVisible=false;
@@ -81,13 +88,13 @@ test('confirmed new session invalidates actions before its state refresh', async
     await executeCommandPaletteItem(captured);
     assert.equal(requests.length, 0);
     assert.match(errors[0], /session has changed/);
-    assert.equal(activeTabGeneration, 4);
+    assert.equal(activeTabGeneration, 1);
   })()`);
   assert.match(source, /event.command === "new_session"[\s\S]*?invalidateShellSessionActions\(tabId\)/);
   assert.match(source, /await api\("\/api\/new-session"[\s\S]*?invalidateShellSessionActions\(tabContext.tabId\)/);
 });
 
-for (const transition of ['currentState.isCompacting = true', 'pendingManualCompactions.add(activeTabId)']) {
+for (const transition of ['currentState.isCompacting = true', 'composerStore.beginCompaction(activeTabId)']) {
   test(`Compact rechecks live availability: ${transition}`, async () => {
     const run = fixture();
     await run(`(async () => {
@@ -122,13 +129,13 @@ test('a pending real compaction request rejects a second palette invocation and 
     let release, requestCount = 0;
     api = async () => { requestCount += 1; return new Promise(resolve => { release = resolve; }); };
     const first = requestManualCompaction();
-    assert.equal(pendingManualCompactions.has(activeTabId), true);
+    assert.equal(composerStore.isCompactionPending(activeTabId), true);
     await executeCommandPaletteItem(captured);
     assert.equal(requestCount, 1);
     assert.match(errors[0], /compaction is already running/);
     release({ data: {} });
     await first;
-    assert.equal(pendingManualCompactions.size, 0);
+    assert.equal(composerStore.isCompactionPending(activeTabId), false);
     assert.equal(buildCommandPaletteItems().find(a => a.id === 'session:compact').available, true);
   })()`);
 });

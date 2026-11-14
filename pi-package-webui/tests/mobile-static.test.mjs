@@ -1147,11 +1147,11 @@ assert.match(app, /elements\.dialog\.classList\.toggle\("guardrail-dialog", isGu
 assert.match(app, /elements\.dialog\.classList\.toggle\("release-dialog", isReleaseDialog\)/, "release extension dialogs should get dedicated roomy styling");
 assert.match(app, /release-publish-action/, "release dialogs should distinguish the publish confirmation button");
 assert.match(app, /guardrail-safe-action/, "guardrail dialogs should distinguish safe and allow actions");
-assert.match(app, /function hasQueuedDialogRequest\(id\)/, "frontend should deduplicate replayed extension UI dialogs by request id");
+assert.match(app, /function hasQueuedDialogRequest\(id, tabId = activeTabId\)/, "frontend should deduplicate replayed extension UI dialogs by request id");
 assert.match(app, /if \(request\.replayed\) addEvent\(`recovered pending \$\{request\.method\} request`, "warn"\)/, "frontend should surface replayed extension UI blockers");
 assert.match(app, /case "webui_extension_ui_cancelled":/, "frontend should close dialogs cancelled by backend abort handling");
-assert.match(app, /case "webui_extension_ui_resolved":[\s\S]*?removeQueuedDialogRequests\(\[event\.id\]\)/, "frontend should close dialogs resolved by another connected browser");
-assert.match(app, /if \(responseId && activeDialog && String\(activeDialog\.id \|\| ""\) !== responseId\) return;/, "dialog response cleanup should not close the next queued dialog after a resolve-event race");
+assert.match(app, /case "webui_extension_ui_resolved":[\s\S]*?removeQueuedDialogRequests\(\[event\.id\], event\.tabId \|\| activeTabId\)/, "frontend should close dialogs resolved by another connected browser");
+assert.match(app, /if \(responseId && extensionRequests\.active && String\(extensionRequests\.active\.id \|\| ""\) !== responseId\) return;/, "dialog response cleanup should not close the next queued dialog after a resolve-event race");
 assert.match(app, /if \(runIndicatorIsActive\(\)\) \{\s*setRunIndicatorActivity\("Continuing after your response…"\);[\s\S]*?scheduleRefreshState\(120, tabContext\);\s*\}/, "extension UI responses should promptly reconcile canonical state so background release commands cannot leave a stale running indicator");
 assert.match(app, /function parseTodoProgressWidget\(lines\)/, "todo-progress widgets should be parsed from extension widget lines");
 assert.ok(app.includes("const goalLine = cleanLines.find((line) => /^Goal\\s*[:：]/i.test(line));"), "todo-progress parser should preserve an optional Goal line from extension widget lines");
@@ -2280,7 +2280,9 @@ assert.match(app, /function updateTerminalTabGroupOpenState\(\)/, "frontend shou
 assert.match(app, /const totalTabCount = tabs\.length \+ subagentTerminalViews\.size;[\s\S]*classList\.toggle\("terminal-tabs-dense", totalTabCount >= 10\)/, "frontend should include virtual subagent tabs when enabling dense tab layout");
 assert.match(app, /appendTerminalTabContent\(button, \{ title: activeTitle,[\s\S]*?count: groupTabs\.length,[^}]*\}\)/, "group buttons should show the active terminal name instead of only the cwd label");
 assert.match(app, /wrapper\.addEventListener\("pointerenter", \(event\) => \{\s+if \(event\.pointerType === "touch"\) return;\s+setOpenTerminalTabGroup\(group\.key\);/, "terminal tab groups should mark themselves open while hovered with a non-touch pointer");
-assert.match(app, /if \(openTerminalTabGroupKey\) \{\n\s+scheduleRefreshTabs\(600\);/, "tab polling should defer full tab refreshes while a group menu is open");
+assert.match(app, /menuOpen: !!openTerminalTabGroupKey/, "attention scheduler should receive group-menu interaction state");
+const attentionSource = await readFile(join(root, "public", "session-attention-scheduler.mjs"), "utf8");
+assert.match(attentionSource, /const MENU_DELAY = 600/, "tab polling should defer full tab refreshes while a group menu is open");
 assert.match(app, /function shouldRenderTerminalTabGroup\(group, groupCount\) \{\n\s+if \(group\.custom\) return group\.tabs\.length > 1;\n\s+return groupCount > 1 && group\.tabs\.length > 1 && Boolean\(group\.cwd\);\n\}/, "terminal tabs should always render custom groups while only collapsing multi-tab cwd groups when multiple groups are available");
 assert.match(app, /TERMINAL_CUSTOM_GROUPS_STORAGE_KEY/, "frontend should persist custom terminal tab groups in browser storage");
 assert.match(app, /function bindTerminalTabDragAndDrop\(/, "terminal tabs should bind drag-and-drop grouping behavior");
@@ -2295,9 +2297,9 @@ assert.match(app, /const groups = tabCwdGroups\(\);[\s\S]*?for \(const group of 
 assert.match(app, /const subagentGroups = subagentTerminalViewGroups\(\)[\s\S]*renderSubagentTerminalTabGroup\(group\)[\s\S]*renderSubagentTerminalTab\(group\.views\[0\]\)/, "open subagent views should render as first-class virtual tabs, grouped by parent workspace when siblings exist");
 assert.match(technical, /Tracked subagent output[\s\S]*dedicated \*\*Subagent\*\* terminal tab[\s\S]*read-only[\s\S]*does not stop or interrupt/, "technical reference should document the selectable read-only child terminal behavior");
 assert.match(app, /let tabSeenCompletionSerials = new Map\(\)/, "frontend should track which tab completions have been seen");
-assert.match(app, /let activeTabGeneration = 0/, "frontend should version active-tab UI state to reject stale async work");
+assert.match(app, /let activeTabGeneration = sessionContext\.generation/, "frontend should version active-tab UI state to reject stale async work");
 assert.match(app, /function isCurrentTabContext\(context\)/, "frontend should identify stale active-tab refresh contexts");
-assert.match(app, /function connectEvents\(tabContext = activeTabContext\(\), \{ requestedMode = "auto", fallbackAttempted = false \} = \{\}\)[\s\S]*?eventSource !== source/, "frontend should ignore stale SSE messages from old active tabs");
+assert.match(app, /function connectEvents\(tabContext = activeTabContext\(\), \{ requestedMode = "auto", fallbackAttempted = false \} = \{\}\)[\s\S]*?sessionEvents\.connect\(/, "frontend should route SSE connections through the context-guarded owner");
 assert.match(app, /let foregroundReconcileTimer = null/, "frontend should debounce foreground resume reconciliation");
 assert.match(app, /case "webui_connected":[\s\S]*?clearFeatureDecisionStateForTab\(connectedTabId, \{ render: true \}\)[\s\S]*?scheduleForegroundReconcile\("event stream reconnect", 0\)/, "SSE reconnect should close stale popup content and clear cached category/output before authoritative status replay");
 assert.match(app, /async function reconcileForegroundState\(reason = "resume"\)[\s\S]*?refreshTabs\(\)[\s\S]*?ensureActiveEventStream\(tabContext\)[\s\S]*?refreshAll\(tabContext\)/, "foreground reconciliation should refresh tabs plus active transcript after mobile backgrounding");
@@ -2323,7 +2325,7 @@ assert.match(app, /function markTabDoneLocally\(/, "frontend should locally reco
 assert.match(app, /function syncActiveTabActivityFromState\(state = currentState\)/, "frontend should reconcile active-tab indicators from authoritative state snapshots");
 assert.match(app, /event\.command === "get_state" && event\.tabId === activeTabId[\s\S]*?syncActiveTabActivityFromState\(currentState\)/, "get_state response events should update stale active-tab activity");
 assert.match(app, /function applyResponseTab\(response\)/, "frontend should merge tab metadata returned by prompt responses");
-assert.match(app, /newSessionButton\.addEventListener\("click", async \(\) => \{[\s\S]*?api\("\/api\/new-session"[\s\S]*?applyResponseTab\(response\)[\s\S]*?refreshAll\(tabContext\)/, "the New button should apply returned terminal-tab metadata before the full session refresh");
+assert.match(app, /newSessionButton\.addEventListener\("click", async \(\) => \{[\s\S]*?api\("\/api\/new-session"[\s\S]*?applyResponseTab\(response\)[\s\S]*?invalidateActiveSession\(tabContext\)/, "the New button should apply returned terminal-tab metadata before the full session refresh");
 assert.match(app, /case "webui_tab_renamed":/, "frontend should update tab labels from backend rename events");
 assert.match(app, /case "webui_recovery_opened":[\s\S]*?refreshTabs\(\)[\s\S]*?switchTab\(event\.recoveryTabId\)/, "recovery events should refresh tabs and activate the new recovery session");
 assert.match(app, /terminalTabsToggleButton\.addEventListener\("click"/, "terminal tabs trigger should be wired in JS");

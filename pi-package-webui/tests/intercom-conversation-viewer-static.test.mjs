@@ -67,7 +67,7 @@ const detailSource = functionSource("refreshIntercomConversationDetail");
 assert.match(detailSource, /conversation=\$\{encodeURIComponent\(state\.conversationId\)\}/, "detail selection should send only an encoded opaque ID");
 assert.match(detailSource, /requestSerial !== intercomDetailRequestSerial[\s\S]*state !== intercomConversationDialogState[\s\S]*!isCurrentTabContext\(state\)/, "detail responses should be rejected after rapid selection or tab changes");
 assert.match(app, /\["webui_connected", "agent_end", "message_end", "tool_execution_end"\][\s\S]*scheduleIntercomConversationRefresh\(tabContext\)/, "settlement and reconnect events should refresh conversation summaries");
-assert.match(app, /source\.onopen = \(\) => \{[\s\S]*scheduleIntercomConversationRefresh\(tabContext, 0\)/, "event-stream reconnection should authoritatively refetch tags");
+assert.match(app, /function handleSessionStreamOpen\(event, tabContext\) \{[\s\S]*scheduleIntercomConversationRefresh\(tabContext, 0\)/, "event-stream reconnection should authoritatively refetch tags");
 
 const messageRenderSource = functionSource("renderIntercomConversationMessage");
 const renderSource = functionSource("renderIntercomConversationDetail");
@@ -97,8 +97,8 @@ assert.match(css, /\.extension-dialog\.intercom-conversation-dialog \{[\s\S]*wid
 assert.match(css, /@media \(max-width: 720px\)[\s\S]*\.composer-intercom-tag \{ min-height: 44px;[\s\S]*\.extension-dialog\.intercom-conversation-dialog[\s\S]*width: calc\(100vw - 0\.7rem\)/, "tags and the dialog should remain reachable on narrow and coarse-pointer layouts");
 
 assert.match(html, /\/styles\.css\?v=154/, "the stylesheet URL should advance for the bounded conversation tags");
-assert.match(html, /data-app-src="\/app\.js\?v=186"/, "the guarded app URL should advance for current browser wiring");
-assert.match(serviceWorker, /const CACHE_NAME = "pi-webui-pwa-v157"/, "the PWA cache identity should advance with browser assets");
+assert.match(html, /data-app-src="\/app\.js\?v=187"/, "the guarded app URL should advance for current browser wiring");
+assert.match(serviceWorker, /const CACHE_NAME = "pi-webui-pwa-v158"/, "the PWA cache identity should advance with browser assets");
 
 assert.match(readme, /one compact tag per conversation appears beneath the composer/i, "the README should explain the user-visible entry point");
 assert.match(technical, /## Agent conversation viewer[\s\S]*Attachments, tool calls and results, thinking, stdout\/stderr, filesystem paths, raw session records/i, "the advanced guide should document privacy exclusions");
