@@ -1091,7 +1091,6 @@ test("semantic tooltip, held pointer, open dropdown, and stale tab contexts surv
 
   const inactiveTab = page.locator(`[data-tab-id="${inactiveTabId}"]`);
   await inactiveTab.locator(".terminal-tab-close").click();
-  await page.getByRole("button", { name: "Close tab", exact: true }).click();
   await expect.poll(async () => (await tabIds(page)).length).toBe(1);
   await expect(page.locator(`[data-tooltip-target-key="terminal-tab:${inactiveTabId}:switch"]`)).toHaveCount(0);
   await page.mouse.move(0, 0);
