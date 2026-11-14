@@ -78,6 +78,8 @@ test('running session can be aborted from Settings and All tools without changin
   await expect(page.locator('.focused-run-controls #abortButton')).toBeVisible();
   await rail.getByRole('button', { name: 'All tools', exact: true }).click();
   await expect(page.locator('#shellToolsLauncher #abortButton')).toBeVisible();
+  await page.locator('#shellToolsLauncher').getByRole('button', { name: 'Choose directory for new tab', exact: true }).click();
+  await expect(page.locator('dialog:modal #abortButton')).toBeVisible();
   const response = page.waitForResponse(response => new URL(response.url()).pathname === '/api/abort' && response.request().method() === 'POST');
   await page.locator('#abortButton').hover();
   await page.mouse.down();
@@ -87,4 +89,22 @@ test('running session can be aborted from Settings and All tools without changin
   await page.keyboard.press('Escape');
   await rail.getByRole('button', { name: 'Conversation', exact: true }).click();
   await expect(page.locator('#promptInput')).toBeVisible();
+});
+
+test('phone landscape keeps draft and attachment reachable with a constrained keyboard viewport', async ({ browser, ownership }, testInfo) => {
+  const context = await browser.newContext({ viewport: { width: 844, height: 390 }, isMobile: true, hasTouch: true, serviceWorkers: 'block' });
+  try {
+    const page = await context.newPage();
+    await page.goto(`${ownership.baseURL}/?mobileShell=v2`);
+    await page.locator('#promptInput').fill('landscape retained draft');
+    await page.locator('#attachmentInput').setInputFiles({ name: 'context.txt', mimeType: 'text/plain', buffer: Buffer.from('context') });
+    await page.locator('#promptInput').focus();
+    await page.setViewportSize({ width: 844, height: 220 });
+    await expect(page.locator('body')).toHaveClass(/mobile-keyboard-open/);
+    await page.screenshot({ path: testInfo.outputPath('phone-landscape-before-hit-check.png') });
+    for (const selector of ['#promptInput', '#attachButton', '#sendButton', '#composerActionsButton']) await page.locator(selector).click({ trial: true, timeout: 2000 });
+    await expect(page.locator('#promptInput')).toHaveValue('landscape retained draft');
+    await expect(page.locator('#attachmentTray')).toContainText('context.txt');
+    await page.screenshot({ path: testInfo.outputPath('phone-landscape-keyboard.png') });
+  } finally { await context.close(); }
 });

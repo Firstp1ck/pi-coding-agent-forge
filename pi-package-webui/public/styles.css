@@ -19774,3 +19774,18 @@ body:has(#undoToast:not([hidden])) .notice-toast-stack { bottom: calc(max(1rem, 
 @media (min-width: 721px) and (max-width: 1050px) {
   html[data-tablet-shell="v2"] .file-viewer-pane { visibility: visible; pointer-events: auto; }
 }
+@media (max-width: 950px) and (max-height: 300px) and (pointer: coarse) and (hover: none) {
+  html[data-mobile-shell="v2"] body.mobile-keyboard-open .mobile-shell-appbar {
+    grid-template-columns: minmax(0, 1fr) minmax(0, auto) auto auto;
+    min-height: 44px;
+    padding-block: 0;
+  }
+  html[data-mobile-shell="v2"] body.mobile-keyboard-open .mobile-shell-indicators { grid-column: 2; grid-row: 1; max-width: 30vw; }
+  html[data-mobile-shell="v2"] body.mobile-keyboard-open .footer-status-host { display: none; }
+  html[data-mobile-shell="v2"] body.mobile-keyboard-open .chat { padding-top: 44px; }
+}
+
+@media (max-width: 950px) and (max-height: 300px) and (pointer: coarse) and (hover: none) {
+  html[data-mobile-shell="v2"] body.mobile-keyboard-open #mobileSearchButton { grid-column: 3; grid-row: 1; }
+  html[data-mobile-shell="v2"] body.mobile-keyboard-open #mobileMoreButton { grid-column: 4; grid-row: 1; }
+}

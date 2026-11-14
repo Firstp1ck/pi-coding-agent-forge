@@ -5,6 +5,8 @@ import { createToolsLauncher } from './shell-tools-launcher.mjs';
 export function createFocusedShellAdapter({ document, viewHost, nodes, sections, onNavigate, onPreferences, onInvoke, getTools }) {
   let mounted = false;
   let inspector = null;
+  const modalHosts = new WeakMap();
+  let modalStack = [];
   const contentHidden = new Map();
   const settingsIds = ['controls', 'optional-features'];
   const byId = new Map(sections.map(record => [record.id, record]));
@@ -17,7 +19,7 @@ export function createFocusedShellAdapter({ document, viewHost, nodes, sections,
     onPinsChange: pinnedActions => {
       if (!onPreferences({ pinnedActions })) tools.update({ pinnedIds: getTools().pinnedIds });
     },
-    onClose: () => { if (mounted) moveRunControls(workspace.slots.runControls); },
+    onClose: () => syncModalRunControls(),
   });
   const workspace = createFocusedWorkspace({ document, onNavigate,
     onTools: () => openTools(),
@@ -34,6 +36,38 @@ export function createFocusedShellAdapter({ document, viewHost, nodes, sections,
   function moveRunControls(host) {
     for (const node of [nodes.abortButton, nodes.conversationModeEndButton]) if (node) viewHost.move(node, host);
   }
+
+  function syncModalRunControls() {
+    if (!mounted) return;
+    modalStack = modalStack.filter(dialog => dialog.isConnected && dialog.open);
+    const dialog = modalStack.at(-1);
+    let host = workspace.slots.runControls;
+    if (dialog === tools.element) host = tools.slots.runControls;
+    else if (dialog) {
+      host = modalHosts.get(dialog);
+      if (!host) {
+        host = document.createElement('div');
+        host.className = 'focused-modal-run-controls';
+        host.setAttribute('role', 'group');
+        dialog.append(host);
+        modalHosts.set(dialog, host);
+      }
+    }
+    host.setAttribute('aria-label', `Run controls for ${snapshot.title}`);
+    moveRunControls(host);
+  }
+
+  // Native dialogs own focus. Keep the existing run controls in the foremost
+  // modal, including feature dialogs created after the initial shell.
+  const modalObserver = new document.defaultView.MutationObserver(records => {
+    for (const { target } of records) {
+      if (target.tagName !== 'DIALOG') continue;
+      modalStack = modalStack.filter(dialog => dialog !== target);
+      if (target.open) modalStack.push(target);
+    }
+    syncModalRunControls();
+  });
+  modalObserver.observe(document.body, { subtree: true, attributes: true, attributeFilter: ['open'] });
 
   function mountContent(id, host) {
     const record = byId.get(id);
@@ -94,6 +128,8 @@ export function createFocusedShellAdapter({ document, viewHost, nodes, sections,
       composerControls.hidden = false;
       moveRunControls(workspace.slots.runControls);
       mounted = true;
+      modalStack = [...document.querySelectorAll("dialog:modal")];
+      syncModalRunControls();
     }
     nodes.layout.hidden = true;
     nodes.home.hidden = false;

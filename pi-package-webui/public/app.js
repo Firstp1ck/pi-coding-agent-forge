@@ -1713,6 +1713,7 @@ let mobilePresentation = "essential";
 let mobileProjectTopic = "files";
 const canonicalViewHost = createViewHost({ document });
 let mobileCanonicalMount = null;
+let responsiveFieldFocus = null;
 let mobileWidgetAreaMount = null;
 let mobileLifecycleSignature = "";
 let mobileLifecycleInitialized = false;
@@ -2817,6 +2818,10 @@ function renderMobilePhoneExperience({ focus = false } = {}) {
 }
 
 function installMobilePhoneExperience() {
+  document.addEventListener("focusout", rememberResponsiveFieldFocus, true);
+  document.addEventListener("focusin", event => {
+    if (responsiveFieldFocus && event.target !== responsiveFieldFocus.node) responsiveFieldFocus = null;
+  }, true);
   mobilePhoneExperienceInstalled = true;
   mobilePresentation = readMobilePresentation();
   const shell = mobileShellElement("mobileShellV2");
@@ -2895,6 +2900,26 @@ function installMobilePhoneExperience() {
   renderMobilePhoneExperience();
 }
 
+function rememberResponsiveFieldFocus(event) {
+  const node = event.target;
+  if (event.relatedTarget || !node?.closest?.(".side-panel-section-content") || typeof node.selectionStart !== "number") return;
+  const nextMode = createMobileShellState({ viewport: mobileShellViewport() }).viewportMode;
+  if (nextMode === mobileShellState.viewportMode) return;
+  // CSS can blur a field at a breakpoint before the media-query callback moves it.
+  responsiveFieldFocus = { node, selection: [node.selectionStart, node.selectionEnd, node.selectionDirection] };
+}
+
+function restoreResponsiveFieldFocus() {
+  const captured = responsiveFieldFocus;
+  responsiveFieldFocus = null;
+  if (!captured) return;
+  const { node, selection } = captured;
+  if (document.activeElement !== document.body && document.activeElement !== node) return;
+  if (!node.isConnected || node.closest("[hidden], [inert]") || !node.getClientRects().length || getComputedStyle(node).visibility !== "visible") return;
+  node.focus({ preventScroll: true });
+  node.setSelectionRange(...selection);
+}
+
 function applyMobileShellViewport() {
   const wasActive = isMobileShellV2Active();
   applyMobileShellEvent({ type: "viewport", viewport: mobileShellViewport() });
@@ -2904,6 +2929,7 @@ function applyMobileShellViewport() {
     deactivateDrawerModal(elements.statusBar, { restoreFocus: false });
     document.body.classList.remove("composer-actions-open", "footer-details-expanded", "mobile-tabs-expanded", "mobile-keyboard-open");
   }
+  restoreResponsiveFieldFocus();
 }
 
 function setMobileContinuityNotice(message = "", level = "info") {

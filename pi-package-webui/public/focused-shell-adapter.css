@@ -36,3 +36,6 @@ html[data-desktop-shell="focused"] #focusedWorkspace { height: var(--visual-view
 #focusedWorkspace[data-navigation="top"] .terminal-tabs { flex-direction: row; height: auto; align-items: center; }
 #focusedWorkspace[data-navigation="top"] .terminal-tab { width: auto; min-width: 180px; }
 #focusedWorkspace[data-navigation="top"] .terminal-tab-group-menu { max-height: 100px; overflow: auto; }
+
+.focused-modal-run-controls { display: flex; gap: 8px; flex-wrap: wrap; }
+.focused-modal-run-controls:has(> button:not([hidden])) { padding-block: 8px; border-top: 1px solid var(--border); }
