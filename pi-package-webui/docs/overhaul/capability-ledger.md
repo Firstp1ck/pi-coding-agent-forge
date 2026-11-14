@@ -63,7 +63,7 @@ These counts are not the browser baseline’s crowding denominator. Hidden contr
 | Canonical DOM | `shell-view-host.mjs`; mobile canonical/widget adapters | Same nodes and resources, original homes, input values/selection/scroll retained; app owns section attributes |
 | Drawer focus | `shell-surfaces.mjs`; drawer activation adapters | One keyboard listener, nested Escape first, native modal precedence, no resource shutdown, stale focus return invalidated |
 
-These contracts summarize the accepted W1 modules. W2 integration is under verification; the W3 focused shell is not implemented. HTTP/SSE, settings/layout persistence, session lifetime and semantic extension UI remain with their existing owners. Future workers read this summary and their wave contract; earlier handoffs are supporting evidence only.
+These contracts summarize the accepted W1 modules. W2 is accepted; the W3 focused shell is next. HTTP/SSE, settings/layout persistence, session lifetime and semantic extension UI remain with their existing owners. Future workers read this summary and their wave contract; earlier handoffs are supporting evidence only.
 
 ## Migration matrix
 
@@ -213,4 +213,4 @@ The inventory test lives under `scripts/tests/` because it needs repository-only
 | `platform-event-stream.mjs` | One EventSource with source/context checks and detached old callbacks. Parent retains parsing, replay validation, output-mode negotiation, transcript barriers and reconnect policy. |
 | `session-extension-requests.mjs` | FIFO and deduplication use exact originating tab/request identity. Parent retains semantic dialog rendering, responses and explicit reset cancellation; moving views has no response side effects. Session replacement retires its old requests without sending cancellation into the replacement. |
 
-Module tests and the parent session adapter tests pass. Whole-wave browser/full-suite evidence and independent review remain pending; this table is an integration contract, not W2 acceptance.
+W2 is accepted after two Sol review rounds, parent fixes for all three findings, all 226 package test files passing with exit zero, and four actual browser ownership scenarios passing. The final review ran 101 independent checks. These contracts preserve Classic; focused layout and existing mobile reflow defects remain W3 work.
