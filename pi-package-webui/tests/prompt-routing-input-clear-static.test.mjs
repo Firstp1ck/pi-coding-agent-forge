@@ -24,7 +24,7 @@ const requestIndex = sendSource.indexOf('await api("/api/prompt"');
 assert.ok(clearIndex >= 0, "sendPrompt should clear the captured input-backed draft");
 assert.ok(routingIndex >= 0 && clearIndex < routingIndex, "the submitted prompt should be cleared before routing progress starts");
 assert.ok(requestIndex >= 0 && clearIndex < requestIndex, "the submitted prompt should be cleared before the prompt request starts");
-assert.match(sendSource, /catch \(error\) \{\n\s+(?:if \(guidedGitPermitGranted\) guidedGitLaunchPermits\.clearTab\(targetTabId\);\n\s+)?restorePromptInputAfterRoutingError\(inputMessage,/, "a routing failure should revoke any activation permit and restore the sent input when no replacement draft exists");
+assert.match(sendSource, /catch \(error\) \{\s+if \(!sessionContext\.isLifetimeCurrent\(lifetime\)\) \{\s+if \(throwOnError\) throw error;\s+return;\s+\}\s+if \(guidedGitPermitGranted\) guidedGitLaunchPermits\.clearTab\(targetTabId\);\s+restorePromptInputAfterRoutingError\(inputMessage,/, "only a current-session routing failure may revoke its permit and restore the sent input");
 
 const successStart = sendSource.indexOf("applyResponseTab(response);");
 const catchStart = sendSource.indexOf("} catch (error)", successStart);
