@@ -12,7 +12,10 @@
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-    <link rel="stylesheet" href="/styles.css?v=154" />
+    <link rel="stylesheet" href="/styles.css?v=155" />
+    <link rel="stylesheet" href="/shell-workspace.css?v=1" />
+    <link rel="stylesheet" href="/shell-tools-launcher.css?v=1" />
+    <link rel="stylesheet" href="/focused-shell-adapter.css?v=1" />
     <script>
       // Public-only issue-bot runtime configuration. Keep disabled unless the gateway,
       // Turnstile site key, exact CORS origin, and private-report destination are approved.
@@ -826,6 +829,15 @@
                     <span class="control-scope-badge">This browser</span>
                   </div>
 
+                  <div class="control-row">
+                    <span class="control-row-label" data-tooltip="Choose Classic or the compact desktop preview. Saved in this browser; phone and tablet modes are independent." role="button" tabindex="0"><label for="desktopShellSelect">Desktop layout</label></span>
+                    <select id="desktopShellSelect"><option value="classic">Classic</option><option value="focused">Compact preview</option></select>
+                    <span id="desktopShellStatus" class="toggle-control-hint control-row-full">Saved in this browser. Phone and tablet preferences stay independent.</span>
+                  </div>
+                  <div class="control-row">
+                    <span class="control-row-label" data-tooltip="Place compact session navigation at the left or above the conversation." role="button" tabindex="0"><label for="focusedNavigationSelect">Compact session navigation</label></span>
+                    <select id="focusedNavigationSelect"><option value="left">Sidebar</option><option value="top">Top bar</option></select>
+                  </div>
                   <div class="control-row terminal-tabs-layout-control-field">
                     <span class="control-row-label" data-tooltip="Where your open terminal tabs are listed: in a bar above the chat or in a Sidebar on the right." aria-label="Tab placement. Where your open terminal tabs are listed: in a bar above the chat or in a Sidebar on the right." role="button" tabindex="0">
                       <label for="terminalTabsLayoutSelect">Tab placement</label>
@@ -1898,7 +1910,7 @@
       </form>
     </dialog>
 
-    <script id="webuiBootLoader" data-app-src="/app.js?v=187">
+    <script id="webuiBootLoader" data-app-src="/app.js?v=188">
       (() => {
         "use strict";
 

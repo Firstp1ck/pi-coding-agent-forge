@@ -1,3 +1,4 @@
+import { createFocusedShellAdapter } from "./focused-shell-adapter.mjs";
 import { createSessionContext } from "./session-context.mjs";
 import { createSessionComposerStore } from "./session-composer-store.mjs";
 import { createAttentionScheduler } from "./session-attention-scheduler.mjs";
@@ -5,7 +6,7 @@ import { createSessionEventStream } from "./platform-event-stream.mjs";
 import { createExtensionRequestStore } from "./session-extension-requests.mjs";
 import { filterActionItems, checkActionTarget } from "./shell-actions.mjs";
 import { createShellHistory } from "./shell-navigation.mjs";
-import { readShellPreferences, resolveShellMode } from "./shell-preferences.mjs";
+import { readShellPreferences, writeShellPreferences, resolveShellMode } from "./shell-preferences.mjs";
 import { createViewHost } from "./shell-view-host.mjs";
 import { createSurfaceCoordinator } from "./shell-surfaces.mjs";
 import { aurReviewSafePath as parsedAurReviewSafePath, parseAurReviewPayload as parseValidatedAurReviewPayload } from "./aur-review-payload.mjs";
@@ -1642,11 +1643,14 @@ const colorSchemeMedia = window.matchMedia?.("(prefers-color-scheme: dark)") || 
 const initialUrlParams = new URLSearchParams(window.location.search);
 const embeddedSplitMode = initialUrlParams.get("embed") === "split";
 const forceClassicShell = initialUrlParams.get("shell") === "classic";
-const shellPreferenceState = (() => {
+let shellPreferenceState = (() => {
   try { return readShellPreferences(window.localStorage); }
   catch { return readShellPreferences(null); }
 })();
-const shellHistory = createShellHistory({ window, onPopState: restoreMobileNavigation });
+let focusedShell = null;
+let focusedShellRenderPending = false;
+let focusedShellState = { destination: "conversation", inspector: null };
+const shellHistory = createShellHistory({ window, onPopState: restoreShellNavigation });
 document.body.classList.toggle("embedded-split", embeddedSplitMode);
 
 function readMobileShellPreference() {
@@ -2033,6 +2037,139 @@ function mobileSwitchToTab(tabId, { route = "chat", focus = false } = {}) {
     mobileNavigate(route);
     if (focus && route === "chat") focusPromptInput({ defer: true });
   }).catch((error) => addEvent(error.message || String(error), "error"));
+}
+
+function isFocusedShellRequested() {
+  return !embeddedSplitMode && resolveShellMode({
+    recovery: forceClassicShell,
+    viewportMode: mobileShellState.viewportMode,
+    desktopLayout: shellPreferenceState.value.desktopLayout,
+    phoneMode: mobileShellState.featureMode,
+    tabletMode: mobileShellState.tabletFeatureMode,
+  }) === "focused";
+}
+
+function scheduleFocusedShellRender() {
+  if (!focusedShell || focusedShellRenderPending) return;
+  focusedShellRenderPending = true;
+  queueMicrotask(() => { focusedShellRenderPending = false; renderFocusedShell(); });
+}
+
+function renderFocusedShell() {
+  if (!focusedShell) return;
+  const wasActive = focusedShell.active;
+  const active = activeTab();
+  const record = sidePanelSectionRecords().find(({ id }) => id === focusedShellState.inspector);
+  focusedShell.update({
+    ...shellPreferenceState.value,
+    ...focusedShellState,
+    enabled: isFocusedShellRequested(),
+    inspectorOpen: !!record && !["home", "settings"].includes(focusedShellState.destination),
+    inspectorTitle: record?.button.textContent.trim() || "",
+    title: active?.title || "Choose a session",
+    context: active?.cwd || "",
+    attentionCount: tabs.filter(tab => mobileTabActivityState(tab) === "blocked").length,
+    homeCollapsed: workspaceDashboardCollapsed,
+  });
+  if (wasActive !== focusedShell.active) {
+    syncMobileComposerDisclosureLayout();
+    setComposerActionsOpen(false);
+    composerModeRenderSignature = "";
+    updateComposerModeButtons();
+  }
+}
+
+function saveFocusedShellPreferences(patch) {
+  const value = { ...shellPreferenceState.value, ...patch };
+  let result;
+  try { result = writeShellPreferences(window.localStorage, value); }
+  catch { result = { ok: false, reason: "unavailable" }; }
+  if (!result.ok) {
+    addEvent(`Desktop layout could not be saved (${result.reason}). Your current layout is unchanged.`, "error");
+    $("#desktopShellSelect").value = shellPreferenceState.value.desktopLayout;
+    return false;
+  }
+  shellPreferenceState = { status: "valid", value };
+  $("#desktopShellSelect").value = value.desktopLayout;
+  $("#focusedNavigationSelect").value = value.navigation || "left";
+  renderFocusedShell();
+  return true;
+}
+
+function navigateFocusedShell(destination, inspector = undefined, { replace = false } = {}) {
+  const next = { destination, inspector: inspector === undefined ? destination === "project" ? "files" : destination === "activity" ? "subagents" : null : inspector };
+  const url = new URL(window.location.href);
+  url.searchParams.set("view", next.destination);
+  if (next.inspector) url.searchParams.set("inspector", next.inspector);
+  else url.searchParams.delete("inspector");
+  try { shellHistory.write({ state: { focusedShellState: next }, url: url.href, replace }); }
+  catch (error) { addEvent(`Navigation could not be saved. ${error.message || error}`, "error"); return; }
+  focusedShellState = next;
+  renderFocusedShell();
+}
+
+function restoreShellNavigation(event) {
+  restoreMobileNavigation(event);
+  const state = event.state?.focusedShellState;
+  if (state && ["conversation", "home", "project", "activity", "settings"].includes(state.destination)) {
+    focusedShellState = { destination: state.destination, inspector: sidePanelSectionRecords().some(({ id }) => id === state.inspector) ? state.inspector : null };
+  } else {
+    focusedShellState = { destination: "conversation", inspector: null };
+  }
+  renderFocusedShell();
+}
+
+function focusedToolsActions() {
+  const context = shellActionTarget();
+  const sectionActions = sidePanelSectionRecords().map(record => {
+    const destination = ["controls", "optional-features"].includes(record.id) ? "settings" : ["files", "git"].includes(record.id) ? "project" : "activity";
+    return {
+      id: `view:${record.id}`, scope: "browser", category: destination === "settings" ? "Settings" : destination === "project" ? "Project" : "Activity",
+      label: record.button.querySelector(".side-panel-section-label")?.textContent || record.id,
+      description: `Open ${record.id.replaceAll("-", " ")} controls`, keywords: record.id, available: true,
+      run: () => navigateFocusedShell(destination, destination === "settings" ? null : record.id),
+    };
+  });
+  return [...sectionActions, ...buildCommandPaletteItems().map(action => ({
+    ...action,
+    category: action.kind === "Model" ? "Models" : action.kind === "Tab" ? "Sessions" : action.destination === "project" ? "Project" : action.destination === "settings" ? "Settings" : action.destination === "activity" ? "Activity" : "Session",
+    available: checkActionTarget(action, context).ok,
+    unavailableReason: checkActionTarget(action, context).reason || action.unavailableReason,
+  }))];
+}
+
+async function invokeFocusedTool(captured) {
+  try {
+    const target = checkActionTarget(captured, shellActionTarget());
+    if (!target.ok) throw new Error(target.reason);
+    const current = focusedToolsActions().find(action => action.id === captured.id);
+    if (!current) throw new Error("This action is no longer available. Reopen All tools.");
+    const availability = checkActionTarget({ ...current, target: captured.target }, shellActionTarget());
+    if (!availability.ok) throw new Error(availability.reason);
+    focusedShell.closeTools();
+    await current.run();
+  } catch (error) { addEvent(error.message || String(error), "error"); }
+}
+
+function initializeFocusedShell() {
+  const destination = initialUrlParams.get("view");
+  const inspector = initialUrlParams.get("inspector");
+  if (["conversation", "home", "project", "activity", "settings"].includes(destination)) {
+    focusedShellState = { destination, inspector: sidePanelSectionRecords().some(({ id }) => id === inspector) ? inspector : destination === "project" ? "files" : destination === "activity" ? "subagents" : null };
+  }
+  focusedShell = createFocusedShellAdapter({
+    document, viewHost: canonicalViewHost,
+    nodes: { ...elements, layout: $(".layout"), conversation: $(".workspace-column"), navigation: elements.terminalTabsShell, home: elements.workspaceDashboard, footer: $("[data-control-deck-shared-footer]"), versions: $(".side-panel-version-row") },
+    sections: sidePanelSectionRecords(), onNavigate: navigateFocusedShell,
+    onPreferences: saveFocusedShellPreferences, onInvoke: invokeFocusedTool,
+    getTools: () => ({ actions: focusedToolsActions(), pinnedIds: shellPreferenceState.value.pinnedActions || [], contextLabel: activeTab()?.title || "No active session" }),
+  });
+  $("#desktopShellSelect").value = shellPreferenceState.value.desktopLayout;
+  $("#focusedNavigationSelect").value = shellPreferenceState.value.navigation || "left";
+  $("#desktopShellSelect").addEventListener("change", event => saveFocusedShellPreferences({ desktopLayout: event.target.value }));
+  $("#focusedNavigationSelect").addEventListener("change", event => saveFocusedShellPreferences({ navigation: event.target.value }));
+  if (forceClassicShell) $("#desktopShellStatus").textContent = "Classic recovery is active. Remove shell=classic from the address to use the saved layout.";
+  renderFocusedShell();
 }
 
 function restoreMobileNavigation(event) {
@@ -2585,6 +2722,8 @@ function mobileRenderLifecycle() {
 }
 
 function renderMobilePhoneExperience({ focus = false } = {}) {
+  if (focusedShell?.active && !isFocusedShellRequested()) renderFocusedShell();
+  scheduleFocusedShellRender();
   const shell = mobileShellElement("mobileShellV2");
   if (!shell) return;
   const active = isMobileShellV2Active();
@@ -4275,12 +4414,12 @@ function reconcileControlDeckHosts() {
   const footerHost = activeShell === elements.sidePanelLeft
     ? elements.sidePanelLeft?.querySelector("[data-control-deck-footer-slot]")
     : elements.sidePanel;
-  if (sharedFooter && footerHost && sharedFooter.parentElement !== footerHost) footerHost.append(sharedFooter);
+  if (!focusedShell?.active && sharedFooter && footerHost && sharedFooter.parentElement !== footerHost) footerHost.append(sharedFooter);
   const versionRow = document.querySelector(".side-panel-version-row");
   const versionHost = activeShell === elements.sidePanelLeft
     ? elements.sidePanelLeft?.querySelector("[data-control-deck-version-slot]")
     : elements.sidePanel?.querySelector(".side-panel-heading");
-  if (versionRow && versionHost && versionRow.parentElement !== versionHost) versionHost.append(versionRow);
+  if (!focusedShell?.active && versionRow && versionHost && versionRow.parentElement !== versionHost) versionHost.append(versionRow);
   const editButton = elements.sidePanelEditButton;
   const editHost = activeShell === elements.sidePanelLeft
     ? elements.sidePanelLeft?.querySelector("[data-control-deck-edit-slot]")
@@ -5578,7 +5717,7 @@ function syncTerminalTabsSidebarWidthForViewport() {
     updateTerminalTabsSidebarResizeHandle();
     return;
   }
-  applyTerminalTabsSidebarWidth(readStoredTerminalTabsSidebarWidth() || currentTerminalTabsSidebarWidth());
+  applyTerminalTabsSidebarWidth(readStoredTerminalTabsSidebarWidth() || Math.min(304, Math.max(208, window.innerWidth * 0.18)));
 }
 
 function normalizeSubagentOpenMode(value) {
@@ -7668,7 +7807,7 @@ function restoreMobileComposerOriginalPositions() {
 
 function syncMobileComposerDisclosureLayout() {
   rememberMobileComposerOriginalPositions();
-  const useMobileDisclosure = isMobileView() && !isMobileShellV2Active();
+  const useMobileDisclosure = (isMobileView() && !isMobileShellV2Active()) || focusedShell?.active === true;
   document.body.classList.toggle("mobile-composer-disclosure", useMobileDisclosure);
   if (!useMobileDisclosure) {
     restoreMobileComposerOriginalPositions();
@@ -7680,7 +7819,7 @@ function syncMobileComposerDisclosureLayout() {
 function setComposerActionsOpen(open, { restoreFocus = false } = {}) {
   if (isMobileShellV2Active()) return;
   syncMobileComposerDisclosureLayout();
-  const shouldOpen = open && isMobileView();
+  const shouldOpen = open && (isMobileView() || focusedShell?.active === true);
   if (shouldOpen) {
     composerActionsFocusReturn = document.activeElement instanceof HTMLElement ? document.activeElement : elements.composerActionsButton;
     if (followUpQueueOpen) setFollowUpQueueOpen(false);
@@ -7692,7 +7831,7 @@ function setComposerActionsOpen(open, { restoreFocus = false } = {}) {
   elements.composerActionsButton.textContent = shouldOpen ? "−" : "More";
   elements.composerActionsButton.setAttribute("aria-label", shouldOpen ? "Minimize more composer actions" : "Show more composer actions");
   elements.composerActionsButton.title = shouldOpen ? "Minimize more composer actions" : "Show more composer actions";
-  elements.composerActionsPanel.setAttribute("aria-hidden", shouldOpen || !isMobileView() ? "false" : "true");
+  elements.composerActionsPanel.setAttribute("aria-hidden", shouldOpen || (!isMobileView() && !focusedShell?.active) ? "false" : "true");
   if (!shouldOpen) {
     setPublishMenuOpen(false);
     setNativeCommandMenuOpen(false);
@@ -7765,7 +7904,7 @@ function updateComposerModeButtons() {
   composerModeRenderSignature = nextSignature;
 
   const target = runActive ? elements.composerRow : elements.composerActionsPanel;
-  const before = runActive ? elements.abortButton : null;
+  const before = runActive && elements.abortButton.parentElement === target ? elements.abortButton : null;
   for (const button of [elements.steerButton, elements.followUpButton]) {
     if (button.parentElement !== target) target.insertBefore(button, before);
     button.hidden = !runActive;
@@ -8320,6 +8459,7 @@ function persistWorkspaceDashboardCollapsed(collapsed) {
 }
 
 function setWorkspaceDashboardCollapsed(collapsed, { persist = true } = {}) {
+  if (focusedShell?.active && persist) { navigateFocusedShell(collapsed ? "conversation" : "home"); return; }
   workspaceDashboardCollapsed = !!collapsed;
   if (elements.workspaceDashboard) elements.workspaceDashboard.hidden = workspaceDashboardCollapsed;
   if (elements.workspaceDashboardToggleButton) {
@@ -17614,6 +17754,7 @@ function terminalTabControlKey(node) {
 }
 
 function renderTabs() {
+  scheduleFocusedShellRender();
   if (deferUiRenderDuringPointerActivation("tabs", renderTabs)) return;
   const continuityContextKey = `${activeTabId || ""}:${activeTabGeneration}:${activeSubagentTerminalId || ""}`;
   const focusSnapshot = captureScopedControlContinuity(elements.tabBar, continuityContextKey, terminalTabControlKey);
@@ -17864,7 +18005,7 @@ function updateTerminalSplitControls(canShowSplit, splitTab = terminalSplitTab()
 function updateTerminalSplitUi() {
   const tab = terminalSplitTab();
   const overlayDrawerOpen = isControlDeckOverlayPresentation() && !document.body.classList.contains("side-panel-collapsed");
-  const canShowSplit = !!tab && !embeddedSplitMode && !overlayDrawerOpen;
+  const canShowSplit = !!tab && !embeddedSplitMode && !overlayDrawerOpen && window.innerWidth > 1050;
   document.body.classList.toggle("terminal-split-open", canShowSplit);
   if (elements.terminalSplitShell) elements.terminalSplitShell.hidden = !canShowSplit;
   scheduleControlDeckPresentationReconciliation();
@@ -18647,6 +18788,11 @@ function clearUnreadEvents() {
 }
 
 function revealSidePanelSectionById(id) {
+  if (focusedShell?.active) {
+    const destination = ["controls", "optional-features"].includes(id) ? "settings" : ["files", "git"].includes(id) ? "project" : "activity";
+    navigateFocusedShell(destination, destination === "settings" ? null : id);
+    return;
+  }
   const record = sidePanelSectionRecords().find((entry) => entry.id === id);
   if (!record) return;
   if (record.section.hidden) setSidePanelSectionVisible(record, true);
@@ -18659,6 +18805,7 @@ function revealSidePanelSectionById(id) {
 }
 
 function revealEventsSection() {
+  if (focusedShell?.active) { navigateFocusedShell("activity", "events"); clearUnreadEvents(); return; }
   const record = eventsSectionRecord();
   if (!record) return;
   if (record.section.hidden) setSidePanelSectionVisible(record, true);
@@ -28462,6 +28609,7 @@ function splitSessionFilePath(sessionFile) {
 }
 
 function renderStatus() {
+  scheduleFocusedShellRender();
   if (deferUiRenderDuringPointerActivation("status", renderStatus)) return;
   const state = currentState;
   updateComposerModeButtons();
@@ -47555,6 +47703,7 @@ function renderCommandPalette({ preserveScroll = false } = {}) {
 }
 
 function openCommandPalette(initialQuery = "") {
+  if (focusedShell?.active && !initialQuery) { focusedShell.openTools(); return; }
   setComposerActionsOpen(false);
   setPublishMenuOpen(false);
   setNativeCommandMenuOpen(false);
@@ -51809,6 +51958,7 @@ window.addEventListener("appinstalled", () => {
 });
 installMobileShellNavigationBridge();
 installMobilePhoneExperience();
+initializeFocusedShell();
 registerPwaServiceWorker();
 renderServerOfflinePanel();
 refreshSidebarOutputMode().catch((error) => addEvent(error.message || String(error), "error"));

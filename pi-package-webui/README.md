@@ -56,6 +56,12 @@ Check the server at any time with:
 /webui-status detailed
 ```
 
+### Try the compact desktop preview
+
+Open **Controls → Interface → Desktop layout** and choose **Compact preview**. The narrow rail opens Conversation, Project, Activity, and Settings. **All tools** searches the real commands and panels; pin frequent actions there. Model and effort controls stay beside your draft, and **More** opens secondary composer actions.
+
+Choose **Classic** in Settings to return. Your open sessions, drafts, and saved Classic arrangement remain available. Phone and tablet modes have separate preferences.
+
 ### Your first session
 
 1. Start the Web UI with `/webui-start`.

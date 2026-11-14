@@ -10,11 +10,19 @@ Classic and mobile adapters in `public/app.js` share five flat ES modules:
 
 - `shell-actions.mjs` preserves palette matching and checks captured session/project targets before dispatch. Stable action IDs identify entries across catalog refreshes. The app rebuilds the catalog at execution. Captured session identity rejects same-tab replacements without changing stream ownership; successful New session replies invalidate actions before refreshed state arrives. Compact availability includes both authoritative busy state and locally pending requests. Existing handlers retain asynchronous guards and server authorization remains authoritative.
 - `shell-navigation.mjs` owns the browser history listener and writes. Mobile navigation commits history before changing the rendered state, so a failed write leaves the current view intact. Unrelated history fields and URL parameters survive.
-- `shell-preferences.mjs` reads the versioned browser preference without repairing unknown records. Missing, corrupt or unavailable storage falls back to Classic. Phone and tablet mode choices remain independent; `shell=classic` takes precedence. Focused desktop rendering is introduced separately.
+- `shell-preferences.mjs` reads the versioned browser preference without repairing unknown records. Missing, corrupt or unavailable storage falls back to Classic. Phone and tablet mode choices remain independent; `shell=classic` takes precedence. Focused desktop is opt-in through the browser preference. Pins use bounded printable catalog IDs; inspector navigation keeps its stricter ID grammar.
 - `shell-view-host.mjs` moves canonical DOM nodes and restores their original homes, focus, selection and scroll. The app retains section visibility and disclosure attributes. Moving or restoring a view never owns its session, runner or stream lifetime.
 - `shell-surfaces.mjs` owns one drawer keyboard listener and restores prior attributes. Native modal dialogs retain keyboard ownership. Replacing a drawer invalidates pending focus returns without closing feature resources.
 
 The modules ship with the package and participate in the service-worker cache. Keep module imports, cache versions, browser entry URLs and pinned asset tests coherent. Node contracts cover action targets, preferences and history. `tests/browser/shell-ownership.spec.mjs` exercises real DOM ownership; `mobile-foundation.spec.mjs` checks app integration. These checks do not replace the overhaul plan's later parity and platform gates.
+
+## Compact desktop integration
+
+`focused-shell-adapter.mjs` places canonical views in `shell-workspace.mjs` and restores them with the shared view host. It moves the existing model/effort rows, footer administration controls and Abort/End buttons; feature handlers, request targets and resource lifetimes remain in the app. The original Control Deck visibility and order are retained for Classic. Desktop preview preferences never write the durable layout schema.
+
+`shell-tools-launcher.mjs` renders caller-supplied action records, categories and pins in a native dialog. The app rebuilds the catalog and rechecks captured session/project targets before execution. Native modal ownership remains with the browser. History writes precede view changes and preserve unrelated state and URL identity.
+
+`tests/browser/focused-shell-integration.spec.mjs` uses the shared disposable `session-fixture.mjs` to exercise actual drafts, controls, history, rollback, responsive mode transitions and Abort inside the launcher. Worker component fixtures cover layout and keyboard contracts; they do not establish whole-app parity. New files ship as flat assets and participate in the PWA cache.
 
 ## Pi 1.2 theme compatibility
 

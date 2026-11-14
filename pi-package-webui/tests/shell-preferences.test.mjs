@@ -131,7 +131,7 @@ test("optional focused fields roundtrip independently without filling absent fie
   for (const optional of [
     { navigation: "left" }, { navigation: "top" },
     { navCollapsed: false }, { navCollapsed: true },
-    { pinnedActions: [] }, { pinnedActions: ["project:files", "Session_New-1"] },
+    { pinnedActions: [] }, { pinnedActions: ["project:files", "Session_New-1", "model:fake/fake-model", "command:with%20space"] },
     { inspectorWidth: 240 }, { inspectorWidth: 320 }, { inspectorWidth: 640 },
   ]) {
     for (const desktopLayout of ["classic", "focused"]) {
@@ -170,7 +170,7 @@ test("invalid optional fields reject the whole record and never write or repair 
     ...[undefined, null, "bottom", "Left", true, 1].map((navigation) => ({ navigation })),
     ...[undefined, null, "false", 0, 1].map((navCollapsed) => ({ navCollapsed })),
     ...[undefined, null, "project:files", {}, [1], [null], [""], ["1action"], [" leading"],
-      ["trailing "], ["project.files"], ["é"], ["a\n"], ["a\r"], [`a${"b".repeat(120)}`],
+      ["trailing "], ["é"], ["a\n"], ["a\r"], [`a${"b".repeat(512)}`],
       Array(1), Array.from({ length: 21 }, (_, i) => `action:${i}`)]
       .map((pinnedActions) => ({ pinnedActions })),
     ...[undefined, null, 239, 641, 320.5, "320", true, NaN, Infinity]

@@ -1,0 +1,38 @@
+html[data-desktop-shell="focused"] .layout[hidden] { display: none !important; }
+.focused-composer-controls[hidden] { display: none; }
+html[data-desktop-shell="focused"] .focused-composer-controls {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  border-top: 1px solid var(--border); padding: 6px 0 0;
+}
+html[data-desktop-shell="focused"] .focused-composer-controls .control-row {
+  display: flex; gap: 5px; align-items: center; position: relative; min-width: 0;
+}
+html[data-desktop-shell="focused"] .focused-composer-controls select { max-width: 230px; }
+html[data-desktop-shell="focused"] .focused-composer-controls .control-row-label { font-size: 11px; }
+html[data-desktop-shell="focused"] .focused-composer-controls .model-search-results { position: absolute; bottom: 100%; z-index: 50; }
+html[data-desktop-shell="focused"] #composerActionsButton { display: inline-flex; }
+html[data-desktop-shell="focused"] #composerActionsPanel { display: none; }
+html[data-desktop-shell="focused"] body.composer-actions-open #composerActionsPanel {
+  display: flex; flex-wrap: wrap; max-height: 35vh; overflow: auto;
+}
+html[data-desktop-shell="focused"] .side-panel-section-content { min-width: 0; }
+html[data-desktop-shell="focused"] .side-panel-controls { display: grid; gap: 16px; }
+html[data-desktop-shell="focused"] #focusedWorkspace { height: var(--visual-viewport-height, 100dvh); }
+#focusedWorkspace .chat-panel { display: flex; flex-direction: column; }
+#focusedWorkspace .terminal-tabs-shell { display: flex; flex-direction: column; align-items: stretch; height: 100%; min-height: 0; }
+#focusedWorkspace .terminal-tabs-drawer-content { display: flex; flex-direction: column; gap: 8px; min-height: 0; height: 100%; }
+#focusedWorkspace .terminal-tabs { flex: 1; display: flex; flex-direction: column; align-items: stretch; overflow: auto; max-height: none; }
+#focusedWorkspace .terminal-tab { flex: 0 0 auto; min-width: 0; width: 100%; max-width: none; }
+#focusedWorkspace .terminal-tab-group-menu { position: static; display: flex; width: 100%; min-width: 0; max-width: 100%; max-height: none; padding: 4px 0 0; overflow: visible; }
+#focusedWorkspace .terminal-tab-group { display: flex; flex-direction: column; }
+#focusedWorkspace .terminal-tab-group-item { border-radius: 5px; box-shadow: none; }
+#focusedWorkspace .terminal-sidebar-actions { display: flex; gap: 4px; }
+#focusedWorkspace .terminal-tabs button { min-height: 30px; padding-block: 4px; box-shadow: none; }
+#focusedWorkspace .terminal-new-tab-menu { width: 100%; }
+#focusedWorkspace .terminal-new-tab-menu .composer-publish-menu-panel { inset: auto 0 100%; width: 100%; min-width: 0; }
+#focusedWorkspace .terminal-close-all-button { font-size: 11px; min-height: 28px; }
+#focusedWorkspace[data-navigation="top"] .terminal-tabs-shell,
+#focusedWorkspace[data-navigation="top"] .terminal-tabs-drawer-content,
+#focusedWorkspace[data-navigation="top"] .terminal-tabs { flex-direction: row; height: auto; align-items: center; }
+#focusedWorkspace[data-navigation="top"] .terminal-tab { width: auto; min-width: 180px; }
+#focusedWorkspace[data-navigation="top"] .terminal-tab-group-menu { max-height: 100px; overflow: auto; }

@@ -22,7 +22,7 @@ function normalizePreferences(value) {
     if (!Array.isArray(value.pinnedActions)) return null;
     const pins = new Set();
     for (const id of value.pinnedActions) {
-      if (typeof id !== "string" || /^[a-z][a-z0-9:_-]{0,119}$/i.exec(id)?.[0] !== id) return null;
+      if (typeof id !== "string" || /^[a-z][\x21-\x7e]{0,511}$/i.exec(id)?.[0] !== id) return null;
       pins.add(id);
       if (pins.size > 20) return null;
     }

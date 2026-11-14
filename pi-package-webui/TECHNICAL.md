@@ -4,6 +4,14 @@ Advanced user setup, configuration, compatibility, security, and troubleshooting
 
 [Back to the human-friendly README](README.md) · [Contributor and implementation guide](DEVELOPMENT.md)
 
+## Compact desktop preview
+
+The compact layout is opt-in under **Controls → Interface → Desktop layout**. Its session navigation can sit on the left or above the conversation. **All tools** supports up to twenty pins, saved with the layout choice in this browser. Settings and inspectors reuse your existing controls and their original scopes.
+
+Missing, invalid, or unavailable browser storage keeps Classic. To recover from a layout problem, add `?shell=classic` to the address, or `&shell=classic` when it already has a query. This forces Classic without deleting the saved preference. Remove that parameter to use your choice again. Switching layouts preserves the saved Classic arrangement; phone and tablet preview choices remain independent.
+
+This preview is still undergoing complete feature and platform verification. Native keyboard, cross-browser, and installed-companion checks remain pending.
+
 ## Requirements
 
 - Node.js 22.19 or newer

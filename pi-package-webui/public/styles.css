@@ -18456,6 +18456,7 @@ html[data-density="compact"] .composer { padding-block: 0.5rem; }
     display: block;
     height: var(--visual-viewport-height, 100dvh);
     margin-left: 7rem;
+    width: calc(100% - 7rem);
     padding: 0;
     overflow: hidden;
   }
@@ -19760,4 +19761,16 @@ body:has(#undoToast:not([hidden])) .notice-toast-stack { bottom: calc(max(1rem, 
   .command-palette-item.active, .native-selector-item.keyboard-active, .footer-model-option.active, .terminal-tab.active > button { outline: 2px solid Highlight; outline-offset: 1px; }
   .run-indicator-pulse, .subagent-state-dot { background: Highlight; forced-color-adjust: none; }
   .message::before { background: CanvasText; box-shadow: none; }
+}
+
+@media (max-width: 1050px) {
+  body.terminal-split-open .workspace-column { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 720px), (max-width: 950px) and (max-height: 500px) and (pointer: coarse) {
+  html[data-mobile-shell="v2"] .notice-toast-stack { bottom: calc(4.7rem + env(safe-area-inset-bottom)); }
+  html[data-mobile-shell="v2"] body.mobile-keyboard-open .notice-toast-stack { bottom: calc(0.5rem + env(safe-area-inset-bottom)); }
+}
+
+@media (min-width: 721px) and (max-width: 1050px) {
+  html[data-tablet-shell="v2"] .file-viewer-pane { visibility: visible; pointer-events: auto; }
 }
