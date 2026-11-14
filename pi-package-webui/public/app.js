@@ -2572,14 +2572,19 @@ function renderMobilePhoneExperience({ focus = false } = {}) {
   const shell = mobileShellElement("mobileShellV2");
   if (!shell) return;
   const active = isMobileShellV2Active();
-  shell.hidden = !active;
   if (!active) {
+    // Restore into an interactive Classic host before hiding the focused source.
+    syncMobileShellInteractivity();
+    if (mobileCanonicalMount || mobileWidgetAreaMount) {
+      setSidePanelCollapsed(isSidePanelOverlayView() ? true : readStoredSidePanelCollapsed() ?? false, { persist: false });
+    }
     mobileWidgetAreaUnmount();
     mobileCanonicalUnmount();
+    shell.hidden = true;
     document.documentElement.removeAttribute("data-mobile-presentation");
-    syncMobileShellInteractivity();
     return;
   }
+  shell.hidden = false;
   document.documentElement.dataset.mobilePresentation = mobilePresentation;
   const route = mobileShellState.route;
   const surface = mobileShellElement("mobileShellSurface");

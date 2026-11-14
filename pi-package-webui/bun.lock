@@ -5,7 +5,7 @@
     "": {
       "name": "@firstpick/pi-package-webui",
       "dependencies": {
-        "@firstpick/pi-utils": "^0.2.5",
+        "@firstpick/pi-utils": "^0.3.2",
         "mermaid": "^11.15.0",
       },
       "devDependencies": {
@@ -163,7 +163,7 @@
 
     "@esbuild/win32-x64": ["@esbuild/win32-x64@0.28.2", "", { "os": "win32", "cpu": "x64" }, "sha512-5ebpxr3nWMzrL/rnUI755Jkuee0bHL/Gq0WTF9lvcpv73wAp5eu8MfBUgWK9bhWvZjj7yX8etf/8tI8Ney695g=="],
 
-    "@firstpick/pi-utils": ["@firstpick/pi-utils@0.2.9", "", { "peerDependencies": { "@earendil-works/pi-coding-agent": "*", "@earendil-works/pi-tui": "*" } }, "sha512-prVP4xsxH1NqJzb6DNQbVtLuSfskBEQtUpZ8oTSIbhGSCpCW1oCGkslecXbqOdm/Uih+kmtJjp/WaVDRdjcGPw=="],
+    "@firstpick/pi-utils": ["@firstpick/pi-utils@0.3.2", "", { "peerDependencies": { "@earendil-works/pi-coding-agent": "*", "@earendil-works/pi-tui": "*" } }, "sha512-ffhr4ZcPAedx84skA49zD+Vj/lfBqvE1rAq1LG89Vdz6f4AvLHwOcJMl6dtuJxbNTsX091OEkjETTCkjmK6ESw=="],
 
     "@google/genai": ["@google/genai@1.52.0", "", { "dependencies": { "google-auth-library": "^10.3.0", "p-retry": "^4.6.2", "protobufjs": "^7.5.4", "ws": "^8.18.0" }, "peerDependencies": { "@modelcontextprotocol/sdk": "^1.25.2" }, "optionalPeers": ["@modelcontextprotocol/sdk"] }, "sha512-gwSvbpiN/17O9TbsqSsE/OzZcpv5Fo4RQjdngGgogtuB9RsyJ8ZHhX5KjHj1bp5N9snN2eK8LDGXSaWW2hof8Q=="],
 

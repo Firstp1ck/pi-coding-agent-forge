@@ -878,3 +878,34 @@ test("shell modules survive the service-worker offline cache and online refresh"
   await page.locator('#commandPaletteButton').click();
   await expect(page.locator('[data-action-id="conversation:search"]')).toBeVisible();
 });
+
+test("shell breakpoint return restores focus and selection into the expanded Classic Files view", async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(`${baseURL}/?mobileShell=v2&tabletShell=legacy&mobileRoute=project`);
+  await page.locator('#sidePanelSectionToggleFiles').click();
+  const input = page.locator('#fileTreeSearchInput');
+  await expect(input).toBeVisible();
+  await input.fill('tablet-example');
+  await input.evaluate(node => {
+    window.focusedFilesInput = node;
+    node.focus();
+    node.setSelectionRange(2, 6, 'backward');
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole('navigation', { name: 'Phone destinations' }).getByRole('button', { name: 'Project', exact: true }).click();
+  await expect(page.locator('#mobileProjectRoute')).toBeVisible();
+  await input.focus();
+  await input.evaluate(node => node.setSelectionRange(2, 6, 'backward'));
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await expect(input).toBeVisible();
+  await expect(input).toBeFocused();
+  assert.deepEqual(await input.evaluate(node => ({ same: node === window.focusedFilesInput, value: node.value, start: node.selectionStart, end: node.selectionEnd, direction: node.selectionDirection })), { same: true, value: 'tablet-example', start: 2, end: 6, direction: 'backward' });
+  await page.screenshot({ path: testInfo.outputPath('classic-files-focus-restored.png') });
+  await page.keyboard.insertText('retained');
+  await expect(input).toHaveValue('taretained-example');
+  await input.evaluate(node => node.setSelectionRange(2, 6, 'backward'));
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(input).toBeFocused();
+  assert.deepEqual(await input.evaluate(node => [node.selectionStart, node.selectionEnd, node.selectionDirection]), [2, 6, 'backward']);
+  await expect(input).toHaveValue('taretained-example');
+});
