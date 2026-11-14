@@ -439,7 +439,7 @@ The parent validates actual browser measurements and coverage before accepting W
 
 ### Current contract summary
 
-The reviewed plan, approved mock reference, source inventory and initial browser baseline are integrated. The inventory's ten tests and one parent browser integration case pass. W0-C and W0-D are collecting the missing baseline cases. Production code is unchanged. Classic remains the sole current desktop presentation; shell implementation is gated behind W0 acceptance. No implementation reviews have run. The complete overhaul remains incomplete.
+The reviewed plan, approved mock reference, source inventory and browser/layout baselines are integrated. The inventory's ten tests, one parent browser integration case and all thirteen layout cases pass. Four layout cases deliberately characterize existing defects; they are not product acceptance passes. W0-D is collecting the remaining populated-capability evidence. Production code is unchanged. Classic remains the sole current desktop presentation; shell implementation is gated behind W0 acceptance. No implementation reviews have run. The complete overhaul remains incomplete.
 
 
 ### W0 baseline check and BUG-001
@@ -507,3 +507,16 @@ The view host records each node's original parent and sibling only once, moves t
 Each worker verifies its own module behavior. Parent integration then checks unchanged Classic/mobile workflows, missing/stale targets, storage denial/corruption, history Back/Forward, repeated mount/unmount, selection/focus, and listener cleanup. All new imports must be present in the npm payload and service-worker cache list. An integrated round-1 review checks the used interfaces and preservation contracts, not only the standalone tests. No CSS split is required in W1 because changing loading order without a layout change adds risk without removing an owner.
 
 Dependency preflight: npm reports `@firstpick/pi-utils` 0.3.2 as published. The parent downloaded the 0.2.5 minimum and 0.3.2 archives into disposable directories without installing either. Both expose the seven utilities imported by the WebUI launcher, through the same root/process/http exports. Package-range, lockfile and consuming-package version changes belong to W1 integration, with the corresponding exact-version tests updated and the launcher checked. This archive inspection does not replace runtime validation.
+
+### W0-C integration and defect disposition
+
+Integrated worker `6ab2e562e07d73e0cbbf26de485dbc4355681b97` as `1ce53e75` after inspecting its four-file diff and handoff. The parent copied the 25 screenshots/raw artifacts into the integration checkout, displayed and inspected the sidebar, narrow split and constrained-phone failure screenshots, and reran the complete dedicated suite. All 13 tests passed in 33.9 seconds, with nine passing layout scenarios and four explicit defect characterizations. The rerun did not overwrite frozen JSON. Log: `/tmp/webui-overhaul-w0-c-integration.log`.
+
+| Finding | Parent disposition and required follow-through |
+| --- | --- |
+| W0-C-001, hidden split reserves half the narrow workspace | Accepted. Parent reproduced the geometry and inspected the 1024px screenshot; the narrow CSS hides `.terminal-split-shell` while the split-open workspace retains two columns. W3 must reclaim the space or provide a usable narrow split presentation, preserve both sessions/drafts and keep a reachable return path. |
+| W0-C-002, phone-v2 status strip intercepts composer | Accepted. Parent rerun confirms prompt/attachment trial-click interception at 844×220; screenshot shows the status strip over the composer. W3 must keep the required controls operable during constrained landscape layout. Native keyboard verification remains distinct. |
+| W0-C-003, oversized sidebar with Right deck | Accepted. Parent inspected the 1920px screenshot and reproduced the rail/transcript geometry. W3 must bound sidebar width and preserve space for conversation across deck changes and collapse. This disposition accepts the observed defect, not an unverified CSS root cause. |
+| BUG-002, tablet-v2 attachment clipping | Accepted as corroboration of the existing finding. Initial geometry remains clipped even though Playwright can scroll the layout sideways to complete a trial click. Keep the original W3 assignment. |
+
+The supplement's exact defect assertions are historical baseline characterizations. W3 adds positive corrected-behavior regression checks; it must not keep asserting the defect as a release gate. The frozen source-only capture commands are not intended to run unchanged after production extraction. True browser zoom and native keyboards remain explicitly unmeasured. W7 must report their verification status separately from equivalent viewport reflow tests.
