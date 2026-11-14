@@ -47,3 +47,18 @@ html[data-desktop-shell="focused"] #focusedWorkspace { height: var(--visual-view
 #focusedWorkspace .terminal-tab-actions > button { min-height: 28px; }
 #focusedWorkspace .terminal-tab-button { padding: 5px 7px; }
 #focusedWorkspace .terminal-tab-title { font-size: 12px; letter-spacing: normal; }
+
+.focused-artifacts-host { height: 100%; min-height: 0; min-width: 0; }
+.focused-artifacts-host > .document-artifact-content { height: 100%; min-height: 0; }
+.focused-artifact-empty { padding: 1rem; }
+#focusedWorkspace .focused-artifacts-host .document-artifact-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+#focusedWorkspace .focused-artifacts-host .document-artifact-sidebar { display: flex; overflow-x: auto; max-height: 6rem; border-right: 0; border-bottom: 1px solid var(--ctp-surface0); }
+#focusedWorkspace .focused-artifacts-host .document-artifact-thumbnail { flex: 0 0 4.5rem; padding: .25rem; }
+#focusedWorkspace .focused-artifacts-host .document-artifact-thumbnail img { height: 2.75rem; object-fit: contain; }
+#focusedWorkspace .focused-artifacts-host .document-artifact-toolbar { position: static; padding: 0; gap: .25rem; }
+#focusedWorkspace .focused-artifacts-host .document-artifact-stage { padding: .5rem; }
+#focusedWorkspace .focused-artifacts-host .document-artifact-header { padding: .5rem; flex-wrap: wrap; }
+#focusedWorkspace .focused-artifacts-host .document-artifact-search { min-width: 0; width: 100%; }
+#focusedWorkspace .focused-artifacts-host .document-artifact-semantic { min-width: 0; max-width: 100%; }
+#focusedWorkspace .focused-artifacts-host .document-artifact-thumbnail span { white-space: nowrap; }
+#focusedWorkspace .focused-artifacts-host .document-artifact-toolbar button { min-height: 1.75rem; padding: .3rem .45rem; font-size: var(--text-xs); }

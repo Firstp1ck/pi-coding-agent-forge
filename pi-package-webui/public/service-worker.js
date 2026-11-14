@@ -10,6 +10,8 @@ const APP_SHELL = [
   "/activity-events-controller.mjs",
   "/project-git-tools-controller.mjs",
   "/project-runners-controller.mjs",
+  "/project-file-viewer-controller.mjs",
+  "/project-artifact-controller.mjs",
   "/shell-actions.mjs",
   "/shell-workspace.mjs",
   "/shell-workspace.css",

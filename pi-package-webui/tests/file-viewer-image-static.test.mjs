@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 
+const fileOwner = await readFile(new URL("../public/project-file-viewer-controller.mjs", import.meta.url), "utf8");
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const [app, css, html, server, readme, technical, development, serviceWorker] = await Promise.all([
   readFile(join(root, "public", "app.js"), "utf8"),
@@ -24,8 +25,8 @@ function sourceBetween(source, startMarker, endMarker, label) {
 }
 
 const imageHelpers = sourceBetween(app, "const FILE_VIEWER_IMAGE_MIME_TYPES", "\n// Changes mode only exists", "image data helper");
-const modeSource = sourceBetween(app, "function resolveFileViewerMode(", "\nfunction setFileViewerMode(", "image-aware mode resolver");
-const openSource = sourceBetween(app, "async function openFileInViewer(", "\nasync function openAurReviewReportInViewer(", "file open flow");
+const modeSource = sourceBetween(fileOwner, "export function resolveFileViewerMode(", "\n/**", "image-aware mode resolver").replace("export ", "");
+const openSource = sourceBetween(fileOwner, "  async function open(", "\n  async function openReport(", "file open flow");
 const uiSource = sourceBetween(app, "function updateFileViewerUi(", "\nconst FILE_VIEWER_SEARCH_MATCH_LIMIT", "file viewer UI renderer");
 
 const helperResults = JSON.parse(vm.runInNewContext(`${imageHelpers}\nJSON.stringify([
@@ -50,11 +51,11 @@ assert.match(server, /resolved\.info\.size > FILE_VIEWER_MAX_BYTES[\s\S]*const b
 
 assert.match(html, /id="fileViewerImage"[^>]*role="group"[^>]*aria-label="Image preview"[^>]*hidden>[\s\S]*<img id="fileViewerImageElement" alt="" \/>/, "the viewer should expose a labelled, initially hidden image surface");
 assert.match(app, /fileViewerImage: \$\("#fileViewerImage"\)[\s\S]*fileViewerImageElement: \$\("#fileViewerImageElement"\)/, "the image surface should be registered in the frontend element map");
-assert.match(openSource, /const kind = data\.kind === "image" \? "image" : "text";[\s\S]*const imageUrl = kind === "image" \? fileViewerImageDataUrl\(data\) : "";/, "the standard file-open flow should validate image payloads through the allowlisted data URL helper");
+assert.match(openSource, /const kind = data\.kind === "image" \? "image" : "text";[\s\S]*const imageUrl = kind === "image" \? imageDataUrl\(data\) : "";/, "the standard file-open flow should validate image payloads through the allowlisted data URL helper");
 assert.match(openSource, /readOnly: kind === "image",\s*sourceAvailable: kind === "text"/, "images should be read-only and unavailable to the source editor");
 assert.match(uiSource, /elements\.fileViewerImage\.hidden = mode !== "image"/, "the image surface should render only in image mode");
 assert.match(uiSource, /elements\.fileViewerImageElement\.alt = `Preview of \$\{viewer\.name \|\| fileDisplayName\(viewer\.path\)\}`/, "rendered images should receive a useful filename-based alternative label");
-assert.match(app, /if \(!activeFileViewer \|\| activeFileViewer\.kind === "image" \|\| !elements\.fileViewerSearchBar\) return;/, "text search should not open for image previews");
+assert.match(app, /if \(!projectFiles\.viewer \|\| projectFiles\.viewer\.kind === "image" \|\| !elements\.fileViewerSearchBar\) return;/, "text search should not open for image previews");
 assert.match(app, /elements\.fileViewerImageElement\.removeAttribute\("src"\);\s*elements\.fileViewerImageElement\.alt = "";/, "closing or replacing a viewer should release stale image source state");
 
 assert.match(css, /\.file-viewer-image \{[\s\S]*display: grid;[\s\S]*place-items: center;/, "the image surface should center its preview");

@@ -1,3 +1,5 @@
+import { createProjectArtifactController } from "./project-artifact-controller.mjs";
+import { createProjectFileViewerController, gitFileDiffCategory, resolveFileViewerMode } from "./project-file-viewer-controller.mjs";
 import { createProjectGitToolsController, GIT_TOOLS_SECTIONS } from "./project-git-tools-controller.mjs";
 import { createProjectRunnersController, APP_RUNNER_CONTEXT_DEFAULT_LINES, APP_RUNNER_CONTEXT_MAX_LINES, normalizeAppRunnerContextLineCount } from "./project-runners-controller.mjs";
 import { createActivityEventsController, EVENT_DISPLAY_MODE_STORAGE_KEY, EVENT_FILTER_STORAGE_KEY } from "./activity-events-controller.mjs";
@@ -652,12 +654,24 @@ let activeTextAttachmentEditor = null;
 let activeSkillEditor = null;
 let fileTreeState = { root: "", entriesByPath: new Map(), expanded: new Set(), loading: new Set(), selectedPath: "", requestSerial: 0, searchQuery: "", searchEntries: [], searchLoading: false, searchTruncated: false, searchTotal: 0, gitStatusRoot: "", gitStatusByPath: new Map() };
 let fileTreeLastRenderSignature = "";
-let activeFileViewer = null;
-let fileViewersByTab = new Map();
-let fileViewerOpenRequestSerial = 0;
-let fileViewerGitChangesRequestSerial = 0;
-let fileViewerSelection = null;
-let fileViewerSelectionsByTab = new Map();
+const projectFiles = createProjectFileViewerController({
+  api,
+  captureTarget: projectTargetFromContext,
+  isTargetCurrent: isCurrentProjectTarget,
+  isTargetAlive: isAliveProjectTarget,
+  confirmDiscardEdits,
+  normalizePath: normalizeFileTreePath,
+  fileApiPath, fileDisplayName, fileExtensionForPath, fileLanguageForPath,
+  imageDataUrl: fileViewerImageDataUrl,
+  remapPath: remapFileTreePathAfterMove,
+  onChange: handleProjectFileChange,
+  onStatus: setFileViewerStatus,
+  onSelectPath(path) { fileTreeState.selectedPath = path; renderFileTree(); },
+  async onRefreshDirectory(path, target) {
+    if (isCurrentProjectTarget(target)) await loadFileTreeDirectory(fileParentPath(path), { force: true });
+  },
+  addEvent,
+});
 let fileViewerSearchMatches = [];
 let fileViewerSearchIndex = -1;
 let fileViewerSearchTruncated = false;
@@ -1668,6 +1682,7 @@ let shellPreferenceState = (() => {
   catch { return readShellPreferences(null); }
 })();
 let focusedShell = null;
+const focusedFeatureRecords = [];
 let focusedShellRenderPending = false;
 let focusedShellState = { destination: "conversation", inspector: null };
 const shellHistory = createShellHistory({ window, onPopState: restoreShellNavigation });
@@ -2078,17 +2093,32 @@ function scheduleFocusedShellRender() {
 
 function focusedSectionDestination(id) {
   if (["controls", "optional-features"].includes(id)) return "settings";
-  if (["files", "git"].includes(id)) return "project";
+  if (["files", "git", "artifacts"].includes(id)) return "project";
   if (["session", "sampling", "commands"].includes(id)) return "conversation";
   return "activity";
 }
 
+function focusedInspectorRecords() {
+  return [...sidePanelSectionRecords(), ...focusedFeatureRecords];
+}
+
+function initializeFocusedFeatureRecords() {
+  const parking = make("div");
+  parking.id = "focusedFeatureParking";
+  parking.hidden = true;
+  document.body.append(parking);
+  const content = make("section", "focused-artifacts-host");
+  content.append(make("p", "muted focused-artifact-empty", "Open a document artifact from a message to inspect its pages here."), projectArtifacts.element);
+  parking.append(content);
+  focusedFeatureRecords.push({ id: "artifacts", label: "Documents", content });
+}
+
 function focusedInspectorTopics(destination) {
   const labels = { git: "Changes", subagents: "Agents", queue: "Queues", "codex-usage": "Codex usage", "claude-usage": "Claude usage" };
-  const order = ["files", "git", "subagents", "queue", "events", "codex-usage", "claude-usage", "session", "sampling", "commands"];
-  return sidePanelSectionRecords().filter(record => focusedSectionDestination(record.id) === destination)
+  const order = ["files", "git", "artifacts", "subagents", "queue", "events", "codex-usage", "claude-usage", "session", "sampling", "commands"];
+  return focusedInspectorRecords().filter(record => focusedSectionDestination(record.id) === destination)
     .sort((left, right) => order.indexOf(left.id) - order.indexOf(right.id))
-    .map(record => ({ id: record.id, label: labels[record.id] || record.button.querySelector(".side-panel-section-label")?.textContent || record.id }));
+    .map(record => ({ id: record.id, label: labels[record.id] || record.label || record.button?.querySelector(".side-panel-section-label")?.textContent || record.id }));
 }
 
 function renderFocusedShell() {
@@ -2096,19 +2126,20 @@ function renderFocusedShell() {
   const wasActive = focusedShell.active;
   const previousInspector = focusedShell.inspector;
   const active = activeTab();
-  const record = sidePanelSectionRecords().find(({ id }) => id === focusedShellState.inspector);
+  const record = focusedInspectorRecords().find(({ id }) => id === focusedShellState.inspector);
   focusedShell.update({
     ...shellPreferenceState.value,
     ...focusedShellState,
     enabled: isFocusedShellRequested(),
     inspectorOpen: !!record && !["home", "settings"].includes(focusedShellState.destination),
-    inspectorTitle: record?.button.querySelector(".side-panel-section-label")?.textContent || "",
+    inspectorTitle: record?.label || record?.button?.querySelector(".side-panel-section-label")?.textContent || "",
     inspectorTopics: record && focusedShellState.destination !== "settings" ? focusedInspectorTopics(focusedShellState.destination) : [],
     title: active?.title || "Choose a session",
     context: active?.cwd || "",
     attentionCount: tabs.filter(tab => mobileTabActivityState(tab) === "blocked").length,
     homeCollapsed: workspaceDashboardCollapsed,
   });
+  syncDocumentArtifactHost();
   if (wasActive !== focusedShell.active) {
     syncMobileComposerDisclosureLayout();
     setComposerActionsOpen(false);
@@ -2155,14 +2186,14 @@ function focusedNavigationFromSearch(search) {
   const destination = params.get("view");
   if (!["conversation", "home", "project", "activity", "settings"].includes(destination)) return { destination: "conversation", inspector: null };
   const inspector = params.get("inspector");
-  return { destination, inspector: sidePanelSectionRecords().some(({ id }) => id === inspector) ? inspector : destination === "project" ? "files" : destination === "activity" ? "subagents" : null };
+  return { destination, inspector: focusedInspectorRecords().some(({ id }) => id === inspector) ? inspector : destination === "project" ? "files" : destination === "activity" ? "subagents" : null };
 }
 
 function restoreShellNavigation(event) {
   restoreMobileNavigation(event);
   const state = event.state?.focusedShellState;
   if (state && ["conversation", "home", "project", "activity", "settings"].includes(state.destination)) {
-    focusedShellState = { destination: state.destination, inspector: sidePanelSectionRecords().some(({ id }) => id === state.inspector) ? state.inspector : null };
+    focusedShellState = { destination: state.destination, inspector: focusedInspectorRecords().some(({ id }) => id === state.inspector) ? state.inspector : null };
   } else {
     focusedShellState = focusedNavigationFromSearch(window.location.search);
   }
@@ -2171,11 +2202,11 @@ function restoreShellNavigation(event) {
 
 function focusedToolsActions() {
   const context = shellActionTarget();
-  const sectionActions = sidePanelSectionRecords().map(record => {
+  const sectionActions = focusedInspectorRecords().map(record => {
     const destination = focusedSectionDestination(record.id);
     return {
       id: `view:${record.id}`, scope: "browser", category: destination === "settings" ? "Settings" : destination === "project" ? "Project" : destination === "conversation" ? "Session" : "Activity",
-      label: record.button.querySelector(".side-panel-section-label")?.textContent || record.id,
+      label: record.label || record.button?.querySelector(".side-panel-section-label")?.textContent || record.id,
       description: `Open ${record.id.replaceAll("-", " ")} controls`, keywords: record.id, available: true,
       run: () => navigateFocusedShell(destination, destination === "settings" ? null : record.id),
     };
@@ -2202,6 +2233,7 @@ async function invokeFocusedTool(captured) {
 }
 
 function initializeFocusedShell() {
+  initializeFocusedFeatureRecords();
   const initial = focusedNavigationFromSearch(window.location.search);
   try {
     if (isFocusedShellRequested()) shellHistory.write({ state: { focusedShellState: initial }, replace: true });
@@ -2212,7 +2244,7 @@ function initializeFocusedShell() {
   focusedShell = createFocusedShellAdapter({
     document, viewHost: canonicalViewHost,
     nodes: { ...elements, layout: $(".layout"), conversation: $(".workspace-column"), navigation: elements.terminalTabsShell, home: elements.workspaceDashboard, footer: $("[data-control-deck-shared-footer]"), versions: $(".side-panel-version-row") },
-    sections: sidePanelSectionRecords(), onNavigate: navigateFocusedShell,
+    sections: focusedInspectorRecords(), onNavigate: navigateFocusedShell,
     onPreferences: saveFocusedShellPreferences, onInvoke: invokeFocusedTool,
     getTools: () => ({ actions: focusedToolsActions(), pinnedIds: shellPreferenceState.value.pinnedActions || [], contextLabel: activeTab()?.title || "No active session" }),
   });
@@ -6241,8 +6273,7 @@ function retireClosedWorkspaceTabContexts(closedIds) {
     clearAttachments(id);
     composerStore.clearTab(id);
     sessionContext.invalidate(id);
-    fileViewersByTab.delete(id);
-    fileViewerSelectionsByTab.delete(id);
+    projectFiles.forgetTab(id);
     btwWidgetDismissedIdsByTab.delete(id);
     removeSubagentTerminalViewsForParent(id);
   }
@@ -12606,9 +12637,13 @@ function projectTargetFromContext(context = activeTabContext()) {
   return { ...context, lifetime: sessionContext.captureLifetime(context.tabId), cwd: tabs.find(tab => tab.id === context.tabId)?.cwd || "" };
 }
 
-function isCurrentProjectTarget(target) {
-  return isCurrentTabContext(target) && sessionContext.isLifetimeCurrent(target?.lifetime)
+function isAliveProjectTarget(target) {
+  return sessionContext.isLifetimeCurrent(target?.lifetime)
     && tabs.some(tab => tab.id === target.tabId && (tab.cwd || "") === target.cwd);
+}
+
+function isCurrentProjectTarget(target) {
+  return isCurrentTabContext(target) && isAliveProjectTarget(target);
 }
 
 function isCurrentTabContext(context) {
@@ -13391,7 +13426,7 @@ function handleFileTreeKeydown(event) {
 }
 
 function currentFileViewerPath() {
-  return normalizeFileTreePath(activeFileViewer?.path || elements.fileViewerOpenDefaultButton?.dataset.path || "");
+  return normalizeFileTreePath(projectFiles.viewer?.path || elements.fileViewerOpenDefaultButton?.dataset.path || "");
 }
 
 async function openPathInDefaultEditor(path = currentFileViewerPath()) {
@@ -13631,28 +13666,12 @@ async function refreshFileTreeAfterOperation(paths = []) {
 }
 
 function updateActiveFileViewerAfterMove(sourcePath = "", destinationPath = "") {
-  if (!activeFileViewer) return;
-  const currentPath = normalizeFileTreePath(activeFileViewer.path || "");
-  const nextPath = remapFileTreePathAfterMove(currentPath, sourcePath, destinationPath);
-  if (!nextPath || nextPath === currentPath) return;
-  const language = fileLanguageForPath(nextPath);
-  activeFileViewer = {
-    ...activeFileViewer,
-    path: nextPath,
-    name: fileDisplayName(nextPath),
-    extension: fileExtensionForPath(nextPath),
-    language,
-    mode: activeFileViewer.mode === "preview" && language === "markdown" ? "preview" : "source",
-    // The open-time diff snapshot belongs to the previous path.
-    gitChanges: null,
-  };
-  if (fileViewerSelection) fileViewerSelection = { ...fileViewerSelection, path: nextPath, fileName: activeFileViewer.name };
-  cacheActiveFileViewerForTab();
-  updateFileViewerUi();
+  captureFileViewerEditorContinuity();
+  projectFiles.remapPath(sourcePath, destinationPath);
 }
 
 function closeActiveFileViewerIfDeleted(deletedPath = "") {
-  if (!activeFileViewer || !filePathWithinOrEqual(activeFileViewer.path, deletedPath)) return false;
+  if (!projectFiles.viewer || !filePathWithinOrEqual(projectFiles.viewer.path, deletedPath)) return false;
   closeFileViewer();
   return true;
 }
@@ -13665,7 +13684,7 @@ async function deleteFileTreeEntry(entry = fileContextMenuState?.entry) {
     return;
   }
   const typeLabel = fileOperationTypeLabel(entry);
-  const dirtyWarning = activeFileViewer?.dirty && filePathWithinOrEqual(activeFileViewer.path, sourcePath)
+  const dirtyWarning = projectFiles.viewer?.dirty && filePathWithinOrEqual(projectFiles.viewer.path, sourcePath)
     ? "\n\nThe currently open file has unsaved edits that will be discarded from the viewer."
     : "";
   const recursiveWarning = typeLabel === "directory" ? "\n\nThis permanently deletes the directory and all of its contents." : "";
@@ -14659,7 +14678,7 @@ function applyDurableFileViewerWidth(value) {
   if (width < FILE_VIEWER_WIDTH_MIN_PX) return;
   writeDurableLayoutCache(FILE_VIEWER_WIDTH_STORAGE_KEY, String(width));
   restoreFileViewerWidthPreference();
-  if (activeFileViewer && !isSidePanelOverlayView()) applyFileViewerWidth(width);
+  if (projectFiles.viewer && !isSidePanelOverlayView()) applyFileViewerWidth(width);
 }
 
 function applyDurableUiLayoutField(field, value) {
@@ -14931,7 +14950,7 @@ function sidePanelMaxWidth(side = "right") {
   const gap = Number.parseFloat(layoutStyle?.columnGap || layoutStyle?.gap || "0") || 0;
   const horizontalPadding = (Number.parseFloat(layoutStyle?.paddingLeft || "0") || 0) + (Number.parseFloat(layoutStyle?.paddingRight || "0") || 0);
   const contentWidth = Math.max(0, layoutWidth - horizontalPadding);
-  const fileViewerVisible = !!activeFileViewer && elements.fileViewerPane && getComputedStyle(elements.fileViewerPane).display !== "none";
+  const fileViewerVisible = !!projectFiles.viewer && elements.fileViewerPane && getComputedStyle(elements.fileViewerPane).display !== "none";
   const fileViewerWidth = fileViewerVisible ? Math.max(FILE_VIEWER_WIDTH_MIN_PX, elements.fileViewerPane.getBoundingClientRect().width) : 0;
   const splitOpen = document.body.classList.contains("terminal-split-open");
   const terminalRailWidth = isControlDeckSidebarPresentation() ? Math.max(TERMINAL_TABS_SIDEBAR_WIDTH_MIN_PX, currentTerminalTabsSidebarWidth()) : 0;
@@ -15130,7 +15149,7 @@ function currentFileViewerWidth() {
 function updateFileViewerResizeHandle(width = currentFileViewerWidth()) {
   const handle = elements.fileViewerResizeHandle;
   if (!handle) return;
-  const resizeAvailable = !!activeFileViewer && !isSidePanelOverlayView();
+  const resizeAvailable = !!projectFiles.viewer && !isSidePanelOverlayView();
   handle.hidden = !resizeAvailable;
   handle.setAttribute("aria-valuemin", String(FILE_VIEWER_WIDTH_MIN_PX));
   handle.setAttribute("aria-valuemax", String(fileViewerMaxWidth()));
@@ -15153,7 +15172,7 @@ function restoreFileViewerWidthPreference() {
 }
 
 function beginFileViewerResize(event) {
-  if (!activeFileViewer || isSidePanelOverlayView()) return;
+  if (!projectFiles.viewer || isSidePanelOverlayView()) return;
   if (event.button !== undefined && event.button !== 0) return;
   event.preventDefault();
   const startWidth = currentFileViewerWidth();
@@ -15186,7 +15205,7 @@ function finishFileViewerResize(event) {
 }
 
 function handleFileViewerResizeKeydown(event) {
-  if (!activeFileViewer || isSidePanelOverlayView()) return;
+  if (!projectFiles.viewer || isSidePanelOverlayView()) return;
   const step = event.shiftKey ? 80 : 24;
   const current = currentFileViewerWidth();
   let next = current;
@@ -15200,7 +15219,7 @@ function handleFileViewerResizeKeydown(event) {
 }
 
 function syncFileViewerWidthForViewport() {
-  if (!activeFileViewer) {
+  if (!projectFiles.viewer) {
     updateFileViewerResizeHandle();
     return;
   }
@@ -15240,21 +15259,11 @@ function fileViewerImageDataUrl(data = {}) {
 
 // Changes mode only exists for Git-originated opens. Image previews are
 // read-only, while text keeps the original Source/Markdown-Preview behavior.
-function resolveFileViewerMode(viewer) {
-  if (!viewer) return "source";
-  const hasChanges = !!viewer.gitChanges;
-  if (viewer.mode === "changes") return hasChanges ? "changes" : viewer.kind === "image" ? "image" : "source";
-  if (viewer.kind === "image") return "image";
-  if (viewer.sourceAvailable === false) return hasChanges ? "changes" : "source";
-  return viewer.mode === "preview" && viewer.language === "markdown" ? "preview" : "source";
-}
+
 
 function setFileViewerMode(mode = "source") {
-  if (!activeFileViewer) return;
-  const previousMode = activeFileViewer.mode;
-  activeFileViewer.mode = resolveFileViewerMode({ ...activeFileViewer, mode });
-  if (activeFileViewer.mode === "changes" && previousMode !== "changes") clearFileViewerSelection();
-  updateFileViewerUi();
+  captureFileViewerEditorContinuity();
+  projectFiles.setMode(mode);
   if (elements.fileViewerSearchBar && !elements.fileViewerSearchBar.hidden) {
     fileViewerSearchIndex = -1;
     runFileViewerSearch({ navigate: true });
@@ -15262,14 +15271,11 @@ function setFileViewerMode(mode = "source") {
 }
 
 function setFileViewerDirty(dirty) {
-  if (!activeFileViewer || activeFileViewer.readOnly) return;
-  activeFileViewer.dirty = !!dirty;
-  if (elements.fileViewerSaveButton) elements.fileViewerSaveButton.disabled = !activeFileViewer.dirty;
-  if (activeFileViewer.dirty) setFileViewerStatus("Unsaved file edits.", "warn");
+  projectFiles.setDirty(dirty);
 }
 
 function updateFileViewerUi() {
-  const open = !!activeFileViewer;
+  const open = !!projectFiles.viewer;
   document.body.classList.toggle("file-viewer-open", open);
   syncMobileShellInteractivity();
   if (elements.fileViewerPane) elements.fileViewerPane.hidden = !open;
@@ -15280,7 +15286,7 @@ function updateFileViewerUi() {
     return;
   }
   if (!isSidePanelOverlayView()) applyFileViewerWidth(currentFileViewerWidth());
-  const viewer = activeFileViewer;
+  const viewer = projectFiles.viewer;
   captureFileViewerEditorContinuity(viewer);
   const isMarkdown = viewer.language === "markdown";
   const isImage = viewer.kind === "image";
@@ -15365,7 +15371,7 @@ function fileViewerSearchQueryText() {
 }
 
 function fileViewerSearchSurface() {
-  const mode = resolveFileViewerMode(activeFileViewer);
+  const mode = resolveFileViewerMode(projectFiles.viewer);
   if (mode === "image") return null;
   if (mode === "preview") return elements.fileViewerPreview;
   if (mode === "changes") return elements.fileViewerChanges;
@@ -15374,7 +15380,7 @@ function fileViewerSearchSurface() {
 
 function fileViewerSearchText() {
   const surface = fileViewerSearchSurface();
-  if (surface === elements.fileViewerEditor) return String(surface?.value ?? activeFileViewer?.content ?? "");
+  if (surface === elements.fileViewerEditor) return String(surface?.value ?? projectFiles.viewer?.content ?? "");
   return String(surface?.textContent || "");
 }
 
@@ -15530,7 +15536,7 @@ function stepFileViewerSearch(step) {
 }
 
 function openFileViewerSearch() {
-  if (!activeFileViewer || activeFileViewer.kind === "image" || !elements.fileViewerSearchBar) return;
+  if (!projectFiles.viewer || projectFiles.viewer.kind === "image" || !elements.fileViewerSearchBar) return;
   closeChatSearch();
   const editor = fileViewerSearchSurface() === elements.fileViewerEditor ? elements.fileViewerEditor : null;
   const selectedText = editor && editor.selectionEnd > editor.selectionStart
@@ -15557,7 +15563,7 @@ function closeFileViewerSearch({ restoreFocus = true } = {}) {
   fileViewerSearchTruncated = false;
   updateFileViewerSearchCount();
   if (!restoreFocus) return;
-  const mode = resolveFileViewerMode(activeFileViewer);
+  const mode = resolveFileViewerMode(projectFiles.viewer);
   if (mode === "image") elements.fileViewerImage?.focus({ preventScroll: true });
   else if (mode === "preview") elements.fileViewerPreview?.focus({ preventScroll: true });
   else if (mode === "changes") elements.fileViewerChanges?.focus({ preventScroll: true });
@@ -15615,7 +15621,7 @@ function renderFileViewerChangesTruncation(snapshot) {
   return notice;
 }
 
-function renderFileViewerChanges(snapshot = activeFileViewer?.gitChanges) {
+function renderFileViewerChanges(snapshot = projectFiles.viewer?.gitChanges) {
   const container = elements.fileViewerChanges;
   if (!container) return;
   if (!snapshot) {
@@ -15634,13 +15640,13 @@ function renderFileViewerChanges(snapshot = activeFileViewer?.gitChanges) {
 }
 
 function clearFileViewerSelection() {
-  fileViewerSelection = null;
+  projectFiles.setSelection(null);
   renderFileViewerSelectionBar();
 }
 
 function selectedTextFromEditor() {
   const editor = elements.fileViewerEditor;
-  if (!editor || editor.hidden || !activeFileViewer) return null;
+  if (!editor || editor.hidden || !projectFiles.viewer) return null;
   const start = editor.selectionStart;
   const end = editor.selectionEnd;
   if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return null;
@@ -15673,19 +15679,19 @@ function fileSelectionContext(text, start, end, radius = FILE_VIEWER_CONTEXT_RAD
 }
 
 function updateFileViewerSelectionFromEditor() {
-  if (!activeFileViewer) return;
+  if (!projectFiles.viewer) return;
   const selected = selectedTextFromEditor();
   if (!selected || !selected.text.trim()) {
     clearFileViewerSelection();
     return;
   }
   const context = fileSelectionContext(elements.fileViewerEditor.value || "", selected.start, selected.end);
-  fileViewerSelection = { ...context, ...selected, path: activeFileViewer.path, fileName: activeFileViewer.name };
+  projectFiles.setSelection({ ...context, ...selected, path: projectFiles.viewer.path, fileName: projectFiles.viewer.name });
   renderFileViewerSelectionBar();
 }
 
 function updateFileViewerSelectionFromPreview() {
-  if (!activeFileViewer || elements.fileViewerPreview?.hidden) return;
+  if (!projectFiles.viewer || elements.fileViewerPreview?.hidden) return;
   const selection = window.getSelection?.();
   const preview = elements.fileViewerPreview;
   if (!preview || !selection?.anchorNode || !selection?.focusNode || !preview.contains(selection.anchorNode) || !preview.contains(selection.focusNode)) return;
@@ -15694,36 +15700,36 @@ function updateFileViewerSelectionFromPreview() {
     clearFileViewerSelection();
     return;
   }
-  const content = activeFileViewer.content || "";
+  const content = projectFiles.viewer.content || "";
   const start = Math.max(0, content.indexOf(text));
   const end = start >= 0 ? start + text.length : start;
   const context = start >= 0
     ? fileSelectionContext(content, start, end)
     : { startLine: 1, endLine: textLineCount(content), startColumn: 1, endColumn: 1, fromLine: 1, toLine: textLineCount(content), context: content.slice(0, 4000) };
-  fileViewerSelection = { ...context, start, end, text, path: activeFileViewer.path, fileName: activeFileViewer.name };
+  projectFiles.setSelection({ ...context, start, end, text, path: projectFiles.viewer.path, fileName: projectFiles.viewer.name });
   renderFileViewerSelectionBar();
 }
 
 function renderFileViewerSelectionBar() {
   if (!elements.fileSelectionBar) return;
-  const hasSelection = !!fileViewerSelection?.text;
+  const hasSelection = !!projectFiles.selection?.text;
   elements.fileSelectionBar.hidden = !hasSelection;
   if (!hasSelection) return;
-  const lineLabel = fileViewerSelection.startLine === fileViewerSelection.endLine
-    ? `line ${fileViewerSelection.startLine}`
-    : `lines ${fileViewerSelection.startLine}-${fileViewerSelection.endLine}`;
-  if (elements.fileSelectionSummary) elements.fileSelectionSummary.textContent = `${lineLabel} · ${fileViewerSelection.text.length} chars selected`;
+  const lineLabel = projectFiles.selection.startLine === projectFiles.selection.endLine
+    ? `line ${projectFiles.selection.startLine}`
+    : `lines ${projectFiles.selection.startLine}-${projectFiles.selection.endLine}`;
+  if (elements.fileSelectionSummary) elements.fileSelectionSummary.textContent = `${lineLabel} · ${projectFiles.selection.text.length} chars selected`;
 }
 
 function fileSelectionPrompt() {
-  if (!activeFileViewer || !fileViewerSelection?.text) return "";
+  if (!projectFiles.viewer || !projectFiles.selection?.text) return "";
   const comment = (elements.fileSelectionCommentInput?.value || "").trim();
-  const selection = fileViewerSelection;
+  const selection = projectFiles.selection;
   const range = selection.startLine === selection.endLine
     ? `line ${selection.startLine}, columns ${selection.startColumn}-${selection.endColumn}`
     : `lines ${selection.startLine}-${selection.endLine}`;
   return [
-    `File selection from ${activeFileViewer.path} (${range}).`,
+    `File selection from ${projectFiles.viewer.path} (${range}).`,
     comment ? `User comment: ${comment}` : "User comment: <none>",
     "",
     "Selected text:",
@@ -15753,10 +15759,10 @@ async function sendFileSelectionToSession() {
   }
 }
 
-function captureFileViewerEditorContinuity(viewer = activeFileViewer) {
+function captureFileViewerEditorContinuity(viewer = projectFiles.viewer) {
   const editor = elements.fileViewerEditor;
-  if (!viewer || !editor || editor.hidden || editor.dataset.fileViewerPath !== viewer.path) return;
-  viewer.editorContinuity = {
+  if (!viewer || !editor || editor.hidden || editor.dataset.fileViewerPath !== viewer.path || editor.value !== viewer.content) return;
+  projectFiles.cache(activeTabId, {
     path: viewer.path,
     content: viewer.content,
     selectionStart: editor.selectionStart ?? editor.value.length,
@@ -15765,10 +15771,10 @@ function captureFileViewerEditorContinuity(viewer = activeFileViewer) {
     scrollTop: editor.scrollTop,
     scrollLeft: editor.scrollLeft,
     focused: document.activeElement === editor,
-  };
+  });
 }
 
-function restoreFileViewerEditorContinuity(viewer = activeFileViewer) {
+function restoreFileViewerEditorContinuity(viewer = projectFiles.viewer) {
   const editor = elements.fileViewerEditor;
   const state = viewer?.editorContinuity;
   if (!editor || !state || state.path !== viewer.path || state.content !== viewer.content || editor.dataset.fileViewerPath !== viewer.path) return;
@@ -15788,18 +15794,17 @@ function restoreFileViewerEditorContinuity(viewer = activeFileViewer) {
 }
 
 function cacheActiveFileViewerForTab(tabId = activeTabId) {
-  if (!tabId) return;
   captureFileViewerEditorContinuity();
-  if (activeFileViewer) fileViewersByTab.set(tabId, activeFileViewer);
-  else fileViewersByTab.delete(tabId);
-  if (fileViewerSelection) fileViewerSelectionsByTab.set(tabId, fileViewerSelection);
-  else fileViewerSelectionsByTab.delete(tabId);
+  projectFiles.cache(tabId);
 }
 
 function resetFileViewerUi() {
-  fileViewerOpenRequestSerial += 1;
-  activeFileViewer = null;
-  clearFileViewerSelection();
+  projectFiles.resetActive();
+}
+
+function resetFileViewerDom() {
+  closeFileViewerSearch({ restoreFocus: false });
+  renderFileViewerSelectionBar();
   document.body.classList.remove("file-viewer-open");
   syncMobileShellInteractivity();
   updateFileViewerResizeHandle();
@@ -15825,207 +15830,45 @@ function resetFileViewerUi() {
 }
 
 function restoreFileViewerForActiveTab() {
-  activeFileViewer = activeTabId ? fileViewersByTab.get(activeTabId) || null : null;
-  fileViewerSelection = activeTabId ? fileViewerSelectionsByTab.get(activeTabId) || null : null;
-  updateFileViewerUi();
-  if (activeFileViewer?.dirty) setFileViewerStatus("Unsaved file edits.", "warn");
-  else if (activeFileViewer) setFileViewerStatus("Restored for this terminal.", "success");
+  projectFiles.activate(activeTabId);
 }
 
 function closeFileViewer() {
-  if (activeTabId) {
-    fileViewersByTab.delete(activeTabId);
-    fileViewerSelectionsByTab.delete(activeTabId);
+  projectFiles.close();
+}
+
+function handleProjectFileChange(reason) {
+  if (reason === "selection") { renderFileViewerSelectionBar(); return; }
+  if (reason === "continuity") return;
+  if (reason === "content") {
+    if (elements.fileViewerSaveButton) elements.fileViewerSaveButton.disabled = !projectFiles.viewer?.dirty || projectFiles.viewer?.readOnly === true;
+    return;
   }
-  resetFileViewerUi();
+  if (["reset", "close", "open", "activate"].includes(reason) || !projectFiles.viewer) resetFileViewerDom();
+  updateFileViewerUi();
 }
 
-// Side-panel Git categories are UI labels; the read API uses its own allowlist.
-const GIT_FILE_DIFF_CATEGORY_BY_PANEL = Object.freeze({
-  staged: "staged",
-  changes: "unstaged",
-  conflicted: "conflicted",
-  untracked: "untracked",
-});
-
-function gitFileDiffCategory(panelCategory = "") {
-  return GIT_FILE_DIFF_CATEGORY_BY_PANEL[String(panelCategory || "").trim()] || "";
+function openFileInViewer(path = "", options = {}) {
+  return projectFiles.open(path, options);
 }
 
-// The changes view is the bounded snapshot loaded when the file was opened;
-// reopening the Git row refreshes it. Failures become a visible viewer state
-// instead of a rejected open.
-async function loadGitFileChangesSnapshot(repoRelPath, category, tabId) {
-  const snapshot = { category, path: repoRelPath, label: "", command: "", diff: "", truncated: false, capBytes: 0, error: "" };
-  try {
-    const params = new URLSearchParams({ path: repoRelPath, category });
-    const response = await api(`/api/git-file-diff?${params.toString()}`, { tabId });
-    if (!response.ok) throw new Error(response.error || "Failed to load Git changes for this file");
-    const data = response.data || {};
-    return {
-      ...snapshot,
-      ...data,
-      category,
-      path: data.path || repoRelPath,
-      diff: String(data.diff || ""),
-      truncated: data.truncated === true,
-      capBytes: Number(data.capBytes) || 0,
-      contentError: data.error ? String(data.error) : "",
-      error: "",
-    };
-  } catch (error) {
-    return { ...snapshot, error: error.message || String(error) };
-  }
-}
-
-function gitFileChangesPlaceholder(category, repoRelPath, requestSerial) {
-  return { category, path: repoRelPath, label: "", command: "", diff: "", truncated: false, capBytes: 0, loading: true, requestSerial, error: "" };
-}
-
-async function applyGitFileChangesSnapshot(request, tabContext, viewerPath, requestSerial) {
-  const snapshot = await request;
-  const viewer = tabContext.tabId === activeTabId ? activeFileViewer : fileViewersByTab.get(tabContext.tabId);
-  if (!viewer?.gitChanges?.loading || viewer.path !== viewerPath || viewer.gitChanges.requestSerial !== requestSerial) return;
-  viewer.gitChanges = snapshot;
-  if (viewer === activeFileViewer) updateFileViewerUi();
-}
-
-async function openFileInViewer(path = "", { gitCategory = "", gitPath = "" } = {}) {
-  const normalized = normalizeFileTreePath(path);
-  if (!normalized) return;
-  if (activeFileViewer?.dirty && activeFileViewer.path !== normalized) {
-    if (!(await confirmDiscardEdits({ what: "unsaved file edits", target: activeFileViewer.path }))) return;
-  }
-  const openRequestSerial = ++fileViewerOpenRequestSerial;
-  const tabContext = activeTabContext();
-  fileTreeState.selectedPath = normalized;
-  renderFileTree();
-  setFileViewerStatus(`Opening ${normalized}…`);
-  const category = gitFileDiffCategory(gitCategory);
-  const changesPath = normalizeFileTreePath(gitPath) || normalized;
-  const changesRequestSerial = category ? ++fileViewerGitChangesRequestSerial : 0;
-  const changesRequest = category ? loadGitFileChangesSnapshot(changesPath, category, tabContext.tabId) : null;
-  try {
-    const response = await api(fileApiPath("/api/files/content", normalized), { tabId: tabContext.tabId });
-    if (!isCurrentTabContext(tabContext) || openRequestSerial !== fileViewerOpenRequestSerial) return;
-    const data = response.data || {};
-    const gitChanges = changesRequest ? gitFileChangesPlaceholder(category, changesPath, changesRequestSerial) : null;
-    const kind = data.kind === "image" ? "image" : "text";
-    const imageUrl = kind === "image" ? fileViewerImageDataUrl(data) : "";
-    if (kind === "image" && !imageUrl) throw new Error("Image preview data is invalid or unsupported");
-    activeFileViewer = {
-      path: normalizeFileTreePath(data.path || normalized),
-      name: data.name || fileDisplayName(normalized),
-      content: kind === "text" ? String(data.content || "") : "",
-      size: Number(data.size) || 0,
-      mtimeMs: Number(data.mtimeMs) || 0,
-      extension: data.extension || "",
-      language: kind === "text" ? data.language || "text" : "image",
-      kind,
-      mimeType: kind === "image" ? String(data.mimeType || "") : "",
-      imageUrl,
-      mode: gitChanges ? "changes" : kind === "image" ? "image" : data.language === "markdown" ? "preview" : "source",
-      dirty: false,
-      readOnly: kind === "image",
-      sourceAvailable: kind === "text",
-      gitChanges,
-    };
-    if (elements.fileViewerEditor) elements.fileViewerEditor.value = activeFileViewer.content;
-    clearFileViewerSelection();
-    cacheActiveFileViewerForTab();
-    updateFileViewerUi();
-    setFileViewerStatus(kind === "image" ? "Image opened in WebUI (read-only)." : "Opened in WebUI.", "success");
-    if (changesRequest) void applyGitFileChangesSnapshot(changesRequest, tabContext, activeFileViewer.path, changesRequestSerial);
-  } catch (error) {
-    const message = error.message || String(error);
-    // A deleted tracked file has no live source but still has a diff worth showing.
-    const gitChanges = changesRequest ? await changesRequest : null;
-    if (!isCurrentTabContext(tabContext) || openRequestSerial !== fileViewerOpenRequestSerial) return;
-    if (gitChanges && !gitChanges.error) {
-      activeFileViewer = {
-        path: normalized,
-        name: fileDisplayName(normalized),
-        content: "",
-        size: 0,
-        mtimeMs: 0,
-        extension: fileExtensionForPath(normalized),
-        language: fileLanguageForPath(normalized),
-        mode: "changes",
-        dirty: false,
-        readOnly: true,
-        sourceAvailable: false,
-        gitChanges,
-      };
-      if (elements.fileViewerEditor) elements.fileViewerEditor.value = "";
-      clearFileViewerSelection();
-      cacheActiveFileViewerForTab();
-      updateFileViewerUi();
-      setFileViewerStatus("File content unavailable; showing Git changes (read-only).", "warn");
-      return;
-    }
-    setFileViewerStatus(message, "error");
-    addEvent(`file open failed: ${message}`, "error");
-  }
-}
-
-async function openAurReviewReportInViewer(path = "", repoRoot = "") {
+function openAurReviewReportInViewer(path = "", repoRoot = "") {
   const normalized = aurReviewSafePath(path);
-  const expectedRepoRoot = String(repoRoot || "");
-  if (!normalized || !expectedRepoRoot) return;
-  const tabContext = activeTabContext();
-  setFileViewerStatus(`Opening ${normalized}…`);
-  try {
-    const params = new URLSearchParams({ path: normalized, repoRoot: expectedRepoRoot });
-    const response = await api(`/api/aur-review/report-content?${params.toString()}`, { tabId: tabContext.tabId });
-    if (!isCurrentTabContext(tabContext)) return;
-    const data = response.data || {};
-    activeFileViewer = {
-      path: normalizeFileTreePath(data.path || normalized),
-      name: data.name || fileDisplayName(normalized),
-      content: String(data.content || ""),
-      size: Number(data.size) || 0,
-      mtimeMs: Number(data.mtimeMs) || 0,
-      extension: data.extension || "",
-      language: data.language || "text",
-      mode: data.language === "markdown" ? "preview" : "source",
-      dirty: false,
-      readOnly: true,
-    };
-    if (elements.fileViewerEditor) elements.fileViewerEditor.value = activeFileViewer.content;
-    clearFileViewerSelection();
-    cacheActiveFileViewerForTab();
-    updateFileViewerUi();
-    setFileViewerStatus("Report opened in WebUI (read-only).", "success");
-  } catch (error) {
-    if (isCurrentTabContext(tabContext)) {
-      setFileViewerStatus(error.message || String(error), "error");
-      addEvent(`review report open failed: ${error.message || String(error)}`, "error");
-    }
-  }
+  if (!normalized || !repoRoot) return;
+  return projectFiles.openReport(normalized, String(repoRoot));
 }
 
 async function saveActiveFileViewer() {
-  if (!activeFileViewer || !elements.fileViewerEditor) return;
-  if (activeFileViewer.readOnly) {
-    setFileViewerStatus("This report is read-only.", "info");
-    return;
-  }
-  const tabContext = activeTabContext();
-  const content = elements.fileViewerEditor.value || "";
+  const viewer = projectFiles.viewer;
+  if (!viewer || !elements.fileViewerEditor) return;
+  const target = projectTargetFromContext();
   if (elements.fileViewerSaveButton) elements.fileViewerSaveButton.disabled = true;
-  setFileViewerStatus(`Saving ${activeFileViewer.path}…`);
   try {
-    const response = await api("/api/files/content", { method: "POST", body: { path: activeFileViewer.path, content, mtimeMs: activeFileViewer.mtimeMs }, tabId: tabContext.tabId });
-    if (!isCurrentTabContext(tabContext)) return;
-    const data = response.data || {};
-    activeFileViewer = { ...activeFileViewer, ...data, path: normalizeFileTreePath(data.path || activeFileViewer.path), content, dirty: false };
-    cacheActiveFileViewerForTab();
-    updateFileViewerUi();
-    await loadFileTreeDirectory(fileParentPath(activeFileViewer.path), { force: true });
-    setFileViewerStatus("Saved.", "success");
-  } catch (error) {
-    if (isCurrentTabContext(tabContext)) setFileViewerStatus(error.message || String(error), "error");
-    if (activeFileViewer && elements.fileViewerSaveButton) elements.fileViewerSaveButton.disabled = false;
+    return await projectFiles.save(elements.fileViewerEditor.value || "");
+  } finally {
+    if (isCurrentProjectTarget(target) && projectFiles.viewer === viewer && elements.fileViewerSaveButton) {
+      elements.fileViewerSaveButton.disabled = viewer.readOnly === true || !viewer.dirty;
+    }
   }
 }
 
@@ -18313,8 +18156,7 @@ async function closeTerminalTabs(tabIds, { label = "selected terminal tabs", all
       commandCatalogsByTab.delete(id);
       projectRunners.forgetTab(id);
       tabMessagesCache.delete(id);
-      fileViewersByTab.delete(id);
-      fileViewerSelectionsByTab.delete(id);
+      projectFiles.forgetTab(id);
       btwWidgetDismissedIdsByTab.delete(id);
       removeSubagentTerminalViewsForParent(id);
     }
@@ -25138,7 +24980,7 @@ async function changeActiveTabCwd() {
   }
 
   if (!(await appConfirmText(`Restart ${tab.title} in:\n${cwd}\n\nCurrent in-flight work in this tab will be stopped. The conversation continues in the new directory.`, { affected: tab.title, confirmLabel: "Change working folder" }))) return;
-  if (activeFileViewer?.dirty && !(await confirmDiscardEdits({ what: "unsaved file edits", target: activeFileViewer.path }))) return;
+  if (projectFiles.viewer?.dirty && !(await confirmDiscardEdits({ what: "unsaved file edits", target: projectFiles.viewer.path }))) return;
 
   saveActiveDraft();
   if (isCurrentTabContext(tabContext)) {
@@ -36054,7 +35896,7 @@ function configureMarkdownLink(link, href) {
   link.addEventListener("click", (event) => {
     event.preventDefault();
     const cwd = latestWorkspace?.cwd || activeTab()?.cwd || "";
-    const basePath = link.closest?.(".file-viewer-preview") && activeFileViewer ? fileParentPath(activeFileViewer.path) : "";
+    const basePath = link.closest?.(".file-viewer-preview") && projectFiles.viewer ? fileParentPath(projectFiles.viewer.path) : "";
     const workspacePath = markdownWorkspaceFilePath(href, cwd, basePath);
     if (!workspacePath) {
       addEvent(`Cannot open Markdown link outside this tab's working directory: ${filePath}`, "error");
@@ -38251,75 +38093,82 @@ function renderLsToolExecution(parent, tool) {
 }
 
 let documentArtifactDialog = null;
+let documentArtifactOpen = false;
+const projectArtifacts = createProjectArtifactController({
+  document, api,
+  captureTarget: projectTargetFromContext,
+  isTargetCurrent: isAliveProjectTarget,
+  onOpen({ target }) {
+    if (!isAliveProjectTarget(target) || target.tabId !== activeTabId) return false;
+    if (focusedShell?.active) {
+      navigateFocusedShell("project", "artifacts");
+      if (focusedShell.inspector !== "artifacts") return false;
+    }
+    documentArtifactOpen = true;
+    syncDocumentArtifactHost();
+    return true;
+  },
+  onClose() {
+    documentArtifactOpen = false;
+    if (documentArtifactDialog?.open) documentArtifactDialog.close();
+    syncDocumentArtifactHost();
+  },
+  onReference: addDocumentArtifactPageToComposer,
+  onError(error) { addEvent(`Document artifact: ${error.message || error}`, "error"); },
+});
 
-function addDocumentArtifactPageToComposer(artifact, pageNum) {
+function addDocumentArtifactPageToComposer(artifact, pageNum, target) {
+  if (!isAliveProjectTarget(target) || target.tabId !== activeTabId) return false;
   const reference = `[Document artifact ${artifact.id}${artifact.revisionId ? ` revision ${artifact.revisionId}` : ""}, page ${pageNum}]`;
   const current = elements.promptInput.value.trim();
   elements.promptInput.value = [current, reference].filter(Boolean).join("\n\n");
+  composerStore.setDraft(target.tabId, elements.promptInput.value);
   resizePromptInput();
   renderCommandSuggestions();
+  if (focusedShell?.active) navigateFocusedShell("conversation", null);
   focusPromptInput({ defer: true });
+  return true;
 }
 
 function ensureDocumentArtifactDialog() {
   if (documentArtifactDialog?.isConnected) return documentArtifactDialog;
   const dialog = make("dialog", "document-artifact-dialog");
+  dialog.setAttribute("aria-label", "Document artifact");
   dialog.addEventListener("click", (event) => { if (event.target === dialog) dialog.close(); });
+  dialog.addEventListener("close", () => {
+    const host = focusedFeatureRecords.find(record => record.id === "artifacts")?.content;
+    if (dialog.open || host?.parentElement !== dialog) return;
+    documentArtifactOpen = false;
+    projectArtifacts.close({ notify: false });
+    canonicalViewHost.restore(host);
+    syncDocumentArtifactHost();
+  });
   document.body.append(dialog);
   documentArtifactDialog = dialog;
   return dialog;
 }
 
-async function openDocumentArtifact(artifact) {
-  const dialog = ensureDocumentArtifactDialog();
-  dialog.replaceChildren(make("div", "document-artifact-loading", "Loading document artifact…"));
-  if (!dialog.open) dialog.showModal();
-  try {
-    const response = await api(artifact.manifestUrl);
-    const manifest = response.data || {}, pages = Array.isArray(manifest.pages) ? manifest.pages : [];
-    let pageIndex = 0, zoom = 1, rotation = 0;
-    const shell = make("section", "document-artifact-shell"), header = make("header", "document-artifact-header"), title = make("div", "document-artifact-title"), actions = make("div", "document-artifact-actions"), body = make("div", "document-artifact-body"), sidebar = make("aside", "document-artifact-sidebar"), stage = make("main", "document-artifact-stage"), image = make("img", "document-artifact-page"), toolbar = make("div", "document-artifact-toolbar"), meta = make("span", "document-artifact-meta"), search = make("input", "document-artifact-search"), semantic = make("details", "document-artifact-semantic");
-    title.append(make("strong", undefined, artifact.title || "Document"), make("span", "muted", `${artifact.pageCount || pages.length || 0} page${Number(artifact.pageCount || pages.length) === 1 ? "" : "s"} · ${manifest.renderer?.engine || "document artifact"}`));
-    const close = make("button", undefined, "Close"); close.type = "button"; close.addEventListener("click", () => dialog.close());
-    if (artifact.downloadUrl) { const download = make("a", "button-like", "Download"); download.href = artifact.downloadUrl; download.download = artifact.title || "document"; actions.append(download); }
-    actions.append(close); header.append(title, actions);
-    search.type = "search"; search.placeholder = "Search outline, comments, revisions, or metadata";
-    const previous = make("button", undefined, "Previous"), next = make("button", undefined, "Next"), zoomOut = make("button", undefined, "−"), zoomIn = make("button", undefined, "+"), fit = make("button", undefined, "Fit"), rotate = make("button", undefined, "Rotate"), send = make("button", undefined, "Send page to composer");
-    for (const button of [previous, next, zoomOut, zoomIn, fit, rotate, send]) button.type = "button";
-    const renderPage = () => {
-      const page = pages[pageIndex];
-      image.hidden = !page;
-      if (page) { image.src = page.imageUrl; image.alt = `Rendered page ${page.pageNum} of ${artifact.title || "document"}`; image.style.transform = `scale(${zoom}) rotate(${rotation}deg)`; meta.textContent = `Page ${page.pageNum} of ${artifact.pageCount || pages.length} · ${Math.round(zoom * 100)}% · ${rotation}°`; }
-      else meta.textContent = "No rendered pages are available";
-      previous.disabled = pageIndex <= 0; next.disabled = pageIndex >= pages.length - 1; send.disabled = !page;
-      for (const [index, button] of [...sidebar.querySelectorAll("button")].entries()) button.classList.toggle("active", index === pageIndex);
-    };
-    previous.addEventListener("click", () => { pageIndex = Math.max(0, pageIndex - 1); renderPage(); });
-    next.addEventListener("click", () => { pageIndex = Math.min(pages.length - 1, pageIndex + 1); renderPage(); });
-    zoomOut.addEventListener("click", () => { zoom = Math.max(0.25, zoom - 0.25); renderPage(); });
-    zoomIn.addEventListener("click", () => { zoom = Math.min(3, zoom + 0.25); renderPage(); });
-    fit.addEventListener("click", () => { zoom = 1; renderPage(); });
-    rotate.addEventListener("click", () => { rotation = (rotation + 90) % 360; renderPage(); });
-    send.addEventListener("click", () => { const page = pages[pageIndex]; if (page) { addDocumentArtifactPageToComposer(artifact, page.pageNum); dialog.close(); } });
-    toolbar.append(previous, next, zoomOut, zoomIn, fit, rotate, send, meta);
-    for (const [index, page] of pages.entries()) { const button = make("button", "document-artifact-thumbnail"); button.type = "button"; const thumb = make("img"); thumb.src = page.imageUrl; thumb.alt = ""; button.append(thumb, make("span", undefined, `Page ${page.pageNum}`)); button.addEventListener("click", () => { pageIndex = index; renderPage(); }); sidebar.append(button); }
-    const semanticData = { outline: manifest.outline || [], comments: manifest.comments || [], revisions: manifest.revisions || [], warnings: manifest.warnings || [], diff: manifest.diff || undefined, renderer: manifest.renderer || undefined };
-    semantic.append(make("summary", undefined, "Semantic structure, revisions, warnings, and diff"), make("pre", undefined, JSON.stringify(semanticData, null, 2)));
-    search.addEventListener("input", () => { const query = search.value.trim().toLocaleLowerCase(); semantic.hidden = !!query && !JSON.stringify(semanticData).toLocaleLowerCase().includes(query); if (query && semantic.hidden) search.setCustomValidity("No semantic match"); else search.setCustomValidity(""); });
-    stage.append(toolbar, search, image, semantic); body.append(sidebar, stage); shell.append(header, body); dialog.replaceChildren(shell); renderPage();
-  } catch (error) {
-    const close = make("button", undefined, "Close"); close.type = "button"; close.addEventListener("click", () => dialog.close());
-    dialog.replaceChildren(make("div", "document-artifact-error", `Document artifact is stale or unavailable: ${error.message || error}`), close);
+function syncDocumentArtifactHost() {
+  const host = focusedFeatureRecords.find(record => record.id === "artifacts")?.content;
+  if (!host) return;
+  host.querySelector(".focused-artifact-empty").hidden = documentArtifactOpen;
+  if (focusedShell?.active) {
+    if (host.parentElement === documentArtifactDialog) canonicalViewHost.restore(host);
+    if (documentArtifactDialog?.open) documentArtifactDialog.close();
+  } else if (documentArtifactOpen) {
+    const dialog = ensureDocumentArtifactDialog();
+    canonicalViewHost.move(host, dialog);
+    if (!dialog.open) dialog.showModal();
   }
 }
 
+function openDocumentArtifact(artifact) {
+  return projectArtifacts.open(artifact);
+}
+
 function appendDocumentArtifact(parent, artifact) {
-  if (artifact?.schema !== "pi.artifact/v1" || artifact?.kind !== "document") return;
-  const card = make("div", `document-artifact-card${artifact.unavailable ? " unavailable" : ""}`), text = make("div"), actions = make("div", "document-artifact-card-actions");
-  text.append(make("strong", undefined, artifact.title || "Document artifact"), make("span", "muted", artifact.unavailable ? "Preview unavailable" : `${artifact.pageCount || 0} page${Number(artifact.pageCount) === 1 ? "" : "s"}`));
-  if (!artifact.unavailable && artifact.manifestUrl) { const open = make("button", undefined, "Open viewer"); open.type = "button"; open.addEventListener("click", () => openDocumentArtifact(artifact)); actions.append(open); }
-  if (!artifact.unavailable && artifact.downloadUrl) { const download = make("a", "button-like", "Download"); download.href = artifact.downloadUrl; download.download = artifact.title || "document"; actions.append(download); }
-  card.append(text, actions); parent.append(card);
+  const card = projectArtifacts.renderCard(artifact);
+  if (card) parent.append(card);
 }
 
 function renderGenericToolExecution(parent, tool) {
@@ -49996,6 +49845,7 @@ elements.textPromptDialog?.addEventListener("cancel", (event) => {
   finishTextPrompt(null);
 });
 elements.textPromptDialog?.addEventListener("close", () => {
+  if (elements.textPromptDialog.open) return;
   if (activeTextPromptResolve) finishTextPrompt(null);
 });
 elements.confirmationCancelButton?.addEventListener("click", () => finishApplicationConfirmation(false));
@@ -50972,7 +50822,7 @@ window.addEventListener("keydown", (event) => {
     // Inside a modal dialog (settings, palette, pickers) leave the browser's own find alone.
     if (document.querySelector("dialog[open]")) return;
     event.preventDefault();
-    if (activeFileViewer && elements.fileViewerPane?.contains(event.target)) openFileViewerSearch();
+    if (projectFiles.viewer && elements.fileViewerPane?.contains(event.target)) openFileViewerSearch();
     else openChatSearch();
   }
 });
@@ -51461,7 +51311,7 @@ elements.fileViewerResizeHandle?.addEventListener("pointerdown", beginFileViewer
 elements.fileViewerResizeHandle?.addEventListener("keydown", handleFileViewerResizeKeydown);
 elements.fileViewerSaveButton?.addEventListener("click", () => saveActiveFileViewer());
 elements.fileViewerCloseButton?.addEventListener("click", async () => {
-  if (activeFileViewer?.dirty && !(await confirmDiscardEdits({ what: "unsaved file edits", target: activeFileViewer.path }))) return;
+  if (projectFiles.viewer?.dirty && !(await confirmDiscardEdits({ what: "unsaved file edits", target: projectFiles.viewer.path }))) return;
   closeFileViewer();
 });
 // Reload/close with unsaved file edits or a non-empty composer asks first (browser-native prompt).
@@ -51470,7 +51320,7 @@ window.addEventListener("beforeunload", (event) => {
   persistDesktopDrafts();
   // Text drafts are persisted above; only unsaved file edits and file attachments would be lost.
   const attachmentsPending = activeTabId ? attachmentsForTab(activeTabId).some((attachment) => attachment?.file) : false;
-  if (!activeFileViewer?.dirty && !attachmentsPending) return;
+  if (!projectFiles.viewer?.dirty && !attachmentsPending) return;
   event.preventDefault();
   event.returnValue = "";
 });
@@ -51499,10 +51349,8 @@ elements.fileViewerSearchNextButton?.addEventListener("click", () => stepFileVie
 elements.fileViewerSearchCloseButton?.addEventListener("click", () => closeFileViewerSearch());
 elements.fileViewerEditor?.addEventListener("scroll", syncFileViewerSearchOverlayScroll);
 elements.fileViewerEditor?.addEventListener("input", () => {
-  if (!activeFileViewer) return;
-  activeFileViewer.content = elements.fileViewerEditor.value || "";
-  activeFileViewer.size = new Blob([activeFileViewer.content]).size;
-  setFileViewerDirty(true);
+  if (!projectFiles.viewer) return;
+  projectFiles.setContent(elements.fileViewerEditor.value || "");
   updateFileViewerSelectionFromEditor();
   if (elements.fileViewerSearchBar && !elements.fileViewerSearchBar.hidden) runFileViewerSearch();
 });
@@ -51518,7 +51366,7 @@ for (const eventName of ["keyup", "mouseup"]) {
   elements.fileViewerPreview?.addEventListener(eventName, () => setTimeout(updateFileViewerSelectionFromPreview, 0));
 }
 document.addEventListener("selectionchange", () => {
-  if (activeFileViewer && elements.fileViewerPreview && !elements.fileViewerPreview.hidden) updateFileViewerSelectionFromPreview();
+  if (projectFiles.viewer && elements.fileViewerPreview && !elements.fileViewerPreview.hidden) updateFileViewerSelectionFromPreview();
 });
 elements.fileSelectionSendButton?.addEventListener("click", () => sendFileSelectionToSession());
 elements.fileSelectionCommentInput?.addEventListener("keydown", (event) => {

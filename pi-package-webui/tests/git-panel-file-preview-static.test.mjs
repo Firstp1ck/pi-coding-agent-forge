@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 
+const owner = await readFile(new URL("../public/project-file-viewer-controller.mjs", import.meta.url), "utf8");
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const [app, css, html] = await Promise.all([
   readFile(join(root, "public", "app.js"), "utf8"),
@@ -11,27 +12,27 @@ const [app, css, html] = await Promise.all([
   readFile(join(root, "public", "index.html"), "utf8"),
 ]);
 
-function sourceBetween(startMarker, endMarker, label) {
-  const start = app.indexOf(startMarker);
-  const end = app.indexOf(endMarker, start);
+function sourceBetween(startMarker, endMarker, label, source = app) {
+  const start = source.indexOf(startMarker);
+  const end = source.indexOf(endMarker, start);
   assert.ok(start >= 0 && end > start, `${label} should remain a standalone frontend helper`);
-  return app.slice(start, end);
+  return source.slice(start, end);
 }
 
 const normalizePathSource = sourceBetween("function normalizeFileTreePath(", "\nfunction fileApiPath(", "normalizeFileTreePath");
 const targetSource = sourceBetween("function gitFileViewerTarget(", "\nasync function openGitFileInViewer(", "gitFileViewerTarget");
 const openSource = sourceBetween("async function openGitFileInViewer(", "\nasync function openGitFileFromChanges(", "openGitFileInViewer");
 const renderSource = sourceBetween("function renderGitPanelFile(", "\nfunction renderGitPanelTreeSection(", "renderGitPanelFile");
-const categorySource = sourceBetween("const GIT_FILE_DIFF_CATEGORY_BY_PANEL = Object.freeze({", "\nasync function loadGitFileChangesSnapshot(", "gitFileDiffCategory");
-const modeSource = sourceBetween("function resolveFileViewerMode(", "\nfunction setFileViewerMode(", "resolveFileViewerMode");
+const categorySource = sourceBetween("const GIT_FILE_DIFF_CATEGORY_BY_PANEL", "export function resolveFileViewerMode", "categories", owner).replaceAll("export ", "");
+const modeSource = sourceBetween("export function resolveFileViewerMode", "\n/**", "mode", owner).replace("export ", "");
 const setModeSource = sourceBetween("function setFileViewerMode(", "\nfunction setFileViewerDirty(", "setFileViewerMode");
 const viewerUiSource = sourceBetween("function updateFileViewerUi(", "\nfunction fileViewerChangesNotice(", "updateFileViewerUi");
 const changesRenderSource = sourceBetween("function fileViewerChangesNotice(", "\nfunction clearFileViewerSelection(", "file viewer changes rendering");
 const combinedSyntaxSource = sourceBetween("function gitFileDiffUsesCombinedSyntax(", "\nfunction renderFileViewerUntrackedChanges(", "gitFileDiffUsesCombinedSyntax");
-const snapshotSource = sourceBetween("async function loadGitFileChangesSnapshot(", "\nfunction gitFileChangesPlaceholder(", "loadGitFileChangesSnapshot");
-const applySnapshotSource = sourceBetween("function gitFileChangesPlaceholder(", "\nasync function openFileInViewer(", "gitFileChangesPlaceholder");
-const openFileSource = sourceBetween("async function openFileInViewer(", "\nasync function openAurReviewReportInViewer(", "openFileInViewer");
-const viewerPersistenceSource = sourceBetween("function cacheActiveFileViewerForTab(", "\n// Side-panel Git categories are UI labels", "file viewer tab persistence");
+const snapshotSource = sourceBetween("  async function loadDiff(", "\n  async function applyDiff(", "diff request", owner);
+const applySnapshotSource = sourceBetween("  async function applyDiff(", "\n  async function open(", "diff ownership", owner);
+const openFileSource = sourceBetween("  async function open(", "\n  async function openReport(", "open owner", owner);
+const viewerPersistenceSource = sourceBetween("function cacheActiveFileViewerForTab(", "\nfunction handleProjectFileChange(", "viewer adapter");
 const moveSource = sourceBetween("function updateActiveFileViewerAfterMove(", "\nfunction closeActiveFileViewerIfDeleted(", "updateActiveFileViewerAfterMove");
 const resetActiveTabUiSource = sourceBetween("function resetActiveTabUi(", "\nfunction tabGroupStatusRank(", "resetActiveTabUi");
 const switchTabSource = sourceBetween("async function switchTab(", "\nfunction currentDirectoryForNewTab(", "switchTab");
@@ -110,8 +111,8 @@ assert.equal(modes[7], "changes", "a deleted tracked file without live source sh
 assert.equal(modes[8], "source", "a missing source without any Git snapshot should not invent a Changes view");
 assert.equal(modes[9], "source", "mode resolution should fail closed without a viewer");
 
-assert.match(setModeSource, /activeFileViewer\.mode = resolveFileViewerMode\(\{ \.\.\.activeFileViewer, mode \}\);/, "mode switching should route every request through the shared resolver");
-assert.match(setModeSource, /if \(activeFileViewer\.mode === "changes" && previousMode !== "changes"\) clearFileViewerSelection\(\);/, "entering Changes mode should clear a stale Source or Preview selection bar");
+assert.match(owner, /viewer\.mode = resolveFileViewerMode\(\{ \.\.\.viewer, mode \}\)/, "mode switching should route every request through the shared resolver");
+assert.match(owner, /if \(viewer\.mode === "changes" && previousMode !== "changes"\) selection = null/, "entering Changes mode should clear a stale Source or Preview selection bar");
 assert.match(viewerUiSource, /const hasChanges = !!viewer\.gitChanges;/, "the viewer UI should derive Changes availability from the open-time snapshot");
 assert.match(viewerUiSource, /elements\.fileViewerChangesModeButton\.hidden = !hasChanges;\s*elements\.fileViewerChangesModeButton\.disabled = !hasChanges;/, "the Changes control should stay hidden and disabled for non-Git opens");
 assert.match(viewerUiSource, /elements\.fileViewerSourceModeButton\.disabled = !sourceAvailable;/, "Source should be disabled when the live file content is unavailable");
@@ -145,59 +146,51 @@ assert.deepEqual(
 
 // --- Backend request contract ---
 
-assert.match(snapshotSource, /new URLSearchParams\(\{ path: repoRelPath, category \}\)/, "the changes request should send the repo-relative path and the mapped category");
+assert.match(snapshotSource, /new URLSearchParams\(\{ path, category \}\)/, "the changes request should send the repo-relative path and the mapped category");
 assert.match(snapshotSource, /api\(`\/api\/git-file-diff\?\$\{params\.toString\(\)\}`, \{ tabId \}\)/, "the changes request should call the read-only Git file diff endpoint on the owning tab");
 assert.match(snapshotSource, /if \(!response\.ok\) throw new Error\(response\.error \|\| "Failed to load Git changes for this file"\)/, "an ok:false response should surface a readable error");
 assert.match(snapshotSource, /truncated: data\.truncated === true/, "truncation should be carried into the viewer snapshot");
 assert.match(snapshotSource, /contentError: data\.error \? String\(data\.error\) : ""/, "an untracked read error should stay distinct from a request failure");
 assert.match(snapshotSource, /return \{ \.\.\.snapshot, error: error\.message \|\| String\(error\) \};/, "a failed changes request should resolve to an error snapshot instead of rejecting the open");
-assert.match(app, /let fileViewerGitChangesRequestSerial = 0;/, "Git changes opens should have a request identity counter");
-assert.match(applySnapshotSource, /loading: true, requestSerial/, "the viewer should show an identified loading snapshot until the bounded diff arrives");
-assert.match(
-  applySnapshotSource,
-  /const viewer = tabContext\.tabId === activeTabId \? activeFileViewer : fileViewersByTab\.get\(tabContext\.tabId\);\s*if \(!viewer\?\.gitChanges\?\.loading \|\| viewer\.path !== viewerPath \|\| viewer\.gitChanges\.requestSerial !== requestSerial\) return;/,
-  "a late diff response should update the owning terminal's cached viewer while still rejecting stale viewer identities",
-);
+assert.match(owner, /let diffSerial = 0/, "Git changes opens should have a request identity counter");
+assert.match(openFileSource, /loading: true, requestSerial/, "the viewer should show an identified loading snapshot until the bounded diff arrives");
+assert.match(applySnapshotSource, /tabs\.get\(token\.target\.tabId\) !== token\.owner[\s\S]*token\.owner\.viewer !== buffer[\s\S]*buffer\.path !== path[\s\S]*buffer\.gitChanges !== placeholder[\s\S]*!isTargetAlive\(token\.target\)/, "a late diff response should update the owning terminal's cached viewer while still rejecting stale viewer identities");
 
 // --- Open flow: Git default, normal-open isolation, deleted files ---
 
 assert.match(openSource, /category = "" \} = \{\}/, "Git opens should accept an optional side-panel category");
 assert.match(openSource, /openFileInViewer\(target\.path, \{ gitCategory: category, gitPath: normalizeFileTreePath\(repoRelPath\) \}\)/, "Git opens should hand the category and repo path to the standard viewer");
-assert.match(openFileSource, /async function openFileInViewer\(path = "", \{ gitCategory = "", gitPath = "" \} = \{\}\)/, "the standard viewer should accept optional Git context without changing its default signature");
-assert.match(app, /let fileViewerOpenRequestSerial = 0;/, "file viewer opens should have a shared request identity counter");
-assert.match(openFileSource, /const openRequestSerial = \+\+fileViewerOpenRequestSerial;/, "every viewer open should capture a unique request identity");
-assert.match(openFileSource, /const category = gitFileDiffCategory\(gitCategory\);/, "the viewer should map the side-panel category through the shared allowlist");
-assert.match(openFileSource, /const changesRequestSerial = category \? \+\+fileViewerGitChangesRequestSerial : 0;/, "each Git-originated open should receive a unique changes request identity");
-assert.match(openFileSource, /const changesRequest = category \? loadGitFileChangesSnapshot\(changesPath, category, tabContext\.tabId\) : null;/, "only category-carrying opens should request a diff");
-assert.match(openFileSource, /const gitChanges = changesRequest \? gitFileChangesPlaceholder\(category, changesPath, changesRequestSerial\) : null;/, "normal File-section opens should carry no Git snapshot at all");
-assert.match(openFileSource, /applyGitFileChangesSnapshot\(changesRequest, tabContext, activeFileViewer\.path, changesRequestSerial\)/, "same-path Git requests should apply only through their captured request identity");
+assert.match(openFileSource, /async function open\(path = "", \{ gitCategory = "", gitPath = "" \} = \{\}\)/, "the standard viewer should accept optional Git context without changing its default signature");
+assert.match(owner, /let openSerial = 0/, "file viewer opens should have a shared request identity counter");
+assert.match(owner, /serial: \+\+openSerial/, "every viewer open should capture a unique request identity");
+assert.match(openFileSource, /category = gitFileDiffCategory\(gitCategory\)/, "the viewer should map the side-panel category through the shared allowlist");
+assert.match(openFileSource, /const requestSerial = category \? \+\+diffSerial : 0/, "each Git-originated open should receive a unique changes request identity");
+assert.match(openFileSource, /changesRequest = category \? loadDiff\(changesPath, category, token\.target\.tabId\) : null/, "only category-carrying opens should request a diff");
+assert.match(openFileSource, /const gitChanges = changesRequest \? \{[\s\S]*\} : null/, "normal File-section opens should carry no Git snapshot at all");
+assert.match(openFileSource, /applyDiff\(changesRequest, token, next, gitChanges\)/, "same-path Git requests should apply only through their captured request identity");
 assert.match(openFileSource, /mode: gitChanges \? "changes" : kind === "image" \? "image" : data\.language === "markdown" \? "preview" : "source",/, "Git opens should default to Changes while normal opens keep the Image/Markdown/Source default");
-assert.match(openFileSource, /if \(!isCurrentTabContext\(tabContext\) \|\| openRequestSerial !== fileViewerOpenRequestSerial\) return;/, "the source-success path should reject stale same-tab viewer opens");
-assert.match(openFileSource, /const gitChanges = changesRequest \? await changesRequest : null;\s*if \(!isCurrentTabContext\(tabContext\) \|\| openRequestSerial !== fileViewerOpenRequestSerial\) return;/, "the deleted-file fallback should reject stale same-tab viewer opens after awaiting the diff");
+assert.match(openFileSource, /await api\(fileApiPath[\s\S]*if \(!isOpenCurrent\(token\)\) return \{ success: false, reason: "stale" \}/, "the source-success path should reject stale same-tab viewer opens");
+assert.match(openFileSource, /const gitChanges = changesRequest \? await changesRequest : null;\s*if \(!isOpenCurrent\(token\)\) return \{ success: false, reason: "stale" \}/, "the deleted-file fallback should reject stale same-tab viewer opens after awaiting the diff");
 assert.match(openFileSource, /readOnly: kind === "image",\s*sourceAvailable: kind === "text",/, "a live Git-originated text file should stay editable while image previews remain read-only");
-assert.match(
-  openFileSource,
-  /const gitChanges = changesRequest \? await changesRequest : null;\s*if \(!isCurrentTabContext\(tabContext\) \|\| openRequestSerial !== fileViewerOpenRequestSerial\) return;\s*if \(gitChanges && !gitChanges\.error\) \{/,
-  "a current failed source load should fall back to the diff only when that diff actually loaded",
-);
+assert.match(openFileSource, /const gitChanges = changesRequest \? await changesRequest : null;\s*if \(!isOpenCurrent\(token\)\) return \{ success: false, reason: "stale" \};\s*if \(gitChanges && !gitChanges\.error\)/, "a current failed source load should fall back to the diff only when that diff actually loaded");
 assert.match(openFileSource, /mode: "changes",\s*dirty: false,\s*readOnly: true,\s*sourceAvailable: false,/, "a deleted tracked file should open read-only in Changes mode");
-assert.match(openFileSource, /setFileViewerStatus\("File content unavailable; showing Git changes \(read-only\)\.", "warn"\)/, "the deleted-file fallback should explain itself in the viewer status");
-assert.match(openFileSource, /setFileViewerStatus\(message, "error"\);\s*addEvent\(`file open failed: \$\{message\}`, "error"\);/, "a total failure should still report the original open error");
-assert.match(viewerPersistenceSource, /function resetFileViewerUi\(\) \{\s*fileViewerOpenRequestSerial \+= 1;\s*activeFileViewer = null;/, "resetting the visible viewer should invalidate pending source and deleted-file opens");
+assert.match(openFileSource, /onStatus\("File content unavailable; showing Git changes \(read-only\)\.", "warn"\)/, "the deleted-file fallback should explain itself in the viewer status");
+assert.match(openFileSource, /onStatus\(message, "error"\);\s*addEvent\(`file open failed: \$\{message\}`, "error"\)/, "a total failure should still report the original open error");
+assert.match(owner, /function resetActive\(\) \{\s*openSerial \+= 1;\s*viewer = null/, "resetting the visible viewer should invalidate pending source and deleted-file opens");
 assert.match(viewerPersistenceSource, /elements\.fileViewerChanges\.hidden = true;\s*elements\.fileViewerChanges\.replaceChildren\(\);/, "resetting the visible viewer should clear the changes surface");
-assert.match(moveSource, /gitChanges: null,/, "renaming the open file should drop its stale open-time diff snapshot");
+assert.match(owner, /function remapPath[\s\S]*gitChanges: null/, "renaming the open file should drop its stale open-time diff snapshot");
 
 // --- Per-terminal viewer persistence ---
 
-assert.match(app, /let fileViewersByTab = new Map\(\);/, "open file viewers should be stored per terminal tab");
-assert.match(app, /let fileViewerSelectionsByTab = new Map\(\);/, "viewer selections should be stored with their owning terminal tab");
-assert.match(viewerPersistenceSource, /fileViewersByTab\.set\(tabId, activeFileViewer\)/, "caching a terminal should retain its active viewer object, including dirty edits and mode");
-assert.match(viewerPersistenceSource, /fileViewerSelectionsByTab\.set\(tabId, fileViewerSelection\)/, "caching a terminal should retain its active file selection");
-assert.match(viewerPersistenceSource, /activeFileViewer = activeTabId \? fileViewersByTab\.get\(activeTabId\) \|\| null : null;\s*fileViewerSelection = activeTabId \? fileViewerSelectionsByTab\.get\(activeTabId\) \|\| null : null;\s*updateFileViewerUi\(\);/, "activating a terminal should restore its own viewer and selection");
-assert.match(viewerPersistenceSource, /function closeFileViewer\(\) \{\s*if \(activeTabId\) \{\s*fileViewersByTab\.delete\(activeTabId\);\s*fileViewerSelectionsByTab\.delete\(activeTabId\);/, "explicitly closing a viewer should remove only the active terminal's cached state");
+assert.match(owner, /const tabs = new Map\(\)/, "open file viewers should be stored per terminal tab");
+assert.match(owner, /owner = \{ viewer: null, selection: null \}/, "viewer selections should be stored with their owning terminal tab");
+assert.match(owner, /owner\.viewer = viewer/, "caching a terminal should retain its active viewer object, including dirty edits and mode");
+assert.match(owner, /owner\.selection = selection/, "caching a terminal should retain its active file selection");
+assert.match(owner, /function activate\(tabId\)[\s\S]*viewer = tabs\.get\(activeTabId\)\?\.viewer \|\| null;\s*selection = tabs\.get\(activeTabId\)\?\.selection \|\| null;/, "activating a terminal should restore its own viewer and selection");
+assert.match(owner, /function close\(\) \{\s*if \(activeTabId\) tabs.delete\(activeTabId\)/, "explicitly closing a viewer should remove only the active terminal's cached state");
 assert.match(switchTabSource, /cacheActiveFileViewerForTab\(activeTabId\);[\s\S]*?const tabContext = setActiveTabId\(tabId, \{ remember: true \}\);/, "switching terminals should cache the outgoing viewer before changing the active tab identity");
 assert.match(resetActiveTabUiSource, /resetFileViewerUi\(\);\s*resetFileTreeState\(\);\s*restoreFileViewerForActiveTab\(\);/, "resetting tab UI should restore the incoming terminal's viewer instead of closing it");
-assert.match(closeTabsSource, /fileViewersByTab\.delete\(id\);\s*fileViewerSelectionsByTab\.delete\(id\);/, "closing terminal tabs should discard their cached viewers and selections");
+assert.match(closeTabsSource, /projectFiles\.forgetTab\(id\)/, "closing terminal tabs should discard their cached viewers and selections");
 
 // --- Changes rendering contracts ---
 
