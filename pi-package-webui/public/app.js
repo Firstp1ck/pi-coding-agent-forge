@@ -1,3 +1,4 @@
+import { createActivityEventsController, EVENT_DISPLAY_MODE_STORAGE_KEY, EVENT_FILTER_STORAGE_KEY } from "./activity-events-controller.mjs";
 import { createFocusedShellAdapter } from "./focused-shell-adapter.mjs";
 import { createSessionContext } from "./session-context.mjs";
 import { createSessionComposerStore } from "./session-composer-store.mjs";
@@ -626,9 +627,6 @@ const transcriptRenderer = createTranscriptRenderer({
 });
 
 const PI_WEBUI_NPM_URL = "https://www.npmjs.com/package/@firstpick/pi-package-webui";
-const EVENT_DISPLAY_MODE_STORAGE_KEY = "pi-webui-event-display-mode-v1";
-const EVENT_FILTER_STORAGE_KEY = "pi-webui-event-filter-v1";
-const EVENT_FILTER_VALUES = new Set(["all", "errors", "warnings", "tools", "tree"]);
 
 let currentState = null;
 let tabStateCache = new Map();
@@ -666,8 +664,16 @@ let fileContextMenuState = null;
 let sidePanelContextMenuState = null;
 let gitFooterContextMenuState = null;
 let eventTreeContextMenuState = null;
-let eventDisplayMode = readStoredEventDisplayMode();
-let eventFilter = readStoredEventFilter();
+const activityEvents = createActivityEventsController({
+  document,
+  nodes: elements,
+  readPreference: key => localStorage.getItem(key),
+  writePreference: (key, value) => localStorage.setItem(key, value),
+  isVisible: eventsSectionIsVisibleAndExpanded,
+  onJump: jumpToChatEvent,
+  onNotice: showNoticeToast,
+  onUnreadChange: () => scheduleFocusedShellRender(),
+});
 const toolEventStartedAt = new Map();
 let sidePanelSectionEditMode = false;
 let sidePanelSectionPointerDrag = null;
@@ -701,7 +707,6 @@ const PATH_SUGGEST_DEBOUNCE_MS = 120;
 const NOTICE_TOAST_LIMIT = 3;
 const NOTICE_TOAST_TIMEOUT_MS = { info: 5000, success: 5000, warn: 6000, error: 10000 };
 const noticeToasts = [];
-let eventsUnreadCount = 0;
 let streamRawText = "";
 let streamThinkingRawText = "";
 let streamDerivedOutputState = null;
@@ -18494,149 +18499,11 @@ function toolLifecycleEventArguments(event, phase) {
   return args;
 }
 
-function normalizeEventDisplayMode(value) {
-  return value === "compact" ? "compact" : "detailed";
-}
-
-function readStoredEventDisplayMode() {
-  try {
-    return normalizeEventDisplayMode(localStorage.getItem(EVENT_DISPLAY_MODE_STORAGE_KEY));
-  } catch {
-    return "detailed";
-  }
-}
-
-function normalizeEventFilter(value) {
-  return EVENT_FILTER_VALUES.has(value) ? value : "all";
-}
-
-function readStoredEventFilter() {
-  try {
-    return normalizeEventFilter(localStorage.getItem(EVENT_FILTER_STORAGE_KEY));
-  } catch {
-    return "all";
-  }
-}
-
-function eventRowMatchesFilter(line, filter = eventFilter) {
-  if (!line?.classList?.contains("event") || filter === "all") return true;
-  if (filter === "errors") return line.dataset.eventLevel === "error";
-  if (filter === "warnings") return line.dataset.eventLevel === "warn";
-  if (filter === "tools") return ["start", "finish"].includes(line.dataset.eventToolPhase);
-  if (filter === "tree") return line.dataset.eventTreeAvailable === "true";
-  return true;
-}
-
-function applyEventFilter() {
-  const rows = [...(elements.eventLog?.children || [])].filter((line) => line.classList?.contains("event"));
-  let shown = 0;
-  for (const line of rows) {
-    const matches = eventRowMatchesFilter(line);
-    line.hidden = !matches;
-    if (matches) shown += 1;
-  }
-  const total = rows.length;
-  if (elements.eventFilterStatus) {
-    elements.eventFilterStatus.textContent = total === 0
-      ? "No events yet"
-      : eventFilter === "all"
-        ? `${total} event${total === 1 ? "" : "s"}`
-        : `${shown} of ${total}`;
-  }
-  if (elements.eventFilterEmpty) {
-    elements.eventFilterEmpty.hidden = total === 0 || shown > 0;
-    const label = elements.eventFilterSelect?.selectedOptions?.[0]?.textContent?.trim() || "this filter";
-    elements.eventFilterEmpty.textContent = `No events match ${label.toLowerCase()}.`;
-  }
-}
-
-function syncEventFilterUi() {
-  if (elements.eventFilterSelect) elements.eventFilterSelect.value = eventFilter;
-  applyEventFilter();
-}
-
-function setEventFilter(value, { persist = true } = {}) {
-  eventFilter = normalizeEventFilter(value);
-  syncEventFilterUi();
-  if (!persist) return;
-  try {
-    localStorage.setItem(EVENT_FILTER_STORAGE_KEY, eventFilter);
-  } catch {
-    // The filter remains active for this page when storage is unavailable.
-  }
-}
-
-function syncEventDisplayModeUi() {
-  if (elements.eventLog) elements.eventLog.dataset.displayMode = eventDisplayMode;
-  elements.eventDisplayDetailedAction?.setAttribute("aria-checked", String(eventDisplayMode === "detailed"));
-  elements.eventDisplayCompactAction?.setAttribute("aria-checked", String(eventDisplayMode === "compact"));
-}
-
-function setEventDisplayMode(value, { persist = true } = {}) {
-  eventDisplayMode = normalizeEventDisplayMode(value);
-  syncEventDisplayModeUi();
-  if (!persist) return;
-  try {
-    localStorage.setItem(EVENT_DISPLAY_MODE_STORAGE_KEY, eventDisplayMode);
-  } catch {
-    // Display mode remains active for this page when storage is unavailable.
-  }
-}
-
-function addEvent(message, level = "info", { toolCallId = "", toolEventPhase = "", details = [], notify = true, occurredAt = Date.now(), aggregateKey = "", aggregateIncrement = 1, aggregateSingular = "", aggregatePlural = "" } = {}) {
-  const stableAggregateKey = String(aggregateKey || "").trim();
-  const priorAggregate = stableAggregateKey
-    ? [...(elements.eventLog?.children || [])].find((candidate) => candidate.dataset.eventAggregateKey === stableAggregateKey)
-    : null;
-  const aggregateCount = stableAggregateKey
-    ? Math.max(0, Number.parseInt(priorAggregate?.dataset.eventAggregateCount || "0", 10) || 0) + Math.max(1, Math.trunc(Number(aggregateIncrement) || 1))
-    : 0;
-  const eventMessage = stableAggregateKey && aggregateSingular
-    ? `${message} ${aggregateCount} ${aggregateCount === 1 ? aggregateSingular : aggregatePlural || aggregateSingular}`
-    : String(message || "");
-  priorAggregate?.remove();
-  const line = make("button", `event ${level}`.trim());
-  line.type = "button";
-  line.dataset.eventLevel = String(level || "info").trim().toLowerCase() || "info";
-  line.dataset.chatEventTimestamp = String(occurredAt);
-  if (stableAggregateKey) {
-    line.dataset.eventAggregateKey = stableAggregateKey;
-    line.dataset.eventAggregateCount = String(aggregateCount);
-  }
-  const stableToolCallId = String(toolCallId || "").trim();
-  const toolLifecycle = ["start", "finish"].includes(toolEventPhase);
-  const treeEligible = stableToolCallId && toolLifecycle;
-  line.dataset.eventTreeAvailable = String(!!treeEligible);
-  if (stableToolCallId) line.dataset.chatToolCallId = stableToolCallId;
-  if (toolLifecycle) line.dataset.eventToolPhase = toolEventPhase;
-  line.setAttribute("aria-keyshortcuts", "ContextMenu Shift+F10");
-  const time = make("span", "event-time", `[${new Date(occurredAt).toLocaleTimeString()}]`);
-  const summary = make("span", "event-summary", eventMessage);
-  const main = make("span", "event-main");
-  main.append(time, summary);
-  line.append(main);
-  if (Array.isArray(details) && details.length) {
-    const meta = make("span", "event-details");
-    for (const detail of details) {
-      if (!detail?.label || !detail?.value) continue;
-      const item = make("span", `event-detail${detail.tone ? ` ${detail.tone}` : ""}`);
-      item.append(make("span", "event-detail-label", `${detail.label}:`), document.createTextNode(` ${detail.value}`));
-      meta.append(item);
-    }
-    if (meta.childElementCount) line.append(meta);
-  }
-  const accessibleText = line.textContent.trim();
-  line.title = `Jump to this event in the chat; open the context menu for display options${treeEligible ? " and Tree navigation" : ""}`;
-  line.setAttribute("aria-label", `${accessibleText}. Jump to this event in the chat. Context menu: display options${treeEligible ? " and Tree navigation" : ""}.`);
-  line.addEventListener("click", () => jumpToChatEvent(line));
-  elements.eventLog.prepend(line);
-  while (elements.eventLog.children.length > 120) elements.eventLog.lastElementChild?.remove();
-  applyEventFilter();
-  if (notify && (level === "error" || level === "warn")) {
-    showNoticeToast(eventMessage, level);
-    noteUnreadEvent();
-  }
-}
+function syncEventFilterUi() { activityEvents.syncUi(); }
+function syncEventDisplayModeUi() { activityEvents.syncUi(); }
+function setEventFilter(value, options) { activityEvents.setFilter(value, options); }
+function setEventDisplayMode(value, options) { activityEvents.setDisplayMode(value, options); }
+function addEvent(message, level, options) { activityEvents.add(message, level, options); }
 
 function closeEventTreeContextMenu({ returnFocus = true } = {}) {
   const trigger = eventTreeContextMenuState?.trigger;
@@ -18689,7 +18556,7 @@ function showEventTreeContextMenu(event, line = null) {
   const top = Math.min(Number(event.clientY) || 0, Math.max(8, window.innerHeight - rect.height - 8));
   menu.style.left = `${Math.max(8, left)}px`;
   menu.style.top = `${Math.max(8, top)}px`;
-  const displayAction = eventDisplayMode === "compact" ? elements.eventDisplayCompactAction : elements.eventDisplayDetailedAction;
+  const displayAction = activityEvents.getSnapshot().displayMode === "compact" ? elements.eventDisplayCompactAction : elements.eventDisplayDetailedAction;
   displayAction?.focus({ preventScroll: true });
 }
 
@@ -18823,31 +18690,11 @@ function eventsSectionRecord() {
 }
 
 function eventsSectionIsVisibleAndExpanded() {
-  if (focusedShell?.active) return focusedShell.inspector === "events" && !["home", "settings"].includes(focusedShellState.destination);
-  const record = eventsSectionRecord();
-  if (!record || record.section.hidden || record.section.classList.contains("collapsed")) return false;
-  return !document.body.classList.contains("side-panel-collapsed") || document.body.classList.contains("control-deck-left");
+  const log = elements.eventLog;
+  return !!log?.getClientRects().length && !log.closest("[hidden], [inert]") && getComputedStyle(log).visibility !== "hidden";
 }
 
-function renderEventsUnreadBadge() {
-  const badge = elements.eventsUnreadBadge;
-  if (!badge) return;
-  badge.textContent = eventsUnreadCount > 99 ? "99+" : String(eventsUnreadCount);
-  badge.hidden = eventsUnreadCount === 0;
-  badge.setAttribute("aria-label", `${eventsUnreadCount} unread warning${eventsUnreadCount === 1 ? "" : "s"} or errors`);
-}
-
-function noteUnreadEvent() {
-  if (eventsSectionIsVisibleAndExpanded()) return;
-  eventsUnreadCount += 1;
-  renderEventsUnreadBadge();
-}
-
-function clearUnreadEvents() {
-  if (!eventsUnreadCount) return;
-  eventsUnreadCount = 0;
-  renderEventsUnreadBadge();
-}
+function clearUnreadEvents() { activityEvents.clearUnread(); }
 
 function revealSidePanelSectionById(id) {
   if (focusedShell?.active) {

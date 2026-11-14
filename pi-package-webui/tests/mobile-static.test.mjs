@@ -5,6 +5,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+const eventsControllerSource = await readFile(join(root, "public", "activity-events-controller.mjs"), "utf8");
 const [pkgRaw, html, css, app, server, extension, readme, technical, development, startScript, manifestRaw, serviceWorker, appleIcon, icon192, icon512, matrixBackground, mochaBackground] = await Promise.all([
   readFile(join(root, "package.json"), "utf8"),
   readFile(join(root, "public", "index.html"), "utf8"),
@@ -287,7 +288,8 @@ assert.match(html, /data-side-panel-section="controls"/, "side panel controls sh
 assert.match(html, /data-side-panel-section="commands"/, "side panel commands should live in a collapsible section");
 assert.match(html, /class="side-panel-section-toggle"[^>]*aria-controls="sidePanelSectionControls"/, "side panel section toggles should target their content panels");
 assert.match(html, /class="side-panel-section-label">Events<\/span>/, "side panel events should expose a section toggle label");
-assert.match(app, /function addEvent\(message, level = "info", \{ toolCallId = "", toolEventPhase = "", details = \[\], notify = true,[\s\S]*?make\("button", `event \$\{level\}`[\s\S]*?chatEventTimestamp[\s\S]*?jumpToChatEvent\(line\)/, "event log entries should be keyboard-accessible controls that navigate into the chat");
+assert.match(eventsControllerSource, /function addEvent\(message, level = "info", \{ toolCallId = "", toolEventPhase = "", details = \[\], notify = true,[\s\S]*?make\("button", `event \$\{level\}`[\s\S]*?chatEventTimestamp/, "event log entries should retain keyboard-accessible buttons and navigation metadata");
+assert.match(app, /onJump: jumpToChatEvent/, "the event owner should use canonical chat navigation");
 assert.match(app, /function chatEventTargetForLine\(line\)[\s\S]*?chatToolCallId[\s\S]*?data-tool-call-id[\s\S]*?\.message\[data-chat-timestamp\]/, "event navigation should prefer exact tool cards and otherwise match the closest chat timestamp");
 assert.match(app, /function jumpToChatEvent\(line\)[\s\S]*?setChatScrollTopInstant[\s\S]*?highlightChatEventTarget[\s\S]*?setSidePanelCollapsed\(true, \{ persist: false \}\)/, "event navigation should dismiss overlay sidebars, scroll the chat, and highlight its target");
 assert.match(app, /function applyChatEventMetadata\(bubble, message\)[\s\S]*?bubble\.dataset\.chatTimestamp/, "rendered chat events should expose timestamps for sidebar navigation");
@@ -1312,7 +1314,7 @@ assert.deepEqual(JSON.parse(JSON.stringify(clearFinishedEvents.at(-1))), {
     aggregatePlural: "finished subagent runs",
   },
 }, "automatic clearing should use one keyed event whose cleared-run counter can accumulate");
-const addEventSource = appFunctionSource("addEvent", "closeEventTreeContextMenu");
+const addEventSource = eventsControllerSource.slice(eventsControllerSource.indexOf("function addEvent("), eventsControllerSource.indexOf("function renderEventsUnreadBadge("));
 assert.match(addEventSource, /eventAggregateKey === stableAggregateKey[\s\S]*eventAggregateCount[\s\S]*priorAggregate\?\.remove\(\)[\s\S]*eventLog\.prepend\(line\)/, "keyed events should replace their prior row, retain a cumulative count, and return to the top of the log");
 assert.match(addEventSource, /aggregateCount === 1 \? aggregateSingular : aggregatePlural/, "aggregate rows should keep singular and plural summaries accurate");
 const aggregateEventLog = {
@@ -1345,11 +1347,12 @@ function aggregateEventNode(_tag, className = "", text = "") {
   };
 }
 const aggregateEventContext = {
-  elements: { eventLog: aggregateEventLog },
+  nodes: { eventLog: aggregateEventLog },
+  disposed: false,
   make: aggregateEventNode,
   applyEventFilter() {},
   jumpToChatEvent() {},
-  showNoticeToast() {},
+  onNotice() {},
   noteUnreadEvent() {},
 };
 vm.runInNewContext(`${addEventSource}\nthis.runAddEvent = addEvent;`, aggregateEventContext);
