@@ -83,6 +83,8 @@ Independent Pi processes do not appear automatically. Start them through `pi-web
 
 When agents exchange direct Intercom messages or use native subagent-supervisor coordination, one compact tag per conversation appears beneath the composer. The tags start at the right edge and extend toward the middle, using up to half of the prompt width. Each tag has a bounded width. If they do not fit, WebUI keeps complete tags visible and replaces the rest with a **+X** tag. Select **+X** to open the remaining conversations above the composer. Long names still shorten with an ellipsis when one name exceeds the available space, while the full name remains available to assistive technology and on hover. Select a conversation to open a read-only chat view showing the two agent names or IDs and their messages. Generic Intercom transport calls and received Intercom records stay out of the main agent-output transcript, while attachments, tool output, and reasoning remain excluded from the chat view.
 
+If preview navigation gets in your way, add `?shell=classic` to the Web UI address to return to the standard layout without resetting your preferences. See [the technical reference](TECHNICAL.md) for the surrounding layout options.
+
 Useful shortcuts:
 
 - `Ctrl/Cmd+K` opens the command palette.

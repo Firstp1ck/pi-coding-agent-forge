@@ -81,7 +81,7 @@ assert.match(restartBody, /Cancel keeps it for the next manual reload or new tab
 
 assert.match(
   app,
-  /\{ kind: "Pi", label: "\/append-system", description: "Choose the APPEND_SYSTEM\.md append prompt", keywords: "append system prompt settings global", run: \(\) => openNativeAppendSystemSelector\(\) \},/,
+  /\{ id: "native:append-system", scope: "server", destination: "settings", kind: "Pi", label: "\/append-system", description: "Choose the APPEND_SYSTEM\.md append prompt", keywords: "append system prompt settings global", run: \(\) => openNativeAppendSystemSelector\(\) \},/,
   "the command palette must expose the append-system selector",
 );
 

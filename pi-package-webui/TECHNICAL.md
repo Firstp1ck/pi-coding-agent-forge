@@ -394,6 +394,8 @@ At the phone/coarse-pointer breakpoint, the legacy mobile shell collapses termin
 
 The optional Mobile Experience v2 shell remains separately controlled by its existing preview setting and is not changed by this legacy mobile layout. Tablet adaptation is independently opt-in at medium widths with `?tabletShell=v2`; use `?tabletShell=legacy` for immediate rollback without changing the phone preview flag.
 
+For recovery, add `shell=classic` to the address, for example `http://127.0.0.1:31415/?shell=classic`. It bypasses phone and tablet previews for that page, including after resizing. Remove it to restore your saved choices; it does not reset your layout or sessions.
+
 ## Git panel
 
 The side-panel **Git** section groups repositories represented by open terminal tabs. Expanding a repository refreshes stale status after a five-minute cache window; live filesystem updates use server-sent events (SSE) to invalidate visible results without periodic Git polling. The context menu provides refresh, stage/unstage, and confirmed discard/delete actions. History shows the latest 30 commits and opens bounded read-only commit diffs.

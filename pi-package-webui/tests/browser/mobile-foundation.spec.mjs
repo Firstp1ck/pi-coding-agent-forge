@@ -749,7 +749,7 @@ test("desktop remains equivalent at required viewport fixtures", async ({ page }
     await expect(page.locator("#mobileShellV2")).toBeHidden();
     await expect(page.locator("#promptInput")).toBeVisible();
     await expect(page.locator(".terminal-tabs-shell")).toBeVisible();
-    await expect(page.locator(".side-panel")).toBeVisible();
+    await expect(page.locator("#sidePanel")).toBeVisible();
   }
 });
 
@@ -759,7 +759,7 @@ test("desktop left-sidebar actions are compact accessible icon buttons", async (
   await page.locator("body").evaluate((body) => body.classList.add("terminal-tabs-left"));
 
   const actions = page.locator(".terminal-sidebar-actions > button");
-  await expect(actions).toHaveCount(4);
+  await expect(actions).toHaveCount(3);
   const snapshots = await actions.evaluateAll((buttons) => buttons.map((button) => ({
     text: button.textContent.trim(),
     ariaLabel: button.getAttribute("aria-label"),
@@ -772,4 +772,109 @@ test("desktop left-sidebar actions are compact accessible icon buttons", async (
     assert.ok(action.width >= 44 && action.height >= 44, `icon action must retain a 44px target, got ${action.width}×${action.height}`);
   }
   assert.ok(Math.max(...snapshots.map((action) => action.width)) - Math.min(...snapshots.map((action) => action.width)) <= 1, "icon actions should remain equal width");
+});
+
+test("shell recovery overrides previews across resize without losing the draft", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`${baseURL}/?shell=classic&mobileShell=v2&tabletShell=v2`);
+  await page.locator('#promptInput').fill('recovery retains this draft');
+  for (const width of [390, 820, 1440, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await expect(page.locator('#mobileShellV2')).toBeHidden();
+    await expect(page.locator('html')).not.toHaveAttribute('data-mobile-shell');
+    await expect(page.locator('html')).not.toHaveAttribute('data-tablet-shell');
+    await expect(page.locator('#promptInput')).toHaveValue('recovery retains this draft');
+  }
+});
+
+test("shell history failure leaves the current view and draft usable", async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`${baseURL}/?mobileShell=v2`);
+  await page.locator('#promptInput').fill('history failure draft');
+  await page.evaluate(() => {
+    const original = history.pushState;
+    history.pushState = function (...args) {
+      history.pushState = original;
+      throw new DOMException('fixture history write denied', 'SecurityError');
+    };
+  });
+  await page.locator('#mobileMoreButton').click();
+  await expect(page.locator('#mobileShellSurface')).toBeHidden();
+  await expect(page.locator('#promptInput')).toHaveValue('history failure draft');
+  await page.locator('#mobileMoreButton').click();
+  await expect(page.locator('#mobileShellSurface')).toBeVisible();
+  await page.locator('#mobileSurfaceCloseButton').click();
+  await expect(page.locator('#promptInput')).toHaveValue('history failure draft');
+  assert.deepEqual(errors, []);
+});
+
+test("shell canonical project navigation retains nodes, filters, history fields and stream", async ({ page }, testInfo) => {
+  let streams = 0;
+  page.on('request', request => { if (new URL(request.url()).pathname === '/api/events') streams += 1; });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`${baseURL}/?mobileShell=v2`);
+  await page.locator('#promptInput').fill('project navigation draft');
+  await expect.poll(() => streams).toBeGreaterThan(0);
+  const before = streams;
+  await page.evaluate(() => {
+    window.originalFilesView = document.querySelector('#sidePanelSectionFiles');
+    history.replaceState({ ...history.state, independentMarker: 'retained' }, '');
+  });
+  const nav = page.getByRole('navigation', { name: 'Phone destinations' });
+  await nav.getByRole('button', { name: 'Project', exact: true }).click();
+  await page.locator('#fileTreeSearchInput').fill('tablet');
+  await nav.getByRole('button', { name: 'Chat', exact: true }).click();
+  await expect(page.locator('#promptInput')).toHaveValue('project navigation draft');
+  await page.goBack();
+  await expect(page.locator('#fileTreeSearchInput')).toBeVisible();
+  await expect(page.locator('#fileTreeSearchInput')).toHaveValue('tablet');
+  assert.deepEqual(await page.evaluate(() => ({ same: window.originalFilesView === document.querySelector('#sidePanelSectionFiles'), marker: history.state.independentMarker })), { same: true, marker: 'retained' });
+  assert.equal(streams, before);
+  await page.screenshot({ path: testInfo.outputPath('shell-project-continuity.png') });
+});
+
+test("shell palette stable actions dispatch the real transcript search", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(baseURL);
+  await page.locator('#promptInput').fill('palette retains draft');
+  await page.locator('#commandPaletteButton').click();
+  const ids = await page.locator('#commandPaletteList [data-action-id]').evaluateAll(nodes => nodes.map(node => node.dataset.actionId));
+  assert.ok(ids.length > 10);
+  assert.equal(new Set(ids).size, ids.length);
+  await page.locator('#commandPaletteInput').fill('Search transcript');
+  await page.locator('[data-action-id="conversation:search"]').click();
+  await expect(page.locator('#chatSearchInput')).toBeVisible();
+  await expect(page.locator('#commandPaletteDialog')).toBeHidden();
+  await expect(page.locator('#promptInput')).toHaveValue('palette retains draft');
+});
+
+test("shell modules survive the service-worker offline cache and online refresh", async ({ page, context }) => {
+  await page.goto(baseURL);
+  await expect(page.locator('#promptInput')).toBeVisible();
+  await page.evaluate(() => navigator.serviceWorker.ready);
+  await page.reload();
+  await expect.poll(() => page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true);
+  const modules = ['shell-actions', 'shell-navigation', 'shell-preferences', 'shell-view-host', 'shell-surfaces'];
+  const cacheState = await page.evaluate(async names => {
+    const cacheNames = await caches.keys();
+    const active = cacheNames.find(name => name.startsWith('pi-webui-pwa-'));
+    const cache = await caches.open(active);
+    return { active, modules: await Promise.all(names.map(async name => !!await cache.match(`/${name}.mjs`))), api: (await cache.keys()).some(request => new URL(request.url).pathname.startsWith('/api/')) };
+  }, modules);
+  assert.equal(cacheState.active, 'pi-webui-pwa-v157');
+  assert.deepEqual(cacheState.modules, modules.map(() => true));
+  assert.equal(cacheState.api, false);
+  try {
+    await context.setOffline(true);
+    await page.reload();
+    assert.deepEqual(await page.evaluate(async names => Promise.all(names.map(async name => Object.keys(await import(`/${name}.mjs`)).length > 0)), modules), modules.map(() => true));
+  } finally {
+    await context.setOffline(false);
+  }
+  await page.reload();
+  await expect(page.locator('#promptInput')).toBeVisible();
+  await page.locator('#commandPaletteButton').click();
+  await expect(page.locator('[data-action-id="conversation:search"]')).toBeVisible();
 });

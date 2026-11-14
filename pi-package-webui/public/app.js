@@ -1,3 +1,8 @@
+import { filterActionItems, checkActionTarget } from "./shell-actions.mjs";
+import { createShellHistory } from "./shell-navigation.mjs";
+import { readShellPreferences, resolveShellMode } from "./shell-preferences.mjs";
+import { createViewHost } from "./shell-view-host.mjs";
+import { createSurfaceCoordinator } from "./shell-surfaces.mjs";
 import { aurReviewSafePath as parsedAurReviewSafePath, parseAurReviewPayload as parseValidatedAurReviewPayload } from "./aur-review-payload.mjs";
 import { GUIDED_GIT_START_STATUS_KEY, createGuidedGitActivationController, createGuidedGitLaunchPermitController, guidedGitLaunchBlockedReason, guidedGitLaunchModeForTabCatalog, guidedGitReviewAvailableForTabCatalog, guidedGitWorkflowCommandForTabCatalog, resolveCommandForTabCatalog, resolveRpcSlashCommandForTabCatalog } from "./guided-git-command-state.mjs";
 import { guidedGitReviewCanRequestStagedContent, guidedGitReviewHasApprovedBinding, guidedGitReviewProcessNavigationAllowed, guidedGitReviewProcessSelectionPatch, guidedGitReviewTransition, guidedGitReviewWidgetRemovalTransition } from "./guided-git-review-state.mjs";
@@ -8,7 +13,7 @@ import { pruneDismissedSubagentGateKeys, subagentGateIsTerminal, subagentGateKey
 import { groupConsecutiveWorkflowStatusItems, isCompletedWorkflowStatusExecution, workflowStatusSnapshot } from "./workflow-status-stack.mjs";
 import { buildIssuePayload, createIssueWizardCatalog, createIssueWizardState, getCompatibleTemplates, isIssueWizardStepValid, issueClipboardText, reduceIssueWizardState } from "./issue-wizard-state.mjs";
 import { createIssueBotClient, readIssueBotRuntimeConfig } from "./issue-bot-client.mjs";
-import { MOBILE_SHELL_STORAGE_KEY, TABLET_SHELL_STORAGE_KEY, createMobileShellState, isMobileShellV2Enabled, mobileNavigationTargetFromSearch, normalizeMobileNavigationTarget, reduceMobileShellState, resolveMobileShellFeatureMode, resolveTabletShellFeatureMode } from "./mobile-shell-state.mjs";
+import { MOBILE_SHELL_STORAGE_KEY, TABLET_SHELL_STORAGE_KEY, createMobileShellState, mobileNavigationTargetFromSearch, normalizeMobileNavigationTarget, reduceMobileShellState, resolveMobileShellFeatureMode, resolveTabletShellFeatureMode } from "./mobile-shell-state.mjs";
 import { createTranscriptRenderer, groupConsecutiveThinkingItems, groupConsecutiveThinkingMessages } from "./transcript-renderer.mjs";
 import { createStreamDerivedOutputState } from "./stream-derived-output.mjs";
 import { advanceStreamingMarkdownTail } from "./stream-markdown-tail.mjs";
@@ -1081,7 +1086,20 @@ let activeUndoAction = null;
 let undoToastTimer = null;
 let undoToastFocusReturn = null;
 const modalSurfaceState = new WeakMap();
-let activeDrawerModal = null;
+const drawerSurfaceCoordinator = createSurfaceCoordinator({
+  document,
+  getFocusableElements: modalFocusableElements,
+  onEscape(surface, event) {
+    if (surface !== elements.terminalTabsShell || !openTerminalTabGroupKey) return false;
+    event.preventDefault();
+    event.stopPropagation();
+    const openGroup = [...elements.tabBar.querySelectorAll(".terminal-tab-group")]
+      .find((group) => group.dataset.groupKey === openTerminalTabGroupKey);
+    clearOpenTerminalTabGroup(openTerminalTabGroupKey, { force: true });
+    openGroup?.querySelector(".terminal-tab-group-button")?.focus({ preventScroll: true });
+    return true;
+  },
+});
 let activeGitPrDialogResolve = null;
 let gitChangesState = { loading: false, pulling: false, fetching: false, error: "", errorCode: "", errorHint: "", message: "", pullResult: null, data: null, operation: null, lastFetch: null, tabId: null, mode: "changes", commit: null };
 let gitToolsState = { tabId: null, openSections: new Set(), cache: {}, busy: new Set(), notice: {} };
@@ -1605,6 +1623,12 @@ const sidePanelOverlayMedia = window.matchMedia?.(SIDE_PANEL_OVERLAY_QUERY) || m
 const colorSchemeMedia = window.matchMedia?.("(prefers-color-scheme: dark)") || null;
 const initialUrlParams = new URLSearchParams(window.location.search);
 const embeddedSplitMode = initialUrlParams.get("embed") === "split";
+const forceClassicShell = initialUrlParams.get("shell") === "classic";
+const shellPreferenceState = (() => {
+  try { return readShellPreferences(window.localStorage); }
+  catch { return readShellPreferences(null); }
+})();
+const shellHistory = createShellHistory({ window, onPopState: restoreMobileNavigation });
 document.body.classList.toggle("embedded-split", embeddedSplitMode);
 
 function readMobileShellPreference() {
@@ -1639,7 +1663,14 @@ let mobileShellState = createMobileShellState({
 });
 
 function isMobileShellV2Active() {
-  return isMobileShellV2Enabled(mobileShellState.featureMode, mobileShellState.viewportMode, mobileShellState.tabletFeatureMode);
+  const mode = resolveShellMode({
+    recovery: forceClassicShell,
+    viewportMode: mobileShellState.viewportMode,
+    desktopLayout: shellPreferenceState.value.desktopLayout,
+    phoneMode: mobileShellState.featureMode,
+    tabletMode: mobileShellState.tabletFeatureMode,
+  });
+  return mode === "mobile-v2" || mode === "tablet-v2";
 }
 
 function isTabletShellV2Active() {
@@ -1648,9 +1679,9 @@ function isTabletShellV2Active() {
 
 function syncMobileShellRoot() {
   const root = document.documentElement;
-  if (mobileShellState.featureMode === "legacy") root.removeAttribute("data-mobile-shell");
+  if (forceClassicShell || mobileShellState.featureMode === "legacy") root.removeAttribute("data-mobile-shell");
   else root.dataset.mobileShell = "v2";
-  if (mobileShellState.tabletFeatureMode === "legacy") root.removeAttribute("data-tablet-shell");
+  if (forceClassicShell || mobileShellState.tabletFeatureMode === "legacy") root.removeAttribute("data-tablet-shell");
   else root.dataset.tabletShell = "v2";
   root.dataset.mobileShellRoute = mobileShellState.route;
 }
@@ -1658,6 +1689,7 @@ function syncMobileShellRoot() {
 let mobilePhoneExperienceInstalled = false;
 let mobilePresentation = "essential";
 let mobileProjectTopic = "files";
+const canonicalViewHost = createViewHost({ document });
 let mobileCanonicalMount = null;
 let mobileWidgetAreaMount = null;
 let mobileLifecycleSignature = "";
@@ -1889,25 +1921,24 @@ function mobileCanonicalUnmount() {
     record.section.hidden = record.sectionHidden;
     record.section.className = record.sectionClassName;
     record.button?.setAttribute("aria-expanded", record.ariaExpanded);
-    if (record.nextSibling?.parentNode === record.parent) record.parent.insertBefore(record.content, record.nextSibling);
-    else record.parent.append(record.content);
+    canonicalViewHost.restore(record.content);
   }
   mobileCanonicalMount = null;
 }
 
 function mobileWidgetAreaUnmount() {
   if (!mobileWidgetAreaMount) return;
-  const { node, parent, nextSibling } = mobileWidgetAreaMount;
-  if (nextSibling?.parentNode === parent) parent.insertBefore(node, nextSibling);
-  else parent.append(node);
+  canonicalViewHost.restore(mobileWidgetAreaMount);
   mobileWidgetAreaMount = null;
 }
 
 function mobileWidgetAreaMountContent(host, prefix) {
   const node = elements.widgetArea;
   if (!host || !node) return;
-  if (!mobileWidgetAreaMount) mobileWidgetAreaMount = { node, parent: node.parentNode, nextSibling: node.nextSibling };
-  host.replaceChildren(prefix, node);
+  mobileWidgetAreaMount = node;
+  canonicalViewHost.move(node, host);
+  for (const child of [...host.childNodes]) if (child !== node) child.remove();
+  host.insertBefore(prefix, node);
 }
 
 function mobileCanonicalMountContent(host, contentIds, key) {
@@ -1923,8 +1954,6 @@ function mobileCanonicalMountContent(host, contentIds, key) {
     const button = section.querySelector("[data-side-panel-section-toggle]");
     records.push({
       content,
-      parent: content.parentNode,
-      nextSibling: content.nextSibling,
       contentHidden: content.hidden,
       section,
       sectionHidden: section.hidden,
@@ -1936,7 +1965,7 @@ function mobileCanonicalMountContent(host, contentIds, key) {
     section.classList.remove("collapsed");
     content.hidden = false;
     button?.setAttribute("aria-expanded", "true");
-    host.append(content);
+    canonicalViewHost.move(content, host);
   }
   mobileCanonicalMount = { host, key, records };
 }
@@ -1988,9 +2017,34 @@ function mobileSwitchToTab(tabId, { route = "chat", focus = false } = {}) {
   }).catch((error) => addEvent(error.message || String(error), "error"));
 }
 
-function mobileShellHistoryState() {
-  const { route, surface, surfacePage, routeHistory } = mobileShellState;
+function restoreMobileNavigation(event) {
+  const state = event.state?.mobileShellState;
+  if (!event.state?.piMobileShellV2 || !state || !isMobileShellV2Active()) return;
+  const previousSurface = mobileShellState.surface;
+  let restored = createMobileShellState({ viewport: mobileShellViewport(), featureMode: mobileShellState.featureMode, tabletFeatureMode: mobileShellState.tabletFeatureMode, route: state.route });
+  restored = reduceMobileShellState({ ...restored, routeHistory: state.routeHistory }, {});
+  if (state.surface && state.surface !== "none") restored = reduceMobileShellState(restored, { type: "surface", surface: state.surface, page: state.surfacePage });
+  mobileShellState = restored;
+  syncMobileShellRoot();
+  renderMobilePhoneExperience({ focus: previousSurface === "none" });
+  if (previousSurface !== "none" && mobileShellState.surface === "none") restoreMobileSurfaceFocus();
+}
+
+function mobileShellHistoryState(state = mobileShellState) {
+  const { route, surface, surfacePage, routeHistory } = state;
   return { route, surface, surfacePage, routeHistory };
+}
+
+function commitMobileNavigation(next, { replace = false } = {}) {
+  try {
+    shellHistory.write({ state: { piMobileShellV2: true, mobileShellState: mobileShellHistoryState(next) }, replace });
+  } catch (error) {
+    addEvent(`Navigation could not be saved. Your current view is unchanged. ${error.message || String(error)}`, "error");
+    return false;
+  }
+  mobileShellState = next;
+  syncMobileShellRoot();
+  return true;
 }
 
 function mobileNavigate(route, { replace = false, focus = true } = {}) {
@@ -1998,10 +2052,7 @@ function mobileNavigate(route, { replace = false, focus = true } = {}) {
   const current = mobileShellState;
   const next = reduceMobileShellState(current, { type: "route", route, replace });
   if (next.route === current.route && current.surface === "none") return;
-  mobileShellState = next;
-  syncMobileShellRoot();
-  const method = replace ? "replaceState" : "pushState";
-  window.history[method]({ ...(history.state || {}), piMobileShellV2: true, mobileShellState: mobileShellHistoryState() }, "");
+  if (!commitMobileNavigation(next, { replace })) return;
   persistMobileContinuityState();
   renderMobilePhoneExperience({ focus });
 }
@@ -2012,23 +2063,21 @@ function mobileOpenSurface(surface, page = "root", { focus = true } = {}) {
   if (mobileShellState.surface === "none" && document.activeElement instanceof HTMLElement && !openSurface?.contains(document.activeElement)) {
     mobileSurfaceFocusReturn = document.activeElement;
   }
-  mobileShellState = reduceMobileShellState(mobileShellState, { type: "surface", surface, page });
-  syncMobileShellRoot();
-  window.history.pushState({ ...(history.state || {}), piMobileShellV2: true, mobileShellState: mobileShellHistoryState() }, "");
+  const next = reduceMobileShellState(mobileShellState, { type: "surface", surface, page });
+  if (!commitMobileNavigation(next)) return;
   renderMobilePhoneExperience({ focus });
 }
 
 function mobileSetSurfacePage(page) {
-  mobileShellState = reduceMobileShellState(mobileShellState, { type: "surface-page", page });
-  syncMobileShellRoot();
-  window.history.pushState({ ...(history.state || {}), piMobileShellV2: true, mobileShellState: mobileShellHistoryState() }, "");
+  const next = reduceMobileShellState(mobileShellState, { type: "surface-page", page });
+  if (!commitMobileNavigation(next)) return;
   renderMobilePhoneExperience({ focus: true });
 }
 
 function mobileBack() {
   if (!isMobileShellV2Active()) return false;
   if (mobileShellState.surface !== "none" || mobileShellState.routeHistory.length) {
-    window.history.back();
+    shellHistory.back();
     return true;
   }
   return false;
@@ -2671,18 +2720,7 @@ function installMobilePhoneExperience() {
     event.preventDefault();
     mobileOpenSurface("actionSheet");
   });
-  window.addEventListener("popstate", (event) => {
-    const state = event.state?.mobileShellState;
-    if (!event.state?.piMobileShellV2 || !state || !isMobileShellV2Active()) return;
-    const previousSurface = mobileShellState.surface;
-    let restored = createMobileShellState({ viewport: mobileShellViewport(), featureMode: mobileShellState.featureMode, tabletFeatureMode: mobileShellState.tabletFeatureMode, route: state.route });
-    restored = reduceMobileShellState({ ...restored, routeHistory: state.routeHistory }, {});
-    if (state.surface && state.surface !== "none") restored = reduceMobileShellState(restored, { type: "surface", surface: state.surface, page: state.surfacePage });
-    mobileShellState = restored;
-    syncMobileShellRoot();
-    renderMobilePhoneExperience({ focus: previousSurface === "none" });
-    if (previousSurface !== "none" && mobileShellState.surface === "none") restoreMobileSurfaceFocus();
-  });
+
   document.addEventListener("keydown", (event) => {
     if (!isMobileShellV2Active() || event.key !== "Escape" || document.querySelector("dialog[open]")) return;
     if (mobileShellState.surface !== "none") {
@@ -2691,7 +2729,7 @@ function installMobilePhoneExperience() {
       mobileBack();
     }
   }, { capture: true });
-  history.replaceState({ ...(history.state || {}), piMobileShellV2: true, mobileShellState: mobileShellHistoryState() }, "");
+  commitMobileNavigation(mobileShellState, { replace: true });
   renderMobilePhoneExperience();
 }
 
@@ -8153,76 +8191,12 @@ function chooseGitWorktreeBase(branch) {
   });
 }
 
-function handleDrawerModalKeydown(event) {
-  if (!activeDrawerModal || event.defaultPrevented) return;
-  if (event.key === "Escape") {
-    if (activeDrawerModal.surface === elements.terminalTabsShell && openTerminalTabGroupKey) {
-      event.preventDefault();
-      event.stopPropagation();
-      const openGroup = [...elements.tabBar.querySelectorAll(".terminal-tab-group")]
-        .find((group) => group.dataset.groupKey === openTerminalTabGroupKey);
-      clearOpenTerminalTabGroup(openTerminalTabGroupKey, { force: true });
-      openGroup?.querySelector(".terminal-tab-group-button")?.focus({ preventScroll: true });
-      return;
-    }
-    event.preventDefault();
-    activeDrawerModal.close?.();
-    return;
-  }
-  if (event.key !== "Tab") return;
-  const focusable = modalFocusableElements(activeDrawerModal.surface);
-  if (!focusable.length) {
-    event.preventDefault();
-    activeDrawerModal.surface.focus({ preventScroll: true });
-    return;
-  }
-  const first = focusable[0];
-  const last = focusable[focusable.length - 1];
-  if (!activeDrawerModal.surface.contains(document.activeElement)) {
-    event.preventDefault();
-    (event.shiftKey ? last : first).focus({ preventScroll: true });
-  } else if (event.shiftKey && document.activeElement === first) {
-    event.preventDefault();
-    last.focus({ preventScroll: true });
-  } else if (!event.shiftKey && document.activeElement === last) {
-    event.preventDefault();
-    first.focus({ preventScroll: true });
-  }
+function activateDrawerModal(surface, trigger, options = {}) {
+  drawerSurfaceCoordinator.activate(surface, trigger, options);
 }
 
-function activateDrawerModal(surface, trigger, { close } = {}) {
-  if (activeDrawerModal?.surface === surface) {
-    activeDrawerModal.trigger = trigger;
-    activeDrawerModal.close = close;
-    return;
-  }
-  activeDrawerModal = {
-    surface,
-    trigger,
-    close,
-    previousRole: surface.getAttribute("role"),
-    previousTabindex: surface.getAttribute("tabindex"),
-  };
-  surface.setAttribute("role", "dialog");
-  surface.setAttribute("aria-modal", "true");
-  surface.setAttribute("tabindex", "-1");
-  document.addEventListener("keydown", handleDrawerModalKeydown, true);
-}
-
-function deactivateDrawerModal(surface, { restoreFocus = true } = {}) {
-  if (activeDrawerModal?.surface !== surface) {
-    surface?.removeAttribute("aria-modal");
-    return;
-  }
-  const { trigger, previousRole, previousTabindex } = activeDrawerModal;
-  activeDrawerModal = null;
-  surface.removeAttribute("aria-modal");
-  if (previousRole === null) surface.removeAttribute("role");
-  else surface.setAttribute("role", previousRole);
-  if (previousTabindex === null) surface.removeAttribute("tabindex");
-  else surface.setAttribute("tabindex", previousTabindex);
-  document.removeEventListener("keydown", handleDrawerModalKeydown, true);
-  if (restoreFocus && trigger?.isConnected) queueMicrotask(() => trigger.focus({ preventScroll: true }));
+function deactivateDrawerModal(surface, options = {}) {
+  drawerSurfaceCoordinator.deactivate(surface, options);
 }
 
 function syncMobileSidePanelState(collapsed) {
@@ -47345,59 +47319,55 @@ async function refreshCommands(tabContext = activeTabContext()) {
   if (elements.commandPaletteDialog?.open) renderCommandPalette({ preserveScroll: true });
 }
 
-function paletteText(value) {
-  return String(value || "").toLowerCase();
-}
-
-function paletteItemMatches(item, query) {
-  const text = [item.label, item.description, item.kind, item.keywords].map(paletteText).join(" ");
-  return query.split(/\s+/).filter(Boolean).every((token) => text.includes(token));
-}
-
 function commandPaletteCoreItems() {
   const items = [
-    { kind: "Action", label: "New tab", description: "Start an isolated Pi terminal in the current directory", keywords: "workspace session", run: () => createTerminalTab() },
-    { kind: "Action", label: "Choose directory for new tab", description: "Pick a cwd before starting a tab", keywords: "cwd folder workspace", run: () => createTerminalTabFromChosenDirectory({ triggerButton: elements.commandPaletteButton }) },
-    { kind: "Git", label: "Branch worktree", description: "Create or open a Git worktree tab for parallel branch work", keywords: "git branch worktree parallel checkout", run: () => openBranchWorktreePicker() },
-    { kind: "Action", label: "New session", description: "Start a fresh session in the active tab", keywords: "/new clear", run: () => elements.newSessionButton.click() },
-    { kind: "Action", label: "Compact context", description: contextUsageDetail(), keywords: "/compact context window tokens", run: () => requestManualCompaction() },
-    { kind: "Action", label: footerAutoCompactionEnabled() ? "Disable auto-compaction" : "Enable auto-compaction", description: footerAutoCompactionToggleAction(), keywords: "context automatic", run: () => toggleFooterAutoCompaction() },
-    { kind: "Action", label: workspaceDashboardCollapsed ? "Show workspace dashboard" : "Hide workspace dashboard", description: "Toggle the launch/workspace overview", keywords: "home overview", run: () => setWorkspaceDashboardCollapsed(!workspaceDashboardCollapsed) },
-    { kind: "Action", label: document.body.classList.contains("side-panel-collapsed") ? "Show side panel" : "Hide side panel", description: "Toggle the Control Deck", keywords: "controls settings", run: () => setSidePanelCollapsed(!document.body.classList.contains("side-panel-collapsed"), { focusPanel: true }) },
-    { kind: "Action", label: "Change working directory", description: "Restart active tab in another cwd", keywords: "cwd folder workspace", run: () => changeActiveTabCwd() },
-    { kind: "Action", label: "Search transcript", description: "Open transcript search", keywords: "find", run: () => openChatSearch() },
-    { kind: "Pi", label: "/model", description: "Select the active model", keywords: "provider llm", run: () => runNativeCommandMenu("/model") },
-    { kind: "Pi", label: "/resume", description: "Resume a previous session", keywords: "sessions history", run: () => runNativeCommandMenu("/resume") },
-    { kind: "Pi", label: "/fork", description: "Fork from a previous user message", keywords: "branch edit retry", run: () => runNativeCommandMenu("/fork") },
-    { kind: "Pi", label: "/tree", description: "Navigate the session tree", keywords: "branch history", run: () => runNativeCommandMenu("/tree") },
-    { kind: "Pi", label: "/settings", description: "Open settings", keywords: "configuration", run: () => runNativeCommandMenu("/settings") },
-    { kind: "Pi", label: "/scoped-models", description: "Manage model cycling scope", keywords: "models cycle ctrl p", run: () => runNativeCommandMenu("/scoped-models") },
-    { kind: "Pi", label: "/tools", description: "Manage active tools", keywords: "capabilities", run: () => runNativeCommandMenu("/tools") },
-    { kind: "Pi", label: "/skills", description: "Manage active skills", keywords: "system prompt", run: () => runNativeCommandMenu("/skills") },
-    { kind: "Pi", label: "/append-system", description: "Choose the APPEND_SYSTEM.md append prompt", keywords: "append system prompt settings global", run: () => openNativeAppendSystemSelector() },
-    { kind: "Pi", label: "/theme", description: "Choose the Web UI theme", keywords: "dark light colors appearance", run: () => openNativeThemeSelector() },
-    { kind: "Git", label: "Guided Git workflow", description: "Stage, commit, push, or open a pull request step by step", keywords: "git commit push pr publish", run: () => launchGuidedGitWorkflow() },
-    { kind: "Git", label: "Git changes", description: "Review and stage local changes with diffs", keywords: "git diff stage unstage discard status", run: () => openGitChangesDialog() },
-    { kind: "Action", label: "Files panel", description: "Open the Files section of the Control Deck", keywords: "tree browse project explorer", run: () => revealSidePanelSectionById("files") },
-    { kind: "Action", label: "Git panel", description: "Open the Git section of the Control Deck", keywords: "repository status history", run: () => revealSidePanelSectionById("git") },
-    { kind: "Action", label: "Events log", description: "Open the Events section of the Control Deck", keywords: "errors warnings log diagnostics", run: () => revealEventsSection() },
-    { kind: "Action", label: thinkingOutputVisible ? "Hide thinking output" : "Show thinking output", description: "Toggle thinking cards in the transcript (Ctrl/Cmd+T in the composer)", keywords: "reasoning thinking toggle", run: () => setThinkingOutputVisible(!thinkingOutputVisible, { announce: true }) },
-    { kind: "Action", label: toolOutputGloballyExpanded ? "Collapse tool output" : "Expand tool output", description: "Toggle tool result cards (Ctrl/Cmd+O in the composer)", keywords: "tools results collapse expand", run: () => setToolOutputGloballyExpanded(!toolOutputGloballyExpanded, { announce: true }) },
-    { kind: "Action", label: "Show all controls", description: "Restore every hidden button and input tag", keywords: "visibility hidden restore controls buttons", run: () => showAllControls() },
-    { kind: "Action", label: "Reset control visibility", description: "Return hidden/visible controls to the defaults", keywords: "visibility defaults controls buttons", run: () => resetControlVisibilityDefaults() },
+    { id: "session:new-tab", scope: activeTabId ? "project" : "server", destination: "conversation", kind: "Action", label: "New tab", description: "Start an isolated Pi terminal in the current directory", keywords: "workspace session", run: () => createTerminalTab() },
+    { id: "session:new-tab-directory", scope: "server", destination: "conversation", kind: "Action", label: "Choose directory for new tab", description: "Pick a cwd before starting a tab", keywords: "cwd folder workspace", run: () => createTerminalTabFromChosenDirectory({ triggerButton: elements.commandPaletteButton }) },
+    { id: "project:branch-worktree", scope: "project", destination: "project", kind: "Git", label: "Branch worktree", description: "Create or open a Git worktree tab for parallel branch work", keywords: "git branch worktree parallel checkout", run: () => openBranchWorktreePicker() },
+    { id: "session:new", scope: "session", destination: "conversation", kind: "Action", label: "New session", description: "Start a fresh session in the active tab", keywords: "/new clear", run: () => elements.newSessionButton.click() },
+    { id: "session:compact", scope: "session", destination: "conversation", kind: "Action", label: "Compact context", description: contextUsageDetail(), keywords: "/compact context window tokens", run: () => requestManualCompaction() },
+    { id: "session:auto-compaction", scope: "session", destination: "conversation", kind: "Action", label: footerAutoCompactionEnabled() ? "Disable auto-compaction" : "Enable auto-compaction", description: footerAutoCompactionToggleAction(), keywords: "context automatic", run: () => toggleFooterAutoCompaction() },
+    { id: "home:toggle", scope: "browser", destination: "home", kind: "Action", label: workspaceDashboardCollapsed ? "Show workspace dashboard" : "Hide workspace dashboard", description: "Toggle the launch/workspace overview", keywords: "home overview", run: () => setWorkspaceDashboardCollapsed(!workspaceDashboardCollapsed) },
+    { id: "layout:control-deck", scope: "browser", destination: "settings", kind: "Action", label: document.body.classList.contains("side-panel-collapsed") ? "Show side panel" : "Hide side panel", description: "Toggle the Control Deck", keywords: "controls settings", run: () => setSidePanelCollapsed(!document.body.classList.contains("side-panel-collapsed"), { focusPanel: true }) },
+    { id: "session:cwd", scope: "session", destination: "conversation", kind: "Action", label: "Change working directory", description: "Restart active tab in another cwd", keywords: "cwd folder workspace", run: () => changeActiveTabCwd() },
+    { id: "conversation:search", scope: "session", destination: "conversation", kind: "Action", label: "Search transcript", description: "Open transcript search", keywords: "find", run: () => openChatSearch() },
+    { id: "native:model", scope: "session", destination: "conversation", kind: "Pi", label: "/model", description: "Select the active model", keywords: "provider llm", run: () => runNativeCommandMenu("/model") },
+    { id: "native:resume", scope: "project", destination: "conversation", kind: "Pi", label: "/resume", description: "Resume a previous session", keywords: "sessions history", run: () => runNativeCommandMenu("/resume") },
+    { id: "native:fork", scope: "session", destination: "conversation", kind: "Pi", label: "/fork", description: "Fork from a previous user message", keywords: "branch edit retry", run: () => runNativeCommandMenu("/fork") },
+    { id: "native:tree", scope: "session", destination: "conversation", kind: "Pi", label: "/tree", description: "Navigate the session tree", keywords: "branch history", run: () => runNativeCommandMenu("/tree") },
+    { id: "native:settings", scope: "session", destination: "settings", kind: "Pi", label: "/settings", description: "Open settings", keywords: "configuration", run: () => runNativeCommandMenu("/settings") },
+    { id: "native:scoped-models", scope: "session", destination: "settings", kind: "Pi", label: "/scoped-models", description: "Manage model cycling scope", keywords: "models cycle ctrl p", run: () => runNativeCommandMenu("/scoped-models") },
+    { id: "native:tools", scope: "session", destination: "settings", kind: "Pi", label: "/tools", description: "Manage active tools", keywords: "capabilities", run: () => runNativeCommandMenu("/tools") },
+    { id: "native:skills", scope: "session", destination: "settings", kind: "Pi", label: "/skills", description: "Manage active skills", keywords: "system prompt", run: () => runNativeCommandMenu("/skills") },
+    { id: "native:append-system", scope: "server", destination: "settings", kind: "Pi", label: "/append-system", description: "Choose the APPEND_SYSTEM.md append prompt", keywords: "append system prompt settings global", run: () => openNativeAppendSystemSelector() },
+    { id: "native:theme", scope: "browser", destination: "settings", kind: "Pi", label: "/theme", description: "Choose the Web UI theme", keywords: "dark light colors appearance", run: () => openNativeThemeSelector() },
+    { id: "project:guided-git", scope: "project", destination: "project", kind: "Git", label: "Guided Git workflow", description: "Stage, commit, push, or open a pull request step by step", keywords: "git commit push pr publish", run: () => launchGuidedGitWorkflow() },
+    { id: "project:changes", scope: "project", destination: "project", kind: "Git", label: "Git changes", description: "Review and stage local changes with diffs", keywords: "git diff stage unstage discard status", run: () => openGitChangesDialog() },
+    { id: "project:files", scope: "project", destination: "project", kind: "Action", label: "Files panel", description: "Open the Files section of the Control Deck", keywords: "tree browse project explorer", run: () => revealSidePanelSectionById("files") },
+    { id: "project:git", scope: "project", destination: "project", kind: "Action", label: "Git panel", description: "Open the Git section of the Control Deck", keywords: "repository status history", run: () => revealSidePanelSectionById("git") },
+    { id: "activity:events", scope: "browser", destination: "activity", kind: "Action", label: "Events log", description: "Open the Events section of the Control Deck", keywords: "errors warnings log diagnostics", run: () => revealEventsSection() },
+    { id: "conversation:thinking-visibility", scope: "browser", destination: "conversation", kind: "Action", label: thinkingOutputVisible ? "Hide thinking output" : "Show thinking output", description: "Toggle thinking cards in the transcript (Ctrl/Cmd+T in the composer)", keywords: "reasoning thinking toggle", run: () => setThinkingOutputVisible(!thinkingOutputVisible, { announce: true }) },
+    { id: "conversation:tool-output", scope: "browser", destination: "conversation", kind: "Action", label: toolOutputGloballyExpanded ? "Collapse tool output" : "Expand tool output", description: "Toggle tool result cards (Ctrl/Cmd+O in the composer)", keywords: "tools results collapse expand", run: () => setToolOutputGloballyExpanded(!toolOutputGloballyExpanded, { announce: true }) },
+    { id: "settings:show-controls", scope: "browser", destination: "settings", kind: "Action", label: "Show all controls", description: "Restore every hidden button and input tag", keywords: "visibility hidden restore controls buttons", run: () => showAllControls() },
+    { id: "settings:reset-controls", scope: "browser", destination: "settings", kind: "Action", label: "Reset control visibility", description: "Return hidden/visible controls to the defaults", keywords: "visibility defaults controls buttons", run: () => resetControlVisibilityDefaults() },
   ];
   if (tabs.length) {
-    items.push({ kind: "Workspace", label: "Workspace: Save", description: "Capture all open tabs, sessions, groups, and the active tab", keywords: "workspace snapshot save sessions groups", run: () => saveWebuiWorkspace({ triggerButton: elements.commandPaletteButton }) });
+    items.push({ id: "workspace:save", scope: "server", destination: "home", kind: "Workspace", label: "Workspace: Save", description: "Capture all open tabs, sessions, groups, and the active tab", keywords: "workspace snapshot save sessions groups", run: () => saveWebuiWorkspace({ triggerButton: elements.commandPaletteButton }) });
   }
-  items.push({ kind: "Workspace", label: "Workspace: Load…", description: tabs.length ? "Choose a saved workspace and decide whether to save current tabs" : "Show saved workspaces to restore", keywords: "workspace restore saved sessions groups", run: () => openWorkspaceLoadPicker({ triggerButton: elements.commandPaletteButton }) });
-  if (isOptionalFeatureEnabled("statsCommand")) items.push({ kind: "Pi", label: "/stats-webui", description: "Open usage dashboard", keywords: "tokens cost budget", run: () => openStatsOverlay({ refresh: true }) });
+  items.push({ id: "workspace:load", scope: "server", destination: "home", kind: "Workspace", label: "Workspace: Load…", description: tabs.length ? "Choose a saved workspace and decide whether to save current tabs" : "Show saved workspaces to restore", keywords: "workspace restore saved sessions groups", run: () => openWorkspaceLoadPicker({ triggerButton: elements.commandPaletteButton }) });
+  if (isOptionalFeatureEnabled("statsCommand")) items.push({ id: "native:stats", scope: "session", destination: "activity", kind: "Pi", label: "/stats-webui", description: "Open usage dashboard", keywords: "tokens cost budget", run: () => openStatsOverlay({ refresh: true }) });
   return items;
 }
+
 
 function commandPaletteTabItems() {
   return tabs.map((tab) => {
     const indicator = tabIndicator(tab);
     return {
+      id: `tab:${tab.id}`,
+      scope: "tab",
+      target: { tabId: tab.id },
+      destination: "conversation",
       kind: "Tab",
       label: tab.id === activeTabId ? `Current tab: ${tab.title}` : `Switch to tab: ${tab.title}`,
       description: `${indicator.label} · ${normalizeDisplayPath(tab.cwd || "")}`,
@@ -47409,6 +47379,9 @@ function commandPaletteTabItems() {
 
 function commandPaletteModelItems() {
   return availableModels.map((model) => ({
+    id: `model:${encodeURIComponent(model.provider)}/${encodeURIComponent(model.id)}`,
+    scope: "session",
+    destination: "conversation",
     kind: "Model",
     label: `${model.provider}/${model.id}`,
     description: model.name || (model.contextWindow ? `context ${formatFooterTokenCount(model.contextWindow)}` : "Set active model"),
@@ -47426,6 +47399,9 @@ function commandPaletteModelItems() {
 
 function commandPaletteSlashItems() {
   return visibleCommands().slice(0, 140).map((command) => ({
+    id: `command:${encodeURIComponent(command.name)}`,
+    scope: "session",
+    destination: "conversation",
     kind: command.source || "Command",
     label: `/${command.name}`,
     description: command.description || "Run slash command",
@@ -47434,41 +47410,32 @@ function commandPaletteSlashItems() {
   }));
 }
 
+function shellActionTarget() {
+  return {
+    ...activeTabContext(),
+    cwd: tabs.find((tab) => tab.id === activeTabId)?.cwd || "",
+    liveTabIds: tabs.map((tab) => tab.id),
+  };
+}
+
 function buildCommandPaletteItems() {
+  const context = shellActionTarget();
   return [
     ...commandPaletteCoreItems(),
     ...commandPaletteTabItems(),
     ...commandPaletteModelItems(),
     ...commandPaletteSlashItems(),
-  ];
-}
-
-// Ranking: label prefix > label word-start > label contains > description/keywords only.
-// Ties keep catalog order (actions, tabs, models, commands), so results stay predictable.
-function paletteItemScore(item, query) {
-  const label = paletteText(item.label);
-  const tokens = query.split(/\s+/).filter(Boolean);
-  let score = 0;
-  for (const token of tokens) {
-    if (label.startsWith(token)) score += 40;
-    else if (label.replace(/^\//, "").startsWith(token)) score += 36;
-    else if (new RegExp(`(^|[\\s/_-])${token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`).test(label)) score += 24;
-    else if (label.includes(token)) score += 12;
-    else score += 1;
-  }
-  return score;
+  ].map((item) => {
+    if (item.scope !== "session" && item.scope !== "project") return item;
+    return {
+      ...item,
+      target: { tabId: context.tabId, generation: context.generation, ...(item.scope === "project" ? { cwd: context.cwd } : {}) },
+    };
+  });
 }
 
 function filteredCommandPaletteItems() {
-  const query = paletteText(elements.commandPaletteInput?.value || "").trim();
-  const items = buildCommandPaletteItems();
-  if (!query) return items.slice(0, 80);
-  return items
-    .map((item, index) => ({ item, index, score: paletteItemMatches(item, query) ? paletteItemScore(item, query) : -1 }))
-    .filter((entry) => entry.score >= 0)
-    .sort((a, b) => b.score - a.score || a.index - b.index)
-    .slice(0, 80)
-    .map((entry) => entry.item);
+  return filterActionItems(buildCommandPaletteItems(), elements.commandPaletteInput?.value || "");
 }
 
 function setCommandPaletteIndex(index) {
@@ -47491,7 +47458,9 @@ function renderCommandPaletteList({ preserveScroll = false } = {}) {
   commandPaletteItems.forEach((item, index) => {
     const button = make("button", `command-palette-item${index === commandPaletteIndex ? " active" : ""}`);
     button.type = "button";
-    button.id = `command-palette-option-${encodeURIComponent(`${item.kind}-${item.label}`).replace(/%/g, "-")}`;
+    button.id = `command-palette-option-${encodeURIComponent(item.id)}`;
+    button.dataset.actionId = item.id;
+    button.dataset.actionScope = item.scope;
     button.setAttribute("role", "option");
     button.setAttribute("aria-selected", index === commandPaletteIndex ? "true" : "false");
     button.addEventListener("click", () => executeCommandPaletteItem(item));
@@ -47539,9 +47508,15 @@ function closeCommandPalette() {
 
 async function executeCommandPaletteItem(item = commandPaletteItems[commandPaletteIndex]) {
   if (!item) return;
-  closeCommandPalette();
   try {
-    await item.run?.();
+    const target = checkActionTarget(item, shellActionTarget());
+    if (!target.ok) throw new Error(target.reason);
+    const current = buildCommandPaletteItems().find((action) => action.id === item.id);
+    if (!current) throw new Error("This action is no longer available. Reopen the command palette to refresh its actions.");
+    const availability = checkActionTarget({ ...current, target: item.target }, shellActionTarget());
+    if (!availability.ok) throw new Error(availability.reason);
+    closeCommandPalette();
+    await current.run?.();
   } catch (error) {
     addEvent(error.message || String(error), "error");
   }

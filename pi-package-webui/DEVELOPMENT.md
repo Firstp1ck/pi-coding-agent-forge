@@ -4,6 +4,18 @@ Contributor-only implementation, API, architecture, testing, and maintenance inf
 
 [Back to README](README.md) · [Advanced user technical reference](TECHNICAL.md)
 
+## Shell ownership
+
+Classic and mobile adapters in `public/app.js` share five flat ES modules:
+
+- `shell-actions.mjs` preserves palette matching and checks captured session/project targets before dispatch. Stable action IDs identify entries across catalog refreshes. The app rebuilds the catalog at execution; existing handlers retain asynchronous guards and server authorization remains authoritative.
+- `shell-navigation.mjs` owns the browser history listener and writes. Mobile navigation commits history before changing the rendered state, so a failed write leaves the current view intact. Unrelated history fields and URL parameters survive.
+- `shell-preferences.mjs` reads the versioned browser preference without repairing unknown records. Missing, corrupt or unavailable storage falls back to Classic. Phone and tablet mode choices remain independent; `shell=classic` takes precedence. Focused desktop rendering is introduced separately.
+- `shell-view-host.mjs` moves canonical DOM nodes and restores their original homes, focus, selection and scroll. The app retains section visibility and disclosure attributes. Moving or restoring a view never owns its session, runner or stream lifetime.
+- `shell-surfaces.mjs` owns one drawer keyboard listener and restores prior attributes. Native modal dialogs retain keyboard ownership. Replacing a drawer invalidates pending focus returns without closing feature resources.
+
+The modules ship with the package and participate in the service-worker cache. Keep module imports, cache versions, browser entry URLs and pinned asset tests coherent. Node contracts cover action targets, preferences and history. `tests/browser/shell-ownership.spec.mjs` exercises real DOM ownership; `mobile-foundation.spec.mjs` checks app integration. These checks do not replace the overhaul plan's later parity and platform gates.
+
 ## Pi 1.2 theme compatibility
 
 Bundled native theme JSON now uses `https://pi.dev/schemas/theme.schema.json`. Pi 1.2 rejects WebUI-only fields inside a native theme's `export` object at startup. The theme bundle publishes those fields separately in `webui-backgrounds.json`, outside its `pi.themes` directory. `readBundledThemes()` reads that optional file next to the themes directory and merges only `WEBUI_THEME_EXPORT_FIELDS` into catalog exports. Native export colors cannot be overridden by this metadata. Older bundles with inline background fields still load through the existing bundled-only compatibility path.

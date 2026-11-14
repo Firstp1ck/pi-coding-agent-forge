@@ -358,7 +358,7 @@ async function runOptionalFeatureFocus() {
 
   const manifest = JSON.parse(await readFile(path.join(root, "package.json"), "utf8"));
   assert.deepEqual(manifest.optionalDependencies, { "node-pty": "^1.1.0" });
-  assert.equal(manifest.dependencies?.["@firstpick/pi-utils"], "^0.2.5");
+  assert.equal(manifest.dependencies?.["@firstpick/pi-utils"], "^0.3.2");
   assert.equal(JSON.stringify(manifest.pi).includes("node_modules/@firstpick"), false);
 
   const initial = await request("127.0.0.1", "/api/optional-features");
@@ -1329,7 +1329,7 @@ try {
 
   const webuiManifest = JSON.parse(await readFile(path.join(root, "package.json"), "utf8"));
   assert.deepEqual(webuiManifest.optionalDependencies, { "node-pty": "^1.1.0" }, "node-pty should be the only optional dependency");
-  assert.equal(webuiManifest.dependencies?.["@firstpick/pi-utils"], "^0.2.5", "the required pi-utils runtime dependency must remain regular");
+  assert.equal(webuiManifest.dependencies?.["@firstpick/pi-utils"], "^0.3.2", "the required pi-utils runtime dependency must remain regular");
   assert.equal(JSON.stringify(webuiManifest.pi).includes("node_modules/@firstpick"), false, "the WebUI manifest must not claim optional companion resources");
 
   const optionalFeatures = await request("127.0.0.1", "/api/optional-features");
