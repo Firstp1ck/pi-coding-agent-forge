@@ -52,6 +52,7 @@ test("baseline evidence reconciles controls and all canonical families without r
   assert.equal(new Set(inventory.companions.map((item) => item.packageName)).size, 20);
   assert.ok(inventory.companions.some((item) => item.id === "tuiSkillsCommand" && item.packageName === "@firstpick/pi-extension-setup-skills"));
   assert.ok(inventory.nativeDefinitions.some((item) => item.id === "/resume"));
+  assert.ok(inventory.families.find(item => item.id === "diagnostics").currentOwners.some(owner => owner.file.endsWith("/activity-events-controller.mjs") && owner.symbol === "createActivityEventsController"));
   assert.ok(inventory.paletteDefinitions.some((item) => item.labelExpression === '"Show all controls"'));
   assert.ok(inventory.commandRegistrations.some((item) => item.nameExpression === '"webui-start"'));
   assert.ok(inventory.commandDefinitions.find((item) => item.id === "HIDDEN_COMMAND_NAMES").additions.includes("btw-transfer"));

@@ -43,7 +43,7 @@ const CONTRACTS = [
   ["voice", "tab/microphone/conversation", "setNaturalConversationModeEnabled toggleVoiceConversationPaused", "voice-conversation", /voice|naturalConversation|conversationMode|conversationVoice/i],
   ["connection", "server admission / remote identity", "toggleRemoteAuth openRemoteWebuiQrPopup", "remote-auth-settings-harness", /remote|network|pin|connection/i],
   ["system", "server/process/install transaction", "refreshUpdateStatus renderComponentUpdateDialogs", "native-update-lifecycle update-api-harness update-tab-restore-harness", /update|restart|shutdown|piRelease|webuiPackage/i],
-  ["diagnostics", "events / redacted support report", "applyEventFilter renderIssueWizard", "events-tree-context-menu-static open-issue-wizard-static runtime-error-visibility", /event|issue|error|diagnostic/i],
+  ["diagnostics", "events / redacted support report", "activity-events-controller.mjs#createActivityEventsController renderIssueWizard", "events-tree-context-menu-static open-issue-wizard-static runtime-error-visibility", /event|issue|error|diagnostic/i],
   ["extensions", "originating tab/request; replay and timeout", "showNextDialog sendDialogResponse", "custom-message-markdown-static", /extension|dialogQueue|dialogResponse|widget|notification/i],
   ["responses", "originating message/action/request", "renderQuestionnaireOptionButton renderActionFeedbackControls", "questionnaire-dialog feature-decision-output-popup-static", /questionnaire|feedback|learning|editRetry|featureDecision/i],
   ["workflow", "run/gate/model-exception identity", "renderWorkflowModeControls renderSubagentGate", "workflow-status-stack subagent-gate subagent-gate-visibility", /workflow|classifier|classification|featureCategory|gate/i],
@@ -282,6 +282,14 @@ function requireSymbol(sources, file, symbol) {
   return anchor(file, text, fn.offset, symbol);
 }
 
+function requireBrowserSymbol(sources, reference) {
+  const [module, symbol] = reference.includes("#") ? reference.split("#") : ["app.js", reference];
+  if (!/^[a-z][a-z0-9-]*\.(?:mjs|js)$/.test(module) || !sources.has(`${PACKAGE}/public/${module}`)) {
+    throw new Error(`Missing or invalid browser owner ${reference}`);
+  }
+  return requireSymbol(sources, `${PACKAGE}/public/${module}`, symbol);
+}
+
 export async function buildInventory(root = DEFAULT_ROOT) {
   const sources = await readBounded(path.resolve(root));
   const appFile = `${PACKAGE}/public/app.js`;
@@ -301,7 +309,7 @@ export async function buildInventory(root = DEFAULT_ROOT) {
   const families = [];
   for (const [index, [id, scope, symbols, testNames]] of CONTRACTS.entries()) {
     if (!rows[index][1].startsWith(PLAN_ANCHORS[id])) throw new Error(`Canonical feature anchor changed for ${id}; reconcile row ownership before regenerating`);
-    const owners = symbols.split(" ").map((symbol) => requireSymbol(sources, appFile, symbol));
+    const owners = symbols.split(" ").map((symbol) => requireBrowserSymbol(sources, symbol));
     const tests = testNames.split(" ").map((name) => `${PACKAGE}/tests/${name}.test.mjs`);
     for (const test of tests) await lstat(path.join(root, test));
     families.push({ id, capability: rows[index][1], destination: rows[index][2], preservation: rows[index][3], scope, currentOwners: owners, targetOwner: "Unassigned: W1+ extraction contract; legacy owner remains active", eventSources: "Existing tab-scoped HTTP/SSE and DOM handlers; see currentOwners, no new subscription", availability: "Source present; runtime, companion, trust, busy and preference checks still apply", legacyActive: true, controls: controls.filter((item) => item.family === id).map((item) => item.id), persistedKeys: persistence.filter((item) => item.family === id).map((item) => item.id), startingTests: tests });
@@ -327,15 +335,16 @@ export async function buildInventory(root = DEFAULT_ROOT) {
   const paletteStart = app.indexOf("function commandPaletteCoreItems()");
   const paletteEnd = app.indexOf("function commandPaletteTabItems()", paletteStart);
   if (paletteStart < 0 || paletteEnd < 0) throw new Error("Missing palette source boundaries");
-  const paletteDefinitions = [...app.slice(paletteStart, paletteEnd).matchAll(/\{ kind: "([^"]+)", label: ([^\n]+?), description:/g)].map((m) => {
+  const paletteDefinitions = [...app.slice(paletteStart, paletteEnd).matchAll(/\{ [^\n]*?kind: "([^"]+)", label: ([^\n]+?), description:/g)].map((m) => {
     const offset = paletteStart + m.index;
     const row = app.slice(offset, app.indexOf("\n", offset));
     const handler = row.match(/run: (.+)/)?.[1] || "unresolved";
     return { id: `palette:commandPaletteCoreItems/${digest(handler).slice(0, 16)}`, kind: m[1], labelExpression: m[2], handlerExpression: handler, family: NATIVE_FAMILY[m[2].slice(1, -1)] || familyFor(`${m[2]} ${handler}`), anchor: anchor(appFile, app, offset, "commandPaletteCoreItems"), availability: "Definition only; surrounding conditions and invocation guards apply" };
   });
+  if (!paletteDefinitions.length) throw new Error("No palette definitions found; reconcile the source scanner");
   const commandDefinitions = [...app.matchAll(/^const ([A-Z_]*COMMAND[A-Z_]*)\s*=\s*([\s\S]*?);/gm)].map((m) => ({ id: m[1], expression: m[2], strings: [...m[2].matchAll(/["']([^"'\n]+)["']/g)].map((item) => item[1]), additions: [...app.matchAll(new RegExp(m[1] + String.raw`\.add\((["'])([^"'\n]+)\1\)`, "g"))].map((item) => item[2]), anchor: anchor(appFile, app, m.index, m[1]), availability: "Static command routing/filter metadata; live tab catalog remains authoritative" }));
   const commandRegistrations = sorted([...sources].flatMap(([file, text]) => [...text.matchAll(/\bpi\.registerCommand\(\s*([^,\n]+)/g)].map((m) => ({ id: `${file}#registerCommand:${m[1]}`, nameExpression: m[1], anchor: anchor(file, text, m.index, `registerCommand(${m[1]})`) }))));
-  const dynamicFamilies = DYNAMIC.map(([id, family, symbols, stateSource, limit]) => ({ id, family, owners: symbols.split(" ").map((symbol) => requireSymbol(sources, appFile, symbol)), stateSource, limit, availability: "Dynamic; no instances enumerated" }));
+  const dynamicFamilies = DYNAMIC.map(([id, family, symbols, stateSource, limit]) => ({ id, family, owners: symbols.split(" ").map((symbol) => requireBrowserSymbol(sources, symbol)), stateSource, limit, availability: "Dynamic; no instances enumerated" }));
   const serverPersistence = SERVER_PERSISTENCE.map(([id, family, module, symbols, location, keyPaths]) => ({ id, family, location, keyPaths: keyPaths.split(" "), owners: symbols.split(" ").map((symbol) => requireSymbol(sources, `${PACKAGE}/lib/${module}.mjs`, symbol)), method: "Reviewed schema paths; unknown future fields may also survive normalization. No settings file read." }));
   for (const family of families) family.serverPersistence = serverPersistence.filter((item) => item.family === family.id).map((item) => item.id);
   const categories = ["family", "shared-chrome", "non-action", "dynamic-template", "unresolved"];

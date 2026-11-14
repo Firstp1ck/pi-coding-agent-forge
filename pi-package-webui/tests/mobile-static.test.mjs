@@ -5,6 +5,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+const runnersControllerSource = await readFile(join(root, "public", "project-runners-controller.mjs"), "utf8");
 const eventsControllerSource = await readFile(join(root, "public", "activity-events-controller.mjs"), "utf8");
 const [pkgRaw, html, css, app, server, extension, readme, technical, development, startScript, manifestRaw, serviceWorker, appleIcon, icon192, icon512, matrixBackground, mochaBackground] = await Promise.all([
   readFile(join(root, "package.json"), "utf8"),
@@ -1924,8 +1925,9 @@ assert.match(app, /function renderTerminalTabGroup\(group[\s\S]*tabGroupAppRunne
 assert.match(server, /function tabMeta\(tab\)[\s\S]*appRunner: publicAppRunnerState\(tab\.appRunner\)/, "server should expose app-runner state in tab metadata for inactive tab indicators");
 assert.match(app, /function renderAppRunnerInputForm\(run\)[\s\S]*app-runner-stdin-input[\s\S]*Send stdin/, "frontend should let running app runners receive line-oriented stdin");
 assert.match(app, /function renderAppRunnerContextForm\(run\)[\s\S]*app-runner-context-lines-input[\s\S]*Add to context/, "frontend should let users choose how many app-runner output lines to add to agent context");
-assert.match(app, /async function transferAppRunnerOutputToContext\(run, form\)[\s\S]*\/api\/app-runner\/context[\s\S]*scheduleRefreshMessages/, "frontend should submit selected app-runner output lines and refresh the transcript after context transfer");
-assert.match(app, /function appRunnerFailureState\(runnerId, error[\s\S]*failed to start app runner/, "frontend should render visible app-runner start failures instead of only logging them");
+assert.match(app, /async function transferAppRunnerOutputToContext\(run, form\)[\s\S]*projectRunners\.transferContext/, "frontend should submit through the runner owner");
+assert.match(app, /onRefreshContext: target =>[\s\S]*scheduleRefreshMessages\(120, target\)[\s\S]*scheduleRefreshState\(120, target\)/, "context transfer should retain the captured refresh target");
+assert.match(runnersControllerSource, /function failureState\(runnerId, error[\s\S]*failed to start app runner/, "runner ownership should retain visible start failure output");
 assert.match(app, /appRunnerCustomFeedback[\s\S]*Custom app runner was not saved/, "custom app-runner save failures should be shown inline in the dialog");
 assert.match(server, /function customAppRunnerUnavailableReason\(projectRoot, runner\)[\s\S]*Command is not available/, "server should explain why saved custom app runners are unavailable");
 assert.match(server, /url\.pathname === "\/api\/app-runners" && req\.method === "GET"/, "server should expose detected app runners for the active tab cwd");

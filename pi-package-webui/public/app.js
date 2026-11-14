@@ -1,3 +1,4 @@
+import { createProjectRunnersController, APP_RUNNER_CONTEXT_DEFAULT_LINES, APP_RUNNER_CONTEXT_MAX_LINES, normalizeAppRunnerContextLineCount } from "./project-runners-controller.mjs";
 import { createActivityEventsController, EVENT_DISPLAY_MODE_STORAGE_KEY, EVENT_FILTER_STORAGE_KEY } from "./activity-events-controller.mjs";
 import { createFocusedShellAdapter } from "./focused-shell-adapter.mjs";
 import { createSessionContext } from "./session-context.mjs";
@@ -3039,15 +3040,38 @@ const releaseNpmOutputExpandedByTab = new Map();
 const workflowTerminalScrollByTab = new Map();
 const workflowSubprocessMinimizedByTab = new Set();
 const workflowOverlayMinimizedByTab = new Set();
-const appRunnerDataByTab = new Map();
+const appRunnerFormTargets = new WeakMap();
+const projectRunners = createProjectRunnersController({
+  api,
+  captureTarget: () => projectTargetFromContext(),
+  isTargetCurrent: isCurrentProjectTarget,
+  cleanStatusText,
+  onData: (tabId, data, { hasActiveRun }) => {
+    if (!hasActiveRun) return;
+    const tab = tabs.find(item => item.id === tabId);
+    if (tab) tab.appRunner = data.activeRun || null;
+  },
+  onRender: ({ tabs: repaintTabs }) => {
+    for (const input of document.querySelectorAll(".app-runner-stdin-input")) {
+      const target = appRunnerFormTargets.get(input.closest("form"));
+      if (target && isCurrentProjectTarget(target)) input.value = projectRunners.getInputDraft(target.tabId, input.dataset.runId);
+    }
+    renderAppRunnerControls();
+    renderWidgets();
+    if (repaintTabs) renderTabs();
+  },
+  addEvent,
+  onRefreshContext: target => {
+    scheduleRefreshMessages(120, target);
+    scheduleRefreshState(120, target);
+  },
+});
 const conversationModeByTab = new Map();
 const workflowModeByTab = new Map();
 const workflowModeTogglePendingByTab = new Set();
 const workflowInspectorByTab = new Map();
 const workflowInspectorSelectionByTab = new Map();
 const workflowInspectorMinimizedByTab = new Set();
-const appRunnerInputDraftByRun = new Map();
-const appRunnerContextLineDraftByRun = new Map();
 const scopedScrollContinuityByKey = new Map();
 const liveToolRuns = new Map();
 const liveToolCards = new Map();
@@ -3076,8 +3100,6 @@ const optionalFeatureAvailability = {
   codexFastMode: false,
   themeBundle: false,
 };
-const APP_RUNNER_CONTEXT_DEFAULT_LINES = 80;
-const APP_RUNNER_CONTEXT_MAX_LINES = 1000;
 const APP_RUNNER_SEARCH_PATH_LIMIT = 24;
 const OPTIONAL_FEATURES = [
   {
@@ -12566,6 +12588,15 @@ function setActiveTabId(tabId, { remember = false } = {}) {
   return activeTabContext(nextTabId);
 }
 
+function projectTargetFromContext(context = activeTabContext()) {
+  return { ...context, lifetime: sessionContext.captureLifetime(context.tabId), cwd: tabs.find(tab => tab.id === context.tabId)?.cwd || "" };
+}
+
+function isCurrentProjectTarget(target) {
+  return isCurrentTabContext(target) && sessionContext.isLifetimeCurrent(target?.lifetime)
+    && tabs.some(tab => tab.id === target.tabId && (tab.cwd || "") === target.cwd);
+}
+
 function isCurrentTabContext(context) {
   return sessionContext.isCurrent(context);
 }
@@ -16063,7 +16094,7 @@ function syncTabMetadata(nextTabs = []) {
       clearFeatureDecisionStateForTab(tabId);
       tabMessagesCache.delete(tabId);
       widgetsByTab.delete(tabId);
-      appRunnerDataByTab.delete(tabId);
+      projectRunners.forgetTab(tabId);
       conversationModeByTab.delete(tabId);
       workflowModeByTab.delete(tabId);
       workflowModeTogglePendingByTab.delete(tabId);
@@ -17348,10 +17379,7 @@ function renderGitPanel() {
 
 function tabAppRunnerRun(tab) {
   if (!tab?.id) return null;
-  const cached = appRunnerDataByTab.get(tab.id);
-  if (cached && Object.prototype.hasOwnProperty.call(cached, "activeRun")) return cached.activeRun || null;
-  if (Object.prototype.hasOwnProperty.call(tab, "appRunner")) return tab.appRunner || null;
-  return null;
+  return projectRunners.getData(tab.id).activeRun || tab.appRunner || null;
 }
 
 function tabAppRunnerRunningRun(tab) {
@@ -18269,7 +18297,7 @@ async function closeTerminalTabs(tabIds, { label = "selected terminal tabs", all
       clearGitWorkflowForTab(id);
       clearFeatureDecisionStateForTab(id);
       commandCatalogsByTab.delete(id);
-      appRunnerDataByTab.delete(id);
+      projectRunners.forgetTab(id);
       tabMessagesCache.delete(id);
       fileViewersByTab.delete(id);
       fileViewerSelectionsByTab.delete(id);
@@ -29755,26 +29783,9 @@ function renderWorkflowSubprocessWidget() {
   return node;
 }
 
-function activeAppRunnerData() {
-  return activeTabId ? appRunnerDataByTab.get(activeTabId) || { runners: [], activeRun: null } : { runners: [], activeRun: null };
-}
+function activeAppRunnerData() { return projectRunners.getData(activeTabId); }
 
-function setAppRunnerData(tabId, data = {}) {
-  if (!tabId) return;
-  const previous = appRunnerDataByTab.get(tabId) || { runners: [], activeRun: null, customRunnerConfig: null };
-  const hasActiveRun = Object.prototype.hasOwnProperty.call(data, "activeRun");
-  const next = {
-    cwd: data.cwd || previous.cwd || "",
-    runners: Array.isArray(data.runners) ? data.runners : previous.runners || [],
-    customRunnerConfig: data.customRunnerConfig || previous.customRunnerConfig || null,
-    activeRun: hasActiveRun ? data.activeRun : previous.activeRun || null,
-  };
-  appRunnerDataByTab.set(tabId, next);
-  if (hasActiveRun) {
-    const tab = tabs.find((item) => item.id === tabId);
-    if (tab) tab.appRunner = next.activeRun || null;
-  }
-}
+function setAppRunnerData(tabId, data = {}) { return projectRunners.applyData(tabId, data); }
 
 function appRunnerIsRunning(run) {
   return run?.status === "running" || run?.stopping === true;
@@ -29804,114 +29815,39 @@ function appRunnerActionButton(label, handler, className = "") {
 }
 
 async function refreshAppRunners(tabContext = activeTabContext()) {
-  if (!tabContext.tabId) return;
-  const response = await api("/api/app-runners", { tabId: tabContext.tabId });
-  if (!isCurrentTabContext(tabContext)) return;
-  setAppRunnerData(tabContext.tabId, response.data || {});
-  renderAppRunnerControls();
-  renderWidgets();
-}
-
-function appRunnerFailureState(runnerId, error, data = activeAppRunnerData()) {
-  const runners = Array.isArray(data.runners) ? data.runners : [];
-  const runner = runners.find((item) => item.id === runnerId) || {};
-  const message = cleanStatusText(error?.message || String(error) || "Unknown app runner error");
-  const command = runner.displayCommand || runner.shortDisplayCommand || runner.label || runnerId || "app runner";
-  const timestamp = new Date().toISOString();
-  return {
-    id: `start-error:${Date.now()}`,
-    runnerId,
-    kind: runner.kind || "custom",
-    label: runner.label || "App runner failed",
-    command: runner.command || "",
-    args: Array.isArray(runner.args) ? runner.args : [],
-    displayCommand: command,
-    cwd: data.cwd || "",
-    status: "error",
-    startedAt: timestamp,
-    endedAt: timestamp,
-    lineCount: 3,
-    lines: [`$ ${command}`, "# failed to start app runner", `# ${message}`],
-  };
+  const result = await projectRunners.refresh(projectTargetFromContext(tabContext));
+  if (result.reason === "error") throw result.error;
 }
 
 async function runAppRunner(runnerId) {
-  const tabContext = activeTabContext();
-  if (!tabContext.tabId || !runnerId) return;
+  const target = projectTargetFromContext();
   setComposerActionsOpen(false);
   setAppRunnerMenuOpen(false);
-  try {
-    const response = await api("/api/app-runner", { method: "POST", body: { runnerId }, tabId: tabContext.tabId });
-    if (!isCurrentTabContext(tabContext)) return;
-    setAppRunnerData(tabContext.tabId, response.data || {});
-    renderAppRunnerControls();
-    renderWidgets();
-    renderTabs();
-    const command = response.data?.activeRun?.displayCommand || "app runner";
-    addEvent(`started ${command}`, "info");
-  } catch (error) {
-    if (!isCurrentTabContext(tabContext)) return;
-    const message = cleanStatusText(error.message || String(error));
-    setAppRunnerData(tabContext.tabId, { activeRun: appRunnerFailureState(runnerId, error, activeAppRunnerData()) });
-    renderAppRunnerControls();
-    renderWidgets();
-    renderTabs();
-    addEvent(`app runner failed: ${message}`, "error");
-  }
+  return projectRunners.start(runnerId, target);
 }
 
 async function stopAppRunner() {
-  const tabContext = activeTabContext();
-  if (!tabContext.tabId) return;
-  try {
-    const response = await api("/api/app-runner/stop", { method: "POST", body: {}, tabId: tabContext.tabId });
-    if (!isCurrentTabContext(tabContext)) return;
-    setAppRunnerData(tabContext.tabId, response.data || {});
-    renderAppRunnerControls();
-    renderWidgets();
-    renderTabs();
-    addEvent("app runner stop requested", "warn");
-  } catch (error) {
-    if (isCurrentTabContext(tabContext)) addEvent(error.message || String(error), "error");
-  }
+  return projectRunners.stop(appRunnerInputDraftKey(activeAppRunnerData().activeRun));
 }
 
 async function clearAppRunner() {
-  const tabContext = activeTabContext();
-  if (!tabContext.tabId) return;
-  try {
-    const response = await api("/api/app-runner/clear", { method: "POST", body: {}, tabId: tabContext.tabId });
-    if (!isCurrentTabContext(tabContext)) return;
-    setAppRunnerData(tabContext.tabId, response.data || {});
-    renderAppRunnerControls();
-    renderWidgets();
-    renderTabs();
-  } catch (error) {
-    if (isCurrentTabContext(tabContext)) addEvent(error.message || String(error), "error");
-  }
+  return projectRunners.clear(appRunnerInputDraftKey(activeAppRunnerData().activeRun));
 }
 
 async function sendAppRunnerInput(run, form, { closeStdin = false } = {}) {
-  const tabContext = activeTabContext();
+  const target = appRunnerFormTargets.get(form);
   const input = form?.querySelector?.(".app-runner-stdin-input");
-  if (!tabContext.tabId || !input || !appRunnerIsRunning(run)) return;
-  const draftKey = appRunnerInputDraftKey(run);
+  if (!target || !isCurrentProjectTarget(target) || !input) return;
+  const runId = appRunnerInputDraftKey(run);
   const text = input.value || "";
+  projectRunners.setInputDraft(target.tabId, runId, text);
   const buttons = [...form.querySelectorAll("button")];
-  buttons.forEach((button) => { button.disabled = true; });
+  buttons.forEach(button => { button.disabled = true; });
   try {
-    const response = await api("/api/app-runner/input", { method: "POST", body: { text, newline: !closeStdin || Boolean(text), closeStdin }, tabId: tabContext.tabId });
-    if (!isCurrentTabContext(tabContext)) return;
-    appRunnerInputDraftByRun.set(draftKey, "");
-    input.value = "";
-    setAppRunnerData(tabContext.tabId, response.data || {});
-    renderAppRunnerControls();
-    renderWidgets();
-    addEvent(closeStdin ? "sent app runner EOF" : text ? "sent app runner input" : "sent app runner Enter", "info");
-  } catch (error) {
-    if (isCurrentTabContext(tabContext)) addEvent(`app runner input failed: ${error.message || String(error)}`, "error");
+    const result = await projectRunners.sendInput({ runId, text, closeStdin }, target);
+    if (result.success && result.inputDraftCleared && isCurrentProjectTarget(target) && input.isConnected && input.value === text) input.value = "";
   } finally {
-    buttons.forEach((button) => { button.disabled = false; });
+    buttons.forEach(button => { button.disabled = false; });
   }
 }
 
@@ -29929,47 +29865,26 @@ function appRunnerInputDraftKey(run) {
   return run?.id || run?.runnerId || "active";
 }
 
-function normalizeAppRunnerContextLineCount(value) {
-  const number = Number.parseInt(String(value ?? ""), 10);
-  if (!Number.isFinite(number)) return APP_RUNNER_CONTEXT_DEFAULT_LINES;
-  return Math.max(1, Math.min(APP_RUNNER_CONTEXT_MAX_LINES, number));
-}
-
-function appRunnerContextDraftKey(run) {
-  return appRunnerInputDraftKey(run);
-}
+function appRunnerContextDraftKey(run) { return appRunnerInputDraftKey(run); }
 
 async function transferAppRunnerOutputToContext(run, form) {
-  const tabContext = activeTabContext();
-  if (!tabContext.tabId || !run) return;
-  const key = appRunnerContextDraftKey(run);
+  const target = appRunnerFormTargets.get(form);
+  if (!target || !isCurrentProjectTarget(target)) return;
+  const runId = appRunnerContextDraftKey(run);
   const input = form?.querySelector?.(".app-runner-context-lines-input");
-  const lineCount = normalizeAppRunnerContextLineCount(input?.value || appRunnerContextLineDraftByRun.get(key) || APP_RUNNER_CONTEXT_DEFAULT_LINES);
+  const lineCount = normalizeAppRunnerContextLineCount(input?.value || projectRunners.getContextDraft(target.tabId, runId));
   if (input) input.value = String(lineCount);
-  appRunnerContextLineDraftByRun.set(key, String(lineCount));
   const buttons = [...(form?.querySelectorAll?.("button") || [])];
-  buttons.forEach((button) => { button.disabled = true; });
-  try {
-    const response = await api("/api/app-runner/context", { method: "POST", body: { lineCount }, tabId: tabContext.tabId });
-    if (!isCurrentTabContext(tabContext)) return;
-    const data = response.data || {};
-    if (data.activeRun) setAppRunnerData(tabContext.tabId, { activeRun: data.activeRun });
-    const deliveredAsSteer = data.delivery === "steer";
-    addEvent(deliveredAsSteer
-      ? `sent last ${data.lineCount || lineCount} app runner output lines as live steering context`
-      : `added last ${data.lineCount || lineCount} app runner output lines to agent context`, "info");
-    scheduleRefreshMessages(120, tabContext);
-    scheduleRefreshState(120, tabContext);
-  } catch (error) {
-    if (isCurrentTabContext(tabContext)) addEvent(`app runner context transfer failed: ${error.message || String(error)}`, "error");
-  } finally {
-    buttons.forEach((button) => { button.disabled = false; });
-  }
+  buttons.forEach(button => { button.disabled = true; });
+  try { await projectRunners.transferContext({ runId, lineCount }, target); }
+  finally { buttons.forEach(button => { button.disabled = false; }); }
 }
 
 function renderAppRunnerContextForm(run) {
   const key = appRunnerContextDraftKey(run);
   const form = make("form", "app-runner-context-form");
+  const target = projectTargetFromContext();
+  appRunnerFormTargets.set(form, target);
   form.dataset.runId = key;
   const label = make("label", "app-runner-context-lines-label");
   label.append(make("span", "", "Context lines"));
@@ -29979,10 +29894,10 @@ function renderAppRunnerContextForm(run) {
   input.max = String(APP_RUNNER_CONTEXT_MAX_LINES);
   input.step = "1";
   input.inputMode = "numeric";
-  input.value = String(normalizeAppRunnerContextLineCount(appRunnerContextLineDraftByRun.get(key) || APP_RUNNER_CONTEXT_DEFAULT_LINES));
+  input.value = String(normalizeAppRunnerContextLineCount(projectRunners.getContextDraft(activeTabId, key) || APP_RUNNER_CONTEXT_DEFAULT_LINES));
   input.setAttribute("aria-label", "Number of recent app runner output lines to add to agent context");
   input.addEventListener("input", () => {
-    appRunnerContextLineDraftByRun.set(key, String(normalizeAppRunnerContextLineCount(input.value)));
+    projectRunners.setContextDraft(target.tabId, key, input.value);
   });
   label.append(input);
   const transfer = make("button", "release-npm-action app-runner-context-action", "Add to context");
@@ -30018,7 +29933,7 @@ function restoreAppRunnerInputFocus(state) {
   const input = [...elements.widgetArea.querySelectorAll(".app-runner-stdin-input")]
     .find((candidate) => candidate.dataset.runId === state.runId);
   if (!input) return;
-  appRunnerInputDraftByRun.set(state.runId, state.value);
+  projectRunners.setInputDraft(state.context.tabId, state.runId, state.value);
   input.value = state.value;
   const selectionStart = Math.min(Math.max(0, state.selectionStart), input.value.length);
   const selectionEnd = Math.min(Math.max(0, state.selectionEnd), input.value.length);
@@ -30742,15 +30657,17 @@ function renderAppRunnerInputForm(run) {
   if (!appRunnerIsRunning(run)) return null;
   const key = appRunnerInputDraftKey(run);
   const form = make("form", "app-runner-stdin-form");
+  const target = projectTargetFromContext();
+  appRunnerFormTargets.set(form, target);
   form.dataset.runId = key;
   const input = make("textarea", "app-runner-stdin-input");
   input.rows = 1;
-  input.value = appRunnerInputDraftByRun.get(key) || "";
+  input.value = projectRunners.getInputDraft(activeTabId, key) || "";
   input.placeholder = run.stdinClosed ? "stdin is closed" : "Send stdin… Enter sends, Shift+Enter inserts a newline";
   input.disabled = run.stdinClosed === true;
   input.dataset.runId = key;
   input.setAttribute("aria-label", "Send input to app runner stdin");
-  input.addEventListener("input", () => { appRunnerInputDraftByRun.set(key, input.value); });
+  input.addEventListener("input", () => { projectRunners.setInputDraft(target.tabId, key, input.value); });
   input.addEventListener("keydown", (event) => {
     if (insertNumpadDecimal(event)) return;
     if (event.key !== "Enter" || event.shiftKey) return;
@@ -49226,7 +49143,7 @@ function handleEvent(event) {
     }
     case "webui_app_runner_update": {
       const runTabId = event.tabId || activeTabId;
-      const previousRun = appRunnerDataByTab.get(runTabId)?.activeRun || null;
+      const previousRun = projectRunners.getData(runTabId)?.activeRun || null;
       setAppRunnerData(runTabId, { cwd: event.cwd, activeRun: event.activeRun });
       renderAppRunnerControls();
       // A chatty dev server sends several updates per second; append only the new lines to the

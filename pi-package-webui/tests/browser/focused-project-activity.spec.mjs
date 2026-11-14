@@ -1,3 +1,5 @@
+import { writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { expect } from '@playwright/test';
 import { test } from './session-fixture.mjs';
 
@@ -49,4 +51,30 @@ test('Activity topics preserve queue controls and Events filter through navigati
   await expect(page.locator('#eventFilterSelect')).toHaveValue('warnings');
   expect(await page.locator('#queueBox').evaluate(node => node === window.originalQueue)).toBe(true);
   await expect(page.locator('#sidePanelSectionEvents')).toHaveCount(1);
+});
+
+
+test('runner input and drafts survive destination changes and only explicit Stop ends the process', async ({ page, ownership }) => {
+  await writeFile(join(ownership.tabs[0].cwd, 'runner-test.sh'), '#!/usr/bin/env bash\nprintf "runner-ready\\n"\nwhile IFS= read -r line; do printf "echo:%s\\n" "$line"; done\n');
+  await page.reload();
+  await expect(page.locator('#modelSelect')).not.toBeEmpty();
+  await page.locator('#composerActionsButton').click();
+  await page.locator('#appRunnerMenuButton').click();
+  await page.locator('#appRunnerMenuPanel button').filter({ hasText: 'runner-test.sh' }).first().click();
+  const widget = page.locator('.app-runner-widget');
+  await expect(widget).toContainText('runner-ready');
+  const input = widget.locator('.app-runner-stdin-input');
+  await input.fill('submitted-line');
+  await input.press('Enter');
+  await expect(widget).toContainText('echo:submitted-line');
+  await input.fill('keep stdin draft');
+  const rail = page.getByRole('navigation', { name: 'Workspace destinations' });
+  await rail.getByRole('button', { name: 'Settings', exact: true }).click();
+  const hiddenRun = await ownership.api(`/api/app-runners?tab=${encodeURIComponent(ownership.tabs[0].id)}`);
+  expect(hiddenRun.activeRun.status).toBe('running');
+  await rail.getByRole('button', { name: 'Conversation', exact: true }).click();
+  await expect(input).toHaveValue('keep stdin draft');
+  await widget.getByRole('button', { name: 'Stop', exact: true }).click();
+  await expect(widget.getByRole('button', { name: 'Stop', exact: true })).toHaveCount(0);
+  await expect.poll(async () => (await ownership.api(`/api/app-runners?tab=${encodeURIComponent(ownership.tabs[0].id)}`)).activeRun?.status).not.toBe('running');
 });
