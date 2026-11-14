@@ -443,6 +443,11 @@
       "sha256": "ecc3e69edfa1a00f8840365ff38aba348ad17808140d1ef3442036ce25fb4c68"
     },
     {
+      "file": "pi-package-webui/public/project-artifact-controller.mjs",
+      "bytes": 9425,
+      "sha256": "7e5c4a8163bac85f7738490f14155097b88cd67f56fe0e1e7d4a835fe8cd84fb"
+    },
+    {
       "file": "pi-package-webui/public/project-git-tools-controller.mjs",
       "bytes": 6731,
       "sha256": "58fe137db0bd07a448e8e0027ee94c576608d033bb309dd094e9d82f8da32dab"
@@ -584,21 +589,21 @@
     },
     {
       "file": "plans/planned/webui-design-architecture-overhaul.md",
-      "bytes": 161684,
-      "sha256": "f5a1688659b33a70f255245a9ff33b39a8e538cb503b76b68b34ef8e2bfe6846"
+      "bytes": 163315,
+      "sha256": "d7d1ee52276051ef166be34662c6d3e01ba534d6267a294243d9e4cb58d84508"
     }
   ],
   "reconciliation": {
-    "records": 1294,
+    "records": 1301,
     "classifications": {
       "family": 725,
       "shared-chrome": 50,
       "non-action": 5,
-      "dynamic-template": 514,
+      "dynamic-template": 521,
       "unresolved": 0
     },
     "staticDialogs": 29,
-    "actionableRecords": 605,
+    "actionableRecords": 610,
     "unassignedPersistence": [
       "pi-package-webui/public/app.js#module/localStorage.getItem:key",
       "pi-package-webui/public/app.js#module/localStorage.setItem:key",
@@ -1522,7 +1527,8 @@
         "pi-package-webui/public/app.js#openDocumentArtifact/construction:make:button:c9265bdc91350536",
         "pi-package-webui/public/app.js#openDocumentArtifact/construction:make:button:c928bde4f136d5e6",
         "pi-package-webui/public/app.js#openDocumentArtifact/construction:make:input:b4cde6213a310e41",
-        "pi-package-webui/public/app.js#openDocumentArtifact/construction:make:summary:fbd47eaab85e7081"
+        "pi-package-webui/public/app.js#openDocumentArtifact/construction:make:summary:fbd47eaab85e7081",
+        "pi-package-webui/public/project-artifact-controller.mjs#createProjectArtifactController/construction:make:input:6dcb44b59d3e4572"
       ],
       "persistedKeys": [],
       "startingTests": [
@@ -24922,6 +24928,118 @@
         "file": "pi-package-webui/public/issue-bot-client.mjs",
         "symbol": "loadTurnstileApi",
         "line": 182
+      },
+      "ancestors": [],
+      "classification": "dynamic-template",
+      "family": null
+    },
+    {
+      "id": "pi-package-webui/public/project-artifact-controller.mjs#createProjectArtifactController/computed-construction:document.createElement:tag);",
+      "sourceId": null,
+      "tag": null,
+      "actionable": false,
+      "data": {},
+      "expression": "document.createElement(tag);",
+      "anchor": {
+        "file": "pi-package-webui/public/project-artifact-controller.mjs",
+        "symbol": "createProjectArtifactController",
+        "line": 15
+      },
+      "ancestors": [],
+      "classification": "dynamic-template",
+      "family": null
+    },
+    {
+      "id": "pi-package-webui/public/project-artifact-controller.mjs#createProjectArtifactController/computed-construction:make:tag",
+      "sourceId": null,
+      "tag": null,
+      "actionable": false,
+      "data": {},
+      "expression": "make(tag",
+      "anchor": {
+        "file": "pi-package-webui/public/project-artifact-controller.mjs",
+        "symbol": "createProjectArtifactController",
+        "line": 14
+      },
+      "ancestors": [],
+      "classification": "dynamic-template",
+      "family": null
+    },
+    {
+      "id": "pi-package-webui/public/project-artifact-controller.mjs#createProjectArtifactController/construction:make:a:3208c3ed083affc5",
+      "sourceId": null,
+      "tag": "a",
+      "actionable": true,
+      "data": {},
+      "expression": "make(\"a\", \"button-like\", \"Download\");",
+      "anchor": {
+        "file": "pi-package-webui/public/project-artifact-controller.mjs",
+        "symbol": "createProjectArtifactController",
+        "line": 44
+      },
+      "ancestors": [],
+      "classification": "dynamic-template",
+      "family": null
+    },
+    {
+      "id": "pi-package-webui/public/project-artifact-controller.mjs#createProjectArtifactController/construction:make:button:635a9afdac0596bb",
+      "sourceId": null,
+      "tag": "button",
+      "actionable": true,
+      "data": {},
+      "expression": "make(\"button\", undefined, \"Open viewer\");",
+      "anchor": {
+        "file": "pi-package-webui/public/project-artifact-controller.mjs",
+        "symbol": "createProjectArtifactController",
+        "line": 198
+      },
+      "ancestors": [],
+      "classification": "dynamic-template",
+      "family": null
+    },
+    {
+      "id": "pi-package-webui/public/project-artifact-controller.mjs#createProjectArtifactController/construction:make:button:823e78b1844a9efb",
+      "sourceId": null,
+      "tag": "button",
+      "actionable": true,
+      "data": {},
+      "expression": "make(\"button\", undefined, label);",
+      "anchor": {
+        "file": "pi-package-webui/public/project-artifact-controller.mjs",
+        "symbol": "createProjectArtifactController",
+        "line": 37
+      },
+      "ancestors": [],
+      "classification": "dynamic-template",
+      "family": null
+    },
+    {
+      "id": "pi-package-webui/public/project-artifact-controller.mjs#createProjectArtifactController/construction:make:input:6dcb44b59d3e4572",
+      "sourceId": null,
+      "tag": "input",
+      "actionable": true,
+      "data": {},
+      "expression": "make(\"input\", \"document-artifact-search\");",
+      "anchor": {
+        "file": "pi-package-webui/public/project-artifact-controller.mjs",
+        "symbol": "createProjectArtifactController",
+        "line": 87
+      },
+      "ancestors": [],
+      "classification": "dynamic-template",
+      "family": "artifacts"
+    },
+    {
+      "id": "pi-package-webui/public/project-artifact-controller.mjs#createProjectArtifactController/construction:make:summary:8cdf807bf9a160e2",
+      "sourceId": null,
+      "tag": "summary",
+      "actionable": true,
+      "data": {},
+      "expression": "make(\"summary\", undefined, \"Semantic structure, revisions, warnings, and diff\"),",
+      "anchor": {
+        "file": "pi-package-webui/public/project-artifact-controller.mjs",
+        "symbol": "createProjectArtifactController",
+        "line": 154
       },
       "ancestors": [],
       "classification": "dynamic-template",
