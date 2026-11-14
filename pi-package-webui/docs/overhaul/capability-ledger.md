@@ -31,7 +31,7 @@ JSON key order and sorted record order are deterministic. There are no generatio
 
 | Evidence | Count | Meaning |
 | --- | ---: | --- |
-| Scanned source inputs | 97 | 4503032 bytes, each hashed |
+| Scanned source inputs | 97 | Per-file byte counts and SHA-256 digests are recorded in the machine inventory's `sources` array |
 | Source control/data candidates | 1269 | Literal markup plus DOM construction and assignment evidence |
 | family | 720 | Annotated with a plan destination family |
 | shared-chrome | 50 | Palette, confirmation/prompt, mobile navigation and undo helpers |

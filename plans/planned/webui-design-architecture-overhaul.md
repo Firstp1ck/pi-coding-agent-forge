@@ -535,3 +535,13 @@ The twenty cases cover real resource-profile writes at session/model/global scop
 Installed companion/provider combinations and native devices remain unverified. W7 records those limits independently from fixture-based parity. The background-approval recovery counts describe observed workarounds, not acceptable focused-shell targets. Preserve the source-tab draft and exact request/tab response checks when adding positive discovery coverage.
 
 Parent verification: all twenty supplemental capability tests passed in 46.7 seconds on the integrated branch, without overwriting the committed reference. Fourteen scenarios are verified within the documented simulation boundary, three model paths remain partial, and three approval paths characterize the known discovery defect. Log: `/tmp/webui-overhaul-w0-d-integration.log`. Round 1 now reviews the combined W0 evidence and its readiness for W1 with two independent Sol runs. No product implementation acceptance is implied.
+
+### W0 round-1 review dispositions
+
+Two fresh-context Sol/high runs review `bb9e40d`. Review A, inventory/isolation/packaging, completed through task `webui-overhaul-w0-review-a-r1-20261114` and recommends beginning W1 after combined disposition. Review B, measurement/coverage, remains pending. This is one review round with complementary scopes, not two rounds. The requested Sol provider/model is used for both; Anthropic remains waived.
+
+| Finding | Parent disposition and verification |
+| --- | --- |
+| W0-A-R1-001, P3 stale source-byte total | Accepted and fixed. Parent summed the committed inventory to 4,521,433 bytes over 97 inputs, confirming the ledger's 4,503,032 total was stale. Removed the duplicated total and pointed readers to the per-file sizes/digests. The canonical plan is itself a hashed input and changes during execution; another copied total would immediately drift. No capability classification or production source changed. |
+
+Review A also verified all source digests, 1,553 anchors, inventory determinism, isolated fixture configuration, packaging/discovery, existing W1 seams and artifact existence. Its evidence is source/read-only validation plus existing parent logs, not another browser run. Parent reruns inventory regeneration/check and whitespace validation after the documentation correction. A second review round is not needed for this wording fix alone; combined W0 acceptance awaits Review B.
