@@ -6,6 +6,7 @@ import { join, relative } from "node:path";
 import { expect } from "@playwright/test";
 import { api, artifactRoot, fixedPrompt, fixtureContract, openFixture, packageRoot, promptFixture, seedBaseline, sourceBaseline, startFixture, stopFixture, streamFinal, streamPrompt, test, waitIdle } from "./overhaul-fixture.mjs";
 import { compareReports, frozenBudgets, installRenderProbe, measureCrowding, measureInput, measureTabSwitch, startStreamProbe, stopStreamProbe, summarize } from "./overhaul-metrics.mjs";
+import { writeBaselineReference } from "./overhaul-reference.mjs";
 
 const runDirectory = join(artifactRoot, `run-${new Date().toISOString().replace(/[:.]/g, "-")}`);
 const report = { schemaVersion: 1, capturedAt: new Date().toISOString(), sourceBaseline, seedBaseline, query: process.env.PI_OVERHAUL_QUERY || "", fixture: fixtureContract, budgets: frozenBudgets, views: [], workflows: [], performance: null };
@@ -76,13 +77,32 @@ for (const view of matrix) {
       await page.locator("#dialogActions").getByRole("button", { name: "Yes", exact: true }).click();
       await expect(page.locator("#dialog")).toBeHidden();
       report.views.push({ ...view, states, pageErrors: errors });
+      assert.deepEqual(errors, [], "rendered baseline must have no browser script errors");
     } finally { await context.close(); }
   });
 }
 
+test("input probe includes earlier synchronous application handlers", async ({ page }) => {
+  await page.setContent('<textarea id="promptInput"></textarea>');
+  await page.evaluate(() => {
+    window.__overhaul = {};
+    document.querySelector("#promptInput").addEventListener("input", (event) => {
+      if (!event.data) return;
+      const start = performance.now();
+      while (performance.now() - start < 80) {}
+      window.__overhaul.handlerMs = performance.now() - start;
+    });
+  });
+  const measured = await measureInput(page, "listener order probe");
+  const handlerMs = await page.evaluate(() => window.__overhaul.handlerMs);
+  assert.ok(handlerMs >= 80, "probe must execute the earlier application handler");
+  assert.ok(measured >= handlerMs, `input interval ${measured}ms must include ${handlerMs}ms of synchronous work`);
+});
+
 test("repeated rendering and retained heap baseline", async ({ browser, request }) => {
   test.setTimeout(120_000);
   const cold = [], warm = [], input = [], switches = [], streams = [], heap = [];
+  const pageErrors = [];
   for (let index = 0; index < 7; index += 1) {
     const fixture = await startFixture(request);
     let context;
@@ -90,6 +110,7 @@ test("repeated rendering and retained heap baseline", async ({ browser, request 
       context = await browser.newContext({ viewport: { width: 1440, height: 900 }, colorScheme: "dark", reducedMotion: "reduce", serviceWorkers: "block" });
       await installRenderProbe(context);
       const page = await context.newPage();
+      page.on("pageerror", (error) => pageErrors.push(error.message));
       await openFixture(page, fixture);
       await page.waitForFunction(() => window.__overhaul.usefulRenderMs !== null);
       cold.push(await page.evaluate(() => window.__overhaul.usefulRenderMs));
@@ -130,16 +151,18 @@ test("repeated rendering and retained heap baseline", async ({ browser, request 
     }
   }
   report.performance = {
+    pageErrors,
     viewport: { width: 1440, height: 900 },
     coldDefinition: "fresh nonpersistent context and empty HTTP cache; server and OS cache remain warm",
     warmDefinition: "reload in same context with HTTP cache enabled; service workers blocked",
     firstUsefulRender: { definition: "navigation time origin to two animation frames after visible enabled composer and fake answer in transcript", coldMs: summarize(cold), warmMs: summarize(warm) },
-    inputToPaint: { definition: "actual insertText input event to second animation frame; excludes driver dispatch latency", ms: summarize(input) },
+    inputToPaint: { measurementVersion: 2, definition: "capture-phase insertText input event before application bubble handlers to second animation frame; includes synchronous handler work, excludes driver dispatch latency", ms: summarize(input) },
     tabSwitchToContent: { definition: "actual tab click event to selected target tab, restored unique draft and transcript, then two animation frames; identical transcript fixture across tabs", ms: summarize(switches) },
     streamRenderGap: { definition: "successive changed streaming transcript text sampled at animation frames, followed by next rendering opportunity; includes intentional 500ms producer cadence", ms: summarize(streams.flatMap((stream) => stream.gapsMs)), runs: streams, eventToPaintLatency: null, eventToPaintLimitation: "fake Pi log has no browser-correlated event timestamp; render gap is cadence, not transport latency" },
     retainedHeap: { definition: "CDP main-page JS used heap after explicit GC and ten fixed first/second navigation cycles; no renderer/GPU/process RSS claim", afterBytes: summarize(heap.map((sample) => sample.afterBytes)), runs: heap },
   };
   await saveJson("performance.json", report.performance);
+  assert.deepEqual(pageErrors, [], "performance samples must have no browser script errors");
 });
 
 test("observed workflow action counts", async ({ browser, request }) => {
@@ -211,6 +234,7 @@ test("observed workflow action counts", async ({ browser, request }) => {
     let context;
     let page;
     const actions = [];
+    const pageErrors = [];
     const act = async (selector, description, perform) => {
       const action = { selector, description, completed: false };
       actions.push(action);
@@ -220,11 +244,12 @@ test("observed workflow action counts", async ({ browser, request }) => {
     try {
       context = await browser.newContext({ viewport: { width: 1440, height: 900 }, colorScheme: "dark", reducedMotion: "reduce", serviceWorkers: "block" });
       page = await context.newPage();
+      page.on("pageerror", (error) => pageErrors.push(error.message));
       await openFixture(page, fixture);
       const detail = await exercise(page, act);
-      report.workflows.push({ name, status: "measured", actions, actionCount: actions.length, ...detail });
+      report.workflows.push({ name, status: "measured", actions, pageErrors, actionCount: actions.length, ...detail });
     } catch (error) {
-      report.workflows.push({ name, status: "missing-evidence", actions, actionCount: null, error: error.message });
+      report.workflows.push({ name, status: "missing-evidence", actions, pageErrors, actionCount: null, error: error.message });
       if (page && !page.isClosed()) await page.screenshot({ path: join(runDirectory, `workflow-${name.replaceAll(" ", "-")}-failure.png`) });
     } finally {
       try {
@@ -235,6 +260,7 @@ test("observed workflow action counts", async ({ browser, request }) => {
     }
   }
   await saveJson("workflows.json", report.workflows);
+  assert.deepEqual(report.workflows.filter((workflow) => workflow.error || workflow.pageErrors.length).map((workflow) => workflow.name), [], "unexpected workflow failures must not pass the capture");
 });
 
 test.afterAll(async () => {
@@ -254,10 +280,7 @@ test.afterAll(async () => {
     } catch (error) { if (error.code !== "ENOENT") throw error; }
   }
   if (process.env.PI_OVERHAUL_UPDATE_BASELINE === "1") {
-    assert.equal(report.views.length, matrix.length, "refuse to freeze an incomplete screenshot matrix");
-    assert.ok(report.performance, "refuse to freeze without repeated performance samples");
-    assert.equal(report.workflows.length, 9, "refuse to freeze without workflow observations");
     await mkdir(join(packageRoot, "docs/overhaul"), { recursive: true });
-    await writeFile(join(packageRoot, "docs/overhaul/browser-baseline.json"), `${JSON.stringify(report, null, 2)}\n`);
+    await writeBaselineReference(join(packageRoot, "docs/overhaul/browser-baseline.json"), report, matrix);
   }
 });

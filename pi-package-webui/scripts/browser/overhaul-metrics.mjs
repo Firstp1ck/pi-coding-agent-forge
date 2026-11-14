@@ -20,14 +20,14 @@ export function compareReports(baseline, current) {
   const compatibleMachine = ["platform", "release", "arch", "cpu", "logicalCpus", "node", "chromium"].every((key) => baseline.machine?.[key] === current.machine?.[key]);
   const compatibleFixture = JSON.stringify(baseline.fixture) === JSON.stringify(current.fixture);
   const checks = [];
-  const timing = (name, before, after, budget) => {
+  const timing = (name, before, after, budget, compatibleMeasurement = true) => {
     const limit = before == null ? null : before + Math.max(before * budget.relativePercent / 100, budget.absoluteMs ?? budget.absoluteBytes);
-    checks.push({ name, baseline: before ?? null, current: after ?? null, limit, status: !compatibleMachine || !compatibleFixture || before == null || after == null ? "missing-evidence" : after <= limit ? "within-budget" : "over-budget" });
+    checks.push({ name, baseline: before ?? null, current: after ?? null, limit, status: !compatibleMeasurement || !compatibleMachine || !compatibleFixture || before == null || after == null ? "missing-evidence" : after <= limit ? "within-budget" : "over-budget" });
   };
   const b = baseline.performance, c = current.performance;
   timing("firstUsefulRenderColdP95Ms", b?.firstUsefulRender.coldMs.p95, c?.firstUsefulRender.coldMs.p95, frozenBudgets.firstUsefulRenderP95);
   timing("firstUsefulRenderWarmP95Ms", b?.firstUsefulRender.warmMs.p95, c?.firstUsefulRender.warmMs.p95, frozenBudgets.firstUsefulRenderP95);
-  timing("inputToPaintP95Ms", b?.inputToPaint.ms.p95, c?.inputToPaint.ms.p95, frozenBudgets.inputToPaintP95);
+  timing("inputToPaintP95Ms", b?.inputToPaint.ms.p95, c?.inputToPaint.ms.p95, frozenBudgets.inputToPaintP95, b?.inputToPaint.measurementVersion === 2 && c?.inputToPaint.measurementVersion === 2);
   timing("tabSwitchToContentP95Ms", b?.tabSwitchToContent.ms.p95, c?.tabSwitchToContent.ms.p95, frozenBudgets.tabSwitchToContentP95);
   timing("streamRenderGapP95Ms", b?.streamRenderGap.ms.p95, c?.streamRenderGap.ms.p95, frozenBudgets.streamRenderGapP95);
   timing("retainedHeapAfterCyclesP95Bytes", b?.retainedHeap.afterBytes.p95, c?.retainedHeap.afterBytes.p95, frozenBudgets.retainedHeapBytes);
@@ -70,7 +70,7 @@ export async function measureInput(page, text) {
     document.querySelector("#promptInput").addEventListener("input", () => {
       const start = performance.now();
       requestAnimationFrame(() => requestAnimationFrame(() => { window.__overhaul.inputMs = performance.now() - start; }));
-    }, { once: true });
+    }, { once: true, capture: true });
   });
   await page.keyboard.insertText(text);
   await page.waitForFunction(() => window.__overhaul.inputMs !== null);

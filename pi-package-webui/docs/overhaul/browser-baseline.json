@@ -21531,19 +21531,20 @@
       }
     },
     "inputToPaint": {
-      "definition": "actual insertText input event to second animation frame; excludes driver dispatch latency",
+      "measurementVersion": 2,
+      "definition": "capture-phase insertText input event before application bubble handlers to second animation frame; includes synchronous handler work, excludes driver dispatch latency",
       "ms": {
         "count": 7,
-        "p50": 27.200000017881393,
-        "p95": 31.599999994039536,
+        "p50": 22.100000023841858,
+        "p95": 30.899999976158142,
         "raw": [
-          27.200000017881393,
-          16.700000017881393,
-          18.80000001192093,
-          18.30000001192093,
-          31.599999994039536,
-          29.69999998807907,
-          28.299999982118607
+          20.5,
+          24.69999998807907,
+          21.100000023841858,
+          17.69999998807907,
+          28,
+          30.899999976158142,
+          22.100000023841858
         ]
       }
     },
@@ -21962,5 +21963,33 @@
     "No native mobile engine/device or accessibility audit. Phone and tablet screenshots use Chromium emulation.",
     "No process-cold startup, filesystem cache flush, physical input/display latency or server-event-to-browser-paint clock correlation.",
     "Action counts are desktop Classic paths; incomplete and unavailable workflows retain explicit status and cannot satisfy reachability gates."
+  ],
+  "corrections": [
+    {
+      "finding": "BUG-W0-B-R1-001",
+      "metric": "performance.inputToPaint",
+      "capturedAt": "2026-11-14T21:04:19.333Z",
+      "sourceBaseline": "06351edae0d87829dfa8c747d31a061825568b0e",
+      "executionHead": "cd31511c7402f723b5eee21032ce0fb069c80663",
+      "artifact": "test-results/overhaul-baseline/run-2026-11-14T21-04-19-332Z/report.json",
+      "previousValue": {
+        "definition": "actual insertText input event to second animation frame; excludes driver dispatch latency",
+        "ms": {
+          "count": 7,
+          "p50": 27.200000017881393,
+          "p95": 31.599999994039536,
+          "raw": [
+            27.200000017881393,
+            16.700000017881393,
+            18.80000001192093,
+            18.30000001192093,
+            31.599999994039536,
+            29.69999998807907,
+            28.299999982118607
+          ]
+        }
+      },
+      "reason": "Capture-phase timer includes synchronous application input handlers. Only input samples supersede the original reference; other metrics, workflows, screenshots and numerical budgets are unchanged."
+    }
   ]
 }
