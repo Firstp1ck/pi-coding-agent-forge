@@ -2056,9 +2056,25 @@ function scheduleFocusedShellRender() {
   queueMicrotask(() => { focusedShellRenderPending = false; renderFocusedShell(); });
 }
 
+function focusedSectionDestination(id) {
+  if (["controls", "optional-features"].includes(id)) return "settings";
+  if (["files", "git"].includes(id)) return "project";
+  if (["session", "sampling", "commands"].includes(id)) return "conversation";
+  return "activity";
+}
+
+function focusedInspectorTopics(destination) {
+  const labels = { git: "Changes", subagents: "Agents", queue: "Queues", "codex-usage": "Codex usage", "claude-usage": "Claude usage" };
+  const order = ["files", "git", "subagents", "queue", "events", "codex-usage", "claude-usage", "session", "sampling", "commands"];
+  return sidePanelSectionRecords().filter(record => focusedSectionDestination(record.id) === destination)
+    .sort((left, right) => order.indexOf(left.id) - order.indexOf(right.id))
+    .map(record => ({ id: record.id, label: labels[record.id] || record.button.querySelector(".side-panel-section-label")?.textContent || record.id }));
+}
+
 function renderFocusedShell() {
   if (!focusedShell) return;
   const wasActive = focusedShell.active;
+  const previousInspector = focusedShell.inspector;
   const active = activeTab();
   const record = sidePanelSectionRecords().find(({ id }) => id === focusedShellState.inspector);
   focusedShell.update({
@@ -2067,6 +2083,7 @@ function renderFocusedShell() {
     enabled: isFocusedShellRequested(),
     inspectorOpen: !!record && !["home", "settings"].includes(focusedShellState.destination),
     inspectorTitle: record?.button.querySelector(".side-panel-section-label")?.textContent || "",
+    inspectorTopics: record && focusedShellState.destination !== "settings" ? focusedInspectorTopics(focusedShellState.destination) : [],
     title: active?.title || "Choose a session",
     context: active?.cwd || "",
     attentionCount: tabs.filter(tab => mobileTabActivityState(tab) === "blocked").length,
@@ -2077,6 +2094,10 @@ function renderFocusedShell() {
     setComposerActionsOpen(false);
     composerModeRenderSignature = "";
     updateComposerModeButtons();
+  }
+  if (focusedShell.active && focusedShell.inspector !== previousInspector) {
+    if (focusedShell.inspector === "git") renderGitPanel();
+    if (focusedShell.inspector === "events") clearUnreadEvents();
   }
 }
 
@@ -2131,9 +2152,9 @@ function restoreShellNavigation(event) {
 function focusedToolsActions() {
   const context = shellActionTarget();
   const sectionActions = sidePanelSectionRecords().map(record => {
-    const destination = ["controls", "optional-features"].includes(record.id) ? "settings" : ["files", "git"].includes(record.id) ? "project" : "activity";
+    const destination = focusedSectionDestination(record.id);
     return {
-      id: `view:${record.id}`, scope: "browser", category: destination === "settings" ? "Settings" : destination === "project" ? "Project" : "Activity",
+      id: `view:${record.id}`, scope: "browser", category: destination === "settings" ? "Settings" : destination === "project" ? "Project" : destination === "conversation" ? "Session" : "Activity",
       label: record.button.querySelector(".side-panel-section-label")?.textContent || record.id,
       description: `Open ${record.id.replaceAll("-", " ")} controls`, keywords: record.id, available: true,
       run: () => navigateFocusedShell(destination, destination === "settings" ? null : record.id),
@@ -16617,6 +16638,7 @@ function terminalDisplayGroupDetail(group, fallback = "group") {
 }
 
 function gitPanelSectionExpanded() {
+  if (focusedShell?.active) return focusedShell.inspector === "git" && !["home", "settings"].includes(focusedShellState.destination);
   const section = elements.sidePanel?.querySelector('[data-side-panel-section="git"]');
   return Boolean(section && !section.hidden && !section.classList.contains("collapsed"));
 }
@@ -18801,6 +18823,7 @@ function eventsSectionRecord() {
 }
 
 function eventsSectionIsVisibleAndExpanded() {
+  if (focusedShell?.active) return focusedShell.inspector === "events" && !["home", "settings"].includes(focusedShellState.destination);
   const record = eventsSectionRecord();
   if (!record || record.section.hidden || record.section.classList.contains("collapsed")) return false;
   return !document.body.classList.contains("side-panel-collapsed") || document.body.classList.contains("control-deck-left");
@@ -18828,7 +18851,7 @@ function clearUnreadEvents() {
 
 function revealSidePanelSectionById(id) {
   if (focusedShell?.active) {
-    const destination = ["controls", "optional-features"].includes(id) ? "settings" : ["files", "git"].includes(id) ? "project" : "activity";
+    const destination = focusedSectionDestination(id);
     navigateFocusedShell(destination, destination === "settings" ? null : id);
     return;
   }

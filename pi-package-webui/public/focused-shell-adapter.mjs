@@ -142,5 +142,5 @@ export function createFocusedShellAdapter({ document, viewHost, nodes, sections,
     }
   }
 
-  return { update, openTools, closeTools, get active() { return mounted; } };
+  return { update, openTools, closeTools, get active() { return mounted; }, get inspector() { return mounted ? inspector : null; } };
 }
