@@ -438,6 +438,16 @@
       "sha256": "ecc3e69edfa1a00f8840365ff38aba348ad17808140d1ef3442036ce25fb4c68"
     },
     {
+      "file": "pi-package-webui/public/project-git-tools-controller.mjs",
+      "bytes": 6731,
+      "sha256": "58fe137db0bd07a448e8e0027ee94c576608d033bb309dd094e9d82f8da32dab"
+    },
+    {
+      "file": "pi-package-webui/public/project-runners-controller.mjs",
+      "bytes": 8974,
+      "sha256": "b23777ade162be980b288df0d6cb70474f1c7663dbfaa0d6dc091a92c45511e0"
+    },
+    {
       "file": "pi-package-webui/public/sampling-parameter-controls.mjs",
       "bytes": 14106,
       "sha256": "3253c52fc83151391f66257482d72743fc69adc124d818321eb3377714f3bea5"
@@ -569,8 +579,8 @@
     },
     {
       "file": "plans/planned/webui-design-architecture-overhaul.md",
-      "bytes": 152280,
-      "sha256": "0db07e8d27187b9d094363e9fe9c2eb8c127e5d71734e601715399b646d97593"
+      "bytes": 159388,
+      "sha256": "a29f38af9cad874db096ec2c2b44a2b03ad76b751082d1c01e8e4e9e0b3b6d7e"
     }
   ],
   "reconciliation": {
