@@ -96,6 +96,7 @@ test('phone landscape keeps draft and attachment reachable with a constrained ke
   try {
     const page = await context.newPage();
     await page.goto(`${ownership.baseURL}/?mobileShell=v2`);
+    await expect(page.locator('#modelSelect')).not.toBeEmpty();
     await page.locator('#promptInput').fill('landscape retained draft');
     await page.locator('#attachmentInput').setInputFiles({ name: 'context.txt', mimeType: 'text/plain', buffer: Buffer.from('context') });
     await page.locator('#promptInput').focus();
@@ -107,4 +108,33 @@ test('phone landscape keeps draft and attachment reachable with a constrained ke
     await expect(page.locator('#attachmentTray')).toContainText('context.txt');
     await page.screenshot({ path: testInfo.outputPath('phone-landscape-keyboard.png') });
   } finally { await context.close(); }
+});
+
+test('compact navigation remains usable at 1100 and 1920 pixels with top and collapsed choices', async ({ page, ownership }, testInfo) => {
+  await openFocused(page, ownership);
+  const rail = page.getByRole('navigation', { name: 'Workspace destinations' });
+  const [source, peer] = ownership.tabs;
+  await page.locator('#promptInput').fill('original session draft');
+  await page.locator(`#tabBar [data-tab-id="${peer.id}"] .terminal-tab-button`).click();
+  await expect(page.locator('#promptInput')).toHaveValue('');
+  await page.locator(`#tabBar [data-tab-id="${source.id}"] .terminal-tab-button`).click();
+  await expect(page.locator('#promptInput')).toHaveValue('original session draft');
+  for (const width of [1100, 1920]) {
+    await page.setViewportSize({ width, height: 900 });
+    await rail.getByRole('button', { name: 'Project', exact: true }).click();
+    await page.locator('#fileTreeSearchInput').click({ trial: true });
+    await page.locator('#promptInput').click({ trial: true });
+    await expect(page.locator('#tabBar [role="tab"]')).toHaveCount(2);
+    await page.screenshot({ path: testInfo.outputPath(`compact-project-${width}.png`) });
+  }
+  await rail.getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.locator('#focusedNavigationSelect').selectOption('top');
+  await rail.getByRole('button', { name: 'Conversation', exact: true }).click();
+  await expect(page.locator('#focusedWorkspace')).toHaveAttribute('data-navigation', 'top');
+  await page.locator(`#tabBar [data-tab-id="${peer.id}"] .terminal-tab-button`).click();
+  await rail.getByRole('button', { name: 'Collapse sessions', exact: true }).click();
+  await expect(page.locator('#focusedWorkspaceNavigation')).toBeHidden();
+  await rail.getByRole('button', { name: 'Expand sessions', exact: true }).click();
+  await expect(page.locator('#focusedWorkspaceNavigation')).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('compact-top-navigation.png') });
 });

@@ -2066,7 +2066,7 @@ function renderFocusedShell() {
     ...focusedShellState,
     enabled: isFocusedShellRequested(),
     inspectorOpen: !!record && !["home", "settings"].includes(focusedShellState.destination),
-    inspectorTitle: record?.button.textContent.trim() || "",
+    inspectorTitle: record?.button.querySelector(".side-panel-section-label")?.textContent || "",
     title: active?.title || "Choose a session",
     context: active?.cwd || "",
     attentionCount: tabs.filter(tab => mobileTabActivityState(tab) === "blocked").length,

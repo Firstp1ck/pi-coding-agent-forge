@@ -39,3 +39,11 @@ html[data-desktop-shell="focused"] #focusedWorkspace { height: var(--visual-view
 
 .focused-modal-run-controls { display: flex; gap: 8px; flex-wrap: wrap; }
 .focused-modal-run-controls:has(> button:not([hidden])) { padding-block: 8px; border-top: 1px solid var(--border); }
+#focusedWorkspace .focused-composer-controls button,
+#focusedWorkspace .focused-composer-controls select { min-height: 30px; padding-block: 4px; font-size: 12px; }
+#focusedWorkspace .composer-row > button { min-height: 34px; padding-block: 5px; }
+#focusedWorkspace .terminal-tab-actions { flex: 0 0 40px; min-width: 40px; flex-direction: row; }
+#focusedWorkspace .terminal-tab-close { flex-basis: 22px; min-width: 22px; padding-inline: 3px; }
+#focusedWorkspace .terminal-tab-actions > button { min-height: 28px; }
+#focusedWorkspace .terminal-tab-button { padding: 5px 7px; }
+#focusedWorkspace .terminal-tab-title { font-size: 12px; letter-spacing: normal; }
