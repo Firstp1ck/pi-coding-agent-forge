@@ -152,3 +152,12 @@ Linux x64, kernel 7.2.14-zen1-1-zen, Node v22.23.5, Chromium 157.0.8103.38. Tabl
 **Related bugs:** None identified in this pass.
 
 **Workaround:** The separately captured `tabletShell=legacy` presentation fits the same viewport. The parent should assign any production fix to its layout owner.
+
+
+## Parent integration adjustments
+
+The three baseline harness modules live under `scripts/browser/`, with the dedicated config pointing there. They require repository source history and a sibling theme fixture, so they are intentionally excluded from npm packaging and normal browser-suite discovery. The focused feature regression tests added in later waves still belong to the ordinary browser suite.
+
+The fixture removes inherited `PI_*` and `FAKE_PI_*` variables before setting its explicit temporary-state overrides. This prevents unrelated caller settings/workspace/fixture paths from escaping isolation. Only the owned fixture process group and temporary root are cleaned up.
+
+The worker's local tablet clipping report is tracked as parent **BUG-002** (BUG-001 in its original report). The original W0 screenshots and numerical reference remain unchanged. Correct the tablet layout in the owning shell wave and compare against this captured baseline; do not alter baseline evidence to conceal the defect.

@@ -4,7 +4,7 @@ import { existsSync } from "node:fs";
 process.env.NODE_ENV = "test";
 
 export default defineConfig({
-  testDir: "./tests/browser",
+  testDir: "./scripts/browser",
   testMatch: "overhaul-baseline.spec.mjs",
   timeout: 90_000,
   expect: { timeout: 10_000 },

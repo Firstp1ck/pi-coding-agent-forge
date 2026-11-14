@@ -61,7 +61,12 @@ async function stopProcessGroup(child) {
   }
 }
 
-export async function startFixture(request) {
+export async function startFixture(request, { fakePi = {}, settings = {} } = {}) {
+  const allowedFixtureOptions = new Set(["FAKE_PI_TRANSCRIPT_JSON", "FAKE_PI_GUIDED_GIT_ACTIVATION", "FAKE_PI_STATS_PROMPT_CONTEXT", "FAKE_PI_INTERCOM_LIVE"]);
+  for (const [key, value] of Object.entries(fakePi)) {
+    assert.ok(allowedFixtureOptions.has(key) && typeof value === "string", `Unsupported fixture option: ${key}`);
+  }
+  assert.ok(settings && typeof settings === "object" && !Array.isArray(settings), "Fixture settings must be an object");
   const root = await mkdtemp(join(tmpdir(), "pi-overhaul-baseline-"));
   let child;
   try {
@@ -70,7 +75,7 @@ export async function startFixture(request) {
     await mkdir(project);
     await mkdir(join(agent, "themes"), { recursive: true });
     await mkdir(join(root, "home"));
-    await writeFile(join(root, "settings.json"), "{}\n");
+    await writeFile(join(root, "settings.json"), `${JSON.stringify(settings)}\n`);
     await writeFile(join(project, "README.md"), "# Baseline project\n\nFixed project context.\n");
     await writeFile(join(project, "baseline-runner.mjs"), 'console.log("BASELINE RUNNER OUTPUT");\n');
     for (let index = 0; index < 120; index += 1) {
@@ -89,11 +94,12 @@ export async function startFixture(request) {
     const port = await freePort();
     const baseURL = `http://127.0.0.1:${port}`;
     let output = "";
+    const fixtureEnv = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("PI_") && !key.startsWith("FAKE_PI_")));
     child = spawn(process.execPath, [join(packageRoot, "bin/pi-webui.mjs"), "--cwd", project, "--host", "127.0.0.1", "--port", String(port), "--pi", join(packageRoot, "tests/fixtures/fake-pi.mjs")], {
       detached: true,
       stdio: ["ignore", "pipe", "pipe"],
       env: {
-        ...process.env,
+        ...fixtureEnv,
         NODE_ENV: "test",
         HOME: join(root, "home"),
         XDG_CONFIG_HOME: join(root, "config"),
@@ -108,6 +114,7 @@ export async function startFixture(request) {
         FAKE_PI_CONTINUITY_MODE: "1",
         FAKE_PI_VOICE_SCRIPTS: "1",
         FAKE_PI_LOG_FILE: join(root, "fake-pi.jsonl"),
+        ...fakePi,
       },
     });
     child.stdout.on("data", (chunk) => { output = (output + chunk).slice(-32_000); });

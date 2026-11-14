@@ -465,3 +465,23 @@ Parent integration correction: moved the inventory test from the npm-shipped top
 The JSON intentionally hashes the current canonical plan; regenerate after plan/source changes and inspect classifications. The source scanner remains evidence tooling, not the runtime action registry. W0-B measurements and integrated review are still pending. No production application code has changed.
 
 Parent W0-A verification: all 10 relocated inventory tests passed; regeneration/check mode and whitespace checks passed. `npm pack --dry-run --json` confirmed repository-only inventory tooling is excluded from the package. No runtime or dependency change was needed.
+
+
+### W0-B integration and remaining baseline work
+
+Integrated `eb84cd3867d91ffc40c9d7020b6831c345dc34a2`. The parent inspected the six-file diff, source-isolated fixture, metrics, raw-data definitions and representative desktop/tablet screenshots. The accepted 42 screenshots were copied into the integration checkout's ignored `pi-package-webui/test-results/overhaul-baseline/run-2026-11-14T20-17-31-610Z/`. Original performance samples and reference JSON remain unchanged.
+
+Parent fixes: keep repository-only baseline modules under `scripts/browser/` and point the dedicated config there, excluding them from ordinary discovery/npm packaging; clear inherited `PI_*`/`FAKE_PI_*` state overrides before the fixture sets its own temporary configuration. Neither changes production source.
+
+BUG-002: pre-existing tablet-v2 clipping at 768×1024. The layout begins at x=112 but remains 768px wide; the attachment control at x=823–863 is clipped. Parent screenshot inspection confirms content leaves the viewport. Major severity; assign to W3 layout owner. Legacy tablet remains available. Original source remains unchanged for baseline captures. Document-overflow=0 must not be treated as proof that mandatory controls fit.
+
+W0 still lacks representative companion-enabled/resource/model paths, long transcript/large file observations, split/left/right/both arrangements, and keyboard-constrained/zoom layout evidence. Supplement those against unchanged source before accepting W0. Real-device behavior remains a W7 verification limitation rather than something Chromium emulation can prove. No complete W0 acceptance is claimed.
+
+
+### Supplemental W0 ownership
+
+The parent extends the isolated fixture with `startFixture(request, {fakePi, settings})`: `settings` is serialized only to the temporary fixture file; `fakePi` permits only string-valued `FAKE_PI_TRANSCRIPT_JSON`, `FAKE_PI_GUIDED_GIT_ACTIVATION`, `FAKE_PI_STATS_PROMPT_CONTEXT`, and `FAKE_PI_INTERCOM_LIVE`. All other inherited Pi/fixture overrides remain removed. Existing call sites are unchanged.
+
+Two dependency-independent Sol workers may now run against this integrated fixture in isolated checkouts. W0-C owns only `scripts/browser/overhaul-layout-baseline.spec.mjs`, `playwright.overhaul-layout.config.mjs`, `docs/overhaul/layout-baseline.md` and `docs/overhaul/layout-baseline.json`. It captures Classic variants/split and zoom/keyboard-constrained layout. W0-D owns only `scripts/browser/overhaul-capability-baseline.spec.mjs`, `playwright.overhaul-capability.config.mjs`, `docs/overhaul/capability-browser-baseline.md` and `docs/overhaul/capability-browser-baseline.json`. It captures populated companion/model/resource paths and long transcript/file behavior. Both use the current fixture unchanged, write screenshots under ignored `test-results/overhaul-baseline/`, preserve the frozen reference/budgets, and stop on an interface change outside this boundary. Unique handoffs are `handoffs/webui-overhaul-w0-c.md` and `handoffs/webui-overhaul-w0-d.md`.
+
+Production source remains at the original baseline. Real OS keyboard and native-device checks are not implied by viewport simulations. These workers add missing evidence; they do not fix product defects or weaken release gates. Integrated W0 review begins after their evidence is inspected and combined.
