@@ -208,3 +208,108 @@ test("invalid construction fails before installing a listener", () => {
   assert.throws(() => createShellHistory({ window }), TypeError);
   assert.equal(listeners.size, 0);
 });
+
+test("focused patches merge with mobile and third-party state without retaining caller objects", () => {
+  const { window, listeners, entries } = fakeWindow();
+  const history = createShellHistory({ window, onPopState() {} });
+  history.write({ state: navigation(), replace: true });
+  for (const destination of ["conversation", "home", "project", "activity", "settings"]) {
+    for (const inspector of [null, "a", "Project:files_1-2", `z${"_".repeat(119)}`]) {
+      const focusedShellState = { destination, inspector };
+      history.write({ state: { focusedShellState } });
+      focusedShellState.destination = "home";
+      assert.deepEqual(window.history.state, {
+        otherFeature: { selected: 3 }, ...navigation(), focusedShellState: { destination, inspector },
+      });
+    }
+  }
+  const focused = { ...window.history.state.focusedShellState };
+  const entryCount = entries.length;
+  history.write({ state: navigation({ route: "sessions" }), replace: true });
+  assert.equal(entries.length, entryCount);
+  assert.deepEqual(window.history.state.focusedShellState, focused, "mobile writes retain focused state");
+  assert.equal(window.history.state.mobileShellState.route, "sessions");
+  assert.deepEqual([...listeners.keys()], ["popstate"]);
+  assert.equal(listeners.get("popstate").size, 1);
+  history.dispose();
+});
+
+test("focused history back forwards the original saved state and URL, then disposal is terminal", () => {
+  const { window, listeners, calls } = fakeWindow();
+  const received = [];
+  const history = createShellHistory({ window, onPopState: (event) => received.push(event) });
+  const focusedShellState = { destination: "conversation", inspector: null };
+  history.write({ state: { ...navigation(), focusedShellState }, replace: true });
+  const originalUrl = window.location.href;
+  history.write({ state: { focusedShellState: { destination: "project", inspector: "files" } },
+    url: "/?view=project&inspector=files&tab=tab_12345678" });
+  history.back();
+  assert.equal(received.length, 1);
+  assert.equal(received[0].state, window.history.state);
+  assert.deepEqual(received[0].state, { otherFeature: { selected: 3 }, ...navigation(), focusedShellState });
+  assert.equal(window.location.href, originalUrl);
+  assert.equal(calls.filter((call) => call.method === "back").length, 1);
+  const listener = [...listeners.get("popstate")][0];
+  history.dispose();
+  history.dispose();
+  listener({ state: { focusedShellState } });
+  assert.equal(received.length, 1, "already queued callback is suppressed after disposal");
+  assert.equal(listeners.get("popstate").size, 0);
+  assert.throws(() => history.write({ state: { focusedShellState } }), /disposed/);
+  assert.throws(() => history.back(), /disposed/);
+});
+
+test("focused deep links preserve mobile identifiers, rollout flags, unknown queries and fragments", () => {
+  const { window } = fakeWindow();
+  const history = createShellHistory({ window, onPopState() {} });
+  const identity = "tab=tab_12345678&run=run_12345678&blocker=blocker_12345678";
+  for (const destination of ["conversation", "home", "project", "activity", "settings"]) {
+    const search = `?view=${destination}&inspector=Project%3Afiles_1-2&mobileRoute=activity&${identity}&embed=split&mobileShell=legacy&tabletShell=v2&shell=classic&custom=a%20b&custom=c`;
+    history.write({ state: { focusedShellState: { destination, inspector: "Project:files_1-2" } },
+      url: `${search}#details` });
+    assert.equal(window.location.href, `https://pi.example/${search}#details`);
+    assert.deepEqual(mobileNavigationTargetFromSearch(new URL(window.location.href).search), {
+      v: 1, route: "activity", tabId: "tab_12345678", runId: "run_12345678", blockerId: "blocker_12345678",
+    });
+    history.write({ state: {}, url: new URL(window.location.href), replace: true });
+    assert.equal(window.location.href, `https://pi.example/${search}#details`);
+  }
+  history.dispose();
+});
+
+test("malformed focused state and queries fail atomically before push or replace", () => {
+  const { window, calls, entries } = fakeWindow();
+  const history = createShellHistory({ window, onPopState() {} });
+  const focused = { destination: "project", inspector: "files" };
+  const invalidFocused = [
+    undefined, null, [], "project", {}, { destination: "project" }, { inspector: null },
+    { ...focused, destination: "chat" }, { ...focused, destination: "sessions" },
+    { ...focused, destination: "Settings" }, { ...focused, destination: null },
+    { ...focused, inspector: undefined }, { ...focused, inspector: "" },
+    { ...focused, inspector: 1 }, { ...focused, inspector: {} },
+    { ...focused, inspector: "a\n" }, { ...focused, inspector: "private title" },
+    { ...focused, inspector: `a${"b".repeat(120)}` },
+    { ...focused, extra: true }, { ...focused, [Symbol("extra")]: true },
+    Object.assign(Object.create({ destination: "project" }), { inspector: null }),
+  ];
+  const invalidUrls = [
+    "/?view=", "/?view=chat", "/?view=sessions", "/?view=Project", "/?view=project&view=invalid",
+    "/?inspector=", "/?inspector=1files", "/?inspector=private%20title", "/?inspector=files%0A",
+    "/?inspector=%C3%A9", "/?inspector=files&inspector=bad.value", `/?inspector=a${"b".repeat(120)}`,
+    "/?view=project&inspector=files&tab=bad", "/?view=project&mobileRoute=unknown",
+  ];
+  for (const replace of [false, true]) {
+    for (const focusedShellState of invalidFocused) {
+      assert.throws(() => history.write({ state: { ...navigation(), focusedShellState }, replace }), TypeError);
+    }
+    for (const url of invalidUrls) {
+      assert.throws(() => history.write({ state: { focusedShellState: focused }, replace, url }), TypeError, url);
+    }
+    assert.throws(() => history.write({ state: { focusedShellState: focused, session: "private" }, replace }), TypeError);
+  }
+  assert.deepEqual(calls, []);
+  assert.equal(entries.length, 1);
+  assert.deepEqual(window.history.state, { otherFeature: { selected: 3 } });
+  assert.equal(window.location.href, entries[0].href);
+  history.dispose();
+});

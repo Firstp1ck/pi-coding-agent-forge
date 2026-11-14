@@ -9,7 +9,30 @@ function defaultPreferences() {
 function normalizePreferences(value) {
   if (!value || typeof value !== "object" || Array.isArray(value) || value.v !== 1) return null;
   if (value.desktopLayout !== "classic" && value.desktopLayout !== "focused") return null;
-  return { v: 1, desktopLayout: value.desktopLayout };
+  const normalized = { v: 1, desktopLayout: value.desktopLayout };
+  if (Object.hasOwn(value, "navigation")) {
+    if (value.navigation !== "left" && value.navigation !== "top") return null;
+    normalized.navigation = value.navigation;
+  }
+  if (Object.hasOwn(value, "navCollapsed")) {
+    if (typeof value.navCollapsed !== "boolean") return null;
+    normalized.navCollapsed = value.navCollapsed;
+  }
+  if (Object.hasOwn(value, "pinnedActions")) {
+    if (!Array.isArray(value.pinnedActions)) return null;
+    const pins = new Set();
+    for (const id of value.pinnedActions) {
+      if (typeof id !== "string" || /^[a-z][a-z0-9:_-]{0,119}$/i.exec(id)?.[0] !== id) return null;
+      pins.add(id);
+      if (pins.size > 20) return null;
+    }
+    normalized.pinnedActions = [...pins];
+  }
+  if (Object.hasOwn(value, "inspectorWidth")) {
+    if (!Number.isInteger(value.inspectorWidth) || value.inspectorWidth < 240 || value.inspectorWidth > 640) return null;
+    normalized.inspectorWidth = value.inspectorWidth;
+  }
+  return normalized;
 }
 
 /** Read only the preview record. Invalid and future records remain untouched. */
@@ -30,7 +53,7 @@ export function readShellPreferences(storage) {
   return { status: "invalid", value: defaultPreferences() };
 }
 
-/** Explicit writes store only v and desktopLayout; failures never escape to chat. */
+/** Explicit writes store only validated preview fields; failures never escape to chat. */
 export function writeShellPreferences(storage, value) {
   let normalized;
   try {
