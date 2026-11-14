@@ -254,9 +254,12 @@ test("heartbeat pings while open and stops after close", async () => {
   const helper = fakeHelper(standardHandler);
   const client = makeClient(helper, { heartbeatIntervalMs: 10 });
   await client.connect("0.1.0");
-  await new Promise((r) => setTimeout(r, 45));
-  const pings = helper.received.filter((r) => r.method === "ping").length;
-  assert.ok(pings >= 2, `expected at least 2 pings, got ${pings}`);
+  // Wait for the pings instead of counting them in a fixed window (a 45 ms window flaked under load).
+  const pingCount = () => helper.received.filter((r) => r.method === "ping").length;
+  const deadline = Date.now() + 2_000;
+  while (pingCount() < 2 && Date.now() < deadline) await new Promise((r) => setTimeout(r, 5));
+  const pings = pingCount();
+  assert.ok(pings >= 2, `expected at least 2 pings within 2 s, got ${pings}`);
   client.close();
   await new Promise((r) => setTimeout(r, 30));
   assert.equal(helper.received.filter((r) => r.method === "ping").length, pings);

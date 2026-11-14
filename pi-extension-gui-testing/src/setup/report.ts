@@ -38,16 +38,29 @@ export function summarizeReport(report: SetupReport): string {
   return `${label} ${report.backend}: ${report.status} — ${report.message}`;
 }
 
-/** Full plain-text report: header, check table, plan or applied fixes, smoke test, warnings, summary. */
+/** Full plain-text report: header, check table, applied fixes, remaining plan items, smoke test, warnings, summary. */
 export function renderReport(report: SetupReport): string {
   const sections: string[] = [`${report.kind === "setup" ? "GUI testing setup" : "GUI testing doctor"}: ${report.backend} — ${report.status}`];
   if (report.initialResults) sections.push(`Checks before fixes:\n${renderCheckTable(report.initialResults)}`);
   sections.push(`${report.initialResults ? "Checks after fixes" : "Checks"}:\n${renderCheckTable(report.results)}`);
   if (report.applied.length > 0) {
     sections.push(`Fixes applied:\n${report.applied.map((a) => `- ${a.checkId}: ${a.ok ? "ok" : "failed"} (${oneLine(a.observed)})`).join("\n")}`);
-  } else if (report.plan && report.plan.items.length > 0) {
-    const label = report.kind === "doctor" ? "Suggested fixes (doctor never applies them; run /gui-setup)" : "Remediation plan";
-    sections.push(`${label}:\n${formatPlan(report.plan)}`);
+  }
+  // Every plan item not applied yet stays visible with its guidance, also after some fixes ran.
+  const appliedIds = new Set(report.applied.map((a) => a.checkId));
+  const remaining = report.plan?.items.filter((item) => !appliedIds.has(item.checkId)) ?? [];
+  if (report.plan && remaining.length > 0) {
+    const label =
+      report.kind === "doctor" ? "Suggested fixes (doctor never applies them; run /gui-setup)" : report.applied.length > 0 ? "Remaining steps" : "Remediation plan";
+    const automated = remaining.filter((i) => i.automated);
+    sections.push(
+      `${label}:\n${formatPlan({
+        items: remaining,
+        downloadBytes: automated.reduce((sum, i) => sum + (i.remediation.downloadBytes ?? 0), 0),
+        estimatedSeconds: automated.reduce((sum, i) => sum + (i.remediation.estimatedSeconds ?? 0), 0),
+        needsSudo: automated.some((i) => i.remediation.needsSudo === true),
+      })}`,
+    );
   }
   if (report.missingFlags?.length) sections.push(`Missing flags: ${report.missingFlags.join(", ")}`);
   if (report.smoke) sections.push(`Smoke test: ${report.smoke.ok ? "passed" : "failed"} — ${oneLine(report.smoke.observed, 300)}`);

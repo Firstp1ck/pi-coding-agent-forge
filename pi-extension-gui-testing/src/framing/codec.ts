@@ -4,6 +4,7 @@
  * encoded requests out.
  */
 import { randomBytes } from "node:crypto";
+import { ownedSlice } from "./log-event.ts";
 import {
   MAX_LINE_BYTES,
   READY_PREFIX,
@@ -175,7 +176,8 @@ export class DiagnosticBuffer {
 
   /** Adds one line, truncating it and evicting the oldest line when full. */
   add(line: string): void {
-    const text = line.length > this.#maxLineChars ? `${line.slice(0, this.#maxLineChars)}…` : line;
+    // Owned copies: a slice (even of a short line) can keep the whole decoded protocol line alive.
+    const text = line.length > this.#maxLineChars ? `${ownedSlice(line, 0, this.#maxLineChars)}…` : ownedSlice(line);
     this.#lines.push(text);
     if (this.#lines.length > this.#maxLines) this.#lines.shift();
   }

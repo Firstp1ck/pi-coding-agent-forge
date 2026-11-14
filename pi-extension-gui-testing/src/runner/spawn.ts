@@ -30,6 +30,18 @@ export const INHERITED_ENV = [
   "DOCKER_CONFIG",
   "DOCKER_CERT_PATH",
   "DOCKER_TLS_VERIFY",
+  // Windows (Docker Desktop hosts, M1c): the docker CLI finds its config, contexts, and
+  // plugins through these, and Windows programs need SystemRoot. None reaches a desktop session.
+  "USERPROFILE",
+  "APPDATA",
+  "LOCALAPPDATA",
+  "ProgramData",
+  "ProgramFiles",
+  "SystemRoot",
+  "SystemDrive",
+  "TEMP",
+  "TMP",
+  "PATHEXT",
 ] as const;
 
 export interface SpawnRunnerOptions {

@@ -1,0 +1,10 @@
+{
+  "method": "snapshotFull",
+  "response": {
+    "id": 5,
+    "ok": true,
+    "result": {
+      "tree_gz_base64": "H4sIAAAAAAAAA63SwWrDMAwG4FcJ/9mHJE1D8W0MBr2M3UsPDlGbMNc2trK2lL778KB1um4Ulp2EdJA+JK1O8LSBRChkDgFvNUFi49WOIGBikHhR75Q9OQeBxg6mDZAnHCCLXOAIWeYC+77lDrKuBDrqtx1DVvlZILBiCpArkFGNphYCobP73myxPovR+CKN5541ZY3yUwmLRwIBpzwZvmzgRlQmkRtClzUDszXJ9KxtoO+g+g60+LOnuPXMHnjePIWQ7e5I0XKM97iSYuViKvJJS6oSSquGdOK8Ws5cJH11+0k0L6+i2UhUTwLNR39EB06epXFDTD+UHmL+CypK/gW1/gSxFJPMXQMAAA=="
+    }
+  }
+}

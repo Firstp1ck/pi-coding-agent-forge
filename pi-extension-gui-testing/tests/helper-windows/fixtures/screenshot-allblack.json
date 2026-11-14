@@ -1,0 +1,21 @@
+{
+  "method": "screenshot",
+  "response": {
+    "id": 14,
+    "ok": true,
+    "result": {
+      "width": 64,
+      "height": 40,
+      "scale": 1,
+      "png_base64": "iVBORw0KGgoAAAANSUhEUgAAAEAAAAAoCAIAAADBrGu+AAAAHklEQVR4nO3BAQEAAACCIP+vbkhAAQAAAAAAANCRAR4oAAEBKvZdAAAAAElFTkSuQmCC",
+      "sha256": "f6e28ad1753237d42be72be187a88f09a269097eeda24bcf12908db6bd361246",
+      "allBlack": true,
+      "captureId": "c4",
+      "target": "win:0x1002",
+      "origin": {
+        "x": 10,
+        "y": 20
+      }
+    }
+  }
+}

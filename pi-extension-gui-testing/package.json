@@ -1,6 +1,6 @@
 {
   "name": "@firstpick/pi-extension-gui-testing",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Launch, navigate, and screenshot GUI apps in isolated Docker, SSH, or cloud environments so Pi can check its own UI work without touching your desktop.",
   "type": "module",
   "license": "MIT",
@@ -32,7 +32,7 @@
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
-    "test": "node --experimental-strip-types --test \"tests/contracts/**/*.test.mjs\" \"tests/unit/**/*.test.mjs\"",
+    "test": "node --experimental-strip-types --test \"tests/contracts/**/*.test.mjs\" \"tests/unit/**/*.test.mjs\" \"tests/helper-windows/*.test.mjs\"",
     "test:e2e": "node --experimental-strip-types --test --test-concurrency=1",
     "check": "npm run typecheck && npm test"
   },
@@ -51,6 +51,8 @@
     "index.ts",
     "src",
     "helpers",
+    "!helpers/**/__pycache__",
+    "!helpers/**/*.pyc",
     "testapps",
     "skills",
     "README.md",

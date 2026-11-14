@@ -9,12 +9,12 @@ import os
 import platform
 import time
 
-from . import HELPER_VERSION, PROTOCOL_VERSION, capture, inputs, procs, x11
+from . import HELPER_VERSION, PROTOCOL_VERSION, capture, deps, inputs, procs, x11
 from .dispatch import ProtocolError
 
 ACTIONS = ("click", "double_click", "right_click", "type", "key", "scroll", "set_value")
 WAIT_KINDS = ("window", "text", "ref", "idle")
-CAPABILITIES = ["launch", "wait", "snapshot", "snapshotFull", "screenshot", "act", "windows", "exec", "a11y-atspi"]
+CAPABILITIES = ["launch", "wait", "snapshot", "snapshotFull", "screenshot", "act", "windows", "exec", "deps", "a11y-atspi"]
 
 DEFAULT_CWD = "/workspace"
 LAUNCH_WINDOW_WAIT_S = 20.0
@@ -64,11 +64,32 @@ def _env(params):
     return env
 
 
-def _cwd(params):
-    cwd = _str(params, "cwd", default=DEFAULT_CWD) or DEFAULT_CWD
+def _cwd(params, default=DEFAULT_CWD):
+    cwd = _str(params, "cwd", default=default) or default
     if not os.path.isdir(cwd):
         raise ProtocolError("NOT_FOUND", "cwd %s does not exist in the session" % cwd)
     return cwd
+
+
+def _os_release():
+    """``ID VERSION_ID`` from ``/etc/os-release`` (empty when unreadable)."""
+    values = {}
+    try:
+        with open("/etc/os-release", encoding="utf-8", errors="replace") as handle:
+            for line in handle.read(16384).splitlines():
+                key, sep, value = line.partition("=")
+                if sep and key in ("ID", "VERSION_ID"):
+                    values[key] = value.strip().strip('"')[:64]
+    except OSError:
+        pass
+    return " ".join(v for v in (values.get("ID"), values.get("VERSION_ID")) if v)
+
+
+def platform_fingerprint():
+    """What installed dependencies depend on: OS, machine, libc, distribution, Python (bounded)."""
+    libc = " ".join(v for v in platform.libc_ver() if v)
+    parts = ["%s %s" % (platform.system(), platform.machine()), libc, _os_release(), "python %s" % platform.python_version()]
+    return "; ".join(p for p in parts if p)[:256]
 
 
 def is_chromium_like(cmd, args):
@@ -97,6 +118,11 @@ class Handlers:
         self._snapshots = None
         self._capture_counter = 0
         self._capture = None
+        self._deps = deps.Transfers(
+            getattr(session, "deps_root", lambda: None),
+            tmp_dir=getattr(session, "transfer_tmp_dir", None),
+            on_unpacked=getattr(session, "deps_unpacked", None),
+        )
 
     @property
     def env(self):
@@ -114,15 +140,28 @@ class Handlers:
             "act": self.act,
             "windows": self.windows,
             "exec": self.exec_,
+            "depsPack": self._deps.pack,
+            "depsRead": self._deps.read,
+            "depsReceive": self._deps.receive,
+            "depsWrite": self._deps.write,
+            "depsUnpack": self._deps.unpack,
+            "depsDiscard": self._deps.discard,
             "stop": self.stop,
         }
 
     def _store(self):
         if self._snapshots is None:
+            if not getattr(self.session, "a11y_available", True):
+                self._snapshots = NoA11yStore()
+                return self._snapshots
             from . import a11y  # needs the private bus in the environment first
 
             self._snapshots = a11y.SnapshotStore()
         return self._snapshots
+
+    @property
+    def _default_cwd(self):
+        return getattr(self.session, "default_cwd", DEFAULT_CWD)
 
     # ----- session -------------------------------------------------------
 
@@ -136,13 +175,22 @@ class Handlers:
             "helperVersion": HELPER_VERSION,
             "os": "linux",
             "arch": platform.machine(),
-            "capabilities": list(CAPABILITIES),
+            "capabilities": [c for c in CAPABILITIES if self._has_capability(c)],
+            "platform": platform_fingerprint(),
         }
+
+    def _has_capability(self, name):
+        if name == "a11y-atspi":
+            return getattr(self.session, "a11y_available", True)
+        if name == "deps":
+            return bool(getattr(self.session, "deps_root", lambda: None)())
+        return True
 
     def ping(self, ctx, params):
         return {"ok": True}
 
     def stop(self, ctx, params):
+        self._deps.close()
         leftovers = self.session.teardown()
         ctx.after = lambda: self._request_exit("stop")
         return {"ok": not leftovers, "leftovers": leftovers}
@@ -150,10 +198,14 @@ class Handlers:
     # ----- processes -----------------------------------------------------
 
     def exec_(self, ctx, params):
+        host = getattr(self.session, "host", None)
+        if host is not None and not host.allow_exec:
+            raise ProtocolError("BAD_REQUEST", "exec is disabled in host mode: this backend never runs setup commands "
+                                "(the client did not set PI_GUI_ALLOW_EXEC=1)")
         cmd = _str(params, "cmd", required=True)
         timeout_ms = _int(params, "timeoutMs", default=DEFAULT_EXEC_TIMEOUT_MS, minimum=1)
         env = _env(params)
-        cwd = _cwd(params)
+        cwd = _cwd(params, self._default_cwd)
         self.session.ensure_venv()
         start = time.monotonic()
         child = self.session.spawn_child(["sh", "-c", cmd], env, cwd, "setup")
@@ -184,7 +236,7 @@ class Handlers:
         if not isinstance(args, list) or not all(isinstance(a, str) for a in args):
             raise ProtocolError("BAD_REQUEST", "args must be an array of strings")
         env = _env(params)
-        cwd = _cwd(params)
+        cwd = _cwd(params, self._default_cwd)
         try:
             self.session.ensure_venv()
         except ProtocolError:
@@ -238,9 +290,9 @@ class Handlers:
             if info is None:
                 raise ProtocolError("NOT_FOUND", "window %s is gone or not visible" % ref)
             return info["bounds"]
+        acc, _, offset = self._store().resolve(ref)  # NOT_FOUND first on a host without AT-SPI
         from . import a11y
 
-        acc, _, offset = self._store().resolve(ref)
         bounds = a11y.live_bounds(acc, offset)
         if bounds is None:
             raise ProtocolError("NOT_FOUND", "element %s has no on-screen bounds" % ref)
@@ -324,9 +376,9 @@ class Handlers:
         return {"ok": True}
 
     def _act_element(self, action, ref, text, env):
+        acc, _, offset = self._store().resolve(ref)
         from . import a11y
 
-        acc, _, offset = self._store().resolve(ref)
         bounds = a11y.live_bounds(acc, offset)
         point = _center(bounds) if bounds is not None else None
         if action == "set_value":
@@ -372,18 +424,20 @@ class Handlers:
                 return False
             return window_probe
         if kind == "text":
+            if not getattr(self.session, "a11y_available", True):
+                return lambda: False
             from . import a11y
 
             return lambda: a11y.find_text(value, check=ctx.check)
         if kind == "ref":
-            from . import a11y
-
             store = self._store()
 
             def ref_probe():
                 if x11.parse_window_ref(value) is not None:
                     return x11.window_info(x11.parse_window_ref(value), env) is not None
                 acc, _, offset = store.resolve(value)
+                from . import a11y
+
                 states = a11y.describe(acc, offset)["states"]
                 return "showing" in states
             return ref_probe
@@ -397,6 +451,30 @@ class Handlers:
             recent = hashes[-_IDLE_STABLE_SAMPLES:]
             return len(recent) == _IDLE_STABLE_SAMPLES and len(set(recent)) == 1
         return idle_probe
+
+
+class NoA11yStore:
+    """Snapshots on a host without AT-SPI: always ``coverage: "none"`` and no nodes."""
+
+    def __init__(self):
+        self._counter = 0
+        self._latest = None
+
+    def take(self, max_nodes, windows, check=None):
+        self._counter += 1
+        self._latest = "s%d" % self._counter
+        return {"snapshotId": self._latest, "coverage": "none", "tree": [], "truncated": False}
+
+    def full(self, snapshot_id):
+        import base64
+        import gzip
+
+        if snapshot_id != self._latest:
+            raise ProtocolError("STALE_REF", "unknown or stale snapshotId %r, take a new snapshot" % snapshot_id)
+        return {"tree_gz_base64": base64.b64encode(gzip.compress(b"[]", mtime=0)).decode("ascii")}
+
+    def resolve(self, ref):
+        raise ProtocolError("NOT_FOUND", "no accessibility tree on this host (AT-SPI is not installed); use screenshots and coordinates")
 
 
 def _center(bounds):

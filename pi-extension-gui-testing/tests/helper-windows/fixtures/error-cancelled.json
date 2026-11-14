@@ -1,0 +1,11 @@
+{
+  "method": "windows",
+  "response": {
+    "id": 2,
+    "ok": false,
+    "error": {
+      "code": "CANCELLED",
+      "message": "request cancelled before it started"
+    }
+  }
+}

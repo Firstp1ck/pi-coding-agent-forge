@@ -36,9 +36,9 @@ export function notSetUpMessage(backend: BackendId): string {
   return `backend "${backend}" is not set up; ask the user to run /gui-setup ${backend}`;
 }
 
-/** Error text for a backend id that exists in the contract but not in this build. */
-export function notAvailableMessage(backend: string): string {
-  return `backend "${backend}" is not available yet; available: ${IMPLEMENTED_BACKENDS.join(", ")}`;
+/** Error text for a backend id that exists in the contract but not in this build (or not in `available`). */
+export function notAvailableMessage(backend: string, available: readonly BackendId[] = IMPLEMENTED_BACKENDS): string {
+  return `backend "${backend}" is not available yet; available: ${available.join(", ")}`;
 }
 
 /**

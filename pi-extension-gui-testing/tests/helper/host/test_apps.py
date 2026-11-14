@@ -60,7 +60,7 @@ class Apps(unittest.TestCase):
         try:
             with Helper("w2-test-app-%s-%d" % (app, os.getpid()), network=network, shm_size=shm_size,
                         mounts=[mount]) as h:
-                h.call("hello", {"protocol": 1, "packageVersion": "0.1.0"})
+                h.call("hello", {"protocol": 2, "packageVersion": "0.1.0"})
                 for cmd in cfg.get("setup", []):
                     started = time.monotonic()
                     result = h.call("exec", {"cmd": cmd, "cwd": "/workspace", "env": {}, "timeoutMs": 900000}, timeout=960)

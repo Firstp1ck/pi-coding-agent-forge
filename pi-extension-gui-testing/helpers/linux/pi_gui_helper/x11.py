@@ -60,14 +60,43 @@ _ID_RE = re.compile(r"0x[0-9a-fA-F]+")
 
 
 def client_window_ids(env):
-    """Managed top-level windows in stacking order, from openbox's ``_NET_CLIENT_LIST``."""
+    """Managed top-level windows in stacking order, from openbox's ``_NET_CLIENT_LIST``.
+
+    Without a window manager (host mode may run without openbox) the atom does
+    not exist; then the mapped, non-override-redirect children of the root
+    window are the top-level windows.
+    """
     try:
         out = run_tool(["xprop", "-root", "_NET_CLIENT_LIST"], env).decode("utf-8", "replace")
     except ProtocolError:
         return []
     if "not found" in out or "no such atom" in out:
-        return []
+        return unmanaged_toplevels(env)
     return [int(match, 16) for match in _ID_RE.findall(out.split("=", 1)[-1])]
+
+
+_CHILD_RE = re.compile(r"^\s+(0x[0-9a-fA-F]+)\s")
+
+
+def unmanaged_toplevels(env):
+    """Mapped, non-override-redirect root children (top-level windows when no WM runs)."""
+    try:
+        out = run_tool(["xwininfo", "-root", "-children"], env).decode("utf-8", "replace")
+    except ProtocolError:
+        return []
+    found = []
+    for line in out.splitlines():
+        match = _CHILD_RE.match(line)
+        if not match:
+            continue
+        xid = int(match.group(1), 16)
+        try:
+            text = run_tool(["xwininfo", "-id", "0x%x" % xid], env).decode("utf-8", "replace")
+        except ProtocolError:
+            continue
+        if "Map State: IsViewable" in text and "Override Redirect State: no" in text:
+            found.append(xid)
+    return found
 
 
 _GEOM_KEYS = {

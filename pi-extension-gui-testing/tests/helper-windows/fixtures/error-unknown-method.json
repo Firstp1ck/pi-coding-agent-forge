@@ -1,0 +1,11 @@
+{
+  "method": "teleport",
+  "response": {
+    "id": 35,
+    "ok": false,
+    "error": {
+      "code": "BAD_REQUEST",
+      "message": "unknown method 'teleport'"
+    }
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "method": "screenshot",
+  "response": {
+    "id": 3,
+    "ok": true,
+    "result": {
+      "width": 64,
+      "height": 40,
+      "scale": 1,
+      "png_base64": "iVBORw0KGgoAAAANSUhEUgAAAEAAAAAoCAIAAADBrGu+AAABe0lEQVR4nGNgYOcTlVHWMrSwd/MNiU7KLCiva+2ZPGvhivXb9h45fenmg+fvvv5h5hKUkFfTNbF28gwIj0vNKa5q7OifNnfJ6k07Dxw/d/XO41cff/xn4xWRVtI0MLdz9QmOSszIL6tt6Z40c8HydVv3HD518cb9Z2+//GbiFBCXU9UxtnL08A+LTckuqmxo75s6Z/GqjTv2Hzt75fajlx++/2PlEZZS1NA3s3XxDopMSM8rrWnumjhj/rK1W3YfOnnh+r2nbz7/YuTgF5NV0TayZHBw9wuNSc4qrKhv650ye9HKDdv3HT1z+dbDF++//WXhFpJUUNcztXH2CoyIT8stqW7qnDB93tI1m3cdPHH+2t0nrz/9HOgAYKA0BAY6ABgGOglQHAADnQRG88CAJ4HRPDCaB0brgdF6YLQeGG0LjbaFRttCo/2B0f7AaH9gtE882ice7ROPjguNjguNjguNjo2Ojo2Ojo2Ozg+Mzg+Mzg+MzpGVj7A5MgBae/HT32IArwAAAABJRU5ErkJggg==",
+      "sha256": "b6220f3d250b3d7fbd21fd9686ce4824ff3a458aca644376e351dbc573b873ba",
+      "captureId": "c2",
+      "target": "win:0x1001",
+      "origin": {
+        "x": 10,
+        "y": 20
+      }
+    }
+  }
+}

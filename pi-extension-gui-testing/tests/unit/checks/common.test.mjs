@@ -30,11 +30,13 @@ test("pi.version passes from 1.4.0 and records the version as a fact", async () 
   assert.equal((await piVersionCheck().run(ctx)).status, "pass", "the installed Pi is ≥ 1.4.0");
 });
 
-test("host.os: docker-linux only on Linux in M1; other backends not available", async () => {
+test("host.os: docker-linux on Linux, and (M1c) on macOS and Windows with Docker Desktop; other hosts and backends refused", async () => {
   assert.equal((await hostOsCheck("docker-linux", "linux").run(ctx)).status, "pass");
-  const mac = await hostOsCheck("docker-linux", "darwin").run(ctx);
-  assert.equal(mac.status, "fail");
-  assert.match(mac.observed, /Docker Desktop hosts .* are planned/);
+  assert.equal((await hostOsCheck("docker-linux", "darwin").run(ctx)).status, "pass");
+  assert.equal((await hostOsCheck("docker-linux", "win32").run(ctx)).status, "pass");
+  const bsd = await hostOsCheck("docker-linux", "freebsd").run(ctx);
+  assert.equal(bsd.status, "fail");
+  assert.match(bsd.observed, /freebsd: docker-linux runs on Linux \(Docker Engine\), macOS, and Windows \(Docker Desktop with Linux containers\)/);
   assert.match((await hostOsCheck("cua", "linux").run(ctx)).observed, /not available yet/);
 });
 

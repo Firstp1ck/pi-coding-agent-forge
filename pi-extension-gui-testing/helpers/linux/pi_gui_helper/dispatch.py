@@ -24,6 +24,8 @@ ERROR_CODES = (
     "CANCELLED",
     "BAD_REQUEST",
     "INTERNAL",
+    "ARCHIVE_REJECTED",
+    "TOO_LARGE",
 )
 
 BYPASS_METHODS = ("ping", "cancel")

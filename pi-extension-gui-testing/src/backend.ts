@@ -3,7 +3,7 @@
  * audits its own footprint. Tools never talk to Docker or a helper directly.
  */
 import type { Check } from "./checks/types.ts";
-import type { BackendId, ResolvedConfig } from "./config/types.ts";
+import type { BackendId, ResolvedConfig, TargetOs } from "./config/types.ts";
 import type { ErrorCode, Leftover, LogEvent, Method, Params, Result } from "./protocol.ts";
 
 export interface SessionStartOptions {
@@ -24,6 +24,20 @@ export interface SessionStartOptions {
   /** Progress text for `ctx.ui.setStatus`. */
   onStatus?(text: string): void;
   signal: AbortSignal;
+  /**
+   * Optional (added after M1). Receives the argv that force-removes the
+   * session's resources, before the backend creates them; the caller's
+   * synchronous exit handler runs it while the start is pending. The latest
+   * call wins.
+   */
+  onExitCleanup?(argv: string[]): void;
+  /**
+   * Optional (added with the Windows backends). Target OS of the app this
+   * session runs, as `gui_launch` chose it (its `target`, else the first of
+   * the project's `targets`). Backends with one target may ignore it; when
+   * absent, a backend uses the first of `config.shared.targets`.
+   */
+  target?: TargetOs;
 }
 
 /** Summary of a workspace sync (`copy` mode, remote backends). */
@@ -33,12 +47,40 @@ export interface SyncSummary {
   excluded: number;
 }
 
+/** Outcome of the dependency cache for one session start (spec §4.8), shown by `gui_launch`. */
+export interface DepsCacheReport {
+  /** `hit`: restored, `setup` skipped; `miss`: `setup` ran (and maybe was stored); `off`: the cache was not used. */
+  state: "hit" | "miss" | "off";
+  /** One user-facing line, e.g. "hit: restored 1 204 entries (38.2 MB); setup skipped". */
+  detail: string;
+  /** First 12 hex characters of the cache key. */
+  key?: string;
+  /** Whether a miss was stored in the cache. */
+  stored?: boolean;
+}
+
 export interface Session {
   readonly id: string;
   readonly backend: BackendId;
   /** Target architecture reported by `hello`, e.g. `x86_64`. */
   readonly arch: string;
   readonly sync?: SyncSummary;
+  /** Optional (added after M1). Workspace path as the helper sees it; default `/workspace`. */
+  readonly workspacePath?: string;
+  /**
+   * Optional (added after M1). What the workspace is, for the `gui_launch`
+   * result, e.g. "the project directory itself (writable)". Default: "read-only
+   * mount", or "writable filtered copy" in `copy` mode.
+   */
+  readonly workspaceDescription?: string;
+  /** Optional (added after M1). Launch warnings of the backend (e.g. skipped `setup` commands), shown in the `gui_launch` result. */
+  readonly warnings?: readonly string[];
+  /** Optional (M1b). `hello.platform` of the helper. */
+  readonly platform?: string;
+  /** Optional (M1b). `hello.capabilities` of the helper. */
+  readonly capabilities?: readonly string[];
+  /** Optional (M1b). What the dependency cache did at start; absent when there is no `setup`. */
+  readonly depsCache?: DepsCacheReport;
   /**
    * Sends one protocol request. Requests other than `ping` and `cancel` run
    * sequentially per session. Rejects with a {@link SessionError} carrying the
@@ -49,6 +91,11 @@ export interface Session {
   stop(): Promise<Leftover[]>;
   /** Read-only audit of this session's resources only (spec §7a.4). */
   auditFootprint(): Promise<Leftover[]>;
+  /**
+   * Optional (added after M1). Argv the synchronous exit handler runs when Pi
+   * exits before this session stopped (bounded, no shell); `[]` means nothing.
+   */
+  forceRemoveArgv?(): string[];
 }
 
 /** Failure of a session request; `code` is a protocol {@link ErrorCode} or a client-only code such as `CLOSED`. */

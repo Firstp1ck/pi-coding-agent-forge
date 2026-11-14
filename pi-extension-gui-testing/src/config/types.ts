@@ -16,8 +16,16 @@ export type BackendId =
   | "docker-windows"
   | "local-windows";
 
+/**
+ * Ids of the backends implemented in this build, in picker order. Each needs
+ * an entry in `src/backends/registry.ts`; the type check fails when the two differ.
+ */
+export const IMPLEMENTED_BACKEND_IDS = ["docker-linux", "local-linux", "remote-linux", "remote-linux-docker", "cua", "local-windows", "docker-windows"] as const satisfies readonly BackendId[];
+
+export type ImplementedBackendId = (typeof IMPLEMENTED_BACKEND_IDS)[number];
+
 /** Backends implemented in the current build. Others are rejected with "not available yet". */
-export const IMPLEMENTED_BACKENDS: readonly BackendId[] = ["docker-linux"];
+export const IMPLEMENTED_BACKENDS: readonly BackendId[] = IMPLEMENTED_BACKEND_IDS;
 
 export type WorkspaceMode = "mount" | "copy";
 export type NetworkMode = "default" | "none";
@@ -48,15 +56,32 @@ export interface UsageCheckConfig {
 }
 
 /** Fields allowed in `.pi/gui.local.json` and the global config. */
+/** `remote` in `.pi/gui.local.json` and the global config (remote backends, spec §4.2a). */
+export interface RemoteConfig {
+  /** SSH alias or `user@host` (never resolved values). */
+  host?: string;
+  /** `remote-linux-docker`: remove the base image from the host after every session (spec §7a.1, Q7). Default `false`. */
+  purgeTooling?: boolean;
+}
+
+/** `depsCache` in `.pi/gui.local.json` and the global config: the client-side dependency cache (spec §4.8). */
+export interface DepsCacheConfig {
+  /** Default `true`. `false`: `setup` runs every session and nothing is stored. */
+  enabled?: boolean;
+  /** Size limit of the whole cache in GB (1024³ bytes), shared by all projects. Default 5; least recently used entries go first. */
+  maxSizeGB?: number;
+}
+
 export interface PersonalConfig {
   backend?: BackendId;
-  remote?: { host?: string };
+  remote?: RemoteConfig;
+  depsCache?: DepsCacheConfig;
   keepSandbox?: boolean;
   limits?: Limits;
   usageCheck?: UsageCheckConfig;
 }
 
-export const PERSONAL_FIELDS = ["backend", "remote", "keepSandbox", "limits", "usageCheck"] as const;
+export const PERSONAL_FIELDS = ["backend", "remote", "depsCache", "keepSandbox", "limits", "usageCheck"] as const;
 
 /** Verified state of one backend, persisted after a successful setup or doctor run. */
 export interface VerifiedBackend {
@@ -83,6 +108,7 @@ export const DEFAULTS = {
   keepSandbox: false,
   limits: { maxConcurrentSessions: 2, idleTimeoutMinutes: 15 },
   usageCheck: { warnSessionCostUsd: 1, warnDailyCostUsd: 5 },
+  depsCache: { enabled: true, maxSizeGB: 5 },
 } as const;
 
 export const PROJECT_SHARED_FILE = ".pi/gui.json";
@@ -101,7 +127,9 @@ export interface ResolvedConfig {
   limits: Required<Limits>;
   usageCheck: Required<UsageCheckConfig>;
   keepSandbox: boolean;
-  remote?: { host?: string };
+  remote?: RemoteConfig;
+  /** Resolved `depsCache` (always set by `resolveConfig`; optional for hand-built configs, which get the defaults). */
+  depsCache?: { enabled: boolean; maxBytes: number };
   /** Human-readable warnings, e.g. personal fields ignored in `.pi/gui.json`. */
   warnings: string[];
 }
