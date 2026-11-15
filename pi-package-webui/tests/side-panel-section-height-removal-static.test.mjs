@@ -28,7 +28,7 @@ assert.match(app, /const UI_LAYOUT_SIDE_PANEL_FIELDS = \["placement", "sectionLa
 assert.match(app, /function clearRemovedSidePanelSectionHeightState\(\)[\s\S]*localStorage\.removeItem\(REMOVED_SIDE_PANEL_SECTION_HEIGHT_STORAGE_KEY\)[\s\S]*record\.field === "sidePanel" && record\.subfield === "sectionHeights"/, "startup should remove the retired cache and pending mutations");
 assert.match(app, /clearRemovedSidePanelSectionHeightState\(\);\s*restoreDurableUiLayoutPendingJournal\(\);/, "retired height state should be cleared before pending layout restoration");
 assert.match(html, /styles\.css\?v=159/, "removing section resize styles should advance the stylesheet revision");
-assert.match(html, /app\.js\?v=199/, "removing section resize behavior should advance the app revision");
-assert.match(serviceWorker, /const CACHE_NAME = "pi-webui-pwa-v170"/, "removing browser assets should advance the PWA cache identity");
+assert.match(html, /app\.js\?v=200/, "removing section resize behavior should advance the app revision");
+assert.match(serviceWorker, /const CACHE_NAME = "pi-webui-pwa-v171"/, "removing browser assets should advance the PWA cache identity");
 
 console.log("side-panel-section-height-removal-static.test.mjs passed");

@@ -41274,7 +41274,7 @@ async function requestSessionSummaryGeneration(tabId, { refresh = false } = {}) 
   if (pending && isAliveProjectTarget(pending)) return;
   const previous = sessionSummaryStateForTab(tabId);
   sessionSummaryGenerationByTab.set(tabId, target);
-  updateSessionSummaryForTab(tabId, {
+  const generatingState = updateSessionSummaryForTab(tabId, {
     version: SESSION_SUMMARY_PROTOCOL_VERSION,
     status: "generating",
     configured: true,
@@ -41302,7 +41302,12 @@ async function requestSessionSummaryGeneration(tabId, { refresh = false } = {}) 
     });
     throw error;
   } finally {
-    if (sessionSummaryGenerationByTab.get(tabId) === target) sessionSummaryGenerationByTab.delete(tabId);
+    if (sessionSummaryGenerationByTab.get(tabId) === target) {
+      sessionSummaryGenerationByTab.delete(tabId);
+      if (!isAliveProjectTarget(target) && sessionSummaryByTab.get(tabId) === generatingState) {
+        sessionSummaryByTab.delete(tabId);
+      }
+    }
     renderSessionSummaryControls();
     scheduleTabsRender();
     if (sessionSummaryOverlayTabId === tabId) renderSessionSummaryOverlay();
