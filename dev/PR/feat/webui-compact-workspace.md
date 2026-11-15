@@ -85,7 +85,7 @@ The follow-up live audits, delegated fixes and independent reviews used GPT-6.1 
 - More/Send stay compact. Secondary actions occupy their own row, including minimized workflow controls. Short-window suggestions and nested menus retain reachable controls.
 - The full model catalog groups by provider, then explicit release date newest first with alphabetical fallback for undated entries. Wrapped provider headings cannot cover keyboard-selected models; saved scoped-model order is unchanged.
 
-Validation for this addition: all 254 package test files passed before the final CSS-only heading correction. The correction passed all eight model selection/hierarchy browser cases, 31 checks across 27 affected static files, inventory validation, and PWA181 offline/online recovery. The integrated run also passed 60 browser cases and 27 composer cases. These are affected-feature checks, not a new complete browser-suite or performance run. Final model review is pending; Settings, composer, Activity and sidebar findings are resolved.
+Validation for this addition: all 254 package test files passed before the final CSS-only heading correction. The correction passed all eight model selection/hierarchy browser cases, 31 checks across 27 affected static files, inventory validation, and PWA181 offline/online recovery. The integrated run also passed 60 browser cases and 27 composer cases. These are affected-feature checks, not a new complete browser-suite or performance run. Sol/high reviews are complete, with at most two rounds per unit. All accepted findings are resolved; the final model recheck passed five Chromium cases.
 
 <details open>
 <summary>Latest controls with disposable test data</summary>
