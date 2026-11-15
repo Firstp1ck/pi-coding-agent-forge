@@ -68,6 +68,24 @@ The complete Chromium command used a local wrapper of `playwright.config.mjs` se
 
 ## Operational limits
 
+### Terra live polish pass
+
+The follow-up pass uses GPT-6.1 Terra at high reasoning effort, with isolated fake-Pi servers and disposable Git repositories. The original W0-W7 results above are historical; follow-up acceptance is still in progress.
+
+| Live finding | Correction |
+| --- | --- |
+| New-tab choices opened above the viewport | The compact menu chooses an available direction and stays within the viewport during scrolling and resizing. |
+| Feature summaries claimed everything was registered despite registration-needed cards | Summary, accessible labels and tooltips explain excluded states. Installation eligibility and confirmation remain unchanged. |
+| The phone Control Deck button covered a file action | File actions wrap beneath the title, with room reserved for the deck control. |
+| Directory-picker cancellation lost focus or let an earlier response reach a reopened picker | Loading has an enabled focus target; cancellation aborts the read and restores a valid caller. Picker identity rejects late results, including after reopen. Footer callers retain their control key through redraws. |
+| Tag confirmation omitted the selected repository | Confirmation uses the authoritative root already loaded for that section, preserving the captured request target. |
+
+Six browser specs retain the live regressions and workflow checks. These exercise real disposable Git staging, stash, tag, branch and worktree operations, runner configuration and stdin, queue behavior, session actions, menu reachability and picker keyboard/error handling. The background decision fixture emits through fake Pi and the real server so attention discovery and response targeting are tested together. Fork, tree and export responses are simulated where fake Pi lacks upstream behavior; a synthetic decision title does not establish real workflow-provider integration.
+
+Audits distinguish direct preview checks, automated browser scenarios and source-only inspection. They do not establish exhaustive coverage of every control and state. Live installed companions, remote/PIN combinations, browser notification permission/click behavior, provider account changes, voice downloads and hardware, real updates and publishing remain unverified. No production install or configuration mutation is needed for the delivered fixes.
+
+### Platform limits
+
 Linux Chromium is the verified browser environment. Physical Android/iOS keyboards, IME, microphones, Windows/macOS behavior, WebKit and installed live-provider/companion combinations remain unmeasured. Existing platform-specific behavior is preserved in code and focused contracts, not claimed as device-tested.
 
 No production installation, package publication, deployment, push or merge is part of this implementation. Use the user documents for layout selection and recovery. Runtime ownership/protocol downgrades retain their documented drain and explicit shutdown requirements.
