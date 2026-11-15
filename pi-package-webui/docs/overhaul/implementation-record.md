@@ -172,6 +172,16 @@ R1 UI found one selected-effort focus issue. The parent fixed selection preferen
 
 Captures use disposable fake-Pi sessions: [No Project welcome](screenshots/no-project/no-project.png), [floating More tray](screenshots/no-project/more.png), and [natural-height overview](screenshots/no-project/overview.png).
 
+### Empty No Project startup
+
+Default standalone and `/webui-start` launches now show an empty No Project conversation without a session, Pi child or owned directory. Explicit `--cwd`, supervised reattachment and restore descriptors retain precedence. The extension keeps its process working directory but no longer implicitly selects it as a project. The first nonempty submission allocates a durable No Project conversation and dispatches once to that captured tab. Empty submissions do nothing; creation failures retain the draft. Navigation and concurrent draft edits preserve their owners. Native selector commands deferred by navigation remain in their original conversation's draft until the user returns. Both Settings buttons use an outlined gear.
+
+Final source candidate `7281faa` passed all 259 package Node/static/harness files and 21 affected Chromium cases: 13 empty-startup scenarios, three explicit No Project scenarios, four session-ownership scenarios, and one offline-cache case. Ten inventory tests, package payload assertions, syntax and whitespace checks passed. These are affected browser checks, not a complete browser-suite rerun. Assets use app210 and PWA188. No dependency exports or ranges changed.
+
+Two independent Sol/high R1 reviews found the missing VM fixture guard and a first `/name` selector that could target an intervening session. The parent accepted and fixed both. The bounded R2 independently passed 13 browser cases, 19 lifetime/static/inventory checks and one cache case with no remaining in-scope findings. No third round ran. Real providers, extension-host end-to-end startup and physical devices were not exercised; pre-session drafts remain in memory across navigation, not across browser reload.
+
+Captures: [empty startup with zero sessions](screenshots/empty-startup/empty-no-project.png) and [first message creates its conversation](screenshots/empty-startup/first-message.png). The local isolated preview helper now omits its former implicit `--cwd`, so a fresh preview demonstrates the default.
+
 ### Platform limits
 
 Linux Chromium is the verified browser environment. Physical Android/iOS keyboards, IME, microphones, Windows/macOS behavior, WebKit and installed live-provider/companion combinations remain unmeasured. Existing platform-specific behavior is preserved in code and focused contracts, not claimed as device-tested.
