@@ -1,6 +1,6 @@
 # Update feedback repairs
 
-Authorized 2026-11-15. Base 06cd8c8e. Bug fixes and interaction simplification, not a new updater architecture. One Sol/high implementation worker and one fresh Sol/high reviewer for this cohesive UI task. Parent owns diagnosis, integration, cache/inventory/docs and finding disposition.
+Authorized 2026-11-15. Base 06cd8c8e. Bug fixes and interaction simplification, not a new updater architecture. One Sol/high implementation worker and one fresh Sol/high reviewer for each of two tasks: UI feedback and isolated preview updates. Parent owns diagnosis, integration, cache/inventory/docs and finding disposition.
 
 ## Contract
 
@@ -12,7 +12,7 @@ Already up to date must be minimal: heading, component name, Details and Dismiss
 
 ## Isolation diagnosis
 
-The existing preview script uses bwrap --ro-bind / / and makes only its temporary directory and runtime state writable. Pi-managed resources are copied there; npm-global discovery points at the real read-only installation. The user's extension update changed the disposable copy, while global WebUI rename returned EROFS. Preserve this isolation and current configuration. Do not mount the real npm prefix writable or run actual updates. Advise updating the installed package from a normal terminal outside the preview. No backend command changes are required.
+The existing preview script uses bwrap --ro-bind / / and makes only its temporary directory and runtime state writable. Pi-managed resources are copied there; npm-global discovery points at the real read-only installation. The user's extension update changed the disposable copy, while global WebUI rename returned EROFS. User further requested updates to work in preview just like live. Preserve isolation by cloning the user-owned global npm prefix into the temporary preview and mounting the clone over its original path inside Bubblewrap. Keep the same native commands and install-location paths, with writable cloned package/bin contents and an isolated cache. The real npm prefix must remain read-only outside the namespace. Do not run actual updates for verification. Reject unsafe root/system prefixes rather than copying or mounting system directories writable. No backend command changes are required.
 
 ## Worker ownership
 
@@ -23,3 +23,8 @@ Use disposable HOME/XDG/Pi/npm/Git, executable pi/npm guards and fake command fi
 ## Integration and acceptance
 
 Parent inspects and integrates the worker result, updates docs/cache/inventory, runs affected checks, then launches one read-only Sol/high reviewer against this contract. Accept only supported scoped findings; parent fixes and rechecks without extra review rounds. Final package gate uses setsid --wait and guarded commands. Record evidence in handoffs/update-feedback-acceptance.html, archive this plan when verified, then push and link PR38. Real installation updates and Windows/macOS remain untested.
+
+
+## Preview worker ownership
+
+Task P owns only ignored handoffs/start-isolated-webui-preview.sh and a new ignored handoffs/isolated-preview-updates.test.mjs, plus its own handoff handoffs/update-preview-worker.md. Work in an isolated checkout; copy the current parent helper into its handoffs as input, then deliver exact changed files for parent copying, since ignored files cannot cherry-pick. Keep the helper's run and --check interface and all existing temporary agent/config/cache protections. Clone the current user-owned npm prefix with reflink-capable copy, preserving package/bin relationships, and bind only that clone at the original prefix path inside bwrap. Resolve/detect prefix read-only; honor actual npm prefix/config. Keep any unsafe external symlink targets read-only and document limitations. No source, real home/config, package installation, live preview process or tracked-file edits. Use fake npm/pi fixtures to verify simulated npm-global and Pi updates mutate only copied packages, original manifests and files remain unchanged, command discovery resolves the same locations, writable cache works, source stays read-only, and cleanup of check-only fixtures is scoped. Run shell syntax and check behavior without real updates or secrets in output. Capture exact commands/results and deliver changed helper/test paths; no children/review/push. Parent owns incorporation and a separate fresh Sol/high review for this task.
