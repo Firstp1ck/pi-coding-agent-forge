@@ -1088,7 +1088,7 @@ assert.match(server, /async function validateStartupCwd\(cwd\)/, "server should 
 assert.match(server, /--cwd does not exist:/, "server should report nonexistent startup cwd paths clearly");
 assert.match(server, /options\.cwd = await validateStartupCwd\(options\.cwd\)/, "server should fail fast for invalid startup cwd paths");
 assert.match(server, /cwdExplicit: false/, "server should track whether startup cwd was explicitly requested");
-assert.match(server, /return options\.cwdExplicit \? \[await createTab\(\)\] : \[\]/, "server should wait for UI cwd selection when no --cwd is supplied");
+assert.match(server, /return options\.cwdExplicit \? \[await createTab\(\)\] : \[\]/, "server should start without a session when no --cwd or restore is supplied");
 assert.match(server, /async function resolvedPiCliScript\(\)[\s\S]*require\.resolve\.paths\(PI_CODING_AGENT_PACKAGE\)[\s\S]*nodeModulesRoot[\s\S]*dist[\s\S]*cli\.js/, "server should resolve the bundled Pi CLI through Node resolution roots so hoisted global installs can spawn RPC tabs");
 assert.match(server, /canonicalPiRuntimeIdentity[\s\S]*bundledCli: await resolvedPiCliScript\(\)/, "standalone server should use the canonical resolver with the bundled Pi CLI before PATH pi");
 assert.match(server, /resolveCanonicalPiRuntime\([\s\S]*explicitCommand: options\.piBinExplicit \? options\.piBin : ""[\s\S]*bundledCli/, "tabs should retain their explicit or bundled Pi selection independently of updates");

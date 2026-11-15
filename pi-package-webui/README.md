@@ -51,6 +51,8 @@ Restart Pi, then run:
 
 Open the printed address, usually <http://127.0.0.1:31415/>. The browser normally opens automatically.
 
+A fresh start shows **No Project** with no active session. Send your first message to start a conversation in its own folder, or choose a project. To start in a specific folder immediately, use `/webui-start --cwd /path/to/project`.
+
 Check the server at any time with:
 
 ```text
@@ -313,7 +315,7 @@ Choose a project immediately:
 pi-webui --cwd ~/src/my-project
 ```
 
-If you omit `--cwd`, the browser asks which project to open first.
+Without `--cwd`, a fresh start opens **No Project** with no active session. Type your first message to create a conversation in its own folder, or choose a project. Previously running or explicitly restored sessions remain available.
 
 ## Keep it private
 

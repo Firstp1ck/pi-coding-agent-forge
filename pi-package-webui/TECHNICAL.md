@@ -44,7 +44,7 @@ A group can appear in more than one section. Its membership is unchanged; closin
 
 ## No Project conversations
 
-Press the compact layout's **Pi** button or choose **+ Tab → No Project** to open a fresh conversation without selecting a repository. Each fresh conversation receives its own directory under `~/.pi/agent/webui/no-project/`. If you set `PI_CODING_AGENT_DIR`, the directory is under that agent location instead. Allocation happens when the conversation opens, so attachments and tools already have a working folder before the first prompt.
+Press the compact layout's **Pi** button or choose **+ Tab → No Project** to open a fresh conversation without selecting a repository. Each fresh conversation receives its own directory under `~/.pi/agent/webui/no-project/`. If you set `PI_CODING_AGENT_DIR`, the directory is under that agent location instead. Explicitly opening a conversation allocates its folder immediately. A default startup with no active session waits until you submit the first message.
 
 Your files remain after closing a tab. Resume, reopen and saved-workspace restoration reuse that conversation's directory. **New session** and `/new` from a No Project conversation open a new tab with a new directory and keep the old tab available. Choosing a project explicitly uses that project folder. Missing No Project folders produce an error rather than silently switching to another folder. There is no automatic deletion of these directories.
 
@@ -71,6 +71,7 @@ Common options:
 ```text
 /webui-start 31500
 /webui-start --no-open
+/webui-start --cwd ~/src/my-project
 /webui-start --name browser
 /webui-start --remote-auth --host 0.0.0.0
 ```
@@ -101,7 +102,7 @@ Useful options:
 - `--remote-auth` enables PIN protection for non-local browsers.
 - `--migration-dry-run` previews optional-feature migration without changing packages.
 
-If `--cwd` is omitted, the browser asks which project to open first.
+Without `--cwd`, a fresh start opens **No Project** with no active session or Pi child. The first submitted message creates a conversation and its own working directory. Existing supervised sessions and explicit restore information take precedence. This does not enable `--no-session`; conversations still persist normally.
 
 ## Settings and storage
 
