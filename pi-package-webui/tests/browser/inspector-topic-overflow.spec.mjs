@@ -28,6 +28,10 @@ for (const width of [1100, 1440]) {
     expect(tab.x + tab.width).toBeLessThanOrEqual(outer.x + outer.width + 1);
     await last.press('Enter');
     await expect(last).toHaveAttribute('aria-selected', 'true');
+    const inspector = page.locator('.focused-inspector-content');
+    await expect(inspector.locator('.focused-artifact-empty')).toBeVisible();
+    await expect.poll(() => inspector.evaluate(node => node.scrollHeight - node.clientHeight)).toBeLessThanOrEqual(1);
+    await page.screenshot({ path: info.outputPath('documents-empty-no-scrollbar.png') });
     await last.press('Home');
     await expect(first).toBeFocused();
     await first.press('Enter');

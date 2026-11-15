@@ -348,7 +348,7 @@ assert.match(
 
 assert.match(
   serviceWorker,
-  /const CACHE_NAME = "pi-webui-pwa-v177";/,
+  /const CACHE_NAME = "pi-webui-pwa-v178";/,
   "browser asset changes should advance the PWA cache identity",
 );
 assert.match(html, /styles\.css\?v=161/, "visibility styles should advance the stylesheet query revision");

@@ -59,9 +59,9 @@ html[data-desktop-shell="focused"] #focusedWorkspace { height: var(--visual-view
 #focusedWorkspace .terminal-tab-button { padding: 5px 7px; }
 #focusedWorkspace .terminal-tab-title { font-size: 12px; letter-spacing: normal; }
 
-.focused-artifacts-host { height: 100%; min-height: 0; min-width: 0; }
-.focused-artifacts-host > .document-artifact-content { height: 100%; min-height: 0; }
-.focused-artifact-empty { padding: 1rem; }
+.focused-artifacts-host { display: flex; flex-direction: column; height: 100%; min-height: 0; min-width: 0; }
+.focused-artifacts-host > .document-artifact-content { flex: 1; min-height: 0; }
+.focused-artifact-empty { flex: 0 0 auto; margin: 0; padding: 1rem; }
 #focusedWorkspace .focused-artifacts-host .document-artifact-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
 #focusedWorkspace .focused-artifacts-host .document-artifact-sidebar { display: flex; overflow-x: auto; max-height: 6rem; border-right: 0; border-bottom: 1px solid var(--ctp-surface0); }
 #focusedWorkspace .focused-artifacts-host .document-artifact-thumbnail { flex: 0 0 4.5rem; padding: .25rem; }

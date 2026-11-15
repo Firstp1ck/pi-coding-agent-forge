@@ -83,3 +83,20 @@ test('a document card remains usable after switching away and returning to the s
   await page.locator('.document-artifact-card').getByRole('button', { name: 'Open viewer' }).click();
   await expect(page.locator('.document-artifact-meta')).toContainText('Page 1 of 2');
 });
+
+test('short document inspector keeps scrolling inside the loaded page', async ({ page, ownership }, info) => {
+  await page.setViewportSize({ width: 1100, height: 500 });
+  await prepare(page, ownership);
+  await page.locator('.document-artifact-card').getByRole('button', { name: 'Open viewer' }).click();
+  const inspector = page.locator('.focused-inspector-content');
+  const stage = inspector.locator('.document-artifact-stage');
+  await expect(stage.locator('.document-artifact-page')).toBeVisible();
+  await expect.poll(() => inspector.evaluate(node => node.scrollHeight - node.clientHeight)).toBeLessThanOrEqual(1);
+  await expect.poll(() => stage.evaluate(node => node.scrollHeight > node.clientHeight)).toBe(true);
+  await stage.hover();
+  await page.mouse.wheel(0, 300);
+  await expect.poll(() => stage.evaluate(node => node.scrollTop)).toBeGreaterThan(0);
+  await stage.evaluate(node => { node.scrollTop = 0; });
+  await expect(stage.getByRole('button', { name: 'Send page to composer' })).toBeInViewport();
+  await page.screenshot({ path: info.outputPath('document-page-scroll.png') });
+});

@@ -525,7 +525,7 @@
     {
       "file": "pi-package-webui/public/index.html",
       "bytes": 172038,
-      "sha256": "4d494f5c2ce8dee645d2aa66bc4b2bc1755507cf4caf0341a4206ca79a033f6e"
+      "sha256": "01a3e01521655077ebca0a7d95e13faea1c4b3bcb45cf65076a77c1d5ce82d58"
     },
     {
       "file": "pi-package-webui/public/issue-bot-client.mjs",
@@ -580,7 +580,7 @@
     {
       "file": "pi-package-webui/public/service-worker.js",
       "bytes": 6356,
-      "sha256": "f82a7b448b8873143feadcad9c42ae674ed315376415fe27612bef29b48b80ad"
+      "sha256": "a05e5a1eb5508697660f32fb258a7bb670a121852d54bba983ac9e388953c273"
     },
     {
       "file": "pi-package-webui/public/session-attention-scheduler.mjs",

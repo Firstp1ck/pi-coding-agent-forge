@@ -116,6 +116,16 @@ The compact More disclosure inherited the customizable action grid, so its entir
 
 The regression reproduced at 1100px and 1440px before the fix. Three browser cases now cover an open Project inspector, a normal desktop and a 500px-high window, including nested action access, compact primary-button geometry and draft preservation. The combined regression/composer suite passed 15 cases; 25 affected static test files passed. The cache identity advances to PWA175 with adapter CSS5 so existing previews receive the stylesheet. See the [expanded More screenshot](screenshots/interaction/more-expanded.png).
 
+### Session shelves and scrollbar controls
+
+Compact left navigation now separates Inbox (idle, completed and input-needed sessions), Working and Settled. Settled starts collapsed. Settle and Restore change browser-local organization without closing sessions or discarding drafts. New work, pending input, session replacement and newer completion restore the session automatically. Group fragments retain their original group identity while close actions target only the displayed members. Classic, top navigation and phone modes keep their existing organization.
+
+The sidebar and inspector topic strip hide their scrollbar tracks while retaining native scrolling. Inspector tabs retain arrow, Home and End navigation. The Documents empty state no longer allocates a second full-height viewer beneath its message; loaded pages scroll inside the viewer, including short windows. When a keyboard-focused session moves between shelves, the inner list reveals its retained control; ordinary updates preserve the scroll offset.
+
+The combined candidate passed 54 Chromium cases and all 253 package test files. Ten inventory checks, packaged-asset assertions and offline-cache recovery also passed. A round-one Sol review found a focused session could move offscreen; the parent accepted and repaired it, with a strict full-visibility regression for both directions. The initial repair exposed fractional clipping, corrected with rounded scrolling and a focus-outline margin. The final shelf candidate passed eleven integration cases. Six additional Documents cases pass for empty states, loaded-page scrolling, canonical viewer continuity and Classic fallback. The bounded second review is pending; these results do not claim acceptance of that pending gate.
+
+Captures: [Working and collapsed Settled](screenshots/session-shelves/working-and-settled.png), [expanded Settled](screenshots/session-shelves/settled-expanded.png), [Light theme](screenshots/session-shelves/light.png), [scrolling without a track](screenshots/session-shelves/scrolling.png), and [inspector topics without a track](screenshots/session-shelves/inspector-tabs.png).
+
 ### Platform limits
 
 Linux Chromium is the verified browser environment. Physical Android/iOS keyboards, IME, microphones, Windows/macOS behavior, WebKit and installed live-provider/companion combinations remain unmeasured. Existing platform-specific behavior is preserved in code and focused contracts, not claimed as device-tested.
