@@ -374,6 +374,38 @@ test('dispose clears running timers, listeners, observers and pending positionin
   expect(await page.evaluate(() => window.selections)).toEqual([]);
 });
 
+test('short menu keeps keyboard return and reverse navigation visible', async ({ page }, info) => {
+  await page.setViewportSize({ width: 320, height: 240 });
+  await mount(page);
+  await page.evaluate(() => window.publish());
+  await page.locator('#updates').click();
+  const expectFocusedInsideMenu = async (control) => {
+    await expect(control).toBeFocused();
+    await expect(async () => {
+      await page.clock.runFor(50);
+      const geometry = await control.evaluate(node => {
+        const bounds = node.getBoundingClientRect();
+        const menu = node.closest('.sidebar-update-menu').getBoundingClientRect();
+        return { top: bounds.top, bottom: bounds.bottom, menuTop: menu.top, menuBottom: menu.bottom,
+          hit: node.contains(document.elementFromPoint(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2)) };
+      });
+      expect(geometry.top).toBeGreaterThanOrEqual(geometry.menuTop);
+      expect(geometry.bottom).toBeLessThanOrEqual(geometry.menuBottom);
+      expect(geometry.hit).toBe(true);
+    }).toPass();
+  };
+  await page.keyboard.press('Tab');
+  await expectFocusedInsideMenu(page.locator('.sidebar-update-menu-return'));
+  await capture(page, info, 'short-menu-keyboard-return');
+  await page.keyboard.press('Shift+Tab');
+  await expectFocusedInsideMenu(page.getByRole('menuitem', { name: 'Pi only', exact: true }));
+  await page.keyboard.press('Tab');
+  await page.keyboard.press('Enter');
+  await expect(card(page)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Details', exact: true })).toBeFocused();
+  expect(await page.evaluate(() => window.selections)).toEqual([]);
+});
+
 test('Details preserves view across polls and menu close; later jobs replace receipts and reset the view', async ({ page }, info) => {
   await mount(page);
   await page.evaluate(() => window.publish());

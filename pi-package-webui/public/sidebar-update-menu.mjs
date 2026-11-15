@@ -435,6 +435,7 @@ export function createSidebarUpdateMenu({ button, onSelect }) {
       if (!event.shiftKey && !returnToProgress.hidden) {
         event.preventDefault();
         returnToProgress.focus({ preventScroll: true });
+        returnToProgress.scrollIntoView({ block: 'nearest' });
         return;
       }
       close();
@@ -448,7 +449,10 @@ export function createSidebarUpdateMenu({ button, onSelect }) {
   listen(returnToProgress, 'keydown', (event) => {
     if (event.key !== 'Tab') return;
     event.preventDefault();
-    if (event.shiftKey) choices.at(-1).focus({ preventScroll: true });
+    if (event.shiftKey) {
+      choices.at(-1).focus({ preventScroll: true });
+      choices.at(-1).scrollIntoView({ block: 'nearest' });
+    }
     else close();
   });
   listen(document, 'keydown', (event) => {
