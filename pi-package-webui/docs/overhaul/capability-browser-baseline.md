@@ -1,6 +1,6 @@
 # Supplemental capability browser baseline
 
-[Original browser baseline](browser-baseline.md) · [Scenario evidence](capability-browser-baseline.json) · [Contributor guide](../../DEVELOPMENT.md) · [Canonical plan](../../../plans/planned/webui-design-architecture-overhaul.md)
+[Original browser baseline](browser-baseline.md) · [Scenario evidence](capability-browser-baseline.json) · [Contributor guide](../../DEVELOPMENT.md) · [Implementation record](implementation-record.md)
 
 W0-D supplements the unchanged production UI at `06351edae0d87829dfa8c747d31a061825568b0e`, from integration base `ad514adba3f4e57c10c72b26eec0dce570eab30e`. It adds feature evidence before production edits. The original 42 screenshots, nine-workflow JSON and frozen numerical budgets remain unchanged. These scenarios do not measure performance or establish complete overhaul acceptance.
 

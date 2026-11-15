@@ -1,6 +1,6 @@
 # Supplemental layout baseline
 
-[Contributor guide](../../DEVELOPMENT.md) · [Original browser baseline](browser-baseline.md) · [Layout evidence](layout-baseline.json) · [Canonical plan](../../../plans/planned/webui-design-architecture-overhaul.md)
+[Contributor guide](../../DEVELOPMENT.md) · [Original browser baseline](browser-baseline.md) · [Layout evidence](layout-baseline.json) · [Implementation record](implementation-record.md)
 
 W0-C adds layout observations against unchanged production revision `06351edae0d87829dfa8c747d31a061825568b0e`, from integration base `ad514adba3f4e57c10c72b26eec0dce570eab30e`. It does not replace the original 42 images, crowding denominator, performance samples, or frozen budgets. No production code or shared fixture changed.
 

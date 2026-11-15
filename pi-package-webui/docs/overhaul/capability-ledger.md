@@ -1,8 +1,8 @@
 # Capability migration ledger
 
-Capability evidence for the approved compact workspace overhaul. Every legacy feature path remains active. The W0 inventory counts below describe the original baseline; the JSON inventory tracks the current source digests and locations. W1-W6 are accepted: shared shell, session, Project, Activity, Settings and backend services are integrated. W7 rollout and final feature-access evidence remain pending.
+Capability evidence for the approved compact workspace overhaul. Every legacy feature path remains active. The W0 inventory counts below describe the original baseline; the JSON inventory tracks the current source digests and locations. W1-W6 are accepted: shared shell, session, Project, Activity, Settings and backend services are integrated. W7 rollout, feature-access and final integration checks are accepted; the [implementation record](implementation-record.md) records exact results and platform limits.
 
-[Development guide](../../DEVELOPMENT.md) · [Canonical plan](../../../plans/planned/webui-design-architecture-overhaul.md) · [Approved design](../../../dev/mockups/pi-webui-focused/DESIGN.md) · [Machine inventory](capability-inventory.json)
+[Development guide](../../DEVELOPMENT.md) · [Implementation record](implementation-record.md) · [Approved design](../../../dev/mockups/pi-webui-focused/DESIGN.md) · [Machine inventory](capability-inventory.json)
 
 ## Provenance and scope
 

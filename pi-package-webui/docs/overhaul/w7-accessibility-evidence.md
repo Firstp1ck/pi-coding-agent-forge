@@ -1,8 +1,10 @@
 # W7 accessibility and responsive evidence
 
+Final parent acceptance: all 479 Chromium cases, all 250 package test files, all 16 frozen measurement checks and the final Sol review pass at `d0a6a25`. See the [implementation record](implementation-record.md) for results and platform limits. Earlier checkpoints below remain historical evidence.
+
 Parent integration checkpoint: collection roles and notification naming are repaired. The native-dialog check now distinguishes browser chrome from background application focus. Both customization uses top navigation because Sidebar explicitly excludes Both; the corrected case passes. Transcript continuity uses a real wheel gesture and waits for its exact scroll target before measuring; selection/search/scroll/draft retention passes. Settings return-focus and More containment are repaired: 35 integrated focus/ownership cases and 28 boundary/resize cases pass. CSS target-size/stacking/landscape repairs are integrated. The complete 59-case run passed 57 cases; the two rotation/forced-color failures were then repaired and passed focused reruns with native zoom and More resize boundaries. Final whole-suite verification remains pending. Genuine 200% browser zoom now passes both compact and Classic cases after correcting false software-keyboard detection; DPR doubles, layout width halves, visual scale stays 1 and the outer window stays unchanged. Draft, canonical controls, navigation, reset and cleanup pass. The historical worker results below are not a current whole-suite verdict.
 
-[Contributor guide](../../DEVELOPMENT.md) · [Canonical plan](../../../plans/planned/webui-design-architecture-overhaul.md) · [Frozen layout reference](layout-baseline.md) · [Frozen capability reference](capability-browser-baseline.md)
+[Contributor guide](../../DEVELOPMENT.md) · [Implementation record](implementation-record.md) · [Frozen layout reference](layout-baseline.md) · [Frozen capability reference](capability-browser-baseline.md)
 
 This is W7-A11Y implementation evidence at base `3aaf11e70287a00b987c73ee0ffba9065f2d0969`. W0-W6 are accepted. W7 remains unaccepted, with zero review rounds used by this worker. The parent owns product repairs, reruns and acceptance. These tests preserve failing assertions and do not exempt baseline defects.
 

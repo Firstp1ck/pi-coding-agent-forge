@@ -14,7 +14,7 @@ Project and Activity share one topic inspector. Files retain separate unsaved bu
 
 A saved browser choice takes precedence over the server default. With no saved choice, a recognized fresh installation uses compact desktop; an existing installation, older server, unknown state, or custom settings location uses Classic. Invalid or unavailable browser storage also uses Classic. Opening an existing installation in a new browser, clearing browser storage, or changing its address does not turn it into a fresh installation. The installation choice is retained with Web UI settings; do not delete those settings to change your layout. To recover from a layout problem, add `?shell=classic` to the address, or `&shell=classic` when it already has a query. This forces Classic without deleting the saved preference. Remove that parameter to use your choice again. Switching layouts preserves the saved Classic arrangement; phone and tablet preview choices remain independent.
 
-This preview is still undergoing complete feature and platform verification. Native keyboard, cross-browser, and installed-companion checks remain pending.
+The compact layout is verified in Linux Chromium, including keyboard navigation and genuine 200% browser zoom. Physical mobile keyboards and IME, other browser engines, Windows/macOS devices, and live installed-companion combinations remain unverified.
 
 ## Requirements
 

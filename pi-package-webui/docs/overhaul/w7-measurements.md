@@ -1,6 +1,8 @@
 # W7 frozen measurements
 
-Contributor evidence for the W7-M contract in the [canonical plan](../../../plans/planned/webui-design-architecture-overhaul.md). See the [development guide](../../DEVELOPMENT.md) for application implementation contracts and the [W0 browser reference](browser-baseline.md) for the original measurement definitions.
+Final parent acceptance: all 479 Chromium cases, all 250 package test files, all 16 frozen measurement checks and the final Sol review pass at `d0a6a25`. See the [implementation record](implementation-record.md) for results and platform limits. Earlier checkpoints below remain historical evidence.
+
+Contributor evidence for the W7-M contract in the [implementation record](implementation-record.md). See the [development guide](../../DEVELOPMENT.md) for application implementation contracts and the [W0 browser reference](browser-baseline.md) for the original measurement definitions.
 
 This runner measures default Conversation density and performance. Its verdict does not accept W7 or establish capability, reachability, accessibility, rollout or PWA parity. Production corrections belong to the integration owner.
 

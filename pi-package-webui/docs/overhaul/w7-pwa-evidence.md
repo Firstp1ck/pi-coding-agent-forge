@@ -1,8 +1,10 @@
 # W7-P PWA and update evidence
 
+Final parent acceptance: all 479 Chromium cases, all 250 package test files, all 16 frozen measurement checks and the final Sol review pass at `d0a6a25`. See the [implementation record](implementation-record.md) for results and platform limits. Earlier checkpoints below remain historical evidence.
+
 Parent integration checkpoint: all ten PWA/update cases pass in the 37-case run recorded at `/tmp/webui-w7-repaired-workflows.log` (its two failures are unrelated legacy fixtures). The earlier 26-case recovery/Settings run also passed. BUG-W7-P-001/002/003 are fixed: Classic boot recovery preserves query/hash and explicit preference, partial outcomes block another plan, and same-target reconnect retains the Project filter. This supersedes the worker failure status below; the original failures and limitations remain historical evidence. Whole W7 acceptance is pending.
 
-This is contributor evidence for the fixed W7-P contract in the [canonical plan](../../../plans/planned/webui-design-architecture-overhaul.md). W0-W6 were accepted before this work. W7 remains unaccepted, with zero reviews used by this worker. The parent owns production fixes, integration and the postintegration rerun.
+This is contributor evidence for the fixed W7-P contract in the [implementation record](implementation-record.md). W0-W6 were accepted before this work. W7 remains unaccepted, with zero reviews used by this worker. The parent owns production fixes, integration and the postintegration rerun.
 
 The worker changes only [PWA browser checks](../../tests/browser/overhaul-w7-pwa.spec.mjs), [update browser checks](../../tests/browser/overhaul-w7-update.spec.mjs) and this document. Existing fixtures, production files, assets, plans, ledgers, package manifests and lockfiles are unchanged.
 

@@ -1,6 +1,6 @@
 # Browser baseline for the Web UI overhaul
 
-[Contributor guide](../../DEVELOPMENT.md) · [Canonical overhaul plan](../../../plans/planned/webui-design-architecture-overhaul.md) · [Recorded evidence](browser-baseline.json)
+[Contributor guide](../../DEVELOPMENT.md) · [Implementation record](implementation-record.md) · [Recorded evidence](browser-baseline.json)
 
 W0-B captures the unchanged production UI at `06351edae0d87829dfa8c747d31a061825568b0e`, using integration seed `cff3432ee63131ebb6150a906d9c06594ca2c401`. This is a rendered baseline and a comparison harness. It does not establish whole-wave acceptance or functional parity for the future focused shell.
 
