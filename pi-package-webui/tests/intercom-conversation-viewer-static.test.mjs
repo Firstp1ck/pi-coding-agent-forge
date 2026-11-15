@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const [html, app, css, serviceWorker, readme, technical, development] = await Promise.all([
+const [html, app, css, serviceWorker, readme, technical, development, controller] = await Promise.all([
   readFile(join(root, "public", "index.html"), "utf8"),
   readFile(join(root, "public", "app.js"), "utf8"),
   readFile(join(root, "public", "styles.css"), "utf8"),
@@ -12,6 +12,7 @@ const [html, app, css, serviceWorker, readme, technical, development] = await Pr
   readFile(join(root, "README.md"), "utf8"),
   readFile(join(root, "TECHNICAL.md"), "utf8"),
   readFile(join(root, "DEVELOPMENT.md"), "utf8"),
+  readFile(join(root, "public", "activity-intercom-controller.mjs"), "utf8"),
 ]);
 
 function count(value, pattern) {
@@ -19,11 +20,18 @@ function count(value, pattern) {
 }
 
 function functionSource(name) {
-  const start = app.indexOf(`function ${name}(`);
-  assert.ok(start >= 0, `${name} should exist`);
-  const next = app.slice(start + 1).match(/\n(?:async )?function [A-Za-z0-9_$]+\(/);
-  const end = next ? start + 1 + next.index : app.length;
-  return app.slice(start, end);
+  const aliases = {
+    openIntercomConversation: "open", renderIntercomConversationTags: "renderTags",
+    refreshIntercomConversationSummaries: "refreshSummaries", refreshIntercomConversationDetail: "refreshDetail",
+    scheduleIntercomConversationDetailRefresh: "scheduleDetailRefresh", resetIntercomConversationDialog: "resetDetail",
+  };
+  const source = name === "setActiveTabId" ? app : controller;
+  const actualName = aliases[name] || name;
+  const start = source.indexOf(`function ${actualName}(`);
+  assert.ok(start >= 0, `${name} should exist in its owner`);
+  const next = source.slice(start + 1).match(/\n\s*(?:async )?function [A-Za-z0-9_$]+\(/);
+  const end = next ? start + 1 + next.index : source.length;
+  return source.slice(start, end);
 }
 
 for (const id of [
@@ -50,8 +58,8 @@ assert.match(
   "the viewer should be a labelled native dialog with a live transcript and explicit close control",
 );
 assert.match(app, /installModalPrimitives\(\)/, "the native dialog should use the shared focus-management primitive");
-assert.match(functionSource("openIntercomConversation"), /showModal\(\)[\s\S]*intercomConversationCloseButton\?\.focus/, "opening should use the modal primitive and establish an explicit keyboard target");
-assert.match(functionSource("setActiveTabId"), /closeIntercomConversationDialog\(\{ restoreFocus: false \}\)/, "tab switching should close the old conversation without restoring focus into the old tab");
+assert.match(functionSource("openIntercomConversation"), /onDialogOpen\(dialog\)[\s\S]*intercomConversationCloseButton\?\.focus/, "opening should use the modal primitive and establish an explicit keyboard target");
+assert.match(functionSource("setActiveTabId"), /activityIntercom\.activate\(projectTargetFromContext\(\)\)/, "tab switching should close the old conversation without restoring focus into the old tab");
 
 const tagsSource = functionSource("renderIntercomConversationTags");
 assert.match(tagsSource, /const seenConversationIds = new Set\(\)/, "tag rendering should deduplicate conversation IDs defensively");
@@ -61,13 +69,13 @@ assert.match(tagsSource, /aria-haspopup", "dialog"[\s\S]*aria-controls", "interc
 assert.match(tagsSource, /if \(!conversations\.length\)[\s\S]*container\.replaceChildren\(\)[\s\S]*container\.hidden = true/, "the tag list should disappear and clear stale disclosure state when there are no conversations");
 
 const summarySource = functionSource("refreshIntercomConversationSummaries");
-assert.match(summarySource, /api\("\/api\/intercom\/conversations", \{ tabId: tabContext\.tabId \}\)/, "summary requests should stay scoped to the selected tab");
-assert.match(summarySource, /requestSerial !== intercomSummaryRequestSerial \|\| !isCurrentTabContext\(tabContext\)/, "summary responses should be rejected after a newer request or tab switch");
+assert.match(summarySource, /api\("\/api\/intercom\/conversations", \{ tabId: target\.tabId \}\)/, "summary requests should stay scoped to the selected tab");
+assert.match(summarySource, /serial !== intercomSummaryRequestSerial \|\| !current\(target\)/, "summary responses should be rejected after a newer request or tab switch");
 const detailSource = functionSource("refreshIntercomConversationDetail");
 assert.match(detailSource, /conversation=\$\{encodeURIComponent\(state\.conversationId\)\}/, "detail selection should send only an encoded opaque ID");
-assert.match(detailSource, /requestSerial !== intercomDetailRequestSerial[\s\S]*state !== intercomConversationDialogState[\s\S]*!isCurrentTabContext\(state\)/, "detail responses should be rejected after rapid selection or tab changes");
-assert.match(app, /\["webui_connected", "agent_end", "message_end", "tool_execution_end"\][\s\S]*scheduleIntercomConversationRefresh\(tabContext\)/, "settlement and reconnect events should refresh conversation summaries");
-assert.match(app, /function handleSessionStreamOpen\(event, tabContext\) \{[\s\S]*scheduleIntercomConversationRefresh\(tabContext, 0\)/, "event-stream reconnection should authoritatively refetch tags");
+assert.match(detailSource, /serial !== intercomDetailRequestSerial \|\| !detailCurrent\(state\)/, "detail responses should be rejected after rapid selection or tab changes");
+assert.match(app, /\["webui_connected", "agent_end", "message_end", "tool_execution_end"\][\s\S]*activityIntercom\.scheduleRefresh\(projectTargetFromContext\(tabContext\)\)/, "settlement and reconnect events should refresh conversation summaries");
+assert.match(app, /function handleSessionStreamOpen\(event, tabContext\) \{[\s\S]*activityIntercom\.scheduleRefresh\(projectTargetFromContext\(tabContext\), 0\)/, "event-stream reconnection should authoritatively refetch tags");
 
 const messageRenderSource = functionSource("renderIntercomConversationMessage");
 const renderSource = functionSource("renderIntercomConversationDetail");
@@ -86,7 +94,11 @@ assert.match(renderSource, /const anchorOffset = anchor \? anchor\.getBoundingCl
 
 assert.match(functionSource("scheduleIntercomConversationDetailRefresh"), /INTERCOM_DETAIL_REFRESH_MS/, "an open dialog should use the bounded detail refresh interval");
 assert.match(functionSource("resetIntercomConversationDialog"), /intercomDetailRequestSerial \+= 1[\s\S]*clearTimeout\(intercomDetailRefreshTimer\)[\s\S]*intercomConversationDialogState = null/, "dialog close should invalidate requests, cancel polling, and clear selection state");
-assert.match(app, /elements\.intercomConversationDialog\?\.addEventListener\("close", resetIntercomConversationDialog\)/, "native Escape and close-button paths should share polling cleanup");
+assert.match(app, /elements\.intercomConversationDialog\?\.addEventListener\("close",[\s\S]*if \(!elements\.intercomConversationDialog\.open\) activityIntercom\.reset\(\)/, "native Escape and close-button paths should share polling cleanup");
+
+assert.match(controller, /state === intercomConversationDialogState && nodes\.intercomConversationDialog\?\.open && current\(state\)/, "detail acceptance checks the selected owner, open dialog and current session");
+assert.match(app, /onDialogOpen\(dialog\) \{ if \(!dialog\.open\) dialog\.showModal\(\); \}/, "the parent opens the canonical native dialog");
+assert.match(controller, /function activate[\s\S]*close\(\{ restoreFocus: false \}\)/, "activation closes the old detail without restoring old focus");
 
 assert.match(css, /\.composer-intercom-tags \{[\s\S]*display: inline-flex;[\s\S]*flex: 0 1 50%;[\s\S]*max-width: 50%;[\s\S]*overflow: hidden;/, "conversation tags should use up to half the desktop input width without a horizontal scroller");
 assert.match(css, /\.composer-intercom-overflow-menu \{[\s\S]*position: absolute;[\s\S]*max-height:[\s\S]*overflow-y: auto;/, "hidden conversations should remain reachable in a bounded popup");

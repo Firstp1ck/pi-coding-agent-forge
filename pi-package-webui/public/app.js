@@ -1,3 +1,5 @@
+import { createActivityTodoView } from "./activity-todo-view.mjs";
+import { createActivityIntercomController } from "./activity-intercom-controller.mjs";
 import { createActivityUsageController } from "./activity-usage-controller.mjs";
 import { createProjectArtifactController } from "./project-artifact-controller.mjs";
 import { createProjectFileViewerController, gitFileDiffCategory, resolveFileViewerMode } from "./project-file-viewer-controller.mjs";
@@ -644,12 +646,19 @@ let activeTabId = sessionContext.activeTabId;
 let activeTabGeneration = sessionContext.generation;
 let shellActionSessionEpoch = 0;
 const composerStore = createSessionComposerStore();
-const intercomConversationSummariesByTab = new Map();
-let intercomSummaryRequestSerial = 0;
-let intercomSummaryRefreshTimer = null;
-let intercomDetailRequestSerial = 0;
-let intercomDetailRefreshTimer = null;
-let intercomConversationDialogState = null;
+const activityTodo = createActivityTodoView({ document, stripAnsi, parseItem: parseTodoProgressItemLine });
+const activityIntercom = createActivityIntercomController({
+  document, nodes: elements, api,
+  getContext: projectTargetFromContext,
+  isCurrent: isCurrentProjectTarget,
+  onEvent: addEvent,
+  onChange: renderIntercomActivityLinks,
+  onDialogOpen(dialog) { if (!dialog.open) dialog.showModal(); },
+  onDialogClose(dialog, { restoreFocus }) {
+    if (!restoreFocus) modalSurfaceState.delete(dialog);
+    if (dialog.open) dialog.close();
+  },
+});
 
 let activeTextAttachmentEditor = null;
 let activeSkillEditor = null;
@@ -2108,7 +2117,7 @@ function initializeFocusedFeatureRecords() {
     ["runners", "Runners", "No app runner is active. Choose a detected command above, or open runner help to configure one."],
     ["release", "Release", "No release is active. Available release commands appear above; configure missing companions in Settings."],
     ["progress", "Progress", "No workflow or task progress is active for this session."],
-    ["conversations", "Conversations", "No side question is active. Agent conversations remain available from the conversation tags."],
+    ["conversations", "Conversations", "No agent conversation or side question is active for this session."],
     ["extensions", "Extensions", "No extension widgets are active for this session."],
   ]) {
     const content = make("section", "focused-feature-host");
@@ -2122,6 +2131,39 @@ function initializeFocusedFeatureRecords() {
   }
   focusedAgentWidgetHost = make("div", "focused-feature-widgets");
   sidePanelSectionRecords().find(record => record.id === "subagents")?.content.append(focusedAgentWidgetHost);
+}
+
+function renderIntercomActivityLinks() {
+  const record = focusedFeatureRecords.find(item => item.id === "conversations");
+  if (!record) return;
+  const target = projectTargetFromContext();
+  const summaries = activityIntercom.getSummaries(target.tabId);
+  const existing = new Map([...record.controls.querySelectorAll("[data-conversation-id]")].map(node => [node.dataset.conversationId, node]));
+  const retained = new Set();
+  for (const summary of summaries) {
+    let button = existing.get(summary.id);
+    if (button?.dataset.sessionOwner !== `${target.tabId}:${target.lifetime?.revision}`) {
+      button?.remove();
+      button = null;
+    }
+    if (!button) {
+      button = make("button", "focused-conversation-link");
+      button.type = "button";
+      button.dataset.conversationId = summary.id;
+      button.dataset.sessionOwner = `${target.tabId}:${target.lifetime?.revision}`;
+      button.setAttribute("aria-haspopup", "dialog");
+      button.setAttribute("aria-controls", "intercomConversationDialog");
+      button.addEventListener("click", () => {
+        if (isAliveProjectTarget(target) && target.tabId === activeTabId) activityIntercom.open(summary.id);
+      });
+      record.controls.append(button);
+    }
+    const label = `${summary.participants.peer.name} · ${summary.messageCount} message${summary.messageCount === 1 ? "" : "s"}`;
+    if (button.textContent !== label) button.textContent = label;
+    retained.add(button);
+  }
+  for (const button of existing.values()) if (!retained.has(button)) button.remove();
+  record.placeholder.hidden = summaries.length > 0 || record.widgets.childElementCount > 0;
 }
 
 function featureWidgetRoots() {
@@ -2151,7 +2193,7 @@ function syncFocusedWidgetPlacement() {
     else canonicalViewHost.restore(node);
   }
   for (const record of focusedFeatureRecords) {
-    if (record.placeholder) record.placeholder.hidden = record.widgets.childElementCount > 0;
+    if (record.placeholder) record.placeholder.hidden = record.widgets.childElementCount > 0 || (record.id === "conversations" && record.controls.childElementCount > 0);
   }
   for (const [id, nodes] of [["runners", [elements.appRunnerMenuPanel, elements.appRunnerInfoButton]], ["release", [elements.publishMenu]]]) {
     const host = focusedFeatureRecords.find(record => record.id === id)?.controls;
@@ -2191,6 +2233,7 @@ function renderFocusedShell() {
   });
   syncDocumentArtifactHost();
   syncFocusedWidgetPlacement();
+  renderIntercomActivityLinks();
   syncUsageVisibility();
   if (wasActive !== focusedShell.active) {
     syncMobileComposerDisclosureLayout();
@@ -6980,507 +7023,6 @@ function renderSessionSkillTags(tabId = activeTabId) {
   container.append(menu);
   container.hidden = false;
   scheduleSessionSkillTagLayout();
-}
-
-const INTERCOM_CONVERSATION_ID_PATTERN = /^conv_[A-Za-z0-9_-]{24}$/;
-const INTERCOM_MESSAGE_ID_PATTERN = /^msg_[A-Za-z0-9_-]{24}$/;
-const INTERCOM_DETAIL_REFRESH_MS = 5_000;
-const intercomMessageRenderSignatures = new WeakMap();
-
-function intercomBoundedString(value, maxLength = 240) {
-  if (typeof value !== "string") return "";
-  return value.trim().slice(0, maxLength);
-}
-
-function normalizeIntercomParticipant(value, fallback) {
-  const participant = value && typeof value === "object" && !Array.isArray(value) ? value : {};
-  const id = intercomBoundedString(participant.id, 240);
-  const name = intercomBoundedString(participant.name, 160);
-  return { id: id || null, name: name || id || fallback };
-}
-
-function intercomParticipantLabel(participant, fallback = "Agent") {
-  const normalized = normalizeIntercomParticipant(participant, fallback);
-  return normalized.id && normalized.id !== normalized.name ? `${normalized.name} (${normalized.id})` : normalized.name;
-}
-
-function normalizeIntercomConversationSummary(value) {
-  if (!value || typeof value !== "object" || !INTERCOM_CONVERSATION_ID_PATTERN.test(String(value.id || ""))) return null;
-  const participants = value.participants && typeof value.participants === "object" ? value.participants : {};
-  const messageCount = Number(value.messageCount);
-  return {
-    id: String(value.id),
-    participants: {
-      local: normalizeIntercomParticipant(participants.local, "Local agent"),
-      peer: normalizeIntercomParticipant(participants.peer, "Peer agent"),
-    },
-    messageCount: Number.isSafeInteger(messageCount) && messageCount >= 0 ? messageCount : 0,
-    lastMessageAt: typeof value.lastMessageAt === "string" ? value.lastMessageAt : null,
-    truncatedBefore: value.truncatedBefore === true,
-  };
-}
-
-function normalizeIntercomConversationDetail(value) {
-  const summary = normalizeIntercomConversationSummary(value);
-  if (!summary) return null;
-  const messages = [];
-  const seenMessageIds = new Set();
-  for (const candidate of Array.isArray(value.messages) ? value.messages.slice(-200) : []) {
-    const id = String(candidate?.id || "");
-    if (!candidate || typeof candidate !== "object" || !INTERCOM_MESSAGE_ID_PATTERN.test(id) || seenMessageIds.has(id)
-      || !["local", "peer"].includes(candidate.direction) || typeof candidate.text !== "string") continue;
-    seenMessageIds.add(id);
-    const timestamp = typeof candidate.timestamp === "string" && Number.isFinite(Date.parse(candidate.timestamp)) ? candidate.timestamp : null;
-    messages.push({
-      id,
-      direction: candidate.direction,
-      text: candidate.text.slice(0, 65_536),
-      timestamp,
-      truncatedText: candidate.truncatedText === true,
-    });
-  }
-  return { ...summary, messages };
-}
-
-function intercomConversationLabel(conversation) {
-  const local = intercomParticipantLabel(conversation?.participants?.local, "Local agent");
-  const peer = intercomParticipantLabel(conversation?.participants?.peer, "Peer agent");
-  return `${local} ↔ ${peer}`;
-}
-
-function intercomConversationSummarySignature(conversations) {
-  return JSON.stringify((conversations || []).map((conversation) => [
-    conversation.id,
-    intercomConversationLabel(conversation),
-    conversation.messageCount,
-    conversation.lastMessageAt,
-    conversation.truncatedBefore,
-  ]));
-}
-
-let intercomConversationTagLayoutFrame = 0;
-let intercomConversationTagResizeObserver = null;
-let intercomConversationOverflowOpen = false;
-
-function setIntercomConversationOverflowOpen(open, { focusMenu = false, restoreFocus = false } = {}) {
-  const container = elements.intercomConversationTags;
-  const overflow = container?.querySelector("button.composer-intercom-tag.overflow");
-  const menu = container?.querySelector(".composer-intercom-overflow-menu");
-  if (!container || !overflow || !menu) {
-    intercomConversationOverflowOpen = false;
-    return;
-  }
-
-  const availableItems = [...menu.querySelectorAll("button:not([hidden])")];
-  const expanded = Boolean(open && !overflow.hidden && availableItems.length);
-  intercomConversationOverflowOpen = expanded;
-  container.classList.toggle("overflow-open", expanded);
-  overflow.setAttribute("aria-expanded", expanded ? "true" : "false");
-  menu.hidden = !expanded;
-
-  if (expanded && focusMenu) availableItems[0]?.focus();
-  else if (!expanded && restoreFocus) overflow.focus();
-}
-
-function fitIntercomConversationTags() {
-  const container = elements.intercomConversationTags;
-  if (!container || container.hidden) return;
-  const tags = [...container.querySelectorAll(":scope > button.composer-intercom-tag:not(.overflow)")];
-  const overflow = container.querySelector("button.composer-intercom-tag.overflow");
-  const menuItems = [...container.querySelectorAll(".composer-intercom-overflow-menu-item")];
-  if (!tags.length || !overflow || menuItems.length !== tags.length) return;
-
-  const availableWidth = container.clientWidth;
-  if (availableWidth <= 0) return;
-
-  for (const tag of tags) tag.hidden = false;
-  overflow.hidden = false;
-
-  const containerStyle = getComputedStyle(container);
-  const gap = Number.parseFloat(containerStyle.columnGap || containerStyle.gap) || 0;
-  const tagWidths = tags.map((tag) => tag.getBoundingClientRect().width);
-  const overflowWidths = new Map();
-  const maxOverflowDigits = String(tags.length).length;
-  for (let digits = 1; digits <= maxOverflowDigits; digits += 1) {
-    overflow.textContent = `+${"0".repeat(digits)}`;
-    overflowWidths.set(digits, overflow.getBoundingClientRect().width);
-  }
-  let visibleCount = 0;
-
-  for (let count = tags.length; count >= 0; count -= 1) {
-    const hiddenCount = tags.length - count;
-    const itemCount = count + (hiddenCount ? 1 : 0);
-    const tagsWidth = tagWidths.slice(0, count).reduce((total, width) => total + width, 0);
-    const overflowWidth = hiddenCount ? overflowWidths.get(String(hiddenCount).length) || 0 : 0;
-    const requiredWidth = tagsWidth + overflowWidth + Math.max(0, itemCount - 1) * gap;
-    if (requiredWidth <= availableWidth + 0.5) {
-      visibleCount = count;
-      break;
-    }
-  }
-
-  tags.forEach((tag, index) => { tag.hidden = index >= visibleCount; });
-  menuItems.forEach((item, index) => { item.hidden = index < visibleCount; });
-  const hiddenCount = tags.length - visibleCount;
-  overflow.hidden = hiddenCount === 0;
-  if (hiddenCount) {
-    const label = `Show ${hiddenCount} more agent conversation${hiddenCount === 1 ? "" : "s"}`;
-    overflow.textContent = `+${hiddenCount}`;
-    overflow.title = `${label}.`;
-    overflow.setAttribute("aria-label", label);
-    if (intercomConversationOverflowOpen) setIntercomConversationOverflowOpen(true);
-  } else {
-    setIntercomConversationOverflowOpen(false);
-  }
-}
-
-function scheduleIntercomConversationTagLayout() {
-  if (intercomConversationTagLayoutFrame) return;
-  intercomConversationTagLayoutFrame = requestAnimationFrame(() => {
-    intercomConversationTagLayoutFrame = 0;
-    fitIntercomConversationTags();
-  });
-}
-
-function installIntercomConversationTagResizeHandling() {
-  const container = elements.intercomConversationTags;
-  if (!container) return;
-  if (typeof ResizeObserver === "function") {
-    intercomConversationTagResizeObserver = new ResizeObserver(scheduleIntercomConversationTagLayout);
-    intercomConversationTagResizeObserver.observe(container);
-    if (container.parentElement) intercomConversationTagResizeObserver.observe(container.parentElement);
-  } else {
-    window.addEventListener("resize", scheduleIntercomConversationTagLayout, { passive: true });
-  }
-  container.addEventListener("keydown", (event) => {
-    if (event.key !== "Escape" || !intercomConversationOverflowOpen) return;
-    event.preventDefault();
-    event.stopPropagation();
-    setIntercomConversationOverflowOpen(false, { restoreFocus: true });
-  });
-  container.addEventListener("focusout", () => {
-    queueMicrotask(() => {
-      if (intercomConversationOverflowOpen && !container.contains(document.activeElement)) setIntercomConversationOverflowOpen(false);
-    });
-  });
-  document.addEventListener("pointerdown", (event) => {
-    if (intercomConversationOverflowOpen && !container.contains(event.target)) setIntercomConversationOverflowOpen(false);
-  });
-}
-
-function updateIntercomConversationTag(tag, conversation) {
-  const label = intercomConversationLabel(conversation);
-  tag.setAttribute("aria-label", `Open agent conversation ${label}`);
-  tag.title = `${label} · ${conversation.messageCount} message${conversation.messageCount === 1 ? "" : "s"}`;
-  const visualSignature = JSON.stringify([label, conversation.messageCount]);
-  if (tag.dataset.intercomVisualSignature === visualSignature) return;
-  const children = [make("span", "composer-intercom-tag-icon", "↔"), make("span", "composer-intercom-tag-label", label)];
-  if (conversation.messageCount > 0) children.push(make("span", "composer-intercom-tag-count", String(conversation.messageCount)));
-  tag.replaceChildren(...children);
-  tag.dataset.intercomVisualSignature = visualSignature;
-}
-
-function renderIntercomConversationTags(tabId = activeTabId) {
-  const container = elements.intercomConversationTags;
-  if (!container) return;
-  const conversations = intercomConversationSummariesByTab.get(tabId) || [];
-  if (!conversations.length) {
-    intercomConversationOverflowOpen = false;
-    container.classList.remove("overflow-open");
-    container.replaceChildren();
-    container.hidden = true;
-    return;
-  }
-
-  let overflow = container.querySelector("button.composer-intercom-tag.overflow");
-  if (!overflow) {
-    overflow = make("button", "composer-intercom-tag overflow", `+${conversations.length}`);
-    overflow.type = "button";
-    overflow.hidden = true;
-    overflow.setAttribute("aria-haspopup", "dialog");
-    overflow.setAttribute("aria-expanded", "false");
-    overflow.setAttribute("aria-controls", "intercomConversationOverflowMenu");
-    overflow.addEventListener("click", () => {
-      const opening = !intercomConversationOverflowOpen;
-      setIntercomConversationOverflowOpen(opening, { focusMenu: opening });
-    });
-  }
-  let menu = container.querySelector(".composer-intercom-overflow-menu");
-  if (!menu) {
-    menu = make("div", "composer-intercom-overflow-menu");
-    menu.id = "intercomConversationOverflowMenu";
-    menu.hidden = true;
-    menu.setAttribute("role", "dialog");
-    menu.setAttribute("aria-label", "More agent conversations");
-  }
-  container.append(overflow, menu);
-
-  const existingTags = new Map([...container.querySelectorAll(":scope > .composer-intercom-tag[data-intercom-conversation-id]")]
-    .map((tag) => [tag.dataset.intercomConversationId, tag]));
-  const existingMenuItems = new Map([...menu.querySelectorAll(".composer-intercom-overflow-menu-item[data-intercom-conversation-id]")]
-    .map((tag) => [tag.dataset.intercomConversationId, tag]));
-  const orderedTags = [];
-  const orderedMenuItems = [];
-  const seenConversationIds = new Set();
-  for (const conversation of conversations) {
-    if (seenConversationIds.has(conversation.id)) continue;
-    seenConversationIds.add(conversation.id);
-    let tag = existingTags.get(conversation.id);
-    if (tag) existingTags.delete(conversation.id);
-    else {
-      tag = make("button", "composer-intercom-tag");
-      tag.type = "button";
-      tag.dataset.intercomConversationId = conversation.id;
-      tag.setAttribute("aria-haspopup", "dialog");
-      tag.setAttribute("aria-controls", "intercomConversationDialog");
-      tag.addEventListener("click", () => openIntercomConversation(tag.dataset.intercomConversationId));
-    }
-    updateIntercomConversationTag(tag, conversation);
-    orderedTags.push(tag);
-
-    let menuItem = existingMenuItems.get(conversation.id);
-    if (menuItem) existingMenuItems.delete(conversation.id);
-    else {
-      menuItem = make("button", "composer-intercom-tag composer-intercom-overflow-menu-item");
-      menuItem.type = "button";
-      menuItem.dataset.intercomConversationId = conversation.id;
-      menuItem.setAttribute("aria-haspopup", "dialog");
-      menuItem.setAttribute("aria-controls", "intercomConversationDialog");
-      menuItem.addEventListener("click", () => {
-        const conversationId = menuItem.dataset.intercomConversationId;
-        setIntercomConversationOverflowOpen(false);
-        overflow.focus();
-        openIntercomConversation(conversationId);
-      });
-    }
-    updateIntercomConversationTag(menuItem, conversation);
-    orderedMenuItems.push(menuItem);
-  }
-
-  for (const staleTag of existingTags.values()) staleTag.remove();
-  for (const staleItem of existingMenuItems.values()) staleItem.remove();
-  const currentTags = [...container.querySelectorAll(":scope > .composer-intercom-tag[data-intercom-conversation-id]")];
-  if (currentTags.length !== orderedTags.length || orderedTags.some((tag, index) => currentTags[index] !== tag)) {
-    for (const tag of orderedTags) container.insertBefore(tag, overflow);
-  }
-  const currentMenuItems = [...menu.querySelectorAll(":scope > .composer-intercom-overflow-menu-item")];
-  if (currentMenuItems.length !== orderedMenuItems.length || orderedMenuItems.some((tag, index) => currentMenuItems[index] !== tag)) {
-    for (const menuItem of orderedMenuItems) menu.append(menuItem);
-  }
-  container.append(overflow, menu);
-  container.hidden = false;
-  scheduleIntercomConversationTagLayout();
-}
-
-async function refreshIntercomConversationSummaries(tabContext = activeTabContext()) {
-  if (!tabContext.tabId) return;
-  const requestSerial = ++intercomSummaryRequestSerial;
-  const response = await api("/api/intercom/conversations", { tabId: tabContext.tabId });
-  if (requestSerial !== intercomSummaryRequestSerial || !isCurrentTabContext(tabContext)) return;
-  const seenConversationIds = new Set();
-  const conversations = [];
-  for (const value of Array.isArray(response.data?.conversations) ? response.data.conversations : []) {
-    const conversation = normalizeIntercomConversationSummary(value);
-    if (!conversation || seenConversationIds.has(conversation.id)) continue;
-    seenConversationIds.add(conversation.id);
-    conversations.push(conversation);
-  }
-  const previous = intercomConversationSummariesByTab.get(tabContext.tabId) || [];
-  intercomConversationSummariesByTab.set(tabContext.tabId, conversations);
-  if (intercomConversationSummarySignature(previous) !== intercomConversationSummarySignature(conversations) && !elements.intercomConversationDialog?.open) {
-    renderIntercomConversationTags(tabContext.tabId);
-  }
-  if (intercomConversationDialogState?.tabId === tabContext.tabId && !seenConversationIds.has(intercomConversationDialogState.conversationId)) {
-    closeIntercomConversationDialog({ restoreFocus: false });
-  }
-}
-
-function scheduleIntercomConversationRefresh(tabContext = activeTabContext(), delayMs = 180) {
-  clearTimeout(intercomSummaryRefreshTimer);
-  const scheduledContext = { ...tabContext };
-  intercomSummaryRefreshTimer = setTimeout(() => {
-    intercomSummaryRefreshTimer = null;
-    if (!isCurrentTabContext(scheduledContext)) return;
-    refreshIntercomConversationSummaries(scheduledContext).catch((error) => {
-      if (isCurrentTabContext(scheduledContext)) addEvent(`agent conversation refresh failed: ${error.message || String(error)}`, "warn");
-    });
-  }, delayMs);
-}
-
-function setIntercomConversationStatus(message = "", level = "") {
-  const status = elements.intercomConversationStatus;
-  if (!status) return;
-  status.textContent = message;
-  status.classList.toggle("error", level === "error");
-  status.classList.toggle("warn", level === "warn");
-}
-
-function formatIntercomMessageTime(value) {
-  const timestamp = Date.parse(value || "");
-  if (!Number.isFinite(timestamp)) return "";
-  return new Date(timestamp).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
-}
-
-function renderIntercomConversationMessage(article, message, conversation) {
-  const participant = message.direction === "local" ? conversation.participants.local : conversation.participants.peer;
-  const senderLabel = intercomParticipantLabel(participant, message.direction === "local" ? "Local agent" : "Peer agent");
-  const formattedTime = formatIntercomMessageTime(message.timestamp);
-  const signature = JSON.stringify([message.direction, senderLabel, message.text, message.timestamp, message.truncatedText]);
-  if (intercomMessageRenderSignatures.get(article) === signature) return;
-
-  article.className = `intercom-conversation-message ${message.direction}`;
-  article.dataset.intercomMessageId = message.id;
-  article.setAttribute("aria-label", `${senderLabel} message`);
-  const header = make("header", "intercom-conversation-message-header");
-  header.append(make("strong", "intercom-conversation-message-sender", senderLabel));
-  if (formattedTime) {
-    const time = make("time", "intercom-conversation-message-time", formattedTime);
-    time.dateTime = message.timestamp;
-    header.append(time);
-  }
-  const text = make("p", "intercom-conversation-message-text");
-  text.textContent = message.text;
-  const children = [header, text];
-  if (message.truncatedText) children.push(make("span", "intercom-conversation-truncated", "Message truncated"));
-  article.replaceChildren(...children);
-  intercomMessageRenderSignatures.set(article, signature);
-}
-
-function renderIntercomConversationDetail(conversation) {
-  const transcript = elements.intercomConversationTranscript;
-  if (!transcript || !conversation) return;
-  const state = intercomConversationDialogState;
-  const signature = JSON.stringify([
-    conversation.id,
-    conversation.truncatedBefore,
-    intercomConversationLabel(conversation),
-    conversation.messages.map((message) => [message.id, message.direction, message.text, message.timestamp, message.truncatedText]),
-  ]);
-  if (state?.detailSignature === signature) return;
-  if (state) state.detailSignature = signature;
-
-  const existingArticles = new Map([...transcript.querySelectorAll(":scope > .intercom-conversation-message[data-intercom-message-id]")]
-    .map((article) => [article.dataset.intercomMessageId, article]));
-  const shouldFollow = !existingArticles.size || transcript.scrollHeight - transcript.scrollTop - transcript.clientHeight < 80;
-  const previousScrollTop = transcript.scrollTop;
-  const anchor = shouldFollow ? null : [...existingArticles.values()]
-    .find((article) => article.offsetTop + article.offsetHeight > transcript.scrollTop);
-  const anchorOffset = anchor ? anchor.getBoundingClientRect().top - transcript.getBoundingClientRect().top : 0;
-  const orderedArticles = [];
-
-  for (const message of conversation.messages) {
-    let article = existingArticles.get(message.id);
-    if (article) existingArticles.delete(message.id);
-    else article = make("article", `intercom-conversation-message ${message.direction}`);
-    renderIntercomConversationMessage(article, message, conversation);
-    orderedArticles.push(article);
-  }
-  for (const staleArticle of existingArticles.values()) staleArticle.remove();
-  transcript.querySelector(":scope > .intercom-conversation-empty")?.remove();
-
-  let cursor = transcript.firstElementChild;
-  for (const article of orderedArticles) {
-    if (article === cursor) cursor = cursor.nextElementSibling;
-    else transcript.insertBefore(article, cursor);
-  }
-  if (!orderedArticles.length) transcript.append(make("p", "intercom-conversation-empty", "No messages are available in this conversation."));
-
-  requestAnimationFrame(() => {
-    if (state !== intercomConversationDialogState) return;
-    if (shouldFollow) transcript.scrollTop = transcript.scrollHeight;
-    else if (anchor?.isConnected) {
-      const currentAnchorOffset = anchor.getBoundingClientRect().top - transcript.getBoundingClientRect().top;
-      transcript.scrollTop += currentAnchorOffset - anchorOffset;
-    }
-    else transcript.scrollTop = previousScrollTop;
-  });
-}
-
-function updateIntercomSummaryFromDetail(conversation) {
-  const state = intercomConversationDialogState;
-  if (!state || !conversation) return;
-  const summaries = intercomConversationSummariesByTab.get(state.tabId) || [];
-  const index = summaries.findIndex((summary) => summary.id === conversation.id);
-  if (index < 0) return;
-  const next = [...summaries];
-  next[index] = { ...next[index], ...normalizeIntercomConversationSummary(conversation) };
-  intercomConversationSummariesByTab.set(state.tabId, next);
-}
-
-function scheduleIntercomConversationDetailRefresh() {
-  clearTimeout(intercomDetailRefreshTimer);
-  intercomDetailRefreshTimer = null;
-  const state = intercomConversationDialogState;
-  if (!state || !elements.intercomConversationDialog?.open) return;
-  intercomDetailRefreshTimer = setTimeout(() => {
-    intercomDetailRefreshTimer = null;
-    refreshIntercomConversationDetail({ announceLoading: false });
-  }, INTERCOM_DETAIL_REFRESH_MS);
-}
-
-async function refreshIntercomConversationDetail({ announceLoading = false } = {}) {
-  const state = intercomConversationDialogState;
-  if (!state || !elements.intercomConversationDialog?.open) return;
-  const requestSerial = ++intercomDetailRequestSerial;
-  if (announceLoading) setIntercomConversationStatus("Loading agent messages…");
-  try {
-    const path = `/api/intercom/conversations?conversation=${encodeURIComponent(state.conversationId)}`;
-    const response = await api(path, { tabId: state.tabId });
-    if (requestSerial !== intercomDetailRequestSerial || state !== intercomConversationDialogState || !isCurrentTabContext(state)) return;
-    const conversation = normalizeIntercomConversationDetail(response.data?.conversation);
-    if (!conversation || conversation.id !== state.conversationId) throw new Error("Agent conversation is unavailable.");
-    elements.intercomConversationTitle.textContent = intercomParticipantLabel(conversation.participants.peer, "Agent conversation");
-    elements.intercomConversationParticipants.textContent = intercomConversationLabel(conversation);
-    renderIntercomConversationDetail(conversation);
-    updateIntercomSummaryFromDetail(conversation);
-    const notices = [];
-    if (conversation.truncatedBefore) notices.push("Earlier messages are unavailable.");
-    if (conversation.messages.some((message) => message.truncatedText)) notices.push("One or more messages were truncated.");
-    setIntercomConversationStatus(notices.join(" "), notices.length ? "warn" : "");
-  } catch (error) {
-    if (requestSerial === intercomDetailRequestSerial && state === intercomConversationDialogState && isCurrentTabContext(state)) {
-      setIntercomConversationStatus(error.message || String(error), "error");
-    }
-  } finally {
-    if (requestSerial === intercomDetailRequestSerial && state === intercomConversationDialogState) scheduleIntercomConversationDetailRefresh();
-  }
-}
-
-function openIntercomConversation(conversationId) {
-  if (!activeTabId || !INTERCOM_CONVERSATION_ID_PATTERN.test(String(conversationId || "")) || !elements.intercomConversationDialog) return;
-  const summary = (intercomConversationSummariesByTab.get(activeTabId) || []).find((conversation) => conversation.id === conversationId);
-  if (!summary) return;
-  intercomDetailRequestSerial += 1;
-  clearTimeout(intercomDetailRefreshTimer);
-  intercomConversationDialogState = { ...activeTabContext(), conversationId, detailSignature: "" };
-  elements.intercomConversationTitle.textContent = intercomParticipantLabel(summary.participants.peer, "Agent conversation");
-  elements.intercomConversationParticipants.textContent = intercomConversationLabel(summary);
-  elements.intercomConversationTranscript.replaceChildren();
-  setIntercomConversationStatus("Loading agent messages…");
-  if (!elements.intercomConversationDialog.open) elements.intercomConversationDialog.showModal();
-  queueMicrotask(() => elements.intercomConversationCloseButton?.focus({ preventScroll: true }));
-  refreshIntercomConversationDetail({ announceLoading: false });
-}
-
-function resetIntercomConversationDialog() {
-  intercomDetailRequestSerial += 1;
-  clearTimeout(intercomDetailRefreshTimer);
-  intercomDetailRefreshTimer = null;
-  intercomConversationDialogState = null;
-  elements.intercomConversationTranscript?.replaceChildren();
-  if (elements.intercomConversationParticipants) elements.intercomConversationParticipants.textContent = "";
-  setIntercomConversationStatus("");
-  renderIntercomConversationTags(activeTabId);
-}
-
-function closeIntercomConversationDialog({ restoreFocus = true } = {}) {
-  const dialog = elements.intercomConversationDialog;
-  if (!dialog?.open) {
-    resetIntercomConversationDialog();
-    return;
-  }
-  if (!restoreFocus) modalSurfaceState.delete(dialog);
-  dialog.close();
 }
 
 function normalizeFeatureCategory(value) {
@@ -12668,11 +12210,8 @@ function reconcileUnknownTranscriptEvidenceAtBarrier(event) {
 
 function setActiveTabId(tabId, { remember = false } = {}) {
   const nextTabId = tabId || null;
-  if (nextTabId !== activeTabId) {
-    intercomSummaryRequestSerial += 1;
-    clearTimeout(intercomSummaryRefreshTimer);
-    intercomSummaryRefreshTimer = null;
-    closeIntercomConversationDialog({ restoreFocus: false });
+  const tabChanged = nextTabId !== activeTabId;
+  if (tabChanged) {
     closeFeatureDecisionDialog({ restoreFocus: false });
     closeSessionSummaryOverlay({ restoreFocus: false });
   }
@@ -12681,7 +12220,9 @@ function setActiveTabId(tabId, { remember = false } = {}) {
   activeTabGeneration = context.generation;
   renderMainOutputLoading();
   bindGitWorkflowToActiveTab();
-  renderIntercomConversationTags(nextTabId);
+  if (tabChanged) activityIntercom.activate(projectTargetFromContext());
+  else activityIntercom.renderTags(nextTabId);
+  renderIntercomActivityLinks();
   renderFeatureCategoryTag(nextTabId);
   renderSessionSummaryControls();
   if (remember) rememberActiveTab();
@@ -12707,6 +12248,9 @@ function isCurrentTabContext(context) {
 
 function reconcileReplacedSession(context) {
   activeTabGeneration = context.generation;
+  activityIntercom.prune(tabs.filter(tab => tab.id !== context.tabId).map(tab => tab.id));
+  activityIntercom.activate(projectTargetFromContext(context));
+  renderIntercomActivityLinks();
   retireSessionDialogs(context.tabId);
   promptRoutingTabs.delete(context.tabId);
   guidedGitLaunchPermits.clearTab(context.tabId);
@@ -17902,9 +17446,7 @@ async function refreshTabs({ selectStored = false, signal } = {}) {
     tabs = nextTabs;
     syncTabMetadata(tabs);
     const liveParentTabIds = new Set(tabs.map((tab) => tab.id));
-    for (const tabId of intercomConversationSummariesByTab.keys()) {
-      if (!liveParentTabIds.has(tabId)) intercomConversationSummariesByTab.delete(tabId);
-    }
+    activityIntercom.prune(liveParentTabIds);
     for (const view of [...subagentTerminalViews.values()]) {
       if (!liveParentTabIds.has(view.parentTabId)) removeSubagentTerminalViewsForParent(view.parentTabId);
     }
@@ -28443,83 +27985,14 @@ function syncLiveTodoProgressWidgetFromText(text, tabId = activeTabId) {
   return changed;
 }
 
-function parseTodoProgressWidget(lines) {
-  const cleanLines = lines.map(stripAnsi).map((line) => line.trim()).filter(Boolean);
-  const goalLine = cleanLines.find((line) => /^Goal\s*[:：]/i.test(line));
-  const goal = goalLine ? goalLine.replace(/^Goal\s*[:：]\s*/i, "").trim() : "";
-  const headerIndex = cleanLines.findIndex((line) => /^Todo\s+\d+\/\d+\s+done/i.test(line));
-  if (headerIndex === -1) return null;
-
-  const header = cleanLines[headerIndex];
-  const match = header.match(/^Todo\s+(\d+)\/(\d+)\s+done(?:,\s+(\d+)\s+partial)?/i);
-  if (!match) return null;
-
-  const items = [];
-  let footer = "";
-  for (const line of cleanLines.slice(headerIndex + 1)) {
-    const item = parseTodoProgressItemLine(line);
-    if (item) {
-      items.push(item);
-    } else if (/^Scroll\s+/i.test(line)) {
-      footer = line;
-    }
-  }
-
-  return {
-    goal,
-    done: Number.parseInt(match[1], 10) || 0,
-    total: Number.parseInt(match[2], 10) || items.length,
-    partial: Number.parseInt(match[3] || "0", 10) || 0,
-    items,
-    footer,
-  };
-}
+function parseTodoProgressWidget(lines) { return activityTodo.parse(lines); }
 
 function renderTodoProgressWidget(_key, lines) {
-  const todo = parseTodoProgressWidget(lines);
-  if (!todo) return null;
-
   const tabId = activeTabId || "default";
-  const node = make("details", "widget todo-widget");
-  node.open = todoProgressWidgetExpandedByTab.get(tabId) === true;
-  node.setAttribute("aria-label", "Todo progress");
-  node.addEventListener("toggle", () => {
-    todoProgressWidgetExpandedByTab.set(tabId, node.open);
+  return activityTodo.render(lines, {
+    expanded: todoProgressWidgetExpandedByTab.get(tabId) === true,
+    onExpandedChange(open) { todoProgressWidgetExpandedByTab.set(tabId, open); },
   });
-
-  const percent = todo.total > 0 ? Math.max(0, Math.min(100, (todo.done / todo.total) * 100)) : 0;
-  const summary = make("summary", "todo-widget-summary");
-  const header = make("div", "todo-widget-header");
-  header.append(
-    make("span", "todo-widget-toggle", "›"),
-    make("span", "todo-widget-title", "Todo progress"),
-    make("span", "todo-widget-count", `${todo.done}/${todo.total}`),
-    make("span", "todo-widget-meta", todo.partial ? `${todo.partial} partial` : "active"),
-  );
-
-  const progress = make("div", "todo-widget-progress");
-  const fill = make("span", "todo-widget-progress-fill");
-  fill.style.width = `${percent}%`;
-  progress.append(fill);
-  if (todo.goal) summary.append(make("div", "todo-widget-goal", `Goal: ${todo.goal}`));
-  summary.append(header, progress);
-
-  const body = make("div", "todo-widget-body");
-  const list = make("ol", "todo-widget-list");
-  for (const item of todo.items) {
-    const row = make("li", `todo-widget-item ${item.status}`);
-    row.append(
-      make("span", "todo-widget-marker", item.status === "done" ? "✓" : item.status === "partial" ? "–" : ""),
-      make("span", "todo-widget-text", item.text),
-    );
-    list.append(row);
-  }
-  if (todo.items.length) body.append(list);
-  if (todo.footer) body.append(make("div", "todo-widget-footer", todo.footer));
-
-  node.append(summary);
-  if (body.children.length) node.append(body);
-  return node;
 }
 
 function getWidgetLines(key) {
@@ -47045,7 +46518,7 @@ async function refreshAll(tabContext = activeTabContext()) {
   const results = await Promise.allSettled([
     refreshState(tabContext),
     refreshMessages(tabContext),
-    refreshIntercomConversationSummaries(tabContext),
+    activityIntercom.refreshSummaries(projectTargetFromContext(tabContext)),
     ...supplementalRefreshRequests(tabContext),
   ]);
   if (!isCurrentTabContext(tabContext)) return;
@@ -48505,7 +47978,7 @@ function handleEvent(event) {
     return;
   }
   const tabContext = activeTabContext(event.tabId || activeTabId);
-  if (["webui_connected", "agent_end", "message_end", "tool_execution_end"].includes(event.type)) scheduleIntercomConversationRefresh(tabContext);
+  if (["webui_connected", "agent_end", "message_end", "tool_execution_end"].includes(event.type)) activityIntercom.scheduleRefresh(projectTargetFromContext(tabContext));
   switch (event.type) {
     case "webui_connected": {
       const connectedTabId = event.tabId || activeTabId;
@@ -48885,7 +48358,7 @@ function handleEvent(event) {
 
 function handleSessionStreamOpen(event, tabContext) {
   if (!eventStreamPausedForBackground) refreshOptionalFeaturePackageStatuses().catch(() => {});
-  scheduleIntercomConversationRefresh(tabContext, 0);
+  activityIntercom.scheduleRefresh(projectTargetFromContext(tabContext), 0);
 }
 
 function handleSessionStreamMessage(message, tabContext) {
@@ -49004,10 +48477,11 @@ elements.skillEditorDialog?.addEventListener("keydown", (event) => {
   if (!elements.skillEditorSaveButton?.disabled) saveSkillEditor();
 });
 elements.skillEditorDialog?.querySelector("form")?.addEventListener("submit", (event) => event.preventDefault());
-elements.intercomConversationDialog?.addEventListener("close", resetIntercomConversationDialog);
+elements.intercomConversationDialog?.addEventListener("close", () => {
+  if (!elements.intercomConversationDialog.open) activityIntercom.reset();
+});
 elements.intercomConversationDialog?.addEventListener("cancel", () => {
-  clearTimeout(intercomDetailRefreshTimer);
-  intercomDetailRefreshTimer = null;
+  activityIntercom.reset();
 });
 elements.featureCategoryTag?.addEventListener("click", openFeatureDecisionDialog);
 elements.featureDecisionDialog?.addEventListener("close", () => {
@@ -51180,7 +50654,7 @@ restoreBusyPromptBehaviorSetting();
 syncMobileComposerDisclosureLayout();
 updateComposerModeButtons();
 installSessionSkillTagResizeHandling();
-installIntercomConversationTagResizeHandling();
+activityIntercom.install();
 updateOptionalFeatureAvailability();
 renderOptionalFeatureMigrationSurface();
 refreshOptionalFeaturePackageStatuses({ announce: true });

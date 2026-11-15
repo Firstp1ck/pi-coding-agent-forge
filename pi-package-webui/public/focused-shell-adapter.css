@@ -75,3 +75,4 @@ html[data-desktop-shell="focused"] #focusedWorkspace { height: var(--visual-view
 #focusedWorkspace .focused-feature-controls .composer-app-runner-info-button { position: static; opacity: 1; pointer-events: auto; transform: none; }
 #focusedWorkspace .focused-feature-widgets .app-runner-stdin-form { display: grid; grid-template-columns: 1fr auto; }
 #focusedWorkspace .focused-feature-widgets .app-runner-stdin-input { grid-column: 1 / -1; width: 100%; }
+#focusedWorkspace .focused-conversation-link { width: 100%; min-width: 0; white-space: normal; text-align: left; }

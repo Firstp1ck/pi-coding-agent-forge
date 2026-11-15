@@ -1156,14 +1156,16 @@ assert.match(app, /case "webui_extension_ui_cancelled":/, "frontend should close
 assert.match(app, /case "webui_extension_ui_resolved":[\s\S]*?removeQueuedDialogRequests\(\[event\.id\], event\.tabId \|\| activeTabId\)/, "frontend should close dialogs resolved by another connected browser");
 assert.match(app, /if \(extensionRequests\.active !== request \|\| !sessionContext\.isLifetimeCurrent\(lifetime\)\) return;/, "dialog response cleanup should not close the next queued dialog after a resolve-event race");
 assert.match(app, /if \(runIndicatorIsActive\(\)\) \{\s*setRunIndicatorActivity\("Continuing after your response…"\);[\s\S]*?scheduleRefreshState\(120, tabContext\);\s*\}/, "extension UI responses should promptly reconcile canonical state so background release commands cannot leave a stale running indicator");
+const usageControllerSource = await readFile(new URL("../public/activity-usage-controller.mjs", import.meta.url), "utf8");
+const todoView = await readFile(new URL("../public/activity-todo-view.mjs", import.meta.url), "utf8");
 assert.match(app, /function parseTodoProgressWidget\(lines\)/, "todo-progress widgets should be parsed from extension widget lines");
-assert.ok(app.includes("const goalLine = cleanLines.find((line) => /^Goal\\s*[:：]/i.test(line));"), "todo-progress parser should preserve an optional Goal line from extension widget lines");
-assert.ok(app.includes("if (todo.goal) summary.append(make(\"div\", \"todo-widget-goal\", `Goal: ${todo.goal}`));"), "todo-progress widget should display the goal above the progress header");
+assert.ok(todoView.includes("const goalLine = cleanLines.find((line) => /^Goal\\s*[:：]/i.test(line));"), "todo-progress parser should preserve an optional Goal line from extension widget lines");
+assert.ok(todoView.includes("if (todo.goal) summary.append(make(\"div\", \"todo-widget-goal\", `Goal: ${todo.goal}`));"), "todo-progress widget should display the goal above the progress header");
 assert.match(app, /const todoProgressWidgetExpandedByTab = new Map\(\)/, "todo-progress expansion state should survive widget re-renders per tab");
 assert.match(app, /const todoProgressSignatureByTab = new Map\(\)/, "todo-progress should track per-tab signatures to avoid unchanged re-renders");
 assert.match(app, /function widgetRequestEquivalent\(a, b\)[\s\S]*?return a\.widgetLines\.every/, "todo-progress and generic widgets should no-op identical widget payloads");
 assert.match(app, /todoProgressSignatureByTab\.get\(tabId\) === signature\) return false/, "live todo-progress sync should skip unchanged checklist signatures");
-assert.match(app, /const node = make\("details", "widget todo-widget"\)/, "todo-progress widget should render collapsed by default as expandable details");
+assert.match(todoView, /const node = make\("details", "widget todo-widget"\)/, "todo-progress widget should render collapsed by default as expandable details");
 assert.match(app, /Optional feature detection intentionally checks loaded Pi capabilities/, "optional Web UI features should be detected through loaded capabilities, not package folders");
 assert.match(app, /function resetOptionalFeatureAvailability\(\)/, "optional feature state should reset across active-tab and reload boundaries");
 assert.match(app, /function renderOptionalFeaturePanel\(\)/, "side panel should render optional feature installed/enabled state");
@@ -1191,7 +1193,7 @@ assert.match(
   /setSidePanelSectionCollapsed\(record, !record\.section\.classList\.contains\("collapsed"\)\);/,
   "side-panel section toggles should open and close each section independently",
 );
-assert.match(app, /function renderCodexUsage\(\)/, "frontend should render Codex usage buckets in the side panel");
+assert.match(usageControllerSource, /function renderCodexUsage\(\)/, "frontend should render Codex usage buckets in the side panel");
 assert.match(app, /function renderSubagents\(\)[\s\S]*subagentTabsWithRunningAgents\(\)[\s\S]*totalGates[\s\S]*renderSubagentTabGroup\(tab\)/, "frontend should group running subagents and retained retry gates by terminal and session");
 assert.match(app, /function renderSubagents\(\)[\s\S]*activeTabs\.reduce\(\(count, tab\) => count \+ Number\(tab\.runningAgents \|\| 0\), 0\)[\s\S]*subagentCountBadge\.textContent = String\(totalAgents\)/, "the subagent count badge should derive visible agent totals without counting workflow containers or retry-gated attempts twice");
 const workflowControllerSource = appFunctionSource("subagentIsWorkflowController", "subagentCapabilities");
@@ -1550,8 +1552,8 @@ assert.match(helper, /line\.trim\(\)\.toLowerCase\(\) === "\(no output\)"/, "sub
 assert.match(server, /function normalizeWebuiSubagentTranscript\(value\)[\s\S]*remainingParts = WEBUI_SUBAGENT_OUTPUT_LINE_LIMIT[\s\S]*const transcript = normalizeWebuiSubagentTranscript\(rawAgent\.transcript\)/, "server output normalization should preserve the structured transcript under the existing line limit");
 assert.match(helper, /SUBAGENT_ASYNC_STARTED_EVENT = "subagent:async-started"[\s\S]*SUBAGENT_ASYNC_COMPLETE_EVENT = "subagent:async-complete"/, "Web UI helper should track async subagent lifecycle events");
 assert.match(helper, /pi\.on\("tool_execution_start"[\s\S]*event\.toolName !== "subagent"[\s\S]*pi\.on\("tool_execution_end"/, "Web UI helper should track foreground subagent executions");
-assert.match(app, /if \(normalized === "prolite"\) return "Usage";/, "Codex Prolite plan labels should display as Usage in the side panel");
-assert.match(app, /api\(`\/api\/codex-usage\$\{suffix\}`, \{ scoped: false \}\)/, "Codex usage should load through a server endpoint without browser credentials");
+assert.match(usageControllerSource, /if \(normalized === "prolite"\) return "Usage";/, "Codex Prolite plan labels should display as Usage in the side panel");
+assert.match(usageControllerSource, /api\(`\/api\/codex-usage\$\{suffix\}`, \{ scoped: false \}\)/, "Codex usage should load through a server endpoint without browser credentials");
 assert.match(app, /restoreSidePanelSectionState\(\);\n[\s\S]{0,200}?bindSidePanelSectionToggles\(\);/, "side panel section state should restore before toggles are bound");
 assert.match(app, /OPTIONAL_FEATURES_STORAGE_KEY/, "optional feature disable toggles should persist in browser storage");
 assert.match(app, /GIT_FOOTER_WEBUI_STATUS_KEY = "git-footer-webui"/, "git footer Web UI data should be received as an extension-owned status payload");

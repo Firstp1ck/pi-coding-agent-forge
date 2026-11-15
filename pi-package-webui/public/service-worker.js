@@ -9,6 +9,8 @@ const APP_SHELL = [
   "/mobile-shell-state.mjs",
   "/activity-events-controller.mjs",
   "/activity-usage-controller.mjs",
+  "/activity-intercom-controller.mjs",
+  "/activity-todo-view.mjs",
   "/project-git-tools-controller.mjs",
   "/project-runners-controller.mjs",
   "/project-file-viewer-controller.mjs",
