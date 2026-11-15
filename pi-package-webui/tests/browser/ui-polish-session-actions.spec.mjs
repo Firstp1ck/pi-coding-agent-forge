@@ -218,8 +218,10 @@ test('pending picker cancellation and reopen ignore the late result', async ({ p
   await ready(page, ownership);
   let release;
   let entered;
+  let finishStale;
   const pending = new Promise(resolve => { release = resolve; });
   const intercepted = new Promise(resolve => { entered = resolve; });
+  const staleHandled = new Promise(resolve => { finishStale = resolve; });
   let count = 0;
   await page.route('**/api/directories?*', async route => {
     count += 1;
@@ -227,6 +229,7 @@ test('pending picker cancellation and reopen ignore the late result', async ({ p
       entered();
       await pending;
       await route.fulfill({ json: { ok: true, data: { cwd: '/stale', displayCwd: 'Stale response', directories: [] } } });
+      finishStale();
     } else {
       await route.fulfill({ json: { ok: true, data: { cwd: '/fresh', displayCwd: 'Fresh response', directories: [] } } });
     }
@@ -235,15 +238,16 @@ test('pending picker cancellation and reopen ignore the late result', async ({ p
   await page.locator('#newTabChooseDirectoryButton').click();
   await intercepted;
   await expect(page.locator('#pathPickerCancelButton')).toBeFocused();
+  const aborted = page.waitForEvent('requestfailed', request => new URL(request.url()).pathname === '/api/directories');
   await page.keyboard.press('Escape');
+  expect((await aborted).failure().errorText).toMatch(/abort|cancel/i);
   await expect(page.locator('#pathPickerDialog')).toBeHidden();
   await expect(page.locator('#newTabButton')).toBeFocused();
   await page.locator('#newTabButton').click();
   await page.locator('#newTabChooseDirectoryButton').click();
   await expect(page.locator('#pathPickerCurrent')).toHaveText('Fresh response');
-  const staleResponse = page.waitForResponse(r => new URL(r.url()).pathname === '/api/directories' && r.request().method() === 'GET');
   release();
-  await (await staleResponse).finished();
+  await staleHandled;
   await page.evaluate(() => new Promise(requestAnimationFrame));
   await expect(page.locator('#pathPickerCurrent')).toHaveText('Fresh response');
   await expect(page.locator('#pathPickerDialog')).toBeVisible();

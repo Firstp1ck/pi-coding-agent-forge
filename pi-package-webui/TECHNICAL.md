@@ -105,6 +105,8 @@ A changed, verified healthy active component restarts automatically once all com
 
 The working-directory picker accepts a direct path for first, new, and split terminals and for cwd changes. On Windows, enter a rooted drive path such as `C:/` or `D:/project` to switch drives. From a drive root, **Parent** opens a **This PC** view listing ready filesystem drives; choose a drive to browse its root. **This PC** is navigation-only, so search and direct path entry remain available while selecting, creating, or pinning that virtual location is disabled. Web UI loads and validates a directory before it can be selected; an invalid or unavailable path remains in the field so you can correct it.
 
+**Escape** or **Cancel** closes the directory picker even while a folder is loading. Cancellation returns keyboard focus to the visible control that opened it, unless you have moved to another tab or view. In compact session navigation, the **+ Tab** menu stays within the viewport, including when the session list scrolls.
+
 When tabs span multiple working directories, a directory with one tab stays a normal, non-dropdown tab. Hover over it—or focus controls within it—to reveal **+ Tab** directly below, matching the placement used by grouped terminal menus without repeating the current tab. Directories with multiple tabs continue to use the grouped terminal menu.
 
 Restarting only the Web UI normally keeps managed Pi tabs, working folders, saved sessions, and active work connected to the replacement server. Choosing a saved session from `/resume` opens it in a separate terminal tab and leaves the current terminal unchanged.
@@ -138,7 +140,7 @@ Prompt-impact indicators distinguish initial system-prompt text (`+`), condition
 - **Retry failed** retries only failed package installs.
 - **Copy commands** provides manual Pi install commands.
 - **Recheck** repeats the read-only package check.
-- **Install all** selects every missing or unregistered companion. A section's **Install missing** selects only missing or unregistered companions in that section. Both use one confirmation, install sequentially, and continue after individual failures.
+- **Install all** selects companions eligible for bulk installation. A section's **Install missing** limits that selection to its section. Both use one confirmation, install sequentially, and continue after individual failures. Features with unknown status, registration problems, conflicts, updates or disabled access may need individual review. The summary explains exclusions; check each card's available action before proceeding.
 - Configurable loaded companions show separate **Enable/Disable** and **Setup** actions. The loaded **TUI Skills command** and **TUI Tools command** rows open the browser-native Skills Setup and Tools Setup dialogs. Native questionnaires use the real active-session `questionnaire` tool state and expose only direct **Enable/Disable** access controls.
 
 Installs run one at a time and never invent percentage progress. Busy tabs are not restarted without a visible follow-up action. For unattended migration, use `--migrate-optional-features`; use `--migration-dry-run` to print the planned audit-selected migration without changing packages.

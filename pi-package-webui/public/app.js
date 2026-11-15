@@ -24768,7 +24768,7 @@ async function loadPathPickerDirectory(cwd, { focusAfterLoad = false } = {}) {
   try {
     const query = cwd ? `?path=${encodeURIComponent(cwd)}` : "";
     // A reopened picker must not share an in-flight response from its predecessor.
-    const response = await api(`/api/directories${query}`, { signal: state.requestSignal });
+    const response = await api(`/api/directories${query}`, { signal: state.requestController.signal });
     if (pathPickerState !== state || state.requestId !== requestId) return;
     renderPathPicker(response.data || {});
     if (focusAfterLoad) elements.pathPickerSearchInput.focus({ preventScroll: true });
@@ -24822,15 +24822,19 @@ function closePathPicker(cwd) {
   const state = pathPickerState;
   if (!state) return;
   pathPickerState = null;
+  state.requestController.abort();
   if (elements.pathPickerDialog.open) elements.pathPickerDialog.close();
   // Native dialog cancellation can restore its previous focus after close().
   if (!cwd) setTimeout(() => {
     const focused = document.activeElement;
+    const returnFocus = state.returnFocusKey
+      ? [...elements.statusBar.querySelectorAll("button")].find(node => footerControlKey(node) === state.returnFocusKey)
+      : state.returnFocus;
     if (pathPickerState || activeTabId !== state.activeTabId || activeTabGeneration !== state.activeTabGeneration || location.href !== state.location || focusedShellState.destination !== state.destination || mobileShellState.route !== state.mobileRoute || document.querySelector(":modal")) return;
-    if (focused !== document.body && focused !== state.previousFocus && focused !== state.returnFocus) return;
-    if (!state.returnFocus?.isConnected || !state.returnFocus.getClientRects().length || state.returnFocus.disabled) return;
-    if (state.returnFocus === elements.newTabButton) setNewTabMenuOpen(false);
-    state.returnFocus.focus({ preventScroll: true });
+    if (focused !== document.body && focused !== state.previousFocus && focused !== state.returnFocus && focused !== returnFocus && !elements.pathPickerDialog.contains(focused)) return;
+    if (!returnFocus?.isConnected || !returnFocus.getClientRects().length || returnFocus.disabled) return;
+    if (returnFocus === elements.newTabButton) setNewTabMenuOpen(false);
+    returnFocus.focus({ preventScroll: true });
   }, 0);
   state.resolve(cwd || null);
 }
@@ -24845,7 +24849,15 @@ function pickCwd(tab, initialCwd, { title, returnFocus = document.activeElement 
 
   return new Promise((resolve) => {
     const pickerTab = tab || { id: "path-picker", title: "tab" };
-    pathPickerState = { tabId: pickerTab.id, activeTabId, activeTabGeneration, returnFocus, previousFocus: document.activeElement, location: location.href, destination: focusedShellState.destination, mobileRoute: mobileShellState.route, requestSignal: new AbortController().signal, cwd: initialCwd, displayCwd: initialCwd, selectable: true, requestId: 0, loading: false, creatingDirectory: false, directories: [], filteredDirectories: [], resolve };
+    pathPickerState = {
+      tabId: pickerTab.id, activeTabId, activeTabGeneration,
+      returnFocus, returnFocusKey: elements.statusBar.contains(returnFocus) ? footerControlKey(returnFocus) : "",
+      previousFocus: document.activeElement, location: location.href,
+      destination: focusedShellState.destination, mobileRoute: mobileShellState.route,
+      requestController: new AbortController(), cwd: initialCwd, displayCwd: initialCwd,
+      selectable: true, requestId: 0, loading: false, creatingDirectory: false,
+      directories: [], filteredDirectories: [], resolve,
+    };
     elements.pathPickerTitle.textContent = title || `Choose CWD for ${pickerTab.title}`;
     elements.pathPickerCurrent.textContent = "Loading…";
     elements.pathPickerPathInput.value = "";
@@ -24932,6 +24944,7 @@ async function changeActiveTabCwd() {
 function footerControlKey(node) {
   if (node?.id) return `footer:id:${node.id}`;
   if (node?.dataset?.footerModelKey) return `footer:model:${node.dataset.footerModelKey}`;
+  if (node?.matches?.(".footer-tui-cwd")) return "footer:cwd";
   return "";
 }
 
