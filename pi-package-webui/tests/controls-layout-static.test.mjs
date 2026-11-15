@@ -17,6 +17,6 @@ assert.match(html, /class="control-row remote-auth-control-row" hidden[\s\S]*id=
 assert.match(app, /remoteAuthToggle\?\.closest\("\.remote-auth-control-row"\)[\s\S]*remoteAuthRow\.hidden = false/, "loading remote status should reveal the optional PIN protection setting");
 assert.match(html, /styles\.css\?v=164/, "Controls stylesheet changes should advance the cache query");
 assert.match(html, /app\.js\?v=207/, "Controls tooltip wiring should advance the app cache query");
-assert.match(serviceWorker, /const CACHE_NAME = "pi-webui-pwa-v184"/, "Controls browser assets should advance the PWA cache identity");
+assert.match(serviceWorker, /const CACHE_NAME = "pi-webui-pwa-v185"/, "Controls browser assets should advance the PWA cache identity");
 
 console.log("controls-layout-static.test.mjs passed");
