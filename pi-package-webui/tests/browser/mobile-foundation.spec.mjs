@@ -878,7 +878,7 @@ test("shell modules survive the service-worker offline cache and online refresh"
     const cache = await caches.open(active);
     return { active, shelvesCss: !!await cache.match('/session-shelves.css'), modules: await Promise.all(names.map(async name => !!await cache.match(`/${name}.mjs`))), api: (await cache.keys()).some(request => new URL(request.url).pathname.startsWith('/api/')) };
   }, modules);
-  assert.equal(cacheState.active, 'pi-webui-pwa-v196');
+  assert.equal(cacheState.active, 'pi-webui-pwa-v197');
   assert.equal(cacheState.shelvesCss, true);
   assert.deepEqual(cacheState.modules, modules.map(() => true));
   assert.equal(cacheState.api, false);

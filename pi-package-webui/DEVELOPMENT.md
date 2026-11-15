@@ -1198,3 +1198,8 @@ Coverage includes `composer-toolbar-polish.spec.mjs`, `settings-complete-home.sp
 Browser draft records retain optional `cwd` in the existing version-1 envelope. It is bounded to 4096 UTF-16 code units and rejects NUL; absent or empty values keep No Project behavior. The empty-screen workspace picker captures its originating draft identity, and first-send promotion captures cwd alongside text/revision. Selection cannot reassign a promoted draft or create a Pi child early.
 
 The shared path-fast-pick and directory-creation routes allow absent tab context only when there are zero tabs and no explicit tab identifier. Explicit unknown identifiers still fail, and real-tab Natural Conversation guards retain their existing behavior. `tests/browser/workspace-draft-selection.spec.mjs` covers these route contracts and browser draft selection/promotion races.
+
+
+### Thread start flow
+
+`public/workspace-choices.mjs` is the pure list builder for the New thread palette and the draft folder dropdown (`tests/workspace-choices.test.mjs`). `tests/browser/thread-start-flow.spec.mjs` covers palette and dropdown choices with zero `POST /api/tabs`, first-prompt creation in the chosen folder, a dropdown change during a pending first send, keyboard navigation and Branch worktree. `#newTabButton` keeps its ID for existing hooks; the old `+ Tab` menu items are gone.

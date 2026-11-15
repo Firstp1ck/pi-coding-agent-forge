@@ -8,6 +8,12 @@ Advanced user setup, configuration, compatibility, security, and troubleshooting
 
 On an empty conversation, Open workspace selects a folder without starting Pi. The first nonempty prompt creates the session in that folder. Leaving typed text saves a browser Draft with its selected folder, including across reloads. A blank folder selection stays in the current page only until you type or send. Pinned folders and folder creation work before any terminal exists. Existing-session, split and restore actions keep their current behavior.
 
+
+## Starting threads
+
+The sidebar **New thread** button opens a folder palette built by `public/workspace-choices.mjs`: Current folder, No project, pinned folders, recent thread folders (deduplicated, at most 12), then Browse… and Branch worktree…. Folder and No project choices only open or reuse a blank client draft with that cwd. On a draft's empty screen, the Workspace value opens the same list as a dropdown and changes only that draft's cwd; No project clears it. Neither path calls `POST /api/tabs`; the first nonempty prompt creates exactly one thread. Branch worktree keeps creating its thread immediately.
+
+Visible text calls Pi conversations threads. Code, element IDs, `/api/tabs` and storage keys still say tab. New threads default to `Thread N`, and stored `Terminal N` titles display as `Thread N` without being rewritten.
 ## Compact desktop preview
 
 Fresh installations default to the compact layout only when the server can establish that no earlier Web UI state exists. Existing installations keep Classic; choose **Controls → Interface → Desktop layout → Compact preview** to switch. Its session navigation can sit on the left or above the conversation. **All tools** supports up to twenty pins, saved with the layout choice in this browser. Settings and inspectors reuse your existing controls and their original scopes. Settings groups Appearance, Models and resources, Features, Accounts, Voice, Connection, System, and Help. Search shows each result’s scope and why a control is unavailable. A result opens its category and original control; browser Back and Forward restore the destination. Search does not apply settings. A Settings gear beside the bottom-left workspace buttons opens this same page. Models and resources includes Sampling, Codex speed and Summary Setup; Appearance includes Git-footer Visibility and saved tool-output expansion; System includes project runner configuration. These controls retain their session, browser, global or project scope as shown. Runtime settings and Features Setup remain the home for their existing preferences. **All tools → Model shortcuts** opens the scoped model picker; **Use advanced model shortcuts** or **Use simple model shortcuts** changes its layout while retaining saved ordering. The footer Model chip opens your saved scoped picker and restores keyboard focus when you close it.
@@ -48,7 +54,7 @@ A group can appear in more than one section. Its membership is unchanged; closin
 
 ## No Project conversations
 
-Press the compact layout's **Pi** button or choose **+ Tab → No Project** to open a fresh conversation without selecting a repository. Each fresh conversation receives its own directory under `~/.pi/agent/webui/no-project/`. If you set `PI_CODING_AGENT_DIR`, the directory is under that agent location instead. Opening an empty conversation does not allocate a folder or start Pi. The first submitted message creates its terminal and directory.
+Press the compact layout's **Pi** button or choose **New thread → No project** to open a fresh conversation without selecting a repository. Each fresh conversation receives its own directory under `~/.pi/agent/webui/no-project/`. If you set `PI_CODING_AGENT_DIR`, the directory is under that agent location instead. Opening an empty conversation does not allocate a folder or start Pi. The first submitted message creates its terminal and directory.
 
 Paste text directly into the empty composer. File attachments require a running session; choose a project or send the first message before attaching files. If you submit a command that opens a dialog and navigate away while its conversation is being created, the command stays in that conversation's draft. Return there and submit it to open the dialog.
 
@@ -150,9 +156,9 @@ Only localhost can start updates. Package lifecycle scripts run with your existi
 
 The working-directory picker accepts a direct path for first, new, and split terminals and for cwd changes. On Windows, enter a rooted drive path such as `C:/` or `D:/project` to switch drives. From a drive root, **Parent** opens a **This PC** view listing ready filesystem drives; choose a drive to browse its root. **This PC** is navigation-only, so search and direct path entry remain available while selecting, creating, or pinning that virtual location is disabled. Web UI loads and validates a directory before it can be selected; an invalid or unavailable path remains in the field so you can correct it.
 
-**Escape** or **Cancel** closes the directory picker even while a folder is loading. Cancellation returns keyboard focus to the visible control that opened it, unless you have moved to another tab or view. In compact session navigation, the **+ Tab** menu stays within the viewport, including when the session list scrolls.
+**Escape** or **Cancel** closes the directory picker even while a folder is loading. Cancellation returns keyboard focus to the visible control that opened it, unless you have moved to another tab or view. The **New thread** palette and the empty-screen folder dropdown render in the top layer, so scrolling lists cannot clip them.
 
-When tabs span multiple working directories, a directory with one tab stays a normal, non-dropdown tab. Hover over it—or focus controls within it—to reveal **+ Tab** directly below, matching the placement used by grouped terminal menus without repeating the current tab. Directories with multiple tabs continue to use the grouped terminal menu.
+When tabs span multiple working directories, a directory with one tab stays a normal, non-dropdown tab. Hover over it—or focus controls within it—to reveal **+ Thread** directly below, matching the placement used by grouped terminal menus without repeating the current tab. Directories with multiple tabs continue to use the grouped terminal menu.
 
 Restarting only the Web UI normally keeps managed Pi tabs, working folders, saved sessions, and active work connected to the replacement server. Choosing a saved session from `/resume` opens it in a separate terminal tab and leaves the current terminal unchanged.
 
