@@ -1,3 +1,4 @@
+import { navigateFocused } from './focused-navigation-fixture.mjs';
 import { expect } from '@playwright/test';
 import { test } from './session-fixture.mjs';
 
@@ -39,7 +40,7 @@ async function open(page, ownership, { commands = true, speedData = speed } = {}
   await page.goto(`${ownership.baseURL}/?tab=${ownership.tabs[0].id}`);
   await expect(page.locator('#chat')).toContainText('fake answer');
   await expect(page.locator('#modelSelect')).not.toBeEmpty();
-  await page.getByRole('navigation', { name: 'Workspace destinations' }).getByRole('button', { name: 'Settings', exact: true }).click();
+  await navigateFocused(page, 'Settings');
 }
 
 async function selectTab(page, id, { behindDialog = false } = {}) {
@@ -77,7 +78,7 @@ test('all six homes and Runtime aliases are discoverable; navigation preserves c
   await page.locator('#promptInput').fill('Keep this unsent draft');
   const sampleNode = await page.locator('.sampling-parameters').elementHandle();
   const speedNode = await page.locator('.codex-fast-mode-control').elementHandle();
-  await page.getByRole('navigation', { name: 'Workspace destinations' }).getByRole('button', { name: 'Settings', exact: true }).click();
+  await navigateFocused(page, 'Settings');
   const before = reads.filter(path => path.endsWith('sampling-parameters')).length;
   await category(page, 'Models and resources').click();
   await expect(page.locator('#samplingParametersSupport')).toContainText('fake-model');
@@ -405,7 +406,7 @@ test('a replacement session cannot reuse a held sampling load from the same tab'
   await page.locator('#confirmationConfirmButton').click();
   await expect.poll(async () => (await ownership.api(`/api/state?tab=${ownership.tabs[0].id}`)).sessionId).not.toBe(original);
   await expect(page.locator('#confirmationDialog')).toBeHidden();
-  await page.getByRole('navigation', { name: 'Workspace destinations' }).getByRole('button', { name: 'Settings', exact: true }).click();
+  await navigateFocused(page, 'Settings');
   await category(page, 'Models and resources').click();
   const temperature = page.locator('[data-sampling-parameter="temperature"] input[type=number]');
   await expect(temperature).toHaveValue('0.3');

@@ -42,7 +42,7 @@ test('document inspector loads lazily and retains page/zoom through destinations
   await content.evaluate(node => { window.canonicalArtifact = node; });
   await content.getByRole('button', { name: 'Next', exact: true }).click();
   await content.getByRole('button', { name: '+', exact: true }).click();
-  await rail(page).getByRole('button', { name: 'Settings', exact: true }).click();
+  await navigateFocused(page, 'Settings');
   await navigateFocused(page, 'Project');
   await page.getByRole('combobox', { name: 'Project section', exact: true }).selectOption({ label: 'Documents' });
   await expect(content.locator('.document-artifact-meta')).toContainText('Page 2 of 2 · 125%');
@@ -58,7 +58,7 @@ test('open document transfers to Classic dialog and explicit close permits a fre
   const requests = await prepare(page, ownership);
   await page.locator('.document-artifact-card').getByRole('button', { name: 'Open viewer' }).click();
   await page.locator('.document-artifact-content').getByRole('button', { name: 'Next', exact: true }).click();
-  await rail(page).getByRole('button', { name: 'Settings', exact: true }).click();
+  await navigateFocused(page, 'Settings');
   await page.locator('#desktopShellSelect').selectOption('classic');
   const dialog = page.getByRole('dialog', { name: 'Document artifact', exact: true });
   await expect(dialog).toBeVisible();

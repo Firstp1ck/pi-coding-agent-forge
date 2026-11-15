@@ -1,3 +1,4 @@
+import { navigateFocused } from './focused-navigation-fixture.mjs';
 import { expect } from '@playwright/test';
 import { test } from './session-fixture.mjs';
 
@@ -47,7 +48,7 @@ async function openFocused(page, ownership, query = '') {
 }
 
 async function openSettings(page) {
-  await destinations(page).getByRole('button', { name: 'Settings', exact: true }).click();
+  await navigateFocused(page, 'Settings');
   await expect(search(page)).toBeVisible();
   await expect(categoryNavigation(page)).toBeVisible();
 }
@@ -245,7 +246,7 @@ test('Settings search and canonical controls retain the composer draft through C
   await search(page).evaluate((input) => input.setSelectionRange(1, 4, 'backward'));
   await destinations(page).getByRole('button', { name: 'Conversation', exact: true }).click();
   await expect(prompt).toHaveValue('keep my Settings navigation draft');
-  await destinations(page).getByRole('button', { name: 'Settings', exact: true }).click();
+  await navigateFocused(page, 'Settings');
   await expect(search(page)).toHaveValue('Theme');
   expect(await search(page).evaluate((input) => [input.selectionStart, input.selectionEnd, input.selectionDirection]))
     .toEqual([1, 4, 'backward']);

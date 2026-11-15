@@ -44,7 +44,7 @@ test('Activity topics preserve queue controls and Events filter through navigati
   await page.getByRole('combobox', { name: 'Activity section', exact: true }).selectOption({ label: 'Events' });
   await expect(page.locator('#eventFilterSelect')).toHaveValue('warnings');
   await page.screenshot({ path: testInfo.outputPath('activity-events.png') });
-  await rail.getByRole('button', { name: 'Settings', exact: true }).click();
+  await navigateFocused(page, 'Settings');
   await page.locator('#desktopShellSelect').selectOption('classic');
   await page.locator('#sidePanelSectionToggleEvents').click();
   await expect(page.locator('#eventFilterSelect')).toBeVisible();
@@ -91,7 +91,7 @@ test('runner input and drafts survive destination changes and only explicit Stop
   await page.screenshot({ path: testInfo.outputPath('runner-inspector.png') });
   const rail = page.getByRole('navigation', { name: 'Workspace destinations' });
   await widget.evaluate(node => { window.retainedRunnerWidget = node; });
-  await rail.getByRole('button', { name: 'Settings', exact: true }).click();
+  await navigateFocused(page, 'Settings');
   const overview = page.waitForResponse(response => new URL(response.url()).pathname === '/api/subagents');
   await ownership.api(`/api/prompt?tab=${encodeURIComponent(ownership.tabs[0].id)}`, { message: 'fixture subagents running', requestId: 'hidden-widget-refresh' });
   await overview;
@@ -101,7 +101,7 @@ test('runner input and drafts survive destination changes and only explicit Stop
   await navigateFocused(page, 'Project');
   await page.getByRole('combobox', { name: 'Project section', exact: true }).selectOption({ label: 'Runners' });
   await expect(input).toHaveValue('keep stdin draft');
-  await rail.getByRole('button', { name: 'Settings', exact: true }).click();
+  await navigateFocused(page, 'Settings');
   await page.locator('#desktopShellSelect').selectOption('classic');
   await expect(page.locator('#widgetArea .app-runner-widget')).toBeVisible();
   await expect(input).toHaveValue('keep stdin draft');

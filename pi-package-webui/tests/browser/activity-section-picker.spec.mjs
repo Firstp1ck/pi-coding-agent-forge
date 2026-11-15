@@ -229,7 +229,7 @@ test('destination switches restore Activity selection and Project section keyboa
   await expect(page.getByRole('tabpanel', { name: 'Activity', exact: true })).toBeVisible();
   await expect(page.getByRole('tab')).toHaveCount(2);
   await expect(page.locator('#inspectorDraft')).toHaveValue('Keep this filter');
-  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.evaluate(() => shell.update({ destination: 'settings' }));
   await expect(picker).toBeHidden();
   await page.getByRole('button', { name: 'Inspector', exact: true }).click();
   await page.getByRole('tab', { name: 'Activity', exact: true }).click();

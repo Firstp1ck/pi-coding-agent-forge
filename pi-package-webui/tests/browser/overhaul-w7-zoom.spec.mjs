@@ -1,3 +1,4 @@
+import { navigateFocused } from './focused-navigation-fixture.mjs';
 import { chromium, expect } from '@playwright/test';
 import { mkdir, mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -229,7 +230,7 @@ for (const mode of ['compact-v2', 'classic']) {
         await hitChecks(page, composerSelectors, info, 'reset-composer');
         if (mode === 'compact-v2') {
           await expect(page.locator('#focusedWorkspace')).toBeVisible();
-          await page.getByRole('navigation', { name: 'Workspace destinations' }).getByRole('button', { name: 'Settings', exact: true }).click();
+          await navigateFocused(page, 'Settings');
           await page.locator('#desktopShellSelect').selectOption('classic');
           await expect(page.locator('#focusedWorkspace')).toBeHidden();
           await assertCanonical(page, nodes, draft);

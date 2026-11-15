@@ -33,6 +33,11 @@ async function component(page) {
             onConversation: () => shell.update({ destination: 'conversation' }),
           });
           document.body.append(shell.element);
+          const settingsEntry = document.createElement('button');
+          settingsEntry.className = 'terminal-settings-button';
+          settingsEntry.textContent = 'Settings';
+          settingsEntry.addEventListener('click', () => shell.update({ destination: 'settings' }));
+          shell.slots.navigation.append(settingsEntry);
           shell.slots.conversation.innerHTML = '<textarea id="draft" aria-label="Message Pi">Keep this selected draft</textarea><button id="action">Composer action</button><div id="scroll" style="height:80px;overflow:auto"><div style="height:600px">Persistent transcript</div></div>';
           shell.slots.settings.innerHTML = '<input id="setting" aria-label="Setting" value="Uncommitted setting">';
           window.originalDraft = document.getElementById('draft');
@@ -45,7 +50,7 @@ async function component(page) {
   await page.waitForFunction(() => window.ready);
 }
 
-const settings = page => page.getByRole('navigation', { name: 'Workspace destinations' }).getByRole('button', { name: 'Settings', exact: true });
+const settings = page => page.getByRole('button', { name: 'Settings', exact: true });
 const back = page => page.getByRole('button', { name: 'Back to conversation', exact: true }).filter({ visible: true });
 
 test('Tab traversal to Settings preserves the originating composer field and canonical state', async ({ page }, info) => {

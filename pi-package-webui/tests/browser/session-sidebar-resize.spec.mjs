@@ -1,3 +1,4 @@
+import { navigateFocused } from './focused-navigation-fixture.mjs';
 import { expect } from '@playwright/test';
 import { test } from './session-fixture.mjs';
 
@@ -93,7 +94,7 @@ test('top navigation and Classic restore the saved sidebar width', async ({ page
   const handle = page.getByRole('separator', { name: 'Resize session sidebar' });
   await handle.focus();
   await handle.press('Shift+ArrowRight');
-  await page.getByRole('navigation', { name: 'Workspace destinations' }).getByRole('button', { name: 'Settings', exact: true }).click();
+  await navigateFocused(page, 'Settings');
   await page.locator('#focusedNavigationSelect').selectOption('top');
   await expect(handle).toBeHidden();
   await page.locator('#focusedNavigationSelect').selectOption('left');

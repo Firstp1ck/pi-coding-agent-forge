@@ -35,7 +35,7 @@ test("Usage topics retain canonical provider data and explicit refresh through C
   await expect(page.locator("#claudeUsageBox")).toContainText("41%");
   await expect(page.locator("#claudeUsageBox")).toContainText("Fixture Claude account");
   await page.screenshot({ path: testInfo.outputPath("activity-usage.png") });
-  await page.getByRole("navigation", { name: "Workspace destinations" }).getByRole("button", { name: "Settings", exact: true }).click();
+  await navigateFocused(page, 'Settings');
   await page.locator("#desktopShellSelect").selectOption("classic");
   await page.locator("#sidePanelSectionToggleCodexUsage").click();
   await expect(page.locator("#codexUsageBox")).toBeVisible();
@@ -93,7 +93,7 @@ test("Agents output navigation preserves runs and explicit cancel and dismiss us
   await page.locator(".subagent-overlay-close-action").click();
   await expect(page.locator(".subagent-overlay-widget")).toHaveCount(0);
   const rail = page.getByRole("navigation", { name: "Workspace destinations" });
-  await rail.getByRole("button", { name: "Settings", exact: true }).click();
+  await navigateFocused(page, 'Settings');
   const before = await ownership.api("/api/subagents");
   expect(before.groups.flatMap(group => group.runs).find(run => run.id === "fixture-run").status).toBe("running");
   expect(mutations).toEqual([]);

@@ -1,3 +1,4 @@
+import { navigateFocused } from './focused-navigation-fixture.mjs';
 import { expect } from '@playwright/test';
 import { writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
@@ -168,7 +169,7 @@ test('export offers browser download from a simulated RPC result', async ({ page
 
 test('desktop light theme is selectable and keeps draft', async ({ page, ownership }, info) => {
   await ready(page, ownership);
-  await page.getByRole('navigation', { name: 'Workspace destinations' }).getByRole('button', { name: 'Settings', exact: true }).click();
+  await navigateFocused(page, 'Settings');
   const light = page.locator('[data-scheme-mode="light"]');
   await light.click();
   await expect(light).toHaveAttribute('aria-pressed', 'true');

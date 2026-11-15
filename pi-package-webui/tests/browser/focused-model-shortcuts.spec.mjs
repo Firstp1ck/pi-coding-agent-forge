@@ -1,3 +1,4 @@
+import { navigateFocused } from './focused-navigation-fixture.mjs';
 import { expect } from '@playwright/test';
 import { test } from './session-fixture.mjs';
 
@@ -23,7 +24,7 @@ for (const layout of ['flat', 'advanced']) {
     await expect(footerModel(page)).toBeVisible();
     await expect(page.locator('.focused-composer-controls')).toBeHidden();
     const rail = page.getByRole('navigation', { name: 'Workspace destinations' });
-    await rail.getByRole('button', { name: 'Settings', exact: true }).click();
+    await navigateFocused(page, 'Settings');
     await rail.getByRole('button', { name: 'All tools', exact: true }).click();
     await page.getByRole('searchbox', { name: 'Search all tools' }).fill('Model shortcuts');
     await page.locator('#shellToolsLauncher').getByRole('button', { name: 'Model shortcuts', exact: true }).click();

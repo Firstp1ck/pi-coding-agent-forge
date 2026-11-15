@@ -1,3 +1,4 @@
+import { navigateFocused } from './focused-navigation-fixture.mjs';
 import { expect } from '@playwright/test';
 import { test } from './session-fixture.mjs';
 
@@ -46,7 +47,7 @@ test('Settle and Restore organize sessions without stopping them or discarding d
   expect(mutations).toEqual([]);
   expect((await ownership.api('/api/tabs')).tabs.find(tab => tab.id === first.id).running).toBe(true);
   await expect(page.locator('#newTabButton')).toBeVisible();
-  await page.getByRole('navigation', { name: 'Workspace destinations' }).getByRole('button', { name: 'Settings', exact: true }).click();
+  await navigateFocused(page, 'Settings');
   await page.locator('[data-scheme-mode="light"]').click();
   await page.getByRole('navigation', { name: 'Workspace destinations' }).getByRole('button', { name: 'Conversation', exact: true }).click();
   await page.screenshot({ path: info.outputPath('shelves-light.png') });

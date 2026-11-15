@@ -1,3 +1,4 @@
+import { navigateFocused } from './focused-navigation-fixture.mjs';
 import { expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { test } from './session-fixture.mjs';
@@ -9,7 +10,7 @@ async function open(page, ownership) {
   await page.addInitScript(() => localStorage.setItem('pi-webui-shell-preferences-v1', JSON.stringify({ v: 1, desktopLayout: 'focused' })));
   await page.goto(`${ownership.baseURL}/?tab=${ownership.tabs[0].id}`);
   await expect(page.locator('#modelSelect')).not.toBeEmpty();
-  await page.getByRole('navigation', { name: 'Workspace destinations' }).getByRole('button', { name: 'Settings', exact: true }).click();
+  await navigateFocused(page, 'Settings');
 }
 
 test('Settings retains canonical administration controls, light/narrow layout and accessible navigation', async ({ page, ownership }, info) => {

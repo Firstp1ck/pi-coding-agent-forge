@@ -1,3 +1,4 @@
+import { navigateFocused } from './focused-navigation-fixture.mjs';
 import { expect } from "@playwright/test";
 import { capture, holdMetadata, INTERFACE_PATH, settleStartup, SHELL_KEY, shellWrites, test } from "./shell-rollout-fixture.mjs";
 
@@ -16,7 +17,7 @@ async function open(rollout, options, query = "") {
 
 async function chooseDesktop(page, layout) {
   if (await page.locator("#focusedWorkspace").isVisible()) {
-    await destinations(page).getByRole("button", { name: "Settings", exact: true }).click();
+    await navigateFocused(page, 'Settings');
   } else if (!await page.locator("#desktopShellSelect").isVisible()) {
     await page.locator("#sidePanelSectionToggleControls").click();
   }
@@ -243,7 +244,7 @@ test("delayed real fresh metadata preserves the initial Focused deep link, canon
     await expect(page.locator("#fileTreeSearchInput")).toBeVisible();
     await page.locator("#fileTreeSearchInput").fill("retain W7 file filter");
     const mutationsAfterMigration = audit.mutations.length;
-    await destinations(page).getByRole("button", { name: "Settings", exact: true }).click();
+    await navigateFocused(page, 'Settings');
     await expect(page.locator("#desktopShellSelect")).toBeVisible();
     await page.goBack();
     await expect(page.locator("#focusedWorkspace")).toHaveAttribute("data-destination", "project");

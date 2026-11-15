@@ -1,6 +1,18 @@
 import { expect } from '@playwright/test';
 
 export async function navigateFocused(page, destination, act = async (_label, action) => action()) {
+  if (destination === 'Settings') {
+    const gear = page.locator('.terminal-settings-button');
+    if (await gear.isVisible()) {
+      await act('open Settings', () => gear.click());
+    } else {
+      await act('open All tools', () => page.getByRole('navigation', { name: 'Workspace destinations' }).getByRole('button', { name: 'All tools', exact: true }).click());
+      await act('find Controls', () => page.getByRole('searchbox', { name: 'Search all tools' }).fill('Controls'));
+      await act('open Controls', () => page.locator('#shellToolsLauncher').getByRole('button', { name: 'Controls', exact: true }).click());
+    }
+    await expect(page.locator('#focusedWorkspace')).toHaveAttribute('data-destination', 'settings');
+    return;
+  }
   if (destination === 'Project' || destination === 'Activity') {
     const inspector = page.getByRole('button', { name: 'Inspector', exact: true });
     if (await inspector.getAttribute('aria-expanded') !== 'true') {

@@ -1,3 +1,4 @@
+import { navigateFocused } from './focused-navigation-fixture.mjs';
 import { expect } from '@playwright/test';
 import { test } from './session-fixture.mjs';
 
@@ -49,7 +50,7 @@ test('new tab choices stay reachable in focused navigation', async ({ page, owne
   await expect(page.locator('#tabBar [role="tab"]')).toHaveCount(11);
   await page.setViewportSize({ width: 1100, height: 450 });
   await checkMenu(page);
-  await page.getByRole('navigation', { name: 'Workspace destinations' }).getByRole('button', { name: 'Settings', exact: true }).click();
+  await navigateFocused(page, 'Settings');
   await page.locator('#focusedNavigationSelect').selectOption('top');
   await page.getByRole('navigation', { name: 'Workspace destinations' }).getByRole('button', { name: 'Conversation', exact: true }).click();
   await expect(page.locator('#focusedWorkspace')).toHaveAttribute('data-navigation', 'top');

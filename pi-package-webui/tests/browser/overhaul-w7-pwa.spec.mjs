@@ -1,3 +1,4 @@
+import { navigateFocused } from './focused-navigation-fixture.mjs';
 import { readFile, writeFile } from 'node:fs/promises';
 import { createServer, request as proxyRequest } from 'node:http';
 import { expect } from '@playwright/test';
@@ -125,7 +126,7 @@ test('complete current entry graph is precached, including Settings, and never c
     const response = await page.request.get(`${assets.baseURL}${path}`);
     expect(response.ok(), path).toBe(true);
   }
-  await destinations(page).getByRole('button', { name: 'Settings', exact: true }).click();
+  await navigateFocused(page, 'Settings');
   await expect(page.locator('.settings-workspace')).toBeVisible();
   await page.screenshot({ path: info.outputPath('current-settings-cache.png') });
   const evidencePath = info.outputPath('current-asset-graph.json');
@@ -154,7 +155,7 @@ test('old cache gains new Settings modules while a stale open client retains its
   const after = await cacheSnapshot(page, cacheName);
   expect(after.names).not.toContain(oldName);
   expect(after.paths).toEqual([...shellAssets].sort());
-  await destinations(page).getByRole('button', { name: 'Settings', exact: true }).click();
+  await navigateFocused(page, 'Settings');
   await page.getByRole('navigation', { name: 'Settings categories' }).getByRole('button', { name: 'System', exact: true }).click();
   await expect(page.locator('#serverActionSelect')).toBeVisible();
   await destinations(page).getByRole('button', { name: 'Conversation', exact: true }).click();
@@ -176,7 +177,7 @@ test('offline reload serves the Focused asset graph without claiming working off
     await page.reload({ waitUntil: 'domcontentloaded' });
     await expect(page.locator('#webuiBootFailurePanel')).toBeHidden();
     await expect(page.locator('#focusedWorkspace')).toBeVisible();
-    await destinations(page).getByRole('button', { name: 'Settings', exact: true }).click();
+    await navigateFocused(page, 'Settings');
     await expect(page.locator('.settings-workspace')).toBeVisible();
     const results = await page.evaluate(async paths => Promise.all(paths.map(async path => {
       const response = await fetch(path);

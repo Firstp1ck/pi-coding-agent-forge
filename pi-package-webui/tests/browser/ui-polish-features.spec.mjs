@@ -1,3 +1,4 @@
+import { navigateFocused } from './focused-navigation-fixture.mjs';
 import { expect } from '@playwright/test';
 import { OPTIONAL_FEATURE_CATALOG } from '../../lib/optional-feature-catalog.mjs';
 import { test } from './session-fixture.mjs';
@@ -17,7 +18,7 @@ async function openFeatures(page, ownership, response) {
   await page.route('**/api/optional-features', route => route.fulfill(response));
   await page.addInitScript(() => localStorage.setItem('pi-webui-shell-preferences-v1', JSON.stringify({ v: 1, desktopLayout: 'focused' })));
   await page.goto(`${ownership.baseURL}/?tab=${ownership.tabs[0].id}`);
-  await page.getByRole('navigation', { name: 'Workspace destinations' }).getByRole('button', { name: 'Settings', exact: true }).click();
+  await navigateFocused(page, 'Settings');
   await page.getByRole('navigation', { name: 'Settings categories' }).getByRole('button', { name: 'Features', exact: true }).click();
 }
 const ok = data => ({ json: { ok: true, data } });

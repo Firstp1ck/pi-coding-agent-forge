@@ -69,7 +69,7 @@ async function openFocused(page, ownership) {
 }
 
 async function openSystem(page) {
-  await destinations(page).getByRole('button', { name: 'Settings', exact: true }).click();
+  await navigateFocused(page, 'Settings');
   await page.getByRole('navigation', { name: 'Settings categories' }).getByRole('button', { name: 'System', exact: true }).click();
   await expect(page.locator('#serverActionSelect')).toBeVisible();
 }

@@ -223,7 +223,8 @@ export function createFocusedWorkspace({
     } else {
       const control = event.target.closest?.('button');
       if (tabTraversal && ['Enter', ' '].includes(event.key) && control
-        && !Object.values(slots).some(slot => slot.contains(control))) rememberFocus(tabOrigin);
+        && (control.matches('.terminal-settings-button')
+          || !Object.values(slots).some(slot => slot.contains(control)))) rememberFocus(tabOrigin);
       tabTraversal = false;
       tabOrigin = null;
     }

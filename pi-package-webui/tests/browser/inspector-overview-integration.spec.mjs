@@ -1,3 +1,4 @@
+import { navigateFocused } from './focused-navigation-fixture.mjs';
 import { expect } from '@playwright/test';
 import { test } from './session-fixture.mjs';
 
@@ -66,7 +67,7 @@ for (const [width, height] of [[1440, 900], [1100, 500]]) {
       await expect(toggle).toBeFocused();
       await expect(page.locator('#promptInput')).toHaveValue('Preserve this overview draft');
       await toggle.click();
-      await page.getByRole('navigation', { name: 'Workspace destinations' }).getByRole('button', { name: 'Settings', exact: true }).click();
+      await navigateFocused(page, 'Settings');
       await expect(overview).toBeHidden();
       await toggle.click();
       await expect(overview).toBeVisible();

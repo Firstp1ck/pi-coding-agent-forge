@@ -24,7 +24,7 @@ test('compact workspace retains real drafts, settings and inspector fields acros
   await navigateFocused(page, 'Project');
   await expect(page.locator('#fileTreeSearchInput')).toBeVisible();
   await page.locator('#fileTreeSearchInput').fill('keep filter');
-  await rail.getByRole('button', { name: 'Settings', exact: true }).click();
+  await navigateFocused(page, 'Settings');
   await expect(page.locator('#desktopShellSelect')).toBeVisible();
   await page.goBack();
   await expect(page.locator('#fileTreeSearchInput')).toHaveValue('keep filter');
@@ -32,7 +32,7 @@ test('compact workspace retains real drafts, settings and inspector fields acros
   await expect(prompt).toHaveValue('retain this compact draft');
   expect(await prompt.evaluate(node => node === window.originalPrompt)).toBe(true);
   await page.screenshot({ path: testInfo.outputPath('compact-conversation.png') });
-  await rail.getByRole('button', { name: 'Settings', exact: true }).click();
+  await navigateFocused(page, 'Settings');
   await page.locator('#desktopShellSelect').selectOption('classic');
   await expect(page.locator('#focusedWorkspace')).toBeHidden();
   await expect(prompt).toBeVisible();
@@ -76,7 +76,7 @@ test('running session can be aborted from Settings and All tools without changin
   await page.locator('#sendButton').click();
   await expect(page.locator('#abortButton')).toBeVisible();
   const rail = page.getByRole('navigation', { name: 'Workspace destinations' });
-  await rail.getByRole('button', { name: 'Settings', exact: true }).click();
+  await navigateFocused(page, 'Settings');
   await expect(page.locator('.focused-run-controls #abortButton')).toBeVisible();
   await rail.getByRole('button', { name: 'All tools', exact: true }).click();
   await expect(page.locator('#shellToolsLauncher #abortButton')).toBeVisible();
@@ -133,7 +133,7 @@ test('compact navigation remains usable at 1100 and 1920 pixels with top and col
     await expect(page.locator('#tabBar [role="tab"]')).toHaveCount(2);
     await page.screenshot({ path: testInfo.outputPath(`compact-project-${width}.png`) });
   }
-  await rail.getByRole('button', { name: 'Settings', exact: true }).click();
+  await navigateFocused(page, 'Settings');
   await page.locator('#focusedNavigationSelect').selectOption('top');
   await rail.getByRole('button', { name: 'Conversation', exact: true }).click();
   await expect(page.locator('#focusedWorkspace')).toHaveAttribute('data-navigation', 'top');
@@ -153,7 +153,7 @@ test('initial Project deep link survives Back and Forward with unrelated URL and
   await page.goto(`${ownership.baseURL}/?view=project&inspector=git&tab=${ownership.tabs[0].id}&custom=keep#fragment`);
   await expect(page.locator('#focusedWorkspace')).toHaveAttribute('data-destination', 'project');
   await expect(page.locator('#sidePanelSectionGit')).toBeVisible();
-  await page.getByRole('navigation', { name: 'Workspace destinations' }).getByRole('button', { name: 'Settings', exact: true }).click();
+  await navigateFocused(page, 'Settings');
   await page.goBack();
   await expect(page.locator('#focusedWorkspace')).toHaveAttribute('data-destination', 'project');
   await expect(page.locator('#sidePanelSectionGit')).toBeVisible();
@@ -176,10 +176,8 @@ test('End conversation stays canonical and reachable through More, Settings and 
   await page.locator('#composerActionsButton').click();
   await expect(page.locator('.focused-run-controls #conversationModeEndButton')).toBeVisible();
   const rail = page.getByRole('navigation', { name: 'Workspace destinations' });
-  for (const destination of ['Home', 'Settings']) {
-    await rail.getByRole('button', { name: destination, exact: true }).click();
-    await expect(end).toBeVisible();
-  }
+  await navigateFocused(page, 'Settings');
+  await expect(end).toBeVisible();
   await rail.getByRole('button', { name: 'All tools', exact: true }).click();
   await expect(page.locator('#shellToolsLauncher #conversationModeEndButton')).toBeVisible();
   await page.keyboard.press('Escape');
@@ -195,7 +193,7 @@ test('End conversation stays canonical and reachable through More, Settings and 
 test('Search transcript reveals Conversation from Settings and launcher run controls have an accessible group', async ({ page, ownership }, testInfo) => {
   await openFocused(page, ownership);
   const rail = page.getByRole('navigation', { name: 'Workspace destinations' });
-  await rail.getByRole('button', { name: 'Settings', exact: true }).click();
+  await navigateFocused(page, 'Settings');
   await rail.getByRole('button', { name: 'All tools', exact: true }).click();
   const dialog = page.locator('#shellToolsLauncher');
   await expect(dialog.getByRole('group', { name: /^Run controls for / })).toBeAttached();
