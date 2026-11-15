@@ -199,12 +199,15 @@ test("legacy phone keeps terminal navigation and secondary composer actions coll
   await expect(page.locator(".terminal-tabs-shell")).toHaveAttribute("aria-modal", "true");
 
   await page.locator("#newTabButton").tap();
-  await expect(page.locator("#newTabMenuPanel")).toBeVisible();
-  let drawerLayers = await page.evaluate(() => ({
-    drawer: Number.parseInt(getComputedStyle(document.querySelector(".terminal-tabs-shell")).zIndex, 10),
-    backdrop: Number.parseInt(getComputedStyle(document.querySelector("#terminalTabsBackdrop")).zIndex, 10),
-  }));
-  assert.ok(drawerLayers.drawer > drawerLayers.backdrop, `open + Thread options must remain above the blurred backdrop, got ${JSON.stringify(drawerLayers)}`);
+  await expect(page.locator("#newThreadDialog")).toBeVisible();
+  await expect(page.locator("dialog:modal")).toHaveId("newThreadDialog");
+  await expect(page.locator("#terminalTabsDrawerContent"), "the top-layer palette replaces the drawer").toBeHidden();
+  const palette = await page.locator("#newThreadDialog").boundingBox();
+  assert.ok(palette && palette.x >= 0 && palette.y >= 0 && palette.x + palette.width <= 320 && palette.y + palette.height <= 720, `the new-thread palette must fit 320×720, got ${JSON.stringify(palette)}`);
+  await page.keyboard.press("Escape");
+  await expect(page.locator("#newThreadDialog")).toBeHidden();
+  await page.locator("#terminalTabsToggleButton").tap();
+  await expect(page.locator("#terminalTabsDrawerContent")).toBeVisible();
 
   await page.evaluate(() => {
     const fixture = document.createElement("div");
@@ -235,7 +238,7 @@ test("legacy phone keeps terminal navigation and secondary composer actions coll
     }
     const overallNewTab = document.createElement("div");
     overallNewTab.id = "mobileOverallNewTabFixture";
-    overallNewTab.className = "terminal-new-tab-menu composer-publish-menu";
+    overallNewTab.className = "terminal-new-tab-menu";
     overallNewTab.textContent = "+ Thread";
     visibilityFixture.append(overallNewTab);
 
@@ -253,10 +256,9 @@ test("legacy phone keeps terminal navigation and secondary composer actions coll
   await expect(mobileGroupFixtureButton.locator(".terminal-tab-meta")).toBeVisible();
   await expect(mobileGroupFixtureButton.locator(".terminal-tab-meta")).toContainText("project-cwd");
   await mobileGroupFixtureButton.tap();
-  await expect(page.locator("#newTabMenuPanel")).toBeHidden();
   await expect(mobileGroupFixtureButton).toHaveAttribute("aria-expanded", "true");
   await expect(mobileGroupFixtureMenu).toBeVisible();
-  drawerLayers = await page.evaluate(() => ({
+  const drawerLayers = await page.evaluate(() => ({
     drawer: Number.parseInt(getComputedStyle(document.querySelector(".terminal-tabs-shell")).zIndex, 10),
     backdrop: Number.parseInt(getComputedStyle(document.querySelector("#terminalTabsBackdrop")).zIndex, 10),
   }));
@@ -500,7 +502,12 @@ test("phone v2 destinations, canonical actions, history, and presentation remain
   await expect(page.locator("#mobileSessionsSearchInput")).toBeVisible();
   await page.locator("#promptInput").evaluate((node) => { node.value = "draft survives switch"; node.dispatchEvent(new Event("input", { bubbles: true })); });
   await page.locator("#mobileNewCurrentDirectoryButton").click();
-  await expect(page.locator(".mobile-session-select")).toHaveCount(2);
+  await expect(page.locator("#newThreadDialog")).toBeVisible();
+  await page.locator("#newThreadList [role=\"option\"]").first().click();
+  await expect(page.locator("#emptyStartTitle")).toHaveText("Start a conversation");
+  await expect(page.locator("#promptInput")).toHaveValue("");
+  await phoneNav.getByRole("button", { name: "Sessions", exact: true }).click();
+  await expect(page.locator(".mobile-session-select"), "a thread draft is not a server session").toHaveCount(1);
   await page.locator(".mobile-session-select").first().click();
   await expect(page.locator("#promptInput")).toHaveValue("draft survives switch");
   await assertAxeClean(page, "phone Sessions route");
@@ -674,7 +681,10 @@ test("a blocker notification switches to its background tab before exact-target 
   const targetTabId = initialTabs.data.tabs[0].id;
   await page.getByRole("button", { name: "Sessions", exact: true }).click();
   await page.locator("#mobileNewCurrentDirectoryButton").click();
-  await expect(page.locator(".mobile-session-select")).toHaveCount(2);
+  await page.locator("#newThreadList [role=\"option\"]").first().click();
+  await page.locator("#promptInput").fill("fixture second mobile thread");
+  await page.locator("#sendButton").click();
+  await expect.poll(async () => (await (await page.request.get(`${baseURL}/api/tabs`)).json()).data.tabs.length).toBe(2);
   const currentTabs = await (await page.request.get(`${baseURL}/api/tabs`)).json();
   const activeTabId = currentTabs.data.activeTabId || currentTabs.data.tabs.find((tab) => tab.id !== targetTabId)?.id;
   assert.notEqual(activeTabId, targetTabId, "fixture requires a different active tab");

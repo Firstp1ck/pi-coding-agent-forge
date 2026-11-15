@@ -25,7 +25,7 @@ async function ready(page, fixture, scheme = "dark") {
 async function openPicker(page, { waitForLoad = true } = {}) {
   if (await page.locator("#newTabButton").isVisible()) {
     await page.locator("#newTabButton").click();
-    await page.locator("#newTabChooseDirectoryButton").click();
+    await page.locator("#newThreadList").getByRole("option", { name: /Browse…/ }).click();
   } else {
     await page.locator("#promptInput").focus();
     await page.keyboard.press("Control+k");
@@ -144,10 +144,17 @@ test("direct paths, search, empty folders and creation preserve canonical action
   await expect(page.locator("#pathPickerCurrent")).toHaveAttribute("title", created);
   expect((await stat(created)).isDirectory()).toBe(true);
   await expect(page.locator("#pathPickerChooseButton")).toBeFocused();
-  const response = page.waitForResponse(response => new URL(response.url()).pathname === "/api/tabs" && response.request().method() === "POST");
+  const creations = [];
+  page.on("request", request => {
+    if (new URL(request.url()).pathname === "/api/tabs" && request.method() === "POST") creations.push(request.postDataJSON());
+  });
   await page.locator("#pathPickerChooseButton").click();
-  expect((await response).request().postDataJSON()).toEqual({ cwd: created });
   await expect(page.locator("#pathPickerDialog")).toBeHidden();
+  await expect(page.locator(".empty-start-workspace-button")).toHaveText(created);
+  expect(creations, "choosing a folder opens a draft without creating a thread").toEqual([]);
+  await page.locator("#promptInput").fill("Start in the created folder");
+  await page.locator("#sendButton").click();
+  await expect.poll(() => creations).toEqual([{ cwd: created }]);
   await expect.poll(async () => (await folderPicker.api("/api/tabs")).tabs.map(tab => tab.cwd)).toContain(created);
 });
 

@@ -274,8 +274,8 @@ test("typed summary commands stay native, preserve failures, reset sessions, res
   await expect(page.locator("#sessionSummaryOverlayBody")).toContainText("Generate a summary to populate this view.");
 
   await page.locator("#newTabButton").evaluate((button) => button.click());
-  await page.locator("#newTabCurrentDirectoryButton").evaluate((button) => button.click());
-  await expect(page.locator("#tabBar [role=\"tab\"]")).toHaveCount(2);
+  await page.locator("#newThreadList [role=\"option\"]").first().evaluate((button) => button.click());
+  await expect(page.locator("#emptyStartTitle")).toHaveText("Start a conversation");
   await expect(page.locator("#sessionSummaryOverlay")).toBeHidden();
 });
 
@@ -296,15 +296,16 @@ test("inactive and grouped tab actions keep setup, generation, and busy state sc
   await expect(page.locator(".terminal-tab-summary-button")).toHaveCount(initialTabCount);
 
   const firstTabId = await page.locator(".terminal-tab[data-tab-id]").first().getAttribute("data-tab-id");
-  await page.locator("#newTabButton").evaluate((button) => button.click());
-  await page.locator("#newTabCurrentDirectoryButton").evaluate((button) => button.click());
+  // The new-thread palette only opens drafts, so create the idle second thread directly.
+  const created = await page.request.post(`${baseURL}/api/tabs`, { data: {} });
+  expect(created.ok()).toBe(true);
+  const createdTabId = (await created.json()).data.tab.id;
   const expectedTabCount = initialTabCount + 1;
-  await expect(page.locator(".terminal-tab[data-tab-id]")).toHaveCount(expectedTabCount);
-  await expect(page.locator(".terminal-tab-summary-button")).toHaveCount(expectedTabCount);
-
   await page.reload();
   await expect(page.locator(".terminal-tab[data-tab-id]")).toHaveCount(expectedTabCount);
   await expect(page.locator(".terminal-tab-summary-button")).toHaveCount(expectedTabCount);
+  await page.locator(`[data-tab-id="${createdTabId}"] .terminal-tab-button`).click();
+  await expect(page.locator(`[data-tab-id="${createdTabId}"]`)).toHaveClass(/active/);
 
   const activeTab = page.locator(".terminal-tab.active[data-tab-id]");
   const activeTabId = await activeTab.getAttribute("data-tab-id");

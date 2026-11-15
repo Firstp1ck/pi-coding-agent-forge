@@ -54,7 +54,7 @@ async function holdCreation(page) {
 
 async function openNoProjectMenu(page) {
   await page.locator('#newTabButton').click();
-  await page.locator('#newTabNoProjectButton').click();
+  await page.locator('#newThreadList').getByRole('option', { name: /No project/ }).click();
 }
 
 test('blank openings allocate nothing; leaving text creates an Inbox draft that resumes, reloads, and closes locally', async ({ page, emptyStartup }, info) => {

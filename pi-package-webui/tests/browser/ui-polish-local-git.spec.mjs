@@ -128,7 +128,7 @@ test('create a branch worktree from current HEAD through the picker', async ({ p
   await page.goto(`${ownership.baseURL}/?tab=${encodeURIComponent(ownership.tabs[0].id)}`);
   await expect(page.locator('#modelSelect')).not.toBeEmpty();
   await page.locator('#newTabButton').click();
-  await page.locator('#newTabWorktreeButton').click();
+  await page.locator('#newThreadList').getByRole('option', { name: /Branch worktree…/ }).click();
   await expect(page.getByRole('listbox', { name: 'Git branches and worktrees' })).toBeVisible();
   await page.locator('#footerBranchCreateType').fill('test');
   await page.locator('#footerBranchCreateName').fill('worktree');
@@ -150,7 +150,7 @@ test('switch an existing local branch in this checkout', async ({ page, ownershi
   await page.goto(`${ownership.baseURL}/?tab=${encodeURIComponent(ownership.tabs[0].id)}`);
   await expect(page.locator('#modelSelect')).not.toBeEmpty();
   await page.locator('#newTabButton').click();
-  await page.locator('#newTabWorktreeButton').click();
+  await page.locator('#newThreadList').getByRole('option', { name: /Branch worktree…/ }).click();
   const option = page.getByRole('option').filter({ hasText: 'fixture-switch' });
   await option.getByRole('button', { name: 'Switch here' }).click();
   await expect.poll(() => repo.git('branch', '--show-current')).toBe('fixture-switch');

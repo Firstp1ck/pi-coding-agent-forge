@@ -176,8 +176,15 @@ test("optional workspace survives saved draft navigation and version-1 reload wi
   const copy = restored.get(blank);
   copy.cwd = "/external";
   assert.equal(restored.get(blank).cwd, "/tmp/updated workspace");
+  const beforeClear = restored.get(blank).revision;
+  assert.equal(restored.setCwd(blank, ""), true);
+  assert.equal(restored.get(blank).cwd, undefined, "clearing removes the folder so the draft starts a No Project thread");
+  assert.equal(Object.hasOwn(restored.get(blank), "cwd"), false);
+  assert.equal(restored.get(blank).revision, beforeClear + 1);
   restored.setCwd(blank, "");
+  assert.equal(restored.get(blank).revision, beforeClear + 1, "clearing an unset folder is not an edit");
   assert.equal(f.reload().get(blank).cwd, undefined);
+  assert.equal(Object.hasOwn(JSON.parse(f.raw()).records.find(record => record.id === blank), "cwd"), false);
   assert.equal(restored.setCwd("draft:missing", "/tmp/valid"), false);
 });
 

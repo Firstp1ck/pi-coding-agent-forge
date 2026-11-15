@@ -1074,19 +1074,15 @@ test("tab navigation clears transcript selection and never restores it into anot
   const initialOutput = page.locator(".message.assistant .markdown-body").first();
   await expect(initialOutput).toContainText("fake answer");
   assert.equal((await selectRenderedText(initialOutput, "fake answer")).text, "fake answer");
-  await page.locator("#newTabButton").click();
-  await page.locator("#newTabCurrentDirectoryButton").click();
-  await expect.poll(async () => (await tabIds(page)).length).toBe(2);
-  await expect.poll(() => page.evaluate(() => window.getSelection()?.toString() || "")).toBe("");
   const originalTab = page.locator("#tabBar [role=\"tab\"]").first();
-  const originalTabId = await originalTab.evaluate((node) => node.closest("[data-tab-id]")?.dataset.tabId || "");
+  await page.locator("#newTabButton").click();
+  await page.locator("#newThreadList [role=\"option\"]").first().click();
+  await expect(page.locator("#emptyStartTitle")).toHaveText("Start a conversation");
+  await expect.poll(() => page.evaluate(() => window.getSelection()?.toString() || "")).toBe("");
   await originalTab.click();
   await expect(page.locator("#promptInput")).toBeFocused();
   await expect.poll(() => page.evaluate(() => window.getSelection()?.toString() || "")).toBe("");
-  const extraTabId = (await tabIds(page)).find((id) => id !== originalTabId);
-  assert.ok(extraTabId, "navigation fixture should create a distinct tab to clean up");
-  await api(page, `/api/tabs/${encodeURIComponent(extraTabId)}`, { method: "DELETE" });
-  await expect.poll(async () => (await tabIds(page)).length).toBe(1);
+  expect(await tabIds(page), "opening a thread draft must not create a server thread").toHaveLength(1);
 });
 
 test("semantic tooltip, held pointer, open dropdown, and stale tab contexts survive only when valid", async ({ page }) => {
@@ -1095,9 +1091,8 @@ test("semantic tooltip, held pointer, open dropdown, and stale tab contexts surv
   const initialIds = await tabIds(page);
   assert.equal(initialIds.length, 1, "continuity fixture starts with one terminal tab");
 
-  await page.locator("#newTabButton").click();
-  await page.locator("#newTabCurrentDirectoryButton").click();
-  await expect.poll(async () => (await tabIds(page)).length).toBe(2);
+  await api(page, "/api/tabs", { method: "POST", data: {} });
+  await page.reload();
   await expect(page.locator("#tabBar [role=\"tab\"]")).toHaveCount(2);
 
   const inactiveTabButton = page.locator("#tabBar [role=\"tab\"][aria-selected=\"false\"]");
@@ -1124,16 +1119,17 @@ test("semantic tooltip, held pointer, open dropdown, and stale tab contexts surv
   await expect(tooltip).toBeHidden();
 
   await page.locator("#newTabButton").click();
-  await expect(page.locator("#newTabButton")).toHaveAttribute("aria-expanded", "true");
+  await expect(page.locator("#newThreadDialog")).toBeVisible();
   await triggerDelayedStream(page);
-  await expect(page.locator("#newTabButton")).toHaveAttribute("aria-expanded", "true");
-  await expect(page.locator("#newTabMenu")).toHaveClass(/open/);
-  await page.locator("#promptInput").click();
-  await expect(page.locator("#newTabButton")).toHaveAttribute("aria-expanded", "false");
+  await expect(page.locator("#newThreadDialog")).toBeVisible();
+  await expect(page.locator("#newThreadInput")).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(page.locator("#newThreadDialog")).toBeHidden();
+  await expect(page.locator("#newTabButton")).toBeFocused();
 
-  await page.locator("#newTabButton").click();
-  await page.locator("#newTabCurrentDirectoryButton").click();
-  await expect.poll(async () => (await tabIds(page)).length).toBe(2);
+  await api(page, "/api/tabs", { method: "POST", data: {} });
+  await page.reload();
+  await expect(page.locator("#tabBar [role=\"tab\"]")).toHaveCount(2);
   const heldButton = page.locator("#tabBar [role=\"tab\"][aria-selected=\"true\"]");
   await expect(heldButton).toBeVisible();
   await heldButton.hover();

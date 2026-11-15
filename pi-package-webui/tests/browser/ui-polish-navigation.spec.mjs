@@ -6,25 +6,42 @@ test.use({ video: 'off', serviceWorkers: 'block', viewport: { width: 1280, heigh
 
 async function checkMenu(page) {
   const trigger = page.locator('#newTabButton');
+  const dialog = page.locator('#newThreadDialog');
+  const options = page.locator('#newThreadList [role="option"]');
   await trigger.scrollIntoViewIfNeeded();
-  await trigger.hover();
-  for (const id of ['newTabNoProjectButton', 'newTabCurrentDirectoryButton', 'newTabChooseDirectoryButton', 'newTabWorktreeButton']) {
-    const item = page.locator(`#${id}`);
-    await expect(item).toBeInViewport({ ratio: 1 });
-    await item.click({ trial: true });
+  await expect(trigger).toBeInViewport({ ratio: 1 });
+  await trigger.click();
+  await expect(dialog).toBeVisible();
+  await expect(page.locator('#newThreadInput')).toBeFocused();
+  const viewport = page.viewportSize();
+  const box = await dialog.boundingBox();
+  expect(box.y).toBeGreaterThanOrEqual(0);
+  expect(box.y + box.height).toBeLessThanOrEqual(viewport.height);
+  const labels = await options.locator('.command-palette-item-label').allTextContents();
+  expect(labels.slice(0, 2)).toEqual([expect.any(String), 'No project']);
+  expect(labels.slice(-2)).toEqual(['Browse…', 'Branch worktree…']);
+  for (const option of await options.all()) {
+    await option.scrollIntoViewIfNeeded();
+    await expect(option).toBeInViewport();
+    await option.click({ trial: true });
   }
-  await trigger.focus();
-  await trigger.press('ArrowDown');
-  await expect(page.locator('#newTabNoProjectButton')).toBeFocused();
-  await page.keyboard.press('ArrowDown');
-  await expect(page.locator('#newTabCurrentDirectoryButton')).toBeFocused();
-  await page.keyboard.press('ArrowDown');
-  await expect(page.locator('#newTabChooseDirectoryButton')).toBeFocused();
-  await page.keyboard.press('End');
-  await expect(page.locator('#newTabWorktreeButton')).toBeFocused();
   await page.keyboard.press('Escape');
+  await expect(dialog).toBeHidden();
   await expect(trigger).toBeFocused();
-  await expect(page.locator('#newTabMenuPanel')).toBeHidden();
+  await page.keyboard.press('Enter');
+  await expect(dialog).toBeVisible();
+  await expect(options.first()).toHaveAttribute('aria-selected', 'true');
+  await page.keyboard.press('ArrowDown');
+  await expect(options.nth(1)).toHaveAttribute('aria-selected', 'true');
+  await expect(page.locator('#newThreadInput')).toHaveAttribute('aria-activedescendant', await options.nth(1).getAttribute('id'));
+  await page.keyboard.press('End');
+  await expect(options.last()).toHaveAttribute('aria-selected', 'true');
+  await expect(options.last()).toBeInViewport();
+  await page.keyboard.press('Home');
+  await expect(options.first()).toHaveAttribute('aria-selected', 'true');
+  await page.keyboard.press('Escape');
+  await expect(dialog).toBeHidden();
+  await expect(trigger).toBeFocused();
 }
 
 test('new tab choices stay reachable in focused navigation', async ({ page, ownership }, testInfo) => {
@@ -34,16 +51,10 @@ test('new tab choices stay reachable in focused navigation', async ({ page, owne
   await page.locator(`#tabBar [data-tab-id="${ownership.tabs[1].id}"] .terminal-tab-close`).click();
   await expect(page.locator('#tabBar [role="tab"]')).toHaveCount(1);
   await page.locator('#promptInput').fill('retained draft');
-  const oldPlacement = await page.addStyleTag({ content: '#focusedWorkspace .terminal-new-tab-menu .composer-publish-menu-panel { position: absolute; inset: auto 0 100%; width: 100%; min-width: 0; padding-bottom: .38rem; overflow: visible; }' });
-  await page.locator('#newTabButton').hover();
-  expect((await page.locator('#newTabCurrentDirectoryButton').boundingBox()).y).toBeLessThan(0);
-  await page.screenshot({ path: testInfo.outputPath('before-one-tab.png') });
-  await oldPlacement.evaluate(node => node.remove());
-  await page.mouse.move(500, 300);
   await checkMenu(page);
-  await page.locator('#newTabButton').hover();
+  await page.locator('#newTabButton').click();
   await page.screenshot({ path: testInfo.outputPath('after.png') });
-  await page.mouse.move(500, 300);
+  await page.keyboard.press('Escape');
   await expect(page.locator('#promptInput')).toHaveValue('retained draft');
   for (let index = 0; index < 10; index++) await ownership.api('/api/tabs', {});
   await page.reload();
@@ -64,19 +75,23 @@ test('new tab actions open their intended destinations and keep the draft', asyn
   await page.goto(ownership.baseURL);
   await expect(page.locator('#focusedWorkspace')).toBeVisible();
   await page.locator('#promptInput').fill('source draft');
+  const palette = page.locator('#newThreadList');
   await page.locator('#newTabButton').click();
-  await page.locator('#newTabChooseDirectoryButton').click();
-  await expect(page.locator('dialog:modal')).toBeVisible();
+  await palette.getByRole('option', { name: /Browse…/ }).click();
+  await expect(page.locator('#pathPickerDialog')).toBeVisible();
   await page.locator('#pathPickerCancelButton').click();
-  await expect(page.locator('dialog:modal')).toBeHidden();
+  await expect(page.locator('dialog:modal')).toHaveCount(0);
   await page.locator('#newTabButton').click();
-  await page.locator('#newTabWorktreeButton').click();
+  await palette.getByRole('option', { name: /Branch worktree…/ }).click();
   await expect(page.getByRole('listbox', { name: 'Git branches and worktrees' })).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(page.getByRole('listbox', { name: 'Git branches and worktrees' })).toBeHidden();
   await page.locator('#newTabButton').click();
-  await page.locator('#newTabCurrentDirectoryButton').click();
-  await expect(page.locator('#tabBar [role="tab"]')).toHaveCount(3);
+  await palette.getByRole('option').first().click();
+  await expect(page.locator('#emptyStartTitle')).toHaveText('Start a conversation');
+  await expect(page.locator('.empty-start-workspace-button')).toHaveText(ownership.tabs[0].cwd);
+  await expect(page.locator('#promptInput')).toHaveValue('');
+  await expect(page.locator('#tabBar [role="tab"]')).toHaveCount(2);
   await page.locator(`#tabBar [data-tab-id="${ownership.tabs[0].id}"] .terminal-tab-button`).click();
   await expect(page.locator('#promptInput')).toHaveValue('source draft');
 });

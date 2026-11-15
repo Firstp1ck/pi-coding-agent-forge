@@ -29,7 +29,7 @@ async function preserve(page, ownership) {
 test('directory picker Escape closes and restores focus', async ({ page, ownership }, info) => {
   await ready(page, ownership);
   await page.locator('#newTabButton').click();
-  await page.locator('#newTabChooseDirectoryButton').click();
+  await page.locator('#newThreadList').getByRole('option', { name: /Browse…/ }).click();
   await expect(page.locator('#pathPickerDialog')).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(page.locator('#pathPickerDialog')).toBeHidden();
@@ -205,7 +205,7 @@ test('phone sessions navigation returns to chat with the source draft', async ({
 test('directory picker Escape after loading closes and returns focus', async ({ page, ownership }, info) => {
   await ready(page, ownership);
   await page.locator('#newTabButton').click();
-  await page.locator('#newTabChooseDirectoryButton').click();
+  await page.locator('#newThreadList').getByRole('option', { name: /Browse…/ }).click();
   await expect(page.locator('#pathPickerChooseButton')).toBeEnabled();
   await page.screenshot({ path: info.outputPath('directory-loaded.png') });
   await page.keyboard.press('Escape');
@@ -236,7 +236,7 @@ test('pending picker cancellation and reopen ignore the late result', async ({ p
     }
   });
   await page.locator('#newTabButton').click();
-  await page.locator('#newTabChooseDirectoryButton').click();
+  await page.locator('#newThreadList').getByRole('option', { name: /Browse…/ }).click();
   await intercepted;
   await expect(page.locator('#pathPickerCancelButton')).toBeFocused();
   const aborted = page.waitForEvent('requestfailed', request => new URL(request.url()).pathname === '/api/directories');
@@ -245,7 +245,7 @@ test('pending picker cancellation and reopen ignore the late result', async ({ p
   await expect(page.locator('#pathPickerDialog')).toBeHidden();
   await expect(page.locator('#newTabButton')).toBeFocused();
   await page.locator('#newTabButton').click();
-  await page.locator('#newTabChooseDirectoryButton').click();
+  await page.locator('#newThreadList').getByRole('option', { name: /Browse…/ }).click();
   await expect(page.locator('#pathPickerCurrent')).toHaveText('Fresh response');
   release();
   await staleHandled;
@@ -260,7 +260,7 @@ test('pending picker cancellation and reopen ignore the late result', async ({ p
 test('switching tabs while picker is open does not restore stale focus', async ({ page, ownership }) => {
   await ready(page, ownership);
   await page.locator('#newTabButton').click();
-  await page.locator('#newTabChooseDirectoryButton').click();
+  await page.locator('#newThreadList').getByRole('option', { name: /Browse…/ }).click();
   await expect(page.locator('#pathPickerDialog')).toBeVisible();
   await page.locator(`#tabBar [data-tab-id="${ownership.tabs[1].id}"] .terminal-tab-button`).evaluate(button => button.click());
   await expect(page.locator('#pathPickerDialog')).toBeHidden();

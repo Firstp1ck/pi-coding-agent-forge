@@ -168,10 +168,16 @@ test("errors surface as a toast and an Events unread badge", async ({ page }) =>
   await expect(page.locator("#promptInput")).toBeVisible();
   await expect(page.locator("#eventsUnreadBadge")).toBeHidden();
 
-  // Palette → "New thread" fails server-side; previously this only wrote to the collapsed Events log.
+  // Palette → "New thread" opens a draft; its first message fails to start the thread server-side.
+  // Previously this only wrote to the collapsed Events log.
   await page.keyboard.press("Control+k");
   await page.locator("#commandPaletteInput").fill("New thread");
   await page.keyboard.press("Enter");
+  await expect(page.locator("#newThreadDialog")).toBeVisible();
+  await page.keyboard.press("Enter");
+  await expect(page.locator("#newThreadDialog")).toBeHidden();
+  await page.locator("#promptInput").fill("Start a thread that fails");
+  await page.locator("#sendButton").click();
   const toast = page.locator("#noticeToastStack .notice-toast.error");
   await expect(toast.first()).toContainText("tab spawn exploded");
   await expect(page.locator("#eventsUnreadBadge")).toBeVisible();

@@ -151,8 +151,9 @@ async function prepareInteractiveState(page, {
     await page.locator("#confirmationCancelButton").focus();
     await expect(page.locator("#confirmationDialog")).toHaveAttribute("open", "");
   } else if (dropdown) {
-    await page.locator("#newTabButton").click();
-    await expect(page.locator("#newTabButton")).toHaveAttribute("aria-expanded", "true");
+    // The new-thread control opens a modal palette now; the composer options menu is the non-modal dropdown.
+    await page.locator("#optionsMenuButton").click();
+    await expect(page.locator("#optionsMenuButton")).toHaveAttribute("aria-expanded", "true");
   } else {
     await page.locator("#promptInput").focus();
   }

@@ -159,7 +159,7 @@
         <section id="mobileSessionsRoute" class="mobile-route" data-mobile-route="sessions" aria-labelledby="mobileSessionsTitle" hidden>
           <header class="mobile-route-header"><h1 id="mobileSessionsTitle" tabindex="-1">Sessions</h1><button id="mobileSessionsCloseAllButton" type="button">Close all</button></header>
           <div class="mobile-session-actions" aria-label="New session actions">
-            <button id="mobileNewCurrentDirectoryButton" class="primary" type="button">New here</button><button id="mobileNewDirectoryButton" type="button">Choose folder</button><button id="mobileNewWorktreeButton" type="button">Worktree</button><button id="mobileResumeSessionButton" type="button">Resume</button>
+            <button id="mobileNewCurrentDirectoryButton" class="primary" type="button" aria-haspopup="dialog" aria-controls="newThreadDialog">New thread</button><button id="mobileNewDirectoryButton" type="button">Choose folder</button><button id="mobileNewWorktreeButton" type="button">Worktree</button><button id="mobileResumeSessionButton" type="button">Resume</button>
           </div>
           <label class="mobile-search-field" for="mobileSessionsSearchInput">Search sessions<input id="mobileSessionsSearchInput" type="search" placeholder="Search sessions" autocomplete="off" /></label>
           <p id="mobileSessionsStatus" class="mobile-route-status muted" role="status"></p>
@@ -226,14 +226,8 @@
           <button id="terminalTabsToggleButton" class="terminal-tabs-toggle-button" type="button" aria-controls="terminalTabsDrawerContent" aria-expanded="false">Threads</button>
           <div id="terminalTabsDrawerContent" class="terminal-tabs-drawer-content" role="region" aria-label="Thread navigation">
           <div id="tabBar" class="terminal-tabs" role="group" aria-label="Pi threads">
-            <div id="newTabMenu" class="terminal-new-tab-menu composer-publish-menu">
-              <button id="newTabButton" class="terminal-new-tab-button" type="button" aria-label="Start a separate isolated Pi thread" aria-haspopup="menu" aria-expanded="false" aria-controls="newTabMenuPanel">+ Thread ▾</button>
-              <div id="newTabMenuPanel" class="terminal-new-tab-menu-panel composer-publish-menu-panel" role="menu" aria-labelledby="newTabButton">
-                <button id="newTabNoProjectButton" class="terminal-new-tab-menu-item composer-publish-menu-item" type="button" role="menuitem"><span>No Project</span></button>
-                <button id="newTabCurrentDirectoryButton" class="terminal-new-tab-menu-item composer-publish-menu-item" type="button" role="menuitem"><span>Current Directory</span></button>
-                <button id="newTabChooseDirectoryButton" class="terminal-new-tab-menu-item composer-publish-menu-item" type="button" role="menuitem"><span>Choose Directory</span></button>
-                <button id="newTabWorktreeButton" class="terminal-new-tab-menu-item composer-publish-menu-item" type="button" role="menuitem" aria-label="Open branch worktree picker: create or open a separate Git checkout in a new Pi thread. Keeps this thread on its current branch; does not commit, push, delete files, or copy ignored dependencies such as node_modules or .venv." data-tooltip="Branch worktree:&#10;• Create or open a separate Git checkout in a new Pi thread.&#10;• Keeps this thread on its current branch.&#10;• Does not commit, push, delete files, or copy ignored deps like node_modules/.venv."><span>Branch Worktree…</span></button>
-              </div>
+            <div id="newTabMenu" class="terminal-new-tab-menu">
+              <button id="newTabButton" class="terminal-new-tab-button" type="button" aria-label="New thread" aria-haspopup="dialog" aria-controls="newThreadDialog"><svg class="terminal-new-tab-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M17.6 3.6a2 2 0 0 1 2.8 2.8L12 14.8l-3.6.8.8-3.6z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg></button>
             </div>
           </div>
           <div class="terminal-sidebar-actions" aria-label="Thread and workspace actions" data-visibility-region="workspace">
@@ -1767,6 +1761,23 @@
         <input id="commandPaletteInput" class="dialog-input command-palette-input" type="search" autocomplete="off" spellcheck="false" placeholder="Search actions, threads, models, commands…" role="combobox" aria-autocomplete="list" aria-controls="commandPaletteList" aria-expanded="true" aria-label="Search command palette" />
         <div id="commandPaletteList" class="command-palette-list" role="listbox" aria-label="Command palette results"></div>
         <p id="commandPaletteHint" class="command-palette-hint muted">Use ↑/↓ then Enter. Escape closes.</p>
+      </form>
+    </dialog>
+
+    <dialog id="newThreadDialog" class="extension-dialog command-palette-dialog" aria-labelledby="newThreadDialogTitle">
+      <form method="dialog">
+        <div class="command-palette-header">
+          <div>
+            <span class="command-palette-kicker">Choose a folder</span>
+            <h2 id="newThreadDialogTitle">New thread</h2>
+          </div>
+          <div class="command-palette-header-actions">
+            <button id="newThreadCloseButton" class="command-palette-close-button" type="button" aria-label="Close new thread palette" title="Close new thread palette">Close</button>
+          </div>
+        </div>
+        <input id="newThreadInput" class="dialog-input command-palette-input" type="search" autocomplete="off" spellcheck="false" placeholder="Search folders…" role="combobox" aria-autocomplete="list" aria-controls="newThreadList" aria-expanded="true" aria-label="Search folders for the new thread" />
+        <div id="newThreadList" class="command-palette-list" role="listbox" aria-label="Folders for the new thread"></div>
+        <p id="newThreadHint" class="command-palette-hint muted">↑↓ Navigate · Enter Select · Esc Close</p>
       </form>
     </dialog>
 

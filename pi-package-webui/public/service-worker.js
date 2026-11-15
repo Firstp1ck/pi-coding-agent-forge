@@ -52,6 +52,7 @@ const APP_SHELL = [
   "/session-shelf-state.mjs",
   "/session-shelves.mjs",
   "/draft-conversations.mjs",
+  "/workspace-choices.mjs",
   "/session-shelves.css",
   "/session-composer-store.mjs",
   "/session-attention-scheduler.mjs",

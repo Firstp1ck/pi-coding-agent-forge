@@ -87,12 +87,14 @@ export function createDraftConversations({ storage = () => globalThis.localStora
     create,
     get(id) { const record = records.get(id); return record ? { ...record } : null; },
     list() { return [...records.values()].filter(record => record.saved).map(record => ({ ...record })); },
+    /** Sets the draft folder; an empty string clears it so the draft starts a No Project thread. */
     setCwd(id, cwd) {
       if (!validCwd(cwd)) throw new Error("The draft workspace path is invalid or too long.");
       const record = records.get(id);
       if (!record) return false;
-      if (record.cwd !== cwd) {
-        record.cwd = cwd;
+      if ((record.cwd || "") !== cwd) {
+        if (cwd) record.cwd = cwd;
+        else delete record.cwd;
         record.revision += 1;
         record.updatedAt = now();
       }

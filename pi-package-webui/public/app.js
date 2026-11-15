@@ -3,6 +3,7 @@ import { groupModelCatalog, modelReleaseDate } from "./model-catalog-order.mjs";
 import { createSessionShelfState } from "./session-shelf-state.mjs";
 import { createSessionShelves } from "./session-shelves.mjs";
 import { createDraftConversations } from "./draft-conversations.mjs";
+import { buildWorkspaceChoices, filterWorkspaceChoices } from "./workspace-choices.mjs";
 import { createFocusedComposerDisclosure } from "./focused-composer-disclosure.mjs";
 import { composerSubmissionPresentation } from "./focused-composer-controls.mjs";
 import { createSettingsResourceController } from "./settings-resource-controller.mjs";
@@ -75,11 +76,6 @@ const elements = {
   sidebarUpdateButton: $("#sidebarUpdateButton"),
   newTabMenu: $("#newTabMenu"),
   newTabButton: $("#newTabButton"),
-  newTabMenuPanel: $("#newTabMenuPanel"),
-  newTabCurrentDirectoryButton: $("#newTabCurrentDirectoryButton"),
-  newTabChooseDirectoryButton: $("#newTabChooseDirectoryButton"),
-  newTabNoProjectButton: $("#newTabNoProjectButton"),
-  newTabWorktreeButton: $("#newTabWorktreeButton"),
   closeAllTabsButton: $("#closeAllTabsButton"),
   terminalSplitShell: $("#terminalSplitShell"),
   terminalSplitFrame: $("#terminalSplitFrame"),
@@ -597,6 +593,10 @@ const elements = {
   commandPaletteList: $("#commandPaletteList"),
   commandPaletteHint: $("#commandPaletteHint"),
   commandPaletteCloseButton: $("#commandPaletteCloseButton"),
+  newThreadDialog: $("#newThreadDialog"),
+  newThreadInput: $("#newThreadInput"),
+  newThreadList: $("#newThreadList"),
+  newThreadCloseButton: $("#newThreadCloseButton"),
   editRetryDialog: $("#editRetryDialog"),
   editRetryMessage: $("#editRetryMessage"),
   editRetryText: $("#editRetryText"),
@@ -1220,6 +1220,11 @@ const sessionSummaryByTab = new Map();
 const sessionSummaryGenerationByTab = new Map();
 let pathPickerState = null;
 let pathFastPicks = [];
+// Most recent activation per thread id; orders the "Recent" folder choices.
+const threadActivationOrder = new Map();
+let threadActivationSerial = 0;
+const newThreadPaletteState = { choices: [], index: 0, returnFocus: null, restoreFocus: true };
+let draftWorkspacePicker = null;
 let pathFastPicksReady = false;
 let pathFastPicksLoadPromise = null;
 let mobileTabsExpanded = false;
@@ -1237,7 +1242,6 @@ let savedWorkspacesError = "";
 let savedWorkspacesRefreshPromise = null;
 let terminalTabDragId = null;
 let splitTabId = null;
-let newTabMenuOpen = false;
 let nativeCommandMenuOpen = false;
 let appRunnerMenuOpen = false;
 let appRunnerMenuIntent = 0;
@@ -1480,7 +1484,7 @@ const activityQueue = createActivityQueueController({
     setOptionsMenuOpen(false);
     setConversationVoiceMenuOpen(false);
     setBusyPromptBehaviorMenuOpen(false);
-    setNewTabMenuOpen(false);
+    closeDraftWorkspacePicker();
   },
   onAfterClose: scheduleDeferredUiFlushAfterDropdownClose,
   onProjectionChange() {
@@ -2440,7 +2444,7 @@ function renderFocusedShell() {
     inspectorTitle: record?.label || record?.button?.querySelector(".side-panel-section-label")?.textContent || "",
     inspectorTopics: record && focusedShellState.destination !== "settings" ? focusedInspectorTopics(focusedShellState.destination) : [],
     title: threadDisplayTitle(active?.title) || "Start a conversation",
-    context: !active || active.workspaceKind === "no-project" ? "No Project" : active.cwd || "",
+    context: !active ? (activeDraftCwd() ? normalizeDisplayPath(activeDraftCwd()) : "No Project") : active.workspaceKind === "no-project" ? "No Project" : active.cwd || "",
     attentionCount: focusedAttentionSnapshot().items.filter(item => item.state === "blocked").reduce((sum, item) => sum + item.decisionCount, 0),
     finishedCount: focusedAttentionSnapshot().items.filter(item => item.state === "done").length,
     homeCollapsed: workspaceDashboardCollapsed,
@@ -3430,9 +3434,9 @@ function installMobilePhoneExperience() {
   mobileShellElement("mobileSurfaceBackButton")?.addEventListener("click", mobileBack);
   mobileShellElement("mobileSessionsSearchInput")?.addEventListener("input", mobileRenderSessions);
   mobileShellElement("mobileSessionsCloseAllButton")?.addEventListener("click", () => elements.closeAllTabsButton?.click());
-  mobileShellElement("mobileNewCurrentDirectoryButton")?.addEventListener("click", () => createTerminalTab());
-  mobileShellElement("mobileNewDirectoryButton")?.addEventListener("click", () => createTerminalTabFromChosenDirectory());
-  mobileShellElement("mobileNewWorktreeButton")?.addEventListener("click", () => elements.newTabWorktreeButton?.click());
+  mobileShellElement("mobileNewCurrentDirectoryButton")?.addEventListener("click", (event) => openNewThreadPalette({ returnFocus: event.currentTarget }));
+  mobileShellElement("mobileNewDirectoryButton")?.addEventListener("click", (event) => browseNewThreadFolder({ returnFocus: event.currentTarget }));
+  mobileShellElement("mobileNewWorktreeButton")?.addEventListener("click", () => openBranchWorktreePicker());
   mobileShellElement("mobileResumeSessionButton")?.addEventListener("click", () => elements.optionsResumeButton?.click());
   mobileShellElement("mobileActivityRefreshButton")?.addEventListener("click", () => reconcileForegroundState("mobile activity").catch((error) => addEvent(error.message || String(error), "error")));
   const projectTopics = mobileShellElement("mobileProjectTopics");
@@ -4657,7 +4661,7 @@ function isInteractiveDropdownOpen() {
       || conversationVoiceMenuOpen
       || busyPromptBehaviorMenuOpen
       || activityQueue.isOpen()
-      || newTabMenuOpen
+      || draftWorkspacePicker !== null
       || isFooterPickerOpen()
       || elements.commandSuggest?.hidden === false
       || elements.modelSearchInput?.hidden === false
@@ -8192,10 +8196,7 @@ function setMobileTabsExpanded(expanded, { restoreFocus = false } = {}) {
   elements.terminalTabsToggleButton.setAttribute("aria-expanded", mobileTabsExpanded ? "true" : "false");
   if (mobileTabsExpanded) {
     activateDrawerModal(elements.terminalTabsShell, elements.terminalTabsToggleButton, {
-      close: () => {
-        setNewTabMenuOpen(false);
-        setMobileTabsExpanded(false, { restoreFocus: true });
-      },
+      close: () => setMobileTabsExpanded(false, { restoreFocus: true }),
     });
   } else {
     deactivateDrawerModal(elements.terminalTabsShell, { restoreFocus: false });
@@ -12717,6 +12718,8 @@ function setActiveTabId(tabId, { remember = false } = {}) {
   activeTabId = context.tabId;
   activeTabGeneration = context.generation;
   renderMainOutputLoading();
+  if (activeTabId) threadActivationOrder.set(activeTabId, ++threadActivationSerial);
+  if (tabChanged) closeDraftWorkspacePicker();
   bindGitWorkflowToActiveTab();
   if (tabChanged) {
     activityIntercom.activate(projectTargetFromContext());
@@ -17802,63 +17805,8 @@ function clearOpenTerminalTabGroup(groupKey, { force = false, preserveFocus = fa
   syncTabPolling();
 }
 
-function positionFocusedNewTabMenu(event) {
-  const menu = elements.newTabMenu;
-  const panel = elements.newTabMenuPanel;
-  if (!menu || !panel || !elements.newTabButton) return;
-  if (event?.type === "scroll" && panel.contains(event.target)) return;
-  const trigger = elements.newTabButton.getBoundingClientRect();
-  const viewportWidth = document.documentElement.clientWidth;
-  const viewportHeight = document.documentElement.clientHeight;
-  // Remeasure intrinsic content on resize instead of retaining the previous row width.
-  panel.style.setProperty("--new-tab-menu-width", "max-content");
-  panel.style.setProperty("--new-tab-menu-max-height", `${viewportHeight - 8}px`);
-  const width = Math.min(Math.max(trigger.width, panel.getBoundingClientRect().width), viewportWidth - 8);
-  panel.style.setProperty("--new-tab-menu-width", `${width}px`);
-  const height = panel.getBoundingClientRect().height;
-  const below = Math.max(0, viewportHeight - trigger.bottom - 4);
-  const above = Math.max(0, trigger.top - 4);
-  const openBelow = height <= below || below >= above;
-  let availableHeight = openBelow ? below : above;
-  let top = openBelow ? trigger.bottom : trigger.top - Math.min(height, availableHeight);
-  let left = Math.max(4, Math.min(trigger.left, viewportWidth - width - 4));
-  if (!menu.closest("#focusedWorkspace") && viewportWidth >= 721 && document.body.classList.contains("terminal-tabs-left")) {
-    const sideLeft = document.body.classList.contains("terminal-tabs-sidebar-start") ? trigger.right : trigger.left - width;
-    if (sideLeft >= 4 && sideLeft + width <= viewportWidth - 4) {
-      left = sideLeft;
-      top = Math.max(4, Math.min(trigger.top, viewportHeight - height - 4));
-      availableHeight = viewportHeight - top - 4;
-    }
-  }
-  panel.style.setProperty("--new-tab-menu-max-height", `${availableHeight}px`);
-  panel.style.setProperty("--new-tab-menu-top", `${top}px`);
-  panel.style.setProperty("--new-tab-menu-left", `${left}px`);
-}
-
-function setNewTabMenuOpen(open) {
-  const focusedMenu = elements.newTabMenu?.closest("#focusedWorkspace");
-  if (!open) {
-    setNewTabMenuOpen.suppressFocusReopen = true;
-    queueMicrotask(() => { setNewTabMenuOpen.suppressFocusReopen = false; });
-  }
-  if (focusedMenu) elements.newTabMenu.classList.toggle("menu-dismissed", !open);
-  if (open && activityQueue.isOpen()) setFollowUpQueueOpen(false);
-  newTabMenuOpen = !!open;
-  elements.newTabButton?.setAttribute("aria-expanded", newTabMenuOpen ? "true" : "false");
-  elements.newTabButton?.classList.toggle("menu-open", newTabMenuOpen);
-  elements.newTabMenu?.classList.toggle("open", newTabMenuOpen);
-  if (newTabMenuOpen) positionFocusedNewTabMenu();
-  window.removeEventListener("resize", positionFocusedNewTabMenu);
-  window.removeEventListener("scroll", positionFocusedNewTabMenu, true);
-  if (newTabMenuOpen) {
-    window.addEventListener("resize", positionFocusedNewTabMenu);
-    window.addEventListener("scroll", positionFocusedNewTabMenu, true);
-  }
-  if (!newTabMenuOpen) scheduleDeferredUiFlushAfterDropdownClose();
-}
-
 function initializeTerminalHeaderTooltips() {
-  applyStyledTooltip(elements.newTabButton, "Start a separate isolated Pi thread", { ariaLabel: "Start a separate isolated Pi thread" });
+  applyStyledTooltip(elements.newTabButton, "New thread:\n• Choose a folder, No project, or a branch worktree.\n• Nothing starts until you send the first message.", { ariaLabel: "New thread" });
   applyStyledTooltip(elements.closeAllTabsButton, "Close all threads", { ariaLabel: "Close all threads" });
 }
 
@@ -17883,33 +17831,6 @@ function initializeControlSettingTooltips() {
       else if (label.contains(elements.themeControlLabel)) toggleThemeSearchInput();
     });
   });
-}
-
-function openNewTabMenu() {
-  if (setNewTabMenuOpen.suppressFocusReopen) return;
-  setPublishMenuOpen(false);
-  setNativeCommandMenuOpen(false);
-  setAppRunnerMenuOpen(false);
-  setOptionsMenuOpen(false);
-  setNewTabMenuOpen(true);
-}
-
-function newTabMenuItems() {
-  return [elements.newTabNoProjectButton, elements.newTabCurrentDirectoryButton, elements.newTabChooseDirectoryButton, elements.newTabWorktreeButton].filter(Boolean);
-}
-
-function focusNewTabMenuItem(direction = "first") {
-  const items = newTabMenuItems();
-  const item = direction === "last" ? items.at(-1) : items[0];
-  item?.focus({ preventScroll: false });
-}
-
-function moveNewTabMenuFocus(delta) {
-  const items = newTabMenuItems();
-  if (!items.length) return;
-  const currentIndex = Math.max(0, items.indexOf(document.activeElement));
-  const nextIndex = (currentIndex + delta + items.length) % items.length;
-  items[nextIndex].focus({ preventScroll: false });
 }
 
 function scheduleTabsRender() {
@@ -18438,7 +18359,6 @@ async function splitTerminalTab(tabId, { triggerButton = null } = {}) {
   if (splitTabId) closeTerminalSplitView();
   let resolvedCwd = sourceTab.cwd || latestWorkspace?.cwd || currentDirectoryForNewTab();
   setMobileTabsExpanded(false);
-  setNewTabMenuOpen(false);
   if (!resolvedCwd) {
     resolvedCwd = await pickCwd(sourceTab, "", { title: "Choose a folder for split session" });
     if (!resolvedCwd) return;
@@ -18485,7 +18405,7 @@ async function openClientDraft(id = null) {
   clearOpenTerminalTabGroup(null, { force: true });
   setFollowUpQueueOpen(false);
   setMobileTabsExpanded(false);
-  setNewTabMenuOpen(false);
+  closeDraftWorkspacePicker();
   closeTerminalSplitView();
   if (voiceConversation) stopVoiceConversationLoop();
   draftNavigationRevision += 1;
@@ -18506,7 +18426,6 @@ async function openNoProjectConversation() {
 async function createTerminalTab(cwd, { triggerButton = elements.newTabButton, customGroupId = null, workspaceKind = cwd === undefined && activeTab()?.workspaceKind === "no-project" ? "no-project" : "project", activate = true } = {}) {
   const sourceContext = activeTabContext();
   setMobileTabsExpanded(false);
-  setNewTabMenuOpen(false);
   const resolvedCwd = cwd || currentDirectoryForNewTab();
   if (workspaceKind !== "no-project" && !resolvedCwd && tabs.length === 0) {
     await createTerminalTabFromChosenDirectory({ triggerButton });
@@ -18537,37 +18456,380 @@ async function createTerminalTab(cwd, { triggerButton = elements.newTabButton, c
   }
 }
 
-async function createTerminalTabFromChosenDirectory({ triggerButton = elements.newTabChooseDirectoryButton } = {}) {
+async function createTerminalTabFromChosenDirectory({ triggerButton = null } = {}) {
   const sourceTab = activeTab();
   const initialCwd = currentDirectoryForNewTab();
   setMobileTabsExpanded(false);
-  setNewTabMenuOpen(false);
-  const returnFocus = triggerButton === elements.newTabChooseDirectoryButton ? elements.newTabButton : triggerButton;
+  const returnFocus = triggerButton || elements.newTabButton;
   const cwd = await pickCwd(sourceTab || { id: "new-tab", title: "new thread" }, initialCwd, { title: "Choose a folder for new session", returnFocus });
   if (!cwd) return;
   await createTerminalTab(cwd, { triggerButton });
 }
 
-async function chooseClientDraftWorkspace({ cwd, triggerButton } = {}) {
-  if (activeTabId) return;
-  const draftId = draftConversations.activeId || draftConversations.create();
-  if (draftSubmissions.has(draftId)) return;
-  const initialCwd = draftConversations.get(draftId)?.cwd || "";
-  const selectedCwd = cwd || await pickCwd(null, initialCwd, { title: "Choose a workspace for this draft", returnFocus: triggerButton });
-  // Selection belongs to the opening draft, even if navigation or first send
-  // finishes while the picker is open. A promoted draft no longer owns a cwd.
-  if (!selectedCwd || draftSubmissions.has(draftId) || !draftConversations.get(draftId)) return;
+/** Folder of the visible browser draft, or "" on a real thread or a No Project draft. */
+function activeDraftCwd() {
+  return activeTabId ? "" : draftConversations.get(draftConversations.activeId)?.cwd || "";
+}
+
+/**
+ * Sets or clears (empty `cwd`) the folder of one browser draft and refreshes
+ * its visible empty state. Returns false when the draft is gone or its first
+ * prompt is already creating the thread, because that thread keeps the folder
+ * captured at send time.
+ */
+function setClientDraftWorkspace(draftId, cwd) {
+  if (draftSubmissions.has(draftId) || !draftConversations.get(draftId)) return false;
   try {
-    draftConversations.setCwd(draftId, selectedCwd);
+    draftConversations.setCwd(draftId, cwd);
     reportDraftStorageError();
     renderTabs();
     if (!activeTabId && draftConversations.activeId === draftId) {
       elements.chat.querySelector(".empty-start-state")?.remove();
       renderEmptyStartState();
+      renderFooter();
     }
+    return true;
   } catch (error) {
     addEvent(error.message, "error");
+    return false;
   }
+}
+
+/** Chooses the active draft's folder, with the folder picker when `cwd` is omitted. Returns whether the draft changed. */
+async function chooseClientDraftWorkspace({ cwd, triggerButton } = {}) {
+  if (activeTabId) return false;
+  const draftId = draftConversations.activeId || draftConversations.create();
+  if (draftSubmissions.has(draftId)) return false;
+  const initialCwd = draftConversations.get(draftId)?.cwd || "";
+  const selectedCwd = cwd || await pickCwd(null, initialCwd, { title: "Choose a workspace for this draft", returnFocus: triggerButton });
+  // Selection belongs to the opening draft, even if navigation or first send
+  // finishes while the picker is open. A promoted draft no longer owns a cwd.
+  if (!selectedCwd) return false;
+  return setClientDraftWorkspace(draftId, selectedCwd);
+}
+
+function threadFolder(tab) {
+  if (!tab || tab.workspaceKind === "no-project") return "";
+  const workspace = tab.id === activeTabId ? latestWorkspace : tabWorkspaceCache.get(tab.id);
+  return workspace?.cwd || tab.cwd || "";
+}
+
+/** Current, pinned and recent folder sources for `buildWorkspaceChoices`. On a draft, the last active thread's folder is current. */
+function workspaceChoiceSources() {
+  const recentTabs = tabs
+    .map((tab, index) => ({ tab, index }))
+    .sort((a, b) => (threadActivationOrder.get(b.tab.id) || 0) - (threadActivationOrder.get(a.tab.id) || 0) || b.index - a.index)
+    .map(({ tab }) => tab);
+  const recent = recentTabs.map(threadFolder).filter(Boolean);
+  return { currentCwd: activeTabId ? threadFolder(activeTab()) : recent[0] || "", pinned: pathFastPicks, recent };
+}
+
+/** The active draft when it is blank and idle, so a new-thread choice reuses it instead of adding another draft. */
+function reusableBlankDraftId() {
+  const id = draftConversations.activeId;
+  if (activeTabId || !id || draftSubmissions.has(id) || elements.promptInput.value.trim() || !draftConversations.get(id)) return null;
+  return id;
+}
+
+/** Shows an empty draft with `cwd` ("" for No project). Nothing is created on the server until its first prompt. */
+async function openThreadDraft({ cwd = "" } = {}) {
+  const reusable = reusableBlankDraftId();
+  const previous = draftConversations.activeId;
+  await openClientDraft(reusable);
+  const draftId = draftConversations.activeId;
+  // openClientDraft declines while a theme save is pending; never retarget the draft that was already open.
+  if (activeTabId || !draftId || (!reusable && draftId === previous)) return;
+  setClientDraftWorkspace(draftId, cwd);
+  mobileNavigate("chat", { focus: false });
+}
+
+async function browseNewThreadFolder({ returnFocus = elements.newTabButton } = {}) {
+  const reusable = reusableBlankDraftId();
+  if (reusable) {
+    const changed = await chooseClientDraftWorkspace({ triggerButton: returnFocus });
+    if (changed && !activeTabId && draftConversations.activeId === reusable) await openClientDraft(reusable);
+    return;
+  }
+  const source = { context: activeTabContext(), navigation: focusedShellState, draftNavigation: draftNavigationRevision };
+  const cwd = await pickCwd(activeTab() || { id: "new-tab", title: "new thread" }, workspaceChoiceSources().currentCwd, { title: "Choose a folder for new session", returnFocus });
+  // Without an opening draft, a late choice must not pull the user away from
+  // where they navigated while the picker was open.
+  if (!cwd || !isCurrentTabContext(source.context) || focusedShellState !== source.navigation || draftNavigationRevision !== source.draftNavigation) return;
+  await openThreadDraft({ cwd });
+}
+
+/**
+ * Applies list keys to a workspace choice state ({ choices, index }): arrows
+ * wrap, Home/End jump. Returns the highlighted choice (or null) on Enter and
+ * undefined for every other key.
+ */
+function handleWorkspaceChoiceKey(event, state, render) {
+  const count = state.choices.length;
+  let next;
+  if (event.key === "ArrowDown") next = count ? (state.index + 1) % count : 0;
+  else if (event.key === "ArrowUp") next = count ? (state.index - 1 + count) % count : 0;
+  else if (event.key === "Home") next = 0;
+  else if (event.key === "End") next = Math.max(0, count - 1);
+  else if (event.key === "Enter") {
+    event.preventDefault();
+    return state.choices[state.index] || null;
+  } else return undefined;
+  event.preventDefault();
+  state.index = next;
+  render();
+  return undefined;
+}
+
+function renderWorkspaceChoiceList({ list, input, state, idPrefix, compact, onChoose }) {
+  list.replaceChildren();
+  if (!state.choices.length) {
+    list.append(make("div", compact ? "footer-model-picker-source" : "command-palette-empty muted", "No matching folders."));
+    input.removeAttribute("aria-activedescendant");
+    return;
+  }
+  state.choices.forEach((choice, index) => {
+    const active = index === state.index;
+    const option = make("button", `${compact ? "footer-model-option" : "command-palette-item"}${active ? " active" : ""}`);
+    option.type = "button";
+    option.tabIndex = -1;
+    option.id = `${idPrefix}-${index}`;
+    option.dataset.workspaceChoice = choice.id;
+    option.setAttribute("role", "option");
+    option.setAttribute("aria-selected", String(active));
+    if (choice.kind === "folder") option.title = choice.path;
+    if (compact) {
+      option.append(
+        make("span", "footer-model-option-main", choice.selected ? `${choice.label} · selected` : choice.label),
+        make("span", "footer-model-option-name", `${choice.tag} · ${choice.path}`),
+      );
+    } else {
+      option.append(
+        make("span", "command-palette-item-kind", choice.tag),
+        make("span", "command-palette-item-label", choice.label),
+        make("span", "command-palette-item-description", choice.path),
+      );
+    }
+    // Keep focus in the search field so the combobox keeps keyboard ownership.
+    option.addEventListener("pointerdown", (event) => event.preventDefault());
+    option.addEventListener("click", () => onChoose(choice));
+    list.append(option);
+  });
+  const active = list.children[state.index];
+  input.setAttribute("aria-activedescendant", active.id);
+  active.scrollIntoView({ block: "nearest" });
+}
+
+function renderNewThreadPalette() {
+  const state = newThreadPaletteState;
+  state.choices = filterWorkspaceChoices(buildWorkspaceChoices({ ...workspaceChoiceSources(), includeWorktree: true }), elements.newThreadInput.value);
+  if (state.index >= state.choices.length) state.index = 0;
+  renderWorkspaceChoiceList({ list: elements.newThreadList, input: elements.newThreadInput, state, idPrefix: "new-thread-option", compact: false, onChoose: chooseNewThreadPaletteEntry });
+}
+
+function openNewThreadPalette({ returnFocus = document.activeElement } = {}) {
+  const dialog = elements.newThreadDialog;
+  if (!dialog) return;
+  closeCommandPalette();
+  closeDraftWorkspacePicker();
+  setComposerActionsOpen(false);
+  setPublishMenuOpen(false);
+  setNativeCommandMenuOpen(false);
+  setAppRunnerMenuOpen(false);
+  setOptionsMenuOpen(false);
+  setMobileTabsExpanded(false);
+  Object.assign(newThreadPaletteState, { index: 0, returnFocus, restoreFocus: true });
+  elements.newThreadInput.value = "";
+  renderNewThreadPalette();
+  if (!dialog.open) dialog.showModal();
+  elements.newThreadInput.focus({ preventScroll: true });
+  // Pinned folders load lazily; list them as soon as the first load finishes.
+  initializeFastPicks()
+    .then(() => { if (dialog.open) renderNewThreadPalette(); })
+    .catch((error) => addEvent(`failed to load pinned folders: ${error.message}`, "error"));
+}
+
+function closeNewThreadPalette({ restoreFocus = true } = {}) {
+  newThreadPaletteState.restoreFocus = restoreFocus;
+  if (elements.newThreadDialog?.open) elements.newThreadDialog.close();
+}
+
+function restoreNewThreadPaletteFocus() {
+  const { returnFocus, restoreFocus } = newThreadPaletteState;
+  newThreadPaletteState.returnFocus = null;
+  if (!restoreFocus) return;
+  const focusable = (node) => node?.isConnected && node.getClientRects().length && !node.disabled;
+  // Opening the palette closed the phone thread drawer; return to the toggle that opened it.
+  const drawerToggle = elements.terminalTabsShell?.contains(returnFocus) ? elements.terminalTabsToggleButton : null;
+  const target = [returnFocus, drawerToggle].find(focusable);
+  if (target) target.focus({ preventScroll: true });
+  else focusPromptInput();
+}
+
+async function chooseNewThreadPaletteEntry(choice) {
+  if (!choice) return;
+  const { returnFocus } = newThreadPaletteState;
+  closeNewThreadPalette({ restoreFocus: false });
+  if (choice.kind === "worktree") openBranchWorktreePicker();
+  else if (choice.kind === "browse") await browseNewThreadFolder({ returnFocus });
+  else await openThreadDraft({ cwd: choice.kind === "folder" ? choice.cwd : "" });
+}
+
+function renderDraftWorkspaceButton(value) {
+  const holder = make("strong");
+  const button = make("button", "empty-start-workspace-button", value);
+  button.type = "button";
+  button.setAttribute("aria-haspopup", "listbox");
+  button.setAttribute("aria-expanded", "false");
+  button.setAttribute("aria-label", `Workspace: ${value}. Change the folder for this draft`);
+  button.title = "Change the folder for this draft";
+  button.addEventListener("click", () => {
+    if (draftWorkspacePicker?.trigger === button) closeDraftWorkspacePicker({ restoreFocus: true });
+    else openDraftWorkspacePicker(button);
+  });
+  button.addEventListener("keydown", (event) => {
+    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+    event.preventDefault();
+    if (draftWorkspacePicker?.trigger !== button) openDraftWorkspacePicker(button);
+  });
+  holder.append(button);
+  return holder;
+}
+
+function renderDraftWorkspacePicker() {
+  const picker = draftWorkspacePicker;
+  if (!picker) return;
+  const selectedCwd = draftConversations.get(picker.draftId)?.cwd || "";
+  picker.choices = filterWorkspaceChoices(buildWorkspaceChoices({ ...workspaceChoiceSources(), selectedCwd }), picker.input.value);
+  if (picker.index >= picker.choices.length) picker.index = 0;
+  renderWorkspaceChoiceList({ list: picker.list, input: picker.input, state: picker, idPrefix: "draft-workspace-option", compact: true, onChoose: chooseDraftWorkspacePickerEntry });
+}
+
+/** Places the dropdown in the viewport next to its trigger; fixed top-layer positioning keeps chat scroll containers from clipping it. */
+function positionDraftWorkspacePicker(event) {
+  const picker = draftWorkspacePicker;
+  if (!picker) return;
+  if (event?.type === "scroll" && picker.element.contains(event.target)) return;
+  if (!picker.trigger.isConnected) {
+    closeDraftWorkspacePicker();
+    return;
+  }
+  const margin = 8;
+  const gap = 4;
+  const trigger = picker.trigger.getBoundingClientRect();
+  const viewportWidth = document.documentElement.clientWidth;
+  const viewportHeight = document.documentElement.clientHeight;
+  const width = Math.min(352, viewportWidth - margin * 2);
+  const below = viewportHeight - trigger.bottom - gap - margin;
+  const above = trigger.top - gap - margin;
+  const style = picker.element.style;
+  style.setProperty("--draft-workspace-picker-width", `${width}px`);
+  style.setProperty("--draft-workspace-picker-max-height", `${viewportHeight - margin * 2}px`);
+  const naturalHeight = picker.element.getBoundingClientRect().height;
+  const openBelow = naturalHeight <= below || below >= above;
+  const maxHeight = Math.max(120, openBelow ? below : above);
+  style.setProperty("--draft-workspace-picker-max-height", `${maxHeight}px`);
+  const height = Math.min(naturalHeight, maxHeight);
+  style.setProperty("--draft-workspace-picker-left", `${Math.max(margin, Math.min(trigger.left, viewportWidth - width - margin))}px`);
+  style.setProperty("--draft-workspace-picker-top", `${Math.max(margin, openBelow ? trigger.bottom + gap : trigger.top - gap - height)}px`);
+}
+
+function openDraftWorkspacePicker(trigger) {
+  closeDraftWorkspacePicker();
+  const draftId = draftConversations.activeId;
+  if (activeTabId || !draftId) return;
+  setComposerActionsOpen(false);
+  setPublishMenuOpen(false);
+  setNativeCommandMenuOpen(false);
+  setAppRunnerMenuOpen(false);
+  setOptionsMenuOpen(false);
+  const element = make("div", "footer-model-picker draft-workspace-picker");
+  element.setAttribute("popover", "manual");
+  element.setAttribute("role", "dialog");
+  element.setAttribute("aria-label", "Choose a folder for this draft");
+  const input = make("input", "dialog-input draft-workspace-picker-input");
+  Object.assign(input, { type: "search", autocomplete: "off", spellcheck: false, placeholder: "Search folders…" });
+  const list = make("div", "draft-workspace-picker-list");
+  list.id = "draftWorkspacePickerList";
+  list.setAttribute("role", "listbox");
+  list.setAttribute("aria-label", "Folders for this draft");
+  for (const [name, value] of [["role", "combobox"], ["aria-autocomplete", "list"], ["aria-expanded", "true"], ["aria-controls", list.id], ["aria-label", "Search folders for this draft"]]) input.setAttribute(name, value);
+  element.append(
+    make("div", "footer-model-picker-title", "Folder for this draft"),
+    input,
+    list,
+    make("div", "footer-model-picker-source", "↑↓ Navigate · Enter Select · Esc Close"),
+  );
+  document.body.append(element);
+  draftWorkspacePicker = { element, input, list, trigger, draftId, choices: [], index: 0 };
+  renderDraftWorkspacePicker();
+  draftWorkspacePicker.index = Math.max(0, draftWorkspacePicker.choices.findIndex((choice) => choice.selected));
+  renderDraftWorkspacePicker();
+  trigger.setAttribute("aria-expanded", "true");
+  trigger.setAttribute("aria-controls", list.id);
+  element.showPopover?.();
+  positionDraftWorkspacePicker();
+  window.addEventListener("resize", positionDraftWorkspacePicker);
+  window.addEventListener("scroll", positionDraftWorkspacePicker, true);
+  input.addEventListener("input", () => {
+    if (!draftWorkspacePicker) return;
+    draftWorkspacePicker.index = 0;
+    renderDraftWorkspacePicker();
+  });
+  input.addEventListener("keydown", (event) => {
+    if (!draftWorkspacePicker) return;
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      closeDraftWorkspacePicker({ restoreFocus: true });
+      return;
+    }
+    const choice = handleWorkspaceChoiceKey(event, draftWorkspacePicker, renderDraftWorkspacePicker);
+    if (choice !== undefined) void chooseDraftWorkspacePickerEntry(choice);
+  });
+  element.addEventListener("focusout", () => setTimeout(() => {
+    const focused = document.activeElement;
+    // Focus on the trigger means a toggle click is in progress; its handler closes the picker.
+    if (draftWorkspacePicker?.element === element && !element.contains(focused) && focused !== draftWorkspacePicker.trigger) closeDraftWorkspacePicker();
+  }, 0));
+  input.focus({ preventScroll: true });
+  initializeFastPicks()
+    .then(() => { if (draftWorkspacePicker?.element === element) renderDraftWorkspacePicker(); })
+    .catch((error) => addEvent(`failed to load pinned folders: ${error.message}`, "error"));
+}
+
+function closeDraftWorkspacePicker({ restoreFocus = false } = {}) {
+  const picker = draftWorkspacePicker;
+  if (!picker) return;
+  draftWorkspacePicker = null;
+  window.removeEventListener("resize", positionDraftWorkspacePicker);
+  window.removeEventListener("scroll", positionDraftWorkspacePicker, true);
+  picker.trigger.setAttribute("aria-expanded", "false");
+  picker.trigger.removeAttribute("aria-controls");
+  picker.element.remove();
+  if (restoreFocus) focusDraftWorkspaceTrigger(picker.trigger);
+  scheduleDeferredUiFlushAfterDropdownClose();
+}
+
+/** Focuses the card's folder button, or its replacement after the empty state re-rendered. */
+function focusDraftWorkspaceTrigger(trigger) {
+  const target = trigger?.isConnected ? trigger : elements.chat.querySelector(".empty-start-workspace-button");
+  target?.focus({ preventScroll: true });
+}
+
+async function chooseDraftWorkspacePickerEntry(choice) {
+  const picker = draftWorkspacePicker;
+  if (!picker || !choice) return;
+  closeDraftWorkspacePicker();
+  if (choice.kind === "browse") {
+    await chooseClientDraftWorkspace({ triggerButton: picker.trigger });
+    return;
+  }
+  if (draftSubmissions.has(picker.draftId)) {
+    addEvent("The first message is already starting this thread; its folder stays unchanged.", "warn");
+  } else {
+    setClientDraftWorkspace(picker.draftId, choice.kind === "folder" ? choice.cwd : "");
+  }
+  focusDraftWorkspaceTrigger(picker.trigger);
 }
 
 function tabHasActiveAgent(tab) {
@@ -23286,7 +23548,8 @@ function gitFooterFallbackMessage() {
 function renderMinimalFooter() {
   invalidateGitFooterRenderCache();
   const tab = activeTab();
-  const workspaceLabel = latestWorkspace?.displayCwd || (tab?.cwd ? normalizeDisplayPath(tab.cwd) : "No Project");
+  const draftCwd = tab ? "" : activeDraftCwd();
+  const workspaceLabel = latestWorkspace?.displayCwd || (tab?.cwd ? normalizeDisplayPath(tab.cwd) : draftCwd ? normalizeDisplayPath(draftCwd) : "No Project");
   const modelLine = tab ? footerModelLine() : "";
   const footerMessage = tab ? gitFooterFallbackMessage() : "Ready for your first message";
 
@@ -23601,7 +23864,7 @@ function renderWorkspaceDashboard() {
   const actions = make("div", "workspace-dashboard-actions");
   actions.append(
     dashboardAction("Command palette", () => openCommandPalette(), "primary"),
-    dashboardAction("New thread", () => createTerminalTab()),
+    dashboardAction("New thread", (event) => openNewThreadPalette({ returnFocus: event?.currentTarget })),
   );
   if (tabs.length) {
     actions.append(
@@ -24559,7 +24822,6 @@ function renderFooterWorktreeList(state = footerBranchPickerState) {
 }
 
 function openBranchWorktreePicker() {
-  setNewTabMenuOpen(false);
   setMobileTabsExpanded(false);
   setComposerActionsOpen(false);
   setFooterBranchPickerOpen(true);
@@ -25502,7 +25764,6 @@ function closePathPicker(cwd) {
     if (pathPickerState || activeTabId !== state.activeTabId || activeTabGeneration !== state.activeTabGeneration || location.href !== state.location || focusedShellState.destination !== state.destination || mobileShellState.route !== state.mobileRoute || document.querySelector(":modal")) return;
     if (focused !== document.body && focused !== state.previousFocus && focused !== state.returnFocus && focused !== returnFocus && !elements.pathPickerDialog.contains(focused)) return;
     if (!returnFocus?.isConnected || !returnFocus.getClientRects().length || returnFocus.disabled) return;
-    if (returnFocus === elements.newTabButton) setNewTabMenuOpen(false);
     returnFocus.focus({ preventScroll: true });
   }, 0);
   state.resolve(cwd || null);
@@ -37131,7 +37392,7 @@ function emptyStartAction({ title, description, symbol, className = "", onClick 
 function renderEmptyStartState() {
   if (elements.chat.querySelector(".empty-start-state")) return;
   const tab = activeTab();
-  const draftCwd = !tab ? draftConversations.get(draftConversations.activeId)?.cwd || "" : "";
+  const draftCwd = !tab ? activeDraftCwd() : "";
   const noProject = !tab || tab.workspaceKind === "no-project";
   const workspace = draftCwd ? normalizeDisplayPath(draftCwd) : noProject ? "No Project" : latestWorkspace?.displayCwd || (tab?.cwd ? normalizeDisplayPath(tab.cwd) : "");
   const workspaceInfo = normalizeGitWorkspaceInfo(tab?.gitWorkspace);
@@ -37224,7 +37485,8 @@ function renderEmptyStartState() {
     context.append(make("span", "empty-start-context-label", "Current"));
     for (const [label, value] of contextItems) {
       const item = make("span", "empty-start-context-item");
-      item.append(make("span", undefined, label), make("strong", undefined, value));
+      // Only a draft can change its folder here; a real thread keeps its cwd.
+      item.append(make("span", undefined, label), !tab && label === "Workspace" ? renderDraftWorkspaceButton(value) : make("strong", undefined, value));
       context.append(item);
     }
   }
@@ -46714,8 +46976,8 @@ async function refreshCommands(tabContext = activeTabContext()) {
 
 function commandPaletteCoreItems() {
   const items = [
-    { id: "session:new-tab", scope: activeTabId ? "project" : "server", destination: "conversation", kind: "Action", label: "New thread", description: "Start an isolated Pi thread in the current directory", keywords: "workspace session", run: () => createTerminalTab() },
-    { id: "session:new-tab-directory", scope: "server", destination: "conversation", kind: "Action", label: "Choose directory for new thread", description: "Pick a cwd before starting a thread", keywords: "cwd folder workspace", run: ({ triggerButton = elements.commandPaletteButton } = {}) => createTerminalTabFromChosenDirectory({ triggerButton }) },
+    { id: "session:new-tab", scope: "server", destination: "conversation", kind: "Action", label: "New thread", description: "Choose a folder, No project, or a branch worktree; nothing starts until the first message", keywords: "workspace session folder project draft compose", run: () => openNewThreadPalette({ returnFocus: elements.newTabButton }) },
+    { id: "session:new-tab-directory", scope: "server", destination: "conversation", kind: "Action", label: "Choose directory for new thread", description: "Pick a cwd for a new thread draft", keywords: "cwd folder workspace browse", run: ({ triggerButton = elements.commandPaletteButton } = {}) => browseNewThreadFolder({ returnFocus: triggerButton }) },
     { id: "project:branch-worktree", scope: "project", destination: "project", kind: "Git", label: "Branch worktree", description: "Create or open a Git worktree thread for parallel branch work", keywords: "git branch worktree parallel checkout", run: () => openBranchWorktreePicker() },
     { id: "session:new", scope: "session", destination: "conversation", kind: "Action", label: "New session", description: "Start a fresh session in the active thread", keywords: "/new clear", run: () => elements.newSessionButton.click() },
     { id: "session:compact", scope: "session", destination: "conversation", available: !currentState?.isCompacting && !composerStore.isCompactionPending(activeTabId), unavailableReason: "Context compaction is already running. Wait for it to finish.", kind: "Action", label: "Compact context", description: contextUsageDetail(), keywords: "/compact context window tokens", run: () => requestManualCompaction() },
@@ -49098,55 +49360,26 @@ elements.tabBar?.addEventListener("keydown", (event) => {
       : (index + (event.key === "ArrowRight" ? 1 : -1) + tabsInStrip.length) % tabsInStrip.length;
   tabsInStrip[next]?.focus({ preventScroll: false });
 });
-elements.newTabButton.addEventListener("click", (event) => {
-  event.stopPropagation();
-  openNewTabMenu();
-});
-elements.newTabButton.addEventListener("keydown", (event) => {
-  if (event.key !== "ArrowDown" && event.key !== "ArrowUp" && event.key !== "Enter" && event.key !== " ") return;
+elements.newTabButton.addEventListener("click", () => openNewThreadPalette({ returnFocus: elements.newTabButton }));
+elements.newThreadDialog?.querySelector("form")?.addEventListener("submit", (event) => event.preventDefault());
+elements.newThreadDialog?.addEventListener("cancel", (event) => {
   event.preventDefault();
-  openNewTabMenu();
-  focusNewTabMenuItem(event.key === "ArrowUp" ? "last" : "first");
+  closeNewThreadPalette();
 });
-// Handle the menu before the containing mobile drawer consumes Escape in capture.
-window.addEventListener("keydown", (event) => {
-  if (event.key !== "Escape" || event.defaultPrevented || !newTabMenuOpen || !elements.newTabMenu?.contains(event.target) || document.querySelector("dialog:modal")) return;
-  event.preventDefault();
-  event.stopPropagation();
-  setNewTabMenuOpen(false);
-  elements.newTabButton.focus({ preventScroll: true });
-}, { capture: true });
-elements.newTabMenuPanel?.addEventListener("keydown", (event) => {
-  if (event.key === "ArrowDown") {
+elements.newThreadDialog?.addEventListener("close", restoreNewThreadPaletteFocus);
+elements.newThreadCloseButton?.addEventListener("click", () => closeNewThreadPalette());
+elements.newThreadInput?.addEventListener("input", () => {
+  newThreadPaletteState.index = 0;
+  renderNewThreadPalette();
+});
+elements.newThreadInput?.addEventListener("keydown", (event) => {
+  const choice = handleWorkspaceChoiceKey(event, newThreadPaletteState, renderNewThreadPalette);
+  if (choice !== undefined) void chooseNewThreadPaletteEntry(choice);
+  else if (event.key === "Escape") {
     event.preventDefault();
-    moveNewTabMenuFocus(1);
-  } else if (event.key === "ArrowUp") {
-    event.preventDefault();
-    moveNewTabMenuFocus(-1);
-  } else if (event.key === "Home") {
-    event.preventDefault();
-    focusNewTabMenuItem("first");
-  } else if (event.key === "End") {
-    event.preventDefault();
-    focusNewTabMenuItem("last");
+    closeNewThreadPalette();
   }
 });
-elements.newTabButton.addEventListener("pointerenter", () => openNewTabMenu());
-elements.newTabMenu?.addEventListener("pointerleave", () => {
-  if (!elements.newTabMenu?.contains(document.activeElement)) setNewTabMenuOpen(false);
-});
-elements.newTabMenu?.addEventListener("focusin", () => {
-  if (!newTabMenuOpen) openNewTabMenu();
-});
-elements.newTabMenu?.addEventListener("focusout", () => {
-  setTimeout(() => {
-    if (!elements.newTabMenu?.contains(document.activeElement)) setNewTabMenuOpen(false);
-  }, 0);
-});
-elements.newTabCurrentDirectoryButton?.addEventListener("click", () => createTerminalTab(undefined, { triggerButton: elements.newTabCurrentDirectoryButton }));
-elements.newTabNoProjectButton?.addEventListener("click", () => openNoProjectConversation({ triggerButton: elements.newTabNoProjectButton }));
-elements.newTabChooseDirectoryButton?.addEventListener("click", () => createTerminalTabFromChosenDirectory({ triggerButton: elements.newTabChooseDirectoryButton }));
-elements.newTabWorktreeButton?.addEventListener("click", () => openBranchWorktreePicker());
 elements.workspaceSaveButton?.addEventListener("click", () => saveWebuiWorkspace());
 elements.terminalSplitCloseButton?.addEventListener("click", () => closeTerminalSplitView());
 elements.closeAllTabsButton.addEventListener("click", () => closeAllTerminalTabs());
@@ -50151,8 +50384,8 @@ document.addEventListener("pointerdown", (event) => {
   if (openTerminalTabGroupKey && !event.target?.closest?.(".terminal-tab-group")) {
     clearOpenTerminalTabGroup(openTerminalTabGroupKey);
   }
-  if (newTabMenuOpen && !event.target?.closest?.(".terminal-new-tab-menu")) {
-    setNewTabMenuOpen(false);
+  if (draftWorkspacePicker && !draftWorkspacePicker.element.contains(event.target) && !draftWorkspacePicker.trigger.contains(event.target)) {
+    closeDraftWorkspacePicker();
   }
   if (document.body.classList.contains("composer-actions-open") && !elements.composer.contains(event.target)) {
     setComposerActionsOpen(false);
@@ -50179,7 +50412,6 @@ document.addEventListener("pointerdown", (event) => {
     setBusyPromptBehaviorMenuOpen(false);
   }
   if (document.body.classList.contains("mobile-tabs-expanded") && !elements.terminalTabsDrawerContent?.contains(event.target) && !elements.terminalTabsToggleButton.contains(event.target)) {
-    setNewTabMenuOpen(false);
     setMobileTabsExpanded(false, { restoreFocus: true });
   }
   if (isFooterPickerOpen() && !elements.statusBar.contains(event.target)) {
@@ -50589,8 +50821,9 @@ window.addEventListener("keydown", (event) => {
     elements.busyPromptBehaviorTag?.focus({ preventScroll: true });
     return;
   }
-  if (newTabMenuOpen) {
-    setNewTabMenuOpen(false);
+  if (draftWorkspacePicker) {
+    event.preventDefault();
+    closeDraftWorkspacePicker({ restoreFocus: true });
     return;
   }
   if (document.body.classList.contains("composer-actions-open")) {
@@ -50598,7 +50831,6 @@ window.addEventListener("keydown", (event) => {
     return;
   }
   if (document.body.classList.contains("mobile-tabs-expanded")) {
-    setNewTabMenuOpen(false);
     setMobileTabsExpanded(false, { restoreFocus: true });
     return;
   }

@@ -98,7 +98,7 @@ assert.match(queue, /follow-up-queue-remove-button[\s\S]*remove\(index, item, co
 assert.match(css, /\.follow-up-queue-remove-button \{[\s\S]*color:\s*var\(--ctp-red\)/, "queue removal should have a distinct destructive visual treatment");
 assert.match(app, /setFollowUpQueueOpen\(false, \{ restoreFocus: true \}\)/, "outside close and Escape should request queue-focus restoration");
 assert.match(queue, /restoreFocusTarget[\s\S]*target\?\.focus\(\{ preventScroll: true \}\)/, "closing restores captured focus");
-assert.match(app, /onBeforeOpen\(\) \{[\s\S]*setComposerActionsOpen\(false\)[\s\S]*setPublishMenuOpen\(false\)[\s\S]*setNativeCommandMenuOpen\(false\)[\s\S]*setAppRunnerMenuOpen\(false\)[\s\S]*setOptionsMenuOpen\(false\)[\s\S]*setConversationVoiceMenuOpen\(false\)[\s\S]*setBusyPromptBehaviorMenuOpen\(false\)[\s\S]*setNewTabMenuOpen\(false\)/, "opening closes competing dropdown surfaces");
+assert.match(app, /onBeforeOpen\(\) \{[\s\S]*setComposerActionsOpen\(false\)[\s\S]*setPublishMenuOpen\(false\)[\s\S]*setNativeCommandMenuOpen\(false\)[\s\S]*setAppRunnerMenuOpen\(false\)[\s\S]*setOptionsMenuOpen\(false\)[\s\S]*setConversationVoiceMenuOpen\(false\)[\s\S]*setBusyPromptBehaviorMenuOpen\(false\)[\s\S]*closeDraftWorkspacePicker\(\)/, "opening closes competing dropdown surfaces");
 assert.match(queue, /defer\("follow-up-queue", renderOverlay\)/, "queue rendering defers during pointer activation");
 assert.match(app, /function switchTab\(tabId\)[\s\S]*setFollowUpQueueOpen\(false\)[\s\S]*activityQueue\.setStatus\(""\)/, "tab switching closes and clears queue UI");
 assert.match(queue, /renderQueueGroup\("Follow-up", followUp, "follow-up", \{ removable: !snapshot\.draining, context \}\)/, "deck removal supports every mutable source");
