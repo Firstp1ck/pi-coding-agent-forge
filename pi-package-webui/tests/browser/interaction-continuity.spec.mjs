@@ -1092,8 +1092,10 @@ test("semantic tooltip, held pointer, open dropdown, and stale tab contexts surv
   assert.equal(initialIds.length, 1, "continuity fixture starts with one terminal tab");
 
   await api(page, "/api/tabs", { method: "POST", data: {} });
-  await page.reload();
+  // A plain reload may land on a draft with no thread selected; pin the original thread so exactly one tab is inactive.
+  await page.goto(`${baseURL}/?tab=${encodeURIComponent(initialIds[0])}`);
   await expect(page.locator("#tabBar [role=\"tab\"]")).toHaveCount(2);
+  await expect(page.locator(`#tabBar [data-tab-id="${initialIds[0]}"] [role="tab"]`)).toHaveAttribute("aria-selected", "true");
 
   const inactiveTabButton = page.locator("#tabBar [role=\"tab\"][aria-selected=\"false\"]");
   await expect(inactiveTabButton).toBeVisible();
