@@ -1,6 +1,6 @@
 # Workspace selection before first prompt
 
-Authorized bug repair, 2026-11-16. Parent base d29594ea. One Sol/high implementation worker, then one fresh Sol/high reviewer. Parent owns integration and any supported review fixes; no extra review rounds.
+Authorized bug repair, 2026-11-15. Parent base d29594ea. One Sol/high implementation worker, then one fresh Sol/high reviewer. Parent owns integration and any supported review fixes; no extra review rounds.
 
 ## Contract
 
