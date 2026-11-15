@@ -211,3 +211,35 @@ for (const view of [{ width: 390, height: 844 }, { width: 320, height: 360 }]) {
     await expect(trigger).toBeFocused();
   });
 }
+
+
+for (const placement of ["left", "right"]) {
+  test(`Classic ${placement} sidebar preserves complete hovered menu choices`, async ({ page, ownership }, info) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.addInitScript(() => localStorage.setItem("pi-webui-shell-preferences-v1", JSON.stringify({ v: 1, desktopLayout: "classic" })));
+    await page.goto(ownership.baseURL);
+    await expect(page.locator("#statusBar")).toContainText("fake-model");
+    await page.locator("#terminalTabsLayoutSelect").selectOption("left", { force: true });
+    await page.locator("#controlDeckPlacementSelect").selectOption(placement, { force: true });
+    await expect(page.locator("body")).toHaveClass(/terminal-tabs-left/);
+    const trigger = page.locator("#newTabButton");
+    const panel = page.locator("#newTabMenuPanel");
+    await trigger.scrollIntoViewIfNeeded();
+    await trigger.hover();
+    await expect(panel).toBeVisible();
+    for (const id of choices) {
+      const choice = page.locator(`#${id}`);
+      await choice.hover();
+      await expect(choice).toHaveCSS("transform", "none");
+      await expect(choice).toBeInViewport({ ratio: 1 });
+      await expect(panel).toBeVisible();
+    }
+    await page.locator("#newTabNoProjectButton").hover();
+    await capture(page, info, `classic-${placement}-hover`);
+    await trigger.focus();
+    await trigger.press("ArrowDown");
+    await page.keyboard.press("Escape");
+    await expect(panel).toBeHidden();
+    await expect(trigger).toBeFocused();
+  });
+}

@@ -5473,6 +5473,7 @@ button.subagent-gate-attempt:focus-visible {
 }
 .terminal-new-tab-menu .composer-publish-menu-item:hover,
 .terminal-new-tab-menu .composer-publish-menu-item:focus-visible {
+  transform: none;
   color: #11111b;
   border-color: transparent;
   background: linear-gradient(120deg, var(--ctp-pink), var(--ctp-mauve), var(--ctp-blue));
