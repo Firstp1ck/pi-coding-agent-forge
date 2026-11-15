@@ -7,6 +7,8 @@ const ICONS = {
   project: 'M3 7V4h6l2 3h10v13H3V7Z',
   activity: 'M3 12h4l3-8 4 16 3-8h4',
   settings: 'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2',
+  overview: 'M4 4h16v16H4zM4 10h16M10 10v10',
+  inspector: 'M4 4h16v16H4zM15 4v16',
   tools: 'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z',
   menu: 'M5 12h.01M12 12h.01M19 12h.01',
   close: 'm6 6 12 12M6 18 18 6',
@@ -16,6 +18,7 @@ const ICONS = {
 export function createFocusedWorkspace({
   document, onNavigate, onTools, onToggleNavigation, onSessionMenu,
   onProjectMenu, onInspectorClose, onConversation, onInspectorSelect, onAttention, onNavigationResize,
+  onToggleOverview, onToggleInspector,
 }) {
   const listeners = [];
   const rememberedFocus = new Map();
@@ -26,7 +29,7 @@ export function createFocusedWorkspace({
   let state = {
     destination: 'conversation', navigation: 'left', navCollapsed: false,
     inspectorOpen: false, inspectorTitle: '', inspectorWidth: 320,
-    title: '', context: '', attentionCount: 0,
+    title: '', context: '', attentionCount: 0, overviewOpen: false,
   };
 
   function node(tag, className, text) {
@@ -71,11 +74,6 @@ export function createFocusedWorkspace({
   const navigationToggle = button('Collapse sessions', 'sessions', onToggleNavigation);
   navigationToggle.setAttribute('aria-controls', 'focusedWorkspaceNavigation');
   rail.append(conversationButton, navigationToggle);
-  for (const [destination, label] of [['project', 'Project'], ['activity', 'Activity']]) {
-    const control = button(label, destination, () => onNavigate?.(destination));
-    destinationButtons.set(destination, control);
-    rail.append(control);
-  }
   const attention = node('span', 'focused-attention');
   attention.setAttribute('aria-hidden', 'true');
   const inboxButton = button('Attention', 'activity', onAttention);
@@ -107,11 +105,18 @@ export function createFocusedWorkspace({
   const runControls = node('div', 'focused-run-controls');
   runControls.setAttribute('role', 'group');
   runControls.setAttribute('aria-label', 'Active run controls');
-  header.append(heading, sessionMenu, contextButton, inboxButton, toolsButton, runControls);
+  const overviewToggle = button('Overview', 'overview', onToggleOverview);
+  overviewToggle.setAttribute('aria-controls', 'focusedWorkspaceOverview');
+  const inspectorToggle = button('Inspector', 'inspector', onToggleInspector);
+  inspectorToggle.setAttribute('aria-controls', 'focusedWorkspaceInspector');
+  header.append(heading, sessionMenu, contextButton, inboxButton, toolsButton, overviewToggle, inspectorToggle, runControls);
 
   const body = node('div', 'focused-body');
   const conversation = node('section', 'focused-conversation');
   conversation.setAttribute('aria-label', 'Conversation');
+  const overview = node('div', 'focused-overview-host');
+  overview.id = 'focusedWorkspaceOverview';
+  conversation.append(overview);
   const centralPages = {};
   for (const [destination, label] of [['home', 'Home'], ['settings', 'Settings']]) {
     const page = node('section', 'focused-page');
@@ -124,22 +129,46 @@ export function createFocusedWorkspace({
     centralPages[destination] = { page, content };
   }
   const inspector = node('aside', 'focused-inspector');
-  inspector.setAttribute('aria-labelledby', 'focusedWorkspaceInspectorTitle');
+  inspector.id = 'focusedWorkspaceInspector';
+  const inspectorNavigation = node('div', 'focused-inspector-navigation');
+  const inspectorDestinations = node('div', 'focused-inspector-destinations');
+  inspectorDestinations.setAttribute('role', 'tablist');
+  inspectorDestinations.setAttribute('aria-label', 'Inspector destinations');
+  const inspectorPanel = node('div', 'focused-inspector-panel');
+  inspectorPanel.id = 'focusedWorkspaceInspectorDestinationPanel';
+  inspectorPanel.setAttribute('role', 'tabpanel');
+  for (const [destination, label] of [['project', 'Project'], ['activity', 'Activity']]) {
+    const control = button(label, destination, () => onNavigate?.(destination));
+    control.id = `focusedInspectorDestination-${destination}`;
+    control.setAttribute('role', 'tab');
+    control.setAttribute('aria-controls', inspectorPanel.id);
+    control.append(node('span', '', label));
+    destinationButtons.set(destination, control);
+    inspectorDestinations.append(control);
+  }
+  const focusDestination = event => {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+    const controls = [...inspectorDestinations.children];
+    const index = controls.indexOf(event.target);
+    if (index < 0) return;
+    event.preventDefault();
+    const next = event.key === 'Home' ? 0 : event.key === 'End' ? controls.length - 1
+      : (index + (event.key === 'ArrowRight' ? 1 : -1) + controls.length) % controls.length;
+    for (const control of controls) control.tabIndex = -1;
+    controls[next].tabIndex = 0;
+    controls[next].focus();
+  };
+  inspectorDestinations.addEventListener('keydown', focusDestination);
+  listeners.push(() => inspectorDestinations.removeEventListener('keydown', focusDestination));
+  inspectorNavigation.append(inspectorDestinations, button('Close inspector', 'close', onInspectorClose));
   const inspectorHeader = node('header', 'focused-inspector-header');
   const inspectorTitle = node('strong');
   inspectorTitle.id = 'focusedWorkspaceInspectorTitle';
-  inspectorHeader.append(inspectorTitle, button('Close inspector', 'close', onInspectorClose));
+  const sectionSelect = node('select', 'focused-inspector-section');
+  inspectorHeader.append(inspectorTitle, sectionSelect);
   const inspectorContent = node('div', 'focused-inspector-content');
   inspectorContent.id = 'focusedWorkspaceInspectorPanel';
-  const inspectorTopics = node('div', 'focused-inspector-topics');
-  inspectorTopics.setAttribute('role', 'tablist');
-  inspectorTopics.setAttribute('aria-label', 'Inspector topics');
-  const topicButtons = new Map();
-  const activityPicker = node('label', 'focused-activity-picker');
-  const activitySelect = node('select');
-  activitySelect.setAttribute('aria-label', 'Activity section');
-  activityPicker.append(node('span', '', 'View'), activitySelect);
-  const activityOptions = new Map();
+  const sectionOptions = new Map();
   const activityGroups = [
     ['Work', ['subagents', 'queue', 'progress']],
     ['Conversations', ['conversations', 'extensions']],
@@ -151,35 +180,15 @@ export function createFocusedWorkspace({
     group.label = label;
     return { group, ids };
   });
-  const selectActivity = () => {
-    const option = activitySelect.selectedOptions[0];
-    if (activitySelect.disabled || !option || option.disabled) return;
+  const selectSection = () => {
+    const option = sectionSelect.selectedOptions[0];
+    if (sectionSelect.disabled || !option || option.disabled) return;
     onInspectorSelect?.(option.value);
   };
-  activitySelect.addEventListener('change', selectActivity);
-  listeners.push(() => activitySelect.removeEventListener('change', selectActivity));
-  const selectTopic = event => {
-    const control = event.target.closest('button');
-    if (!control || control.parentNode !== inspectorTopics || control.disabled) return;
-    onInspectorSelect?.(control.dataset.topic);
-  };
-  const focusTopic = event => {
-    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
-    const controls = [...inspectorTopics.children].filter(control => !control.disabled);
-    const index = controls.indexOf(event.target);
-    if (index < 0) return;
-    event.preventDefault();
-    const next = event.key === 'Home' ? 0 : event.key === 'End' ? controls.length - 1
-      : (index + (event.key === 'ArrowRight' ? 1 : -1) + controls.length) % controls.length;
-    for (const control of controls) control.tabIndex = -1;
-    controls[next].tabIndex = 0;
-    controls[next].focus();
-    controls[next].scrollIntoView({ block: 'nearest', inline: 'nearest' });
-  };
-  inspectorTopics.addEventListener('click', selectTopic);
-  inspectorTopics.addEventListener('keydown', focusTopic);
-  listeners.push(() => inspectorTopics.removeEventListener('click', selectTopic), () => inspectorTopics.removeEventListener('keydown', focusTopic));
-  inspector.append(inspectorHeader, inspectorTopics, activityPicker, inspectorContent);
+  sectionSelect.addEventListener('change', selectSection);
+  listeners.push(() => sectionSelect.removeEventListener('change', selectSection));
+  inspectorPanel.append(inspectorHeader, inspectorContent);
+  inspector.append(inspectorNavigation, inspectorPanel);
   body.append(conversation, centralPages.home.page, centralPages.settings.page, inspector);
   const navigationResize = node('div', 'focused-navigation-resize');
   navigationResize.tabIndex = 0;
@@ -193,7 +202,7 @@ export function createFocusedWorkspace({
 
   const slots = Object.freeze({
     navigation, conversation, home: centralPages.home.content,
-    settings: centralPages.settings.content, inspector: inspectorContent, runControls,
+    settings: centralPages.settings.content, inspector: inspectorContent, runControls, overview,
   });
   const visibleHosts = [navigation, conversation, centralPages.home.page, centralPages.settings.page, inspector];
 
@@ -232,85 +241,74 @@ export function createFocusedWorkspace({
     () => element.removeEventListener('pointerdown', onPointerdown, true),
   );
 
-  function updateActivityOptions(topics, selected) {
-    const topicsById = new Map(topics.map(topic => [topic.id, topic]));
-    for (const [id, option] of activityOptions) {
-      if (!topicsById.has(id)) { option.remove(); activityOptions.delete(id); }
-    }
-    const knownIds = new Set(activityGroups.flatMap(({ ids }) => ids));
-    let groupIndex = 0;
-    for (const { group, ids } of activityGroups) {
-      const members = ids.length ? ids.map(id => topicsById.get(id)).filter(Boolean)
-        : topics.filter(topic => !knownIds.has(topic.id));
-      if (!members.length) { group.remove(); continue; }
-      members.forEach((topic, index) => {
-        let option = activityOptions.get(topic.id);
-        if (!option) {
-          option = node('option');
-          option.value = topic.id;
-          activityOptions.set(topic.id, option);
-        }
-        const disabled = topic.available === false;
-        const reason = topic.unavailableReason || 'Unavailable';
-        const label = disabled ? `${topic.label} (${reason})` : topic.label;
-        if (option.textContent !== label) option.textContent = label;
-        option.disabled = disabled;
-        option.title = disabled ? reason : topic.label;
-        if (group.children[index] !== option) group.insertBefore(option, group.children[index] || null);
-      });
-      if (activitySelect.children[groupIndex] !== group) activitySelect.insertBefore(group, activitySelect.children[groupIndex] || null);
-      groupIndex++;
-    }
-    activitySelect.disabled = !selected;
-    if (selected) {
-      if (activitySelect.value !== selected.id) activitySelect.value = selected.id;
-    } else activitySelect.selectedIndex = -1;
-    activityPicker.hidden = topics.length === 0;
-    inspectorContent.setAttribute('role', 'region');
-    inspectorContent.removeAttribute('aria-labelledby');
-    inspectorContent.setAttribute('aria-label', selected?.label || state.inspectorTitle || 'Activity');
-  }
-
   function updateInspectorTopics(topics = [], selectedId) {
     const selected = topics.find(topic => topic.id === selectedId && topic.available !== false)
       || topics.find(topic => topic.available !== false);
     const isActivity = state.destination === 'activity';
-    inspectorTopics.hidden = isActivity || topics.length === 0;
-    activityPicker.hidden = !isActivity || topics.length === 0;
-    if (isActivity) {
-      updateActivityOptions(topics, selected);
-      return;
+    const destination = isActivity ? 'activity' : 'project';
+    const destinationControl = destinationButtons.get(destination);
+    inspector.setAttribute('aria-labelledby', destinationControl.id);
+    inspectorPanel.setAttribute('aria-labelledby', destinationControl.id);
+    const tabStop = inspectorDestinations.contains(document.activeElement) ? document.activeElement : destinationControl;
+    for (const id of ['project', 'activity']) {
+      const control = destinationButtons.get(id);
+      const isSelected = id === destination;
+      control.setAttribute('aria-selected', String(isSelected));
+      // Retain an unactivated keyboard tab stop across status-only snapshots.
+      control.tabIndex = control === tabStop ? 0 : -1;
     }
-    inspectorContent.removeAttribute('aria-label');
+    sectionSelect.setAttribute('aria-label', isActivity ? 'Activity section' : 'Project section');
+    sectionSelect.hidden = topics.length === 0;
+    inspectorTitle.hidden = topics.length !== 0;
     const ids = new Set(topics.map(topic => topic.id));
-    for (const [id, control] of topicButtons) {
-      if (!ids.has(id)) { control.remove(); topicButtons.delete(id); }
+    for (const [id, option] of sectionOptions) {
+      if (!ids.has(id)) { option.remove(); sectionOptions.delete(id); }
     }
-    topics.forEach((topic, index) => {
-      let control = topicButtons.get(topic.id);
-      if (!control) {
-        control = node('button');
-        control.type = 'button';
-        control.dataset.topic = topic.id;
-        control.id = `focusedInspectorTopic-${encodeURIComponent(topic.id)}`;
-        control.setAttribute('role', 'tab');
-        control.setAttribute('aria-controls', inspectorContent.id);
-        topicButtons.set(topic.id, control);
+    for (const topic of topics) {
+      let option = sectionOptions.get(topic.id);
+      if (!option) {
+        option = node('option');
+        option.value = topic.id;
+        sectionOptions.set(topic.id, option);
       }
-      control.textContent = topic.label;
-      control.disabled = topic.available === false;
-      control.title = control.disabled ? topic.unavailableReason || 'Unavailable' : topic.label;
-      control.setAttribute('aria-selected', String(topic.id === selected?.id));
-      control.tabIndex = topic.id === selected?.id ? 0 : -1;
-      if (inspectorTopics.children[index] !== control) inspectorTopics.insertBefore(control, inspectorTopics.children[index] || null);
-    });
-    if (selected) {
-      inspectorContent.setAttribute('role', 'tabpanel');
-      inspectorContent.setAttribute('aria-labelledby', topicButtons.get(selected.id).id);
-    } else {
-      inspectorContent.removeAttribute('role');
-      inspectorContent.removeAttribute('aria-labelledby');
+      const disabled = topic.available === false;
+      const reason = topic.unavailableReason || 'Unavailable';
+      const label = disabled ? `${topic.label} (${reason})` : topic.label;
+      if (option.textContent !== label) option.textContent = label;
+      option.disabled = disabled;
+      option.title = disabled ? reason : topic.label;
     }
+    // Move only changed nodes so native selection and focus survive idle updates.
+    const knownIds = new Set(activityGroups.flatMap(({ ids }) => ids));
+    const groups = isActivity ? activityGroups.map(({ group, ids: groupIds }) => {
+      const members = groupIds.length ? groupIds.filter(id => ids.has(id))
+        : topics.filter(topic => !knownIds.has(topic.id)).map(topic => topic.id);
+      return { parent: group, ids: members };
+    }) : [{ parent: sectionSelect, ids: topics.map(topic => topic.id) }];
+    const visibleGroups = [];
+    for (const { parent, ids: memberIds } of groups) {
+      memberIds.forEach((id, index) => {
+        const option = sectionOptions.get(id);
+        if (parent.children[index] !== option) parent.insertBefore(option, parent.children[index] || null);
+      });
+      if (parent !== sectionSelect && memberIds.length) visibleGroups.push(parent);
+    }
+    if (isActivity) {
+      for (const child of [...sectionSelect.children]) {
+        if (!visibleGroups.includes(child)) child.remove();
+      }
+      visibleGroups.forEach((group, index) => {
+        if (sectionSelect.children[index] !== group) sectionSelect.insertBefore(group, sectionSelect.children[index] || null);
+      });
+    } else {
+      for (const { group } of activityGroups) group.remove();
+    }
+    sectionSelect.disabled = !selected;
+    if (selected) {
+      if (sectionSelect.value !== selected.id) sectionSelect.value = selected.id;
+    } else sectionSelect.selectedIndex = -1;
+    inspectorContent.setAttribute('role', 'region');
+    inspectorContent.setAttribute('aria-label', selected?.label || state.inspectorTitle || (isActivity ? 'Activity' : 'Project'));
   }
 
   function update(snapshot = {}) {
@@ -338,6 +336,9 @@ export function createFocusedWorkspace({
     centralPages.home.page.hidden = state.destination !== 'home';
     centralPages.settings.page.hidden = state.destination !== 'settings';
     inspector.hidden = central || !(state.inspectorOpen || state.destination === 'project' || state.destination === 'activity');
+    inspectorToggle.setAttribute('aria-expanded', String(!inspector.hidden));
+    if (overview.hidden !== !state.overviewOpen) overview.hidden = !state.overviewOpen;
+    overviewToggle.setAttribute('aria-expanded', String(!central && !overview.hidden));
     title.textContent = String(state.title ?? '');
     title.title = title.textContent;
     location.textContent = state.destination[0].toUpperCase() + state.destination.slice(1);
@@ -386,8 +387,7 @@ export function createFocusedWorkspace({
     listeners.length = 0;
     rememberedFocus.clear();
     tabOrigin = null;
-    topicButtons.clear();
-    activityOptions.clear();
+    sectionOptions.clear();
     // The parent restores canonical views and owns removal of the root.
   }
 

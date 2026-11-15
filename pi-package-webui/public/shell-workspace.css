@@ -138,7 +138,7 @@
 }
 
 #focusedWorkspace .focused-body { grid-column: 3; grid-row: 2; display: flex; min-width: 0; min-height: 0; overflow: hidden; }
-#focusedWorkspace .focused-conversation { flex: 1; min-width: 0; min-height: 0; overflow: hidden; }
+#focusedWorkspace .focused-conversation { position: relative; flex: 1; min-width: 0; min-height: 0; overflow: hidden; }
 #focusedWorkspace .focused-page { flex: 1; min-width: 0; min-height: 0; overflow: auto; padding: 20px 24px; }
 #focusedWorkspace .focused-back { margin-bottom: 16px; }
 #focusedWorkspace .focused-page-content { max-width: 980px; margin-inline: auto; }
@@ -153,17 +153,18 @@
   border-left: 1px solid var(--border);
   background: var(--panel-3);
 }
-#focusedWorkspace .focused-inspector-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 42px; padding: 5px 12px; border-bottom: 1px solid var(--border); }
-#focusedWorkspace .focused-inspector-header strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-sm, 0.875rem); }
+#focusedWorkspace .focused-inspector-navigation { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; min-width: 0; padding: 5px 8px; border-bottom: 1px solid var(--border); }
+#focusedWorkspace .focused-inspector-destinations { display: flex; flex: 1; gap: 4px; min-width: 0; }
+#focusedWorkspace .focused-inspector-destinations .focused-button { flex: 1; min-width: 0; }
+#focusedWorkspace .focused-inspector-destinations [aria-selected="true"],
+#focusedWorkspace .focused-header .focused-button[aria-expanded="true"] { color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); border-color: color-mix(in srgb, var(--accent) 24%, transparent); }
+#focusedWorkspace .focused-inspector-panel { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; }
+#focusedWorkspace .focused-inspector-header { display: flex; align-items: center; flex: 0 0 auto; min-width: 0; min-height: 42px; padding: 4px 8px; border-bottom: 1px solid var(--border); }
+#focusedWorkspace .focused-inspector-header strong { min-width: 0; padding: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-sm, 0.875rem); }
+#focusedWorkspace .focused-inspector-section { box-sizing: border-box; width: 100%; min-width: 0; max-width: 100%; min-height: 32px; margin: 0; padding-block: 4px; padding-left: 4px; color: var(--text); background-color: transparent; background-size: 0.34rem 0.34rem, 0.34rem 0.34rem, 0 0, 0 0; border: 1px solid transparent; border-radius: 4px; box-shadow: none; font: inherit; font-weight: 600; text-overflow: ellipsis; }
+#focusedWorkspace .focused-inspector-section:hover { border-color: var(--border); box-shadow: none; }
 #focusedWorkspace .focused-inspector-content { flex: 1; min-height: 0; min-width: 0; overflow: auto; padding: 12px; }
-#focusedWorkspace .focused-inspector-topics { display: flex; flex: 0 0 auto; gap: 2px; overflow-x: auto; scrollbar-width: none; scrollbar-gutter: auto; padding: 4px 8px; border-bottom: 1px solid var(--border); }
-#focusedWorkspace .focused-inspector-topics::-webkit-scrollbar { display: none; }
-#focusedWorkspace .focused-inspector-topics[hidden] { display: none; }
-#focusedWorkspace .focused-inspector-topics button { flex: 0 0 auto; min-height: 30px; padding: 4px 8px; border-color: transparent; background: transparent; font-size: var(--text-xs, 0.75rem); }
-#focusedWorkspace .focused-inspector-topics button[aria-selected="true"] { color: var(--accent); border-color: var(--border); background: var(--panel); }
-#focusedWorkspace .focused-activity-picker { display: grid; flex: 0 0 auto; gap: 6px; min-width: 0; margin: 0; padding: 10px 12px; border-bottom: 1px solid var(--border); color: var(--muted); font-size: var(--text-xs, 0.75rem); }
-#focusedWorkspace .focused-activity-picker[hidden] { display: none; }
-#focusedWorkspace .focused-activity-picker select { box-sizing: border-box; width: 100%; min-width: 0; max-width: 100%; margin: 0; color: var(--text); background-color: var(--panel); border: 1px solid var(--border); border-radius: 6px; font: inherit; }
+#focusedWorkspace .focused-overview-host { position: absolute; z-index: 10; top: 12px; right: 12px; max-width: calc(100% - 24px); max-height: calc(100% - 24px); pointer-events: none; }
 
 #focusedWorkspace[data-nav-collapsed="true"],
 #focusedWorkspace[data-navigation="top"] { grid-template-columns: 46px minmax(0, 1fr); }

@@ -52,6 +52,7 @@ window.events = [];
 window.activityId = 'subagents';
 window.projectId = 'files';
 window.shell = createFocusedWorkspace({ document,
+  onToggleInspector: () => shell.update({ destination: 'conversation', inspectorOpen: true }),
   onNavigate: destination => shell.update({ destination, inspectorTitle: destination === 'activity' ? 'Activity' : 'Project',
     inspector: destination === 'activity' ? activityId : projectId,
     inspectorTopics: destination === 'activity' ? topics : projectTopics }),
@@ -91,10 +92,11 @@ test.beforeEach(async ({ page }) => {
 
 test('all grouped sections stay reachable with one callback per selection and labeled canonical content', async ({ page }) => {
   const picker = page.getByRole('combobox', { name: 'Activity section', exact: true });
-  await expect(page.locator('.focused-activity-picker > span')).toHaveText('View');
+  await expect(page.locator('.focused-inspector-header select')).toHaveCount(1);
+  await expect(page.locator('.focused-inspector-header')).not.toContainText('View');
   await expect(picker).toHaveValue('subagents');
   await expect(page.getByRole('tablist', { name: 'Inspector topics' })).toHaveCount(0);
-  await expect(page.getByRole('tabpanel')).toHaveCount(0);
+  await expect(page.getByRole('tabpanel', { name: 'Activity', exact: true })).toBeVisible();
   expect(await picker.locator('optgroup').evaluateAll(nodes => nodes.map(group => [group.label, [...group.children].map(option => option.value)]))).toEqual(groups);
   const selections = [...topics.slice(1), topics[0]];
   for (const topic of selections) {
@@ -149,7 +151,7 @@ test('repeated snapshots retain picker, option identity and focus while applying
       shell.update({ title: 'Updated status ' + index, inspectorTopics: topics.map(topic => ({ ...topic })) });
       focused.push(document.activeElement === select);
     }
-    return { focused, sameSelect: select === document.querySelector('.focused-activity-picker select'),
+    return { focused, sameSelect: select === document.querySelector('.focused-inspector-section'),
       sameOptions: options.every((option, index) => option === select.options[index]),
       sameGroups: groups.every((group, index) => group === select.children[index]), events };
   });
@@ -196,7 +198,7 @@ test('empty and unavailable catalogs do not synthesize a selection or replace co
   await page.evaluate(() => shell.update({ inspectorTopics: [] }));
   await expect(picker).toBeHidden();
   await expect(picker.locator('option')).toHaveCount(0);
-  await expect(page.getByRole('tabpanel')).toHaveCount(0);
+  await expect(page.getByRole('tabpanel', { name: 'Activity', exact: true })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Activity', exact: true }).locator('#inspectorDraft')).toHaveValue('Unfinished filter');
   await page.evaluate(() => shell.update({ inspectorTopics: topics, inspector: 'queue' }));
   await expect(picker).toBeEnabled();
@@ -204,41 +206,41 @@ test('empty and unavailable catalogs do not synthesize a selection or replace co
   expect(await page.evaluate(() => events)).toEqual([]);
 });
 
-test('destination switches restore Activity selection and Project tab semantics and keyboard behavior', async ({ page }) => {
+test('destination switches restore Activity selection and Project section keyboard behavior', async ({ page }) => {
   const picker = page.getByRole('combobox', { name: 'Activity section' });
   await picker.selectOption('queue');
   await page.locator('#inspectorDraft').fill('Keep this filter');
-  await page.getByRole('button', { name: 'Project', exact: true }).click();
-  await expect(picker).toBeHidden();
-  await expect(page.getByRole('tablist', { name: 'Inspector topics' })).toBeVisible();
-  const files = page.getByRole('tab', { name: 'Files', exact: true });
-  await files.focus();
-  await page.keyboard.press('ArrowRight');
-  await expect(page.getByRole('tab', { name: 'Changes', exact: true })).toBeFocused();
-  await expect(files).toHaveAttribute('aria-selected', 'true');
-  await page.keyboard.press('Enter');
-  await expect(page.getByRole('tabpanel', { name: 'Changes', exact: true })).toBeVisible();
-  await page.keyboard.press('ArrowRight');
-  await expect(page.getByRole('tab', { name: 'Release', exact: true })).toBeFocused();
-  await expect(page.getByRole('tab', { name: 'Runners', exact: true })).toBeDisabled();
-  await page.getByRole('button', { name: 'Activity', exact: true }).click();
+  await page.getByRole('tab', { name: 'Project', exact: true }).click();
+  await expect(picker).toHaveCount(0);
+  await expect(page.getByRole('tablist', { name: 'Inspector destinations' })).toBeVisible();
+  const projectPicker = page.getByRole('combobox', { name: 'Project section' });
+  await expect(projectPicker).toHaveValue('files');
+  await projectPicker.focus();
+  await page.keyboard.press('ArrowDown');
+  await expect(projectPicker).toHaveValue('git');
+  await expect(page.getByRole('region', { name: 'Changes', exact: true })).toBeVisible();
+  await page.keyboard.press('ArrowDown');
+  await expect(projectPicker).toHaveValue('release');
+  await expect(projectPicker.locator('option[value="runners"]')).toBeDisabled();
+  await page.getByRole('tab', { name: 'Activity', exact: true }).click();
   await expect(picker).toBeVisible();
   await expect(picker).toHaveValue('queue');
   await expect(page.getByRole('region', { name: 'Queues', exact: true })).toBeVisible();
-  await expect(page.getByRole('tabpanel')).toHaveCount(0);
-  await expect(page.getByRole('tab')).toHaveCount(0);
+  await expect(page.getByRole('tabpanel', { name: 'Activity', exact: true })).toBeVisible();
+  await expect(page.getByRole('tab')).toHaveCount(2);
   await expect(page.locator('#inspectorDraft')).toHaveValue('Keep this filter');
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
   await expect(picker).toBeHidden();
-  await page.getByRole('button', { name: 'Activity', exact: true }).click();
+  await page.getByRole('button', { name: 'Inspector', exact: true }).click();
+  await page.getByRole('tab', { name: 'Activity', exact: true }).click();
   await expect(picker).toHaveValue('queue');
   expect(await page.evaluate(() => shell.slots.inspector.firstChild === originalContent)).toBe(true);
-  expect(await page.evaluate(() => events)).toEqual(['queue', 'git']);
+  expect(await page.evaluate(() => events)).toEqual(['queue', 'git', 'release']);
 });
 
 test('disposal removes select listeners and stops snapshot updates', async ({ page }) => {
   const result = await page.evaluate(() => {
-    const select = document.querySelector('.focused-activity-picker select');
+    const select = document.querySelector('.focused-inspector-section');
     shell.dispose();
     shell.dispose();
     select.value = 'queue';
@@ -272,18 +274,18 @@ for (const width of [240, 320]) {
       await expect(picker).toHaveValue('claude-usage');
       await expect(picker.locator('option:checked')).toHaveText('Claude usage');
       const geometry = await picker.evaluate(select => {
-        const wrapper = select.parentElement;
-        const inspector = wrapper.parentElement;
+        const header = select.parentElement;
+        const inspector = header.closest('.focused-inspector');
         return { inspectorWidth: inspector.getBoundingClientRect().width,
-          selectWidth: select.getBoundingClientRect().width, availableWidth: wrapper.clientWidth - 24,
-          wrapperOverflow: wrapper.scrollWidth > wrapper.clientWidth,
+          selectWidth: select.getBoundingClientRect().width, availableWidth: header.clientWidth - 16,
+          headerOverflow: header.scrollWidth > header.clientWidth,
           selectOverflow: select.scrollWidth > select.clientWidth,
           inspectorOverflow: inspector.scrollWidth > inspector.clientWidth,
           pageOverflow: document.documentElement.scrollWidth > innerWidth,
           outline: getComputedStyle(select).outlineWidth };
       });
-      expect(geometry).toEqual({ inspectorWidth: width, selectWidth: width - 25, availableWidth: width - 25,
-        wrapperOverflow: false, selectOverflow: false, inspectorOverflow: false, pageOverflow: false, outline: '2px' });
+      expect(geometry).toEqual({ inspectorWidth: width, selectWidth: width - 17, availableWidth: width - 17,
+        headerOverflow: false, selectOverflow: false, inspectorOverflow: false, pageOverflow: false, outline: '2px' });
       const screenshot = testInfo.outputPath(`activity-picker-${width}-${theme}.png`);
       await page.screenshot({ path: screenshot });
       await testInfo.attach(`Activity picker ${width}px ${theme}`, { path: screenshot, contentType: 'image/png' });

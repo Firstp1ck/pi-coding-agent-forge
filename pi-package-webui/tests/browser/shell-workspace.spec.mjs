@@ -68,6 +68,7 @@ window.events = [];
 window.createFocusedWorkspace = createFocusedWorkspace;
 window.shell = createFocusedWorkspace({ document,
   onNavigate: (destination) => { events.push(['navigate', destination]); shell.update({ destination, inspectorTitle: destination === 'activity' ? 'Activity' : 'Project' }); },
+  onToggleInspector: () => shell.update({ destination: 'conversation', inspectorOpen: true }),
   onTools: () => events.push(['tools']),
   onAttention: () => events.push(['attention']),
   onToggleNavigation: () => { events.push(['toggle']); shell.update({ navCollapsed: shell.element.dataset.navCollapsed !== 'true' }); },
@@ -103,6 +104,12 @@ test.beforeEach(async ({ page }) => {
   await page.waitForFunction(() => window.ready);
 });
 
+async function openDestination(page, name) {
+  const tab = page.getByRole('tab', { name, exact: true });
+  if (!await tab.isVisible()) await page.getByRole('button', { name: 'Inspector', exact: true }).click();
+  await tab.click();
+}
+
 test('construction is detached with stable default slots and atomic destination validation', async ({ page }) => {
   const result = await page.evaluate(() => {
     const other = createFocusedWorkspace({ document });
@@ -115,7 +122,7 @@ test('construction is detached with stable default slots and atomic destination 
     other.dispose();
     return { detached: detachedBeforeMount && !other.element.isConnected, names, initial, error, unchanged };
   });
-  expect(result).toEqual({ detached: true, names: ['navigation', 'conversation', 'home', 'settings', 'inspector', 'runControls'], initial: { destination: 'conversation', navigation: 'left', navCollapsed: 'false' }, error: 'TypeError', unchanged: true });
+  expect(result).toEqual({ detached: true, names: ['navigation', 'conversation', 'home', 'settings', 'inspector', 'runControls', 'overview'], initial: { destination: 'conversation', navigation: 'left', navCollapsed: 'false' }, error: 'TypeError', unchanged: true });
   await expect(page.locator('.focused-inspector')).toBeHidden();
   await expect(page.locator('.focused-run-controls')).toBeVisible();
 });
@@ -128,14 +135,14 @@ test('keyboard controls route only their callback and show the selected destinat
   await expect(page.locator('#canonicalConversation')).toBeHidden();
   await expect(page.locator('.focused-run-controls')).toBeVisible();
   await page.getByRole('button', { name: 'Back to conversation', exact: true }).press('Space');
-  await rail.getByRole('button', { name: 'Project', exact: true }).click();
+  await openDestination(page, 'Project');
   await expect(page.locator('#canonicalConversation')).toBeVisible();
   await expect(page.locator('.focused-inspector')).toBeVisible();
-  await expect(rail.getByRole('button', { name: 'Project', exact: true })).toHaveAttribute('aria-current', 'page');
+  await expect(page.getByRole('tab', { name: 'Project', exact: true })).toHaveAttribute('aria-current', 'page');
   await page.getByRole('button', { name: 'Close inspector', exact: true }).click();
   await expect(page.locator('.focused-inspector')).toBeHidden();
   await page.getByRole('button', { name: 'Attention, 2 decisions waiting, 0 finished', exact: true }).press('Enter');
-  await rail.getByRole('button', { name: 'Activity', exact: true }).click();
+  await openDestination(page, 'Activity');
   await expect(page.locator('#focusedWorkspaceInspectorTitle')).toHaveText('Activity');
   await rail.getByRole('button', { name: 'Settings', exact: true }).click();
   await expect(page.locator('#settingsView')).toBeVisible();
@@ -231,7 +238,7 @@ test('inspector bounds, safe labels and disposal preserve parent-owned views', a
     const safe = !shell.element.querySelector('img') && !window.injected;
     const title = shell.element.querySelector('.focused-title').textContent;
     const badge = shell.element.querySelector('.focused-attention').textContent;
-    const children = Object.values(shell.slots).map((slot) => slot.firstChild);
+    const children = ['roster', 'canonicalConversation', 'homeView', 'settingsView', 'inspectorView', 'runView'].map(id => document.getElementById(id));
     host.restoreAll();
     const eventsBefore = events.length;
     shell.dispose();
@@ -251,11 +258,11 @@ test('real navigation clicks restore the latest field focus and selection on ret
   await page.getByRole('button', { name: 'Back to conversation', exact: true }).click();
   await expect(page.locator('#draft')).toBeFocused();
   expect(await page.locator('#draft').evaluate((draft) => [draft.selectionStart, draft.selectionEnd, draft.selectionDirection])).toEqual([3, 18, 'backward']);
-  await page.getByRole('button', { name: 'Project', exact: true }).click();
+  await openDestination(page, 'Project');
   await page.locator('#editor').fill('Unsaved work in the project inspector');
   await page.locator('#editor').evaluate((editor) => editor.setSelectionRange(1, 12, 'forward'));
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
-  await page.getByRole('button', { name: 'Project', exact: true }).click();
+  await page.getByRole('button', { name: 'Inspector', exact: true }).click();
   await expect(page.locator('#editor')).toBeFocused();
   expect(await page.locator('#editor').evaluate((editor) => [editor.selectionStart, editor.selectionEnd, editor.selectionDirection])).toEqual([1, 12, 'forward']);
   await page.locator('#sessionSearch').fill('persistent roster search');
@@ -326,7 +333,7 @@ test('light tokens and Settings retain visible run controls and keyboard focus',
 });
 
 
-test('inspector topics retain canonical content and support manual keyboard selection', async ({ page }, testInfo) => {
+test('Project sections retain canonical content and native keyboard selection', async ({ page }, testInfo) => {
   await page.evaluate(() => {
     shell.update({ destination: 'project', inspector: 'files', inspectorTitle: 'Project', inspectorTopics: [
       { id: 'files', label: 'Files' }, { id: 'git', label: 'Changes' },
@@ -335,23 +342,20 @@ test('inspector topics retain canonical content and support manual keyboard sele
     ] });
     window.originalEditor = document.querySelector('#editor');
   });
-  const files = page.getByRole('tab', { name: 'Files', exact: true });
-  const changes = page.getByRole('tab', { name: 'Changes', exact: true });
-  await expect(files).toHaveAttribute('aria-selected', 'true');
-  await expect(page.getByRole('tabpanel', { name: 'Files', exact: true }).locator('#editor')).toBeVisible();
-  await files.focus();
-  await page.keyboard.press('ArrowRight');
-  await expect(changes).toBeFocused();
-  await expect(files).toHaveAttribute('aria-selected', 'true');
-  await page.keyboard.press('Enter');
-  await expect(changes).toHaveAttribute('aria-selected', 'true');
-  await page.keyboard.press('ArrowRight');
-  await expect(page.getByRole('tab', { name: 'Release', exact: true })).toBeFocused();
-  await expect(page.getByRole('tab', { name: 'Runners', exact: true })).toBeDisabled();
-  await expect(page.getByRole('tab', { name: 'Runners', exact: true })).toHaveAttribute('title', 'Choose a session first');
-  expect(await page.evaluate(() => events.filter(event => event[0] === 'inspector'))).toEqual([['inspector', 'git']]);
+  const picker = page.getByRole('combobox', { name: 'Project section', exact: true });
+  await expect(picker).toHaveValue('files');
+  await expect(page.getByRole('region', { name: 'Files', exact: true }).locator('#editor')).toBeVisible();
+  await picker.focus();
+  await page.keyboard.press('ArrowDown');
+  await expect(picker).toHaveValue('git');
+  await expect(page.getByRole('region', { name: 'Changes', exact: true })).toBeVisible();
+  await page.keyboard.press('ArrowDown');
+  await expect(picker).toHaveValue('release');
+  await expect(picker.locator('option[value="runners"]')).toBeDisabled();
+  await expect(picker.locator('option[value="runners"]')).toHaveAttribute('title', 'Choose a session first');
+  expect(await page.evaluate(() => events.filter(event => event[0] === 'inspector'))).toEqual([['inspector', 'git'], ['inspector', 'release']]);
   expect(await page.locator('#editor').evaluate(node => node === window.originalEditor)).toBe(true);
-  await page.screenshot({ path: testInfo.outputPath('project-topics.png') });
+  await page.screenshot({ path: testInfo.outputPath('project-header.png') });
 });
 
 test('Activity section updates preserve picker focus and remove obsolete options', async ({ page }) => {
@@ -375,6 +379,6 @@ test('Activity section updates preserve picker focus and remove obsolete options
   await picker.selectOption('queue');
   await expect(picker).toHaveValue('queue');
   await page.evaluate(() => shell.update({ inspectorTopics: [] }));
-  await expect(page.getByRole('tablist', { name: 'Inspector topics' })).toBeHidden();
+  await expect(picker).toBeHidden();
   await expect(page.locator('#editor')).toBeVisible();
 });
