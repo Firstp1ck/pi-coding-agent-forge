@@ -64,7 +64,9 @@ The compact left sidebar keeps idle, finished, and input-waiting sessions in **I
 
 In the compact layout, **Ctrl/Cmd+K** opens the same **All tools** search. Session and Project menus offer a short list of actions; **More actions** opens the full catalog. The **Attention** button separates decisions waiting for you, running sessions, and finished work. Select a decision to open its session's response dialog.
 
-Select the model or effort beside your draft to open its picker. A choice applies to that session without a separate Apply button. While Pi is working, **During this run** chooses whether the single submission button steers the run or queues your message afterward. Enter follows that choice; Abort remains separate.
+Drag the right edge of the compact session sidebar to resize it. Open Settings with the gear beside Home at the bottom left.
+
+Select the model or effort beside your draft to open its picker. The full model catalog groups models by provider, then sorts dated models newest first and undated models alphabetically. A choice applies to that session without a separate Apply button. While Pi is working, **During this run** chooses whether the single submission button steers the run or queues your message afterward. Enter follows that choice; Abort remains separate.
 
 **Project** groups Files, Changes, Runners, Releases, and Documents. **Activity** groups Agents, Queues, Progress, Conversations, Events, and provider usage. Use its **View** picker to choose a section without scrolling sideways. Open a section when you need it; changing views keeps running work and unsaved drafts. A queue count beside the draft opens pending follow-ups for editing and reordering.
 

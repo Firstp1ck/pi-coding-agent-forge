@@ -1160,3 +1160,13 @@ A captured tab context becomes stale when that tab replaces its session, as well
 The attention owner reconciles multiple idle tabs every ten seconds to discover later blockers. It forwards an AbortSignal through metadata fetches, limits each scheduled request to ten seconds, defers open group menus and backs off failures. Ordinary bootstrap and explicit user refreshes remain separate; their result serial protects against older responses. Authoritative tab mutation responses advance that serial as well, so an old poll cannot restore a closed tab or erase a newly created one.
 
 Focused ownership checks are the `session-*.test.mjs`, `platform-event-stream.test.mjs` and `shell-action-adapter.test.mjs` tests. Browser adoption uses the opt-in `FAKE_PI_SESSION_OWNERSHIP=1` fixture; this is a test-only switch and makes no provider calls. The complete package check and separate Chromium tests remain integration gates.
+
+## Compact control integration
+
+`model-catalog-order.mjs` groups model catalog records without changing their identities or the saved scoped-model order. Only explicit `releaseDate` and `release_date` values establish chronology; invalid or absent dates use display-name/ID sorting. The grouped native selector retains origin-session guards and keyboard selection.
+
+`settings-workspace.mjs` indexes configuration destinations and hosts canonical controls. Sampling and Codex speed reads on Settings entry must not mutate settings. Sampling, runner, summary and Git-footer dialogs retain their session/project target through asynchronous work. Footer context actions share the captured command target without requiring the Settings dialog to be open.
+
+The compact composer permits vertical focus recovery in short windows and contains horizontal overflow within its action row. The minimized workflow pair occupies two action cells. `shell-navigation-resize.mjs` owns pointer capture, active-drag Escape handling and effective width bounds; only changed user widths are persisted. Viewport clamping must not overwrite the preferred width.
+
+Coverage includes `composer-toolbar-polish.spec.mjs`, `settings-complete-home.spec.mjs`, `model-catalog-groups.spec.mjs` and `session-sidebar-resize.spec.mjs`. Run these with the package's Chromium browser configuration and isolated test state.

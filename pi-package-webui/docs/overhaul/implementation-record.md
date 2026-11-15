@@ -134,6 +134,18 @@ A Scoped models button beside Model opens the existing saved-scope picker direct
 
 The affected browser run passed 74 cases; the final shortcut correction passed all four scoped-model cases. PWA179 offline recovery passed. Independent review passed 40 browser cases and found 24 stale app-revision assertions. Those were corrected; all 28 affected static cases pass. The final combined package gate remains pending. See [Activity picker](screenshots/navigation/activity-picker.png) and [scoped models](screenshots/navigation/scoped-models.png).
 
+### Settings, model catalog, composer and sidebar controls
+
+The bottom-left Settings gear opens the existing searchable page. Six configuration homes now use their original controls or dialogs: Sampling, Codex speed, Summary Setup, runner configuration, Git-footer Visibility, and saved tool-output expansion. Resource navigation performs reads without changing preferences. Dialogs retain their originating session or project through asynchronous work. Footer context-menu Hide remains available independently of the Settings dialog.
+
+The full model picker groups models by provider. Valid explicit release dates sort newest first; undated models follow alphabetically. Current selection stays inside its provider group. Search, keyboard selection, and saved scoped-model order retain their existing behavior. Sticky headings leave room for the highlighted option.
+
+The composer has a compact primary row and a separate More action grid. Short windows permit vertical focus recovery without horizontal conversation scrolling. Minimized workflow controls occupy two cells. The session sidebar supports pointer dragging, keyboard resizing, cancellation and browser-local width persistence; viewport clamping does not overwrite the saved width.
+
+Candidate `04dc31f` passed 60 combined Chromium cases, 27 composer cases and the service-worker offline/online case. Model hierarchy also passed three focused cases. Inventory and package payload checks passed. The full 254-file package run and independent Settings/model reviews are pending. Composer round two is checking the two accepted reachability/overlap fixes; sidebar round two already resolved both findings. Earlier failed runs exposed missing test-fixture dependencies and composer overflow, which were corrected without removing assertions.
+
+Inspected captures: [compact composer](screenshots/controls/composer.png), [provider-grouped models](screenshots/controls/model-providers.png), and [canonical Sampling controls in Settings](screenshots/controls/settings-sampling.png). These use disposable fake-Pi fixtures and do not demonstrate installed provider behavior.
+
 ### Platform limits
 
 Linux Chromium is the verified browser environment. Physical Android/iOS keyboards, IME, microphones, Windows/macOS behavior, WebKit and installed live-provider/companion combinations remain unmeasured. Existing platform-specific behavior is preserved in code and focused contracts, not claimed as device-tested.
