@@ -339,3 +339,68 @@ test('draft text and its palette-chosen folder survive navigation and reload', a
   expect(JSON.parse(await page.evaluate(key => localStorage.getItem(key), storageKey)).records[0].cwd).toBe(pinned);
   expect((await emptyStartup.api('/api/tabs')).tabs).toHaveLength(1);
 });
+
+test('a palette choice applies its folder only to the draft it opened, even if another draft is opened during the switch', async ({ page, emptyStartup }) => {
+  const { thread, current } = await readyWithThread(page, emptyStartup);
+  await openPalette(page);
+  await paletteOption(page, /current-project/).click();
+  await page.locator('#promptInput').fill('saved draft A');
+  await page.locator(`#tabBar [data-tab-id="${thread.id}"] .terminal-tab-button`).click();
+  await openPalette(page);
+  // Both clicks run in one task, so the draft switch lands while the palette's draft opening is still awaiting.
+  await page.evaluate(() => {
+    [...document.querySelectorAll('#newThreadList [role="option"]')].find(node => node.textContent.includes('pinned-project')).click();
+    document.querySelector('[data-draft-id] [role="tab"]').click();
+  });
+  await expect(page.locator('#promptInput')).toHaveValue('saved draft A');
+  await expect(workspaceButton(page)).toHaveText(current);
+});
+
+test('clicking the palette backdrop closes it and returns focus to the New thread button', async ({ page, emptyStartup }) => {
+  await readyWithThread(page, emptyStartup);
+  await openPalette(page);
+  await page.locator('#newThreadInput').click();
+  await expect(page.locator('#newThreadDialog')).toBeVisible();
+  await page.mouse.click(4, 4);
+  await expect(page.locator('#newThreadDialog')).toBeHidden();
+  await expect(page.locator('#newTabButton')).toBeFocused();
+});
+
+test('Browse from the card dropdown returns focus to the re-rendered folder button', async ({ page, emptyStartup }) => {
+  const { pinned } = await readyWithThread(page, emptyStartup);
+  await openPalette(page);
+  await paletteOption(page, /current-project/).click();
+  await workspaceButton(page).click();
+  await pickerOption(page, /Browse/).click();
+  await directPath(page, pinned);
+  await page.locator('#pathPickerChooseButton').click();
+  await expect(workspaceButton(page)).toHaveText(pinned);
+  await expect(workspaceButton(page)).toBeFocused();
+});
+
+test('Browse from a reusable blank draft on mobile returns to Chat', async ({ page, emptyStartup }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const folder = join(emptyStartup.root, 'chosen');
+  await mkdir(folder);
+  await page.goto(`${emptyStartup.baseURL}/?mobileShell=v2`);
+  await expect(page.locator('#promptInput')).toBeEditable();
+  await page.getByRole('button', { name: 'Sessions', exact: true }).click();
+  await page.locator('#mobileNewCurrentDirectoryButton').click();
+  await paletteOption(page, /Browse/).click();
+  await directPath(page, folder);
+  await page.locator('#pathPickerChooseButton').click();
+  await expect(page.locator('#pathPickerDialog')).toBeHidden();
+  await expect(workspaceButton(page)).toHaveText(folder);
+  await expect(page.locator('html')).toHaveAttribute('data-mobile-shell-route', 'chat');
+});
+
+test('a stored legacy title shows as a thread in All tools', async ({ page, emptyStartup }) => {
+  const current = join(emptyStartup.root, 'current');
+  await mkdir(current);
+  const thread = (await emptyStartup.api('/api/tabs', { cwd: current, title: 'Terminal 7' })).tab;
+  await page.addInitScript(() => localStorage.setItem('pi-webui-shell-preferences-v1', JSON.stringify({ v: 1, desktopLayout: 'focused' })));
+  await page.goto(`${emptyStartup.baseURL}/?tab=${encodeURIComponent(thread.id)}`);
+  await expect(page.locator('.focused-title')).toHaveText('Thread 7');
+  await page.getByRole('navigation', { name: 'Workspace destinations' }).getByRole('button', { name: 'All tools', exact: true }).click();
+  await expect(page.locator('.tools-launcher-context')).toHaveText('Thread 7');
+});

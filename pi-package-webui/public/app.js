@@ -2681,7 +2681,7 @@ function focusedToolsSnapshot() {
   const aliases = new Map(actions.filter(action => action.id.startsWith("native:") && action.label.startsWith("/"))
     .map(action => [`command:${encodeURIComponent(action.label.slice(1))}`, action.id]));
   const pinnedIds = [...new Set((shellPreferenceState.value.pinnedActions || []).map(id => aliases.get(id) || id))];
-  return { actions, pinnedIds, contextLabel: activeTab()?.title || "No active session" };
+  return { actions, pinnedIds, contextLabel: threadDisplayTitle(activeTab()?.title) || "No active session" };
 }
 
 async function invokeFocusedTool(captured) {
@@ -18535,19 +18535,25 @@ function reusableBlankDraftId() {
 async function openThreadDraft({ cwd = "" } = {}) {
   const reusable = reusableBlankDraftId();
   const previous = draftConversations.activeId;
-  await openClientDraft(reusable);
+  const opening = openClientDraft(reusable);
+  // openClientDraft selects its draft before its first await. Capture that
+  // identity now: navigation during the await must not receive this folder.
   const draftId = draftConversations.activeId;
+  await opening;
   // openClientDraft declines while a theme save is pending; never retarget the draft that was already open.
-  if (activeTabId || !draftId || (!reusable && draftId === previous)) return;
+  if (!draftId || (!reusable && draftId === previous)) return;
   setClientDraftWorkspace(draftId, cwd);
-  mobileNavigate("chat", { focus: false });
+  if (!activeTabId && draftConversations.activeId === draftId) mobileNavigate("chat", { focus: false });
 }
 
 async function browseNewThreadFolder({ returnFocus = elements.newTabButton } = {}) {
   const reusable = reusableBlankDraftId();
   if (reusable) {
     const changed = await chooseClientDraftWorkspace({ triggerButton: returnFocus });
-    if (changed && !activeTabId && draftConversations.activeId === reusable) await openClientDraft(reusable);
+    if (changed && !activeTabId && draftConversations.activeId === reusable) {
+      await openClientDraft(reusable);
+      if (!activeTabId && draftConversations.activeId === reusable) mobileNavigate("chat", { focus: false });
+    }
     return;
   }
   const source = { context: activeTabContext(), navigation: focusedShellState, draftNavigation: draftNavigationRevision };
@@ -18821,7 +18827,9 @@ async function chooseDraftWorkspacePickerEntry(choice) {
   if (!picker || !choice) return;
   closeDraftWorkspacePicker();
   if (choice.kind === "browse") {
-    await chooseClientDraftWorkspace({ triggerButton: picker.trigger });
+    const changed = await chooseClientDraftWorkspace({ triggerButton: picker.trigger });
+    // A changed folder re-renders the card and drops the original trigger.
+    if (changed && !activeTabId && draftConversations.activeId === picker.draftId) focusDraftWorkspaceTrigger(picker.trigger);
     return;
   }
   if (draftSubmissions.has(picker.draftId)) {
@@ -26936,7 +26944,7 @@ function renderSubagentTerminalView() {
   if (transcript.dataset.continuityScrollKey === scrollKey) rememberScopedScrollContinuity(transcript, scrollKey);
   else if (!scopedScrollContinuityByKey.has(scrollKey)) scopedScrollContinuityByKey.set(scrollKey, { mode: "follow-end", scrollTop: 0, scrollLeft: 0 });
   elements.subagentTerminalTitle.textContent = subagentTerminalViewTitle(view);
-  elements.subagentTerminalMeta.textContent = `${facts.join(" · ")} · parent ${parent?.title || view.parentTitle || "thread"} · run ${view.runId}`;
+  elements.subagentTerminalMeta.textContent = `${facts.join(" · ")} · parent ${threadDisplayTitle(parent?.title || view.parentTitle) || "thread"} · run ${view.runId}`;
   renderSubagentTerminalCards(agent);
   transcript.replaceChildren();
   transcript.setAttribute("aria-live", running ? "polite" : "off");
@@ -49367,6 +49375,15 @@ elements.newThreadDialog?.addEventListener("cancel", (event) => {
   closeNewThreadPalette();
 });
 elements.newThreadDialog?.addEventListener("close", restoreNewThreadPaletteFocus);
+// Backdrop clicks target the dialog element itself; the bounds check keeps a
+// click on the dialog's own edge from counting as outside.
+elements.newThreadDialog?.addEventListener("click", (event) => {
+  const dialog = elements.newThreadDialog;
+  if (event.target !== dialog) return;
+  const box = dialog.getBoundingClientRect();
+  const inside = event.clientX >= box.left && event.clientX <= box.right && event.clientY >= box.top && event.clientY <= box.bottom;
+  if (!inside) closeNewThreadPalette();
+});
 elements.newThreadCloseButton?.addEventListener("click", () => closeNewThreadPalette());
 elements.newThreadInput?.addEventListener("input", () => {
   newThreadPaletteState.index = 0;

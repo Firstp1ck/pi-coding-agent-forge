@@ -33,6 +33,8 @@ for (const [label, pattern] of [
   ["document title", /document\.title = tab \? `Pi Web UI · \$\{threadDisplayTitle\(tab\.title\)\}`/],
   ["command palette thread rows", /`Current thread: \$\{threadDisplayTitle\(tab\.title\)\}` : `Switch to thread: \$\{threadDisplayTitle\(tab\.title\)\}`/],
   ["focused shell header", /title: threadDisplayTitle\(active\?\.title\) \|\| "Start a conversation"/],
+  ["All tools context label", /contextLabel: threadDisplayTitle\(activeTab\(\)\?\.title\) \|\| "No active session"/],
+  ["subagent view parent meta", /parent \$\{threadDisplayTitle\(parent\?\.title \|\| view\.parentTitle\) \|\| "thread"\}/],
   ["subagent parent group", /make\("strong", undefined, threadDisplayTitle\(tab\.tabTitle\) \|\| `Thread \$\{tab\.tabIndex \|\| "\?"\}`\)/],
 ]) {
   assert.match(app, pattern, `${label} should display legacy default titles through threadDisplayTitle`);
