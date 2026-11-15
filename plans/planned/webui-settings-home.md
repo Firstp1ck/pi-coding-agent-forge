@@ -19,3 +19,9 @@ Disposable actual-app Chromium with fake Pi, isolated HOME/XDG/Pi/Git configurat
 
 - Gear implementation prepared in focused-shell-adapter.mjs/css. Both real-app geometry/navigation/fallback cases passed, zero retries.
 - Coverage scout pending; comprehensive Settings coverage is not yet claimed.
+
+### Accepted coverage additions
+
+Source audit at 2e9af8e found six missing homes: Sampling and Codex speed canonical controls in Models and resources; Summary Setup in Models and resources; project runner configuration in System; Git-footer Visibility and persisted tool-output expansion in Appearance. Runtime and Features Setup already cover the remaining audited configuration. Preserve direct quick controls. Add aliases for Runtime preferences without claiming individual field search.
+
+Sol Settings worker owns only public/app.js, public/settings-workspace.mjs and a new tests/browser/settings-complete-home.spec.mjs. Composer worker owns separate CSS and its test; parent owns assets, docs, generated inventory and existing test updates. Bind new dialog entry paths to their original session/project through awaits and existing confirmation flows. No navigation-triggered mutations. Test all six homes and canonical restoration, search, scope, unavailable states and target switches using isolated fake Pi. Parent integrates and reviews.
