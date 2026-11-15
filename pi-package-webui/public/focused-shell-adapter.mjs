@@ -105,7 +105,7 @@ export function createFocusedShellAdapter({ document, viewHost, nodes, sections,
       nodes.layout.inert = false;
       document.documentElement.removeAttribute('data-desktop-shell');
       for (const id of [...contentHidden.keys()]) restoreContent(id);
-      for (const node of [...modelRows, nodes.abortButton, nodes.conversationModeEndButton, nodes.navigation, nodes.home, nodes.footer, nodes.versions, nodes.conversation]) {
+      for (const node of [...modelRows, nodes.abortButton, nodes.conversationModeEndButton, nodes.navigation, nodes.home, nodes.footer, nodes.versions, nodes.settingsRoot, nodes.conversation]) {
         if (node) viewHost.restore(node);
       }
       nodes.home.hidden = next.homeCollapsed;
@@ -123,8 +123,11 @@ export function createFocusedShellAdapter({ document, viewHost, nodes, sections,
       viewHost.move(nodes.conversation, workspace.slots.conversation);
       viewHost.move(nodes.navigation, workspace.slots.navigation);
       viewHost.move(nodes.home, workspace.slots.home);
-      for (const id of settingsIds) mountContent(id, workspace.slots.settings);
-      for (const node of [nodes.footer, nodes.versions]) if (node) viewHost.move(node, workspace.slots.settings);
+      if (nodes.settingsRoot) viewHost.move(nodes.settingsRoot, workspace.slots.settings);
+      else {
+        for (const id of settingsIds) mountContent(id, workspace.slots.settings);
+        for (const node of [nodes.footer, nodes.versions]) if (node) viewHost.move(node, workspace.slots.settings);
+      }
       for (const row of modelRows) viewHost.move(row, composerControls);
       composerControls.hidden = false;
       moveRunControls(workspace.slots.runControls);

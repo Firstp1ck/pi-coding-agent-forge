@@ -6,7 +6,9 @@ Advanced user setup, configuration, compatibility, security, and troubleshooting
 
 ## Compact desktop preview
 
-The compact layout is opt-in under **Controls → Interface → Desktop layout**. Its session navigation can sit on the left or above the conversation. **All tools** supports up to twenty pins, saved with the layout choice in this browser. Settings and inspectors reuse your existing controls and their original scopes.
+The compact layout is opt-in under **Controls → Interface → Desktop layout**. Its session navigation can sit on the left or above the conversation. **All tools** supports up to twenty pins, saved with the layout choice in this browser. Settings and inspectors reuse your existing controls and their original scopes. Settings groups Appearance, Models and resources, Features, Accounts, Voice, Connection, System, and Help. Search shows each result’s scope and why a control is unavailable. A result opens its category and original control; browser Back and Forward restore the destination. Search does not apply settings.
+
+Tools and Skills Setup keep Session, Global, and exact Model defaults separate. Changing the model in Setup does not change the session’s active model. An explicit empty selection differs from inheriting defaults. Disabled companions retain their existing Setup actions. Voice selection may download a voice; opening Voice alone does not start the microphone. Provider login opens terminal sign-in guidance, while logout retains its confirmation. Restart, stop, and updates remain under System with their existing confirmations and access restrictions.
 
 Project and Activity share one topic inspector. Files retain separate unsaved buffers per session; changing views does not save them or stop app runners. Agent output and conversation viewers remain read-only; stopping a run requires its explicit cancel action. The composer queue and Activity Queues operate on the same session queue, including edits, reordering, and removal. Provider usage remains account-wide.
 
@@ -155,7 +157,7 @@ Normal output shows the full live tool and response stream. Compact output keeps
 
 Completed responses replace streamed drafts, including shortened or removed thinking. Refreshing history does not restore text removed by the provider. On older Pi releases, tool arguments stay hidden until Pi identifies the tool, which may happen only when argument generation completes. This keeps Intercom transport content out of the main transcript.
 
-Choose the mode under **Controls → Output processing** or **Settings → Browser workflow**, then select **Compact**. The stable setting and command-line identifier is `compact-v1`. The setting affects display only; it does not change Pi prompts, tools, models, saved transcript meaning, or inference.
+Choose the mode under **Controls → Output processing** or **compact Settings → System**, then select **Compact**. The stable setting and command-line identifier is `compact-v1`. The setting affects display only; it does not change Pi prompts, tools, models, saved transcript meaning, or inference.
 
 ## Code block syntax highlighting
 

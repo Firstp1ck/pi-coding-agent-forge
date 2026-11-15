@@ -85,7 +85,7 @@ assert.doesNotMatch(app, /confirmationAlternative|\balternative:\s*options\.alte
 assert.doesNotMatch(html, /id="sessionLine"/, "Control Deck title should not show verbose session status metadata");
 assert.match(html, /id="themeSelect"/, "side panel should expose a theme selector");
 assert.match(html, /class="controls-intro"[\s\S]*aria-labelledby="sessionControlsTitle"[\s\S]*aria-labelledby="interfaceControlsTitle"[\s\S]*id="networkControlField"[\s\S]*aria-labelledby="serverControlsTitle"/, "Controls should explain scope and group session, interface, remote-access, and server settings in task order");
-assert.match(html, /id="sessionControlsTitle">Active session<[\s\S]*class="control-scope-badge">This tab<[\s\S]*id="interfaceControlsTitle">Interface<[\s\S]*class="control-scope-badge">This browser</, "Controls groups should state whether settings affect the active tab or this browser");
+assert.match(html, /id="sessionControlsTitle">Active session<[\s\S]*class="control-scope-badge">This tab<[\s\S]*id="interfaceControlsTitle">Interface<[\s\S]*class="control-scope-badge">Browser and shared layout</, "Controls groups should distinguish active-tab settings from browser and shared layout controls");
 assert.match(html, /class="control-action-row">[\s\S]*id="modelSelect"[\s\S]*id="setModelButton"[^>]*>Apply<\/button>[\s\S]*id="thinkingSelect"[\s\S]*id="setThinkingButton"[^>]*>Apply<\/button>/, "model and thinking controls should keep their apply actions beside the selection");
 assert.match(css, /\.control-group-header[\s\S]*\.control-scope-badge[\s\S]*\.control-action-row/, "Controls should visually separate group headers, scope badges, and compact action rows");
 assert.match(html, /<label for="themeSelect"[^>]*id="themeControlLabel"[^>]*>Theme<\/label>/, "theme selector should be labeled in side-panel controls");
@@ -405,7 +405,7 @@ assert.match(app, /function conversationVoiceLanguageLabel\(voiceId\)/, "voice l
 assert.match(app, /function conversationVoiceGenderLabel\(voiceId\)/, "voice labels should include a compact M/F gender indicator");
 assert.match(app, /\$\{label\} ↓\$\{conversationVoiceDownloadSizeText\(voice\)\}/, "voices that are not downloaded yet should use compact labels with a download marker and size");
 assert.match(app, /showConversationVoiceFeedback/, "voice selection and download should surface explicit user feedback");
-assert.match(app, /event\.stopPropagation\(\);\n\s*void switchConversationVoice\(voice\.id\);/, "voice menu item clicks should not be swallowed by surrounding dropdown handlers");
+assert.match(app, /event\.stopPropagation\(\);\n\s*if \(panel\.contains\(item\) && isCurrentProjectTarget\(target\)\) void switchConversationVoice\(voice\.id\);/, "voice item clicks should stop propagation and retain their canonical node and originating target");
 assert.match(app, /downloading\|testing/, "voice-switch progress from the package status text should surface on the conversation chip");
 assert.match(app, /function nativeConversationAudioEngaged\(\)[\s\S]*widgets\.has\("natural-conversation-audio"\)/, "frontend should detect the package's native audio loop via its widget");
 assert.match(app, /mode\.enabled === true && !!activeTabId && !nativeConversationAudioEngaged\(\)/, "browser Web Speech loop must stand down while native audio is armed (no double voices)");

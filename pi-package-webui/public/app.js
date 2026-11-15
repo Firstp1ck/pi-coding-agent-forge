@@ -9,6 +9,7 @@ import { createProjectFileViewerController, gitFileDiffCategory, resolveFileView
 import { createProjectGitToolsController, GIT_TOOLS_SECTIONS } from "./project-git-tools-controller.mjs";
 import { createProjectRunnersController, APP_RUNNER_CONTEXT_DEFAULT_LINES, APP_RUNNER_CONTEXT_MAX_LINES, normalizeAppRunnerContextLineCount } from "./project-runners-controller.mjs";
 import { createActivityEventsController, EVENT_DISPLAY_MODE_STORAGE_KEY, EVENT_FILTER_STORAGE_KEY } from "./activity-events-controller.mjs";
+import { createSettingsWorkspace, SETTINGS_CATEGORIES } from "./settings-workspace.mjs";
 import { createFocusedShellAdapter } from "./focused-shell-adapter.mjs";
 import { createSessionContext } from "./session-context.mjs";
 import { createSessionComposerStore } from "./session-composer-store.mjs";
@@ -1740,6 +1741,9 @@ let shellPreferenceState = (() => {
   catch { return readShellPreferences(null); }
 })();
 let focusedShell = null;
+let settingsWorkspace = null;
+let pendingSettingsReveal = null;
+let settingsVoiceTarget = null;
 const focusedFeatureRecords = [];
 const focusedWidgetPlacements = new Map();
 let focusedAgentWidgetHost = null;
@@ -2300,6 +2304,22 @@ function renderFocusedShell() {
     attentionCount: tabs.filter(tab => mobileTabActivityState(tab) === "blocked").length,
     homeCollapsed: workspaceDashboardCollapsed,
   });
+  settingsWorkspace?.update({
+    enabled: focusedShell.active, destination: focusedShellState.destination,
+    category: settingsCategory(focusedShellState.inspector), target: shellActionTarget(),
+    actions: focusedToolsActions(),
+    features: OPTIONAL_FEATURES.map(feature => ({ ...feature, description: `${feature.description} ${optionalFeatureStatus(feature.id).detail || ""}` })),
+  });
+  const voiceTarget = focusedShell.active && focusedShellState.destination === "settings" && settingsCategory(focusedShellState.inspector) === "voice" ? shellActionTarget() : null;
+  if (voiceTarget && (!settingsVoiceTarget || !isCurrentSettingsTarget(settingsVoiceTarget))) {
+    settingsVoiceTarget = voiceTarget;
+    renderConversationVoicePanelNotice("Loading voices…");
+    void loadConversationVoices(activeTabContext());
+  } else if (!voiceTarget) settingsVoiceTarget = null;
+  if (focusedShell.active && focusedShellState.destination === "settings" && pendingSettingsReveal) {
+    const entry = settingsWorkspace.reveal(pendingSettingsReveal);
+    if (entry) pendingSettingsReveal = null;
+  }
   syncDocumentArtifactHost();
   syncFocusedWidgetPlacement();
   const widgetDestination = visibleFeatureWidgetDestination();
@@ -2338,35 +2358,76 @@ function saveFocusedShellPreferences(patch) {
   return true;
 }
 
-function navigateFocusedShell(destination, inspector = undefined, { replace = false } = {}) {
-  const next = { destination, inspector: inspector === undefined ? destination === "project" ? "files" : destination === "activity" ? "subagents" : null : inspector };
+function settingsCategory(inspector) {
+  const id = typeof inspector === "string" && inspector.startsWith("settings:") ? inspector.slice(9) : "";
+  return SETTINGS_CATEGORIES.some(category => category.id === id) ? id : "appearance";
+}
+
+function normalizeFocusedNavigation(state) {
+  const { destination, inspector } = state || {};
+  if (!["conversation", "home", "project", "activity", "settings"].includes(destination)) return { destination: "conversation", inspector: null };
+  if (destination === "settings") {
+    const category = settingsCategory(inspector);
+    const entry = settingsWorkspace?.getEntries().find(entry => entry.id === state.setting && entry.category === category)
+      || (category === "features" && OPTIONAL_FEATURES.some(feature => `feature:${feature.id}` === state.setting) ? { id: state.setting } : null);
+    return { destination, inspector: `settings:${category}`, ...(entry ? { setting: entry.id } : {}) };
+  }
+  return { destination, inspector: focusedInspectorRecords().some(({ id }) => id === inspector) ? inspector : destination === "project" ? "files" : destination === "activity" ? "subagents" : null };
+}
+
+function focusedNavigationUrl(state) {
   const url = new URL(window.location.href);
-  url.searchParams.set("view", next.destination);
-  if (next.inspector) url.searchParams.set("inspector", next.inspector);
-  else url.searchParams.delete("inspector");
-  try { shellHistory.write({ state: { focusedShellState: next }, url: url.href, replace }); }
-  catch (error) { addEvent(`Navigation could not be saved. ${error.message || error}`, "error"); return; }
+  url.searchParams.set("view", state.destination);
+  for (const key of ["inspector", "setting"]) {
+    if (state[key]) url.searchParams.set(key, state[key]);
+    else url.searchParams.delete(key);
+  }
+  return url.href;
+}
+
+function navigateFocusedShell(destination, inspector = undefined, { replace = false, setting = null } = {}) {
+  const next = normalizeFocusedNavigation({ destination, inspector, setting });
+  try { shellHistory.write({ state: { focusedShellState: next }, url: focusedNavigationUrl(next), replace }); }
+  catch (error) { addEvent(`Navigation could not be saved. ${error.message || error}`, "error"); return false; }
   focusedShellState = next;
+  pendingSettingsReveal = next.setting || null;
+  if (next.setting) settingsWorkspace?.clearSearch();
   renderFocusedShell();
+  return true;
 }
 
 function focusedNavigationFromSearch(search) {
   const params = new URLSearchParams(search);
-  const destination = params.get("view");
-  if (!["conversation", "home", "project", "activity", "settings"].includes(destination)) return { destination: "conversation", inspector: null };
-  const inspector = params.get("inspector");
-  return { destination, inspector: focusedInspectorRecords().some(({ id }) => id === inspector) ? inspector : destination === "project" ? "files" : destination === "activity" ? "subagents" : null };
+  return normalizeFocusedNavigation({ destination: params.get("view"), inspector: params.get("inspector"), setting: params.get("setting") });
 }
 
 function restoreShellNavigation(event) {
   restoreMobileNavigation(event);
-  const state = event.state?.focusedShellState;
-  if (state && ["conversation", "home", "project", "activity", "settings"].includes(state.destination)) {
-    focusedShellState = { destination: state.destination, inspector: focusedInspectorRecords().some(({ id }) => id === state.inspector) ? state.inspector : null };
-  } else {
-    focusedShellState = focusedNavigationFromSearch(window.location.search);
-  }
+  focusedShellState = event.state?.focusedShellState
+    ? normalizeFocusedNavigation(event.state.focusedShellState)
+    : focusedNavigationFromSearch(window.location.search);
+  pendingSettingsReveal = focusedShellState.setting || null;
+  if (focusedShellState.setting) settingsWorkspace?.clearSearch();
   renderFocusedShell();
+}
+
+function isCurrentSettingsTarget(target) {
+  const current = shellActionTarget();
+  return target?.tabId === current.tabId && target?.generation === current.generation && target?.sessionIdentity === current.sessionIdentity;
+}
+
+function invokeSettingsAction(actionId, target) {
+  if (!isCurrentSettingsTarget(target)) return;
+  const action = focusedToolsActions().find(action => action.id === actionId);
+  if (action) return invokeFocusedTool({ ...action, target });
+}
+
+function navigateSettings(category, setting, target) {
+  if (!isCurrentSettingsTarget(target)) return;
+  if (!navigateFocusedShell("settings", `settings:${category}`, { setting })) return;
+  settingsWorkspace.clearSearch();
+  const entry = settingsWorkspace.getEntries().find(entry => entry.id === setting);
+  if (entry?.actionId && entry.available) invokeSettingsAction(entry.actionId, target);
 }
 
 function focusedToolsActions() {
@@ -2377,7 +2438,7 @@ function focusedToolsActions() {
       id: `view:${record.id}`, scope: "browser", category: destination === "settings" ? "Settings" : destination === "project" ? "Project" : destination === "conversation" ? "Session" : "Activity",
       label: record.label || record.button?.querySelector(".side-panel-section-label")?.textContent || record.id,
       description: `Open ${record.id.replaceAll("-", " ")} controls`, keywords: record.id, available: true,
-      run: () => navigateFocusedShell(destination, destination === "settings" ? null : record.id),
+      run: () => navigateFocusedShell(destination, destination === "settings" ? `settings:${record.id === "optional-features" ? "features" : "appearance"}` : record.id),
     };
   });
   return [...sectionActions, ...buildCommandPaletteItems().map(action => ({
@@ -2403,16 +2464,19 @@ async function invokeFocusedTool(captured) {
 
 function initializeFocusedShell() {
   initializeFocusedFeatureRecords();
+  settingsWorkspace = createSettingsWorkspace({ document, viewHost: canonicalViewHost, onNavigate: navigateSettings, onInvoke: invokeSettingsAction });
+  $("#focusedFeatureParking").append(settingsWorkspace.element);
   const initial = focusedNavigationFromSearch(window.location.search);
   try {
-    if (isFocusedShellRequested()) shellHistory.write({ state: { focusedShellState: initial }, replace: true });
+    if (isFocusedShellRequested()) shellHistory.write({ state: { focusedShellState: initial }, url: focusedNavigationUrl(initial), replace: true });
     focusedShellState = initial;
+    pendingSettingsReveal = initial.setting || null;
   } catch (error) {
     addEvent(`Initial navigation could not be saved. ${error.message || error}`, "error");
   }
   focusedShell = createFocusedShellAdapter({
     document, viewHost: canonicalViewHost,
-    nodes: { ...elements, layout: $(".layout"), conversation: $(".workspace-column"), navigation: elements.terminalTabsShell, home: elements.workspaceDashboard, footer: $("[data-control-deck-shared-footer]"), versions: $(".side-panel-version-row") },
+    nodes: { ...elements, settingsRoot: settingsWorkspace.element, layout: $(".layout"), conversation: $(".workspace-column"), navigation: elements.terminalTabsShell, home: elements.workspaceDashboard, footer: $("[data-control-deck-shared-footer]"), versions: $(".side-panel-version-row") },
     sections: focusedInspectorRecords(), onNavigate: navigateFocusedShell,
     onPreferences: saveFocusedShellPreferences, onInvoke: invokeFocusedTool,
     getTools: () => ({ actions: focusedToolsActions(), pinnedIds: shellPreferenceState.value.pinnedActions || [], contextLabel: activeTab()?.title || "No active session" }),
@@ -5874,7 +5938,7 @@ function terminalTabsLayoutStatusText(layout = terminalTabsLayout) {
 function renderTerminalTabsLayoutControl() {
   const layout = normalizeTerminalTabsLayout(terminalTabsLayout);
   if (elements.terminalTabsLayoutSelect) elements.terminalTabsLayoutSelect.value = layout;
-  if (elements.terminalTabsLayoutStatus) elements.terminalTabsLayoutStatus.textContent = `${terminalTabsLayoutStatusText(layout)} · saved in this browser`;
+  if (elements.terminalTabsLayoutStatus) elements.terminalTabsLayoutStatus.textContent = `${terminalTabsLayoutStatusText(layout)} · saved in WebUI layout`;
 }
 
 function setTerminalTabsLayout(layout, { persist = true, announce = false } = {}) {
@@ -10913,6 +10977,7 @@ function renderConversationVoicePanelNotice(message, level = "info") {
 }
 
 function renderConversationVoiceOptions(data = conversationVoiceLastData) {
+  const target = projectTargetFromContext();
   const panel = elements.conversationVoiceMenuPanel;
   if (!panel) return;
   const source = data || conversationVoiceLastData || {};
@@ -10969,7 +11034,7 @@ function renderConversationVoiceOptions(data = conversationVoiceLastData) {
     const chooseVoice = (event) => {
       event.preventDefault();
       event.stopPropagation();
-      void switchConversationVoice(voice.id);
+      if (panel.contains(item) && isCurrentProjectTarget(target)) void switchConversationVoice(voice.id);
     };
     item.addEventListener("pointerdown", (event) => {
       pointerActivated = true;
@@ -10990,14 +11055,15 @@ function renderConversationVoiceOptions(data = conversationVoiceLastData) {
 
 async function loadConversationVoices(tabContext = activeTabContext()) {
   if (!tabContext.tabId) return;
+  const target = projectTargetFromContext(tabContext);
   try {
     const response = await api("/api/conversation-voices", { tabId: tabContext.tabId });
-    if (!isCurrentTabContext(tabContext)) return;
+    if (!isCurrentProjectTarget(target)) return;
     conversationVoicesLoadedForTab = tabContext.tabId;
     conversationVoiceLastData = response.data;
     renderConversationVoiceOptions(response.data);
   } catch (error) {
-    if (isCurrentTabContext(tabContext)) {
+    if (isCurrentProjectTarget(target)) {
       conversationVoicesLoadedForTab = null;
       const message = `conversation voice list failed: ${error.message || String(error)}`;
       addEvent(message, "warn");
@@ -40248,6 +40314,7 @@ function renderOptionalFeatureRow(feature) {
   const row = make("div", `optional-feature-row ${status.className}`);
   const impact = optionalFeaturePromptImpact(feature);
   const tooltip = `${optionalFeatureTooltip(feature, status)}\nSystem prompt impact: ${impact.label}.`;
+  row.dataset.settingsFeature = feature.id;
   row.dataset.tooltip = tooltip;
   row.setAttribute("aria-label", tooltip.replace(/\s+/g, " "));
   if (installing || accessChanging) row.setAttribute("aria-busy", "true");
@@ -45590,8 +45657,11 @@ function commandPaletteCoreItems() {
     { id: "activity:events", scope: "browser", destination: "activity", kind: "Action", label: "Events log", description: "Open the Events section of the Control Deck", keywords: "errors warnings log diagnostics", run: () => revealEventsSection() },
     { id: "conversation:thinking-visibility", scope: "browser", destination: "conversation", kind: "Action", label: thinkingOutputVisible ? "Hide thinking output" : "Show thinking output", description: "Toggle thinking cards in the transcript (Ctrl/Cmd+T in the composer)", keywords: "reasoning thinking toggle", run: () => setThinkingOutputVisible(!thinkingOutputVisible, { announce: true }) },
     { id: "conversation:tool-output", scope: "browser", destination: "conversation", kind: "Action", label: toolOutputGloballyExpanded ? "Collapse tool output" : "Expand tool output", description: "Toggle tool result cards (Ctrl/Cmd+O in the composer)", keywords: "tools results collapse expand", run: () => setToolOutputGloballyExpanded(!toolOutputGloballyExpanded, { announce: true }) },
-    { id: "settings:show-controls", scope: "browser", destination: "settings", kind: "Action", label: "Show all controls", description: "Restore every hidden button and input tag", keywords: "visibility hidden restore controls buttons", run: () => showAllControls() },
-    { id: "settings:reset-controls", scope: "browser", destination: "settings", kind: "Action", label: "Reset control visibility", description: "Return hidden/visible controls to the defaults", keywords: "visibility defaults controls buttons", run: () => resetControlVisibilityDefaults() },
+    { id: "native:login", scope: "session", destination: "settings", kind: "Pi", label: "Provider login", description: "Open provider sign-in guidance", keywords: "account authentication credentials", run: () => runNativeCommandMenu("/login") },
+    { id: "native:logout", scope: "session", destination: "settings", kind: "Pi", label: "Provider logout", description: "Review stored provider credentials before removal", keywords: "account authentication credentials", run: () => runNativeCommandMenu("/logout") },
+    { id: "settings:visibility", scope: "server", destination: "settings", kind: "Action", label: "Control visibility", description: "Choose which controls are shown", keywords: "hidden buttons recovery", run: () => openControlVisibilitySetupDialog() },
+    { id: "settings:show-controls", scope: "server", destination: "settings", kind: "Action", label: "Show all controls", description: "Restore every hidden button and input tag", keywords: "visibility hidden restore controls buttons", run: () => showAllControls() },
+    { id: "settings:reset-controls", scope: "server", destination: "settings", kind: "Action", label: "Reset control visibility", description: "Return hidden/visible controls to the defaults", keywords: "visibility defaults controls buttons", run: () => resetControlVisibilityDefaults() },
   ];
   if (tabs.length) {
     items.push({ id: "workspace:save", scope: "server", destination: "home", kind: "Workspace", label: "Workspace: Save", description: "Capture all open tabs, sessions, groups, and the active tab", keywords: "workspace snapshot save sessions groups", run: () => saveWebuiWorkspace({ triggerButton: elements.commandPaletteButton }) });

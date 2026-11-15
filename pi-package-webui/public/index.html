@@ -16,6 +16,8 @@
     <link rel="stylesheet" href="/shell-workspace.css?v=1" />
     <link rel="stylesheet" href="/shell-tools-launcher.css?v=1" />
     <link rel="stylesheet" href="/focused-shell-adapter.css?v=1" />
+    <link rel="stylesheet" href="/settings-navigation.css?v=1" />
+    <link rel="stylesheet" href="/settings-workspace.css?v=1" />
     <script>
       // Public-only issue-bot runtime configuration. Keep disabled unless the gateway,
       // Turnstile site key, exact CORS origin, and private-report destination are approved.
@@ -826,7 +828,7 @@
                     <div class="control-group-heading">
                       <h3 id="interfaceControlsTitle">Interface</h3>
                     </div>
-                    <span class="control-scope-badge">This browser</span>
+                    <span class="control-scope-badge">Browser and shared layout</span>
                   </div>
 
                   <div class="control-row">
@@ -846,7 +848,7 @@
                       <option value="top">Top bar</option>
                       <option value="left">Sidebar</option>
                     </select>
-                    <div id="terminalTabsLayoutStatus" class="terminal-tabs-layout-status toggle-control-hint control-row-full">Top bar · saved in this browser</div>
+                    <div id="terminalTabsLayoutStatus" class="terminal-tabs-layout-status toggle-control-hint control-row-full">Top bar · saved in WebUI layout</div>
                   </div>
 
                   <div class="control-row control-deck-placement-control-field">
@@ -1910,7 +1912,7 @@
       </form>
     </dialog>
 
-    <script id="webuiBootLoader" data-app-src="/app.js?v=191">
+    <script id="webuiBootLoader" data-app-src="/app.js?v=192">
       (() => {
         "use strict";
 

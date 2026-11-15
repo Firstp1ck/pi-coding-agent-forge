@@ -1,4 +1,4 @@
-const CACHE_NAME = "pi-webui-pwa-v162";
+const CACHE_NAME = "pi-webui-pwa-v163";
 const APP_SHELL = [
   "/",
   "/index.html",
@@ -20,6 +20,8 @@ const APP_SHELL = [
   "/settings-resource-controller.mjs",
   "/settings-navigation-controller.mjs",
   "/settings-navigation.css",
+  "/settings-workspace.mjs",
+  "/settings-workspace.css",
   "/shell-actions.mjs",
   "/shell-workspace.mjs",
   "/shell-workspace.css",

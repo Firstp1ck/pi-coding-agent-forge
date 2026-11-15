@@ -24,6 +24,14 @@ The modules ship with the package and participate in the service-worker cache. K
 
 `tests/browser/focused-shell-integration.spec.mjs` uses the shared disposable `session-fixture.mjs` to exercise actual drafts, controls, history, rollback, responsive mode transitions and Abort inside the launcher. Worker component fixtures cover layout and keyboard contracts; they do not establish whole-app parity. New files ship as flat assets and participate in the PWA cache.
 
+## Settings ownership
+
+`settings-workspace.mjs` places the original settings groups in categorized pages through `shell-view-host.mjs`. `settings-navigation-controller.mjs` owns only search, result presentation and keyboard navigation. The app remains the sole history writer and action dispatcher. Settings URLs use the existing `view=settings` and `inspector=settings:<category>` fields plus an optional stable `setting` anchor; invalid entries are dropped and unknown categories recover to Appearance without applying preferences. Existing Theme focus opens its searchable picker. Classic restores original groups and disclosure state.
+
+`settings-resource-controller.mjs` owns tools/skills resources, scope and exact provider/model selection. The app supplies existing HTTP calls and captured tab, session lifetime and native-dialog generation guards. Reads and writes retain their original scope; detached controls and late completions cannot target a replacement. Empty enabled lists and inheritance remain distinct. Companion availability comes from the existing catalog and package state; the Settings search index adds placement metadata, not a second package policy.
+
+The actual-app `settings-navigation-integration.spec.mjs` and `settings-resource-lifetime.spec.mjs` use disposable servers and test canonical controls, history, drafts, retained selections and deferred HTTP boundaries. The existing `resource-profiles.spec.mjs` complements those intercepted race cases with server persistence checks. The navigator’s component fixtures cover keyboard and accessibility semantics. New modules and styles are included in the package and offline cache.
+
 ## Pi 1.2 theme compatibility
 
 Bundled native theme JSON now uses `https://pi.dev/schemas/theme.schema.json`. Pi 1.2 rejects WebUI-only fields inside a native theme's `export` object at startup. The theme bundle publishes those fields separately in `webui-backgrounds.json`, outside its `pi.themes` directory. `readBundledThemes()` reads that optional file next to the themes directory and merges only `WEBUI_THEME_EXPORT_FIELDS` into catalog exports. Native export colors cannot be overridden by this metadata. Older bundles with inline background fields still load through the existing bundled-only compatibility path.

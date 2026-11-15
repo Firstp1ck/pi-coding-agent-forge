@@ -77,9 +77,10 @@ async function revealTheme(page) {
   const theme = settingResult(page, 'Theme').getByRole('button', { name: /^Theme(?:\s|$)/ });
   await expect(theme).toHaveCount(1);
   await theme.click();
+  // The canonical Theme select opens its existing searchable picker when focused.
   await expectLocation(page, 'appearance', 'theme');
-  await expect(page.locator('#themeSelect')).toBeVisible();
-  await expect(page.locator('#themeSelect')).toBeFocused();
+  await expect(page.locator('#themeSearchInput')).toBeVisible();
+  await expect(page.locator('#themeSearchInput')).toBeFocused();
 }
 
 test('actual Settings exposes accessible categories and searches without changing preferences', async ({ page, ownership }, testInfo) => {
@@ -139,8 +140,8 @@ test('Theme search focuses the original control and restores its anchor through 
   expect(new URL(page.url()).searchParams.get('tab')).toBe(ownership.tabs[0].id);
   expect(new URL(page.url()).hash).toBe('#settings-fragment');
   expect(await page.evaluate(() => history.state.settingsNavigationExternal)).toEqual({ keep: 'original history' });
-  await expect(page.locator('#themeSelect')).toBeVisible();
-  await expect(page.locator('#themeSelect')).toBeFocused();
+  await expect(page.locator('#themeSearchInput')).toBeVisible();
+  await expect(page.locator('#themeSearchInput')).toBeFocused();
   expect(await page.locator('#themeSelect').evaluate((node) => node === window.settingsOriginalTheme)).toBe(true);
   await page.goForward();
   await expect(page.locator('#focusedWorkspace')).toHaveAttribute('data-destination', 'conversation');

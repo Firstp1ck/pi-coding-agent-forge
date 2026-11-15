@@ -58,7 +58,7 @@ Check the server at any time with:
 
 ### Try the compact desktop preview
 
-Open **Controls → Interface → Desktop layout** and choose **Compact preview**. The narrow rail opens Conversation, Project, Activity, and Settings. **All tools** searches the real commands and panels; pin frequent actions there. Model and effort controls stay beside your draft, and **More** opens secondary composer actions.
+Open **Controls → Interface → Desktop layout** and choose **Compact preview**. The narrow rail opens Conversation, Project, Activity, and Settings. **All tools** searches the real commands and panels; pin frequent actions there. Model and effort controls stay beside your draft, and **More** opens secondary composer actions. In **Settings**, search for a setting or choose a category such as Appearance, Models and resources, or Features. Search opens the original control or Setup dialog.
 
 **Project** groups Files, Changes, Runners, Releases, and Documents. **Activity** groups Agents, Queues, Progress, Conversations, Events, and provider usage. Open a topic when you need it; changing views keeps running work and unsaved drafts. A queue count beside the draft opens pending follow-ups for editing and reordering.
 

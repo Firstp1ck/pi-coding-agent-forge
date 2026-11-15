@@ -177,9 +177,9 @@ assert.match(server, /function requireResourceScope\(value\)[\s\S]*scope !== "se
 assert.match(server, /updateWebuiSettings\([\s\S]*resourceDefaults[\s\S]*tools[\s\S]*enabledTools/, "global tool choices should persist through the locked Web UI settings updater");
 assert.match(server, /updateWebuiSettings\([\s\S]*resourceDefaults[\s\S]*skills[\s\S]*enabledSkills/, "global skill choices should persist through the locked Web UI settings updater");
 assert.match(app, /function nativeResourceScopeControl\(scope,[\s\S]*Session only[\s\S]*Global default[\s\S]*Model default/, "Tools and Skills Setup should expose session/global/model scope choices");
-assert.match(app, /const body = \{ enabledTools: \[\.\.\.enabledTools\], scope \};/, "Tools Setup should submit its selected persistence scope");
-assert.match(app, /const body = \{ enabledSkills: \[\.\.\.enabledSkills\], scope \};/, "Skills Setup should submit its selected persistence scope");
-assert.match(app, /Unpinned active tools update immediately; pinned tools are unchanged\./, "global selector feedback should explain live precedence");
+assert.match(app, /const body = \{ scope: selection\.scope \};[\s\S]*if \(selection\.scope === "model"\) Object\.assign\(body, \{ provider: selection\.provider, modelId: selection\.modelId \}\)/, "resource writes should retain the selected scope and exact model identity");
+assert.match(app, /if \(change\.inherit\) body\.inherit = true;[\s\S]*body\[kind === "tools" \? "enabledTools" : "enabledSkills"\] = change\.enabled;[\s\S]*method: "POST", body, tabId: target\.tabId/, "resource writes should preserve inheritance versus the full enabled list and captured tab");
+assert.match(app, /Unpinned active \$\{kind\} update immediately; pinned \$\{kind\} are unchanged\./, "global selector feedback should explain live precedence");
 assert.match(app, /aria-pressed/, "resource toggles should expose their enabled state programmatically");
 assert.match(app, /const HIDDEN_COMMAND_NAMES = new Set\(\["webui-tree-navigate", "webui-helper"\]\)/, "frontend should hide Web UI internal helper commands");
 assert.match(app, /"scoped-models", "tools", "skills"/, "frontend native selector commands should include /tools and /skills");
