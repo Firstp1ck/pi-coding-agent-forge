@@ -81,3 +81,84 @@
   }
   .sidebar-update-menu .sidebar-update-menu-choice[aria-disabled="true"] { color: GrayText; }
 }
+
+.sidebar-update-trigger-running svg { animation: sidebar-update-spin 1.2s linear infinite; }
+@keyframes sidebar-update-spin { to { transform: rotate(360deg); } }
+
+.sidebar-update-progress {
+  position: fixed;
+  z-index: 9999;
+  box-sizing: border-box;
+  width: 20rem;
+  margin: 0;
+  padding: 0.7rem;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  box-shadow: 0 8px 24px var(--shadow, #0006);
+  font: inherit;
+  font-size: var(--text-sm, 0.875rem);
+  line-height: 1.4;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.sidebar-update-progress[hidden], .sidebar-update-progress [hidden] { display: none !important; }
+.sidebar-update-progress *, .sidebar-update-progress *::before, .sidebar-update-progress *::after { box-sizing: border-box; min-width: 0; }
+.sidebar-update-progress .sidebar-update-progress-title { margin: 0; color: var(--text); font-size: inherit; font-weight: 650; }
+.sidebar-update-progress :is(p, pre) { margin: 0.3rem 0 0; }
+.sidebar-update-progress :is(.sidebar-update-progress-label, .sidebar-update-progress-step, .sidebar-update-progress-timing, .sidebar-update-progress-heuristic) { color: var(--muted); font-size: var(--text-xs, 0.75rem); }
+.sidebar-update-progress .sidebar-update-progress-result { white-space: pre-wrap; }
+.sidebar-update-progress[data-state="unchanged"] .sidebar-update-progress-title,
+.sidebar-update-progress[data-state="success"] .sidebar-update-progress-title { color: var(--ok); }
+.sidebar-update-progress[data-state="failed"] .sidebar-update-progress-title { color: var(--danger); }
+.sidebar-update-progress[data-state="partial"] .sidebar-update-progress-title,
+.sidebar-update-progress[data-state="unknown"] .sidebar-update-progress-title { color: var(--warning); }
+.sidebar-update-progress-track { height: 0.3rem; margin-top: 0.5rem; overflow: hidden; border-radius: 3px; background: var(--panel-2); }
+.sidebar-update-progress-fill { height: 100%; background: var(--accent); }
+.sidebar-update-progress[data-state="failed"] .sidebar-update-progress-fill { background: var(--danger); }
+.sidebar-update-progress:is([data-state="partial"], [data-state="unknown"]) .sidebar-update-progress-fill { background: var(--warning); }
+.sidebar-update-progress:is([data-state="success"], [data-state="unchanged"]) .sidebar-update-progress-fill { background: var(--ok); }
+.sidebar-update-progress-output { max-height: 5rem; margin-top: 0.5rem; overflow: auto; overscroll-behavior: contain; border-top: 1px solid var(--border); }
+.sidebar-update-progress .sidebar-update-progress-output pre { padding: 0.15rem 0; color: var(--muted); background: transparent; border: 0; font-size: var(--text-xs, 0.75rem); white-space: pre-wrap; overflow-wrap: anywhere; }
+.sidebar-update-progress .sidebar-update-progress-output .sidebar-update-progress-stderr { color: var(--warning); }
+.sidebar-update-progress-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.5rem; }
+.sidebar-update-progress .sidebar-update-progress-actions button {
+  min-height: 36px;
+  max-width: 100%;
+  margin: 0;
+  padding: 0.3rem 0.6rem;
+  color: var(--text);
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  box-shadow: none;
+  transform: none;
+  transition: none;
+  cursor: pointer;
+  font: inherit;
+  line-height: inherit;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.sidebar-update-progress .sidebar-update-progress-actions button:focus-visible { outline: 2px solid var(--accent-2, var(--accent)); outline-offset: 1px; }
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-update-trigger-running svg { animation: none; }
+}
+@media (forced-colors: active) {
+  .sidebar-update-progress {
+    --bg: Canvas;
+    --text: CanvasText;
+    --muted: CanvasText;
+    --panel-2: Canvas;
+    --border: CanvasText;
+    --accent: Highlight;
+    --accent-2: Highlight;
+    --warning: CanvasText;
+    --danger: CanvasText;
+    --ok: CanvasText;
+  }
+}

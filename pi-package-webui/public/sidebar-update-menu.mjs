@@ -5,6 +5,8 @@ const CHOICES = [
   ['webui', 'WebUI only', 'Update existing WebUI installations.'],
   ['pi', 'Pi only', 'Update the Pi coding agent.'],
 ];
+const PROGRESS_STATES = ['launching', 'running', 'success', 'unchanged', 'partial', 'failed', 'unknown'];
+const RUNNING_STATES = ['launching', 'running'];
 let nextId = 0;
 
 /** Present update scopes. The caller owns previews, confirmation, and execution. */
@@ -22,6 +24,9 @@ export function createSidebarUpdateMenu({ button, onSelect }) {
     element.className = className;
     if (text !== undefined) element.textContent = text;
     return element;
+  };
+  const setText = (element, text) => {
+    if (element.textContent !== text) element.textContent = text;
   };
 
   const popup = node('div', 'sidebar-update-menu');
@@ -56,7 +61,42 @@ export function createSidebarUpdateMenu({ button, onSelect }) {
     return item;
   });
   popup.append(title, availability, status, menu);
-  document.body.append(popup);
+  const card = node('section', 'sidebar-update-progress');
+  card.hidden = true;
+  card.setAttribute('aria-labelledby', `${id}ProgressTitle`);
+  const summary = node('div', 'sidebar-update-progress-summary');
+  summary.setAttribute('role', 'status');
+  summary.setAttribute('aria-live', 'polite');
+  summary.setAttribute('aria-atomic', 'true');
+  const progressTitle = node('h2', 'sidebar-update-progress-title');
+  progressTitle.id = `${id}ProgressTitle`;
+  const progressLabel = node('p', 'sidebar-update-progress-label');
+  const result = node('p', 'sidebar-update-progress-result');
+  summary.append(progressTitle, progressLabel, result);
+  const step = node('p', 'sidebar-update-progress-step');
+  const timing = node('p', 'sidebar-update-progress-timing');
+  timing.setAttribute('aria-live', 'off');
+  const track = node('div', 'sidebar-update-progress-track');
+  track.setAttribute('role', 'img');
+  const fill = node('div', 'sidebar-update-progress-fill');
+  track.append(fill);
+  const heuristic = node('p', 'sidebar-update-progress-heuristic', 'Time-based estimate · about 60s per command');
+  const output = node('div', 'sidebar-update-progress-output');
+  const stdout = node('pre', 'sidebar-update-progress-stdout');
+  stdout.setAttribute('aria-label', 'Current command output');
+  const stderr = node('pre', 'sidebar-update-progress-stderr');
+  stderr.setAttribute('aria-label', 'Current command error output');
+  output.append(stdout, stderr);
+  const actions = node('div', 'sidebar-update-progress-actions');
+  const details = node('button', 'sidebar-update-progress-details', 'Details');
+  details.type = 'button';
+  details.setAttribute('aria-controls', id);
+  const dismiss = node('button', 'sidebar-update-progress-dismiss', 'Dismiss');
+  dismiss.type = 'button';
+  dismiss.setAttribute('aria-label', 'Dismiss update result');
+  actions.append(details, dismiss);
+  card.append(summary, step, timing, track, heuristic, output, actions);
+  document.body.append(popup, card);
   button.classList.add('sidebar-update-trigger');
   button.disabled = false;
   button.setAttribute('aria-haspopup', 'menu');
@@ -67,6 +107,123 @@ export function createSidebarUpdateMenu({ button, onSelect }) {
   let disposed = false;
   let blocked = false;
   let frame = null;
+  let progress = null;
+  let dismissedJobId = null;
+  let lastJobId = null;
+  let timer = null;
+  let lastEstimate = 0;
+
+  function isRunning() {
+    return progress && RUNNING_STATES.includes(progress.state);
+  }
+
+  function positionCard() {
+    if (card.hidden || disposed) return;
+    const viewport = window.visualViewport;
+    const margin = 8;
+    const gap = 6;
+    const left = (viewport?.offsetLeft ?? 0) + margin;
+    const top = (viewport?.offsetTop ?? 0) + margin;
+    const right = left + (viewport?.width ?? window.innerWidth) - margin * 2;
+    const bottom = top + (viewport?.height ?? window.innerHeight) - margin * 2;
+    const anchor = button.getBoundingClientRect();
+    const width = Math.max(0, right - left);
+    const height = Math.max(0, bottom - top);
+    card.style.maxWidth = `${width}px`;
+    card.style.maxHeight = `${height}px`;
+    const bounds = card.getBoundingClientRect();
+    const spaces = [
+      { left, top, width, height: Math.max(0, Math.min(bottom, anchor.top - gap) - top), side: 'above' },
+      { left, top: Math.max(top, anchor.bottom + gap), width, height: Math.max(0, bottom - Math.max(top, anchor.bottom + gap)), side: 'below' },
+      { left: Math.max(left, anchor.right + gap), top, width: Math.max(0, right - Math.max(left, anchor.right + gap)), height, side: 'right' },
+      { left, top, width: Math.max(0, Math.min(right, anchor.left - gap) - left), height, side: 'left' },
+    ];
+    // Prefer above/below; constrain the card to free space instead of covering Updates.
+    const space = spaces.find((space) => space.width >= bounds.width && space.height >= bounds.height)
+      || spaces.reduce((best, space) => space.width * space.height > best.width * best.height ? space : best);
+    card.style.maxWidth = `${space.width}px`;
+    card.style.maxHeight = `${space.height}px`;
+    const fitted = card.getBoundingClientRect();
+    card.style.left = `${Math.max(space.left, Math.min(anchor.left, space.left + space.width - fitted.width))}px`;
+    card.style.top = `${space.side === 'above' ? space.top + space.height - fitted.height : space.top}px`;
+  }
+
+  function refreshCardVisibility() {
+    const visible = progress && progress.jobId !== dismissedJobId && !opened;
+    card.hidden = !visible;
+    positionCard();
+  }
+
+  function refreshTiming() {
+    if (!progress) return;
+    const running = isRunning();
+    const total = Math.max(0, Math.trunc(progress.totalSteps) || 0);
+    const completed = Math.max(0, Math.min(total, Math.trunc(progress.completedSteps) || 0));
+    const secondsSince = (timestamp) => Math.max(0, (Date.now() - Date.parse(timestamp)) / 1000) || 0;
+    const elapsed = Math.max(0, Math.floor(((progress.stoppedAt ?? Date.now()) - Date.parse(progress.startedAt)) / 1000)) || 0;
+    if (running) {
+      const stepFraction = progress.state === 'running' ? Math.min(0.95, secondsSince(progress.stepStartedAt) / 60) : 0;
+      const estimate = total ? Math.floor(100 * (completed + stepFraction) / total) : 0;
+      lastEstimate = Math.max(lastEstimate, Math.min(99, estimate));
+      timing.textContent = `Elapsed ${elapsed}s · Estimated ${lastEstimate}%`;
+      track.setAttribute('aria-label', `Estimated ${lastEstimate} percent, based on time, not measured work`);
+      fill.style.width = `${lastEstimate}%`;
+    } else {
+      timing.textContent = `Elapsed ${elapsed}s`;
+      const complete = ['success', 'unchanged'].includes(progress.state);
+      fill.style.width = `${complete ? 100 : lastEstimate}%`;
+      track.setAttribute('aria-label', complete ? 'Commands finished' : 'Update has no confirmed completion');
+    }
+    heuristic.hidden = !running;
+  }
+
+  function updateProgress(snapshot, statusText) {
+    const next = snapshot && PROGRESS_STATES.includes(snapshot.state) ? snapshot : null;
+    if (next && next.jobId !== lastJobId) {
+      lastJobId = next.jobId;
+      dismissedJobId = null;
+      lastEstimate = 0;
+      card.scrollTop = 0;
+      output.scrollTop = 0;
+    }
+    const wasRunning = isRunning();
+    // Freeze elapsed time at the first terminal snapshot, including repeated polls.
+    const stoppedAt = next && !RUNNING_STATES.includes(next.state)
+      ? (progress?.jobId === next.jobId && !wasRunning ? progress.stoppedAt : Date.now()) : null;
+    progress = next ? { ...next, stoppedAt } : null;
+    if (timer !== null) window.clearInterval(timer);
+    timer = null;
+    const running = Boolean(isRunning());
+    button.classList.toggle('sidebar-update-trigger-running', running);
+    if (!progress) {
+      refreshCardVisibility();
+      return;
+    }
+    card.dataset.state = progress.state;
+    setText(progressTitle, {
+      launching: 'Preparing update', running: 'Updating', success: 'Update complete',
+      unchanged: 'Already up to date', partial: 'Update partly completed',
+      failed: 'Update failed', unknown: 'Update status unknown',
+    }[progress.state]);
+    setText(progressLabel, progress.label || '');
+    progressLabel.hidden = !progressLabel.textContent;
+    setText(result, running ? '' : statusText);
+    result.hidden = !result.textContent;
+    const total = Math.max(0, Math.trunc(progress.totalSteps) || 0);
+    const completed = Math.max(0, Math.min(total, Math.trunc(progress.completedSteps) || 0));
+    step.textContent = running && total > completed
+      ? `Step ${completed + 1} of ${total}${progress.currentTargetId ? ` · ${progress.currentTargetId}` : ''}`
+      : `${completed} of ${total} steps completed`;
+    stdout.textContent = String(progress.stdout || '').slice(-8000);
+    stderr.textContent = String(progress.stderr || '').slice(-8000);
+    stdout.hidden = !stdout.textContent;
+    stderr.hidden = !stderr.textContent;
+    output.hidden = stdout.hidden && stderr.hidden;
+    dismiss.hidden = running;
+    refreshTiming();
+    if (running) timer = window.setInterval(refreshTiming, 1000);
+    refreshCardVisibility();
+  }
 
   function position() {
     if (!opened || disposed) return;
@@ -101,10 +258,11 @@ export function createSidebarUpdateMenu({ button, onSelect }) {
   }
 
   function schedulePosition() {
-    if (!opened || disposed || frame !== null) return;
+    if ((!opened && card.hidden) || disposed || frame !== null) return;
     frame = window.requestAnimationFrame(() => {
       frame = null;
       position();
+      positionCard();
     });
   }
 
@@ -116,6 +274,7 @@ export function createSidebarUpdateMenu({ button, onSelect }) {
     if (usesPopover && popup.matches(':popover-open')) popup.hidePopover();
     popup.hidden = true;
     button.setAttribute('aria-expanded', 'false');
+    refreshCardVisibility();
     if (restoreFocus && button.isConnected) button.focus({ preventScroll: true });
   }
 
@@ -124,6 +283,7 @@ export function createSidebarUpdateMenu({ button, onSelect }) {
     if (!opened) {
       opened = true;
       popup.hidden = false;
+      refreshCardVisibility();
       popup.scrollTop = 0;
       if (usesPopover) popup.showPopover();
       button.setAttribute('aria-expanded', 'true');
@@ -133,12 +293,20 @@ export function createSidebarUpdateMenu({ button, onSelect }) {
     choices[index].scrollIntoView({ block: 'nearest' });
   }
 
-  function update({ busy = false, disabledReason = '', statusText = '', statusTone = '' } = {}) {
+  /**
+   * progress is optional: {jobId, state, label, totalSteps, completedSteps,
+   * currentTargetId, startedAt, stepStartedAt, stdout, stderr}. Timestamps are ISO
+   * strings; state is launching/running/success/unchanged/partial/failed/unknown.
+   * The parent owns result wording in statusText. Omission removes the job card.
+   */
+  function update({ busy = false, disabledReason = '', statusText = '', statusTone = '', progress: snapshot } = {}) {
     if (disposed) return;
-    blocked = Boolean(busy || disabledReason);
-    availability.textContent = disabledReason || (busy ? 'An update is in progress.' : '');
+    updateProgress(snapshot, statusText);
+    const running = Boolean(isRunning());
+    blocked = Boolean(busy || running || disabledReason);
+    availability.textContent = disabledReason || (busy || running ? 'An update is in progress.' : '');
     availability.hidden = !availability.textContent;
-    status.textContent = statusText;
+    setText(status, statusText);
     status.hidden = !statusText;
     status.dataset.tone = ['error', 'danger', 'warning', 'success'].includes(statusTone) ? statusTone : '';
     const descriptions = [originalAttributes.get('aria-describedby'),
@@ -147,12 +315,19 @@ export function createSidebarUpdateMenu({ button, onSelect }) {
     else button.removeAttribute('aria-describedby');
     button.disabled = false;
     button.setAttribute('aria-disabled', 'false');
-    button.setAttribute('aria-busy', String(Boolean(busy)));
+    button.setAttribute('aria-busy', String(Boolean(busy || running)));
     button.title = blocked ? `Updates unavailable: ${availability.textContent} Open for status.` : 'Updates';
     for (const item of choices) item.setAttribute('aria-disabled', String(blocked));
     position();
   }
 
+  listen(details, 'click', () => open());
+  listen(dismiss, 'click', () => {
+    if (!progress || isRunning()) return;
+    dismissedJobId = progress.jobId;
+    refreshCardVisibility();
+    button.focus({ preventScroll: true });
+  });
   listen(button, 'click', () => {
     if (opened) close();
     else open();
@@ -208,14 +383,21 @@ export function createSidebarUpdateMenu({ button, onSelect }) {
   const observer = new window.ResizeObserver(schedulePosition);
   observer.observe(popup);
   observer.observe(button);
+  observer.observe(card);
 
   function dispose() {
     if (disposed) return;
     close();
     disposed = true;
+    if (frame !== null) window.cancelAnimationFrame(frame);
+    if (timer !== null) window.clearInterval(timer);
+    frame = null;
+    timer = null;
     lifetime.abort();
     observer.disconnect();
     popup.remove();
+    card.remove();
+    button.classList.remove('sidebar-update-trigger-running');
     if (!hadTriggerClass) button.classList.remove('sidebar-update-trigger');
     for (const [name, value] of originalAttributes) {
       if (value === null) button.removeAttribute(name);

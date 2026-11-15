@@ -357,6 +357,7 @@ test('dispose restores trigger attributes and releases listeners, observers, pop
   expect(counts.signals).toBeGreaterThan(40);
   expect(counts).toMatchObject({ aborted: true, observers: 5, disconnected: true, frames: 0 });
   await expect(popup(page)).toHaveCount(0);
+  await expect(page.locator('.sidebar-update-progress')).toHaveCount(0);
   await expect(page.locator('#updates')).toHaveAttribute('title', 'Original title');
   await expect(page.locator('#updates')).toHaveAttribute('aria-describedby', 'outside');
   await expect(page.locator('#updates')).toHaveAttribute('aria-controls', 'originalPanel');
