@@ -136,7 +136,7 @@ export function createProjectGitToolsController({
     try {
       if (confirmation) {
         const accepted = await confirm(confirmation, {
-          affected: target.root || "the current repository", confirmLabel: success || "Continue",
+          affected: state.cache[sectionKey]?.root || target.root || "the current repository", confirmLabel: success || "Continue",
         });
         if (!isCurrent(token) || !accepted) return false;
       }

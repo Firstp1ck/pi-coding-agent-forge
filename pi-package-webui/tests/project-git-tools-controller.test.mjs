@@ -235,6 +235,25 @@ test("confirmation preserves text/root/label and declined or failed prompts do n
   assert.deepEqual(fallback.confirmations, [{ text: "Continue?", affected: "the current repository", confirmLabel: "Continue" }]);
 });
 
+test("confirmation names the loaded repository without replacing its captured target", async () => {
+  const h = harness({
+    api: async () => ({ ok: true, data: { root: "/repo/resolved" } }),
+    confirm: async () => false,
+  });
+  const token = h.controller.capture();
+  await h.controller.load("tags");
+  await h.controller.run("tags", { url: "/unused", confirm: "Create tag?" }, token);
+  assert.equal(h.confirmations[0].affected, "/repo/resolved");
+  assert.equal(h.controller.capture(), token);
+  assert.equal(h.target.root, "/repo/origin");
+  assert.equal(h.calls.length, 1);
+
+  h.replace({ tabId: "replacement-tab", root: "/repo/replacement" });
+  assert.equal(await h.controller.run("tags", { url: "/unused", confirm: "Create tag?" }, token), false);
+  await h.controller.run("tags", { url: "/unused", confirm: "Create tag?" });
+  assert.equal(h.confirmations[1].affected, "/repo/replacement");
+});
+
 test("successful actions preserve method/body and refresh with the originating target", async () => {
   const response = { ok: true, data: { removed: "/repo/other" } };
   const h = harness({ api: async () => response });
