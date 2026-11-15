@@ -104,6 +104,8 @@ test('top group targets stay above the transcript and activate their exact sessi
   const group = page.locator('[data-custom-group-id="w7-css-group"]');
   await group.locator(':scope > .terminal-tab-group-button').focus();
   await expect(group.locator(':scope > .terminal-tab-group-button')).toHaveAttribute('aria-expanded', 'true');
+  await page.mouse.move(1430, 880);
+  await expect(group.locator(':scope > .terminal-tab-group-button')).toHaveAttribute('aria-expanded', 'true');
   const items = group.locator('.terminal-tab-group-item-button');
   await expect(items).toHaveCount(3);
   await page.screenshot({ path: info.outputPath('top-group.png'), animations: 'disabled' });

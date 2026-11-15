@@ -8478,7 +8478,9 @@ function updateVisualViewportVars() {
   if (viewportHeight > maxVisualViewportHeight) maxVisualViewportHeight = viewportHeight;
   const keyboardInset = viewport ? Math.max(0, Math.round(layoutHeight - viewportHeight - offsetTop)) : 0;
   const promptFocused = document.activeElement === elements.promptInput;
-  const keyboardOpen = isMobileView() && promptFocused && (keyboardInset > 80 || maxVisualViewportHeight - viewportHeight > 120);
+  const keyboardComposerActive = promptFocused || (document.body.classList.contains("mobile-keyboard-open")
+    && elements.composer.contains(document.activeElement));
+  const keyboardOpen = isMobileView() && keyboardComposerActive && (keyboardInset > 80 || maxVisualViewportHeight - viewportHeight > 120);
   document.documentElement.style.setProperty("--visual-viewport-height", `${Math.round(viewportHeight)}px`);
   document.documentElement.style.setProperty("--visual-viewport-offset-top", `${Math.round(offsetTop)}px`);
   document.documentElement.style.setProperty("--keyboard-inset-bottom", `${keyboardInset}px`);
@@ -17353,7 +17355,7 @@ function renderTerminalTabGroup(group, groupCount = 1) {
   });
   wrapper.addEventListener("pointerleave", (event) => {
     if (event.pointerType === "touch") return;
-    clearOpenTerminalTabGroup(group.key);
+    clearOpenTerminalTabGroup(group.key, { preserveFocus: true });
   });
   wrapper.addEventListener("focusin", () => {
     if (!isMobileView()) setOpenTerminalTabGroup(group.key);
@@ -17361,7 +17363,7 @@ function renderTerminalTabGroup(group, groupCount = 1) {
   wrapper.addEventListener("focusout", () => {
     if (isMobileView()) return;
     setTimeout(() => {
-      if (!wrapper.contains(document.activeElement)) clearOpenTerminalTabGroup(group.key);
+      if (!wrapper.contains(document.activeElement)) clearOpenTerminalTabGroup(group.key, { preserveFocus: true });
     }, 0);
   });
   const button = make("button", "terminal-tab-button terminal-tab-group-button");
@@ -17437,8 +17439,9 @@ function toggleOpenTerminalTabGroup(groupKey) {
   else setOpenTerminalTabGroup(groupKey);
 }
 
-function clearOpenTerminalTabGroup(groupKey, { force = false } = {}) {
+function clearOpenTerminalTabGroup(groupKey, { force = false, preserveFocus = false } = {}) {
   if (!openTerminalTabGroupKey || (!force && openTerminalTabGroupKey !== groupKey)) return;
+  if (!force && preserveFocus && document.activeElement?.closest?.(".terminal-tab-group")?.dataset.groupKey === openTerminalTabGroupKey) return;
   openTerminalTabGroupKey = null;
   updateTerminalTabGroupOpenState();
   syncTabPolling();
@@ -26273,7 +26276,7 @@ function renderSubagentTerminalTabGroup(group) {
   });
   wrapper.addEventListener("pointerleave", (event) => {
     if (event.pointerType === "touch") return;
-    clearOpenTerminalTabGroup(group.key);
+    clearOpenTerminalTabGroup(group.key, { preserveFocus: true });
   });
   wrapper.addEventListener("focusin", () => {
     if (!isMobileView()) setOpenTerminalTabGroup(group.key);
@@ -26281,7 +26284,7 @@ function renderSubagentTerminalTabGroup(group) {
   wrapper.addEventListener("focusout", () => {
     if (isMobileView()) return;
     setTimeout(() => {
-      if (!wrapper.contains(document.activeElement)) clearOpenTerminalTabGroup(group.key);
+      if (!wrapper.contains(document.activeElement)) clearOpenTerminalTabGroup(group.key, { preserveFocus: true });
     }, 0);
   });
 
@@ -49133,7 +49136,7 @@ document.addEventListener("pointerdown", (event) => {
 }, { passive: true });
 document.addEventListener("pointermove", (event) => {
   if (openTerminalTabGroupKey && !event.target?.closest?.(".terminal-tab-group")) {
-    clearOpenTerminalTabGroup(openTerminalTabGroupKey);
+    clearOpenTerminalTabGroup(openTerminalTabGroupKey, { preserveFocus: true });
   }
   rememberPointerPosition(event);
 }, { passive: true });

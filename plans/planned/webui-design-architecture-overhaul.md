@@ -1205,3 +1205,12 @@ W7-ZOOM measured genuine browser zoom through a disposable extension/profile: DP
 
 
 The genuine-zoom correction passes both actual-browser cases in /tmp/webui-w7-native-zoom-fixed2.log. Parent inspected and displayed the200% compact screenshot with navigation visible. The first integration run failed before application interaction because the repository's Desktop Chrome project inherited deviceScaleFactor with viewport:null. The native-window fixture now explicitly clears that inherited emulation option; its independent DPR/viewport/outer-window assertions remain unchanged. This is real Chromium zoom, not viewport emulation. All12 checked plan/evidence/user-document link sets resolve.
+
+
+### W7 layout integration and final candidate preparation
+
+W7-CSS is integrated from2d24c85 as91bf27a3. Parent inspected its three owned paths. It enlarges adjacent session actions without increasing desktop tab height, admits top-group menus above sticky content, reserves the app bar at constrained keyboard heights, and retains all run controls and attachments. The unchanged35-case worker subset reported zero target-size violations; its semantic failures predated the parent role corrections.
+
+Parent accepts CSS-001 and002. A new deterministic pointer-move step reproduces a focused group's aria-expanded clearing. Hover departure now preserves the actually focused live group, including delayed focusout after roster replacement; outside click, explicit toggle and Escape retain dismissal. At constrained height, Abort focus previously removed keyboard mode and moved the held target. Keyboard mode now persists while focus moves within the composer and the measured viewport remains shrunken; viewport restoration or focus leaving the composer still clears it. Required hold/cancel semantics and originating-tab checks remain unchanged. The integrated59-case layout/accessibility/zoom run is /tmp/webui-w7-integrated-layout.log. Acceptance waits for its completed result.
+
+The pre-CSS whole-package check completed exit0 with all249 files passing (/tmp/webui-w7-focus-check.log). Asset/cache tuple advances coherently to app198/PWA169/styles159 and shell-workspace.css2; every affected static assertion follows. Final integrated package/browser checks and exact frozen measurements remain required. W7 still has zero review rounds used.
