@@ -5,8 +5,10 @@ test.use({ video: 'off', serviceWorkers: 'block', reducedMotion: 'reduce', actio
 test.setTimeout(60_000);
 
 const draft = 'Keep this draft while checking composer controls.';
-const model = page => page.locator('.focused-composer-controls').getByRole('button', { name: /^Model:/ });
-const effort = page => page.getByRole('button', { name: /^Effort:/ });
+const model = page => page.locator('#statusBar .footer-model.footer-meta-action, #statusBar .footer-tui-model');
+const effort = page => page.locator('#statusBar .footer-thinking.footer-meta-action');
+const componentModel = page => page.locator('.focused-composer-controls').getByRole('button', { name: /^Model:/ });
+const componentEffort = page => page.locator('.focused-composer-controls').getByRole('button', { name: /^Effort:/ });
 
 async function ready(page, ownership, { width = 1440, height = 900, theme = 'dark', inspector = false } = {}) {
   await page.setViewportSize({ width, height });
@@ -20,6 +22,9 @@ async function ready(page, ownership, { width = 1440, height = 900, theme = 'dar
   await expect(page.locator('#focusedWorkspace')).toBeVisible();
   await expect(page.locator('#chat')).toContainText('fake answer');
   await expect(model(page)).toBeEnabled();
+  await expect(model(page)).toContainText('fake-model');
+  await expect(effort(page)).toBeEnabled();
+  await expect(page.locator('.focused-composer-controls')).toBeHidden();
   if (inspector) {
     await page.getByRole('button', { name: 'Inspector', exact: true }).click();
     await page.getByRole('tab', { name: 'Project', exact: true }).click();
@@ -34,7 +39,7 @@ async function screenshot(page, info, name) {
   await info.attach(name, { path, contentType: 'image/png' });
 }
 
-async function expectToolbar(page, { coarse = false } = {}) {
+async function expectToolbar(page, { coarse = false, component = false } = {}) {
   const geometry = await page.evaluate(() => {
     const rect = selector => {
       const { x, y, width, height, right, bottom } = document.querySelector(selector).getBoundingClientRect();
@@ -42,7 +47,12 @@ async function expectToolbar(page, { coarse = false } = {}) {
     };
     return {
       row: rect('.composer-row'), more: rect('#composerActionsButton'), send: rect('#sendButton'),
-      group: rect('.focused-composer-controls'),
+      group: document.querySelector('.focused-composer-controls').getClientRects().length ? rect('.focused-composer-controls') : null,
+      footer: [...document.querySelectorAll('#statusBar .footer-model.footer-meta-action, #statusBar .footer-tui-model, #statusBar .footer-thinking.footer-meta-action')]
+        .map(node => {
+          const { x, right, y, bottom } = node.getBoundingClientRect();
+          return { x, right, y, bottom };
+        }),
       controls: [...document.querySelectorAll('.focused-composer-controls button, .focused-composer-controls select')]
         .filter(node => node.getClientRects().length).map(node => {
           const { x, right, y, bottom, height } = node.getBoundingClientRect();
@@ -62,7 +72,14 @@ async function expectToolbar(page, { coarse = false } = {}) {
   expect(geometry.more.right + 8).toBeLessThanOrEqual(geometry.send.x);
   expect(geometry.send.width).toBeLessThan(180);
   expect(geometry.gradient).toContain('linear-gradient');
-  expect(geometry.group.y).toBeGreaterThanOrEqual(geometry.row.bottom);
+  if (geometry.group) expect(geometry.group.y).toBeGreaterThanOrEqual(geometry.row.bottom);
+  expect(geometry.footer).toHaveLength(2);
+  for (const control of geometry.footer) {
+    expect(control.x).toBeGreaterThanOrEqual(0);
+    expect(control.right).toBeLessThanOrEqual(geometry.viewport.width);
+    expect(control.y).toBeGreaterThanOrEqual(0);
+    expect(control.bottom).toBeLessThanOrEqual(geometry.viewport.height);
+  }
   for (const control of [geometry.more, geometry.send, ...geometry.controls]) {
     expect(control.height).toBeGreaterThanOrEqual(coarse ? 44 : 30);
     if (!coarse) expect(control.height).toBeLessThanOrEqual(36);
@@ -72,21 +89,44 @@ async function expectToolbar(page, { coarse = false } = {}) {
     expect(control.bottom).toBeLessThanOrEqual(geometry.viewport.height);
   }
   expect(geometry.controls.every(control => !control.overflow)).toBe(true);
-  await expect(page.getByRole('group', { name: 'Session composer controls' })).toBeVisible();
+  const group = page.locator('.focused-composer-controls');
+  if (component || await page.getByRole('combobox', { name: 'During this run' }).isVisible()) {
+    await expect(group).toBeVisible();
+  } else {
+    await expect(group).toBeHidden();
+  }
+  if (!component) {
+    for (const setting of await group.locator('.focused-composer-setting').all()) await expect(setting).toBeHidden();
+    await expect(group.locator('.focused-composer-scoped-models')).toBeHidden();
+  }
 }
 
 async function checkPickers(page) {
-  await model(page).click();
+  const allTools = page.getByRole('navigation', { name: 'Workspace destinations' }).getByRole('button', { name: 'All tools', exact: true });
+  await allTools.click();
+  await page.getByRole('searchbox', { name: 'Search all tools' }).fill('/model');
+  await page.locator('#shellToolsLauncher').getByRole('button', { name: '/model', exact: true }).click();
   await expect(page.getByRole('dialog', { name: 'Choose model', exact: true })).toBeVisible();
   await expect(page.locator('#nativeCommandBody')).toContainText('fake/fake-model-alt');
+  await page.locator('#nativeCommandSearch').fill('fake-model-alt');
+  await expect(page.locator('#nativeSelectorList').getByRole('option')).toHaveCount(1);
+  await page.locator('#nativeCommandSearch').fill('');
   await page.keyboard.press('Escape');
-  await page.getByRole('button', { name: 'Scoped models', exact: true }).click();
-  await expect(page.getByRole('listbox', { name: /Scoped models/ })).toBeVisible();
+  await expect(page.locator('#nativeCommandDialog')).toBeHidden();
+  await expect(allTools).toBeFocused();
+  await model(page).click();
+  const scoped = page.getByRole('listbox', { name: /Scoped models/ });
+  await expect(scoped).toBeVisible();
   await page.keyboard.press('Escape');
+  await expect(scoped).toHaveCount(0);
+  await expect(model(page)).toBeFocused();
   await effort(page).click();
-  await expect(page.getByRole('dialog', { name: 'Choose thinking effort', exact: true })).toBeVisible();
-  await expect(page.locator('#nativeCommandBody')).toContainText('off');
+  const thinking = page.getByRole('listbox', { name: 'Thinking effort', exact: true });
+  await expect(thinking).toBeVisible();
+  await expect(thinking.getByRole('option', { name: 'off', exact: true })).toBeVisible();
   await page.keyboard.press('Escape');
+  await expect(thinking).toHaveCount(0);
+  await expect(effort(page)).toBeFocused();
   await expect(page.locator('#promptInput')).toHaveValue(draft);
 }
 
@@ -215,12 +255,12 @@ for (const theme of ['dark', 'light']) {
       document.querySelector('.focused-composer-controls').replaceWith(probe.element);
       probe.update({ ...labels, runActive: true, modelDisabled: true, effortDisabled: true });
     }, labels);
-    await expect(model(page)).toBeDisabled();
-    await expect(effort(page)).toBeDisabled();
+    await expect(componentModel(page)).toBeDisabled();
+    await expect(componentEffort(page)).toBeDisabled();
     await expect(page.getByRole('button', { name: 'Scoped models', exact: true })).toBeDisabled();
-    await expect(model(page)).toHaveAttribute('title', labels.modelReason);
-    await expect(model(page)).toHaveAccessibleDescription(labels.modelReason);
-    await expect(effort(page)).toHaveAccessibleDescription(labels.effortReason);
+    await expect(componentModel(page)).toHaveAttribute('title', labels.modelReason);
+    await expect(componentModel(page)).toHaveAccessibleDescription(labels.modelReason);
+    await expect(componentEffort(page)).toHaveAccessibleDescription(labels.effortReason);
     await expect(page.getByText(labels.modelReason, { exact: true })).toBeVisible();
     await expect(page.getByText(labels.effortReason, { exact: true })).toBeVisible();
     const reasons = await page.locator('.focused-composer-reason').evaluateAll(nodes => nodes.map(node => {
@@ -233,7 +273,7 @@ for (const theme of ['dark', 'light']) {
       expect(reason.bottom).toBeLessThanOrEqual(500);
       expect(reason.right).toBeLessThanOrEqual(1100);
     }
-    await expectToolbar(page);
+    await expectToolbar(page, { component: true });
     await screenshot(page, info, 'disabled-reasons');
     await page.evaluate(async labels => {
       const { createFocusedComposerControls } = await import('/focused-composer-controls.mjs');
@@ -241,18 +281,18 @@ for (const theme of ['dark', 'light']) {
       document.querySelector('.focused-composer-controls').replaceWith(probe.element);
       probe.update(labels);
     }, labels);
-    await expect(model(page)).toHaveAttribute('title', labels.modelLabel);
-    await expect(effort(page)).toHaveAttribute('title', labels.effortLabel);
+    await expect(componentModel(page)).toHaveAttribute('title', labels.modelLabel);
+    await expect(componentEffort(page)).toHaveAttribute('title', labels.effortLabel);
     expect(await page.locator('.focused-composer-model-value').evaluate(node => node.scrollWidth > node.clientWidth)).toBe(true);
     await page.keyboard.press('Tab');
-    await model(page).focus();
-    await expect(model(page)).toBeFocused();
-    await expect(model(page)).toHaveCSS('outline-style', 'solid');
+    await componentModel(page).focus();
+    await expect(componentModel(page)).toBeFocused();
+    await expect(componentModel(page)).toHaveCSS('outline-style', 'solid');
     await page.keyboard.press('Tab');
     await expect(page.getByRole('button', { name: 'Scoped models', exact: true })).toBeFocused();
     await page.keyboard.press('Tab');
-    await expect(effort(page)).toBeFocused();
-    await expectToolbar(page);
+    await expect(componentEffort(page)).toBeFocused();
+    await expectToolbar(page, { component: true });
     await screenshot(page, info, 'long-values');
     await expect(page.locator('#promptInput')).toHaveValue(draft);
   });

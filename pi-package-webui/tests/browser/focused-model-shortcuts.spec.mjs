@@ -2,6 +2,7 @@ import { expect } from '@playwright/test';
 import { test } from './session-fixture.mjs';
 
 test.use({ video: 'off', serviceWorkers: 'block', viewport: { width: 1440, height: 900 } });
+const footerModel = page => page.locator('#statusBar .footer-model.footer-meta-action, #statusBar .footer-tui-model');
 const models = [
   { provider: 'fake', id: 'fake-model', name: 'Fake Model' },
   { provider: 'fake', id: 'second-model', name: 'Second Model' },
@@ -19,8 +20,8 @@ for (const layout of ['flat', 'advanced']) {
     await page.goto(ownership.baseURL);
     await expect(page.locator('#focusedWorkspace')).toBeVisible();
     await expect(page.locator('#modelSelect')).not.toBeEmpty();
-    await expect(page.locator('#statusBar .footer-model, #statusBar .footer-tui-model')).toBeVisible();
-    await expect(page.locator('.focused-composer-controls').getByRole('button', { name: /^Model:/ })).toBeVisible();
+    await expect(footerModel(page)).toBeVisible();
+    await expect(page.locator('.focused-composer-controls')).toBeHidden();
     const rail = page.getByRole('navigation', { name: 'Workspace destinations' });
     await rail.getByRole('button', { name: 'Settings', exact: true }).click();
     await rail.getByRole('button', { name: 'All tools', exact: true }).click();
@@ -37,7 +38,7 @@ for (const layout of ['flat', 'advanced']) {
     await page.screenshot({ path: testInfo.outputPath('focused-model-' + layout + '.png') });
     await page.keyboard.press('Escape');
     await expect(picker).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Scoped models', exact: true })).toBeFocused();
+    await expect(footerModel(page)).toBeFocused();
     await rail.getByRole('button', { name: 'All tools', exact: true }).click();
     await page.getByRole('searchbox', { name: 'Search all tools' }).fill('model shortcuts');
     const nextLayout = layout === 'advanced' ? 'simple' : 'advanced';
@@ -47,12 +48,12 @@ for (const layout of ['flat', 'advanced']) {
     await page.keyboard.press('Escape');
     await page.goto(ownership.baseURL + '/?shell=classic');
     await expect(page.locator('#focusedWorkspace')).toBeHidden();
-    await expect(page.locator('#statusBar .footer-model, #statusBar .footer-tui-model')).toBeVisible();
+    await expect(footerModel(page)).toBeVisible();
   });
 }
 
 for (const width of [1100, 1440]) {
-  test(`composer opens provider-scoped models directly at ${width}px`, async ({ page, ownership }, info) => {
+  test(`footer opens provider-scoped models directly at ${width}px`, async ({ page, ownership }, info) => {
     await page.setViewportSize({ width, height: 900 });
     await page.addInitScript(() => {
       localStorage.setItem('pi-webui-shell-preferences-v1', JSON.stringify({ v: 1, desktopLayout: 'focused' }));
@@ -63,9 +64,10 @@ for (const width of [1100, 1440]) {
         { provider: 'other', id: 'other-model', name: 'Other Model' }], patterns: ['*'], source: 'fixture', rpcRunning: true,
     } } }));
     await page.goto(ownership.baseURL);
-    await expect(page.locator('.focused-composer-model-value')).toContainText('fake-model');
+    await expect(footerModel(page)).toContainText('fake-model');
+    await expect(page.locator('.focused-composer-controls')).toBeHidden();
     await page.locator('#promptInput').fill('Keep my scoped model draft');
-    const trigger = page.getByRole('button', { name: 'Scoped models', exact: true });
+    const trigger = footerModel(page);
     await trigger.click();
     const picker = page.getByRole('listbox', { name: 'Scoped models by provider', exact: true });
     await expect(picker).toBeVisible();
@@ -86,21 +88,32 @@ for (const width of [1100, 1440]) {
     await expect(picker).toHaveCount(0);
     await expect(trigger).toBeFocused();
     await expect(trigger).toHaveAttribute('aria-expanded', 'false');
-    const footerTrigger = page.locator('#statusBar .footer-model.footer-meta-action, #statusBar .footer-tui-model');
-    await footerTrigger.click();
+    await trigger.click();
     await expect(picker).toBeVisible();
     await expect(current).toBeFocused();
     await page.keyboard.press('Escape');
-    await expect(footerTrigger).toBeFocused();
+    await expect(trigger).toBeFocused();
     await expect(page.locator('#promptInput')).toHaveValue('Keep my scoped model draft');
     await trigger.press('Enter');
     await expect(picker).toBeVisible();
     const applied = page.waitForResponse(response => new URL(response.url()).pathname === '/api/model' && response.request().method() === 'POST');
     await alternate.click();
-    expect(new URL((await applied).url()).searchParams.get('tab')).toBe(ownership.tabs[0].id);
+    const response = await applied;
+    expect(new URL(response.url()).searchParams.get('tab')).toBe(ownership.tabs[0].id);
+    expect(response.request().postDataJSON()).toEqual({ provider: 'fake', modelId: 'fake-model-alt' });
     await expect.poll(async () => (await ownership.api('/api/state?tab=' + ownership.tabs[0].id)).model.id).toBe('fake-model-alt');
     await expect(page.locator('#promptInput')).toHaveValue('Keep my scoped model draft');
-    await page.locator('.focused-composer-controls').getByRole('button', { name: /^Model:/ }).click();
+    await expect(trigger).toContainText('fake-model-alt');
+    await page.getByRole('navigation', { name: 'Workspace destinations' }).getByRole('button', { name: 'All tools', exact: true }).click();
+    await page.getByRole('searchbox', { name: 'Search all tools' }).fill('/model');
+    await page.locator('#shellToolsLauncher').getByRole('button', { name: '/model', exact: true }).click();
     await expect(page.locator('#nativeCommandTitle')).toHaveText('Choose model');
+    await page.locator('#nativeCommandSearch').fill('fake-model-alt');
+    await expect(page.locator('#nativeSelectorList').getByRole('option')).toHaveCount(1);
+    await expect(page.locator('#nativeSelectorList').getByRole('option')).toContainText('current');
+    await page.locator('#nativeCommandSearch').fill('');
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#nativeCommandDialog')).toBeHidden();
+    await expect(page.locator('#promptInput')).toHaveValue('Keep my scoped model draft');
   });
 }
