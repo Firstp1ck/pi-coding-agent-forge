@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+
+const codexSpeed = await readFile(new URL("../lib/server/codex-fast-mode.mjs", import.meta.url), "utf8");
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const [server, app, html, styles, serviceWorker, technical, development, packageRaw, lockRaw, optionalFeatureCatalog] = await Promise.all([
@@ -27,13 +30,13 @@ assert.equal(lock.packages?.[`node_modules/${packageName}`], undefined, "lockfil
 assert.match(optionalFeatureCatalog, /\["codexFastMode", "@firstpick\/pi-extension-codex-fast-mode", "\^0\.1\.0"\]/, "Optional Features should retain the Pi-installable Fast-mode package mapping");
 
 assert.match(server, /const OPTIONAL_FEATURE_PACKAGES = new Map\(OPTIONAL_FEATURE_CATALOG/, "server should derive Fast-mode installation from the shared Optional Features catalog");
-assert.match(server, /CODEX_FAST_MODE_STATUS_KEY = "codex-fast-mode"[\s\S]*?CODEX_FAST_MODE_COMMAND_NAME = "fast-mode"/, "server should use the extension-owned status and command contracts");
-assert.match(server, /function codexFastModeStatusState\(statusText\)[\s\S]*?codexSpeedModeFromStatus\(stripAnsi\(statusText\)\)/, "server should use the tested exact status parser");
-assert.match(server, /function codexFastModeSnapshot\(tab, patch = \{\}\)[\s\S]*?extensionStatusMap\(tab\)\.get\(CODEX_FAST_MODE_STATUS_KEY\)/, "server snapshots should come from remembered extension status");
-assert.match(server, /async function codexFastModeFeatureData[\s\S]*?codexFastModeSnapshot\(tab\)[\s\S]*?tabHasActiveOutput\(tab\)[\s\S]*?ultrafastModelEligible:[\s\S]*?CODEX_FAST_MODE_CREDIT_NOTICE/, "GET state should be tab-scoped, extension-owned, busy-aware, model-gated, and disclose credit use");
-assert.match(server, /async function waitForCodexFastModeStatus\(tab, desired\)[\s\S]*?snapshot\.statusKnown && snapshot\.mode === desired[\s\S]*?makeHttpError\(409,[\s\S]*?did not confirm/, "server should require bounded exact-mode confirmation");
-assert.match(server, /async function setCodexFastMode[\s\S]*?codexSpeedModeFromIntent\(body\)[\s\S]*?feature\.busy[\s\S]*?desired === "ultrafast" && !feature\.ultrafastModelEligible[\s\S]*?type: "prompt", message: `\/\$\{feature\.commandName\} \$\{argument\}`[\s\S]*?waitForCodexFastModeStatus\(tab, desired\)/, "PUT should validate intent, reject busy or ineligible tabs, invoke the extension, and require exact confirmed state");
-assert.doesNotMatch(server, /codexFastModeSnapshot\(tab, \{ enabled: desired/, "server must not infer effective Fast state from RPC success");
+assert.match(codexSpeed, /CODEX_FAST_MODE_STATUS_KEY = "codex-fast-mode"[\s\S]*?CODEX_FAST_MODE_COMMAND_NAME = "fast-mode"/, "server should use the extension-owned status and command contracts");
+assert.match(codexSpeed, /function codexFastModeStatusState\(statusText\)[\s\S]*?codexSpeedModeFromStatus\(stripAnsi\(statusText\)\)/, "server should use the tested exact status parser");
+assert.match(codexSpeed, /function codexFastModeSnapshot\(tab, patch = \{\}\)[\s\S]*?extensionStatusMap\(tab\)\.get\(CODEX_FAST_MODE_STATUS_KEY\)/, "server snapshots should come from remembered extension status");
+assert.match(codexSpeed, /async function codexFastModeFeatureData[\s\S]*?codexFastModeSnapshot\(tab\)[\s\S]*?tabHasActiveOutput\(tab\)[\s\S]*?ultrafastModelEligible:[\s\S]*?CODEX_FAST_MODE_CREDIT_NOTICE/, "GET state should be tab-scoped, extension-owned, busy-aware, model-gated, and disclose credit use");
+assert.match(codexSpeed, /async function waitForCodexFastModeStatus\(tab, desired\)[\s\S]*?snapshot\.statusKnown && snapshot\.mode === desired[\s\S]*?makeHttpError\(409,[\s\S]*?did not confirm/, "server should require bounded exact-mode confirmation");
+assert.match(codexSpeed, /async function setCodexFastMode[\s\S]*?codexSpeedModeFromIntent\(body\)[\s\S]*?feature\.busy[\s\S]*?desired === "ultrafast" && !feature\.ultrafastModelEligible[\s\S]*?type: "prompt", message: `\/\$\{feature\.commandName\} \$\{argument\}`[\s\S]*?waitForCodexFastModeStatus\(tab, desired\)/, "PUT should validate intent, reject busy or ineligible tabs, invoke the extension, and require exact confirmed state");
+assert.doesNotMatch(codexSpeed, /codexFastModeSnapshot\(tab, \{ enabled: desired/, "server must not infer effective Fast state from RPC success");
 assert.match(server, /url\.pathname === "\/api\/codex-fast-mode" && req\.method === "GET"[\s\S]*?url\.pathname === "\/api\/codex-fast-mode" && req\.method === "PUT"/, "server should expose GET and PUT routes");
 
 assert.match(html, /<label for="fastOutputModeSelect">Compact mode \(Experimental\)<\/label>[\s\S]*?<option value="compact-v1">Compact<\/option>/, "legacy output processing should be presented as Compact mode while retaining compact-v1");
@@ -58,5 +61,7 @@ assert.match(technical, /Normal \/ Fast \/ Ultrafast[\s\S]*?Pro \$500/, "technic
 // Intent preserved: browser-asset changes must advance the coherent cache tuple.
 assert.match(serviceWorker, /pi-webui-pwa-v164[\s\S]*?"\/codex-speed-mode\.mjs"/, "PWA should refresh and cache the shared mode helper");
 assert.match(html, /data-app-src="\/app\.js\?v=193"/, "browser module URL should be cache-busted for speed-mode wiring");
+
+assert.match(server, /createCodexFastModeService\(\{[\s\S]*packageName: OPTIONAL_FEATURE_PACKAGES\.get\("codexFastMode"\)/, "server must wire the speed adapter to the canonical package catalog");
 
 console.log("codex-fast-mode-static.test.mjs passed");

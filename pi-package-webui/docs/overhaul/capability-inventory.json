@@ -49,8 +49,8 @@
     },
     {
       "file": "pi-package-webui/bin/pi-webui.mjs",
-      "bytes": 576267,
-      "sha256": "292b4574d9416332e48fdcb1cb5cd35d51aab5f06f25db28201c856e9f53b880"
+      "bytes": 538710,
+      "sha256": "4482e222a4b7a2c5c2fe428acd410c7e12cfe6e971fb9403e0d0ef555c178097"
     },
     {
       "file": "pi-package-webui/index.ts",
@@ -233,6 +233,16 @@
       "sha256": "e7f339f3cf8d80e998b9a5f65a2dc84403d1b93e455aa2f5422277b756eb7046"
     },
     {
+      "file": "pi-package-webui/lib/server/conversation-voice.mjs",
+      "bytes": 18275,
+      "sha256": "1ce283041f801837d04e8b7aa77f52f83eca026e5ad308aa5a7673c78af567ba"
+    },
+    {
+      "file": "pi-package-webui/lib/server/extension-ui-requests.mjs",
+      "bytes": 4018,
+      "sha256": "6aa6b264a8429c6d5c7c1c1dfa7688711c3bdad091404564cfda153c7c3509b6"
+    },
+    {
       "file": "pi-package-webui/lib/server/git-generation.mjs",
       "bytes": 20475,
       "sha256": "4ce7613d71dc5109a55be69df45399ddd4fdde425d90ae93484e6cffd285c904"
@@ -253,9 +263,24 @@
       "sha256": "577ed5a17f89aade01dcbfdb3f518d086c0bfdfdb5f531db63094658b1702f09"
     },
     {
+      "file": "pi-package-webui/lib/server/helper-requests.mjs",
+      "bytes": 3211,
+      "sha256": "024d08e86a4346888741d6225f7b595e74299b67b8aa78dc85c4d77ba08454ca"
+    },
+    {
+      "file": "pi-package-webui/lib/server/rpc-transports.mjs",
+      "bytes": 13437,
+      "sha256": "bd3840fae89128a64f756d160ae6f84cd85cc9268cc8bbf3098efcbe60c545e9"
+    },
+    {
       "file": "pi-package-webui/lib/server/settings-store.mjs",
       "bytes": 17687,
       "sha256": "1587f3cf6007623f59945087ac99fbfb87bb7c61a6e5e7dc5ceca4b8518f4c1a"
+    },
+    {
+      "file": "pi-package-webui/lib/server/sse-delivery.mjs",
+      "bytes": 4419,
+      "sha256": "6afb2a8b317716612e23ee5046f503c4690b0404183a057af329997e96af39be"
     },
     {
       "file": "pi-package-webui/lib/server/workspace-files.mjs",
@@ -684,8 +709,8 @@
     },
     {
       "file": "plans/planned/webui-design-architecture-overhaul.md",
-      "bytes": 256827,
-      "sha256": "8ed1e05516e946854457044cf204845b8e62b75ae5e636c5d952a95fe0d2d6f1"
+      "bytes": 260307,
+      "sha256": "6574748c7b483a7feaf2a1d279626d351daddb6b66a2c8ca27d08bed57368d10"
     }
   ],
   "reconciliation": {

@@ -1,12 +1,23 @@
 import { createActivityAgentsController } from "../public/activity-agents-controller.mjs";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+
+
 import vm from "node:vm";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+const extensionRequests = await readFile(new URL("../lib/server/extension-ui-requests.mjs", import.meta.url), "utf8");
+const rpcProtocol = await readFile(new URL("../lib/rpc-supervisor-protocol.mjs", import.meta.url), "utf8");
+const rpcTransports = await readFile(new URL("../lib/server/rpc-transports.mjs", import.meta.url), "utf8");
+const voiceService = await readFile(new URL("../lib/server/conversation-voice.mjs", import.meta.url), "utf8");
+const gitWorktrees = await readFile(new URL("../lib/server/git-worktree-sessions.mjs", import.meta.url), "utf8");
+const gitMutations = await readFile(new URL("../lib/server/git-mutations.mjs", import.meta.url), "utf8");
+const gitGeneration = await readFile(new URL("../lib/server/git-generation.mjs", import.meta.url), "utf8");
+const conversationMode = await readFile(new URL("../lib/server/conversation-mode.mjs", import.meta.url), "utf8");
 const gitReads = await readFile(new URL("../lib/server/git-reads.mjs", import.meta.url), "utf8");
 const runnerService = await readFile(new URL("../lib/server/app-runners.mjs", import.meta.url), "utf8");
+
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const agentsControllerSource = await readFile(join(root, "public", "activity-agents-controller.mjs"), "utf8");
 const runnersControllerSource = await readFile(join(root, "public", "project-runners-controller.mjs"), "utf8");
@@ -734,7 +745,7 @@ assert.match(app, /function openGitChangesDialog\(requestedTabId = activeTabId\)
 assert.doesNotMatch(app, /options\.onClick = openGitChangesDialog/, "git changes handlers must not forward click events as tab IDs");
 assert.match(app, /async function loadGitChangesDialog[\s\S]*api\("\/api\/git-changes"/, "git changes modal should load diff data from the server endpoint");
 assert.match(app, /"Resolve with agent"[\s\S]*api\("\/api\/git-operation\/resolve-with-agent", \{ method: "POST"[\s\S]*switchToResponseTab\(response\)/, "conflict panel should open the resolution agent in the new tab returned by the server");
-assert.match(server, /function gitConflictResolutionAgentPrompt\(operation\)[\s\S]*Conflicted files:[\s\S]*Do not continue, skip, abort, commit, reset, or push[\s\S]*diff-filter=U is empty/, "server should build a bounded conflict handoff with operation safety and verification instructions");
+assert.match(gitWorktrees, /function gitConflictResolutionAgentPrompt\(operation\)[\s\S]*Conflicted files:[\s\S]*Do not continue, skip, abort, commit, reset, or push[\s\S]*diff-filter=U is empty/, "server should build a bounded conflict handoff with operation safety and verification instructions");
 assert.match(server, /"\/api\/git-operation\/resolve-with-agent"[\s\S]*openGitConflictResolutionAgentTab\(tab\)/, "server should expose conflict-resolution agent tab creation through the git operation routes");
 assert.match(app, /async function pullGitChangesDialog\(\)[\s\S]*api\("\/api\/git-changes\/pull", \{ method: "POST"/, "git changes modal should post to the pull endpoint from the Pull button");
 assert.match(app, /async function pullGitFooterSync\(tabId = activeTabId, \{ syncValue = "" \} = \{\}\)[\s\S]*api\("\/api\/git-changes\/pull", \{ method: "POST", body: \{ remote: "origin" \}, tabId \}\)[\s\S]*requestGitFooterWebuiPayload\(tabContext, \{ force: true \}\)/, "incoming-only footer Sync should pull directly from origin and refresh the footer payload");
@@ -952,7 +963,7 @@ assert.match(gitReads, /async function readGitChanges\(cwd\)[\s\S]*?const diffAr
 assert.match(gitReads, /\["status", "--porcelain=2", "--branch", "--untracked-files=all"\][\s\S]*?summarizeGitPorcelainStatus\(porcelainStatusText\)/, "server should derive behind/ahead from locale-independent porcelain status so the Pull button activates after fetch");
 assert.match(gitReads, /async function readGitIncomingChanges\(root, summary\)[\s\S]*?"HEAD\.\.@\{upstream\}"/, "server should collect incoming upstream diffs when remote commits are behind");
 assert.match(server, /url\.pathname === "\/api\/git-changes" && req\.method === "GET"/, "server should expose GET /api/git-changes for the changes modal");
-assert.match(server, /async function pullGitChanges\(cwd, \{ remote \} = \{\}\)[\s\S]*?const pullArgs = \["pull", "--ff-only"\];[\s\S]*?remote === "origin"[\s\S]*?pullArgs\.push\("origin"\)[\s\S]*?runGuardedGitMutation\(pullArgs/, "server should allow the guarded pull endpoint to target origin explicitly");
+assert.match(gitMutations, /async function pullGitChanges\(cwd, \{ remote \} = \{\}\)[\s\S]*?const pullArgs = \["pull", "--ff-only"\];[\s\S]*?remote === "origin"[\s\S]*?pullArgs\.push\("origin"\)[\s\S]*?runGuardedGitMutation\(pullArgs/, "server should allow the guarded pull endpoint to target origin explicitly");
 assert.match(server, /url\.pathname === "\/api\/git-changes\/pull" && req\.method === "POST"[\s\S]*?pullGitChanges\(tab\.cwd, \{ remote: body\?\.remote \}\)/, "server should expose POST /api/git-changes/pull for modal and footer Pull actions");
 assert.match(css, /@media \(max-width: 1050px\)[\s\S]*?\.footer-line-meta \{[\s\S]*?display:\s*flex;[\s\S]*?flex-wrap:\s*wrap;[\s\S]*?\.footer-line-meta \.footer-meta \{[\s\S]*?flex:\s*1 1 var\(--footer-chip-min-width\);[\s\S]*?width:\s*auto;[\s\S]*?\.footer-workspace,\n\s+\.footer-model,\n\s+\.footer-thinking \{ grid-column:\s*auto; \}/, "narrow git-footer metadata should wrap like the top metric row instead of forcing a two-column grid");
 assert.match(css, /@media \(max-width: 720px\), \(max-device-width: 720px\), \(pointer: coarse\) and \(hover: none\)[\s\S]*?\.context-meter-bar \{ display:\s*none !important; \}/, "mobile should hide the WebUI context meter that appears after high context usage");
@@ -1556,9 +1567,10 @@ assert.equal(await resolveSubagentDisplayTitleContext.runResolveSubagentDisplayT
 assert.equal(subagentTitleMessageReads, 1, "title recovery should read the existing parent conversation once and must not require spawning another subagent");
 assert.match(server, /url\.pathname === "\/api\/subagents\/output" && req\.method === "GET"[\s\S]*canonicalWebuiSubagentOutputData\(groupId, runId, agentId\)[\s\S]*webuiSubagentOutputData\(getRequestedTab\(req, url\), runId, agentId\)/, "server should expose selected running subagent output only through its owning group or tab");
 assert.match(server, /rememberWebuiSubagentsStatusEvent\(tab, event\)/, "server should ingest the helper's structured subagent status without forwarding internal JSON to the browser footer");
-assert.match(server, /PI_RPC_JSONL_LINE_MAX_BYTES = 32 \* 1024 \* 1024/, "Pi RPC JSONL parsing should use an explicit line-size limit with inline-image headroom");
-assert.match(server, /function ensureStderrMirrorErrorHandler\(stream\)[\s\S]*stream\.on\("error"/, "Pi stderr mirroring should contain asynchronous closed-sink failures");
-assert.match(server, /type: "pi_stdout_line_too_large"[\s\S]*discardingOversizedLine/, "oversized unterminated Pi RPC lines should be discarded until their newline");
+assert.match(rpcProtocol, /PI_RPC_JSONL_LINE_MAX_BYTES = 32 \* 1024 \* 1024/, "Pi RPC JSONL parsing should use an explicit line-size limit with inline-image headroom");
+assert.match(rpcTransports, /import \{ PI_RPC_JSONL_LINE_MAX_BYTES \} from "\.\.\/rpc-supervisor-protocol\.mjs"/, "direct and supervised transports must share the protocol line limit");
+assert.match(rpcTransports, /function ensureStderrMirrorErrorHandler\(stream\)[\s\S]*stream\.on\("error"/, "Pi stderr mirroring should contain asynchronous closed-sink failures");
+assert.match(rpcTransports, /type: "pi_stdout_line_too_large"[\s\S]*discardingOversizedLine/, "oversized unterminated Pi RPC lines should be discarded until their newline");
 assert.match(helper, /SUBAGENT_RPC_REQUEST_EVENT = "subagents:rpc:v1:request"/, "Web UI helper should use pi-subagents' stable status RPC");
 assert.match(helper, /case "subagent-output":[\s\S]*subagentOutputSnapshot\(payload\)/, "Web UI helper should return bounded live state and recent output for the selected child agent");
 assert.match(helper, /function subagentTranscriptOutput\(sessionFile\)[\s\S]*const empty = \{ recentOutput: \[\], transcript: \[\] \}[\s\S]*transcript: subagentTranscriptMessages\(boundedCandidates\)/, "subagent transcript extraction should return bounded structured entries alongside recentOutput");
@@ -1681,8 +1693,8 @@ assert.match(server, /url\.pathname === "\/api\/git-worktrees" && req\.method ==
 assert.match(server, /url\.pathname === "\/api\/git-worktrees\/open" && req\.method === "POST"[\s\S]*openExistingGitWorktreeTab\(tab, body\)/, "server should expose existing git worktree opening for branch tabs");
 assert.match(server, /url\.pathname === "\/api\/git-worktrees" && req\.method === "DELETE"[\s\S]*requireLocalhost\(req, "Removing Git worktrees is only allowed from localhost"\)[\s\S]*removeGitWorktreeForTab\(tab, body\)/, "server should guard destructive git worktree removal behind localhost and confirmation");
 assert.match(server, /url\.pathname === "\/api\/git-branch"[\s\S]*const remoteRef = requestedRemoteRef\(body\);[\s\S]*switchGitBranch\(tab\.cwd, body\.branch, \{ create: body\.create === true, remoteRef \}\)/, "server should preserve optional exact remote-ref intent for advanced footer branch switching");
-assert.match(server, /runGitReadCommandDetailed\(root, \["for-each-ref", "--format=%\(refname\)%09%\(symref\)"[\s\S]*remoteBranchesTruncated: remoteData\.truncated === true[\s\S]*item\.remote !== true && item\.name === targetBranch/, "server branch listing should parse full remote refs, expose truncation, and keep local branch guards local-only");
-assert.match(server, /async function switchGitBranch[\s\S]*BRANCH_CHECKED_OUT_ELSEWHERE[\s\S]*const args = create \? \["switch", "-c", targetBranch\] : \["switch", targetBranch\]/, "server branch switching should refuse branches checked out in another worktree before git switch");
+assert.match(gitMutations, /runGitReadCommandDetailed\(root, \["for-each-ref", "--format=%\(refname\)%09%\(symref\)"[\s\S]*remoteBranchesTruncated: remoteData\.truncated === true[\s\S]*item\.remote !== true && item\.name === targetBranch/, "server branch listing should parse full remote refs, expose truncation, and keep local branch guards local-only");
+assert.match(gitMutations, /async function switchGitBranch[\s\S]*BRANCH_CHECKED_OUT_ELSEWHERE[\s\S]*const args = create \? \["switch", "-c", targetBranch\] : \["switch", targetBranch\]/, "server branch switching should refuse branches checked out in another worktree before git switch");
 assert.match(app, /let latestStats = null/, "default footer should retain session stats for token and context display");
 assert.match(app, /async function refreshStats\(tabContext = activeTabContext\(\)\)[\s\S]*api\("\/api\/stats"/, "default footer should fetch session stats");
 assert.match(app, /function renderMinimalFooter\(\)[\s\S]*stats: fallbackFooterStats\(\)/, "minimal default footer should include token, cost, and context stats");
@@ -1704,7 +1716,7 @@ assert.match(app, /if \(response\.data\?\.level\) requestGitFooterWebuiPayload\(
 assert.match(app, /Loading git footer status…/, "missing git footer payload should show a loading state before declaring the extension unavailable");
 assert.match(app, /GIT_FOOTER_WEBUI_PAYLOAD_CACHE_KEY/, "git footer payloads should be cached across Web UI reloads");
 assert.match(app, /function setOptionalFeatureDisabled\(featureId, disabled\)[\s\S]*clearGitFooterWebuiPayloadCache\(\)/, "changing the git footer feature toggle should invalidate the cached footer payload");
-const workspaceInfoSource = server.match(/async function getWorkspaceInfo[\s\S]*?\r?\n}\r?\n\r?\nlet activeGitWorkflowProcess/)?.[0] || "";
+const workspaceInfoSource = server.match(/async function getWorkspaceInfo[\s\S]*?\r?\n}/)?.[0] || "";
 assert.ok(workspaceInfoSource, "server workspace info source should be inspectable");
 assert.doesNotMatch(workspaceInfoSource, /runCommand\("git"|branchStatus|isRepo/, "Web UI workspace endpoint should not duplicate git footer status collection");
 assert.match(app, /function renderOptionalFeatureDependentDisplays\(\)[\s\S]*renderOptionalFeatureControls\(\);[\s\S]*renderThemeSelect\(\);[\s\S]*renderWidgets\(\);[\s\S]*renderStatus\(\);[\s\S]*renderCommands\(\);[\s\S]*renderAllMessages\(\{ preserveScroll: true, forceRebuild: true \}\);[\s\S]*if \(streamRawText\) renderStreamingAssistantText\(\);/, "optional feature toggles should immediately refresh visible controls, commands, transcript, and live stream displays");
@@ -1889,7 +1901,7 @@ assert.match(app, /gitWorkflow\.step === "generate"\) \{\n\s+const commitInputBu
 assert.match(app, /gitWorkflow\.step === "message"\) \{[\s\S]*const commitInputButton = renderGitWorkflowManualCommitInput\(\{ appendCommitButton: false \}\);[\s\S]*addGitWorkflowAction\("Regenerate"[\s\S]*gitWorkflowActions\.append\(commitInputButton\)/, "Commit choice stage should place Commit input immediately after Regenerate");
 assert.match(app, /async function commitGitWorkflow\(variant[\s\S]*variant === "input"[\s\S]*message: inputMessage/, "Commit input should send the typed message to the git workflow commit API");
 assert.match(app, /const donePatch = variant === "input"[\s\S]*message: true, commit: true/, "Commit input should mark both message and commit workflow processes done");
-assert.match(server, /\["short", "long", "input"\][\s\S]*cleanGitCommitMessageInput\(body\.message\)[\s\S]*git commit -m <input message>/, "server should accept typed git workflow commit messages");
+assert.match(gitMutations, /\["short", "long", "input"\][\s\S]*cleanGitCommitMessageInput\(body\.message\)[\s\S]*git commit -m <input message>/, "server should accept typed git workflow commit messages");
 assert.match(css, /\.git-workflow-message-input-row \{[\s\S]*flex:\s*1 1 100%/, "manual git workflow commit input should span the Message stage actions row");
 assert.match(css, /\.git-workflow-actions button\[data-tooltip\]::after \{[\s\S]*content:\s*attr\(data-tooltip\)[\s\S]*white-space:\s*pre-line/, "guided git workflow action tooltips should render multiline step lists");
 assert.match(app, /function gitBranchNamePromptMessage\(tabId = gitWorkflowActionTabId\(\)\)[\s\S]*hasLoadedGuidedGitNativeCommand\("git-branch-name", tabId\)[\s\S]*"\/git-branch-name"/, "guided git workflow should invoke native PR branch-name generation only when the extension command is available");
@@ -1909,23 +1921,23 @@ assert.match(app, /async function publishGitWorkflowRepository\(tabId, failure\)
 assert.match(app, /async function publishGitWorkflowRepository\([\s\S]*const confirmed = await appConfirmText\(\[[\s\S]*Repository name: \$\{repoName\}[\s\S]*Visibility: \$\{visibility\}[\s\S]*Branch to push: \$\{branch\}[\s\S]*Resulting remote: origin[\s\S]*if \(!confirmed\) return false;[\s\S]*gitWorkflowRequest\("\/api\/git-workflow\/publish", \{ body: \{ visibility, confirmed: true \}/, "guided git publication should confirm the derived name and omit a client-controlled name from the publish request");
 assert.match(app, /async function publishGitWorkflowRepository\([\s\S]*Published \$\{result\.repoName \|\| repoName\} as \$\{result\.visibility \|\| visibility\}\.[\s\S]*Remote: \$\{result\.remote \|\| "origin"\}[\s\S]*Branch: \$\{result\.branch \|\| branch\}[\s\S]*scheduleRefreshFooter\(\)/, "successful publication should report branch/remote metadata and refresh the footer");
 assert.doesNotMatch(app, /function promptGitPublishRepoName\(/, "publication should not ask the user to name a repository");
-assert.match(server, /case "\/api\/git-workflow\/publish": \{[\s\S]*const root = await getGitRoot\(cwd\);[\s\S]*const repoName = cleanGitHubRepoName\(path\.basename\(root\)\);[\s\S]*\["repo", "create", repoName, `--\$\{visibility\}`, "--source", "\.", "--remote", "origin", "--push"\][\s\S]*\{ cwd: root, timeoutMs:/, "server publication should derive the Git root directory name and let gh use system configuration while adding origin and pushing");
+assert.match(gitMutations, /async function publishGitRepository\(cwd, body = \{\}\) \{[\s\S]*const root = await getGitRoot\(cwd\);[\s\S]*const repoName = cleanGitHubRepoName\(path\.basename\(root\)\);[\s\S]*\["repo", "create", repoName, `--\$\{visibility\}`, "--source", "\.", "--remote", "origin", "--push"\][\s\S]*\{ cwd: root, timeoutMs:/, "server publication should derive the Git root directory name and let gh use system configuration while adding origin and pushing");
 assert.match(html, /<select id="textPromptSelect" class="dialog-input" aria-labelledby="textPromptTitle" hidden><\/select>/, "the application prompt should provide a native dropdown control");
 assert.match(app, /function appPromptSelect\([\s\S]*placeholderOption\.disabled = true;[\s\S]*placeholderOption\.selected = true;[\s\S]*select\.value = "";/, "selection prompts should require an explicit choice with no preselected value");
 assert.match(app, /async function promptGitPublishVisibility\(repoName\) \{[\s\S]*await appPromptSelect\(\{[\s\S]*\{ value: "public", label: "Public" \}[\s\S]*\{ value: "private", label: "Private" \}[\s\S]*placeholder: "Choose visibility…"/, "repository visibility should use a public/private dropdown with no default");
 assert.doesNotMatch(app, /async function promptGitPublishVisibility\(repoName\) \{[\s\S]{0,500}window\.prompt/, "repository visibility should not use the browser text prompt");
 assert.match(app, /function cleanGitPublishVisibilityInput\(value\)[\s\S]*if \(visibility !== "public" && visibility !== "private"\)[\s\S]*nothing was published/, "publication visibility must be exactly public or private");
 assert.doesNotMatch(app, /visibility = "(?:public|private)"/, "publication visibility should never be defaulted in the frontend");
-assert.match(server, /async function gitAddAllPayload\([\s\S]*platform\(\) === "win32"[\s\S]*findWindowsReservedGitPath\([\s\S]*windowsReservedGitPathFailure\(/, "guided git add should preflight Windows-reserved untracked paths before staging");
+assert.match(gitMutations, /async function gitAddAllPayload\([\s\S]*platform\(\) === "win32"[\s\S]*findWindowsReservedGitPath\([\s\S]*windowsReservedGitPathFailure\(/, "guided git add should preflight Windows-reserved untracked paths before staging");
 assert.match(app, /Pre-commit verification reminder[\s\S]*Continue with this commit/, "configured verification reminders should run before committing");
-assert.match(server, /function gitWorkflowGenerationProfileArgument\(profile\)[\s\S]*--firstpick-webui-generation-profile=/, "server should encode the configured generation profile for the native extension command");
-assert.match(server, /async function dispatchGitWorkflowGenerationAttempt\([\s\S]*record\.message = gitWorkflowGenerationPrompt\(record\.kind, record\.preferences, record\.nativeCommandName, profile\)[\s\S]*type: "prompt"/, "server should dispatch the configured generation profile without changing the tab profile");
-assert.match(server, /function consumeGitWorkflowGenerationEvent\(tab, event[\s\S]*event\?\.type !== "agent_settled"[\s\S]*settleGitWorkflowGeneration\(tab, record, settlement\)/, "server should settle the owned Guided Git attempt only after agent settlement");
-assert.match(server, /async function finishGitWorkflowGeneration\(tab, record[\s\S]*if \(tab\.gitWorkflowGeneration === record\) tab\.gitWorkflowGeneration = null;/, "server should finish Guided Git generation without restoring or changing the active tab model and effort");
+assert.match(gitGeneration, /function gitWorkflowGenerationProfileArgument\(profile\)[\s\S]*--firstpick-webui-generation-profile=/, "server should encode the configured generation profile for the native extension command");
+assert.match(gitGeneration, /async function dispatchGitWorkflowGenerationAttempt\([\s\S]*record\.message = gitWorkflowGenerationPrompt\(record\.kind, record\.preferences, record\.nativeCommandName, profile\)[\s\S]*type: "prompt"/, "server should dispatch the configured generation profile without changing the tab profile");
+assert.match(gitGeneration, /function consumeGitWorkflowGenerationEvent\(tab, event[\s\S]*event\?\.type !== "agent_settled"[\s\S]*settleGitWorkflowGeneration\(tab, record, settlement\)/, "server should settle the owned Guided Git attempt only after agent settlement");
+assert.match(gitGeneration, /async function finishGitWorkflowGeneration\(tab, record[\s\S]*if \(tab\.gitWorkflowGeneration === record\) tab\.gitWorkflowGeneration = null;/, "server should finish Guided Git generation without restoring or changing the active tab model and effort");
 assert.match(server, /case "\/api\/git-workflow\/branch-name": \{[\s\S]*generationId[\s\S]*readGitWorkflowBranchName\(cwd, \{ generationId/, "server should expose exactly correlated generated branch-name loading for the guided PR workflow");
 assert.match(server, /case "\/api\/git-workflow\/branch":[\s\S]*createGitWorkflowBranchWorktree\(tab, body\)/, "server should route guided PR branch creation through worktree tabs");
-assert.match(server, /async function createGitWorkflowBranchWorktree\(tab, body = \{\}\)[\s\S]*expectedStagedContentHashFromBody\(body\)[\s\S]*snapshotGitWorkflowBranchState\(root, tab\.cwd, expectedStagedContentHash\)[\s\S]*applyGitWorkflowBranchStateToWorktree\(snapshot, worktreePath\)[\s\S]*openWorktreeResultForTab\(tab, createdResult/, "guided PR worktree creation should verify and copy exact staged state before opening the worktree tab");
-assert.match(server, /case "\/api\/git-workflow\/create-pr":[\s\S]*runGitHubWorkflowCommand\(\["pr", "create"/, "server should create PRs with the GitHub CLI after confirmation");
+assert.match(gitWorktrees, /async function createGitWorkflowBranchWorktree\(tab, body = \{\}\)[\s\S]*expectedStagedContentHashFromBody\(body\)[\s\S]*snapshotGitWorkflowBranchState\(root, tab\.cwd, expectedStagedContentHash\)[\s\S]*applyGitWorkflowBranchStateToWorktree\(snapshot, worktreePath\)[\s\S]*openWorktreeResultForTab\(tab, createdResult/, "guided PR worktree creation should verify and copy exact staged state before opening the worktree tab");
+assert.match(gitMutations, /async function createGitWorkflowPr\(cwd, body = \{\}\)[\s\S]*runGitHubWorkflowCommand\(\["pr", "create"/, "server should create PRs with the GitHub CLI after confirmation");
 assert.doesNotMatch(app, /gitWorkflowVisibleTabId|Workflow belongs to/, "guided git workflow should not pin or show workflows outside their owning terminal tab");
 assert.match(app, /function renderReleaseNpmOutputWidget\(\)/, "release-npm live output should use a specialized Web UI renderer");
 assert.match(app, /async function refreshAppRunners\(tabContext = activeTabContext\(\)\)/, "frontend should load detected app runners for the active tab cwd");
@@ -2429,8 +2441,8 @@ assert.match(server, /case "response":[\s\S]*?event\.command === "get_state"[\s\
 assert.match(server, /async function listTabsWithReconciledActivity\(\)/, "server tab listing should reconcile stale working tabs before returning metadata");
 assert.match(server, /tabs: await listTabsWithReconciledActivity\(\)/, "GET /api/tabs should use reconciled tab activity metadata");
 assert.match(server, /tabActivity: tabActivitySnapshot\(tab\)/, "server should expose tab activity over tab metadata and events");
-assert.match(server, /const EXTENSION_UI_BLOCKING_METHODS = new Set\(\["select", "confirm", "input", "editor"\]\)/, "server should know which extension UI requests can block Pi runs");
-assert.match(server, /function trackPendingExtensionUiRequest\(tab, event\)/, "server should track blocking extension UI requests per tab");
+assert.match(extensionRequests, /const EXTENSION_UI_BLOCKING_METHODS = new Set\(\["select", "confirm", "input", "editor"\]\)/, "server should know which extension UI requests can block Pi runs");
+assert.match(extensionRequests, /function trackPendingExtensionUiRequest\(tab, event\)/, "server should track blocking extension UI requests per tab");
 assert.match(server, /pendingExtensionUiRequests: new Map\(\)/, "new tabs should initialize pending extension UI request storage");
 assert.match(server, /extensionStatuses: new Map\(\)/, "new tabs should initialize replayable extension status storage");
 assert.match(server, /extensionWidgets: new Map\(\)/, "new tabs should initialize replayable extension widget storage");
@@ -2444,13 +2456,13 @@ assert.match(server, /trackPendingExtensionUiRequest\(tab, scopedEvent\)/, "RPC 
 assert.match(server, /scopedEvent = \{ \.\.\.scopedEvent,[\s\S]*?pendingExtensionUiRequestCount: pendingExtensionUiRequests\(tab\)\.length \}/, "RPC events should broadcast pending blocker counts for tab indicators");
 assert.match(server, /function replayExtensionStatuses\(tab, client\)[\s\S]*method: "setStatus"/, "server should replay latest extension statuses on SSE reconnect");
 assert.match(server, /function replayExtensionWidgets\(tab, client\)[\s\S]*method: "setWidget"/, "server should replay latest extension widgets on SSE reconnect");
-assert.match(server, /function replayPendingExtensionUiRequests\(tab, client\)/, "server should be able to replay missed extension UI requests on SSE reconnect");
+assert.match(extensionRequests, /function replayPendingExtensionUiRequests\(tab, client\)/, "server should be able to replay missed extension UI requests on SSE reconnect");
 assert.match(server, /replayExtensionStatuses\(tab, client\);\n\s+replayExtensionWidgets\(tab, client\);[\s\S]*?webui_session_summary[\s\S]*?replayPendingExtensionUiRequests\(tab, client\)/, "SSE connections should replay extension statuses, widgets, and the tab-scoped summary before pending blockers");
 assert.match(server, /pendingExtensionUiRequests: pendingExtensionUiRequestSummaries\(tab\)/, "detailed Web UI status should expose pending extension UI blockers");
 assert.match(server, /resolvePendingExtensionUiRequest\(tab, payload\.id\)/, "extension UI responses should clear the pending blocker cache");
 assert.match(server, /type: "webui_extension_ui_resolved"[\s\S]*?pendingExtensionUiRequestCount/, "extension UI responses should notify clients that a blocker resolved");
 assert.match(server, /command\.type === "abort"[\s\S]*?cancelPendingExtensionUiRequests\(tab\)/, "abort should cancel hidden pending extension UI requests");
-assert.match(server, /type: "webui_extension_ui_cancelled"/, "server should notify browsers when pending extension UI requests are cancelled");
+assert.match(extensionRequests, /type: "webui_extension_ui_cancelled"/, "server should notify browsers when pending extension UI requests are cancelled");
 assert.match(server, /async function handleNativeSlashCommand\(tab, body, req\)/, "server should intercept supported native slash commands with request context for security guards");
 assert.match(server, /const restoreTabs = await readRestoreTabsFromEnv\(\)/, "server should accept private restart tab restore descriptors from the launcher environment");
 assert.match(server, /delete process\.env\.PI_WEBUI_RESTORE_FILE[\s\S]*delete process\.env\.PI_WEBUI_RESTORE_TABS/, "server should avoid leaking private or obsolete restore descriptors into spawned Pi RPC processes");
@@ -2552,15 +2564,15 @@ assert.match(optionalFeatureCatalog, /\["tuiSkillsCommand", "@firstpick\/pi-exte
 assert.match(optionalFeatureCatalog, /\["tuiToolsCommand", "@firstpick\/pi-extension-tools"/, "catalog should allow installing the TUI tools optional feature");
 assert.match(optionalFeatureCatalog, /\["questionnaire", "@firstpick\/pi-package-questionnaire"/, "catalog should allow explicitly installing the native questionnaire optional feature");
 assert.match(optionalFeatureCatalog, /\["naturalConversation", "@firstpick\/pi-package-natural-conversation"/, "catalog should know the standalone Natural Conversation package for status and install guidance");
-assert.match(server, /const NATURAL_CONVERSATION_COMMAND_NAMES = \["talk", "voice", "conversation"\]/, "server should detect Natural Conversation from RPC-visible command aliases");
-assert.match(server, /function naturalConversationFeatureData\(tab[\s\S]*getCommandData\(tab, \{ annotateSkills: false \}\)[\s\S]*available[\s\S]*mode/, "server should expose a capability-based Natural Conversation feature snapshot");
+assert.match(conversationMode, /const NATURAL_CONVERSATION_COMMAND_NAMES = \["talk", "voice", "conversation"\]/, "server should detect Natural Conversation from RPC-visible command aliases");
+assert.match(conversationMode, /function naturalConversationFeatureData\(tab[\s\S]*getCommandData\(tab, \{ annotateSkills: false \}\)[\s\S]*available[\s\S]*mode/, "server should expose a capability-based Natural Conversation feature snapshot");
 assert.match(server, /url\.pathname === "\/api\/features\/natural-conversation" && req\.method === "GET"[\s\S]*naturalConversationFeatureData\(tab\)/, "server should expose Natural Conversation feature metadata");
 assert.match(server, /url\.pathname === "\/api\/conversation-mode" && req\.method === "POST"[\s\S]*setNaturalConversationMode\(tab, body\)/, "server should toggle Natural Conversation through the package-owned slash command");
 assert.match(server, /url\.pathname === "\/api\/stt\/transcribe"[\s\S]*handleNaturalConversationSttTranscribe[\s\S]*url\.pathname === "\/api\/tts\/speech"[\s\S]*handleNaturalConversationTtsSpeech/, "server should expose opt-in Natural Conversation STT/TTS fallback routes");
-assert.match(server, /PI_VOICE_STT_URL[\s\S]*PI_VOICE_TTS_URL[\s\S]*GROQ_API_KEY[\s\S]*OPENAI_API_KEY[\s\S]*CLOUDFLARE_API_TOKEN/, "server voice fallbacks should be gated by server-side provider environment variables");
-assert.match(server, /function requireRemoteMicConsentForStt\(req, body = \{\}\)[\s\S]*remoteMicStreamingConsentAccepted/, "server STT fallback should require explicit remote microphone streaming consent for remote clients");
-assert.match(server, /function ensureNaturalConversationPromptSafety\(tab, command\)[\s\S]*setThinkingLevelForTab\(tab, "off"/, "server should force thinking off before WebUI prompts while conversation mode is active");
-assert.match(server, /function enforceNaturalConversationCommandAllowed\(tab, command\)[\s\S]*thinking is forced off[\s\S]*slash commands are blocked from the Web UI shell/, "server should block unsafe direct RPC\/WebUI commands while conversation mode is active");
+assert.match(voiceService, /PI_VOICE_STT_URL[\s\S]*PI_VOICE_TTS_URL[\s\S]*GROQ_API_KEY[\s\S]*OPENAI_API_KEY[\s\S]*CLOUDFLARE_API_TOKEN/, "server voice fallbacks should be gated by server-side provider environment variables");
+assert.match(voiceService, /function requireRemoteMicConsentForStt\(req, body = \{\}\)[\s\S]*remoteMicStreamingConsentAccepted/, "server STT fallback should require explicit remote microphone streaming consent for remote clients");
+assert.match(conversationMode, /function ensureNaturalConversationPromptSafety\(tab, command\)[\s\S]*setThinkingLevelForTab\(tab, "off"/, "server should force thinking off before WebUI prompts while conversation mode is active");
+assert.match(conversationMode, /function enforceNaturalConversationCommandAllowed\(tab, command\)[\s\S]*thinking is forced off[\s\S]*slash commands are blocked from the Web UI shell/, "server should block unsafe direct RPC\/WebUI commands while conversation mode is active");
 assert.match(server, /async function topLevelOptionalFeatureResourceIndex\(cwd = options\.cwd\)[\s\S]*metadata\?\.origin === "package"[\s\S]*packageNameForResourcePath/, "server should detect enabled top-level resources by owning package");
 assert.match(server, /function optionalFeaturePackageStatus\(featureId, cwd = options\.cwd, topLevelResourceIndex\)[\s\S]*installed[\s\S]*configured[\s\S]*locallyConfigured[\s\S]*resourceConflict[\s\S]*ready/, "server should report package registration, top-level availability, conflicts, and readiness separately");
 assert.match(server, /if \(beforeStatus\.locallyConfigured\)[\s\S]*load it twice[\s\S]*local-resource-conflict/, "server should block npm registration when a top-level resource already owns the optional feature");
@@ -2693,5 +2705,7 @@ assert.match(css, /::highlight\(chat-search-match\)[\s\S]*::highlight\(chat-sear
 assert.doesNotMatch(css, /body\.subagent-terminal-active \.chat-search-bar/, "the search bar must remain visible while viewing a subagent output stream");
 assert.match(css, /\.chat \{[^}]*overflow:\s*auto;[^}]*overflow-anchor:\s*none;/, "the transcript should disable browser scroll anchoring because paused-reader position is controlled explicitly during live growth");
 assert.match(css, /\.chat-search-bar,\n\.file-viewer-search-bar \{/, "transcript search bar should be styled");
+
+assert.match(server, /case "\/api\/git-workflow\/create-pr":[\s\S]*return await createGitWorkflowPr\(cwd, body\);/, "the PR route must pass the selected cwd and request to its confirmed mutation owner");
 
 console.log("mobile static checks passed");

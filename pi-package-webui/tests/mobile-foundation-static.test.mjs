@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+
+const sseDelivery = await readFile(new URL("../lib/server/sse-delivery.mjs", import.meta.url), "utf8");
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const [app, css, html, server, serviceWorker, packageRaw] = await Promise.all([
@@ -57,10 +60,10 @@ assert.match(server, /requestId was already used for a different prompt/, "reque
 assert.match(server, /runId: null/, "tab activity must expose an opaque parent-run field");
 assert.match(server, /activity\.runId = randomUUID\(\)/, "parent-run IDs must be server-issued opaque values");
 assert.match(server, /function markTabFailed\([\s\S]*?activity\.status = "failed"[\s\S]*?activity\.completionSerial/, "failed parent turns must be represented distinctly from successful completion");
-assert.match(server, /SSE_BACKPRESSURE_MAX_PENDING_BYTES = 4 \* 1024 \* 1024/, "SSE backpressure buffering must remain explicitly bounded above the healthy fixture burst");
-assert.match(server, /res\.once\("drain", \(\) => flushSseClient\(client\)\)/, "healthy SSE clients must resume after transient write backpressure");
-assert.match(server, /client\.tab\?\.sseClients\?\.delete\(client\)/, "eviction must remove only the slow client");
-assert.match(server, /client\.res\?\.end\(\)/, "slow-client eviction must finish chunked SSE responses gracefully");
+assert.match(sseDelivery, /SSE_BACKPRESSURE_MAX_PENDING_BYTES = 4 \* 1024 \* 1024/, "SSE backpressure buffering must remain explicitly bounded above the healthy fixture burst");
+assert.match(sseDelivery, /res\.once\("drain", \(\) => flushSseClient\(client\)\)/, "healthy SSE clients must resume after transient write backpressure");
+assert.match(sseDelivery, /client\.tab\?\.sseClients\?\.delete\(client\)/, "eviction must remove only the slow client");
+assert.match(sseDelivery, /client\.res\?\.end\(\)/, "slow-client eviction must finish chunked SSE responses gracefully");
 assert.match(css, /--mobile-control-size:\s*40px;/, "phone density should expose the selected 40px control floor");
 assert.match(css, /\.terminal-tabs-toggle-button,[\s\S]*?\.terminal-close-all-button \{ min-height:\s*var\(--mobile-control-size\)/, "phone tab targets should use the shared compact control size");
 assert.match(css, /\.side-panel-toggle-button,[\s\S]*?\.composer-attach-button,[\s\S]*?width:\s*var\(--mobile-control-size\);[\s\S]*?height:\s*var\(--mobile-control-size\);/, "phone icon controls should use the shared compact square size");

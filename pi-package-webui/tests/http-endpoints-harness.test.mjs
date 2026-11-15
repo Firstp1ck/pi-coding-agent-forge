@@ -37,12 +37,17 @@ function lanAddress() {
 }
 
 async function request(host, pathname, { method = "GET", body, headers = {}, timeoutMs = 5_000 } = {}) {
-  const response = await fetch(`http://${host}:${port}${pathname}`, {
-    method,
-    headers: body === undefined ? headers : { "Content-Type": "application/json", ...headers },
-    body: body === undefined ? undefined : JSON.stringify(body),
-    signal: AbortSignal.timeout(timeoutMs),
-  });
+  let response;
+  try {
+    response = await fetch(`http://${host}:${port}${pathname}`, {
+      method,
+      headers: body === undefined ? headers : { "Content-Type": "application/json", ...headers },
+      body: body === undefined ? undefined : JSON.stringify(body),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+  } catch (error) {
+    throw new Error(`HTTP fixture ${method} ${pathname} failed after a ${timeoutMs}ms request budget`, { cause: error });
+  }
   let payload;
   try {
     payload = await response.json();

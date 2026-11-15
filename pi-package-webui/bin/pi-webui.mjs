@@ -7,7 +7,6 @@ import { createRequire } from "node:module";
 import { access, copyFile, lstat, mkdir, open, readFile, readdir, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
 import { homedir, networkInterfaces, platform, tmpdir } from "node:os";
 import path from "node:path";
-import { StringDecoder } from "node:string_decoder";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import { brotliCompress, brotliCompressSync, constants as zlibConstants, gzip, gzipSync } from "node:zlib";
@@ -87,6 +86,11 @@ import { updateStatePaths } from "../lib/update/journal.mjs";
 import { createRestoreFile, listenWithRetry, probeStartupRestore, readRestoreFileOnce, sweepRestoreFiles } from "../lib/update/supervisor.mjs";
 import { OPTIONAL_FEATURE_BY_ID, OPTIONAL_FEATURE_CATALOG } from "../lib/optional-feature-catalog.mjs";
 import { createWorkspaceFilesService, FILE_VIEWER_BODY_LIMIT_BYTES } from "../lib/server/workspace-files.mjs";
+import { createExtensionUiRequestService } from "../lib/server/extension-ui-requests.mjs";
+import { createRpcTransportTypes } from "../lib/server/rpc-transports.mjs";
+import { createSseDelivery } from "../lib/server/sse-delivery.mjs";
+import { createHelperRequestService, WEBUI_HELPER_COMMAND } from "../lib/server/helper-requests.mjs";
+import { createConversationVoiceService, VOICE_AUDIO_JSON_BODY_LIMIT_BYTES } from "../lib/server/conversation-voice.mjs";
 import { createGitReadService } from "../lib/server/git-reads.mjs";
 import { createConversationModeService, NATURAL_CONVERSATION_FEATURE_ID } from "../lib/server/conversation-mode.mjs";
 import { createCodexFastModeService } from "../lib/server/codex-fast-mode.mjs";
@@ -147,8 +151,6 @@ import {
   validateSubagentLaunchSlotRoles,
 } from "../lib/subagent-launch-slots.mjs";
 import {
-  encodeBrowserSseEvent,
-  isOutputModeSemanticBarrier,
   negotiateOutputMode,
   normalizeOutputMode,
   OUTPUT_MODE_COMPACT_V1,
@@ -210,9 +212,6 @@ const REQUEST_TIMEOUT_MS = 5 * 60 * 1000;
 // contract. A detached owner may legitimately outlive the HTTP server request.
 const RPC_SUPERVISOR_COMMAND_TIMEOUT_MAX_MS = 24 * 60 * 60 * 1000;
 const PROMPT_REQUEST_TIMEOUT_MS = Math.max(REQUEST_TIMEOUT_MS, Number.parseInt(process.env.PI_WEBUI_PROMPT_TIMEOUT_MS || "7200000", 10) || 7200000);
-const WEBUI_HELPER_TIMEOUT_MS = 8 * 1000;
-const WEBUI_HELPER_COMMAND = "webui-helper";
-const WEBUI_HELPER_RESPONSE_PREFIX = "__PI_WEBUI_HELPER_RESPONSE__:";
 const SAMPLING_PARAMS_HTTP_MAX_BYTES = 20 * 1024;
 const WEBUI_SUBAGENTS_STATUS_KEY = "webui-subagents";
 const WEBUI_SUBAGENTS_PAYLOAD_PREFIX = "PI_WEBUI_SUBAGENTS_V1 ";
@@ -269,19 +268,12 @@ const RECOVERY_TITLE = "Anthropic compatibility recovery";
 const SKILL_FILE_BODY_LIMIT_BYTES = 2 * 1024 * 1024;
 const PROMPT_BODY_LIMIT_BYTES = 24 * 1024 * 1024;
 const QUEUE_MUTATION_MAX_ITEMS = 512;
-const VOICE_AUDIO_BODY_LIMIT_BYTES = 24 * 1024 * 1024;
-const VOICE_AUDIO_JSON_BODY_LIMIT_BYTES = Math.ceil(VOICE_AUDIO_BODY_LIMIT_BYTES * 1.4) + 1024 * 1024;
-const VOICE_PROVIDER_TIMEOUT_MS = Math.max(1000, Number.parseInt(process.env.PI_VOICE_PROVIDER_TIMEOUT_MS || "120000", 10) || 120000);
-const VOICE_TTS_TEXT_MAX_CHARS = 12_000;
 const UPLOAD_BODY_LIMIT_BYTES = 96 * 1024 * 1024;
 const ATTACHMENT_UPLOAD_MAX_FILES = 12;
 const ATTACHMENT_UPLOAD_MAX_FILE_BYTES = 64 * 1024 * 1024;
 const ATTACHMENT_UPLOAD_MAX_TOTAL_BYTES = 64 * 1024 * 1024;
 const INLINE_IMAGE_MAX_BYTES = 8 * 1024 * 1024;
 const INLINE_IMAGE_TOTAL_MAX_BYTES = 16 * 1024 * 1024;
-// Keep enough headroom for base64-encoded inline images plus their RPC envelope.
-// Pi RPC output is JSONL, so this caps one physical line rather than a response.
-const PI_RPC_JSONL_LINE_MAX_BYTES = 32 * 1024 * 1024;
 const RPC_IMAGE_MIME_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
 const THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
 const SETTINGS_TRANSPORT_CHOICES = ["sse", "websocket", "websocket-cached", "auto"];
@@ -306,7 +298,6 @@ const SETTINGS_RELOAD_LABELS = new Map([
   ["enableSkillCommands", "Skill commands"],
 ]);
 const EVENT_HISTORY_LIMIT = 200;
-const EXTENSION_UI_BLOCKING_METHODS = new Set(["select", "confirm", "input", "editor"]);
 const STATUS_RPC_TIMEOUT_MS = 1_800;
 const FAST_PICK_LIMIT = 30;
 const PATH_SUGGESTION_LIMIT = 20;
@@ -759,47 +750,6 @@ async function piReleaseNotes() {
   return piReleaseNotesCache;
 }
 
-const stderrMirrorFailureListeners = new Set();
-const stderrMirrorErrorHandlers = new WeakSet();
-
-function ensureStderrMirrorErrorHandler(stream) {
-  if (stderrMirrorErrorHandlers.has(stream)) return;
-  stderrMirrorErrorHandlers.add(stream);
-  stream.on("error", (error) => {
-    // Do not log from this handler: stderr is the failing sink and recursive
-    // diagnostics can otherwise terminate the process. Active writers report
-    // the failure through their normal Web UI event path instead.
-    for (const reportFailure of [...stderrMirrorFailureListeners]) reportFailure(error);
-  });
-}
-
-function mirrorPiStderr(text, onFailure) {
-  const stream = process.stderr;
-  let reported = false;
-  const reportFailure = (error) => {
-    if (reported) return;
-    reported = true;
-    stderrMirrorFailureListeners.delete(reportFailure);
-    onFailure(error);
-  };
-
-  if (!stream?.writable || stream.destroyed || stream.writableEnded) {
-    reportFailure(new Error("Web UI stderr sink is not writable"));
-    return;
-  }
-
-  ensureStderrMirrorErrorHandler(stream);
-  stderrMirrorFailureListeners.add(reportFailure);
-  try {
-    stream.write(text, (error) => {
-      stderrMirrorFailureListeners.delete(reportFailure);
-      if (error) reportFailure(error);
-    });
-  } catch (error) {
-    reportFailure(error);
-  }
-}
-
 let nativeAdmissionState = null;
 const nativeAdmittedWork = createUpdateAdmissionCounter();
 let startupProbeReady = false;
@@ -818,346 +768,6 @@ async function assertNativeRpcAdmission(command) {
   if (["get_state", "get_messages", "get_session_stats", "get_available_models", "get_commands"].includes(command?.type)) return;
   if (!nativeAdmissionState) throw new Error("Update admission is not initialized.");
   await assertEffectAdmission(nativeAdmissionState.root, nativeAdmissionState.participant.canonicalRoots);
-}
-
-class SupervisorPiRpcProcess {
-  constructor({ supervisor, tabId, displayCommand = "supervised Pi RPC", cwd, snapshot = {} }) {
-    this.supervisor = supervisor;
-    this.tabId = tabId;
-    this.displayCommand = displayCommand;
-    this.cwd = cwd;
-    this.startedAt = snapshot.startedAt || new Date().toISOString();
-    this.listeners = new Set();
-    this.metadataUpdate = Promise.resolve();
-    this.admissionTail = Promise.resolve();
-    this.applySnapshot(snapshot);
-  }
-
-  applySnapshot(snapshot = {}) {
-    this.startedAt = snapshot.startedAt || this.startedAt;
-    this.cwd = snapshot.metadata?.cwd || this.cwd;
-    const running = snapshot.running !== false;
-    this.child = {
-      pid: Number.isInteger(snapshot.pid) ? snapshot.pid : undefined,
-      exitCode: running ? null : 1,
-      signalCode: null,
-      killed: !running,
-    };
-  }
-
-  isRunning() {
-    return !!this.child && this.child.exitCode === null && this.child.signalCode === null;
-  }
-
-  onEvent(listener) {
-    this.listeners.add(listener);
-    return () => this.listeners.delete(listener);
-  }
-
-  emit(event) {
-    for (const listener of this.listeners) {
-      try {
-        listener(event);
-      } catch (error) {
-        console.error("webui listener failed:", error);
-      }
-    }
-  }
-
-  receiveSupervisorEvent(event) {
-    const payload = event?.payload;
-    if (!payload || typeof payload !== "object") return;
-    if (payload.type === "pi_process_start") {
-      this.child = { pid: payload.pid, exitCode: null, signalCode: null, killed: false };
-      this.startedAt = event.at || new Date().toISOString();
-    } else if (payload.type === "pi_process_exit") {
-      this.child = { ...(this.child || {}), exitCode: payload.code ?? 1, signalCode: payload.signal ?? null, killed: true };
-    } else if (payload.type === "pi_process_error" && !this.isRunning()) {
-      this.child = { ...(this.child || {}), exitCode: 1, signalCode: null, killed: true };
-    }
-    this.emit({
-      ...payload,
-      supervisorScopeId: event.scopeId,
-      supervisorEpoch: event.epoch,
-      supervisorSeq: event.seq,
-    });
-    if (payload.type === "pi_stderr" && payload.text) {
-      mirrorPiStderr(payload.text, (error) => this.emit({
-        type: "pi_stderr_sink_error",
-        error: `Pi RPC stderr could not be mirrored to the Web UI server log: ${sanitizeError(error)}`,
-      }));
-    }
-  }
-
-  // Reserve wrapper order before admission's filesystem await. Only dispatch
-  // holds the barrier: an RPC response may wait on a subsequent UI write.
-  dispatchInOrder(operation) {
-    const dispatch = this.admissionTail.catch(() => {}).then(operation);
-    this.admissionTail = dispatch.then(() => {}, () => {});
-    return dispatch;
-  }
-
-  async send(command, timeoutMs = REQUEST_TIMEOUT_MS) {
-    const response = await this.dispatchInOrder(async () => {
-      await assertNativeRpcAdmission(command);
-      const requestId = command?.id || randomUUID();
-      const boundedTimeoutMs = Math.min(Math.max(1, Number(timeoutMs) || REQUEST_TIMEOUT_MS), RPC_SUPERVISOR_COMMAND_TIMEOUT_MAX_MS);
-      return { response: this.supervisor.command(this.tabId, command, { requestId, timeoutMs: boundedTimeoutMs }) };
-    });
-    return response.response;
-  }
-
-  async writeRaw(command) {
-    return this.dispatchInOrder(async () => {
-      await assertNativeRpcAdmission(command);
-      return this.supervisor.write(this.tabId, command);
-    });
-  }
-
-  async replace({ child, metadata, displayCommand, restart }) {
-    const snapshot = await this.dispatchInOrder(async () => {
-      const request = { tabId: this.tabId, metadata, child };
-      return restart ? this.supervisor.replaceTabUnderUpdate({ ...request, restart }) : this.supervisor.replaceTab(request);
-    });
-    if (displayCommand) this.displayCommand = displayCommand;
-    this.applySnapshot(snapshot);
-    return snapshot;
-  }
-
-  updateMetadata(metadata) {
-    this.metadataUpdate = this.metadataUpdate.catch(() => {}).then(() => this.supervisor.updateTab(this.tabId, metadata));
-    return this.metadataUpdate;
-  }
-
-  async stop() {
-    return this.supervisor.closeTab(this.tabId);
-  }
-
-  dispose() {
-    this.listeners.clear();
-  }
-}
-
-class PiRpcProcess {
-  constructor({ command, args, displayCommand, cwd, env = process.env }) {
-    this.command = command;
-    this.args = args;
-    this.displayCommand = displayCommand;
-    this.cwd = cwd;
-    this.env = env;
-    this.child = undefined;
-    this.spawned = false;
-    this.pending = new Map();
-    this.listeners = new Set();
-    this.startedAt = new Date().toISOString();
-    this.stderrMirrorFailureReported = false;
-  }
-
-  reportStderrMirrorFailure(error) {
-    if (this.stderrMirrorFailureReported) return;
-    this.stderrMirrorFailureReported = true;
-    this.emit({
-      type: "pi_stderr_sink_error",
-      error: `Pi RPC stderr could not be mirrored to the Web UI server log: ${sanitizeError(error)}`,
-    });
-  }
-
-  start() {
-    this.spawned = false;
-    this.child = spawn(this.command, this.args, {
-      cwd: this.cwd,
-      env: this.env,
-      stdio: ["pipe", "pipe", "pipe"],
-      windowsHide: true,
-    });
-
-    const startup = new Promise((resolve, reject) => {
-      this.child.once("spawn", () => {
-        this.spawned = true;
-        this.emit({ type: "pi_process_start", pid: this.child.pid, cwd: this.cwd, command: this.displayCommand, args: this.args });
-        resolve();
-      });
-      this.child.on("error", (error) => {
-        this.spawned = false;
-        const message = sanitizeError(error);
-        this.emit({ type: "pi_process_error", error: message });
-        this.rejectAll(new Error(message));
-        reject(new Error(message));
-      });
-    });
-
-    this.child.on("exit", (code, signal) => {
-      this.emit({ type: "pi_process_exit", code, signal });
-      this.rejectAll(new Error(`Pi RPC process exited${code === null ? "" : ` with code ${code}`}${signal ? ` (${signal})` : ""}`));
-    });
-
-    this.attachJsonlReader(this.child.stdout, (line) => this.handleStdoutLine(line));
-    this.attachTextReader(this.child.stderr, (text) => {
-      if (text.length > 0) {
-        // Publish before attempting the optional terminal mirror so a closed
-        // stderr sink cannot hide Pi diagnostics from browser clients.
-        this.emit({ type: "pi_stderr", text });
-        mirrorPiStderr(text, (error) => this.reportStderrMirrorFailure(error));
-      }
-    });
-
-    return startup;
-  }
-
-  isRunning() {
-    return this.spawned && !!this.child && this.child.exitCode === null && !this.child.killed;
-  }
-
-  onEvent(listener) {
-    this.listeners.add(listener);
-    return () => this.listeners.delete(listener);
-  }
-
-  emit(event) {
-    for (const listener of this.listeners) {
-      try {
-        listener(event);
-      } catch (error) {
-        console.error("webui listener failed:", error);
-      }
-    }
-  }
-
-  attachJsonlReader(stream, onLine) {
-    const decoder = new StringDecoder("utf8");
-    let buffer = "";
-    let bufferBytes = 0;
-    let discardingOversizedLine = false;
-
-    const emitOversizedLine = () => this.emit({
-      type: "pi_stdout_line_too_large",
-      error: `Discarded a Pi RPC JSONL line larger than ${PI_RPC_JSONL_LINE_MAX_BYTES} bytes`,
-      maxBytes: PI_RPC_JSONL_LINE_MAX_BYTES,
-    });
-    const consume = (chunk) => {
-      let input = chunk;
-      while (input.length > 0) {
-        if (discardingOversizedLine) {
-          const newlineIndex = input.indexOf("\n");
-          if (newlineIndex === -1) return;
-          discardingOversizedLine = false;
-          input = input.slice(newlineIndex + 1);
-          continue;
-        }
-
-        const newlineIndex = input.indexOf("\n");
-        const segment = newlineIndex === -1 ? input : input.slice(0, newlineIndex);
-        const segmentBytes = Buffer.byteLength(segment);
-        if (bufferBytes + segmentBytes > PI_RPC_JSONL_LINE_MAX_BYTES) {
-          buffer = "";
-          bufferBytes = 0;
-          emitOversizedLine();
-          if (newlineIndex === -1) {
-            discardingOversizedLine = true;
-            return;
-          }
-          input = input.slice(newlineIndex + 1);
-          continue;
-        }
-
-        buffer += segment;
-        bufferBytes += segmentBytes;
-        if (newlineIndex === -1) return;
-        let line = buffer;
-        buffer = "";
-        bufferBytes = 0;
-        if (line.endsWith("\r")) line = line.slice(0, -1);
-        onLine(line);
-        input = input.slice(newlineIndex + 1);
-      }
-    };
-
-    stream.on("data", (chunk) => consume(typeof chunk === "string" ? chunk : decoder.write(chunk)));
-    stream.on("end", () => {
-      consume(decoder.end());
-      if (!discardingOversizedLine && buffer.length > 0) onLine(buffer.endsWith("\r") ? buffer.slice(0, -1) : buffer);
-    });
-  }
-
-  attachTextReader(stream, onText) {
-    const decoder = new StringDecoder("utf8");
-    stream.on("data", (chunk) => onText(typeof chunk === "string" ? chunk : decoder.write(chunk)));
-    stream.on("end", () => {
-      const tail = decoder.end();
-      if (tail) onText(tail);
-    });
-  }
-
-  handleStdoutLine(line) {
-    if (!line.trim()) return;
-
-    let event;
-    try {
-      event = JSON.parse(line);
-    } catch (error) {
-      this.emit({ type: "pi_stdout_parse_error", line, error: sanitizeError(error) });
-      return;
-    }
-
-    if (event?.type === "response" && event.id && this.pending.has(event.id)) {
-      const pending = this.pending.get(event.id);
-      this.pending.delete(event.id);
-      clearTimeout(pending.timeout);
-      pending.resolve(event);
-    }
-
-    this.emit(event);
-  }
-
-  send(command, timeoutMs = REQUEST_TIMEOUT_MS) {
-    if (!this.isRunning() || !this.child?.stdin) {
-      return Promise.reject(new Error("Pi RPC process is not running"));
-    }
-
-    const id = command.id || randomUUID();
-    const payload = { ...command, id };
-
-    return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        this.pending.delete(id);
-        reject(new Error(`Timed out waiting for RPC response to ${command.type}`));
-      }, timeoutMs);
-
-      this.pending.set(id, { resolve, reject, timeout });
-      this.writeRaw(payload).catch((error) => {
-        clearTimeout(timeout);
-        this.pending.delete(id);
-        reject(error);
-      });
-    });
-  }
-
-  async writeRaw(command) {
-    if (!this.isRunning() || !this.child?.stdin) {
-      throw new Error("Pi RPC process is not running");
-    }
-    await assertNativeRpcAdmission(command);
-    const line = `${JSON.stringify(command)}\n`;
-    if (!this.child.stdin.write(line)) {
-      await new Promise((resolve) => this.child.stdin.once("drain", resolve));
-    }
-  }
-
-  rejectAll(error) {
-    for (const [id, pending] of this.pending) {
-      clearTimeout(pending.timeout);
-      pending.reject(error);
-      this.pending.delete(id);
-    }
-  }
-
-  stop() {
-    if (!this.child || this.child.exitCode !== null) return;
-    this.child.kill("SIGTERM");
-    setTimeout(() => {
-      if (this.child && this.child.exitCode === null) this.child.kill("SIGKILL");
-    }, 3000).unref();
-  }
 }
 
 // JSON responses are compact and, when the client accepts it, compressed. Boot alone fetches
@@ -1399,100 +1009,12 @@ function sendRemoteAuthRequired(req, res, url) {
 // disconnects healthy Chromium EventSource streams as soon as a frame exceeds
 // roughly 16 KiB. Queue subsequent frames until "drain", with strict bounds so
 // a client that truly stops reading cannot grow server memory indefinitely.
-const SSE_BACKPRESSURE_MAX_PENDING_BYTES = 4 * 1024 * 1024;
-const SSE_BACKPRESSURE_MAX_PENDING_FRAMES = 256;
-const SSE_BACKPRESSURE_TIMEOUT_MS = 10_000;
 
-function clearSseBackpressureTimer(client) {
-  if (!client?.backpressureTimer) return;
-  clearTimeout(client.backpressureTimer);
-  client.backpressureTimer = undefined;
-}
 
-function evictSlowSseClient(client) {
-  if (!client || client.evicted) return;
-  client.evicted = true;
-  client.backpressured = false;
-  clearSseBackpressureTimer(client);
-  client.pendingFrames = [];
-  client.pendingFrameBytes = 0;
-  client.tab?.sseClients?.delete(client);
-  try {
-    // Complete the chunked response so Chromium can reconnect without
-    // ERR_INCOMPLETE_CHUNKED_ENCODING.
-    client.res?.end();
-  } catch {
-    // A closed browser socket needs no further cleanup.
-  }
-}
 
-function scheduleSseBackpressureTimeout(client) {
-  clearSseBackpressureTimer(client);
-  client.backpressureTimer = setTimeout(() => evictSlowSseClient(client), SSE_BACKPRESSURE_TIMEOUT_MS);
-  client.backpressureTimer.unref?.();
-}
 
-function flushSseClient(client) {
-  const res = client?.res;
-  if (!client || client.evicted) return;
-  if (!res || res.destroyed || res.writableEnded) {
-    evictSlowSseClient(client);
-    return;
-  }
-  client.backpressured = false;
-  clearSseBackpressureTimer(client);
-  while (client.pendingFrames?.length) {
-    const frame = client.pendingFrames.shift();
-    client.pendingFrameBytes -= Buffer.byteLength(frame);
-    try {
-      if (!res.write(frame)) {
-        client.backpressured = true;
-        scheduleSseBackpressureTimeout(client);
-        res.once("drain", () => flushSseClient(client));
-        return;
-      }
-    } catch {
-      evictSlowSseClient(client);
-      return;
-    }
-  }
-  client.pendingFrameBytes = 0;
-}
 
-function writeSseFrame(client, frame) {
-  const res = client?.res || client;
-  if (!res || res.destroyed || res.writableEnded || client?.evicted) return false;
-  if (client?.res && client.backpressured) {
-    const frameBytes = Buffer.byteLength(frame);
-    const pendingFrames = client.pendingFrames || (client.pendingFrames = []);
-    const pendingBytes = Number(client.pendingFrameBytes) || 0;
-    if (pendingFrames.length >= SSE_BACKPRESSURE_MAX_PENDING_FRAMES || pendingBytes + frameBytes > SSE_BACKPRESSURE_MAX_PENDING_BYTES) {
-      evictSlowSseClient(client);
-      return false;
-    }
-    pendingFrames.push(frame);
-    client.pendingFrameBytes = pendingBytes + frameBytes;
-    return true;
-  }
-  try {
-    if (!res.write(frame) && client?.res) {
-      client.backpressured = true;
-      scheduleSseBackpressureTimeout(client);
-      res.once("drain", () => flushSseClient(client));
-    }
-    // write() returning false still accepted this frame.
-    return true;
-  } catch {
-    if (client?.res) evictSlowSseClient(client);
-    return false;
-  }
-}
 
-function sendSse(client, event) {
-  const payload = encodeBrowserSseEvent(event, { outputMode: client?.activeMode || OUTPUT_MODE_NORMAL });
-  if (payload === undefined) return false;
-  return writeSseFrame(client, `data: ${payload}\n\n`);
-}
 
 function rpcSuccess(command, data = {}) {
   return { type: "response", command, success: true, data };
@@ -4348,19 +3870,19 @@ async function handleGitWorkflowRequest(pathname, body = {}, tabOrCwd = options.
         return { ok: true, data: await readGitWorkflowPrDescription(cwd, { generationId, generation: tab?.gitWorkflowArtifactGeneration || null }) };
       }
       case "/api/git-workflow/init":
-        return initializeGitRepository(cwd);
+        return await initializeGitRepository(cwd);
       case "/api/git-workflow/init-files-status":
         return { ok: true, data: await initialRepositoryFilesStatus(cwd) };
       case "/api/git-workflow/readme":
         return prepareInitialRepositoryFiles(cwd, { repoName: body.repoName, stack: body.stack });
       case "/api/git-workflow/initial-commit":
-        return initialGitCommit(cwd);
+        return await initialGitCommit(cwd);
       case "/api/git-workflow/main-branch":
-        return renameGitMainBranch(cwd);
+        return await renameGitMainBranch(cwd);
       case "/api/git-workflow/remote":
-        return addGitOrigin(cwd, body);
+        return await addGitOrigin(cwd, body);
       case "/api/git-workflow/init-push":
-        return pushInitialGitMain(cwd);
+        return await pushInitialGitMain(cwd);
       case "/api/git-workflow/add":
         return gitAddAllPayload(cwd);
       case "/api/git-workflow/branch": {
@@ -4368,13 +3890,13 @@ async function handleGitWorkflowRequest(pathname, body = {}, tabOrCwd = options.
         return { ok: true, data: await createGitWorkflowBranchWorktree(tab, body) };
       }
       case "/api/git-workflow/commit":
-        return commitGitWorkflow(cwd, body);
+        return await commitGitWorkflow(cwd, body);
       case "/api/git-workflow/push":
-        return pushGitWorkflow(cwd, body);
+        return await pushGitWorkflow(cwd, body);
       case "/api/git-workflow/publish":
-        return publishGitRepository(cwd, body);
+        return await publishGitRepository(cwd, body);
       case "/api/git-workflow/create-pr":
-        return createGitWorkflowPr(cwd, body);
+        return await createGitWorkflowPr(cwd, body);
       case "/api/git-workflow/cancel": {
         const generationCancelled = cancelGitWorkflowGeneration(tab);
         const processCancelled = cancelGitWorkflowProcess();
@@ -5113,6 +4635,45 @@ try {
   process.exit(2);
 }
 
+const { PiRpcProcess, SupervisorPiRpcProcess } = createRpcTransportTypes({
+  assertNativeRpcAdmission, sanitizeError, requestTimeoutMs: REQUEST_TIMEOUT_MS,
+  supervisorCommandTimeoutMaxMs: RPC_SUPERVISOR_COMMAND_TIMEOUT_MAX_MS,
+});
+
+const {
+  clearSseBackpressureTimer,
+  evictSlowSseClient,
+  scheduleSseBackpressureTimeout,
+  flushSseClient,
+  writeSseFrame,
+  sendSse,
+  activateOutputMode,
+  sendSseToClient,
+} = createSseDelivery();
+
+const {
+  parseWebuiHelperResponseEvent,
+  resolveWebuiHelperResponse,
+  resolveWebuiHelperRpcResponse,
+  webuiHelperRequestMap,
+  sendWebuiHelperCommand,
+} = createHelperRequestService({ makeHttpError, sanitizeError });
+
+const {
+  pendingExtensionUiMap,
+  isPendingExtensionUiRequest,
+  pruneExpiredPendingExtensionUiRequests,
+  pendingExtensionUiRequests,
+  pendingExtensionUiRequestSummaries,
+  trackPendingExtensionUiRequest,
+  resolvePendingExtensionUiRequest,
+  clearPendingExtensionUiRequests,
+  replayPendingExtensionUiRequests,
+  cancelPendingExtensionUiRequests,
+} = createExtensionUiRequestService({
+  truncateStatusText, markTabWorking, sendSseToClient, tabActivitySnapshot, broadcastTabEvent,
+});
+
 const {
   naturalConversationStatusState,
   naturalConversationModeSnapshot,
@@ -5136,6 +4697,15 @@ const {
   optionalFeaturePackageStatus, getCommandData, extensionStatusMap, stripAnsi,
   makeHttpError, sanitizeError, safeRpcData, stateIsBusyForSettings, setThinkingLevelForTab,
   requestTimeoutMs: REQUEST_TIMEOUT_MS, statusRpcTimeoutMs: STATUS_RPC_TIMEOUT_MS,
+});
+
+const {
+  conversationVoicesData, setConversationVoice, naturalConversationVoiceProviderStatus,
+  naturalConversationUnavailableResponse, handleNaturalConversationSttTranscribe,
+  handleNaturalConversationTtsSpeech,
+} = createConversationVoiceService({
+  naturalConversationFeatureData, naturalConversationModeSnapshot, isLocalRequest,
+  makeHttpError, formatBytes, truncateStatusText,
 });
 
 const {
@@ -6030,11 +5600,6 @@ function tabActivitySnapshot(tab) {
   return { ...(tab.activity || createTabActivity(tab.createdAt)) };
 }
 
-function pendingExtensionUiMap(tab) {
-  if (!tab.pendingExtensionUiRequests) tab.pendingExtensionUiRequests = new Map();
-  return tab.pendingExtensionUiRequests;
-}
-
 function extensionStatusMap(tab) {
   if (!tab.extensionStatuses) tab.extensionStatuses = new Map();
   return tab.extensionStatuses;
@@ -6470,18 +6035,6 @@ function rememberWebuiSubagentsStatusEvent(tab, event) {
   return true;
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
 function replayExtensionStatuses(tab, client) {
   for (const [statusKey, statusText] of extensionStatusMap(tab)) {
     sendSseToClient(client, {
@@ -6866,92 +6419,6 @@ function sendQueuedBashCommand(tab, command) {
     broadcastBashQueueUpdate(tab);
     void drainTabBashQueue(tab);
   });
-}
-
-function isPendingExtensionUiRequest(event) {
-  return event?.type === "extension_ui_request" && EXTENSION_UI_BLOCKING_METHODS.has(event.method) && event.id;
-}
-
-function pruneExpiredPendingExtensionUiRequests(tab, nowMs = Date.now()) {
-  const pending = tab?.pendingExtensionUiRequests;
-  if (!pending) return;
-  for (const [id, request] of pending) {
-    const expiresAtMs = Date.parse(request.expiresAt || "");
-    if (Number.isFinite(expiresAtMs) && expiresAtMs <= nowMs) pending.delete(id);
-  }
-}
-
-function pendingExtensionUiRequests(tab) {
-  pruneExpiredPendingExtensionUiRequests(tab);
-  return [...(tab?.pendingExtensionUiRequests?.values() || [])];
-}
-
-function pendingExtensionUiRequestSummaries(tab) {
-  return pendingExtensionUiRequests(tab).map((request) => ({
-    id: request.id,
-    method: request.method,
-    title: truncateStatusText(request.title || request.placeholder || "", 120),
-    message: request.message ? truncateStatusText(request.message, 180) : undefined,
-    receivedAt: request.receivedAt,
-    expiresAt: request.expiresAt,
-  }));
-}
-
-function trackPendingExtensionUiRequest(tab, event) {
-  if (!isPendingExtensionUiRequest(event)) return;
-  const receivedAt = new Date().toISOString();
-  const timeoutMs = Number(event.timeout);
-  const expiresAt = Number.isFinite(timeoutMs) && timeoutMs > 0 ? new Date(Date.parse(receivedAt) + timeoutMs + 1000).toISOString() : undefined;
-  pendingExtensionUiMap(tab).set(String(event.id), { ...event, receivedAt, expiresAt });
-  if (!tab.activity?.isWorking) markTabWorking(tab, receivedAt);
-}
-
-function resolvePendingExtensionUiRequest(tab, id) {
-  if (!id) return false;
-  return !!tab?.pendingExtensionUiRequests?.delete(String(id));
-}
-
-function clearPendingExtensionUiRequests(tab) {
-  tab?.pendingExtensionUiRequests?.clear();
-}
-
-function replayPendingExtensionUiRequests(tab, client) {
-  const pending = pendingExtensionUiRequests(tab);
-  for (const request of pending) {
-    sendSseToClient(client, {
-      ...request,
-      type: "extension_ui_request",
-      replayed: true,
-      tabId: tab.id,
-      tabTitle: tab.title,
-      pendingExtensionUiRequestCount: pending.length,
-      tabActivity: tabActivitySnapshot(tab),
-    });
-  }
-}
-
-async function cancelPendingExtensionUiRequests(tab) {
-  const pending = pendingExtensionUiRequests(tab);
-  if (!pending.length) return 0;
-  const ids = [];
-  for (const request of pending) {
-    ids.push(String(request.id));
-    try {
-      await tab.rpc.writeRaw({ type: "extension_ui_response", id: request.id, cancelled: true });
-    } catch {
-      // Abort should remain best-effort even if the RPC process already exited.
-    }
-    resolvePendingExtensionUiRequest(tab, request.id);
-  }
-  broadcastTabEvent(tab, {
-    type: "webui_extension_ui_cancelled",
-    tabId: tab.id,
-    tabTitle: tab.title,
-    ids,
-    pendingExtensionUiRequestCount: pendingExtensionUiRequests(tab).length,
-    tabActivity: tabActivitySnapshot(tab),
-  });
-  return ids.length;
 }
 
 function markTabWorking(tab, timestamp = new Date().toISOString(), { runStarted = false } = {}) {
@@ -8895,73 +8362,6 @@ async function safeRpcResponse(tab, command, timeoutMs = REQUEST_TIMEOUT_MS) {
   }
 }
 
-function parseWebuiHelperResponseEvent(event) {
-  if (event?.type !== "extension_ui_request" || event.method !== "notify") return undefined;
-  const message = String(event.message || "");
-  if (!message.startsWith(WEBUI_HELPER_RESPONSE_PREFIX)) return undefined;
-  try {
-    return JSON.parse(message.slice(WEBUI_HELPER_RESPONSE_PREFIX.length));
-  } catch (error) {
-    return { ok: false, error: `Invalid Web UI helper response: ${sanitizeError(error)}` };
-  }
-}
-
-function resolveWebuiHelperResponse(tab, event) {
-  const payload = parseWebuiHelperResponseEvent(event);
-  if (!payload) return false;
-  const requestId = String(payload.requestId || "");
-  const pending = tab?.webuiHelperRequests?.get(requestId);
-  if (pending) {
-    tab.webuiHelperRequests.delete(requestId);
-    clearTimeout(pending.timeout);
-    if (payload.ok === false) pending.reject(makeHttpError(400, payload.error || "Web UI helper command failed"));
-    else pending.resolve(payload.data || {});
-  }
-  return true;
-}
-
-function resolveWebuiHelperRpcResponse(tab, event) {
-  if (event?.type !== "response" || event.command !== "prompt" || !event.id) return false;
-  return tab?.webuiHelperResponseIds?.delete(String(event.id)) === true;
-}
-
-function webuiHelperRequestMap(tab) {
-  if (!tab.webuiHelperRequests) tab.webuiHelperRequests = new Map();
-  return tab.webuiHelperRequests;
-}
-
-async function sendWebuiHelperCommand(tab, action, payload = {}, timeoutMs = WEBUI_HELPER_TIMEOUT_MS) {
-  const requestId = randomUUID();
-  const pending = new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => {
-      webuiHelperRequestMap(tab).delete(requestId);
-      tab.webuiHelperResponseIds?.delete(requestId);
-      reject(makeHttpError(504, `Timed out waiting for Web UI helper action: ${action}. Try /reload in this tab, then retry.`));
-    }, timeoutMs);
-    webuiHelperRequestMap(tab).set(requestId, { resolve, reject, timeout });
-  });
-  pending.catch(() => {});
-
-  try {
-    tab.webuiHelperResponseIds?.add(requestId);
-    const response = await tab.rpc.send({
-      id: requestId,
-      type: "prompt",
-      message: `/${WEBUI_HELPER_COMMAND} ${JSON.stringify({ requestId, action, payload })}`,
-    }, timeoutMs);
-    if (response.success === false) throw makeHttpError(400, response.error || `Web UI helper action failed: ${action}`);
-    return await pending;
-  } catch (error) {
-    tab.webuiHelperResponseIds?.delete(requestId);
-    const request = webuiHelperRequestMap(tab).get(requestId);
-    if (request) {
-      clearTimeout(request.timeout);
-      webuiHelperRequestMap(tab).delete(requestId);
-    }
-    throw error;
-  }
-}
-
 function requireResourceScope(value) {
   const scope = String(value || "session").trim().toLowerCase();
   if (scope !== "session" && scope !== "global" && scope !== "model") throw makeHttpError(400, "Resource scope must be session, global, or model");
@@ -9522,8 +8922,6 @@ async function annotateSkillCommandState(tab, commands) {
     });
 }
 
-
-
 async function getCommandData(tab, { annotateSkills = true } = {}) {
   try {
     const response = await tab.rpc.send({ type: "get_commands" });
@@ -9540,308 +8938,6 @@ async function getCommandData(tab, { annotateSkills = true } = {}) {
   }
 }
 
-
-
-
-
-
-
-
-
-
-
-
-// Piper voice switching for the native /talk audio loop. The WebUI never
-// imports the natural-conversation package; it mirrors the package's small
-// voice catalog for display, reads voice.json / the piper voice dir for
-// state, and performs the actual switch (incl. download) by sending
-// `/talk voice <id>` over RPC so the package stays the single writer.
-const CONVERSATION_VOICE_CATALOG = [
-  { id: "en_US-lessac-medium", file: "en_US-lessac-medium.onnx", sizeMb: 63, note: "natural US English" },
-  { id: "en_GB-alba-medium", file: "en_GB-alba-medium.onnx", sizeMb: 63, note: "natural British English" },
-  { id: "de_DE-thorsten-medium", file: "de_DE-thorsten-medium.onnx", sizeMb: 63, note: "natural German" },
-  { id: "de_DE-thorsten-high", file: "de_DE-thorsten-high.onnx", sizeMb: 110, note: "German, best quality" },
-];
-const CONVERSATION_VOICE_SWITCH_TIMEOUT_MS = 10 * 60 * 1000; // downloads can take a while
-
-function conversationVoiceConfigPath() {
-  const override = String(process.env.PI_VOICE_CONFIG_PATH || "").trim();
-  return override || path.join(homedir(), ".pi", "agent", "voice.json");
-}
-
-function conversationVoiceDirs() {
-  const data = String(process.env.XDG_DATA_HOME || "").trim() || path.join(homedir(), ".local", "share");
-  return [path.join(data, "piper"), path.join(data, "piper", "voices"), path.join(data, "piper-voices")];
-}
-
-async function conversationVoicesData() {
-  let ttsProvider = null;
-  let currentModelPath = null;
-  try {
-    const config = JSON.parse(await readFile(conversationVoiceConfigPath(), "utf8"));
-    ttsProvider = config?.native?.tts?.provider ?? null;
-    if (ttsProvider === "piper") currentModelPath = config?.native?.tts?.modelPath ?? null;
-  } catch {
-    // no voice.json yet — the dropdown still lists the catalog
-  }
-
-  const onDisk = new Map();
-  for (const dir of conversationVoiceDirs()) {
-    let entries = [];
-    try {
-      entries = await readdir(dir);
-    } catch {
-      continue;
-    }
-    for (const entry of entries) {
-      if (!entry.endsWith(".onnx") || onDisk.has(entry)) continue;
-      const modelPath = path.join(dir, entry);
-      const sidecar = await stat(`${modelPath}.json`).catch(() => null);
-      if (!sidecar) continue;
-      const size = await stat(modelPath).catch(() => null);
-      onDisk.set(entry, { path: modelPath, sizeMb: size ? Math.round(size.size / (1024 * 1024)) : 0 });
-    }
-  }
-
-  const voices = CONVERSATION_VOICE_CATALOG.map((entry) => ({
-    id: entry.id,
-    sizeMb: entry.sizeMb,
-    note: entry.note,
-    downloaded: onDisk.has(entry.file),
-    current: Boolean(currentModelPath && currentModelPath.endsWith(`/${entry.file}`)),
-  }));
-  for (const [file, info] of onDisk) {
-    if (CONVERSATION_VOICE_CATALOG.some((entry) => entry.file === file)) continue;
-    voices.push({
-      id: file.replace(/\.onnx$/, ""),
-      sizeMb: info.sizeMb,
-      note: "found on disk",
-      downloaded: true,
-      current: info.path === currentModelPath,
-    });
-  }
-  return { voices, current: voices.find((voice) => voice.current)?.id ?? null, ttsProvider };
-}
-
-async function setConversationVoice(tab, body = {}) {
-  const voiceId = String(body.voice || "").trim();
-  if (!/^[\w.-]{1,120}$/.test(voiceId)) throw makeHttpError(400, "voice must be a Piper voice id (letters, digits, dot, dash, underscore)");
-  const feature = await naturalConversationFeatureData(tab);
-  if (!feature.available) throw makeHttpError(404, feature.unavailableReason);
-  const commandName = feature.commands.find((name) => name === "talk") || feature.commands[0] || "talk";
-  const response = await tab.rpc.send({ type: "prompt", message: `/${commandName} voice ${voiceId}` }, CONVERSATION_VOICE_SWITCH_TIMEOUT_MS);
-  if (response.success === false) throw makeHttpError(400, response.error || `Failed to switch the conversation voice to ${voiceId}`);
-  return { ...(await conversationVoicesData()), response };
-}
-
-const VOICE_AUDIO_MIME_TYPES = new Set(["audio/webm", "audio/wav", "audio/x-wav", "audio/mpeg", "audio/mp3", "audio/mp4", "audio/ogg", "audio/flac", "application/octet-stream"]);
-const VOICE_STT_PROVIDER_IDS = ["local", "groq", "openai", "cloudflare"];
-const VOICE_TTS_PROVIDER_IDS = ["local", "openai"];
-
-function safeVoiceEndpointLabel(value) {
-  try {
-    const parsed = new URL(String(value || ""));
-    return `${parsed.origin}${parsed.pathname}`;
-  } catch {
-    return "";
-  }
-}
-
-function naturalConversationVoiceProviderStatus(kind = "stt") {
-  const stt = kind === "stt";
-  const localUrl = stt ? process.env.PI_VOICE_STT_URL : process.env.PI_VOICE_TTS_URL;
-  const providers = [
-    {
-      id: "local",
-      label: stt ? "Local STT endpoint" : "Local TTS endpoint",
-      configured: !!localUrl,
-      env: stt ? ["PI_VOICE_STT_URL"] : ["PI_VOICE_TTS_URL"],
-      endpoint: safeVoiceEndpointLabel(localUrl),
-    },
-  ];
-  if (stt) {
-    providers.push(
-      { id: "groq", label: "Groq Whisper", configured: !!process.env.GROQ_API_KEY, env: ["GROQ_API_KEY"], defaultModel: process.env.PI_VOICE_GROQ_STT_MODEL || "whisper-large-v3-turbo" },
-      { id: "openai", label: "OpenAI transcription", configured: !!process.env.OPENAI_API_KEY, env: ["OPENAI_API_KEY"], defaultModel: process.env.PI_VOICE_OPENAI_STT_MODEL || "gpt-4o-mini-transcribe" },
-      { id: "cloudflare", label: "Cloudflare Workers AI Whisper", configured: !!(process.env.CLOUDFLARE_API_TOKEN && process.env.CLOUDFLARE_ACCOUNT_ID), env: ["CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID"], deferred: true },
-    );
-  } else {
-    providers.push({ id: "openai", label: "OpenAI speech", configured: !!process.env.OPENAI_API_KEY, env: ["OPENAI_API_KEY"], defaultModel: process.env.PI_VOICE_OPENAI_TTS_MODEL || "gpt-4o-mini-tts" });
-  }
-  return {
-    kind: stt ? "stt" : "tts",
-    providers,
-    defaultProvider: (stt ? process.env.PI_VOICE_STT_PROVIDER : process.env.PI_VOICE_TTS_PROVIDER) || (localUrl ? "local" : ""),
-    remoteConsent: stt ? "Remote WebUI raw-audio uploads require per-request remoteMicStreamingConsentAccepted=true; browser Web Speech does not use this route." : "Server-side TTS sends answer text to the selected provider only when this route is explicitly used.",
-  };
-}
-
-function naturalConversationUnavailableResponse(tab, kind = "stt") {
-  return {
-    featureId: NATURAL_CONVERSATION_FEATURE_ID,
-    available: false,
-    mode: naturalConversationModeSnapshot(tab, { available: false, enabled: false, uiState: "off" }),
-    voice: naturalConversationVoiceProviderStatus(kind),
-    message: "Natural Conversation server-side voice fallbacks are opt-in. Configure a local endpoint or explicit hosted provider env vars; browser-native audio remains the default Web UI path.",
-  };
-}
-
-function naturalConversationProviderNotConfiguredError(kind, provider, message) {
-  const error = makeHttpError(provider ? 424 : 501, message);
-  error.voice = naturalConversationVoiceProviderStatus(kind);
-  return error;
-}
-
-function requestedNaturalConversationVoiceProvider(kind, body = {}) {
-  const requested = String(body.provider || body.providerId || (kind === "stt" ? process.env.PI_VOICE_STT_PROVIDER : process.env.PI_VOICE_TTS_PROVIDER) || "").trim().toLowerCase();
-  const ids = kind === "stt" ? VOICE_STT_PROVIDER_IDS : VOICE_TTS_PROVIDER_IDS;
-  const localUrl = kind === "stt" ? process.env.PI_VOICE_STT_URL : process.env.PI_VOICE_TTS_URL;
-  const provider = requested || (localUrl ? "local" : "");
-  if (!provider) throw naturalConversationProviderNotConfiguredError(kind, "", `No Natural Conversation ${kind.toUpperCase()} provider is configured. Set ${kind === "stt" ? "PI_VOICE_STT_URL or PI_VOICE_STT_PROVIDER" : "PI_VOICE_TTS_URL or PI_VOICE_TTS_PROVIDER"}.`);
-  if (!ids.includes(provider)) throw makeHttpError(400, `Unsupported Natural Conversation ${kind.toUpperCase()} provider: ${provider}`);
-  if (provider === "local" && !localUrl) throw naturalConversationProviderNotConfiguredError(kind, provider, `Local Natural Conversation ${kind.toUpperCase()} endpoint is not configured. Set ${kind === "stt" ? "PI_VOICE_STT_URL" : "PI_VOICE_TTS_URL"}.`);
-  if (provider === "groq" && !process.env.GROQ_API_KEY) throw naturalConversationProviderNotConfiguredError(kind, provider, "Groq STT is not configured. Set GROQ_API_KEY server-side; never send it from the browser.");
-  if (provider === "openai" && !process.env.OPENAI_API_KEY) throw naturalConversationProviderNotConfiguredError(kind, provider, `OpenAI ${kind.toUpperCase()} is not configured. Set OPENAI_API_KEY server-side; never send it from the browser.`);
-  if (provider === "cloudflare") throw makeHttpError(501, "Cloudflare Workers AI STT is a selected Phase 4 provider but its adapter is deferred until the exact upload contract is validated; use local, Groq, or OpenAI for this slice.");
-  return provider;
-}
-
-function requireRemoteMicConsentForStt(req, body = {}) {
-  if (isLocalRequest(req)) return;
-  if (body.remoteMicStreamingConsentAccepted === true || body.remoteMicStreamingConsent === true) return;
-  throw makeHttpError(403, "Remote WebUI STT uploads require explicit per-tab remote microphone streaming consent before raw audio is sent to the Pi host or an STT provider.");
-}
-
-function decodeVoiceAudioBody(body = {}) {
-  const value = String(body.audioBase64 || body.audio || body.data || "").trim();
-  if (!value) throw makeHttpError(400, "audioBase64 is required for Natural Conversation STT fallback uploads");
-  const dataUrlMatch = value.match(/^data:([^;,]+);base64,(.*)$/s);
-  const mimeType = String(body.mimeType || body.contentType || dataUrlMatch?.[1] || "audio/webm").toLowerCase();
-  if (!VOICE_AUDIO_MIME_TYPES.has(mimeType)) throw makeHttpError(415, `Unsupported voice audio mime type: ${mimeType}`);
-  const base64 = (dataUrlMatch?.[2] || value).replace(/\s+/g, "");
-  if (!/^[A-Za-z0-9+/]*={0,2}$/.test(base64)) throw makeHttpError(400, "audioBase64 must be valid base64");
-  const buffer = Buffer.from(base64, "base64");
-  if (!buffer.length) throw makeHttpError(400, "audioBase64 decoded to an empty audio payload");
-  if (buffer.length > VOICE_AUDIO_BODY_LIMIT_BYTES) throw makeHttpError(413, `Audio payload is too large (limit ${formatBytes(VOICE_AUDIO_BODY_LIMIT_BYTES)})`);
-  return {
-    buffer,
-    mimeType,
-    fileName: String(body.fileName || `speech.${mimeType.includes("wav") ? "wav" : mimeType.includes("mpeg") || mimeType.includes("mp3") ? "mp3" : "webm"}`).replace(/[\\/\0]/g, "_").slice(0, 120),
-  };
-}
-
-function voiceFetchError(provider, response, text) {
-  const status = response.status >= 500 ? 502 : 400;
-  return makeHttpError(status, `${provider} voice provider returned HTTP ${response.status}: ${truncateStatusText(text || response.statusText || "request failed", 500)}`);
-}
-
-async function fetchVoiceProvider(provider, url, init = {}) {
-  const response = await fetch(url, { ...init, signal: AbortSignal.timeout(VOICE_PROVIDER_TIMEOUT_MS) });
-  if (!response.ok) throw voiceFetchError(provider, response, await response.text().catch(() => ""));
-  return response;
-}
-
-function voiceFormData(audio, body = {}, model = "") {
-  const form = new FormData();
-  form.set("file", new Blob([audio.buffer], { type: audio.mimeType }), audio.fileName);
-  if (model) form.set("model", model);
-  if (body.language) form.set("language", String(body.language));
-  if (body.prompt) form.set("prompt", String(body.prompt));
-  return form;
-}
-
-function transcriptTextFromProviderJson(json) {
-  return String(json?.text || json?.transcript || json?.data?.text || json?.result?.text || "").trim();
-}
-
-async function parseTranscriptResponse(provider, response) {
-  const contentType = String(response.headers.get("content-type") || "").toLowerCase();
-  if (contentType.includes("application/json")) {
-    const json = await response.json();
-    const text = transcriptTextFromProviderJson(json);
-    if (!text) throw makeHttpError(502, `${provider} STT provider returned JSON without a transcript text field`);
-    return text;
-  }
-  const text = (await response.text()).trim();
-  if (!text) throw makeHttpError(502, `${provider} STT provider returned an empty transcript`);
-  return text;
-}
-
-async function transcribeWithLocalProvider(audio, body = {}) {
-  const form = voiceFormData(audio, body, body.model ? String(body.model) : "");
-  const response = await fetchVoiceProvider("local STT", process.env.PI_VOICE_STT_URL, { method: "POST", body: form });
-  return parseTranscriptResponse("local", response);
-}
-
-async function transcribeWithOpenAiCompatibleProvider(provider, audio, body = {}) {
-  const openai = provider === "openai";
-  const url = openai ? "https://api.openai.com/v1/audio/transcriptions" : "https://api.groq.com/openai/v1/audio/transcriptions";
-  const model = String(body.model || (openai ? process.env.PI_VOICE_OPENAI_STT_MODEL || "gpt-4o-mini-transcribe" : process.env.PI_VOICE_GROQ_STT_MODEL || "whisper-large-v3-turbo"));
-  const form = voiceFormData(audio, body, model);
-  form.set("response_format", "json");
-  const response = await fetchVoiceProvider(`${provider} STT`, url, {
-    method: "POST",
-    headers: { authorization: `Bearer ${openai ? process.env.OPENAI_API_KEY : process.env.GROQ_API_KEY}` },
-    body: form,
-  });
-  return parseTranscriptResponse(provider, response);
-}
-
-async function handleNaturalConversationSttTranscribe(req, tab, body = {}) {
-  requireRemoteMicConsentForStt(req, body);
-  const provider = requestedNaturalConversationVoiceProvider("stt", body);
-  const audio = decodeVoiceAudioBody(body);
-  const text = provider === "local" ? await transcribeWithLocalProvider(audio, body) : await transcribeWithOpenAiCompatibleProvider(provider, audio, body);
-  return { provider, text, mimeType: audio.mimeType, byteLength: audio.buffer.length, mode: naturalConversationModeSnapshot(tab) };
-}
-
-function normalizeVoiceText(body = {}) {
-  const text = String(body.text || body.input || "").trim();
-  if (!text) throw makeHttpError(400, "text is required for Natural Conversation TTS fallback synthesis");
-  if (text.length > VOICE_TTS_TEXT_MAX_CHARS) throw makeHttpError(413, `TTS text is too long (limit ${VOICE_TTS_TEXT_MAX_CHARS} characters)`);
-  return text;
-}
-
-async function audioPayloadFromResponse(provider, response, preferredFormat = "") {
-  const contentType = String(response.headers.get("content-type") || "").toLowerCase();
-  if (contentType.includes("application/json")) {
-    const json = await response.json();
-    const audioBase64 = String(json.audioBase64 || json.audio || json.data?.audioBase64 || "").trim();
-    if (!audioBase64) throw makeHttpError(502, `${provider} TTS provider returned JSON without audioBase64`);
-    const buffer = Buffer.from(audioBase64, "base64");
-    return { audioBase64, contentType: json.mimeType || json.contentType || "audio/mpeg", format: json.format || preferredFormat || "mp3", byteLength: buffer.length };
-  }
-  const buffer = Buffer.from(await response.arrayBuffer());
-  if (!buffer.length) throw makeHttpError(502, `${provider} TTS provider returned empty audio`);
-  return { audioBase64: buffer.toString("base64"), contentType: contentType || "audio/mpeg", format: preferredFormat || (contentType.includes("wav") ? "wav" : "mp3"), byteLength: buffer.length };
-}
-
-async function synthesizeWithLocalProvider(text, body = {}) {
-  const response = await fetchVoiceProvider("local TTS", process.env.PI_VOICE_TTS_URL, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ text, voice: body.voice || process.env.PI_VOICE_TTS_VOICE || undefined, format: body.format || process.env.PI_VOICE_TTS_FORMAT || "mp3" }),
-  });
-  return audioPayloadFromResponse("local", response, body.format || process.env.PI_VOICE_TTS_FORMAT || "mp3");
-}
-
-async function synthesizeWithOpenAiProvider(text, body = {}) {
-  const format = String(body.format || process.env.PI_VOICE_OPENAI_TTS_FORMAT || "mp3");
-  const response = await fetchVoiceProvider("openai TTS", "https://api.openai.com/v1/audio/speech", {
-    method: "POST",
-    headers: { authorization: `Bearer ${process.env.OPENAI_API_KEY}`, "content-type": "application/json" },
-    body: JSON.stringify({ model: body.model || process.env.PI_VOICE_OPENAI_TTS_MODEL || "gpt-4o-mini-tts", voice: body.voice || process.env.PI_VOICE_OPENAI_TTS_VOICE || "alloy", input: text, response_format: format }),
-  });
-  return audioPayloadFromResponse("openai", response, format);
-}
-
-async function handleNaturalConversationTtsSpeech(_req, tab, body = {}) {
-  const provider = requestedNaturalConversationVoiceProvider("tts", body);
-  const text = normalizeVoiceText(body);
-  const audio = provider === "local" ? await synthesizeWithLocalProvider(text, body) : await synthesizeWithOpenAiProvider(text, body);
-  return { provider, ...audio, mode: naturalConversationModeSnapshot(tab) };
-}
-
 function resolveCliPath(value) {
   const text = String(value || "").trim();
   if (!text) return "";
@@ -9853,7 +8949,6 @@ function resolveTabPath(tab, value) {
   if (!text) return "";
   return path.isAbsolute(text) ? text : path.resolve(tab?.cwd || options.cwd, text);
 }
-
 
 function configuredSessionDir() {
   for (let index = 0; index < options.piArgs.length; index++) {
@@ -10841,29 +9936,6 @@ function outputModeMetadata() {
 
 function tabHasActiveOutput(tab) {
   return tab?.activity?.isWorking === true || tab?.lastState?.isStreaming === true || tab?.lastState?.isCompacting === true;
-}
-
-function activateOutputMode(client, activeMode, reason = "server-default-change") {
-  const nextMode = normalizeOutputMode(activeMode);
-  if (client.activeMode === nextMode) {
-    client.pendingMode = undefined;
-    return;
-  }
-  sendSse(client, {
-    type: "webui_output_mode",
-    protocolVersion: OUTPUT_MODE_PROTOCOL_VERSION,
-    previousMode: client.activeMode,
-    activeMode: nextMode,
-    reason,
-  });
-  client.activeMode = nextMode;
-  client.pendingMode = undefined;
-}
-
-function sendSseToClient(client, event) {
-  const sent = sendSse(client, event);
-  if (sent && client?.pendingMode && isOutputModeSemanticBarrier(event)) activateOutputMode(client, client.pendingMode);
-  return sent;
 }
 
 function refreshAutoOutputModes() {

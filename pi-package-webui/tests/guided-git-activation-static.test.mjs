@@ -4,6 +4,9 @@ import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+const gitGeneration = await readFile(new URL("../lib/server/git-generation.mjs", import.meta.url), "utf8");
+const gitMutations = await readFile(new URL("../lib/server/git-mutations.mjs", import.meta.url), "utf8");
+
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const [app, state, server, html, serviceWorker, readme, technical, development, fakePi] = await Promise.all([
   readFile(join(root, "public", "app.js"), "utf8"),
@@ -71,18 +74,18 @@ test("native generation capabilities are extension-only and tab-local", () => {
 });
 
 test("server dispatch requires extension provenance and completes on a fresh native artifact", () => {
-  assert.match(server, /async function resolveGuidedGitNativeCommand[\s\S]*candidate\?\.source === "extension"[\s\S]*Same-named prompt templates are not used/u);
-  const dispatchStart = server.indexOf("async function dispatchGitWorkflowGenerationAttempt");
-  const dispatchEnd = server.indexOf("\nasync function settleGitWorkflowGeneration", dispatchStart);
+  assert.match(gitGeneration, /async function resolveGuidedGitNativeCommand[\s\S]*candidate\?\.source === "extension"[\s\S]*Same-named prompt templates are not used/u);
+  const dispatchStart = gitGeneration.indexOf("async function dispatchGitWorkflowGenerationAttempt");
+  const dispatchEnd = gitGeneration.indexOf("\n  async function settleGitWorkflowGeneration", dispatchStart);
   assert.notEqual(dispatchStart, -1);
   assert.notEqual(dispatchEnd, -1);
-  const dispatch = server.slice(dispatchStart, dispatchEnd);
+  const dispatch = gitGeneration.slice(dispatchStart, dispatchEnd);
   assert.match(dispatch, /record\.message = gitWorkflowGenerationPrompt\(record\.kind, record\.preferences, record\.nativeCommandName, profile\)/u);
-  assert.match(server, /record\.primary = gitWorkflowGenerationProfile\(\s+preferences\.generation\.provider,\s+preferences\.generation\.modelId,\s+preferences\.generation\.thinkingLevel,/u, "generation records should retain the configured profile used by dispatch");
+  assert.match(gitGeneration, /record\.primary = gitWorkflowGenerationProfile\(\s+preferences\.generation\.provider,\s+preferences\.generation\.modelId,\s+preferences\.generation\.thinkingLevel,/u, "generation records should retain the configured profile used by dispatch");
   assert.doesNotMatch(dispatch, /set_model|set_thinking_level|setThinkingLevelForTab/u, "guided generation must not switch or restore the parent tab model or reasoning effort");
-  assert.match(server, /function guidedGitNativeCommandErrorFromEvent[\s\S]*event\?\.type !== "extension_error"[\s\S]*event\.extensionPath !== `command:\$\{commandName\}`/u);
-  assert.match(server, /if \(record\.nativeCommandError\) throw record\.nativeCommandError;[\s\S]*await assertGuidedGitNativeArtifactUpdated\(tab, record\);[\s\S]*finishGitWorkflowGeneration\(tab, record, \{ successful: true \}\)/u);
-  assert.match(server, /const target = path\.resolve\(base, `\$\{encodeURIComponent\(branch\)\}\.md`\)/u);
+  assert.match(gitGeneration, /function guidedGitNativeCommandErrorFromEvent[\s\S]*event\?\.type !== "extension_error"[\s\S]*event\.extensionPath !== `command:\$\{commandName\}`/u);
+  assert.match(gitGeneration, /if \(record\.nativeCommandError\) throw record\.nativeCommandError;[\s\S]*await assertGuidedGitNativeArtifactUpdated\(tab, record\);[\s\S]*finishGitWorkflowGeneration\(tab, record, \{ successful: true \}\)/u);
+  assert.match(gitMutations, /const target = path\.resolve\(base, `\$\{encodeURIComponent\(branch\)\}\.md`\)/u);
   assert.match(development, /correlated `extension_error` event as the native command's terminal failure/u);
 });
 

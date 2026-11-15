@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+
+const gitGeneration = await readFile(new URL("../lib/server/git-generation.mjs", import.meta.url), "utf8");
 
 const testsDir = path.dirname(fileURLToPath(import.meta.url));
 const packageDir = path.resolve(testsDir, "..");
@@ -43,9 +46,9 @@ assert.match(lifecycle, /pendingFallbackLifecycleEvents[\s\S]*slice\(-4\)/, "pre
 assert.match(lifecycle, /flushPendingGitWorkflowFallbackLifecycleEvents[\s\S]*generationAccepted: true[\s\S]*flushPendingGitWorkflowFallbackLifecycleEvents\(tabId\)/, "buffered lifecycle events should flush only after response correlation");
 assert.match(lifecycle, /generationId[\s\S]*workflow\.generationId/, "all lifecycle kinds should require the exact server generation ID");
 assert.doesNotMatch(lifecycle, /\bapi\(|gitWorkflowRequest\(|fetch\(/, "browser lifecycle handling must never dispatch fallback or another request");
-assert.match(server, /lifecycle\.events = [\s\S]*\.slice\(-2\)/, "the server should retain a bounded per-tab lifecycle replay snapshot");
+assert.match(gitGeneration, /lifecycle\.events = [\s\S]*\.slice\(-2\)/, "the server should retain a bounded per-tab lifecycle replay snapshot");
 assert.match(server, /replayGitWorkflowFallbackLifecycle\(tab, client\)/, "EventSource reconnect should replay Guided Git lifecycle state");
-assert.match(server, /reason: boundedGitWorkflowGenerationError\("The primary Git-writing model ended with an error\."\)/, "lifecycle reason copy should be curated rather than exposing provider diagnostics");
+assert.match(gitGeneration, /reason: boundedGitWorkflowGenerationError\("The primary Git-writing model ended with an error\."\)/, "lifecycle reason copy should be curated rather than exposing provider diagnostics");
 assert.match(app, /handleGitWorkflowFallbackLifecycleEvent\(event\)\) return;[\s\S]*if \(!eventTargetsActiveTab\(event\)\)/, "tab-scoped fallback events should be handled before inactive-tab routing");
 assert.match(app, /generationKind: "commit"[\s\S]*generationKind: "branch"[\s\S]*generationKind: "pr"/, "all three Guided Git generation kinds should register browser correlation state");
 assert.match(app, /branch-name\$\{query\}[\s\S]*pr-description\$\{query\}/, "branch and PR artifact reads should send their exact generation IDs");
