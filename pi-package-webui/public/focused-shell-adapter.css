@@ -5,6 +5,35 @@ html[data-desktop-shell="focused"] .control-row:has(#thinkingSelect),
 html[data-desktop-shell="focused"] #busyPromptBehaviorTag,
 html[data-desktop-shell="focused"] #busyPromptBehaviorMenu { display: none !important; }
 html[data-desktop-shell="focused"] #composerActionsButton { display: inline-flex; }
+html[data-desktop-shell="focused"] #focusedWorkspace .composer-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 8px;
+  margin-top: 8px;
+}
+html[data-desktop-shell="focused"] #focusedWorkspace .composer-row > .spacer { display: none; }
+/* Saved action slots still apply inside More, but cannot place the primary action. */
+html[data-desktop-shell="focused"] #focusedWorkspace #composerActionsButton,
+html[data-desktop-shell="focused"] #focusedWorkspace #sendButton {
+  grid-row: 1;
+  order: 0;
+  width: auto;
+  min-height: 34px;
+  padding: 5px 14px;
+}
+html[data-desktop-shell="focused"] #focusedWorkspace #composerActionsButton {
+  grid-column: 1;
+  justify-self: start;
+  justify-content: center;
+  min-width: 64px;
+}
+html[data-desktop-shell="focused"] #focusedWorkspace #sendButton {
+  grid-column: 2;
+  justify-self: end;
+  min-width: 96px;
+}
 html[data-desktop-shell="focused"] #composerActionsPanel { display: none; }
 html[data-desktop-shell="focused"] body.composer-actions-open #composerActionsPanel {
   display: grid;
@@ -19,10 +48,34 @@ html[data-desktop-shell="focused"] body.composer-actions-open #composerActionsPa
   align-items: start;
   overflow: visible;
 }
+/* The conversation clips sideways flyouts, so keep nested Options in one scroll area. */
+html[data-desktop-shell="focused"] #focusedWorkspace .composer-options-menu { position: static; }
+html[data-desktop-shell="focused"] #focusedWorkspace .composer-options-menu-panel {
+  inset: auto 0 calc(100% + 8px) auto;
+  width: min(26rem, 100%);
+  min-width: 0;
+  max-width: 100%;
+  max-height: min(40dvh, 24rem);
+  overflow: auto;
+}
+html[data-desktop-shell="focused"] #focusedWorkspace .composer-options-submenu { flex-direction: column; }
+html[data-desktop-shell="focused"] #focusedWorkspace .composer-options-submenu-panel {
+  position: static;
+  max-height: none;
+  padding-top: 6px;
+  overflow: visible;
+}
+@media (pointer: coarse) {
+  /* Touch styles size the chat to the viewport; the focused header needs room too. */
+  html[data-desktop-shell="focused"] #focusedWorkspace .chat-panel { height: 100%; max-height: 100%; }
+  html[data-desktop-shell="focused"] #focusedWorkspace #composerActionsButton,
+  html[data-desktop-shell="focused"] #focusedWorkspace #sendButton { min-height: 44px; }
+}
 html[data-desktop-shell="focused"] .side-panel-section-content { min-width: 0; }
 html[data-desktop-shell="focused"] .side-panel-controls { display: grid; gap: 16px; }
 html[data-desktop-shell="focused"] #focusedWorkspace { height: var(--visual-viewport-height, 100dvh); }
-#focusedWorkspace .chat-panel { display: flex; flex-direction: column; }
+/* Only the transcript scrolls; focusing an action must not shift the whole composer. */
+#focusedWorkspace .chat-panel { display: flex; flex-direction: column; overflow: clip; }
 #focusedWorkspace .terminal-tabs-shell { display: flex; flex-direction: column; align-items: stretch; height: 100%; min-height: 0; }
 #focusedWorkspace .terminal-tabs-drawer-content { display: flex; flex-direction: column; gap: 8px; min-height: 0; height: 100%; }
 #focusedWorkspace .terminal-tabs { flex: 1; display: flex; flex-direction: column; align-items: stretch; overflow: auto; max-height: none; }
