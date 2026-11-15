@@ -271,10 +271,11 @@ test('Essential and Detailed change presentation without changing transport proc
 });
 
 
-test('final-output question feedback accepts a pointer click without copy-button interception', async ({ page, ownership }) => {
+test('final-output question feedback accepts a pointer click without copy-button interception', async ({ page, ownership }, info) => {
   await open(page, ownership);
   await page.locator('#chat .feedback-question').first().click();
   await expect(page.locator('#feedbackTray')).toContainText('1 action reaction');
+  await capture(page, info, 'pointer-feedback');
 });
 
 test('hidden attachment control can be recovered from All tools and Settings', async ({ page, ownership }, info) => {

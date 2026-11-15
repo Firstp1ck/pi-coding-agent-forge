@@ -59,8 +59,8 @@ assert.match(technical, /## Normal and compact output[\s\S]*?select \*\*Compact\
 assert.match(development, /### Codex subscription Fast mode[\s\S]*?service_tier: "priority"[\s\S]*?service_tier: "ultrafast"[\s\S]*?8× Standard included usage[\s\S]*?6×/, "development guide should document both tiers and cost semantics");
 assert.match(technical, /Normal \/ Fast \/ Ultrafast[\s\S]*?Pro \$500/, "technical reference should document the third mode and subscription eligibility");
 // Intent preserved: browser-asset changes must advance the coherent cache tuple.
-assert.match(serviceWorker, /pi-webui-pwa-v166[\s\S]*?"\/codex-speed-mode\.mjs"/, "PWA should refresh and cache the shared mode helper");
-assert.match(html, /data-app-src="\/app\.js\?v=195"/, "browser module URL should be cache-busted for speed-mode wiring");
+assert.match(serviceWorker, /pi-webui-pwa-v167[\s\S]*?"\/codex-speed-mode\.mjs"/, "PWA should refresh and cache the shared mode helper");
+assert.match(html, /data-app-src="\/app\.js\?v=196"/, "browser module URL should be cache-busted for speed-mode wiring");
 
 assert.match(server, /createCodexFastModeService\(\{[\s\S]*packageName: OPTIONAL_FEATURE_PACKAGES\.get\("codexFastMode"\)/, "server must wire the speed adapter to the canonical package catalog");
 

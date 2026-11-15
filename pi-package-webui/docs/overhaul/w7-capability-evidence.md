@@ -281,9 +281,11 @@ Same Linux/Chromium desktop fixture, reduced motion.
 
 **Workaround:** Focus the reaction and press Enter. The separate keyboard path verifies failure, retained queue and successful retry without a force-click exemption.
 
-## Readiness
+## Parent integration verification
 
-FAIL for capability acceptance while these assertions fail. This unit delivers tests and evidence for parent repair. No review round, release gate, installed-companion parity, physical-device result, cohort acceptance or whole-W7 approval is claimed.
+Parent integrated this unit as 32229cd5 and independently reproduced all three failures. Project Changes now expands the active repository on its first Focused visit, retaining later manual collapse and one expanded repository. Opening Runners requests current discovery through the existing guarded owner. Feedback reserves horizontal space beside Copy, reveals on message hover/focus and remains visible for touch input; its buttons no longer require a prior hover before accepting a click. The feedback container has group semantics.
+
+All 25 actual-app cases pass in the parent run, exit 0, including all nine reachability targets. Log: `/tmp/webui-w7-cap-integrated.log`. All 75 focused Git-render/runner checks pass in `/tmp/webui-w7-cap-focused-node.log`. Parent captured, inspected and displayed runner output and pointer-feedback screenshots under `test-results/w7-cap-integrated/`. The historical reproductions above remain evidence of the repaired defects. Companion payloads retain their documented mocks; this is not installed-provider coverage. Whole-W7 acceptance, accessibility, performance and PWA gates remain separate.
 
 ## Missing fixture seams and remaining limits
 

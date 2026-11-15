@@ -1173,6 +1173,7 @@ const projectGitTools = createProjectGitToolsController({
 });
 let gitPanelState = {
   expandedCardKey: "",
+  focusedInitializedRoots: new Set(),
   discovery: new Map(),
   repositories: new Map(),
   activeViews: new Map(),
@@ -2340,6 +2341,12 @@ function renderFocusedShell() {
   }
   if (focusedShell.active && focusedShell.inspector !== previousInspector) {
     if (focusedShell.inspector === "git") renderGitPanel();
+    if (focusedShell.inspector === "runners") {
+      const target = activeTabContext();
+      void refreshAppRunners(target).catch(error => {
+        if (isCurrentTabContext(target)) addEvent(error.message || String(error), "error");
+      });
+    }
     if (focusedShell.inspector === "events") clearUnreadEvents();
   }
 }
@@ -16989,6 +16996,14 @@ function renderGitPanel() {
   for (const key of [...gitPanelState.openFolders.keys()]) if (!liveRoots.has(key.split("\u0000", 1)[0])) gitPanelState.openFolders.delete(key);
   const liveCardKeys = new Set(cards.filter((card) => card.root).map((card) => card.key));
   if (gitPanelState.expandedCardKey && !liveCardKeys.has(gitPanelState.expandedCardKey)) gitPanelState.expandedCardKey = "";
+  for (const root of gitPanelState.focusedInitializedRoots) {
+    if (!liveRoots.has(root)) gitPanelState.focusedInitializedRoots.delete(root);
+  }
+  const activeCard = cards.find(card => card.root && card.candidates.some(candidate => candidate.tabId === activeTabId));
+  if (focusedShell?.active && activeCard && !gitPanelState.focusedInitializedRoots.has(activeCard.root)) {
+    gitPanelState.focusedInitializedRoots.add(activeCard.root);
+    if (!gitPanelState.expandedCardKey) gitPanelState.expandedCardKey = activeCard.key;
+  }
   closeGitPanelContextMenu({ returnFocus: false });
   const repositoryCount = cards.filter((card) => card.root).length;
   const discovering = [...gitPanelState.discovery.values()].some((entry) => entry.loading);
@@ -35533,6 +35548,7 @@ function renderActionFeedbackControls(bubble, message, messageIndex) {
   const key = actionFeedbackKey(message, messageIndex);
   const selected = actionFeedbackByTab.get(activeTabId)?.get(key)?.reaction;
   const controls = make("div", "action-feedback-controls");
+  controls.setAttribute("role", "group");
   controls.setAttribute("aria-label", message?.role === "assistant" ? "Final output feedback" : "Action feedback");
   for (const [reaction, meta] of Object.entries(ACTION_FEEDBACK_REACTIONS)) {
     const button = make("button", `action-feedback-button feedback-${reaction}${selected === reaction ? " active" : ""}`, meta.icon);

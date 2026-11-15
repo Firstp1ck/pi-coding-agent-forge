@@ -9027,13 +9027,21 @@ button.git-workflow-step:hover:not(:disabled) {
   transform: translateY(0.12rem) scale(0.98);
   transition: opacity 140ms ease, transform 140ms ease;
 }
+.message.has-copy-action > .action-feedback-controls {
+  right: 3.2rem;
+}
+.message:hover > .action-feedback-controls,
+.message:focus-within > .action-feedback-controls,
 .action-feedback-controls:hover,
 .action-feedback-controls:focus-within {
   opacity: 1;
   transform: translateY(0) scale(1);
 }
-.action-feedback-controls:not(:hover):not(:focus-within) .action-feedback-button {
-  pointer-events: none;
+@media (hover: none) {
+  .action-feedback-controls {
+    opacity: 1;
+    transform: none;
+  }
 }
 .action-feedback-button {
   min-width: 44px;
