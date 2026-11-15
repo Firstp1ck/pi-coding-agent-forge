@@ -1238,6 +1238,7 @@ let splitTabId = null;
 let newTabMenuOpen = false;
 let nativeCommandMenuOpen = false;
 let appRunnerMenuOpen = false;
+let appRunnerMenuIntent = 0;
 let busyPromptBehaviorMenuOpen = false;
 const skillUsageByTab = new Map();
 let appRunnerInfoTarget = null;
@@ -18347,7 +18348,7 @@ async function splitTerminalTab(tabId, { triggerButton = null } = {}) {
   setMobileTabsExpanded(false);
   setNewTabMenuOpen(false);
   if (!resolvedCwd) {
-    resolvedCwd = await pickCwd(sourceTab, "", { title: "Choose CWD for split terminal" });
+    resolvedCwd = await pickCwd(sourceTab, "", { title: "Choose a folder for split session" });
     if (!resolvedCwd) return;
   }
   if (triggerButton) triggerButton.disabled = true;
@@ -18450,7 +18451,7 @@ async function createTerminalTabFromChosenDirectory({ triggerButton = elements.n
   setMobileTabsExpanded(false);
   setNewTabMenuOpen(false);
   const returnFocus = triggerButton === elements.newTabChooseDirectoryButton ? elements.newTabButton : triggerButton;
-  const cwd = await pickCwd(sourceTab || { id: "new-tab", title: "new tab" }, initialCwd, { title: "Choose CWD for new tab", returnFocus });
+  const cwd = await pickCwd(sourceTab || { id: "new-tab", title: "new tab" }, initialCwd, { title: "Choose a folder for new session", returnFocus });
   if (!cwd) return;
   await createTerminalTab(cwd, { triggerButton });
 }
@@ -25076,7 +25077,7 @@ function updateCreateDirectoryControls() {
   const canCreate = canEdit && !!pathPickerCreateName();
   elements.pathPickerCreateNameInput.disabled = !canEdit;
   elements.pathPickerCreateButton.disabled = !canCreate;
-  elements.pathPickerCreateButton.textContent = busy ? "Creating…" : "Create directory";
+  elements.pathPickerCreateButton.textContent = busy ? "Creating…" : "Create folder";
 }
 
 function pathPickerSearchQuery() {
@@ -25283,7 +25284,7 @@ function renderPathPicker(data) {
   elements.pathPickerCurrent.textContent = pathPickerState.displayCwd;
   elements.pathPickerCurrent.title = pathPickerState.cwd || pathPickerState.displayCwd;
   elements.pathPickerChooseButton.disabled = !pathPickerState.selectable || !pathPickerState.cwd;
-  elements.pathPickerChooseButton.textContent = "Use this directory";
+  elements.pathPickerChooseButton.textContent = "Choose this folder";
   elements.pathPickerPathInput.value = "";
   elements.pathPickerCreateNameInput.value = "";
   elements.pathPickerSearchInput.value = "";
@@ -25297,7 +25298,8 @@ function renderPathPicker(data) {
     elements.pathPickerRoots.append(pathPickerButton("↑ Parent", data.parent, () => loadPathPickerDirectory(data.parent, { focusAfterLoad: true }), "path-picker-root-button"));
   }
   for (const root of data.roots || []) {
-    elements.pathPickerRoots.append(pathPickerButton(root.label, root.cwd, () => loadPathPickerDirectory(root.cwd, { focusAfterLoad: true }), "path-picker-root-button"));
+    const label = root.label === "Tab" ? "Current session" : root.label === "Default" ? "Default folder" : root.label;
+    elements.pathPickerRoots.append(pathPickerButton(label, root.cwd, () => loadPathPickerDirectory(root.cwd, { focusAfterLoad: true }), "path-picker-root-button"));
   }
 
   renderPathPickerDirectoryList();
@@ -25410,7 +25412,7 @@ function pickCwd(tab, initialCwd, { title, returnFocus = document.activeElement 
       selectable: true, requestId: 0, loading: false, creatingDirectory: false,
       directories: [], filteredDirectories: [], resolve,
     };
-    elements.pathPickerTitle.textContent = title || `Choose CWD for ${pickerTab.title}`;
+    elements.pathPickerTitle.textContent = title || "Choose a folder";
     elements.pathPickerCurrent.textContent = "Loading…";
     elements.pathPickerPathInput.value = "";
     elements.pathPickerCreateNameInput.value = "";
@@ -30227,7 +30229,8 @@ function renderAppRunnerControls() {
       : "No app runners detected in this tab working directory";
   button.dataset.tooltip = runners.length ? "App runners: run detected project commands in this tab's working directory." : APP_RUNNER_SUPPORTED_TOOLTIP;
   button.setAttribute("aria-label", button.title);
-  if (!runners.length || running) setAppRunnerMenuOpen(false);
+  // Refreshing data must not cancel the click that requested this discovery.
+  if (!runners.length || running) setAppRunnerMenuOpen(false, { preserveOpeningIntent: true });
 
   panel.replaceChildren();
   for (const runner of runners) {
@@ -39623,7 +39626,8 @@ function setNativeCommandMenuOpen(open) {
   if (!nativeCommandMenuOpen) scheduleDeferredUiFlushAfterDropdownClose();
 }
 
-function setAppRunnerMenuOpen(open) {
+function setAppRunnerMenuOpen(open, { preserveOpeningIntent = false } = {}) {
+  if (!open && !preserveOpeningIntent) appRunnerMenuIntent += 1;
   if (open && composerMenuDismissed(elements.appRunnerMenuButton?.parentElement)) return;
   if (open && activityQueue.isOpen()) setFollowUpQueueOpen(false);
   appRunnerMenuOpen = !!open;
@@ -49084,13 +49088,16 @@ elements.appRunnerMenuButton?.addEventListener("click", async () => {
   setOptionsMenuOpen(false);
   setAppRunnerMenuOpen(false);
   const tabContext = activeTabContext();
+  const openingIntent = ++appRunnerMenuIntent;
+  const fromFocusedComposer = focusedShell?.active === true;
   try {
     await refreshAppRunners(tabContext);
-    if (!isCurrentTabContext(tabContext)) return;
+    if (!isCurrentTabContext(tabContext) || openingIntent !== appRunnerMenuIntent
+      || (fromFocusedComposer && (!focusedShell?.active || !document.body.classList.contains("composer-actions-open")))) return;
     if (appRunnerMenuCanOpen()) setAppRunnerMenuOpen(true);
     else if (!appRunnerIsRunning(activeAppRunnerData().activeRun)) openAppRunnerInfoDialog();
   } catch (error) {
-    if (isCurrentTabContext(tabContext)) addEvent(error.message || String(error), "error");
+    if (isCurrentTabContext(tabContext) && openingIntent === appRunnerMenuIntent) addEvent(error.message || String(error), "error");
   }
 });
 appRunnerMenuContainer?.addEventListener("pointerenter", () => {

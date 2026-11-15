@@ -79,6 +79,11 @@ for (const view of [
     await page.setViewportSize({ width: view.width, height: view.height });
     await ready(page, folderPicker, view.scheme);
     await openPicker(page);
+    await expect(page.locator("#pathPickerTitle")).toHaveText("Choose a folder for new session");
+    await expect(page.locator("#pathPickerChooseButton")).toHaveText("Choose this folder");
+    await expect(page.locator("#pathPickerCreateButton")).toHaveText("Create folder");
+    await expect(page.locator("#pathPickerRoots")).toContainText("Current session");
+    await expect(page.locator("#pathPickerRoots")).toContainText("Default folder");
     await expect(page.locator("#pathPickerCurrent")).toHaveAttribute("title", folderPicker.project);
     await expect(page.locator("#pathPickerList .path-picker-directory")).toHaveCount(folderPicker.folders.length);
     await expect(page.locator(".path-picker-pinned")).not.toHaveAttribute("open", "");
