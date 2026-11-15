@@ -22,7 +22,7 @@ Each worker owns only its unique ignored `handoffs/ui-polish-<id>.md` plus dispo
 
 ## Status
 
-Discovery pending. No findings accepted or fixes implemented yet.
+Terra audits and both review rounds are complete. Confirmed fixes are integrated. Final combined package and Chromium acceptance is running. Audit coverage remains partial and is recorded explicitly below.
 
 ### Discovery disposition
 
@@ -48,3 +48,13 @@ TOOLS initial discovery has no confirmed defect and remains partial. Terra TOOLS
 - POLISH-005 accepted: annotated-tag confirmation omits the selected repository path. Parent used the already-scoped section cache's authoritative root for confirmation display, leaving the captured target/guards intact. All 43 controller checks and 11 live local Git cases pass. Terra's original failing assertion remains active.
 - Activity's synthetic background-decision failure was a fixture delivery defect, not a product finding. Parent replaced the inactive-tab SSE interception with an explicit fake-Pi decision command going through actual server pending-request/attention/replay behavior. The exact selected value, request ID and tab-ID reply assertions remain. All eight live Activity cases pass. This verifies extension decision routing; it does not claim a real workflow/model provider or browser notification permission/click integration.
 - Parent full Chromium invocation was interrupted by termination of its outer shell; its child continued briefly, then stopped after 278 reported passes without a final report. It is not a full-suite pass. Final acceptance will use bounded shards after the picker fix, with zero retries and isolated outer HOME/XDG/agent/update paths.
+
+### Review disposition and final acceptance
+
+Both first-round Terra reports found no concrete scoped regression. Parent acceptance then found that an All tools directory action returned focus to a hidden legacy button. The parent retained the launcher opener through dispatch and added an exact return-focus regression. Round two independently passed all four rail/header and pointer/keyboard paths plus 59 controller/action checks, with no qualifying finding. The review budget is exhausted; no third round was opened.
+
+Later full-suite investigation found three fixture races. The geometry fixture now holds its stream until the test explicitly aborts, rather than ending before slow tab navigation completes. The mobile paste setup resolves and edits the live textarea in one browser task; diagnostics confirmed that locator evaluation could otherwise edit a disconnected handle. The serial visibility fixture waits for its final Show all write and journal cleanup before the next case reads shared server settings. Original behavioral, request-identity, geometry and durability assertions remain active.
+
+The repaired mobile fixture exposed another real interaction defect: error toasts covered the failed-send Retry action. The parent moved notices beneath the mobile app bar while failed-send recovery is visible. Real failed-fetch browser cases at 320px and 390px prove that the error stays visible, Retry receives the pointer, no automatic retry occurs, and the original request ID is retained. Four unchanged mobile continuity repetitions and twelve visibility cases also pass. Public assets and their pinned cache assertions advance together to styles161/PWA173; app201 remains unchanged.
+
+Acceptance at code commit a8a118a6 is pending the complete package gate and four zero-retry Chromium shards. Screenshots were captured and inspected. Original W0-W7 performance results remain historical; this pass does not recapture benchmarks or establish exhaustive hardware, provider or individual-control coverage.

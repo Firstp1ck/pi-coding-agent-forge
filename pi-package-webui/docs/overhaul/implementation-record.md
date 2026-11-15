@@ -79,13 +79,17 @@ The follow-up pass uses GPT-6.1 Terra at high reasoning effort, with isolated fa
 | The phone Control Deck button covered a file action | File actions wrap beneath the title, with room reserved for the deck control. |
 | Directory-picker cancellation lost focus or let an earlier response reach a reopened picker | Loading has an enabled focus target; cancellation aborts the read and restores a valid caller. Picker identity rejects late results, including after reopen. Footer callers retain their control key through redraws. |
 | Tag confirmation omitted the selected repository | Confirmation uses the authoritative root already loaded for that section, preserving the captured request target. |
+| A nested directory picker returned to a hidden launcher button | All tools retains the visible rail/header opener for the picker and returns focus after cancellation. |
+| Error notifications covered mobile failed-send Retry | While recovery is visible, notices stay beneath the mobile app bar. The original request ID survives manual retry. |
 
-Six browser specs retain the live regressions and workflow checks. These exercise real disposable Git staging, stash, tag, branch and worktree operations, runner configuration and stdin, queue behavior, session actions, menu reachability and picker keyboard/error handling. The background decision fixture emits through fake Pi and the real server so attention discovery and response targeting are tested together. Fork, tree and export responses are simulated where fake Pi lacks upstream behavior; a synthetic decision title does not establish real workflow-provider integration.
+Seven browser specs retain the live regressions and workflow checks. These exercise real disposable Git staging, stash, tag, branch and worktree operations, runner configuration and stdin, queue behavior, session actions, menu reachability and picker keyboard/error handling. The background decision fixture emits through fake Pi and the real server so attention discovery and response targeting are tested together. Fork, tree and export responses are simulated where fake Pi lacks upstream behavior; a synthetic decision title does not establish real workflow-provider integration.
 
 Audits distinguish direct preview checks, automated browser scenarios and source-only inspection. They do not establish exhaustive coverage of every control and state. Live installed companions, remote/PIN combinations, browser notification permission/click behavior, provider account changes, voice downloads and hardware, real updates and publishing remain unverified. No production install or configuration mutation is needed for the delivered fixes.
+
+Screenshots from the follow-up pass show [mobile file actions](screenshots/polish/mobile-file-actions.png) and the [repository-specific tag confirmation](screenshots/polish/git-confirmation.png).
 
 ### Platform limits
 
 Linux Chromium is the verified browser environment. Physical Android/iOS keyboards, IME, microphones, Windows/macOS behavior, WebKit and installed live-provider/companion combinations remain unmeasured. Existing platform-specific behavior is preserved in code and focused contracts, not claimed as device-tested.
 
-No production installation, package publication, deployment, push or merge is part of this implementation. Use the user documents for layout selection and recovery. Runtime ownership/protocol downgrades retain their documented drain and explicit shutdown requirements.
+No production installation, package publication, deployment or merge is part of this implementation. The implementation is submitted through PR #38. Use the user documents for layout selection and recovery. Runtime ownership/protocol downgrades retain their documented drain and explicit shutdown requirements.
