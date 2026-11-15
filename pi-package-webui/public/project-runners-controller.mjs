@@ -65,8 +65,14 @@ export function createProjectRunnersController({
   function applyData(tabId, data = {}) {
     if (!tabId) return;
     const owner = ensureOwner(tabId);
-    // SSE and configuration responses supersede every older request, even for the same run.
-    owner.request = null;
+    const nextRun = Object.hasOwn(data, "activeRun") ? data.activeRun : owner.data.activeRun;
+    // Output can arrive before the stdin POST acknowledgment. Retire its snapshot,
+    // but retain the acknowledgment while the original run and request still own it.
+    if (owner.request?.action === "input" && runIdentity(nextRun) === owner.request.runId) {
+      owner.request.snapshotSuperseded = true;
+    } else {
+      owner.request = null;
+    }
     return mergeData(tabId, owner, data);
   }
 
@@ -125,7 +131,7 @@ export function createProjectRunnersController({
       return { success: false, reason: "run" };
     }
 
-    const token = { owner, target, runId: runIdentity(owner.data.activeRun) };
+    const token = { owner, target, action, runId: runIdentity(owner.data.activeRun), snapshotSuperseded: false };
     owner.request = token;
     const submittedDraft = owner.input.get(runId);
     let path = `/api/app-runner/${action}`;
@@ -172,10 +178,12 @@ export function createProjectRunnersController({
       setInputDraft(target.tabId, runId, "");
       inputDraftCleared = true;
     }
-    if (action === "context") {
-      if (data.activeRun) mergeData(target.tabId, owner, { activeRun: data.activeRun }, token);
-    } else {
-      mergeData(target.tabId, owner, data, token);
+    if (!token.snapshotSuperseded) {
+      if (action === "context") {
+        if (data.activeRun) mergeData(target.tabId, owner, { activeRun: data.activeRun }, token);
+      } else {
+        mergeData(target.tabId, owner, data, token);
+      }
     }
     if (!isCurrent(token)) return { success: false, reason: "stale" };
 

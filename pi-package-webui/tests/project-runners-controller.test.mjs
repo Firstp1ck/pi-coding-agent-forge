@@ -109,7 +109,7 @@ const actions = {
   context: (c, target) => c.transferContext({ runId: "run-a", lineCount: 7 }, target),
 };
 
-test("each request rejects retired, superseded SSE, and changed lifetime completions", async (t) => {
+test("requests reject retired snapshots while same-run input acknowledgments survive SSE", async (t) => {
   for (const [name, invoke] of Object.entries(actions)) {
     for (const invalidation of ["retire", "sse", "replacement", "lifetime", "switch"]) {
       await t.test(`${name}: ${invalidation}`, async () => {
@@ -131,6 +131,17 @@ test("each request rejects retired, superseded SSE, and changed lifetime complet
         const before = f.controller.getData("a");
         const notificationCount = f.notifications.length;
         f.calls[0].resolve({ activeRun: running("old-response"), delivery: "steer" });
+        if (name === "input" && invalidation === "sse") {
+          const result = await pending;
+          assert.equal(result.success, true);
+          assert.equal(result.inputDraftCleared, true);
+          assert.equal(f.controller.getData("a"), before);
+          assert.equal(f.notifications.length, notificationCount);
+          assert.equal(f.controller.getInputDraft("a", "run-a"), "");
+          assert.deepEqual(f.renders, [{ tabs: false }]);
+          assert.deepEqual(f.events, [["sent app runner input", "info"]]);
+          return;
+        }
         assert.deepEqual(await pending, { success: false, reason: "stale" });
         assert.equal(f.controller.getData("a"), before);
         assert.equal(f.notifications.length, notificationCount);
@@ -422,4 +433,21 @@ test("explicit target is used instead of the currently selected tab", async () =
   assert.equal((await pending).success, true);
   assert.equal(f.controller.getData("b").activeRun.id, "run-b");
   assert.equal(f.controller.getData("a").activeRun.id, "run-a");
+});
+
+
+test("same-run output before stdin acknowledgment preserves a newer draft and newer output", async () => {
+  const f = fixture();
+  f.seed();
+  f.controller.setInputDraft("a", "run-a", "submitted");
+  const pending = f.controller.sendInput({ runId: "run-a", text: "submitted" });
+  f.controller.applyData("a", { activeRun: { ...running(), lines: ["echo:submitted"] } });
+  const currentData = f.controller.getData("a");
+  f.controller.setInputDraft("a", "run-a", "next command");
+  f.calls[0].resolve({ activeRun: { ...running(), lines: [] } });
+  const result = await pending;
+  assert.equal(result.success, true);
+  assert.equal(result.inputDraftCleared, false);
+  assert.equal(f.controller.getInputDraft("a", "run-a"), "next command");
+  assert.equal(f.controller.getData("a"), currentData);
 });

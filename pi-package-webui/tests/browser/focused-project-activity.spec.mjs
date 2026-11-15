@@ -64,10 +64,23 @@ test('runner input and drafts survive destination changes and only explicit Stop
   const widget = page.locator('.app-runner-widget');
   await expect(widget).toContainText('runner-ready');
   const input = widget.locator('.app-runner-stdin-input');
+  await page.route('**/api/app-runner/input?*', async route => {
+    const response = await route.fetch();
+    await new Promise(resolve => setTimeout(resolve, 600));
+    await route.fulfill({ response });
+  });
   await input.fill('submitted-line');
   await input.press('Enter');
   await expect(widget).toContainText('echo:submitted-line');
+  await expect(input).toHaveValue('');
+  await input.fill('second-submission');
+  const acknowledged = page.waitForResponse(response => new URL(response.url()).pathname === '/api/app-runner/input');
+  await input.press('Enter');
+  await expect(widget).toContainText('echo:second-submission');
   await input.fill('keep stdin draft');
+  await acknowledged;
+  await expect(input).toHaveValue('keep stdin draft');
+  await expect(widget).toContainText('echo:second-submission');
   await expect(page.locator('[data-feature-host="runners"] .app-runner-widget')).toBeVisible();
   await expect(page.locator('#widgetArea .app-runner-widget')).toHaveCount(0);
   await expect(page.locator('#appRunnerInfoButton')).toHaveCSS('opacity', '1');

@@ -484,8 +484,8 @@
     },
     {
       "file": "pi-package-webui/public/project-runners-controller.mjs",
-      "bytes": 8974,
-      "sha256": "b23777ade162be980b288df0d6cb70474f1c7663dbfaa0d6dc091a92c45511e0"
+      "bytes": 9394,
+      "sha256": "a53534ce412844d1bc47897aa471cef8c22924d6c3668731d0ac95b9327ad659"
     },
     {
       "file": "pi-package-webui/public/sampling-parameter-controls.mjs",
@@ -619,8 +619,8 @@
     },
     {
       "file": "plans/planned/webui-design-architecture-overhaul.md",
-      "bytes": 199107,
-      "sha256": "26e043be0c12d9e0ca64bcfd55642a58e55ba03bc09a259bc8e715bd864f648d"
+      "bytes": 200557,
+      "sha256": "3aba19ecf5dbb492f4334d5ccabd60f92afcfc1cff99659065d42ba15facdc23"
     }
   ],
   "reconciliation": {
