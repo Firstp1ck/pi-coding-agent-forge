@@ -49,8 +49,8 @@
     },
     {
       "file": "pi-package-webui/bin/pi-webui.mjs",
-      "bytes": 702211,
-      "sha256": "fb1501b5fbbdaa6f7ae54e1500593d31e59c86cb1a070adbe0c1dc3123379c9b"
+      "bytes": 576267,
+      "sha256": "292b4574d9416332e48fdcb1cb5cd35d51aab5f06f25db28201c856e9f53b880"
     },
     {
       "file": "pi-package-webui/index.ts",
@@ -223,9 +223,34 @@
       "sha256": "80e16c638d321443f928b4d79e545cc67bfb714ea7cd3dd7d55785b646d26467"
     },
     {
+      "file": "pi-package-webui/lib/server/codex-fast-mode.mjs",
+      "bytes": 7965,
+      "sha256": "be1bff1c150081d1179a043a54029c679faff2e1cd5583ff1f291de6accf6597"
+    },
+    {
+      "file": "pi-package-webui/lib/server/conversation-mode.mjs",
+      "bytes": 9837,
+      "sha256": "e7f339f3cf8d80e998b9a5f65a2dc84403d1b93e455aa2f5422277b756eb7046"
+    },
+    {
+      "file": "pi-package-webui/lib/server/git-generation.mjs",
+      "bytes": 20475,
+      "sha256": "4ce7613d71dc5109a55be69df45399ddd4fdde425d90ae93484e6cffd285c904"
+    },
+    {
+      "file": "pi-package-webui/lib/server/git-mutations.mjs",
+      "bytes": 85694,
+      "sha256": "1d7513ef2110d9c20f8b09ab5a276e93f10ba025acbd778f162d8bbed75a4cc5"
+    },
+    {
       "file": "pi-package-webui/lib/server/git-reads.mjs",
       "bytes": 25537,
       "sha256": "76ccd61875ec9545712c50864b19f987a7e32b2e0c396d91bee3349e0857b402"
+    },
+    {
+      "file": "pi-package-webui/lib/server/git-worktree-sessions.mjs",
+      "bytes": 19453,
+      "sha256": "577ed5a17f89aade01dcbfdb3f518d086c0bfdfdb5f531db63094658b1702f09"
     },
     {
       "file": "pi-package-webui/lib/server/settings-store.mjs",
@@ -659,8 +684,8 @@
     },
     {
       "file": "plans/planned/webui-design-architecture-overhaul.md",
-      "bytes": 254363,
-      "sha256": "1afdbb2abeea2840b21aa736251946ea22982771b29c1a020d7adf7c73c349e5"
+      "bytes": 256827,
+      "sha256": "8ed1e05516e946854457044cf204845b8e62b75ae5e636c5d952a95fe0d2d6f1"
     }
   ],
   "reconciliation": {

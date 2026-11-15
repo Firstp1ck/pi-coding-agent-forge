@@ -32,7 +32,6 @@ import {
 import { CODEX_USAGE_DIRECT_TOKEN_MESSAGE, codexUsageLoginGuidance, resolveCodexUsageAuth } from "../lib/codex-usage-auth.mjs";
 import { readCodexCliUsage } from "../lib/codex-cli-usage.mjs";
 import { createCodexUsageReader } from "../lib/codex-usage-source.mjs";
-import { codexSpeedModeFromIntent, codexSpeedModeFromStatus } from "../public/codex-speed-mode.mjs";
 import { AgentRunIndex, canonicalAgentRunId, normalizeAgentInstance } from "../lib/agent-run-protocol.mjs";
 import { AgentRunRegistry } from "../lib/agent-run-registry.mjs";
 import { resolveScopedModelsFromPatterns } from "../lib/scoped-models.mjs";
@@ -89,6 +88,11 @@ import { createRestoreFile, listenWithRetry, probeStartupRestore, readRestoreFil
 import { OPTIONAL_FEATURE_BY_ID, OPTIONAL_FEATURE_CATALOG } from "../lib/optional-feature-catalog.mjs";
 import { createWorkspaceFilesService, FILE_VIEWER_BODY_LIMIT_BYTES } from "../lib/server/workspace-files.mjs";
 import { createGitReadService } from "../lib/server/git-reads.mjs";
+import { createConversationModeService, NATURAL_CONVERSATION_FEATURE_ID } from "../lib/server/conversation-mode.mjs";
+import { createCodexFastModeService } from "../lib/server/codex-fast-mode.mjs";
+import { createGitGenerationService } from "../lib/server/git-generation.mjs";
+import { createGitMutationService, formatGitCommand } from "../lib/server/git-mutations.mjs";
+import { createGitWorktreeSessionService } from "../lib/server/git-worktree-sessions.mjs";
 import { createAppRunnerService } from "../lib/server/app-runners.mjs";
 import {
   OptionalFeatureAuditCoordinator,
@@ -170,23 +174,13 @@ import {
   parseSlashCommand as parseNativeSlashCommand,
 } from "../lib/native-command-adapter.mjs";
 import {
-  WORKTREE_ERROR_CODES,
-  createGitWorktree,
   gitWorktreeErrorPayload,
   isGitLockFailure,
   listGitWorktrees,
-  openGitWorktree,
   pathInside,
-  pruneGitWorktrees,
-  removeGitWorktree,
 } from "../lib/git-worktrees.mjs";
 import { createGitLiveWatcher } from "../lib/git-live-watcher.mjs";
 import { createWorkspaceFilesLiveWatcher } from "../lib/workspace-files-live-watcher.mjs";
-import {
-  gitMessageArtifactPairReadiness,
-  readStableGitMessageArtifactPair,
-  sameGitMessageArtifactPair,
-} from "../lib/git-message-artifacts.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
@@ -417,7 +411,6 @@ const unavailableNative = (command, details = {}) => nativeCommandUnavailable(co
 function parseSlashCommand(message) {
   return parseNativeSlashCommand(message, NATIVE_SLASH_COMMAND_NAMES);
 }
-const NATURAL_CONVERSATION_FEATURE_ID = "naturalConversation";
 const OPTIONAL_FEATURE_PACKAGES = new Map(OPTIONAL_FEATURE_CATALOG.map(({ featureId, packageName }) => [featureId, packageName]));
 const OPTIONAL_FEATURE_PACKAGE_NAMES = new Set(OPTIONAL_FEATURE_PACKAGES.values());
 const WEBUI_RESOURCE_EXCLUDED_PACKAGES = new Set([WEBUI_PACKAGE]);
@@ -425,8 +418,6 @@ let optionalFeatureMigrationStore;
 let optionalFeatureAuditCoordinator;
 let optionalFeatureStartupReady = false;
 const UPDATE_PACKAGE_NAMES = [...CORE_UPDATE_PACKAGE_NAMES].sort();
-const NATURAL_CONVERSATION_STATUS_KEY = "natural-conversation";
-const NATURAL_CONVERSATION_COMMAND_NAMES = ["talk", "voice", "conversation"];
 const REPLAYABLE_CLEARED_EXTENSION_STATUS_KEYS = new Set(["feature-decision-output", "feature-category"]);
 const GUIDED_GIT_START_STATUS_KEY = "git-guided-workflow:webui-start";
 const GUIDED_GIT_START_PAYLOAD_TYPE = "firstpick.pi-extension-git-guided-workflow.start";
@@ -434,15 +425,6 @@ const GUIDED_GIT_START_PAYLOAD_VERSION = 1;
 const GUIDED_GIT_LAUNCH_TTL_MS = 15_000;
 const GUIDED_GIT_UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 const GUIDED_GIT_COMMAND_MESSAGE = /^\/git-guided-workflow(?::\d+)?$/u;
-// Codex subscription Fast mode is owned by the optional @firstpick/pi-extension-codex-fast-mode
-// package. The Web UI never inspects ChatGPT credentials or request payloads; it only mirrors the
-// extension-published status key and drives the package-owned /fast-mode command over RPC.
-const CODEX_FAST_MODE_FEATURE_ID = "codexFastMode";
-const CODEX_FAST_MODE_STATUS_KEY = "codex-fast-mode";
-const CODEX_FAST_MODE_COMMAND_NAME = "fast-mode";
-const CODEX_FAST_MODE_PROVIDER = "openai-codex";
-const CODEX_FAST_MODE_STATUS_TIMEOUT_MS = 1000;
-const CODEX_FAST_MODE_CREDIT_NOTICE = "Fast mode increases Codex usage; current rates depend on the model and billing plan. Ultrafast requires GPT-6 Astra and Pro $500 or eligible Enterprise/Edu access, using 8x Standard included usage or 6x purchased-credit/pay-as-you-go usage. Workspace terms may differ. Only subscription-backed openai-codex requests are changed; upstream eligibility stays authoritative.";
 const PACKAGE_NAME_CACHE = new Map();
 
 function usage() {
@@ -3148,402 +3130,6 @@ async function triggerSessionSummary(tab, { refresh = false } = {}) {
   }
 }
 
-function gitWorkflowGenerationProfileArgument(profile) {
-  const payload = Buffer.from(JSON.stringify({
-    version: 1,
-    provider: profile.provider,
-    modelId: profile.modelId,
-    thinkingLevel: profile.thinkingLevel,
-  }), "utf8").toString("base64url");
-  return `--firstpick-webui-generation-profile=${payload}`;
-}
-
-function gitWorkflowGenerationPrompt(kind, preferences, commandName, profile) {
-  const generationProfile = gitWorkflowGenerationProfileArgument(profile);
-  switch (kind) {
-    case "commit":
-      return `/${commandName} ${preferences.commit.language} ${preferences.commit.scope} ${generationProfile}`;
-    case "branch":
-      return `/${commandName} ${generationProfile}`;
-    case "pr":
-      return `/${commandName} ${preferences.commit.language} ${generationProfile}`;
-    default:
-      throw makeHttpError(400, "generation kind must be commit, branch, or pr");
-  }
-}
-
-function guidedGitNativeCommandBase(kind) {
-  if (kind === "commit") return "git-staged-msg";
-  if (kind === "branch") return "git-branch-name";
-  if (kind === "pr") return "pr";
-  throw makeHttpError(400, "generation kind must be commit, branch, or pr");
-}
-
-async function resolveGuidedGitNativeCommand(tab, kind) {
-  const baseName = guidedGitNativeCommandBase(kind);
-  const response = await safeRpcData(tab, { type: "get_commands" }, STATUS_RPC_TIMEOUT_MS);
-  const commands = Array.isArray(response.data?.commands) ? response.data.commands : [];
-  const command = commands.find((candidate) => candidate?.source === "extension" && candidate?.name === baseName)
-    || commands.find((candidate) => candidate?.source === "extension" && String(candidate?.name || "").replace(/:\d+$/, "") === baseName);
-  if (!response.ok || !command) {
-    throw makeHttpError(409, `Guided Git requires the /${baseName} extension command in this Pi tab. Same-named prompt templates are not used.`);
-  }
-  return String(command.name);
-}
-
-const GUIDED_GIT_PROVIDER_FAILURE_MARKER = "FIRSTPICK_GUIDED_GIT_PROVIDER_FAILURE";
-const GUIDED_GIT_NATIVE_COMMAND_ERROR_GRACE_MS = 500;
-
-function boundedGitWorkflowGenerationError(message, fallback = "Guided Git generation failed") {
-  const text = typeof message === "string" ? message : fallback;
-  return text.replace(/[\r\n]+/g, " ").trim().slice(0, 240) || fallback;
-}
-
-function isGuidedGitProviderGenerationFailure(error) {
-  return String(error?.message || error || "").includes(GUIDED_GIT_PROVIDER_FAILURE_MARKER);
-}
-
-function guidedGitNativeCommandErrorFromEvent(record, event) {
-  const commandName = String(record?.nativeCommandName || "");
-  if (event?.type !== "extension_error" || event.event !== "command" || !commandName || event.extensionPath !== `command:${commandName}`) return null;
-  const error = new Error(String(event.error || `/${commandName} failed`));
-  error.guidedGitProviderGenerationFailure = isGuidedGitProviderGenerationFailure(error);
-  return error;
-}
-
-function gitWorkflowGenerationCancellationError() {
-  const error = makeHttpError(409, "Guided Git generation was cancelled");
-  error.code = "GIT_WORKFLOW_CANCELLED";
-  return error;
-}
-
-function assertGitWorkflowGenerationOwnership(tab, record) {
-  if (tab.gitWorkflowGeneration !== record) throw new Error("Guided Git generation is no longer active");
-  if (record.cancelled) throw gitWorkflowGenerationCancellationError();
-}
-
-function attachGitWorkflowGenerationError(error, record) {
-  if (!error || typeof error !== "object" || !record?.generationId || !record.fallbackStarted || record.cancelled || record.processLost) return error;
-  error.gitWorkflowGeneration = {
-    generationId: record.generationId,
-    kind: record.kind,
-    fallbackUsed: record.fallbackStarted === true,
-    generation: publicGitWorkflowGenerationProfile(record.fallbackStarted && record.fallback ? record.fallback : record.primary),
-    primaryGeneration: publicGitWorkflowGenerationProfile(record.primary),
-  };
-  return error;
-}
-
-function gitWorkflowGenerationProfile(provider, modelId, thinkingLevel, models) {
-  const model = models.find((candidate) => candidate.provider === provider && candidate.id === modelId) || null;
-  return { provider, modelId, thinkingLevel, model };
-}
-
-function publicGitWorkflowGenerationProfile(profile) {
-  return {
-    provider: String(profile?.provider || ""),
-    modelId: String(profile?.modelId || ""),
-    thinkingLevel: String(profile?.thinkingLevel || ""),
-  };
-}
-
-async function createGitWorkflowArtifactGeneration(tab, generationId, kind) {
-  const createdAt = Date.now();
-  if (kind === "commit") {
-    // Keep generation dispatch compatible with tabs whose cwd has not become
-    // a repository yet; staging boundaries still verify the real Git root.
-    const root = await getGitRoot(tab.cwd).catch(() => path.resolve(tab.cwd));
-    const cwd = gitWorkflowMessageCwd(root, tab.cwd);
-    return {
-      id: generationId,
-      kind,
-      root,
-      cwd,
-      createdAt,
-      baseline: await readStableGitMessageArtifactPair(commitMessagePaths(cwd)),
-      terminal: false,
-      successful: false,
-    };
-  }
-  const baseline = kind === "branch"
-    ? await readGitWorkflowBranchName(tab.cwd).catch(() => null)
-    : await readGitWorkflowPrDescription(tab.cwd).catch(() => null);
-  return { id: generationId, kind, cwd: path.resolve(tab.cwd), createdAt, baseline, terminal: false, successful: false };
-}
-
-async function assertGuidedGitNativeArtifactUpdated(tab, record) {
-  const generation = record.artifactGeneration;
-  if (!generation) throw new Error("Guided Git generation has no artifact correlation record");
-  if (generation.kind === "commit") {
-    const pair = await readStableGitMessageArtifactPair(commitMessagePaths(generation.cwd));
-    const readiness = gitMessageArtifactPairReadiness(generation.baseline, pair);
-    if (!readiness.ready) throw new Error(readiness.reason || "Native commit generation did not update both message artifacts");
-    return;
-  }
-  const current = generation.kind === "branch"
-    ? await readGitWorkflowBranchName(tab.cwd)
-    : await readGitWorkflowPrDescription(tab.cwd);
-  if (generation.baseline
-    && current.path === generation.baseline.path
-    && current.mtimeMs === generation.baseline.mtimeMs
-    && current.ctimeMs === generation.baseline.ctimeMs
-    && current.ino === generation.baseline.ino) {
-    throw new Error(`Native ${generation.kind} generation did not update its correlated artifact`);
-  }
-}
-
-function emitGitWorkflowFallbackLifecycle(tab, record, phase) {
-  const event = {
-    type: `webui_git_workflow_generation_fallback_${phase}`,
-    tabId: tab.id,
-    tabTitle: tab.title,
-    generationId: record.generationId,
-    kind: record.kind,
-    generation: publicGitWorkflowGenerationProfile(record.fallback),
-    primaryGeneration: publicGitWorkflowGenerationProfile(record.primary),
-    ...(phase === "started"
-      ? { reason: boundedGitWorkflowGenerationError("The primary Git-writing model ended with an error.") }
-      : { error: boundedGitWorkflowGenerationError("The fallback Git-writing model ended with an error.") }),
-  };
-  const lifecycle = tab.gitWorkflowFallbackLifecycle;
-  if (lifecycle?.generationId === record.generationId) {
-    lifecycle.events = [...lifecycle.events.filter((item) => item.type !== event.type), event].slice(-2);
-  }
-  broadcastTabEvent(tab, event);
-}
-
-function replayGitWorkflowFallbackLifecycle(tab, client) {
-  const lifecycle = tab.gitWorkflowFallbackLifecycle;
-  for (const event of lifecycle?.events || []) sendSseToClient(client, { ...event, replayed: true });
-}
-
-async function finishGitWorkflowGeneration(tab, record, { successful }) {
-  if (tab.gitWorkflowGeneration !== record || record.finishing) return;
-  record.finishing = true;
-  const artifactGeneration = record.artifactGeneration;
-  if (artifactGeneration && tab.gitWorkflowArtifactGeneration === artifactGeneration) {
-    artifactGeneration.terminal = true;
-    artifactGeneration.successful = successful === true && !record.cancelled;
-  }
-  if (!successful && record.messageGeneration && tab.gitWorkflowMessageGeneration?.id === record.messageGeneration.id) {
-    tab.gitWorkflowMessageGeneration = record.previousMessageGeneration;
-  }
-  markTabIdle(tab);
-  if (tab.gitWorkflowGeneration === record) tab.gitWorkflowGeneration = null;
-}
-
-async function dispatchGitWorkflowGenerationAttempt(tab, record, profile, attempt) {
-  assertGitWorkflowGenerationOwnership(tab, record);
-  if (!tab.rpc?.isRunning?.()) throw new Error("Pi RPC process is not running");
-  if (!profile.model) throw new Error(`Configured ${attempt} Git-writing model is unavailable: ${profile.provider}/${profile.modelId}`);
-  if (!supportedGitWorkflowThinkingLevels(profile.model).includes(profile.thinkingLevel)) {
-    throw new Error(`Configured ${attempt} thinking level ${profile.thinkingLevel} is unavailable for ${profile.provider}/${profile.modelId}`);
-  }
-
-  record.attempt = attempt;
-  record.attemptRunStarted = false;
-  record.promptAccepted = false;
-  record.pendingSettlement = null;
-  record.nativeCommandError = null;
-  record.message = gitWorkflowGenerationPrompt(record.kind, record.preferences, record.nativeCommandName, profile);
-
-  assertGitWorkflowGenerationOwnership(tab, record);
-  markTabWorking(tab);
-  const response = await tab.rpc.send({ type: "prompt", message: record.message });
-  assertGitWorkflowGenerationOwnership(tab, record);
-  if (response.success === false) {
-    const error = new Error(response.error || "Guided Git generation prompt was rejected");
-    error.guidedGitProviderGenerationFailure = isGuidedGitProviderGenerationFailure(response.error);
-    throw error;
-  }
-  if (record.nativeCommandError) throw record.nativeCommandError;
-  record.promptAccepted = true;
-  const pendingSettlement = record.pendingSettlement;
-  if (pendingSettlement?.attempt === attempt) {
-    record.pendingSettlement = null;
-    void settleGitWorkflowGeneration(tab, record, pendingSettlement);
-  }
-  const result = {
-    accepted: true,
-    kind: record.kind,
-    message: record.message,
-    generationId: record.generationId,
-    generation: publicGitWorkflowGenerationProfile(profile),
-    fallbackUsed: attempt === "fallback",
-    primaryGeneration: publicGitWorkflowGenerationProfile(record.primary),
-  };
-  if (record.nativeGeneration) {
-    try {
-      await assertGuidedGitNativeArtifactUpdated(tab, record);
-    } catch (artifactError) {
-      if (!record.nativeCommandError) await delay(GUIDED_GIT_NATIVE_COMMAND_ERROR_GRACE_MS);
-      if (record.nativeCommandError) throw record.nativeCommandError;
-      throw artifactError;
-    }
-    assertGitWorkflowGenerationOwnership(tab, record);
-    await finishGitWorkflowGeneration(tab, record, { successful: true });
-  }
-  return result;
-}
-
-async function startGitWorkflowFallback(tab, record, primaryError) {
-  if (tab.gitWorkflowGeneration !== record || record.fallbackStarted || !record.fallback) return null;
-  if (record.cancelled || !tab.rpc?.isRunning?.() || primaryError?.guidedGitProviderGenerationFailure !== true) return null;
-  record.fallbackStarted = true;
-  record.attempt = "fallback";
-  record.attemptRunStarted = false;
-  record.promptAccepted = false;
-  console.error(`[guided-git] primary generation ${record.generationId} failed; starting fallback: ${sanitizeError(primaryError)}`);
-  emitGitWorkflowFallbackLifecycle(tab, record, "started");
-  try {
-    return await dispatchGitWorkflowGenerationAttempt(tab, record, record.fallback, "fallback");
-  } catch (error) {
-    if (!record.cancelled && tab.gitWorkflowGeneration === record) {
-      console.error(`[guided-git] fallback generation ${record.generationId} failed: ${sanitizeError(error)}`);
-      emitGitWorkflowFallbackLifecycle(tab, record, "failed");
-    }
-    await finishGitWorkflowGeneration(tab, record, { successful: false });
-    throw error;
-  }
-}
-
-async function settleGitWorkflowGeneration(tab, record, { failed, cancelled }) {
-  if (tab.gitWorkflowGeneration !== record || record.finishing) return;
-  if (cancelled) record.cancelled = true;
-  if (record.attempt === "primary" && failed && !record.cancelled && record.fallback) {
-    try {
-      await startGitWorkflowFallback(tab, record, "The primary Git-writing model ended with an error");
-    } catch {
-      // startGitWorkflowFallback emitted the bounded terminal lifecycle event.
-    }
-    return;
-  }
-  if (record.attempt === "fallback" && failed) {
-    emitGitWorkflowFallbackLifecycle(tab, record, "failed");
-  }
-  await finishGitWorkflowGeneration(tab, record, { successful: !failed && !record.cancelled });
-}
-
-function consumeGitWorkflowGenerationEvent(tab, event, { finalError = false } = {}) {
-  const record = tab.gitWorkflowGeneration;
-  if (!record || record.finishing) return;
-  const nativeCommandError = guidedGitNativeCommandErrorFromEvent(record, event);
-  if (nativeCommandError) {
-    record.nativeCommandError = nativeCommandError;
-    return;
-  }
-  if ((event?.type === "agent_end" || event?.type === "agent_settled") && event.aborted === true) record.cancelled = true;
-  if (event?.type === "agent_start") {
-    record.attemptRunStarted = true;
-    return;
-  }
-  if (event?.type !== "agent_settled" || !record.attemptRunStarted) return;
-  record.attemptRunStarted = false;
-  const settlement = { attempt: record.attempt, failed: finalError, cancelled: record.cancelled };
-  if (!record.promptAccepted) {
-    record.pendingSettlement = settlement;
-    return;
-  }
-  void settleGitWorkflowGeneration(tab, record, settlement);
-}
-
-async function startGitWorkflowGeneration(tab, body = {}) {
-  if (tab.gitWorkflowGeneration) throw makeHttpError(409, "A guided Git generation request is already active in this tab");
-  const kind = String(body.kind || "").trim();
-  if (!new Set(["commit", "branch", "pr"]).has(kind)) throw makeHttpError(400, "generation kind must be commit, branch, or pr");
-
-  // Reserve the tab synchronously before the first await. All preflight and
-  // profile transitions retain this exact object as their ownership token.
-  const record = {
-    generationId: randomUUID(),
-    kind,
-    message: "",
-    preferences: null,
-    previousMessageGeneration: tab.gitWorkflowMessageGeneration || null,
-    messageGeneration: null,
-    artifactGeneration: null,
-    primary: null,
-    fallback: null,
-    fallbackStarted: false,
-    cancelled: false,
-    finishing: false,
-    attempt: "primary",
-    attemptRunStarted: false,
-    promptAccepted: false,
-    pendingSettlement: null,
-    nativeCommandName: "",
-    nativeCommandError: null,
-    nativeGeneration: true,
-  };
-  tab.gitWorkflowGeneration = record;
-  tab.gitWorkflowFallbackLifecycle = { generationId: record.generationId, kind, events: [] };
-
-  try {
-    // Browser state is untrusted. When it claims an approved content token,
-    // verify the exact current index again at this server action boundary.
-    await assertExpectedStagedContentHash(tab, body);
-    assertGitWorkflowGenerationOwnership(tab, record);
-    const preferences = await readGitWorkflowPreferences();
-    assertGitWorkflowGenerationOwnership(tab, record);
-    if (!isGitWorkflowSetupComplete(preferences)) throw makeHttpError(409, "Run /git-workflow-setup or open Guided Git Setup before generating Git text");
-    record.preferences = preferences;
-    const nativeCommandName = await resolveGuidedGitNativeCommand(tab, kind);
-    assertGitWorkflowGenerationOwnership(tab, record);
-    record.nativeCommandName = nativeCommandName;
-
-    const state = await currentSessionState(tab);
-    assertGitWorkflowGenerationOwnership(tab, record);
-    if (stateIsBusyForSettings(state)) throw makeHttpError(409, "Wait for the current agent run to finish before generating Git text");
-    const models = await availableGitWorkflowModels(tab);
-    assertGitWorkflowGenerationOwnership(tab, record);
-    record.primary = gitWorkflowGenerationProfile(
-      preferences.generation.provider,
-      preferences.generation.modelId,
-      preferences.generation.thinkingLevel,
-      models,
-    );
-    const fallbackConfigured = !!preferences.generation.fallback?.provider
-      && !!preferences.generation.fallback?.modelId
-      && (preferences.generation.fallback.provider !== preferences.generation.provider
-        || preferences.generation.fallback.modelId !== preferences.generation.modelId);
-    record.fallback = fallbackConfigured
-      ? gitWorkflowGenerationProfile(
-          preferences.generation.fallback.provider,
-          preferences.generation.fallback.modelId,
-          preferences.generation.fallback.thinkingLevel,
-          models,
-        )
-      : null;
-
-    record.artifactGeneration = await createGitWorkflowArtifactGeneration(tab, record.generationId, kind);
-    record.messageGeneration = kind === "commit" ? record.artifactGeneration : null;
-    assertGitWorkflowGenerationOwnership(tab, record);
-    tab.gitWorkflowArtifactGeneration = record.artifactGeneration;
-    if (record.messageGeneration) tab.gitWorkflowMessageGeneration = record.messageGeneration;
-
-    try {
-      return await dispatchGitWorkflowGenerationAttempt(tab, record, record.primary, "primary");
-    } catch (primaryError) {
-      markTabIdle(tab);
-      if (record.fallback && !record.cancelled && tab.rpc?.isRunning?.() && primaryError?.guidedGitProviderGenerationFailure === true) {
-        try {
-          const fallbackResult = await startGitWorkflowFallback(tab, record, primaryError);
-          if (fallbackResult) return fallbackResult;
-        } catch (fallbackError) {
-          throw attachGitWorkflowGenerationError(fallbackError, record);
-        }
-      }
-      await finishGitWorkflowGeneration(tab, record, { successful: false });
-      throw attachGitWorkflowGenerationError(primaryError, record);
-    }
-  } catch (error) {
-    if (tab.gitWorkflowGeneration === record && !record.finishing) {
-      await finishGitWorkflowGeneration(tab, record, { successful: false });
-    }
-    throw error;
-  }
-}
-
 function parseCliScopedModelPatterns() {
   for (let index = 0; index < options.piArgs.length; index++) {
     const arg = options.piArgs[index];
@@ -4658,1942 +4244,55 @@ async function getWorkspaceInfo(cwd, startedAt) {
   };
 }
 
-let activeGitWorkflowProcess = null;
-const GIT_PULL_TIMEOUT_MS = 15 * 60 * 1000;
-// Must remain byte-for-byte aligned with pi-extension-aur-review/src/git.ts.
-const STAGED_CONTENT_HASH_DOMAIN = "firstpick/aur-review/staged-content/v1\0";
-const STAGED_CONTENT_HASH_TIMEOUT_MS = 10_000;
-const STAGED_CONTENT_HASH_OUTPUT_LIMIT = 4 * 1024 * 1024;
-const STAGED_CONTENT_HASH_ARGS = [
-  "-c", "core.quotepath=false",
-  "-c", "diff.external=",
-  "diff", "--cached", "--binary", "--full-index", "--no-ext-diff", "--no-textconv", "--no-renames", "--",
-];
-
-
-/**
- * Read binary cached-diff bytes without decoding them. This is intentionally
- * separate from runCommand(), whose string buffering is appropriate for UI
- * output but would corrupt the staged-content approval token.
- */
-function runGitStagedContentHashCommand(root) {
-  return new Promise((resolve, reject) => {
-    const child = spawn("git", STAGED_CONTENT_HASH_ARGS, {
-      cwd: root,
-      stdio: ["ignore", "pipe", "pipe"],
-      windowsHide: true,
-      env: { ...process.env, GIT_OPTIONAL_LOCKS: "0", GIT_CONFIG_NOSYSTEM: "1", LC_ALL: "C" },
-    });
-    const stdout = [];
-    const stderr = [];
-    let stdoutBytes = 0;
-    let stderrBytes = 0;
-    let settled = false;
-    const finish = (error, result) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timeout);
-      if (error) reject(error);
-      else resolve(result);
-    };
-    const stop = (message) => {
-      try { child.kill("SIGKILL"); } catch { /* process already exited */ }
-      finish(makeUserFacingError(message));
-    };
-    const timeout = setTimeout(() => stop(`git diff --cached timed out after ${STAGED_CONTENT_HASH_TIMEOUT_MS / 1000} seconds`), STAGED_CONTENT_HASH_TIMEOUT_MS);
-    child.stdout.on("data", (chunk) => {
-      const bytes = Buffer.from(chunk);
-      stdoutBytes += bytes.length;
-      if (stdoutBytes > STAGED_CONTENT_HASH_OUTPUT_LIMIT) {
-        stop(`git diff --cached output exceeded the ${STAGED_CONTENT_HASH_OUTPUT_LIMIT / 1024 / 1024} MiB staged-content safety limit`);
-        return;
-      }
-      stdout.push(bytes);
-    });
-    child.stderr.on("data", (chunk) => {
-      const bytes = Buffer.from(chunk);
-      stderrBytes += bytes.length;
-      if (stderrBytes <= 64 * 1024) stderr.push(bytes);
-    });
-    child.on("error", (error) => finish(makeUserFacingError(formatCommandSpawnError("git", error))));
-    child.on("close", (exitCode) => {
-      if (exitCode !== 0) {
-        const detail = Buffer.concat(stderr).toString("utf8").trim().slice(0, 1200);
-        finish(makeUserFacingError(detail ? `git diff --cached failed: ${detail}` : `git diff --cached failed with exit code ${exitCode ?? "unknown"}`));
-        return;
-      }
-      finish(null, Buffer.concat(stdout));
-    });
-  });
-}
-
-function stagedContentHashFromDiff(stagedDiff) {
-  return createHash("sha256").update(STAGED_CONTENT_HASH_DOMAIN).update(stagedDiff).digest("hex");
-}
-
-async function readStagedContentHash(root) {
-  // `git diff --cached` correctly compares the index to the empty tree when
-  // HEAD is unborn, so no HEAD lookup is needed (or allowed) here.
-  const stagedDiff = await runGitStagedContentHashCommand(root);
-  return {
-    stagedDiff,
-    hasStagedChanges: stagedDiff.length > 0,
-    stagedContentHash: stagedDiff.length > 0 ? stagedContentHashFromDiff(stagedDiff) : null,
-  };
-}
-
-/** Read-only same-tab digest of the exact staged content git can commit. */
-async function stagedContentHashForTab(tab) {
-  const root = await getGitRoot(tab.cwd);
-  const staged = await readStagedContentHash(root);
-  return { root, hasStagedChanges: staged.hasStagedChanges, stagedContentHash: staged.stagedContentHash };
-}
-
-function expectedStagedContentHashFromBody(body = {}) {
-  const expected = body?.expectedStagedContentHash;
-  if (expected === undefined) return ""; // Legacy Guided Git flow: no review was required.
-  if (typeof expected !== "string" || !/^[a-f0-9]{64}$/i.test(expected)) {
-    throw makeHttpError(400, "expectedStagedContentHash must be a SHA-256 hex digest");
-  }
-  return expected;
-}
-
-async function assertExpectedStagedContentHash(tab, body = {}) {
-  const expected = expectedStagedContentHashFromBody(body);
-  if (!expected) return "";
-  const current = await stagedContentHashForTab(tab);
-  if (!current.hasStagedChanges || current.stagedContentHash !== expected) {
-    throw makeHttpError(409, "Staged content changed after manual approval. Return to Stage and request a new manual review before continuing.");
-  }
-  return expected;
-}
-
-const GITIGNORE_MAX_BYTES = 5 * 1024 * 1024;
-const gitignoreMutationQueues = new Map();
-
-function serializeGitignoreMutation(root, mutation) {
-  const previous = gitignoreMutationQueues.get(root) || Promise.resolve();
-  const current = previous.catch(() => {}).then(mutation);
-  gitignoreMutationQueues.set(root, current);
-  return current.finally(() => {
-    if (gitignoreMutationQueues.get(root) === current) gitignoreMutationQueues.delete(root);
-  });
-}
-
-function gitignoreEntryForTarget(root, requestedPath, kind) {
-  if (kind !== "file" && kind !== "folder") throw makeHttpError(400, "Gitignore target kind must be file or folder");
-  if (typeof requestedPath !== "string" || requestedPath.length === 0) throw makeHttpError(400, "Gitignore target path is required");
-  if (/[\0-\x1f\x7f]/.test(requestedPath)) throw makeHttpError(400, "Gitignore target path cannot contain control characters");
-
-  const slashPath = requestedPath.replace(/\\/g, "/");
-  if (path.posix.isAbsolute(slashPath) || path.win32.isAbsolute(requestedPath) || /^[A-Za-z]:/.test(requestedPath)) {
-    throw makeHttpError(400, "Gitignore target path must be repository-relative");
-  }
-  const segments = slashPath.split("/").filter(Boolean);
-  if (!segments.length || segments.some((segment) => segment === "." || segment === "..")) {
-    throw makeHttpError(400, "Gitignore target path cannot be the repository root or contain traversal segments");
-  }
-
-  const normalized = segments.join("/");
-  const target = path.resolve(root, ...segments);
-  const relative = path.relative(root, target);
-  if (!relative || relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
-    throw makeHttpError(400, "Gitignore target path must stay inside the repository");
-  }
-  const escaped = normalized.replace(/([*?\[\] ])/g, "\\$1");
-  return { path: normalized, kind, entry: `/${escaped}${kind === "folder" ? "/" : ""}` };
-}
-
-function sameFileIdentity(first, second) {
-  return first?.dev === second?.dev && first?.ino === second?.ino;
-}
-
-function gitignoreHasExactEntry(content, entry) {
-  const existing = content.toString("latin1").split(/\r\n|\n|\r/);
-  return existing.includes(Buffer.from(entry, "utf8").toString("latin1"));
-}
-
-async function appendGitignoreEntry(root, entry) {
-  const target = path.join(root, ".gitignore");
-  for (let attempt = 0; attempt < 2; attempt++) {
-    let before;
-    try {
-      before = await lstat(target);
-    } catch (error) {
-      if (error?.code !== "ENOENT") throw error;
-      before = null;
-    }
-
-    if (!before) {
-      let handle;
-      try {
-        handle = await open(target, fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_EXCL | (fsConstants.O_NOFOLLOW || 0), 0o666);
-        await handle.writeFile(`${entry}\n`, "utf8");
-        return true;
-      } catch (error) {
-        if (error?.code === "EEXIST" && attempt === 0) continue;
-        throw error;
-      } finally {
-        await handle?.close();
-      }
-    }
-
-    if (before.isSymbolicLink() || !before.isFile()) throw makeHttpError(409, "Repository .gitignore must be a regular file and cannot be a symbolic link");
-    if (before.nlink !== 1) throw makeHttpError(409, "Repository .gitignore must have exactly one hard link; replace linked copies with a regular file before retrying");
-
-    let handle;
-    try {
-      handle = await open(target, fsConstants.O_RDWR | fsConstants.O_APPEND | (fsConstants.O_NOFOLLOW || 0));
-      const opened = await handle.stat();
-      if (!opened.isFile() || !sameFileIdentity(before, opened)) throw makeHttpError(409, "Repository .gitignore changed while it was being opened");
-      if (opened.nlink !== 1) throw makeHttpError(409, "Repository .gitignore must have exactly one hard link; replace linked copies with a regular file before retrying");
-      if (opened.size > GITIGNORE_MAX_BYTES) throw makeHttpError(409, `Repository .gitignore exceeds the ${formatBytes(GITIGNORE_MAX_BYTES)} safe modification limit`);
-      const content = await handle.readFile();
-      if (gitignoreHasExactEntry(content, entry)) return false;
-      const newline = content.includes(Buffer.from("\r\n")) ? "\r\n" : "\n";
-      const lastByte = content.length ? content[content.length - 1] : null;
-      const separator = content.length && lastByte !== 0x0a && lastByte !== 0x0d ? newline : "";
-      await handle.writeFile(`${separator}${entry}${newline}`, "utf8");
-      return true;
-    } catch (error) {
-      if (error?.code === "ENOENT" && attempt === 0) continue;
-      if (error?.code === "ELOOP") throw makeHttpError(409, "Repository .gitignore cannot be a symbolic link");
-      throw error;
-    } finally {
-      await handle?.close();
-    }
-  }
-}
-
-async function addGitignoreEntry(cwd, body = {}) {
-  try {
-    const root = await realpath(await getGitRoot(cwd));
-    const target = gitignoreEntryForTarget(root, body.path, body.kind);
-    const added = await serializeGitignoreMutation(root, () => appendGitignoreEntry(root, target.entry));
-    return { root, ...target, added, changes: await readGitChanges(root) };
-  } catch (error) {
-    if (error?.statusCode) throw error;
-    const wrapped = makeHttpError(500, formatCliError(error));
-    if (error?.code) wrapped.code = error.code;
-    throw wrapped;
-  }
-}
-
-async function pullGitChanges(cwd, { remote } = {}) {
-  const root = await getGitRoot(cwd);
-  const pullArgs = ["pull", "--ff-only"];
-  if (remote === "origin") pullArgs.push("origin");
-  else if (remote) throw new Error(`Unsupported Git pull remote: ${String(remote)}`);
-  const payload = await runGuardedGitMutation(pullArgs, { cwd: root, timeoutMs: GIT_PULL_TIMEOUT_MS });
-  if (payload.data) payload.data.root = root;
-  if (payload.ok) payload.data.changes = await readGitChanges(root);
-  else {
-    payload.error = (payload.data?.stderr || payload.data?.stdout || payload.error || "git pull --ff-only failed").trim();
-    applyGitSyncFailure(payload);
-  }
-  return payload;
-}
-
-const GIT_LOCK_RETRY_ATTEMPTS = 3;
-const GIT_LOCK_RETRY_DELAY_MS = 250;
-const GIT_FETCH_TIMEOUT_MS = 2 * 60 * 1000;
-const GIT_CONFLICT_PREVIEW_MAX_BYTES = 200_000;
-const GIT_STASH_PATCH_MAX_OUTPUT = 200_000;
-const PROTECTED_GIT_BRANCHES = new Set(["main", "master"]);
-const NO_REMOTE_HINT = "No push destination is configured. Publish this repository or add a Git remote, then retry.";
-
 const sleepMs = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-function requireConfirmed(body, action) {
-  if (body?.confirmed !== true) throw makeHttpError(409, `${action} requires confirmed: true.`);
-}
-
-// Retry transient index.lock contention before reporting failure; the shared
-// isGitLockFailure classifier keeps this consistent with worktree mutations.
-async function runGitMutationCommand(args, options = {}) {
-  let result;
-  for (let attempt = 0; attempt < GIT_LOCK_RETRY_ATTEMPTS; attempt++) {
-    result = await runGitWorkflowCommand(args, options);
-    const ok = result.exitCode === 0 && !result.timedOut && !result.cancelled && !result.error;
-    if (ok || !isGitLockFailure(result)) return result;
-    if (attempt < GIT_LOCK_RETRY_ATTEMPTS - 1) await sleepMs(GIT_LOCK_RETRY_DELAY_MS * (attempt + 1));
-  }
-  return result;
-}
-
-function gitMutationPayload(result) {
-  const payload = gitWorkflowCommandPayload(result);
-  if (!payload.ok) {
-    let pathFailure = null;
-    if (isGitLockFailure(result)) {
-      payload.code = "REPO_BUSY";
-      payload.hint = "Another git process is using this repository. Retry once it finishes.";
-    } else {
-      pathFailure = classifyGitPathFailure(result);
-      if (pathFailure) Object.assign(payload, pathFailure);
-    }
-    payload.error = pathFailure?.error || String(result?.stderr || result?.stdout || payload.error || "git command failed").trim();
-  }
-  return payload;
-}
-
-async function gitAddAllPayload(cwd) {
-  await getGitRoot(cwd);
-  if (platform() === "win32") {
-    const untrackedText = await runGitReadCommand(cwd, ["ls-files", "--others", "--exclude-standard", "-z", "--", "."]);
-    const invalidPath = findWindowsReservedGitPath(untrackedText);
-    const pathFailure = windowsReservedGitPathFailure(invalidPath);
-    if (pathFailure) return { ok: false, ...pathFailure };
-  }
-  return gitMutationPayload(await runGitMutationCommand(["add", "."], { cwd }));
-}
-
-async function runGuardedGitMutation(args, options = {}) {
-  try {
-    return gitMutationPayload(await runGitMutationCommand(args, options));
-  } catch (error) {
-    if (/already running/i.test(error?.message || "")) {
-      return { ok: false, code: "REPO_BUSY", error: sanitizeError(error), hint: "Another git workflow command is already running in the Web UI." };
-    }
-    throw error;
-  }
-}
-
-// Turn raw git remote-operation stderr into an actionable state. Returns null
-// when no known pattern matches (caller keeps the raw error).
-function classifyGitSyncFailure(result, { push = false } = {}) {
-  const text = `${result?.stderr || ""}\n${result?.stdout || ""}`.toLowerCase();
-  if (result?.timedOut) return { code: "NETWORK", hint: "The remote did not respond before the timeout. Check connectivity and retry." };
-  if (isGitLockFailure(result)) return { code: "REPO_BUSY", hint: "Another git process is using this repository. Retry once it finishes." };
-  if (/terminal prompts disabled|authentication failed|permission denied|access denied|could not read username|could not read password|publickey|invalid credentials/.test(text)) {
-    return { code: "AUTH", hint: "Authentication failed and interactive prompts are disabled in the Web UI. Refresh your credentials or SSH agent in a terminal, then retry." };
-  }
-  if (/could not resolve host|failed to connect|connection (?:refused|reset|timed out)|network is unreachable|operation timed out/.test(text)) {
-    return { code: "NETWORK", hint: "The remote could not be reached. Check connectivity and retry." };
-  }
-  if (push && /fatal:\s+no configured push destination\./.test(text)) {
-    return { code: "NO_REMOTE", hint: NO_REMOTE_HINT };
-  }
-  if (push && /protected branch|gh006/.test(text)) {
-    return { code: "PROTECTED_BRANCH", hint: "The remote refused the push because the branch is protected. Push to a feature branch and open a PR instead." };
-  }
-  if (push && /\[rejected\]|non-fast-forward|fetch first|updates were rejected/.test(text)) {
-    return { code: "NON_FAST_FORWARD", hint: "The remote has commits you don't have. Fetch and review the incoming diff, then integrate before pushing." };
-  }
-  if (push && /has no upstream branch/.test(text)) {
-    return { code: "NO_UPSTREAM", hint: "The current branch has no upstream. Push with 'set upstream' to publish it." };
-  }
-  if (!push && /not possible to fast-forward|divergent branches|need to specify how to reconcile/.test(text)) {
-    return { code: "DIVERGED", hint: "Local and remote branches have diverged. Fetch, review the incoming diff, then merge or rebase explicitly — or integrate in a worktree." };
-  }
-  if (!push && /no tracking information/.test(text)) {
-    return { code: "NO_UPSTREAM", hint: "The current branch has no upstream to pull from. Set one or pull with an explicit remote/branch." };
-  }
-  if (/would be overwritten/.test(text)) {
-    return { code: "DIRTY_WORKTREE", hint: "Local changes would be overwritten. Stash or commit them first." };
-  }
-  if (/conflict/.test(text)) {
-    return { code: "CONFLICTS", hint: "Conflicts were created. Resolve them in the conflicts panel, then continue or abort the operation." };
-  }
-  return null;
-}
-
-function applyGitSyncFailure(payload, { push = false } = {}) {
-  if (payload.ok || payload.code) return payload;
-  const classified = classifyGitSyncFailure(payload.data, { push });
-  if (classified) {
-    payload.code = classified.code;
-    payload.hint = classified.hint;
-  }
-  return payload;
-}
-
-async function fetchGitChanges(cwd) {
-  const root = await getGitRoot(cwd);
-  const payload = await runGuardedGitMutation(
-    ["-c", "credential.interactive=false", "fetch", "--prune"],
-    { cwd: root, timeoutMs: GIT_FETCH_TIMEOUT_MS, label: "git fetch --prune" },
-  );
-  if (payload.data) payload.data.root = root;
-  if (payload.ok) {
-    // git fetch reports ref updates on stderr.
-    payload.data.summary = `${payload.data.stderr || ""}\n${payload.data.stdout || ""}`.trim();
-    payload.data.changes = await readGitChanges(root);
-  } else {
-    applyGitSyncFailure(payload);
-  }
-  return payload;
-}
-
-async function integrateGitUpstream(cwd, body = {}) {
-  const mode = String(body.mode || "").trim();
-  if (!["merge", "rebase"].includes(mode)) throw makeHttpError(400, "mode must be 'merge' or 'rebase'");
-  requireConfirmed(body, `Running git ${mode} against the upstream`);
-  const root = await getGitRoot(cwd);
-  const upstream = await gitUpstreamRef(root);
-  if (!upstream) throw makeHttpError(409, "No upstream is configured for the current branch");
-  const args = mode === "merge" ? ["merge", "--no-edit", "@{upstream}"] : ["-c", "core.editor=true", "rebase", "@{upstream}"];
-  const payload = await runGuardedGitMutation(args, { cwd: root, timeoutMs: GIT_PULL_TIMEOUT_MS, label: `git ${mode} ${upstream}` });
-  if (payload.data) {
-    payload.data.root = root;
-    payload.data.upstream = upstream;
-    payload.data.mode = mode;
-  }
-  if (payload.ok) payload.data.changes = await readGitChanges(root);
-  else applyGitSyncFailure(payload);
-  return payload;
-}
-
-// ---- Git operation (merge/rebase/cherry-pick/revert/bisect) lifecycle ----
-
-async function pathEntryExists(target) {
-  try {
-    await stat(target);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-async function gitDirPath(root) {
-  const out = await runGitReadCommand(root, ["rev-parse", "--git-dir"], { maxOutputLength: 10_000 });
-  const dir = out.trim();
-  return path.isAbsolute(dir) ? dir : path.resolve(root, dir);
-}
-
-async function detectGitOperationKind(root) {
-  const gitDir = await gitDirPath(root);
-  if ((await pathEntryExists(path.join(gitDir, "rebase-merge"))) || (await pathEntryExists(path.join(gitDir, "rebase-apply")))) return "rebase";
-  if (await pathEntryExists(path.join(gitDir, "MERGE_HEAD"))) return "merge";
-  if (await pathEntryExists(path.join(gitDir, "CHERRY_PICK_HEAD"))) return "cherry-pick";
-  if (await pathEntryExists(path.join(gitDir, "REVERT_HEAD"))) return "revert";
-  if (await pathEntryExists(path.join(gitDir, "BISECT_LOG"))) return "bisect";
-  return null;
-}
-
-function gitOperationCommands(kind) {
-  switch (kind) {
-    case "merge":
-      return { continue: ["commit", "--no-edit"], abort: ["merge", "--abort"], skip: null };
-    case "rebase":
-      return { continue: ["-c", "core.editor=true", "rebase", "--continue"], abort: ["rebase", "--abort"], skip: ["-c", "core.editor=true", "rebase", "--skip"] };
-    case "cherry-pick":
-      return { continue: ["-c", "core.editor=true", "cherry-pick", "--continue"], abort: ["cherry-pick", "--abort"], skip: ["-c", "core.editor=true", "cherry-pick", "--skip"] };
-    case "revert":
-      return { continue: ["-c", "core.editor=true", "revert", "--continue"], abort: ["revert", "--abort"], skip: ["-c", "core.editor=true", "revert", "--skip"] };
-    default:
-      return null;
-  }
-}
-
-function parseGitConflictEntries(porcelainText) {
-  const entries = [];
-  for (const line of String(porcelainText || "").split(/\r?\n/)) {
-    if (!line.startsWith("u ")) continue;
-    // u XY sub m1 m2 m3 mW h1 h2 h3 path — 10 space-separated fields, then path.
-    const fields = [];
-    let start = 0;
-    for (let index = 0; index < 10; index++) {
-      const next = line.indexOf(" ", start);
-      if (next === -1) break;
-      fields.push(line.slice(start, next));
-      start = next + 1;
-    }
-    fields.push(line.slice(start));
-    const entryPath = fields[10] || "";
-    if (entryPath) entries.push({ path: entryPath, status: fields[1] || "UU" });
-  }
-  return entries;
-}
-
-function extractConflictMarkerHunks(content, { contextLines = 2, maxHunks = 8, maxLinesPerHunk = 80 } = {}) {
-  const lines = content.split(/\r?\n/);
-  const hunks = [];
-  for (let index = 0; index < lines.length && hunks.length < maxHunks; index++) {
-    if (!lines[index].startsWith("<<<<<<<")) continue;
-    let end = index;
-    while (end < lines.length - 1 && !lines[end].startsWith(">>>>>>>")) end++;
-    const start = Math.max(0, index - contextLines);
-    const stop = Math.min(lines.length - 1, end + contextLines);
-    hunks.push({
-      startLine: start + 1,
-      truncated: stop - start + 1 > maxLinesPerHunk,
-      lines: lines.slice(start, Math.min(stop + 1, start + maxLinesPerHunk)),
-    });
-    index = end;
-  }
-  return hunks;
-}
-
-async function readGitConflictPreview(root, relPath) {
-  try {
-    const filePath = resolveGitRelativePath(root, relPath);
-    const info = await stat(filePath).catch(() => null);
-    if (!info) return { kind: "missing" };
-    if (!info.isFile()) return { kind: "unsupported", size: info.size };
-    if (info.size > GIT_CONFLICT_PREVIEW_MAX_BYTES) return { kind: "large", size: info.size };
-    const buffer = await readFile(filePath);
-    if (isLikelyBinaryBuffer(buffer)) return { kind: "binary", size: info.size };
-    const content = buffer.toString("utf8");
-    return {
-      kind: "text",
-      size: info.size,
-      hasMarkers: /^<{7}(?: |$)/m.test(content),
-      hunks: extractConflictMarkerHunks(content),
-    };
-  } catch (error) {
-    return { kind: "error", error: sanitizeError(error) };
-  }
-}
-
-async function readGitOperationSnapshot(cwd) {
-  const root = await getGitRoot(cwd);
-  const porcelainText = await runGitReadCommand(root, ["status", "--porcelain=2", "--branch", "--untracked-files=all"], { maxOutputLength: 120_000 });
-  const summary = summarizeGitPorcelainStatus(porcelainText);
-  const kind = await detectGitOperationKind(root);
-  const conflictEntries = parseGitConflictEntries(porcelainText);
-  const conflicts = [];
-  for (const entry of conflictEntries) {
-    conflicts.push({ ...entry, preview: await readGitConflictPreview(root, entry.path) });
-  }
-  const commands = gitOperationCommands(kind);
-  let bisect = null;
-  if (kind === "bisect") {
-    const log = await runGitReadCommand(root, ["bisect", "log"], { maxOutputLength: 60_000 }).catch(() => "");
-    bisect = { log: log.trimEnd().split(/\r?\n/).slice(-20).join("\n") };
-  }
-  return {
-    root,
-    branch: gitBranchFromPorcelainStatus(porcelainText),
-    operation: kind,
-    summary,
-    conflicts,
-    canContinue: Boolean(kind) && kind !== "bisect" && conflictEntries.length === 0,
-    canSkip: Boolean(commands?.skip),
-    commands: commands
-      ? {
-          continue: formatGitCommand(commands.continue.filter((arg) => arg !== "-c" && arg !== "core.editor=true")),
-          abort: formatGitCommand(commands.abort),
-          ...(commands.skip ? { skip: formatGitCommand(commands.skip.filter((arg) => arg !== "-c" && arg !== "core.editor=true")) } : {}),
-        }
-      : null,
-    bisect,
-    generatedAt: new Date().toISOString(),
-  };
-}
-
-function gitConflictResolutionAgentPrompt(operation) {
-  const conflicts = (operation.conflicts || []).map((conflict) => `- ${conflict.status || "UU"} ${JSON.stringify(String(conflict.path || ""))}`);
-  const summary = operation.summary || {};
-  return [
-    `Resolve the current Git ${operation.operation} conflicts in this working tree.`,
-    "",
-    `Repository root: ${JSON.stringify(String(operation.root || ""))}`,
-    `Branch: ${operation.branch || "detached or unknown"}`,
-    `Working tree: ${summary.staged || 0} staged, ${summary.unstaged || 0} unstaged, ${conflicts.length} conflicted`,
-    "Conflicted files:",
-    ...conflicts,
-    "",
-    "Requirements:",
-    "- Inspect git status plus the staged, unstaged, and unmerged diffs before editing.",
-    "- Resolve only the currently unmerged files and preserve the intended changes from both sides.",
-    "- Stage each resolved file with git add.",
-    `- Do not continue, skip, abort, commit, reset, or push the ${operation.operation}.`,
-    "- Verify git diff --name-only --diff-filter=U is empty, then report what you resolved and any uncertainty.",
-  ].join("\n");
-}
-
-async function openGitConflictResolutionAgentTab(sourceTab) {
-  const operation = await readGitOperationSnapshot(sourceTab.cwd);
-  if (!operation.operation || operation.operation === "bisect") throw makeHttpError(409, "No conflict-resolution Git operation is in progress");
-  if (!operation.conflicts?.length) throw makeHttpError(409, "No unmerged files remain to send to an agent");
-
-  const targetTab = await createTab({
-    title: `Resolve ${operation.operation} conflicts`,
-    titleSource: "explicit",
-    conversationStarted: true,
-    cwd: operation.root,
-  });
-  const command = { type: "prompt", message: gitConflictResolutionAgentPrompt(operation) };
-  markTabWorking(targetTab);
-  let response;
-  try {
-    response = await targetTab.rpc.send(command, PROMPT_REQUEST_TIMEOUT_MS);
-  } catch (error) {
-    markTabIdle(targetTab);
-    throw error;
-  }
-  if (response.success === false) {
-    markTabIdle(targetTab);
-    throw makeHttpError(502, response.error || "The conflict-resolution agent rejected the handoff prompt");
-  }
-  recordEvent({
-    type: "webui_git_conflict_agent_started",
-    sourceTabId: sourceTab.id,
-    tabId: targetTab.id,
-    cwd: operation.root,
-    operation: operation.operation,
-    conflicts: operation.conflicts.length,
-  });
-  return {
-    sourceTabId: sourceTab.id,
-    tab: tabMeta(targetTab),
-    tabs: listTabs(),
-    operation: {
-      operation: operation.operation,
-      root: operation.root,
-      branch: operation.branch,
-      conflicts: operation.conflicts.map(({ path: conflictPath, status }) => ({ path: conflictPath, status })),
-    },
-  };
-}
-
-async function gitOperationStageFile(cwd, body = {}) {
-  const root = await getGitRoot(cwd);
-  const kind = await detectGitOperationKind(root);
-  if (!kind) throw makeHttpError(409, "No git operation is in progress");
-  const rel = normalizeGitRelativePath(root, body.path);
-  const payload = await runGuardedGitMutation(["add", "--", rel], { cwd: root, label: `git add -- ${rel}` });
-  if (payload.data) payload.data.root = root;
-  if (payload.ok) payload.data.operation = await readGitOperationSnapshot(root);
-  return payload;
-}
-
-async function gitOperationAction(cwd, action, body = {}) {
-  const root = await getGitRoot(cwd);
-  const kind = await detectGitOperationKind(root);
-  if (!kind) throw makeHttpError(409, "No git operation is in progress");
-  if (kind === "bisect") throw makeHttpError(409, "Bisect is controlled through /api/git-operation/bisect");
-  const commands = gitOperationCommands(kind);
-
-  let args;
-  if (action === "continue") {
-    const porcelainText = await runGitReadCommand(root, ["status", "--porcelain=2"], { maxOutputLength: 120_000 });
-    if (parseGitConflictEntries(porcelainText).length > 0) {
-      return { ok: false, code: "UNMERGED_PATHS", error: "Unmerged paths remain. Resolve and stage every conflicted file before continuing." };
-    }
-    args = commands.continue;
-  } else if (action === "skip") {
-    if (!commands.skip) throw makeHttpError(409, `git ${kind} does not support skip`);
-    args = commands.skip;
-  } else if (action === "abort") {
-    requireConfirmed(body, `Aborting the ${kind} operation discards its in-progress state and`);
-    args = commands.abort;
-  } else {
-    throw makeHttpError(400, "Unknown git operation action");
-  }
-
-  const payload = await runGuardedGitMutation(args, { cwd: root, timeoutMs: GIT_PULL_TIMEOUT_MS });
-  if (payload.data) {
-    payload.data.root = root;
-    payload.data.kind = kind;
-  }
-  if (payload.ok) payload.data.operation = await readGitOperationSnapshot(root);
-  else applyGitSyncFailure(payload);
-  return payload;
-}
-
-const GIT_BISECT_VERDICTS = new Set(["good", "bad", "old", "new", "skip", "reset"]);
-
-async function gitBisectAction(cwd, body = {}) {
-  const verdict = String(body.verdict || "").trim().toLowerCase();
-  if (!GIT_BISECT_VERDICTS.has(verdict)) throw makeHttpError(400, "verdict must be one of good, bad, old, new, skip, reset");
-  const root = await getGitRoot(cwd);
-  const kind = await detectGitOperationKind(root);
-  if (kind !== "bisect") throw makeHttpError(409, "No git bisect is in progress");
-  if (verdict === "reset") requireConfirmed(body, "Resetting the bisect session");
-  const payload = await runGuardedGitMutation(["bisect", verdict], { cwd: root });
-  if (payload.data) payload.data.root = root;
-  if (payload.ok) payload.data.operation = await readGitOperationSnapshot(root);
-  return payload;
-}
-
-// ---- Stash ----
-
-function cleanGitStashRef(value) {
-  const ref = String(value || "").trim();
-  if (!/^stash@\{\d{1,4}\}$/.test(ref)) throw makeHttpError(400, "stash ref must look like stash@{0}");
-  return ref;
-}
-
-async function readGitStashes(cwd) {
-  const root = await getGitRoot(cwd);
-  const out = await runGitReadCommand(root, ["stash", "list", "--format=%gd%x09%at%x09%gs"], { maxOutputLength: 120_000 });
-  const stashes = out
-    .split(/\r?\n/)
-    .filter(Boolean)
-    .map((line) => {
-      const [ref, epoch, ...subject] = line.split("\t");
-      return { ref: ref || "", epochSeconds: Number.parseInt(epoch || "0", 10) || 0, subject: subject.join("\t") };
-    })
-    .filter((entry) => entry.ref);
-  return { root, stashes, generatedAt: new Date().toISOString() };
-}
-
-async function readGitStashPreview(cwd, requestedRef) {
-  const root = await getGitRoot(cwd);
-  const ref = cleanGitStashRef(requestedRef);
-  const [statText, patchText] = await Promise.all([
-    runGitReadCommand(root, ["stash", "show", "--include-untracked", "--stat", ref], { maxOutputLength: 120_000 }).catch((error) => `(${sanitizeError(error)})`),
-    runGitReadCommand(root, ["stash", "show", "--include-untracked", "-p", ref], { maxOutputLength: GIT_STASH_PATCH_MAX_OUTPUT }).catch(() => ""),
-  ]);
-  return { root, ref, stat: statText.trimEnd(), patch: patchText.trimEnd() };
-}
-
-async function saveGitStash(cwd, body = {}) {
-  const root = await getGitRoot(cwd);
-  const args = ["stash", "push"];
-  if (body.includeUntracked === true) args.push("--include-untracked");
-  if (body.message) args.push("-m", cleanGitCommitMessageInput(body.message));
-  const payload = await runGuardedGitMutation(args, { cwd: root });
-  if (payload.data) payload.data.root = root;
-  if (payload.ok) payload.data.stashes = (await readGitStashes(root)).stashes;
-  return payload;
-}
-
-async function applyGitStash(cwd, body = {}, { pop = false } = {}) {
-  const root = await getGitRoot(cwd);
-  const ref = cleanGitStashRef(body.ref);
-  const payload = await runGuardedGitMutation(["stash", pop ? "pop" : "apply", ref], { cwd: root });
-  if (payload.data) {
-    payload.data.root = root;
-    payload.data.ref = ref;
-  }
-  if (payload.ok) payload.data.stashes = (await readGitStashes(root)).stashes;
-  else if (!payload.code && /conflict/i.test(payload.error || "")) {
-    payload.code = "CONFLICTS";
-    payload.hint = pop
-      ? "The stash conflicts with the working tree; git kept the stash entry. Resolve the conflicts, then drop the stash manually."
-      : "The stash conflicts with the working tree. Resolve the conflicts or reset the working tree.";
-  }
-  return payload;
-}
-
-async function dropGitStash(cwd, body = {}) {
-  requireConfirmed(body, "Dropping a stash permanently deletes it and");
-  const root = await getGitRoot(cwd);
-  const ref = cleanGitStashRef(body.ref);
-  const payload = await runGuardedGitMutation(["stash", "drop", ref], { cwd: root });
-  if (payload.data) {
-    payload.data.root = root;
-    payload.data.ref = ref;
-  }
-  if (payload.ok) payload.data.stashes = (await readGitStashes(root)).stashes;
-  return payload;
-}
-
-// ---- File-level staging ----
-
-async function stageGitFile(cwd, body = {}) {
-  const root = await getGitRoot(cwd);
-  const rel = normalizeGitRelativePath(root, body.path);
-  const payload = await runGuardedGitMutation(["add", "--", rel], { cwd: root, label: `git add -- ${rel}` });
-  if (payload.data) payload.data.root = root;
-  if (payload.ok) payload.data.changes = await readGitChanges(root);
-  return payload;
-}
-
-async function unstageGitFile(cwd, body = {}) {
-  const root = await getGitRoot(cwd);
-  const rel = normalizeGitRelativePath(root, body.path);
-  let payload = await runGuardedGitMutation(["restore", "--staged", "--", rel], { cwd: root, label: `git restore --staged -- ${rel}` });
-  if (!payload.ok && /HEAD/.test(payload.error || "")) {
-    // Unborn branch (no commit yet): restore --staged has no HEAD to restore from.
-    payload = await runGuardedGitMutation(["rm", "--cached", "-r", "--", rel], { cwd: root, label: `git rm --cached -- ${rel}` });
-  }
-  if (payload.data) payload.data.root = root;
-  if (payload.ok) payload.data.changes = await readGitChanges(root);
-  return payload;
-}
-
-async function stageAllGitChanges(cwd) {
-  const root = await getGitRoot(cwd);
-  const payload = await gitAddAllPayload(root);
-  if (payload.data) payload.data.root = root;
-  return payload;
-}
-
-async function unstageAllGitChanges(cwd) {
-  const root = await getGitRoot(cwd);
-  let payload = await runGuardedGitMutation(["restore", "--staged", "--", "."], { cwd: root, label: "git restore --staged -- ." });
-  if (!payload.ok && /HEAD/.test(payload.error || "")) {
-    payload = await runGuardedGitMutation(["rm", "--cached", "-r", "--", "."], { cwd: root, label: "git rm --cached -r -- ." });
-  }
-  if (payload.data) payload.data.root = root;
-  return payload;
-}
-
-async function discardGitFile(cwd, body = {}) {
-  requireConfirmed(body, "Discarding file changes is destructive and");
-  const root = await getGitRoot(cwd);
-  const rel = normalizeGitRelativePath(root, body.path);
-  const payload = await runGuardedGitMutation(["restore", "--", rel], { cwd: root, label: `git restore -- ${rel}` });
-  if (payload.data) payload.data.root = root;
-  if (payload.ok) payload.data.changes = await readGitChanges(root);
-  return payload;
-}
-
-async function deleteGitUntrackedFile(cwd, body = {}) {
-  requireConfirmed(body, "Deleting an untracked file is destructive and");
-  const root = await getGitRoot(cwd);
-  const rel = normalizeGitRelativePath(root, body.path);
-  const listed = await runGitReadCommand(root, ["ls-files", "--others", "--exclude-standard", "--", rel], { maxOutputLength: 120_000 });
-  const files = listed.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-  if (!files.includes(rel)) throw makeHttpError(409, `Not an untracked file: ${rel}`);
-  await rm(resolveGitRelativePath(root, rel));
-  return { ok: true, data: { root, path: rel, deleted: true, changes: await readGitChanges(root) } };
-}
-
-// ---- Undo / recovery ----
-
-async function readGitUndoState(cwd) {
-  const root = await getGitRoot(cwd);
-  const [parentProbe, porcelainText, upstream, operation, lastLog] = await Promise.all([
-    runCommand("git", ["rev-parse", "--verify", "--quiet", "HEAD~1"], { cwd: root, timeoutMs: 2000 }),
-    runGitReadCommand(root, ["status", "--porcelain=2", "--branch"], { maxOutputLength: 120_000 }),
-    gitUpstreamRef(root),
-    detectGitOperationKind(root),
-    runGitReadCommand(root, ["log", "-1", "--format=%h%x09%s"], { maxOutputLength: 10_000 }).catch(() => ""),
-  ]);
-  const summary = summarizeGitPorcelainStatus(porcelainText);
-  const hasParent = parentProbe.exitCode === 0;
-  const [lastHash = "", ...subjectParts] = lastLog.trim().split("\t");
-  const lastSubject = subjectParts.join("\t");
-  // With an upstream, "unpushed" means ahead > 0; without one nothing has been
-  // published through this branch's tracking ref.
-  const unpushed = upstream ? summary.ahead > 0 : true;
-  return {
-    root,
-    hasParent,
-    upstream,
-    operation,
-    summary,
-    lastCommit: lastHash ? { hash: lastHash, subject: lastSubject } : null,
-    canUndoLastCommit: hasParent && unpushed && !operation,
-    canAmendMessage: Boolean(lastHash) && unpushed && !operation && summary.staged === 0,
-  };
-}
-
-async function undoLastGitCommit(cwd, body = {}) {
-  requireConfirmed(body, "Undoing the last commit rewrites HEAD and");
-  const state = await readGitUndoState(cwd);
-  if (!state.hasParent) throw makeHttpError(409, "HEAD has no parent commit to undo to");
-  if (state.operation) throw makeHttpError(409, `Cannot undo during a ${state.operation} operation`);
-  if (!state.canUndoLastCommit) throw makeHttpError(409, "The last commit is already pushed to the upstream; undoing it would rewrite published history");
-  const payload = await runGuardedGitMutation(["reset", "--soft", "HEAD~1"], { cwd: state.root });
-  if (payload.data) {
-    payload.data.root = state.root;
-    payload.data.undoneCommit = state.lastCommit;
-    payload.data.restoreCommand = "git reset --soft ORIG_HEAD";
-  }
-  if (payload.ok) payload.data.changes = await readGitChanges(state.root);
-  return payload;
-}
-
-async function amendLastGitCommitMessage(cwd, body = {}) {
-  requireConfirmed(body, "Amending the last commit rewrites HEAD and");
-  const message = cleanGitCommitMessageInput(body.message);
-  const state = await readGitUndoState(cwd);
-  if (!state.lastCommit) throw makeHttpError(409, "There is no commit to amend");
-  if (state.operation) throw makeHttpError(409, `Cannot amend during a ${state.operation} operation`);
-  if (state.summary.staged > 0) throw makeHttpError(409, "Staged changes present; amending now would silently add them to the last commit. Unstage or commit them first.");
-  if (!state.canAmendMessage) throw makeHttpError(409, "The last commit is already pushed to the upstream; amending it would rewrite published history");
-  const payload = await runGuardedGitMutation(["commit", "--amend", "-m", message], { cwd: state.root, label: "git commit --amend -m <message>" });
-  if (payload.data) {
-    payload.data.root = state.root;
-    payload.data.previousCommit = state.lastCommit;
-    payload.data.restoreCommand = "git reset --soft ORIG_HEAD";
-  }
-  return payload;
-}
-
-async function readGitReflog(cwd) {
-  const root = await getGitRoot(cwd);
-  const out = await runGitReadCommand(root, ["reflog", "-n", "20", "--format=%h%x09%gd%x09%cI%x09%gs"], { maxOutputLength: 120_000 });
-  const entries = out
-    .split(/\r?\n/)
-    .filter(Boolean)
-    .map((line) => {
-      const [hash, selector, date, ...subject] = line.split("\t");
-      return { hash: hash || "", selector: selector || "", date: date || "", subject: subject.join("\t") };
-    });
-  return { root, entries, generatedAt: new Date().toISOString() };
-}
-
-// ---- Submodules ----
-
-async function readGitSubmodules(cwd) {
-  const root = await getGitRoot(cwd);
-  if (!(await regularFileExists(path.join(root, ".gitmodules")))) {
-    return { root, hasSubmodules: false, submodules: [], dirty: 0 };
-  }
-  const out = await runGitReadCommand(root, ["submodule", "status", "--recursive"], { timeoutMs: 30_000, maxOutputLength: 200_000 });
-  const submodules = out
-    .split(/\r?\n/)
-    .filter(Boolean)
-    .map((line) => {
-      const flag = line[0] || " ";
-      const rest = line.slice(1).trim();
-      const firstSpace = rest.indexOf(" ");
-      const sha = firstSpace === -1 ? rest : rest.slice(0, firstSpace);
-      const remainder = firstSpace === -1 ? "" : rest.slice(firstSpace + 1);
-      const describeMatch = remainder.match(/^(.*?)( \([^)]*\))?$/);
-      return {
-        sha,
-        path: (describeMatch?.[1] ?? remainder).trim(),
-        describe: describeMatch?.[2] ? describeMatch[2].trim().replace(/^\(|\)$/g, "") : "",
-        state: flag === "-" ? "uninitialized" : flag === "+" ? "out-of-sync" : flag === "U" ? "conflicts" : "clean",
-      };
-    });
-  return { root, hasSubmodules: true, submodules, dirty: submodules.filter((item) => item.state !== "clean").length };
-}
-
-async function updateGitSubmodules(cwd, body = {}) {
-  requireConfirmed(body, "Recursively updating submodules can check out new commits and");
-  const root = await getGitRoot(cwd);
-  const payload = await runGuardedGitMutation(["submodule", "update", "--init", "--recursive"], { cwd: root, timeoutMs: GIT_PULL_TIMEOUT_MS });
-  if (payload.data) payload.data.root = root;
-  if (payload.ok) payload.data.submodules = (await readGitSubmodules(root)).submodules;
-  return payload;
-}
-
-// ---- Tags ----
-
-function cleanGitTagName(value) {
-  const name = String(value || "").trim();
-  if (!name || name.includes("\0") || name.includes("@{") || name.startsWith("-") || name.startsWith("/") || /\s/.test(name)) {
-    throw makeHttpError(400, "Invalid tag name");
-  }
-  return name;
-}
-
-async function validateGitTagName(root, name) {
-  const result = await runCommand("git", ["check-ref-format", `refs/tags/${name}`], { cwd: root, timeoutMs: 5000 });
-  if (result.exitCode !== 0) throw makeHttpError(400, `Invalid tag name: ${name}`);
-}
-
-async function readGitTags(cwd) {
-  const root = await getGitRoot(cwd);
-  const [headOut, recentOut] = await Promise.all([
-    runGitReadCommand(root, ["tag", "--points-at", "HEAD", "--sort=-creatordate"], { maxOutputLength: 60_000 }).catch(() => ""),
-    runGitReadCommand(
-      root,
-      ["for-each-ref", "refs/tags", "--sort=-creatordate", "--count=30", "--format=%(refname:short)%09%(objecttype)%09%(objectname:short)%09%(*objectname:short)%09%(creatordate:iso8601)%09%(subject)"],
-      { maxOutputLength: 120_000 },
-    ).catch(() => ""),
-  ]);
-  const headTags = headOut.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-  const tags = recentOut
-    .split(/\r?\n/)
-    .filter(Boolean)
-    .map((line) => {
-      const [name, objectType, objectName, target, date, ...subject] = line.split("\t");
-      return {
-        name: name || "",
-        annotated: objectType === "tag",
-        target: (objectType === "tag" ? target : objectName) || "",
-        date: date || "",
-        subject: subject.join("\t"),
-        atHead: headTags.includes(name || ""),
-      };
-    });
-  return { root, headTags, tags, generatedAt: new Date().toISOString() };
-}
-
-async function createGitTag(cwd, body = {}) {
-  requireConfirmed(body, "Creating a tag");
-  const root = await getGitRoot(cwd);
-  const name = cleanGitTagName(body.name);
-  await validateGitTagName(root, name);
-  const message = cleanGitCommitMessageInput(body.message || name);
-  const payload = await runGuardedGitMutation(["tag", "-a", name, "-m", message], { cwd: root, label: `git tag -a ${name} -m <message>` });
-  if (payload.data) {
-    payload.data.root = root;
-    payload.data.tag = name;
-    // Tags never leave the machine implicitly; pushing stays a separate,
-    // explicit action.
-    payload.data.pushCommand = `git push ${"origin"} ${name}`;
-  }
-  if (payload.ok) payload.data.tags = (await readGitTags(root)).tags;
-  return payload;
-}
-
-// ---- Signing diagnostics ----
-
-async function readGitSigningDiagnostics(cwd) {
-  const root = await getGitRoot(cwd);
-  const readConfig = async (args) => {
-    const result = await runCommand("git", ["config", ...args], { cwd: root, timeoutMs: 2000 });
-    return result.exitCode === 0 ? result.stdout.trim() : "";
-  };
-  const [gpgSign, gpgFormat, signingKey, lastLog] = await Promise.all([
-    readConfig(["--bool", "--get", "commit.gpgsign"]),
-    readConfig(["--get", "gpg.format"]),
-    readConfig(["--get", "user.signingkey"]),
-    runGitReadCommand(root, ["log", "-1", "--format=%h%x09%G?%x09%GS"], { maxOutputLength: 10_000 }).catch(() => ""),
-  ]);
-  const [lastHash = "", signState = "", signer = ""] = lastLog.trim().split("\t");
-  const commitSignRequired = gpgSign.toLowerCase() === "true";
-  const normalizedState = signState.trim().toUpperCase();
-  const mismatch = commitSignRequired && (!normalizedState || normalizedState === "N" || normalizedState === "E");
-  const suggestions = [];
-  if (mismatch) {
-    if (!signingKey) suggestions.push({ label: "Set your signing key (repo only)", command: "git config user.signingkey <KEY-ID>" });
-    suggestions.push({ label: "Re-sign the last commit", command: "git commit --amend --no-edit -S" });
-    suggestions.push({ label: "Disable signing for this repository", command: "git config commit.gpgsign false" });
-  }
-  return {
-    root,
-    commitSignRequired,
-    gpgFormat: gpgFormat || "(default: gpg)",
-    signingKey: signingKey || "(not set)",
-    lastCommit: lastHash ? { hash: lastHash, signState: normalizedState || "N", signer } : null,
-    mismatch,
-    suggestions,
-  };
-}
-
-function gitWorkflowMessageCwd(root, cwd) {
-  const repositoryRoot = path.resolve(root);
-  const suppliedCwd = path.resolve(String(cwd || repositoryRoot));
-  if (suppliedCwd !== repositoryRoot && !pathInside(repositoryRoot, suppliedCwd)) {
-    throw new Error(`Git workflow cwd must stay inside repository root: ${suppliedCwd}`);
-  }
-  return repositoryRoot;
-}
-
-function gitWorkflowMessageFileMeta(root, messageCwd, filePath) {
-  return {
-    path: filePath,
-    relativePath: path.relative(messageCwd, filePath).split(path.sep).join("/"),
-    repoRelativePath: path.relative(root, filePath).split(path.sep).join("/"),
-  };
-}
-
-function commitMessagePaths(baseDir) {
-  return {
-    shortPath: path.join(baseDir, "dev", "COMMIT", "staged-commit-short.txt"),
-    longPath: path.join(baseDir, "dev", "COMMIT", "staged-commit-long.txt"),
-    branchPath: path.join(baseDir, "dev", "COMMIT", "staged-branch-name.txt"),
-  };
-}
-
-function assertGitWorkflowArtifactGenerationReady(generationId, generation, kind) {
-  if (!generationId) return;
-  if (!generation || generation.id !== generationId || generation.kind !== kind) {
-    throw new Error(`This ${kind} generation is no longer active. Regenerate the artifact.`);
-  }
-  if (!generation.terminal) throw new Error(`The correlated ${kind} generation is still running.`);
-  if (!generation.successful) throw new Error(`The correlated ${kind} generation did not finish successfully. Regenerate the artifact.`);
-}
-
-async function readGitWorkflowBranchName(cwd, { generationId = "", generation = null } = {}) {
-  assertGitWorkflowArtifactGenerationReady(generationId, generation, "branch");
-  const root = await getGitRoot(cwd);
-  const messageCwd = gitWorkflowMessageCwd(root, cwd);
-  const { branchPath } = commitMessagePaths(messageCwd);
-  try {
-    const [branchText, branchStat] = await Promise.all([readFile(branchPath, "utf8"), stat(branchPath)]);
-    const branch = branchText.split(/\r?\n/).find((line) => line.trim())?.trim() || "";
-    if (!branch) throw new Error(`${branchPath} is empty`);
-    const branchFile = gitWorkflowMessageFileMeta(root, messageCwd, branchPath);
-    return {
-      root,
-      cwd: messageCwd,
-      branchPath,
-      branchRelativePath: branchFile.relativePath,
-      branchRepoRelativePath: branchFile.repoRelativePath,
-      branch,
-      mtimeMs: branchStat.mtimeMs,
-      ctimeMs: branchStat.ctimeMs,
-      ino: String(branchStat.ino),
-    };
-  } catch (error) {
-    throw new Error(`Missing generated branch name file ${branchPath}. Run /git-branch-name first. ${sanitizeError(error)}`);
-  }
-}
-
-const GIT_WORKFLOW_MESSAGE_PAIR_SETTLE_MS = 80;
-
-function gitWorkflowMessagePendingPayload(root, messageCwd, paths, generationId, reason, details = {}) {
-  const shortFile = gitWorkflowMessageFileMeta(root, messageCwd, paths.shortPath);
-  const longFile = gitWorkflowMessageFileMeta(root, messageCwd, paths.longPath);
-  return {
-    ready: false,
-    generationId,
-    reason,
-    root,
-    cwd: messageCwd,
-    shortPath: paths.shortPath,
-    longPath: paths.longPath,
-    shortRelativePath: shortFile.relativePath,
-    longRelativePath: longFile.relativePath,
-    shortRepoRelativePath: shortFile.repoRelativePath,
-    longRepoRelativePath: longFile.repoRelativePath,
-    ...details,
-  };
-}
-
-async function readGitWorkflowMessages(cwd, { generationId = "", generation = null } = {}) {
-  const root = await getGitRoot(cwd);
-  const messageCwd = gitWorkflowMessageCwd(root, cwd);
-  const paths = commitMessagePaths(messageCwd);
-  if (generationId && (!generation || generation.id !== generationId || generation.kind !== "commit" || generation.cwd !== messageCwd)) {
-    return gitWorkflowMessagePendingPayload(root, messageCwd, paths, generationId, "This commit-message generation is no longer active. Regenerate the message files.", { expired: true });
-  }
-  if (generationId && !generation.terminal) {
-    return gitWorkflowMessagePendingPayload(root, messageCwd, paths, generationId, "The correlated commit-message generation is still running.", { running: true });
-  }
-  if (generationId && !generation.successful) {
-    return gitWorkflowMessagePendingPayload(root, messageCwd, paths, generationId, "The correlated commit-message generation did not finish successfully. Regenerate the message files.", { expired: true });
-  }
-  try {
-    let pair = await readStableGitMessageArtifactPair(paths);
-    if (generationId) {
-      const readiness = gitMessageArtifactPairReadiness(generation.baseline, pair);
-      if (!readiness.ready) return gitWorkflowMessagePendingPayload(root, messageCwd, paths, generationId, readiness.reason, readiness);
-      await new Promise((resolve) => setTimeout(resolve, GIT_WORKFLOW_MESSAGE_PAIR_SETTLE_MS));
-      const settledPair = await readStableGitMessageArtifactPair(paths);
-      if (!sameGitMessageArtifactPair(pair, settledPair)) {
-        return gitWorkflowMessagePendingPayload(root, messageCwd, paths, generationId, "Generated commit message files are still settling.");
-      }
-      const settledReadiness = gitMessageArtifactPairReadiness(generation.baseline, settledPair);
-      if (!settledReadiness.ready) return gitWorkflowMessagePendingPayload(root, messageCwd, paths, generationId, settledReadiness.reason, settledReadiness);
-      pair = settledPair;
-    }
-    if (!pair.short.exists || !pair.long.exists) {
-      throw new Error(`Missing ${!pair.short.exists ? paths.shortPath : paths.longPath}`);
-    }
-    const shortFile = gitWorkflowMessageFileMeta(root, messageCwd, paths.shortPath);
-    const longFile = gitWorkflowMessageFileMeta(root, messageCwd, paths.longPath);
-    return {
-      ready: true,
-      generationId,
-      root,
-      cwd: messageCwd,
-      shortPath: paths.shortPath,
-      longPath: paths.longPath,
-      shortRelativePath: shortFile.relativePath,
-      longRelativePath: longFile.relativePath,
-      shortRepoRelativePath: shortFile.repoRelativePath,
-      longRepoRelativePath: longFile.repoRelativePath,
-      short: pair.short.text.trimEnd(),
-      long: pair.long.text.trimEnd(),
-      shortMtimeMs: Number(BigInt(pair.short.mtimeNs) / 1_000_000n),
-      longMtimeMs: Number(BigInt(pair.long.mtimeNs) / 1_000_000n),
-      shortSha256: pair.short.sha256,
-      longSha256: pair.long.sha256,
-    };
-  } catch (error) {
-    throw new Error(`Missing or unstable generated commit message files in ${path.join(messageCwd, "dev", "COMMIT")}. Run /git-staged-msg first. ${sanitizeError(error)}`);
-  }
-}
-
-function cleanGitBranchName(value) {
-  const branch = String(value || "").trim();
-  if (!branch) throw new Error("branch is required");
-  if (branch.includes("\0") || branch.includes("@{") || branch.startsWith("-") || branch.startsWith("/")) throw new Error("invalid branch name");
-  return branch;
-}
-
-function cleanGitCommitMessageInput(value) {
-  const message = String(value || "").replace(/\r\n?/g, "\n").trim();
-  if (!message) throw new Error("commit message is required");
-  if (message.includes("\0")) throw new Error("commit message contains a NUL byte");
-  if (message.length > 10000) throw new Error("commit message is too long");
-  return message;
-}
-
-function gitWorkflowDefaultCommitAction(entry) {
-  if (!entry || entry.y !== " ") return "";
-  if (entry.x === "A") return "created";
-  if (entry.x === "M" || entry.x === "T") return "updated";
-  if (entry.x === "D") return "deleted";
-  return "";
-}
-
-function formatGitWorkflowDefaultCommitPath(filePath) {
-  return String(filePath || "").replace(/[\0\r\n\t]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 4000);
-}
-
-async function readGitWorkflowDefaultCommitMessage(cwd) {
-  const root = await getGitRoot(cwd);
-  const statusText = await runGitReadCommand(root, ["status", "--porcelain=v1", "-z", "--untracked-files=all"], { maxOutputLength: 120_000 });
-  const entries = parseGitPorcelainZEntries(statusText);
-  const empty = (reason, extra = {}) => ({ root, message: "", reason, ...extra });
-  if (entries.length === 0) return empty("No changed files are ready for a default commit message.");
-  if (entries.length !== 1) return empty(`Expected exactly one changed file for a default commit message; found ${entries.length}.`);
-  const [entry] = entries;
-  const action = gitWorkflowDefaultCommitAction(entry);
-  const displayPath = formatGitWorkflowDefaultCommitPath(entry.path);
-  if (!action || !displayPath) {
-    return empty("The only changed file is not a staged created, updated, or deleted file.", { path: entry.path || "" });
-  }
-  return {
-    root,
-    message: `${action} ${displayPath}`,
-    action,
-    path: entry.path,
-  };
-}
-
-function cleanGitHubUsername(value) {
-  const username = String(value || "").trim().replace(/^@+/, "");
-  if (!username) throw new Error("GitHub username is required");
-  if (username.length > 39 || !/^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$/.test(username) || username.includes("--")) {
-    throw new Error("Invalid GitHub username");
-  }
-  return username;
-}
-
-function cleanGitHubRepoName(value) {
-  let repoName = String(value || "").trim();
-  const githubUrlMatch = repoName.match(/github\.com[:/][^/\s]+\/([^/\s]+?)(?:\.git)?\/?$/i);
-  if (githubUrlMatch) repoName = githubUrlMatch[1];
-  if (repoName.includes("/")) repoName = repoName.split("/").filter(Boolean).pop() || "";
-  repoName = repoName.replace(/\.git$/i, "");
-  if (!repoName) throw new Error("GitHub repository name is required");
-  if (repoName.length > 100 || repoName === "." || repoName === ".." || !/^[A-Za-z0-9._-]+$/.test(repoName)) {
-    throw new Error("Invalid GitHub repository name");
-  }
-  return repoName;
-}
-
-function gitHubOriginUrl(username, repoName) {
-  return `https://github.com/${cleanGitHubUsername(username)}/${cleanGitHubRepoName(repoName)}.git`;
-}
-
-function defaultGitRepoNameFromRoot(root) {
-  try {
-    return cleanGitHubRepoName(path.basename(root));
-  } catch {
-    return "new-repo";
-  }
-}
-
-async function ensureOutsideGitRepository(cwd) {
-  const result = await runCommand("git", ["rev-parse", "--show-toplevel"], { cwd, timeoutMs: 2000 });
-  if (result.exitCode === 0 && result.stdout.trim()) throw new Error(`Already inside a git repository: ${path.resolve(result.stdout.trim())}`);
-}
-
-async function regularFileExists(filePath) {
-  try {
-    return (await stat(filePath)).isFile();
-  } catch (error) {
-    if (error?.code === "ENOENT") return false;
-    throw error;
-  }
-}
-
-async function detectRepositoryStack(root) {
-  let names = new Set();
-  try {
-    names = new Set(await readdir(root));
-  } catch {
-    return "";
-  }
-  const detected = [];
-  if (names.has("package.json")) {
-    try {
-      const manifest = JSON.parse(await readFile(path.join(root, "package.json"), "utf8"));
-      const deps = { ...(manifest.dependencies || {}), ...(manifest.devDependencies || {}) };
-      if (deps.next) detected.push("Next.js");
-      else if (deps.react || deps.vite) detected.push("React / Vite");
-      else detected.push("Node.js / TypeScript");
-      if (deps.typescript || names.has("tsconfig.json")) detected.push("TypeScript");
-    } catch {
-      detected.push("Node.js");
-    }
-  }
-  if (names.has("pyproject.toml") || names.has("requirements.txt") || names.has("setup.py")) detected.push("Python");
-  if (names.has("manage.py")) detected.push("Django");
-  if (names.has("Cargo.toml")) detected.push("Rust");
-  if (names.has("go.mod")) detected.push("Go");
-  if (names.has("pom.xml") || names.has("build.gradle") || names.has("build.gradle.kts")) detected.push("Java / Gradle");
-  if (names.has("Dockerfile") || names.has("docker-compose.yml") || names.has("compose.yml")) detected.push("Docker");
-  return [...new Set(detected)].join(", ");
-}
-
-async function initialRepositoryFilesStatus(cwd) {
-  const root = await getGitRoot(cwd);
-  const readmePath = path.join(root, "README.md");
-  const gitignorePath = path.join(root, ".gitignore");
-  const [readmeExists, gitignoreExists, detectedStack] = await Promise.all([
-    regularFileExists(readmePath),
-    regularFileExists(gitignorePath),
-    detectRepositoryStack(root),
-  ]);
-  return { root, readmePath, gitignorePath, readmeExists, gitignoreExists, detectedStack };
-}
-
-function gitignoreLinesForStack(stackInput, detectedStack = "") {
-  const stack = `${stackInput || ""} ${detectedStack || ""}`.toLowerCase();
-  const sections = [
-    ["# OS / editors", ".DS_Store", "Thumbs.db", ".idea/", ".vscode/", "*.swp", "*.swo"],
-    ["# Local env / secrets", ".env", ".env.*", "!.env.example", "*.local"],
-    ["# Logs / temp", "*.log", "logs/", "tmp/", "temp/", ".cache/"],
-  ];
-  if (/node|npm|pnpm|yarn|bun|typescript|javascript|react|vite|next/.test(stack)) {
-    sections.push(["# Node / frontend", "node_modules/", "dist/", "build/", ".next/", "out/", "coverage/", ".turbo/", ".vite/", "*.tsbuildinfo"]);
-  }
-  if (/python|django|fastapi|flask/.test(stack)) {
-    sections.push(["# Python", "__pycache__/", "*.py[cod]", ".pytest_cache/", ".ruff_cache/", ".mypy_cache/", ".venv/", "venv/", "htmlcov/", "*.egg-info/"]);
-  }
-  if (/rust|cargo/.test(stack)) sections.push(["# Rust", "target/"]);
-  if (/\bgo\b|golang/.test(stack)) sections.push(["# Go", "bin/", "*.test", "coverage.out"]);
-  if (/java|gradle|maven|kotlin/.test(stack)) sections.push(["# Java / JVM", "target/", "build/", ".gradle/", "*.class"]);
-  if (/docker|container/.test(stack)) sections.push(["# Docker", ".docker/", "docker-compose.override.yml"]);
-  if (sections.length === 3) {
-    sections.push(["# Common dependency / build outputs", "node_modules/", ".venv/", "venv/", "target/", "dist/", "build/", "coverage/", "vendor/", "*.tmp"]);
-  }
-  const seen = new Set();
-  const lines = [];
-  for (const section of sections) {
-    lines.push(section[0]);
-    for (const pattern of section.slice(1)) {
-      if (seen.has(pattern)) continue;
-      seen.add(pattern);
-      lines.push(pattern);
-    }
-    lines.push("");
-  }
-  return `${lines.join("\n").replace(/\n{3,}/g, "\n\n").trim()}\n`;
-}
-
-async function prepareInitialRepositoryFiles(cwd, { repoName: repoNameInput, stack = "" } = {}) {
-  const before = await initialRepositoryFilesStatus(cwd);
-  const repoName = repoNameInput ? cleanGitHubRepoName(repoNameInput) : defaultGitRepoNameFromRoot(before.root);
-  if (await regularFileExists(before.readmePath)) {
-    // Explicit pre-add check: keep existing README.md unchanged.
-  } else {
-    await writeFile(before.readmePath, `# ${repoName}\n\nInitialized by Pi Web UI.\n`, "utf8");
-  }
-  let gitignoreCreated = false;
-  let gitignoreSource = before.gitignoreExists ? "existing" : "fallback";
-  if (!(await regularFileExists(before.gitignorePath))) {
-    await writeFile(before.gitignorePath, gitignoreLinesForStack(stack, before.detectedStack), "utf8");
-    gitignoreCreated = true;
-  }
-  const payload = gitMutationPayload(await runGitMutationCommand(["add", "--", "README.md", ".gitignore"], { cwd: before.root, label: "git add README.md .gitignore" }));
-  if (payload.data) {
-    payload.data.root = before.root;
-    payload.data.readme = { path: before.readmePath, exists: true, created: !before.readmeExists };
-    payload.data.gitignore = { path: before.gitignorePath, exists: true, created: gitignoreCreated, source: gitignoreSource };
-    payload.data.detectedStack = before.detectedStack;
-    payload.data.stack = stack;
-    payload.data.stdout = [
-      before.readmeExists ? `Using existing ${before.readmePath}` : `Created ${before.readmePath}`,
-      before.gitignoreExists ? `Using existing ${before.gitignorePath}` : `Created ${before.gitignorePath} (${gitignoreSource})`,
-      payload.data.stdout?.trimEnd(),
-    ].filter(Boolean).join("\n");
-  }
-  return payload;
-}
-
-async function validateGitBranchName(root, branch) {
-  const result = await runGitWorkflowCommand(["check-ref-format", "--branch", branch], { cwd: root, timeoutMs: 5000 });
-  if (result.exitCode !== 0 || result.timedOut || result.cancelled || result.error) {
-    throw new Error((result.stderr || result.stdout || result.error || `Invalid branch name: ${branch}`).trim());
-  }
-}
-
-async function currentGitBranch(root) {
-  const result = await runGitWorkflowCommand(["branch", "--show-current"], { cwd: root, timeoutMs: 5000 });
-  const branch = result.stdout.trim();
-  if (result.exitCode !== 0 || !branch) throw new Error((result.stderr || result.stdout || "Cannot determine current git branch").trim());
-  return branch;
-}
-
-async function currentGitBranchForPicker(root) {
-  try {
-    return (await runGitReadCommand(root, ["branch", "--show-current"], { timeoutMs: 5000, maxOutputLength: 10_000 })).trim();
-  } catch {
-    return "";
-  }
-}
-
-function normalizeGitBranchList(branchText, current = "") {
-  const seen = new Set();
-  const branches = [];
-  for (const line of String(branchText || "").split(/\r?\n/)) {
-    const name = line.trim();
-    if (!name || seen.has(name)) continue;
-    seen.add(name);
-    branches.push({ name, current: !!current && name === current });
-  }
-  return branches.sort((left, right) => {
-    if (left.current !== right.current) return left.current ? -1 : 1;
-    return left.name.localeCompare(right.name);
-  });
-}
-
-function configuredRemoteForRef(remoteRef, remoteNames = []) {
-  return remoteNames
-    .filter((remoteName) => remoteRef.startsWith(`${remoteName}/`))
-    .sort((left, right) => right.length - left.length || left.localeCompare(right))[0] || "";
-}
-
-function remoteBranchRecord(fullRef, symref = "", remoteNames = []) {
-  const prefix = "refs/remotes/";
-  const ref = String(fullRef || "");
-  if (!ref.startsWith(prefix) || symref) return null;
-  const remoteRef = ref.slice(prefix.length);
-  const remoteName = configuredRemoteForRef(remoteRef, remoteNames);
-  if (!remoteName) return null;
-  const name = remoteRef.slice(remoteName.length + 1);
-  if (!name) return null;
-  return { name, current: false, remote: true, remoteRef, remoteName, displayName: remoteRef };
-}
-
-async function readRemoteGitBranchData(root) {
-  const [remoteNamesText, refs] = await Promise.all([
-    runGitReadCommand(root, ["remote"], { timeoutMs: 5000, maxOutputLength: 120_000 }),
-    runGitReadCommandDetailed(root, ["for-each-ref", "--format=%(refname)%09%(symref)", "refs/remotes"], { timeoutMs: 5000, maxOutputLength: 120_000 }),
-  ]);
-  return {
-    remoteNames: remoteNamesText.split(/\r?\n/).map((line) => line.trim()).filter(Boolean),
-    refText: refs.output,
-    truncated: refs.truncated === true,
-    unavailable: false,
-  };
-}
-
-function normalizeRemoteGitBranches(remoteData, localBranchNames) {
-  // Never parse tail-truncated output: the first retained line may be a partial
-  // ref. Local branches and worktrees remain available while the UI can expose
-  // the truncation flag.
-  if (!remoteData || remoteData.truncated) return [];
-  const remoteBranches = [];
-  for (const line of String(remoteData.refText || "").split(/\r?\n/)) {
-    const [fullRef = "", symref = ""] = line.split("\t", 2);
-    const branch = remoteBranchRecord(fullRef, symref, remoteData.remoteNames);
-    // A local branch takes precedence over every same-named remote ref. Until
-    // then, retain each exact remote ref so multiple remotes stay unambiguous.
-    if (branch && !localBranchNames.has(branch.name)) remoteBranches.push(branch);
-  }
-  return remoteBranches.sort((left, right) => left.displayName.localeCompare(right.displayName));
-}
-
-async function readGitBranches(cwd) {
-  const root = await getGitRoot(cwd);
-  const [current, branchText, worktreeData, remoteData] = await Promise.all([
-    currentGitBranchForPicker(root),
-    runGitReadCommand(root, ["branch", "--format=%(refname:lstrip=2)"], { timeoutMs: 5000, maxOutputLength: 120_000 }),
-    listGitWorktrees(cwd).catch(() => null),
-    readRemoteGitBranchData(root).catch(() => ({ remoteNames: [], refText: "", truncated: false, unavailable: true })),
-  ]);
-  const occupiedByBranch = new Map();
-  for (const item of worktreeData?.occupiedBranches || []) {
-    if (!item?.branch || occupiedByBranch.has(item.branch)) continue;
-    occupiedByBranch.set(item.branch, item);
-  }
-  const localBranches = normalizeGitBranchList(branchText, current).map((branch) => {
-    const occupied = occupiedByBranch.get(branch.name);
-    return occupied ? { ...branch, occupied: true, worktreePath: occupied.path, worktreeCurrent: occupied.current === true, mainWorktree: occupied.isMainWorktree === true } : branch;
-  });
-  const remoteBranches = normalizeRemoteGitBranches(remoteData, new Set(localBranches.map((branch) => branch.name)));
-  return {
-    cwd,
-    root,
-    repoRoot: worktreeData?.repoRoot || root,
-    commonGitDir: worktreeData?.commonGitDir || "",
-    currentWorktreePath: worktreeData?.currentWorktreePath || root,
-    defaultWorktreesRoot: worktreeData?.defaultWorktreesRoot || "",
-    current,
-    generatedAt: new Date().toISOString(),
-    branches: [...localBranches, ...remoteBranches],
-    remoteBranchesTruncated: remoteData.truncated === true,
-    remoteBranchesUnavailable: remoteData.unavailable === true,
-    worktrees: worktreeData?.worktrees || [],
-    occupiedBranches: worktreeData?.occupiedBranches || [],
-  };
-}
-
-function requestedRemoteRef(body = {}) {
-  if (!Object.hasOwn(body, "remoteRef")) return null;
-  if (typeof body.remoteRef !== "string" || !body.remoteRef || body.remoteRef.trim() !== body.remoteRef) {
-    throw new Error("remoteRef must be a non-empty exact remote-tracking ref");
-  }
-  return body.remoteRef;
-}
-
-async function verifyRemoteGitBranchIntent(cwd, branch, remoteRef) {
-  const targetBranch = cleanGitBranchName(branch);
-  const branches = await readGitBranches(cwd);
-  const localBranch = branches.branches.find((item) => item.remote !== true && item.name === targetBranch);
-  if (localBranch) throw new Error(`Local git branch already exists: ${targetBranch}. Refresh the picker and use the local branch instead.`);
-  const remoteBranch = branches.branches.find((item) => item.remote === true && item.remoteRef === remoteRef);
-  if (!remoteBranch) throw new Error(`Unknown remote git branch: ${remoteRef}`);
-  if (remoteBranch.name !== targetBranch) {
-    throw new Error(`Remote git branch ${remoteRef} does not match local branch ${targetBranch}`);
-  }
-  return { root: branches.root, branch: targetBranch, remoteRef: remoteBranch.remoteRef };
-}
-
-async function switchGitBranch(cwd, branch, { create = false, remoteRef = null } = {}) {
-  if (remoteRef !== null) {
-    // Re-read the advertised remote-only record immediately before creating a
-    // tracking branch. This rejects stale refs and local-name collisions.
-    const intent = await verifyRemoteGitBranchIntent(cwd, branch, remoteRef);
-    const payload = gitMutationPayload(await runGitMutationCommand(["switch", "--track", "-c", intent.branch, intent.remoteRef], { cwd: intent.root, timeoutMs: 10 * 60 * 1000 }));
-    if (payload.ok) {
-      payload.data.branch = intent.branch;
-      payload.data.root = intent.root;
-      payload.data.switched = true;
-      payload.data.created = true;
-    } else {
-      payload.error = (payload.data?.stderr || payload.data?.stdout || payload.error || `Failed to create and switch to ${intent.branch}`).trim();
-    }
-    return payload;
-  }
-
-  const root = await getGitRoot(cwd);
-  const targetBranch = cleanGitBranchName(branch);
-  await validateGitBranchName(root, targetBranch);
-  const branches = await readGitBranches(cwd);
-  const branchExists = branches.branches.some((item) => item.remote !== true && item.name === targetBranch);
-  if (create && branchExists) throw new Error(`Local git branch already exists: ${targetBranch}`);
-  if (!create && !branchExists) throw new Error(`Unknown local git branch: ${targetBranch}`);
-  const occupied = branches.branches.find((item) => item.remote !== true && item.name === targetBranch && item.occupied && !item.worktreeCurrent);
-  if (!create && occupied?.worktreePath) {
-    return {
-      ok: false,
-      code: WORKTREE_ERROR_CODES.BRANCH_CHECKED_OUT_ELSEWHERE,
-      error: `Branch ${targetBranch} is already checked out at ${occupied.worktreePath}. Open that worktree instead of switching this checkout.`,
-      data: { branch: targetBranch, root, worktreePath: occupied.worktreePath },
-    };
-  }
-  if (!create && branches.current === targetBranch) {
-    return { ok: true, data: { command: `git switch ${targetBranch}`, stdout: "", stderr: "", exitCode: 0, branch: targetBranch, root, switched: false, created: false } };
-  }
-  const args = create ? ["switch", "-c", targetBranch] : ["switch", targetBranch];
-  const payload = gitMutationPayload(await runGitMutationCommand(args, { cwd: root, timeoutMs: 10 * 60 * 1000 }));
-  if (payload.ok) {
-    payload.data.branch = targetBranch;
-    payload.data.root = root;
-    payload.data.switched = true;
-    payload.data.created = create;
-  } else {
-    payload.error = (payload.data?.stderr || payload.data?.stdout || payload.error || `Failed to ${create ? "create and switch to" : "switch to"} ${targetBranch}`).trim();
-  }
-  return payload;
-}
-
-function normalizeWorktreeSessionMode(value) {
-  const mode = String(value || "fork-current").trim().toLowerCase();
-  if (!mode || mode === "fork" || mode === "fork-current") return "fork-current";
-  if (mode === "empty" || mode === "new") return "empty";
-  if (mode === "clone-current" || mode === "parent-only") {
-    throw makeHttpError(400, `sessionMode ${mode} is not supported yet; use fork-current or empty.`);
-  }
-  throw makeHttpError(400, "sessionMode must be fork-current or empty");
-}
-
-async function createEmptySessionFileForCwd(cwd) {
-  const manager = SessionManager.create(cwd, configuredSessionDir());
-  const sessionFile = manager.getSessionFile();
-  const header = manager.getHeader();
-  if (!sessionFile || !header) return undefined;
-  await mkdir(path.dirname(sessionFile), { recursive: true });
-  await writeFile(sessionFile, `${JSON.stringify(header)}\n`, { encoding: "utf8", flag: "wx" });
-  return sessionFile;
-}
-
-async function prepareWorktreeSessionFile(sourceTab, targetCwd, requestedMode = "fork-current") {
-  if (options.noSession) return { mode: "none", requestedMode: "none", sessionFile: undefined, warning: "Web UI was started with --no-session." };
-  const mode = normalizeWorktreeSessionMode(requestedMode);
-  if (mode === "empty") {
-    return { mode, requestedMode: mode, sessionFile: await createEmptySessionFileForCwd(targetCwd) };
-  }
-
-  const state = await currentSessionState(sourceTab).catch(() => sourceTab?.lastState || {});
-  const sourceSessionFile = state.sessionFile || tabRestorableSessionFile(sourceTab);
-  if (sourceSessionFile) {
-    requireAllowedSessionPath(sourceSessionFile);
-    const sourceInfo = await stat(sourceSessionFile).catch(() => null);
-    if (sourceInfo?.isFile()) {
-      const manager = SessionManager.forkFrom(sourceSessionFile, targetCwd, configuredSessionDir());
-      return { mode, requestedMode: mode, sessionFile: manager.getSessionFile(), parentSession: sourceSessionFile };
-    }
-  }
-
-  return {
-    mode: "empty",
-    requestedMode: mode,
-    sessionFile: await createEmptySessionFileForCwd(targetCwd),
-    warning: "Current session is not persisted yet; opened an empty session rooted at the worktree.",
-  };
-}
-
-function gitWorkspaceFromWorktreeResult(result, worktree = result?.worktree) {
-  if (!worktree?.path) return null;
-  return {
-    repoRoot: result.repoRoot || worktree.repoRoot || "",
-    commonGitDir: result.commonGitDir || worktree.commonGitDir || "",
-    worktreePath: worktree.path,
-    branch: worktree.branch || result.branch || null,
-    worktreeCount: Array.isArray(result.worktrees) ? result.worktrees.length : undefined,
-    isMainWorktree: worktree.isMainWorktree === true,
-  };
-}
-
-async function openWorktreeResultForTab(sourceTab, result, body = {}) {
-  const worktree = result?.worktree;
-  const worktreePath = worktree?.path || result?.path;
-  if (!worktreePath) throw makeHttpError(500, "Git worktree operation did not return a path");
-  if (body.openTab === false) return { ...result, session: null, tab: null, tabs: listTabs(), openedTab: false };
-
-  if (sameResolvedPath(worktreePath, sourceTab.cwd)) {
-    sourceTab.gitWorkspace = gitWorkspaceFromWorktreeResult(result, worktree);
-    scheduleSupervisorMetadataUpdate(sourceTab);
-    return { ...result, session: null, tab: tabMeta(sourceTab), tabs: listTabs(), openedTab: false, openedCurrent: true };
-  }
-
-  const existingTab = [...tabs.values()].find((item) => sameResolvedPath(item.cwd, worktreePath));
-  if (existingTab) {
-    existingTab.gitWorkspace = gitWorkspaceFromWorktreeResult(result, worktree);
-    scheduleSupervisorMetadataUpdate(existingTab);
-    return { ...result, session: null, tab: tabMeta(existingTab), tabs: listTabs(), openedTab: false, openedExistingTab: true };
-  }
-
-  const session = await prepareWorktreeSessionFile(sourceTab, worktreePath, body.sessionMode || "fork-current");
-  const tab = await createTab({
-    title: body.title,
-    titleSource: body.title ? "explicit" : undefined,
-    cwd: worktreePath,
-    sessionFile: session.sessionFile,
-    gitWorkspace: gitWorkspaceFromWorktreeResult(result, worktree),
-  });
-  recordEvent({ type: "webui_worktree_opened", tabId: tab.id, tabTitle: tab.title, cwd: tab.cwd, branch: worktree.branch || result.branch || "", sessionMode: session.mode });
-  return {
-    ...result,
-    session,
-    tab: tabMeta(tab),
-    tabs: listTabs(),
-    openedTab: true,
-    dependencyHint: "Git worktrees do not share ignored dependency directories such as node_modules or .venv; install/bootstrap dependencies manually if needed.",
-  };
-}
-
-async function cleanupCreatedWorktreeAfterFailure(sourceCwd, worktreePath) {
-  try {
-    return await removeGitWorktree(sourceCwd, worktreePath, { force: true });
-  } catch (error) {
-    return { ok: false, error: sanitizeError(error), code: error?.code || WORKTREE_ERROR_CODES.GIT_COMMAND_FAILED };
-  }
-}
-
-async function readGitWorkflowMessageFilesForTransfer(root, messageCwd = root) {
-  const { shortPath, longPath } = commitMessagePaths(messageCwd);
-  const files = [];
-  for (const sourcePath of [shortPath, longPath]) {
-    try {
-      const content = await readFile(sourcePath, "utf8");
-      files.push({ relativePath: path.relative(root, sourcePath).split(path.sep).join("/"), content });
-    } catch (error) {
-      if (error?.code !== "ENOENT") throw error;
-    }
-  }
-  return files;
-}
-
-async function snapshotGitWorkflowBranchState(root, cwd = root, expectedStagedContentHash = "") {
-  const messageCwd = gitWorkflowMessageCwd(root, cwd);
-  // Preserve raw patch bytes: string decoding would corrupt binary staged
-  // changes before `git apply --index` can copy them to the PR worktree.
-  const staged = await readStagedContentHash(root);
-  if (expectedStagedContentHash && (!staged.hasStagedChanges || staged.stagedContentHash !== expectedStagedContentHash)) {
-    throw makeHttpError(409, "Staged content changed after manual approval. Return to Stage and request a new manual review before creating a PR worktree.");
-  }
-  return {
-    stagedPatch: staged.stagedDiff,
-    stagedContentHash: staged.stagedContentHash,
-    messageFiles: await readGitWorkflowMessageFilesForTransfer(root, messageCwd),
-  };
-}
-
-async function applyGitWorkflowBranchStateToWorktree(snapshot, worktreePath) {
-  const copiedMessageFiles = [];
-  let appliedStagedPatch = false;
-  const patchBytes = Buffer.isBuffer(snapshot?.stagedPatch) ? snapshot.stagedPatch : Buffer.alloc(0);
-  if (patchBytes.length > 0) {
-    const patchPath = path.join(tmpdir(), `pi-webui-staged-worktree-${process.pid}-${Date.now()}-${randomUUID()}.patch`);
-    await writeFile(patchPath, patchBytes);
-    try {
-      const applyResult = await runGitWorkflowCommand(["apply", "--index", "--whitespace=nowarn", patchPath], {
-        cwd: worktreePath,
-        label: "git apply --index <staged diff>",
-        timeoutMs: 5 * 60 * 1000,
-      });
-      if (applyResult.exitCode !== 0 || applyResult.timedOut || applyResult.cancelled || applyResult.error) {
-        throw new Error((applyResult.stderr || applyResult.stdout || applyResult.error || "Unable to apply staged changes in the PR worktree").trim());
-      }
-      appliedStagedPatch = true;
-    } finally {
-      await rm(patchPath, { force: true }).catch(() => {});
-    }
-  }
-
-  for (const file of snapshot?.messageFiles || []) {
-    const relativePath = String(file.relativePath || "").replace(/\\/g, "/");
-    const targetPath = path.resolve(worktreePath, relativePath);
-    if (!relativePath || !pathInside(worktreePath, targetPath)) throw new Error(`Refusing to copy Git workflow file outside the worktree: ${relativePath}`);
-    await mkdir(path.dirname(targetPath), { recursive: true });
-    await writeFile(targetPath, file.content, "utf8");
-    copiedMessageFiles.push(relativePath);
-  }
-
-  return { appliedStagedPatch, copiedMessageFiles };
-}
-
-function gitWorkflowBranchWorktreeStdout({ branch, worktreePath, createdResult, opened, transfer }) {
-  const lines = [];
-  if (createdResult?.created) lines.push(`Created branch worktree ${branch} at ${worktreePath}.`);
-  else if (createdResult?.openedExisting) lines.push(`Opened existing branch worktree ${branch} at ${worktreePath}.`);
-  else lines.push(`Opened branch worktree ${branch} at ${worktreePath}.`);
-  if (transfer?.appliedStagedPatch) lines.push("Copied the source checkout's staged changes into the worktree index.");
-  else if (createdResult?.openedExisting) lines.push("Existing worktree was reused; source staged changes were not copied automatically.");
-  else lines.push("No staged changes were copied because the source index was clean.");
-  if (transfer?.copiedMessageFiles?.length) lines.push(`Copied ${transfer.copiedMessageFiles.join(", ")} for commit message selection.`);
-  if (opened?.tab?.id) lines.push(`Continue the guided Git workflow in Web UI tab ${opened.tab.title || opened.tab.id}.`);
-  lines.push("The source checkout was left on its current branch.");
-  return lines.join("\n");
-}
-
-async function createGitWorkflowBranchWorktree(tab, body = {}) {
-  const root = await getGitRoot(tab.cwd);
-  const branch = cleanGitBranchName(body.branch || body.branchName);
-  await validateGitBranchName(root, branch);
-  const expectedStagedContentHash = expectedStagedContentHashFromBody(body);
-  const snapshot = await snapshotGitWorkflowBranchState(root, tab.cwd, expectedStagedContentHash);
-  let createdResult = null;
-  try {
-    createdResult = await createGitWorktree(tab.cwd, { ...body, branchName: branch });
-    const worktreePath = createdResult.worktree?.path || createdResult.path;
-    if (!worktreePath) throw makeHttpError(500, "Git workflow worktree creation did not return a path");
-    const transfer = createdResult.created
-      ? await applyGitWorkflowBranchStateToWorktree(snapshot, worktreePath)
-      : { appliedStagedPatch: false, copiedMessageFiles: [] };
-    const opened = await openWorktreeResultForTab(tab, createdResult, { openTab: body.openTab !== false, sessionMode: body.sessionMode || "fork-current", ...body });
-    if (createdResult.created) {
-      recordEvent({ type: "webui_worktree_created", tabId: opened.tab?.id || tab.id, cwd: opened.worktree?.path || opened.path, branch });
-    }
-    recordEvent({ type: "webui_git_workflow_worktree", tabId: opened.tab?.id || tab.id, cwd: worktreePath, branch, transferredStagedChanges: transfer.appliedStagedPatch });
-    return {
-      ...opened,
-      command: createdResult.created ? formatGitCommand(["worktree", "add", "-b", branch, worktreePath]) : formatGitCommand(["worktree", "list", "--porcelain"]),
-      stdout: gitWorkflowBranchWorktreeStdout({ branch, worktreePath, createdResult, opened, transfer }),
-      stderr: "",
-      exitCode: 0,
-      branch: opened.branch || branch,
-      carriedStagedChanges: transfer.appliedStagedPatch,
-      copiedMessageFiles: transfer.copiedMessageFiles,
-    };
-  } catch (error) {
-    let cleanup = null;
-    const createdPath = createdResult?.created && !createdResult?.openedExisting ? createdResult.worktree?.path || createdResult.path : "";
-    if (createdPath) cleanup = await cleanupCreatedWorktreeAfterFailure(tab.cwd, createdPath);
-    recordEvent({ type: "webui_git_workflow_worktree_failed", tabId: tab.id, cwd: createdPath || tab.cwd, branch, error: sanitizeError(error), cleanup });
-    throw error;
-  }
-}
-
-async function createGitWorktreeTab(tab, body = {}) {
-  const remoteRef = requestedRemoteRef(body);
-  const worktreeRequest = remoteRef === null
-    ? body
-    : { ...body, branchName: (await verifyRemoteGitBranchIntent(tab.cwd, body.branchName || body.branch, remoteRef)).branch, remoteRef };
-  let createdResult = null;
-  try {
-    createdResult = await createGitWorktree(tab.cwd, worktreeRequest);
-    const opened = await openWorktreeResultForTab(tab, createdResult, { openTab: body.openTab !== false, ...body });
-    if (createdResult.created) {
-      recordEvent({ type: "webui_worktree_created", tabId: opened.tab?.id || tab.id, cwd: opened.worktree?.path || opened.path, branch: opened.branch || body.branchName || "" });
-    }
-    return opened;
-  } catch (error) {
-    let cleanup = null;
-    const createdPath = createdResult?.created && !createdResult?.openedExisting ? createdResult.worktree?.path || createdResult.path : "";
-    if (createdPath) cleanup = await cleanupCreatedWorktreeAfterFailure(tab.cwd, createdPath);
-    recordEvent({ type: "webui_worktree_create_failed", tabId: tab.id, cwd: createdPath || tab.cwd, branch: body.branchName || body.branch || "", error: sanitizeError(error), cleanup });
-    throw error;
-  }
-}
-
-async function openExistingGitWorktreeTab(tab, body = {}) {
-  const requestedPath = String(body.path || body.worktreePath || "").trim();
-  if (!requestedPath) throw makeHttpError(400, "worktree path is required");
-  const result = await openGitWorktree(tab.cwd, requestedPath);
-  return openWorktreeResultForTab(tab, result, { openTab: body.openTab !== false, ...body });
-}
-
-function openTabsInsideWorktree(worktreePath) {
-  return [...tabs.values()].filter((tab) => pathInside(worktreePath, tab.cwd));
-}
-
-async function removeGitWorktreeForTab(tab, body = {}) {
-  if (body.confirmed !== true) throw makeHttpError(409, "Removing a worktree requires confirmed: true because it deletes files under the worktree path.");
-  const requestedPath = String(body.path || body.worktreePath || "").trim();
-  if (!requestedPath) throw makeHttpError(400, "worktree path is required");
-  const activeTabs = openTabsInsideWorktree(requestedPath);
-  if (activeTabs.length) {
-    const error = makeHttpError(409, `Refusing to remove a worktree that is open in ${activeTabs.length} Web UI tab${activeTabs.length === 1 ? "" : "s"}.`);
-    error.code = WORKTREE_ERROR_CODES.WORKTREE_BUSY;
-    error.details = { path: requestedPath, tabIds: activeTabs.map((item) => item.id) };
-    throw error;
-  }
-  const result = await removeGitWorktree(tab.cwd, requestedPath, { force: body.force === true });
-  recordEvent({ type: "webui_worktree_removed", tabId: tab.id, cwd: result.path || requestedPath, branch: result.branch || "" });
-  return { ...result, tabs: listTabs() };
-}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 function sendGitWorktreeFailure(res, error) {
   sendJson(res, 200, gitWorktreeErrorPayload(error));
-}
-
-async function gitRemoteNames(root) {
-  const result = await runGitWorkflowCommand(["remote"], { cwd: root, timeoutMs: 5000 });
-  if (result.exitCode !== 0) throw new Error((result.stderr || result.stdout || "Cannot list git remotes").trim());
-  return result.stdout.split("\n").map((line) => line.trim()).filter(Boolean);
-}
-
-async function defaultGitRemote(root) {
-  const remotes = await gitRemoteNames(root);
-  if (!remotes.length) throw new Error("No git remote is configured for this repository");
-  return remotes.includes("origin") ? "origin" : remotes[0];
-}
-
-function prDescriptionPath(root, branch) {
-  const base = path.resolve(root, "dev", "PR");
-  const target = path.resolve(base, `${encodeURIComponent(branch)}.md`);
-  if (path.dirname(target) !== base) throw new Error("Resolved PR description path escapes dev/PR");
-  return { base, prPath: target };
-}
-
-async function readGitWorkflowPrDescription(cwd, { generationId = "", generation = null } = {}) {
-  assertGitWorkflowArtifactGenerationReady(generationId, generation, "pr");
-  const root = await getGitRoot(cwd);
-  const branch = await currentGitBranch(root);
-  const { prPath } = prDescriptionPath(root, branch);
-  try {
-    const [body, info] = await Promise.all([readFile(prPath, "utf8"), stat(prPath)]);
-    return {
-      root,
-      branch,
-      path: prPath,
-      body: body.trimEnd(),
-      mtimeMs: info.mtimeMs,
-      ctimeMs: info.ctimeMs,
-      ino: String(info.ino),
-    };
-  } catch (error) {
-    throw new Error(`Missing generated PR description ${prPath}. Run /pr first. ${sanitizeError(error)}`);
-  }
-}
-
-function cleanPrTitle(value) {
-  const title = String(value || "").replace(/\r?\n/g, " ").trim();
-  if (!title) throw new Error("PR title is required");
-  return title.slice(0, 300);
-}
-
-function formatWorkflowCommand(command, args) {
-  return [command, ...args.map((arg) => (/\s/.test(arg) ? JSON.stringify(arg) : arg))].join(" ");
-}
-
-function formatGitCommand(args) {
-  return formatWorkflowCommand("git", args);
-}
-
-function runWorkflowCommand(command, args, { cwd, label = formatWorkflowCommand(command, args), timeoutMs = 10 * 60 * 1000 } = {}) {
-  if (activeGitWorkflowProcess) {
-    return Promise.reject(new Error(`A git workflow command is already running: ${activeGitWorkflowProcess.label}`));
-  }
-
-  return new Promise((resolve) => {
-    const child = spawn(command, args, {
-      cwd,
-      // LC_ALL=C keeps git/gh output in English so failure classification
-      // (classifyGitSyncFailure, isGitLockFailure) works regardless of locale.
-      env: { ...process.env, GIT_TERMINAL_PROMPT: process.env.GIT_TERMINAL_PROMPT || "0", GH_PROMPT_DISABLED: process.env.GH_PROMPT_DISABLED || "1", LC_ALL: "C" },
-      stdio: ["ignore", "pipe", "pipe"],
-      windowsHide: true,
-    });
-    let stdout = "";
-    let stderr = "";
-    let timedOut = false;
-    let cancelled = false;
-    let settled = false;
-
-    const finish = (result) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timeout);
-      if (activeGitWorkflowProcess?.child === child) activeGitWorkflowProcess = null;
-      resolve({ command: label, stdout, stderr, timedOut, cancelled, ...result });
-    };
-
-    const terminate = (reason) => {
-      if (reason === "cancelled") cancelled = true;
-      if (child.exitCode === null) child.kill("SIGTERM");
-      setTimeout(() => {
-        if (child.exitCode === null) child.kill("SIGKILL");
-      }, 2000).unref();
-    };
-
-    activeGitWorkflowProcess = { child, label, cancel: () => terminate("cancelled") };
-    const timeout = setTimeout(() => {
-      timedOut = true;
-      terminate("timeout");
-    }, timeoutMs);
-
-    child.stdout.on("data", (chunk) => {
-      stdout += String(chunk);
-      if (stdout.length > 100000) stdout = stdout.slice(-100000);
-    });
-    child.stderr.on("data", (chunk) => {
-      stderr += String(chunk);
-      if (stderr.length > 100000) stderr = stderr.slice(-100000);
-    });
-    child.on("error", (error) => {
-      const message = formatCommandSpawnError(command, error);
-      finish({ exitCode: undefined, stderr: stderr || message, error: message, errorCode: error?.code });
-    });
-    // "close", not "exit": exit can fire before the stdio pipes flush,
-    // intermittently truncating collected stdout/stderr.
-    child.on("close", (exitCode, signal) => finish({ exitCode, signal }));
-  });
-}
-
-function runGitWorkflowCommand(args, options = {}) {
-  return runWorkflowCommand("git", args, { ...options, label: options.label || formatGitCommand(args) });
-}
-
-function runGitHubWorkflowCommand(args, options = {}) {
-  return runWorkflowCommand("gh", args, { ...options, label: options.label || formatWorkflowCommand("gh", args) });
-}
-
-function gitWorkflowCommandPayload(result) {
-  const ok = result.exitCode === 0 && !result.timedOut && !result.cancelled && !result.error;
-  return {
-    ok,
-    error: ok ? undefined : result.error || (result.cancelled ? "Cancelled" : result.timedOut ? "Command timed out" : `Command failed with exit code ${result.exitCode ?? result.signal ?? "unknown"}`),
-    data: result,
-  };
-}
-
-function applyGitHubPublicationFailure(payload) {
-  if (payload.ok) return payload;
-  const text = `${payload.data?.stderr || ""}\n${payload.data?.stdout || ""}\n${payload.data?.error || ""}`.toLowerCase();
-  if (payload.data?.errorCode === "ENOENT") {
-    payload.hint = "Install GitHub CLI (gh), ensure it is on PATH, then retry.";
-  } else if (/not logged into any github hosts|gh auth login|http 401|bad credentials/.test(text)) {
-    payload.code = "AUTH";
-    payload.hint = "GitHub CLI is not authenticated. Run 'gh auth login' in a terminal, then retry.";
-  } else if (/name already exists on this account|repository .+ already exists/.test(text)) {
-    payload.hint = "A GitHub repository with this directory name already exists for the authenticated account. Add that repository as a remote, or rename the local directory before retrying.";
-  }
-  return payload;
 }
 
 // Read-only workflow lookups are safe over GET; everything else mutates the
@@ -6649,142 +4348,37 @@ async function handleGitWorkflowRequest(pathname, body = {}, tabOrCwd = options.
         return { ok: true, data: await readGitWorkflowPrDescription(cwd, { generationId, generation: tab?.gitWorkflowArtifactGeneration || null }) };
       }
       case "/api/git-workflow/init":
-        await ensureOutsideGitRepository(cwd);
-        return gitMutationPayload(await runGitMutationCommand(["init"], { cwd }));
+        return initializeGitRepository(cwd);
       case "/api/git-workflow/init-files-status":
         return { ok: true, data: await initialRepositoryFilesStatus(cwd) };
       case "/api/git-workflow/readme":
         return prepareInitialRepositoryFiles(cwd, { repoName: body.repoName, stack: body.stack });
-      case "/api/git-workflow/initial-commit": {
-        const root = await getGitRoot(cwd);
-        return gitMutationPayload(await runGitMutationCommand(["commit", "-m", "Initial commit"], { cwd: root, label: "git commit -m \"Initial commit\"" }));
-      }
-      case "/api/git-workflow/main-branch": {
-        const root = await getGitRoot(cwd);
-        return gitMutationPayload(await runGitMutationCommand(["branch", "-M", "main"], { cwd: root }));
-      }
-      case "/api/git-workflow/remote": {
-        const root = await getGitRoot(cwd);
-        const username = cleanGitHubUsername(body.username);
-        const repoName = cleanGitHubRepoName(body.repoName);
-        const remoteUrl = gitHubOriginUrl(username, repoName);
-        const payload = gitMutationPayload(await runGitMutationCommand(["remote", "add", "origin", remoteUrl], { cwd: root }));
-        if (payload.data) {
-          payload.data.root = root;
-          payload.data.remote = "origin";
-          payload.data.remoteUrl = remoteUrl;
-          payload.data.repoName = repoName;
-          payload.data.username = username;
-        }
-        return payload;
-      }
-      case "/api/git-workflow/init-push": {
-        const root = await getGitRoot(cwd);
-        return applyGitSyncFailure(gitMutationPayload(await runGitMutationCommand(["push", "-u", "origin", "main"], { cwd: root, timeoutMs: 15 * 60 * 1000 })), { push: true });
-      }
+      case "/api/git-workflow/initial-commit":
+        return initialGitCommit(cwd);
+      case "/api/git-workflow/main-branch":
+        return renameGitMainBranch(cwd);
+      case "/api/git-workflow/remote":
+        return addGitOrigin(cwd, body);
+      case "/api/git-workflow/init-push":
+        return pushInitialGitMain(cwd);
       case "/api/git-workflow/add":
         return gitAddAllPayload(cwd);
       case "/api/git-workflow/branch": {
         if (!tab) throw new Error("Git workflow branch worktree requires a Web UI tab");
         return { ok: true, data: await createGitWorkflowBranchWorktree(tab, body) };
       }
-      case "/api/git-workflow/commit": {
-        const variant = String(body.variant || "").trim();
-        if (!["short", "long", "input"].includes(variant)) throw new Error("variant must be 'short', 'long', or 'input'");
-        // Recheck here as well as in the browser. A staged index can change
-        // between the browser's read-only check and this mutating request.
-        await assertExpectedStagedContentHash(tab || { cwd }, body);
-        if (variant === "input") {
-          const root = await getGitRoot(cwd);
-          const message = cleanGitCommitMessageInput(body.message);
-          return gitMutationPayload(await runGitMutationCommand(["commit", "-m", message], { cwd: root, label: "git commit -m <input message>" }));
-        }
-        const messages = await readGitWorkflowMessages(cwd);
-        if (variant === "short") {
-          const message = messages.short.trim();
-          if (!message) throw new Error(`${messages.shortPath} is empty`);
-          return gitMutationPayload(await runGitMutationCommand(["commit", "-m", message], { cwd: messages.root, label: "git commit -m <dev/COMMIT/staged-commit-short.txt>" }));
-        }
-        if (!messages.long.trim()) throw new Error(`${messages.longPath} is empty`);
-        return gitMutationPayload(await runGitMutationCommand(["commit", "-F", messages.longPath], { cwd: messages.root, label: "git commit -F dev/COMMIT/staged-commit-long.txt" }));
-      }
-      case "/api/git-workflow/push": {
-        const root = await getGitRoot(cwd);
-        const currentBranch = await currentGitBranch(root);
-        const protectedBranch = PROTECTED_GIT_BRANCHES.has(currentBranch);
-        if (body.setUpstream) {
-          const requestedBranch = body.branch ? cleanGitBranchName(body.branch) : currentBranch;
-          if (requestedBranch !== currentBranch) throw new Error(`Current branch is ${currentBranch}, not ${requestedBranch}`);
-          const remote = await defaultGitRemote(root);
-          const payload = await runGuardedGitMutation(["push", "-u", remote, currentBranch], { cwd: root, label: `git push -u ${remote} ${currentBranch}`, timeoutMs: 15 * 60 * 1000 });
-          if (payload.data) {
-            payload.data.branch = currentBranch;
-            payload.data.protectedBranch = protectedBranch;
-            if (payload.ok) payload.data.remote = remote;
-          }
-          return applyGitSyncFailure(payload, { push: true });
-        }
-        // Plain --force is never offered; --force-with-lease still refuses to
-        // clobber remote commits we have not seen, and requires confirmation.
-        const forceWithLease = body.forceWithLease === true;
-        if (forceWithLease) requireConfirmed(body, `Force-pushing ${currentBranch} (--force-with-lease) rewrites the remote branch and`);
-        const remotes = await gitRemoteNames(root);
-        const remote = remotes.includes("origin") ? "origin" : remotes[0];
-        const args = remote
-          ? ["push", "-u", ...(forceWithLease ? ["--force-with-lease"] : []), remote, "HEAD"]
-          : ["push", ...(forceWithLease ? ["--force-with-lease"] : [])];
-        const label = remote
-          ? `git push -u${forceWithLease ? " --force-with-lease" : ""} ${remote} HEAD`
-          : undefined;
-        const payload = await runGuardedGitMutation(args, { cwd: root, label, timeoutMs: 15 * 60 * 1000 });
-        if (payload.data) {
-          payload.data.branch = currentBranch;
-          payload.data.protectedBranch = protectedBranch;
-          payload.data.forceWithLease = forceWithLease;
-          if (remote) payload.data.remote = remote;
-          else payload.data.repoName = path.basename(root);
-        }
-        return applyGitSyncFailure(payload, { push: true });
-      }
-      case "/api/git-workflow/publish": {
-        const root = await getGitRoot(cwd);
-        const repoName = cleanGitHubRepoName(path.basename(root));
-        const visibility = String(body.visibility || "").trim();
-        if (visibility !== "public" && visibility !== "private") throw makeHttpError(400, "visibility must be 'public' or 'private'");
-        requireConfirmed(body, `Publishing GitHub repository ${repoName} as ${visibility}`);
-        const remotes = await gitRemoteNames(root);
-        if (remotes.length) throw makeHttpError(409, "GitHub publication requires a repository with no configured remotes. Existing remotes are not changed or repaired.");
-        const branch = await currentGitBranch(root);
-        const protectedBranch = PROTECTED_GIT_BRANCHES.has(branch);
-        const payload = applyGitHubPublicationFailure(gitWorkflowCommandPayload(await runGitHubWorkflowCommand(
-          ["repo", "create", repoName, `--${visibility}`, "--source", ".", "--remote", "origin", "--push"],
-          { cwd: root, timeoutMs: 15 * 60 * 1000 },
-        )));
-        if (payload.ok) Object.assign(payload.data, { repoName, visibility, remote: "origin", branch, protectedBranch });
-        return payload;
-      }
-      case "/api/git-workflow/create-pr": {
-        const root = await getGitRoot(cwd);
-        const branch = await currentGitBranch(root);
-        const title = cleanPrTitle(body.title);
-        const description = String(body.body || "").trimEnd();
-        if (!description.trim()) throw new Error("PR description is required");
-        const { base, prPath } = prDescriptionPath(root, branch);
-        await mkdir(path.dirname(prPath), { recursive: true });
-        await writeFile(prPath, `${description}\n`, "utf8");
-        const payload = gitWorkflowCommandPayload(await runGitHubWorkflowCommand(["pr", "create", "--title", title, "--body-file", prPath, "--head", branch], { cwd: root, label: "gh pr create --title <title> --body-file <dev/PR/current-branch.md> --head <current-branch>", timeoutMs: 15 * 60 * 1000 }));
-        if (payload.ok) {
-          payload.data.branch = branch;
-          payload.data.path = prPath;
-          payload.data.prDirectory = base;
-        }
-        return payload;
-      }
+      case "/api/git-workflow/commit":
+        return commitGitWorkflow(cwd, body);
+      case "/api/git-workflow/push":
+        return pushGitWorkflow(cwd, body);
+      case "/api/git-workflow/publish":
+        return publishGitRepository(cwd, body);
+      case "/api/git-workflow/create-pr":
+        return createGitWorkflowPr(cwd, body);
       case "/api/git-workflow/cancel": {
-        const generation = tab?.gitWorkflowGeneration || null;
-        if (generation) generation.cancelled = true;
-        const cancelled = !!activeGitWorkflowProcess || !!generation;
-        if (activeGitWorkflowProcess) activeGitWorkflowProcess.cancel();
+        const generationCancelled = cancelGitWorkflowGeneration(tab);
+        const processCancelled = cancelGitWorkflowProcess();
+        const cancelled = processCancelled || generationCancelled;
         return { ok: true, data: { cancelled } };
       }
       default:
@@ -7520,6 +5114,48 @@ try {
 }
 
 const {
+  naturalConversationStatusState,
+  naturalConversationModeSnapshot,
+  resetNaturalConversationMode,
+  rememberNaturalConversationStatusEvent,
+  isNaturalConversationActive,
+  naturalConversationCommandBaseName,
+  naturalConversationSlashCommandName,
+  isNaturalConversationSlashCommand,
+  blockNaturalConversationAction,
+  ensureNaturalConversationRouteAllowed,
+  ensureNaturalConversationPromptSafety,
+  enforceNaturalConversationCommandAllowed,
+  naturalConversationLoadedCommandNames,
+  rememberNaturalConversationCommands,
+  naturalConversationPackageStatus,
+  naturalConversationFeatureData,
+  setNaturalConversationMode,
+} = createConversationModeService({
+  packageName: OPTIONAL_FEATURE_PACKAGES.get(NATURAL_CONVERSATION_FEATURE_ID),
+  optionalFeaturePackageStatus, getCommandData, extensionStatusMap, stripAnsi,
+  makeHttpError, sanitizeError, safeRpcData, stateIsBusyForSettings, setThinkingLevelForTab,
+  requestTimeoutMs: REQUEST_TIMEOUT_MS, statusRpcTimeoutMs: STATUS_RPC_TIMEOUT_MS,
+});
+
+const {
+  codexFastModeCommandBaseName,
+  codexFastModeStatusState,
+  codexFastModeSnapshot,
+  resetCodexFastMode,
+  codexFastModePackageStatus,
+  codexFastModeCommandState,
+  codexFastModeFeatureData,
+  waitForCodexFastModeStatus,
+  setCodexFastMode,
+} = createCodexFastModeService({
+  packageName: OPTIONAL_FEATURE_PACKAGES.get("codexFastMode"),
+  optionalFeaturePackageStatus, getCommandData, currentSessionState, tabHasActiveOutput,
+  extensionStatusMap, stripAnsi, makeHttpError, sanitizeError, sleepMs,
+  requestTimeoutMs: REQUEST_TIMEOUT_MS,
+});
+
+const {
   getGitRoot,
   runGitReadCommandDetailed,
   runGitReadCommand,
@@ -7542,6 +5178,102 @@ const {
   gitUpstreamRef,
 } = createGitReadService({
   runCommand, makeHttpError, makeUserFacingError, formatBytes, sanitizeError, formatGitCommand,
+});
+
+const gitMutations = createGitMutationService({
+  runCommand, makeHttpError, makeUserFacingError, formatBytes, sanitizeError,
+  formatCliError, formatCommandSpawnError, getGitRoot, runGitReadCommandDetailed,
+  runGitReadCommand, readGitChanges, resolveGitRelativePath, normalizeGitRelativePath,
+  isLikelyBinaryBuffer, parseGitPorcelainZEntries, gitBranchFromPorcelainStatus,
+  summarizeGitPorcelainStatus, gitUpstreamRef,
+});
+const {
+  addGitignoreEntry,
+  switchGitBranch,
+  pullGitChanges,
+  fetchGitChanges,
+  integrateGitUpstream,
+  gitOperationStageFile,
+  gitOperationAction,
+  gitBisectAction,
+  saveGitStash,
+  applyGitStash,
+  dropGitStash,
+  stageGitFile,
+  unstageGitFile,
+  stageAllGitChanges,
+  unstageAllGitChanges,
+  discardGitFile,
+  deleteGitUntrackedFile,
+  undoLastGitCommit,
+  amendLastGitCommitMessage,
+  updateGitSubmodules,
+  createGitTag,
+  gitAddAllPayload,
+  readGitOperationSnapshot,
+  readGitStashes,
+  readGitStashPreview,
+  readGitUndoState,
+  readGitReflog,
+  readGitSubmodules,
+  readGitTags,
+  readGitSigningDiagnostics,
+  readGitBranches,
+  readGitWorkflowBranchName,
+  readGitWorkflowMessages,
+  readGitWorkflowDefaultCommitMessage,
+  readGitWorkflowPrDescription,
+  initialRepositoryFilesStatus,
+  prepareInitialRepositoryFiles,
+  readStagedContentHash,
+  stagedContentHashForTab,
+  expectedStagedContentHashFromBody,
+  assertExpectedStagedContentHash,
+  gitWorkflowMessageCwd,
+  commitMessagePaths,
+  cleanGitBranchName,
+  validateGitBranchName,
+  requestedRemoteRef,
+  verifyRemoteGitBranchIntent,
+  runGitWorkflowCommand,
+  requireConfirmed,
+  initializeGitRepository,
+  initialGitCommit,
+  renameGitMainBranch,
+  addGitOrigin,
+  pushInitialGitMain,
+  commitGitWorkflow,
+  pushGitWorkflow,
+  publishGitRepository,
+  createGitWorkflowPr,
+  cancelGitWorkflowProcess,
+} = gitMutations;
+
+const {
+  createGitWorkflowBranchWorktree,
+  createGitWorktreeTab,
+  openExistingGitWorktreeTab,
+  removeGitWorktreeForTab,
+  openGitConflictResolutionAgentTab,
+  pruneGitWorktreesData,
+} = createGitWorktreeSessionService({
+  noSession: options.noSession,
+  getGitRoot, gitMutations, formatGitCommand, makeHttpError, sanitizeError,
+  configuredSessionDir, currentSessionState, tabRestorableSessionFile,
+  requireAllowedSessionPath, getOpenTabs: () => tabs.values(), createTab, tabMeta,
+  listTabs, scheduleSupervisorMetadataUpdate, recordEvent, markTabWorking, markTabIdle,
+  promptRequestTimeoutMs: PROMPT_REQUEST_TIMEOUT_MS,
+});
+
+const {
+  startGitWorkflowGeneration, consumeGitWorkflowGenerationEvent,
+  replayGitWorkflowFallbackLifecycle, cancelGitWorkflowGeneration,
+  loseGitWorkflowGeneration,
+} = createGitGenerationService({
+  getGitRoot, gitMutations, makeHttpError, sanitizeError, safeRpcData,
+  currentSessionState, availableGitWorkflowModels, stateIsBusyForSettings,
+  markTabWorking, markTabIdle, broadcastTabEvent, sendSseToClient,
+  statusRpcTimeoutMs: STATUS_RPC_TIMEOUT_MS,
 });
 
 const {
@@ -8738,95 +6470,17 @@ function rememberWebuiSubagentsStatusEvent(tab, event) {
   return true;
 }
 
-function naturalConversationStatusState(statusText) {
-  const text = stripAnsi(statusText).replace(/\s+/g, " ").trim();
-  if (!text) return { enabled: false, uiState: "off", statusText: "" };
-  const match = text.match(/voice\s*:\s*([a-z0-9_-]+)/i);
-  return { enabled: true, uiState: (match?.[1] || "listening").toLowerCase(), statusText: text };
-}
 
-function naturalConversationModeSnapshot(tab, patch = {}) {
-  const previous = tab?.conversationMode && typeof tab.conversationMode === "object" ? tab.conversationMode : {};
-  const status = naturalConversationStatusState(extensionStatusMap(tab).get(NATURAL_CONVERSATION_STATUS_KEY) || previous.statusText || "");
-  const enabled = patch.enabled ?? status.enabled ?? previous.enabled ?? false;
-  const uiState = patch.uiState || (enabled ? status.uiState || previous.uiState || "listening" : "off");
-  return {
-    featureId: NATURAL_CONVERSATION_FEATURE_ID,
-    available: patch.available ?? previous.available ?? false,
-    enabled,
-    uiState,
-    statusText: patch.statusText ?? status.statusText ?? previous.statusText ?? "",
-    allowedTools: Array.isArray(patch.allowedTools) ? patch.allowedTools : Array.isArray(previous.allowedTools) ? previous.allowedTools : ["read", "grep", "find", "ls"],
-    provider: patch.provider || previous.provider || "browser-shell",
-    startedAt: patch.startedAt ?? previous.startedAt ?? null,
-    packageInstalled: patch.packageInstalled ?? previous.packageInstalled ?? false,
-    loadedCommands: Array.isArray(patch.loadedCommands) ? patch.loadedCommands : Array.isArray(previous.loadedCommands) ? previous.loadedCommands : [],
-    updatedAt: patch.updatedAt || previous.updatedAt || new Date().toISOString(),
-  };
-}
 
-function resetNaturalConversationMode(tab) {
-  if (!tab) return;
-  tab.conversationMode = naturalConversationModeSnapshot(tab, { available: false, enabled: false, uiState: "off", statusText: "", loadedCommands: [] });
-}
 
-function rememberNaturalConversationStatusEvent(tab, event) {
-  if (event?.type !== "extension_ui_request" || event.method !== "setStatus" || event.statusKey !== NATURAL_CONVERSATION_STATUS_KEY) return;
-  const status = naturalConversationStatusState(event.statusText || "");
-  tab.conversationMode = naturalConversationModeSnapshot(tab, {
-    ...status,
-    available: true,
-    loadedCommands: tab?.conversationMode?.loadedCommands?.length ? tab.conversationMode.loadedCommands : ["talk"],
-  });
-}
 
-function isNaturalConversationActive(tab) {
-  return naturalConversationModeSnapshot(tab).enabled === true;
-}
 
-function naturalConversationCommandBaseName(name) {
-  return String(name || "").trim().toLowerCase().replace(/:\d+$/, "");
-}
 
-function naturalConversationSlashCommandName(message) {
-  const match = String(message || "").trim().match(/^\/([^\s]+)/);
-  return match ? naturalConversationCommandBaseName(match[1]) : "";
-}
 
-function isNaturalConversationSlashCommand(message) {
-  return NATURAL_CONVERSATION_COMMAND_NAMES.includes(naturalConversationSlashCommandName(message));
-}
 
-function blockNaturalConversationAction(action) {
-  throw makeHttpError(409, `Natural Conversation Mode is active; ${action}. Leave the mode first with /talk off.`);
-}
 
-function ensureNaturalConversationRouteAllowed(tab, action) {
-  if (isNaturalConversationActive(tab)) blockNaturalConversationAction(action);
-}
 
-async function ensureNaturalConversationPromptSafety(tab, command) {
-  if (!isNaturalConversationActive(tab) || !["prompt", "steer", "follow_up"].includes(command?.type)) return null;
-  tab.pendingThinkingLevel = undefined;
-  const stateResult = await safeRpcData(tab, { type: "get_state" }, STATUS_RPC_TIMEOUT_MS);
-  if (stateResult.ok && stateIsBusyForSettings(stateResult.data)) return null;
-  const response = await setThinkingLevelForTab(tab, "off", { allowPending: false });
-  return response?.success === false ? response : null;
-}
 
-function enforceNaturalConversationCommandAllowed(tab, command) {
-  if (!isNaturalConversationActive(tab)) return;
-  if (command?.type === "set_thinking_level") {
-    if (command.level !== "off") blockNaturalConversationAction("thinking is forced off");
-    return;
-  }
-  if (!["prompt", "steer", "follow_up", "abort", "abort_bash"].includes(command?.type)) {
-    blockNaturalConversationAction(`${command?.type || "this action"} is blocked`);
-  }
-  if (command?.type === "prompt" && naturalConversationSlashCommandName(command.message) && !isNaturalConversationSlashCommand(command.message)) {
-    blockNaturalConversationAction("slash commands are blocked from the Web UI shell");
-  }
-}
 
 function replayExtensionStatuses(tab, client) {
   for (const [statusKey, statusText] of extensionStatusMap(tab)) {
@@ -9491,13 +7145,7 @@ function attachRpcToTab(tab, rpc) {
     updateTabActivityFromEvent(tab, event);
     let scopedEvent = scopedGuidedGitLaunchEvent(tab, eventForTabClients(tab, event));
     if (event?.type === "pi_process_exit" || event?.type === "pi_process_error") {
-      if (tab.gitWorkflowGeneration) tab.gitWorkflowGeneration.processLost = true;
-      if (tab.gitWorkflowArtifactGeneration) {
-        tab.gitWorkflowArtifactGeneration.terminal = true;
-        tab.gitWorkflowArtifactGeneration.successful = false;
-      }
-      tab.gitWorkflowGeneration = null;
-      tab.gitWorkflowMessageGeneration = null;
+      loseGitWorkflowGeneration(tab);
       clearPendingExtensionUiRequests(tab);
       clearExtensionStatuses(tab);
       scheduleSupervisorMetadataUpdate(tab);
@@ -11874,30 +9522,7 @@ async function annotateSkillCommandState(tab, commands) {
     });
 }
 
-function naturalConversationLoadedCommandNames(commands = []) {
-  const names = [];
-  const seen = new Set();
-  for (const command of commands || []) {
-    const baseName = naturalConversationCommandBaseName(command?.name || command?.invokeName || "");
-    if (!NATURAL_CONVERSATION_COMMAND_NAMES.includes(baseName) || seen.has(baseName)) continue;
-    seen.add(baseName);
-    names.push(baseName);
-  }
-  return names;
-}
 
-function rememberNaturalConversationCommands(tab, commands = []) {
-  const loadedCommands = naturalConversationLoadedCommandNames(commands);
-  const available = loadedCommands.length > 0;
-  tab.conversationMode = naturalConversationModeSnapshot(tab, {
-    available,
-    enabled: available ? undefined : false,
-    uiState: available ? undefined : "off",
-    statusText: available ? undefined : "",
-    loadedCommands,
-  });
-  return tab.conversationMode;
-}
 
 async function getCommandData(tab, { annotateSkills = true } = {}) {
   try {
@@ -11915,192 +9540,16 @@ async function getCommandData(tab, { annotateSkills = true } = {}) {
   }
 }
 
-async function naturalConversationPackageStatus() {
-  try {
-    return await optionalFeaturePackageStatus(NATURAL_CONVERSATION_FEATURE_ID);
-  } catch (error) {
-    return { featureId: NATURAL_CONVERSATION_FEATURE_ID, packageName: OPTIONAL_FEATURE_PACKAGES.get(NATURAL_CONVERSATION_FEATURE_ID), installed: false, error: sanitizeError(error) };
-  }
-}
 
-async function naturalConversationFeatureData(tab, { refreshCommands = true } = {}) {
-  let commandData = null;
-  let commandError = "";
-  if (refreshCommands) {
-    try {
-      commandData = await getCommandData(tab, { annotateSkills: false });
-    } catch (error) {
-      commandError = sanitizeError(error);
-      rememberNaturalConversationCommands(tab, []);
-    }
-  }
-  const packageStatus = await naturalConversationPackageStatus();
-  tab.conversationMode = naturalConversationModeSnapshot(tab, { packageInstalled: packageStatus.installed === true });
-  const mode = naturalConversationModeSnapshot(tab);
-  const available = mode.available === true;
-  return {
-    featureId: NATURAL_CONVERSATION_FEATURE_ID,
-    packageName: OPTIONAL_FEATURE_PACKAGES.get(NATURAL_CONVERSATION_FEATURE_ID),
-    available,
-    packageInstalled: packageStatus.installed === true,
-    packageStatus,
-    commands: mode.loadedCommands,
-    mode,
-    rpcRunning: commandData?.rpcRunning !== false && !commandError,
-    unavailableReason: available
-      ? ""
-      : packageStatus.installed
-        ? "Natural Conversation package is installed, but /talk is not loaded in the active Pi tab. Reload the tab or enable the package extension."
-        : "Natural Conversation package is not installed or not visible from the Web UI package root.",
-    error: commandError || undefined,
-  };
-}
 
-async function setNaturalConversationMode(tab, body = {}) {
-  const desired = body.enabled === true;
-  const feature = await naturalConversationFeatureData(tab);
-  if (!feature.available) throw makeHttpError(404, feature.unavailableReason);
-  const commandName = feature.commands.find((name) => name === "talk") || feature.commands[0] || "talk";
-  const response = await tab.rpc.send({ type: "prompt", message: `/${commandName} ${desired ? "on" : "off"}` }, REQUEST_TIMEOUT_MS);
-  if (response.success === false) throw makeHttpError(400, response.error || `Failed to ${desired ? "enable" : "disable"} Natural Conversation Mode`);
-  tab.conversationMode = naturalConversationModeSnapshot(tab, {
-    available: true,
-    enabled: desired,
-    uiState: desired ? "listening" : "off",
-    statusText: desired ? `Voice: listening` : "",
-    loadedCommands: feature.commands,
-    packageInstalled: feature.packageInstalled,
-    startedAt: desired ? naturalConversationModeSnapshot(tab).startedAt || new Date().toISOString() : null,
-  });
-  if (desired) {
-    tab.pendingThinkingLevel = undefined;
-    await setThinkingLevelForTab(tab, "off", { allowPending: false }).catch(() => null);
-  }
-  return { ...(await naturalConversationFeatureData(tab, { refreshCommands: false })), response };
-}
 
-function codexFastModeCommandBaseName(name) {
-  return String(name || "").trim().toLowerCase().replace(/:\d+$/, "");
-}
 
-// Only exact extension-published preferences are authoritative, not RPC command success.
-function codexFastModeStatusState(statusText) {
-  const mode = codexSpeedModeFromStatus(stripAnsi(statusText));
-  return { known: mode !== null, enabled: mode !== null && mode !== "normal", mode };
-}
 
-function codexFastModeSnapshot(tab, patch = {}) {
-  const previous = tab?.codexFastMode && typeof tab.codexFastMode === "object" ? tab.codexFastMode : {};
-  const status = codexFastModeStatusState(extensionStatusMap(tab).get(CODEX_FAST_MODE_STATUS_KEY) || "");
-  const mode = patch.mode ?? (status.known ? status.mode : previous.mode ?? null);
-  const known = mode !== null && (patch.statusKnown ?? (status.known || previous.statusKnown === true));
-  return {
-    featureId: CODEX_FAST_MODE_FEATURE_ID,
-    mode,
-    enabled: mode !== null && mode !== "normal",
-    statusKnown: known,
-    updatedAt: patch.updatedAt || new Date().toISOString(),
-  };
-}
 
-function resetCodexFastMode(tab) {
-  if (!tab) return;
-  tab.codexFastMode = null;
-  tab.codexFastModeCommandName = "";
-}
 
-async function codexFastModePackageStatus() {
-  try {
-    return await optionalFeaturePackageStatus(CODEX_FAST_MODE_FEATURE_ID);
-  } catch (error) {
-    return { featureId: CODEX_FAST_MODE_FEATURE_ID, packageName: OPTIONAL_FEATURE_PACKAGES.get(CODEX_FAST_MODE_FEATURE_ID), installed: false, error: sanitizeError(error) };
-  }
-}
 
-async function codexFastModeCommandState(tab, { refreshCommands = true } = {}) {
-  if (!refreshCommands) return { commandName: String(tab?.codexFastModeCommandName || ""), rpcRunning: true, error: "" };
-  try {
-    const data = await getCommandData(tab, { annotateSkills: false });
-    const match = (data.commands || []).find((command) => codexFastModeCommandBaseName(command?.name) === CODEX_FAST_MODE_COMMAND_NAME);
-    tab.codexFastModeCommandName = match?.name ? String(match.name) : "";
-    return { commandName: tab.codexFastModeCommandName, rpcRunning: data.rpcRunning !== false, error: data.error || "" };
-  } catch (error) {
-    tab.codexFastModeCommandName = "";
-    return { commandName: "", rpcRunning: false, error: sanitizeError(error) };
-  }
-}
 
-async function codexFastModeFeatureData(tab, { refreshCommands = true } = {}) {
-  const packageStatus = await codexFastModePackageStatus();
-  const command = await codexFastModeCommandState(tab, { refreshCommands });
-  const state = await currentSessionState(tab).catch(() => tab?.lastState || {});
-  const model = state?.model?.provider && state?.model?.id
-    ? { provider: String(state.model.provider), id: String(state.model.id), api: String(state.model.api || "") }
-    : null;
-  const mode = codexFastModeSnapshot(tab);
-  tab.codexFastMode = mode;
-  const available = !!command.commandName;
-  return {
-    featureId: CODEX_FAST_MODE_FEATURE_ID,
-    packageName: OPTIONAL_FEATURE_PACKAGES.get(CODEX_FAST_MODE_FEATURE_ID),
-    available,
-    packageInstalled: packageStatus.installed === true,
-    packageStatus,
-    commandName: command.commandName,
-    enabled: mode.enabled,
-    mode: mode.mode,
-    statusKnown: mode.statusKnown,
-    busy: tabHasActiveOutput(tab),
-    model,
-    modelEligible: model?.provider === CODEX_FAST_MODE_PROVIDER,
-    ultrafastModelEligible: model?.provider === CODEX_FAST_MODE_PROVIDER && model.api === "openai-codex-responses" && model.id === "gpt-6-astra",
-    creditNotice: CODEX_FAST_MODE_CREDIT_NOTICE,
-    rpcRunning: command.rpcRunning,
-    unavailableReason: available
-      ? ""
-      : packageStatus.installed
-        ? "Codex Fast mode package is installed, but /fast-mode is not loaded in the active Pi tab. Reload the tab or enable the package extension."
-        : "Codex Fast mode package is not installed or not visible from the Web UI package root.",
-    error: command.error || undefined,
-  };
-}
 
-async function waitForCodexFastModeStatus(tab, desired) {
-  const deadline = Date.now() + CODEX_FAST_MODE_STATUS_TIMEOUT_MS;
-  do {
-    const snapshot = codexFastModeSnapshot(tab);
-    if (snapshot.statusKnown && snapshot.mode === desired) {
-      tab.codexFastMode = snapshot;
-      return snapshot;
-    }
-    if (Date.now() >= deadline) break;
-    await sleepMs(25);
-  } while (true);
-  const label = desired === "normal" ? "off" : desired === "fast" ? "on" : "ultrafast";
-  throw makeHttpError(409, `Codex Fast mode did not confirm ${label}. The extension may be outdated, or the session may have become busy; inspect /fast-mode status and retry when idle.`);
-}
-
-async function setCodexFastMode(tab, body = {}) {
-  let desired;
-  try {
-    desired = codexSpeedModeFromIntent(body);
-  } catch (error) {
-    throw makeHttpError(400, error.message);
-  }
-  const feature = await codexFastModeFeatureData(tab);
-  if (!feature.available) throw makeHttpError(404, feature.unavailableReason);
-  // A mid-turn tier change would produce a mixed-tier tool loop, so mutations are rejected while
-  // the tab is working. Reading status stays available.
-  if (feature.busy) throw makeHttpError(409, "This tab is busy; Codex Fast mode cannot change during a running turn. Wait for the turn to finish, then retry.");
-  if (desired === "ultrafast" && !feature.ultrafastModelEligible) throw makeHttpError(400, "Select GPT-6 Astra through the subscription-backed openai-codex provider before enabling Ultrafast.");
-  const argument = desired === "normal" ? "off" : desired === "fast" ? "on" : "ultrafast";
-  const response = await tab.rpc.send({ type: "prompt", message: `/${feature.commandName} ${argument}` }, REQUEST_TIMEOUT_MS);
-  if (response.success === false) throw makeHttpError(400, response.error || `Failed to select Codex speed ${desired}`);
-  // RPC success only means the extension command returned. Require its authoritative status event
-  // to confirm the requested state so a busy-transition rejection cannot become false success.
-  await waitForCodexFastModeStatus(tab, desired);
-  return { ...(await codexFastModeFeatureData(tab, { refreshCommands: false })), requested: Object.hasOwn(body, "mode") ? desired : body.enabled };
-}
 
 // Piper voice switching for the native /talk audio loop. The WebUI never
 // imports the natural-conversation package; it mirrors the package's small
@@ -15413,7 +12862,7 @@ const server = createServer(async (req, res) => {
         "/api/git-submodules": (cwd) => readGitSubmodules(cwd),
         "/api/git-tags": (cwd) => readGitTags(cwd),
         "/api/git-signing": (cwd) => readGitSigningDiagnostics(cwd),
-        "/api/git-worktrees/prune": (cwd) => pruneGitWorktrees(cwd, { dryRun: true }),
+        "/api/git-worktrees/prune": (cwd) => pruneGitWorktreesData(cwd),
       };
       if (req.method === "GET" && GIT_READ_ROUTES[url.pathname]) {
         const tab = getRequestedTab(req, url);
@@ -15449,10 +12898,7 @@ const server = createServer(async (req, res) => {
         "/api/git-undo/amend-message": (cwd, body) => amendLastGitCommitMessage(cwd, body),
         "/api/git-submodules/update": (cwd, body) => updateGitSubmodules(cwd, body),
         "/api/git-tags/create": (cwd, body) => createGitTag(cwd, body),
-        "/api/git-worktrees/prune": (cwd, body) => {
-          requireConfirmed(body, "Pruning stale worktree records");
-          return pruneGitWorktrees(cwd, { dryRun: false });
-        },
+        "/api/git-worktrees/prune": (cwd, body) => pruneGitWorktreesData(cwd, body, { dryRun: false }),
       };
       if (req.method === "POST" && GIT_MUTATION_ROUTES[url.pathname]) {
         const body = await readJsonBody(req);
