@@ -18,6 +18,8 @@ export function createFocusedWorkspace({
   const listeners = [];
   const rememberedFocus = new Map();
   let focusOrder = 0;
+  let tabTraversal = false;
+  let tabOrigin = null;
   let disposed = false;
   let state = {
     destination: 'conversation', navigation: 'left', navCollapsed: false,
@@ -163,11 +165,35 @@ export function createFocusedWorkspace({
       if (host.contains(target)) rememberedFocus.set(host, { target, order: ++focusOrder });
     }
   }
-  // Navigation buttons receive focus before their click callback runs, so an
-  // update alone cannot capture the previously focused caller-owned field.
+  // Tab can pass through controls that redirect focus asynchronously. Keep its
+  // origin separately, and use it only when keyboard activation leaves a view
+  // through shell chrome. Pointer navigation retains the caller's latest focus.
+  const onKeydown = (event) => {
+    if (event.key === 'Tab') {
+      if (!tabTraversal) tabOrigin = document.activeElement;
+      tabTraversal = true;
+    } else {
+      const control = event.target.closest?.('button');
+      if (tabTraversal && ['Enter', ' '].includes(event.key) && control
+        && !Object.values(slots).some(slot => slot.contains(control))) rememberFocus(tabOrigin);
+      tabTraversal = false;
+      tabOrigin = null;
+    }
+  };
+  const onPointerdown = () => {
+    tabTraversal = false;
+    tabOrigin = null;
+    rememberFocus(document.activeElement);
+  };
   const onFocus = (event) => rememberFocus(event.target);
   element.addEventListener('focusin', onFocus);
-  listeners.push(() => element.removeEventListener('focusin', onFocus));
+  element.addEventListener('keydown', onKeydown, true);
+  element.addEventListener('pointerdown', onPointerdown, true);
+  listeners.push(
+    () => element.removeEventListener('focusin', onFocus),
+    () => element.removeEventListener('keydown', onKeydown, true),
+    () => element.removeEventListener('pointerdown', onPointerdown, true),
+  );
 
   function updateInspectorTopics(topics = [], selectedId) {
     const ids = new Set(topics.map(topic => topic.id));
@@ -254,7 +280,9 @@ export function createFocusedWorkspace({
         .map((host) => ({ host, ...rememberedFocus.get(host) }))
         .sort((a, b) => (b.order ?? 0) - (a.order ?? 0));
       for (const { host, target } of revealed) {
+        const modal = document.querySelector('dialog:modal');
         if (target?.isConnected && host.contains(target) && !target.closest('[hidden], [inert]')
+          && (!modal || modal.contains(target))
           && (active === document.body || element.contains(active))) {
           target.focus({ preventScroll: true });
           break;
@@ -269,6 +297,7 @@ export function createFocusedWorkspace({
     for (const removeListener of listeners) removeListener();
     listeners.length = 0;
     rememberedFocus.clear();
+    tabOrigin = null;
     topicButtons.clear();
     // The parent restores canonical views and owns removal of the root.
   }
