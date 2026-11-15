@@ -14733,24 +14733,107 @@ body.subagent-terminal-active .composer-remote-mic-consent {
 
 .path-picker-dialog {
   width: min(48rem, calc(100vw - 2rem));
+  max-height: calc(100dvh - 2rem);
+  padding: 0;
+  overflow: hidden;
 }
-.path-picker-current-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 0.55rem;
-  align-items: stretch;
+.path-picker-dialog form {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100dvh - 2rem - 2px);
+  min-width: 0;
+}
+.path-picker-header {
+  flex-shrink: 0;
+  padding: 1.1rem 1.2rem 0.8rem;
+  border-bottom: 1px solid var(--border);
+}
+.path-picker-header h2 {
+  margin: 0;
+  font-size: 1.25rem;
+  overflow-wrap: anywhere;
+}
+.path-picker-hint {
+  margin: 0.4rem 0 0;
+  font-size: 0.85rem;
+}
+.path-picker-body {
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 1rem 1.2rem;
+}
+.path-picker-label {
+  display: block;
+  margin: 0 0 0.45rem;
+  color: var(--text);
+  font-size: 0.85rem;
+  font-weight: 700;
 }
 .path-picker-current {
   min-width: 0;
-  margin: 0;
-  padding: 0.72rem 0.82rem;
+  max-height: 6rem;
+  overflow: auto;
+  margin: 0 0 0.85rem;
+  padding: 0.65rem 0.75rem;
   overflow-wrap: anywhere;
-  border: 1px solid rgba(166, 227, 161, 0.24);
-  border-radius: 0.82rem;
+  border: 1px solid var(--border);
+  border-radius: 0.6rem;
   background: rgba(var(--ctp-crust-rgb), 0.64);
-  color: var(--ctp-green);
+  color: var(--text);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-  font-weight: 850;
+  font-size: 0.85rem;
+}
+.path-picker-secondary {
+  margin-top: 0.65rem;
+  padding: 0.15rem 0;
+  border-top: 1px solid var(--border);
+}
+.path-picker-secondary summary {
+  padding: 0.65rem 0.1rem;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+.path-picker-secondary summary:focus-visible {
+  outline: 2px solid var(--ctp-blue);
+  outline-offset: 2px;
+  border-radius: 0.25rem;
+}
+.path-picker-secondary .path-picker-hint {
+  margin: 0 0 0.65rem;
+}
+.path-picker-dialog .path-picker-footer {
+  flex-shrink: 0;
+  margin: 0;
+  padding: 0.85rem 1.2rem;
+  border-top: 1px solid var(--border);
+  background: rgba(var(--ctp-base-rgb), 0.98);
+}
+.path-picker-dialog .path-picker-error {
+  flex-shrink: 0;
+  max-height: 6rem;
+  overflow: auto;
+  margin: 0;
+  padding: 0.65rem 1.2rem;
+  border-top: 1px solid var(--border);
+}
+.path-picker-dialog button,
+.path-picker-dialog input {
+  min-height: 2.5rem;
+}
+.path-picker-dialog .path-picker-directory {
+  overflow-wrap: anywhere;
+  box-shadow: none;
+}
+.path-picker-dialog .path-picker-root-button {
+  box-shadow: none;
+}
+.path-picker-dialog .path-picker-list {
+  min-height: 9rem;
+  max-height: min(18rem, 32dvh);
+  align-content: start;
 }
 .path-picker-add-fast-pick {
   align-self: stretch;
@@ -14766,7 +14849,7 @@ body.subagent-terminal-active .composer-remote-mic-consent {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
   gap: 0.42rem;
-  margin: 0.72rem 0 0;
+  margin: 0 0 0.5rem;
   padding: 0.5rem;
   border: 1px solid rgba(249, 226, 175, 0.14);
   border-radius: 0.82rem;
@@ -14838,11 +14921,9 @@ body.subagent-terminal-active .composer-remote-mic-consent {
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 0.45rem;
 }
-.path-picker-path-row {
-  margin: 0.72rem 0 0;
-}
+.path-picker-path-row,
 .path-picker-create-row {
-  margin: 0 0 0.72rem;
+  margin: 0;
 }
 .path-picker-path-input,
 .path-picker-create-input {
@@ -14871,7 +14952,7 @@ body.subagent-terminal-active .composer-remote-mic-consent {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 0.45rem;
-  margin: 0.72rem 0 0.38rem;
+  margin: 0 0 0.38rem;
 }
 .path-picker-search-input {
   min-width: 0;
@@ -14893,7 +14974,7 @@ body.subagent-terminal-active .composer-remote-mic-consent {
   background: linear-gradient(120deg, var(--ctp-mauve), var(--ctp-pink));
 }
 .path-picker-search-status {
-  min-height: 1rem;
+  min-height: 0;
   margin: 0 0 0.38rem;
   padding: 0 0.12rem;
   font-size: 0.78rem;
@@ -16484,14 +16565,19 @@ button.git-workflow-step { min-height: 1.9rem; }
   .app-runner-context-action,
   .app-runner-stdin-send,
   .app-runner-stdin-eof { width: 100%; }
-  .path-picker-current-row,
+  .path-picker-dialog { width: calc(100vw - 1rem); max-height: calc(100dvh - 1rem); }
+  .path-picker-dialog form { max-height: calc(100dvh - 1rem - 2px); }
+  .path-picker-header { padding: 0.85rem; }
+  .path-picker-body { padding: 0.85rem; }
+  .path-picker-dialog .path-picker-footer { padding: 0.75rem 0.85rem; }
   .path-picker-path-row,
-  .path-picker-create-row,
-  .path-picker-search-row { grid-template-columns: 1fr; }
+  .path-picker-search-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .path-picker-create-row { grid-template-columns: 1fr; }
   .path-picker-add-fast-pick,
-  .path-picker-path-button,
-  .path-picker-create-button,
-  .path-picker-clear-search-button { width: 100%; }
+  .path-picker-create-button { width: 100%; }
+  .path-picker-dialog button,
+  .path-picker-dialog input,
+  .path-picker-secondary summary { min-height: 44px; }
   .path-picker-fast-pick { grid-template-columns: minmax(0, 1fr) 44px; }
   .path-picker-fast-pick-remove {
     width: 44px;

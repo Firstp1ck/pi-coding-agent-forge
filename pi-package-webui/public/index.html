@@ -1703,31 +1703,49 @@
 
     <dialog id="pathPickerDialog" class="extension-dialog path-picker-dialog" aria-labelledby="pathPickerTitle">
       <form method="dialog">
-        <h2 id="pathPickerTitle">Choose working directory</h2>
-        <div class="path-picker-current-row">
-          <p id="pathPickerCurrent" class="path-picker-current"></p>
-          <button id="pathPickerAddFastPickButton" type="button" class="path-picker-add-fast-pick">Pin this folder</button>
+        <header class="path-picker-header">
+          <h2 id="pathPickerTitle">Choose a folder</h2>
+          <p class="path-picker-hint muted">Open a folder below, then choose it to continue.</p>
+        </header>
+        <div class="path-picker-body">
+          <section class="path-picker-location" aria-labelledby="pathPickerLocationLabel">
+            <h3 id="pathPickerLocationLabel" class="path-picker-label">Current location</h3>
+            <p id="pathPickerCurrent" class="path-picker-current"></p>
+            <label for="pathPickerPathInput" class="path-picker-label">Go to a folder</label>
+            <div class="path-picker-path-row">
+              <input id="pathPickerPathInput" class="path-picker-path-input" type="text" placeholder="Enter a path, e.g. /home/me or C:/Projects" autocomplete="off" spellcheck="false" />
+              <button id="pathPickerPathButton" type="button" class="path-picker-path-button">Go</button>
+            </div>
+            <nav id="pathPickerRoots" class="path-picker-roots" aria-label="Folder shortcuts"></nav>
+          </section>
+          <section class="path-picker-browser" aria-labelledby="pathPickerBrowseLabel">
+            <label id="pathPickerBrowseLabel" for="pathPickerSearchInput" class="path-picker-label">Folders in this location</label>
+            <div class="path-picker-search-row">
+              <input id="pathPickerSearchInput" class="path-picker-search-input" type="search" placeholder="Search folders…" autocomplete="off" spellcheck="false" aria-label="Search folders in this location" aria-controls="pathPickerList" aria-describedby="pathPickerSearchStatus" />
+              <button id="pathPickerClearSearchButton" type="button" class="path-picker-clear-search-button" hidden>Clear</button>
+            </div>
+            <p id="pathPickerSearchStatus" class="path-picker-search-status muted" role="status" aria-live="polite"></p>
+            <div id="pathPickerList" class="path-picker-list" role="listbox" aria-label="Folders in this location"></div>
+          </section>
+          <details class="path-picker-secondary path-picker-pinned">
+            <summary>Pinned folders</summary>
+            <div id="pathPickerFastPicks" class="path-picker-fast-picks" aria-label="Pinned folders"></div>
+            <button id="pathPickerAddFastPickButton" type="button" class="path-picker-add-fast-pick">Pin this folder</button>
+          </details>
+          <details class="path-picker-secondary path-picker-create">
+            <summary>Create a folder</summary>
+            <p class="path-picker-hint muted">The new folder will be created in the current location.</p>
+            <label for="pathPickerCreateNameInput" class="path-picker-label">New folder name</label>
+            <div class="path-picker-create-row">
+              <input id="pathPickerCreateNameInput" class="path-picker-create-input" type="text" placeholder="Folder name" autocomplete="off" spellcheck="false" maxlength="255" />
+              <button id="pathPickerCreateButton" type="button" class="path-picker-create-button">Create folder</button>
+            </div>
+          </details>
         </div>
-        <div class="path-picker-path-row" aria-label="Open a directory by path">
-          <input id="pathPickerPathInput" class="path-picker-path-input" type="text" placeholder="Path, e.g. C:/ or D:/project" autocomplete="off" spellcheck="false" aria-label="Directory path" />
-          <button id="pathPickerPathButton" type="button" class="path-picker-path-button">Go</button>
-        </div>
-        <div id="pathPickerFastPicks" class="path-picker-fast-picks" aria-label="Pinned folders"></div>
-        <div id="pathPickerRoots" class="path-picker-roots"></div>
-        <div class="path-picker-create-row" aria-label="Create a new directory in the current directory">
-          <input id="pathPickerCreateNameInput" class="path-picker-create-input" type="text" placeholder="New directory name" autocomplete="off" spellcheck="false" maxlength="255" aria-label="New directory name" />
-          <button id="pathPickerCreateButton" type="button" class="path-picker-create-button">Create directory</button>
-        </div>
-        <div class="path-picker-search-row" aria-label="Search directories in the current directory">
-          <input id="pathPickerSearchInput" class="path-picker-search-input" type="search" placeholder="Search current directory…" autocomplete="off" spellcheck="false" aria-label="Search current directory" />
-          <button id="pathPickerClearSearchButton" type="button" class="path-picker-clear-search-button" hidden>Clear</button>
-        </div>
-        <p id="pathPickerSearchStatus" class="path-picker-search-status muted" role="status" aria-live="polite"></p>
-        <div id="pathPickerList" class="path-picker-list" role="listbox" aria-label="Directories"></div>
         <p id="pathPickerError" class="path-picker-error" role="alert" hidden></p>
-        <menu>
+        <menu class="path-picker-footer">
           <button id="pathPickerCancelButton" type="button">Cancel</button>
-          <button id="pathPickerChooseButton" type="button" class="primary">Use this directory</button>
+          <button id="pathPickerChooseButton" type="button" class="primary">Choose this folder</button>
         </menu>
       </form>
     </dialog>
