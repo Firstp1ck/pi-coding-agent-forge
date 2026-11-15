@@ -36,6 +36,14 @@ async function openFocused(page, ownership, query = '') {
   await expect(page.locator('#modelSelect')).not.toBeEmpty();
   await expect(page.locator(`#tabBar [data-tab-id="${ownership.tabs[0].id}"] .terminal-tab-button`))
     .toHaveAttribute('aria-selected', 'true');
+  // Fresh fixture servers migrate initial layout defaults asynchronously. Observe
+  // Settings writes only after that existing startup migration has persisted.
+  await expect.poll(async () => {
+    const { layout } = await ownership.api('/api/interface-preferences');
+    const panel = layout?.sidePanel;
+    return !!panel?.placement && Array.isArray(panel?.sectionLayout?.order)
+      && typeof panel?.collapsedPanels?.right === 'boolean' && Number.isFinite(panel?.panelWidths?.right);
+  }).toBe(true);
 }
 
 async function openSettings(page) {

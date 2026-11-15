@@ -78,3 +78,54 @@ test('Voice Settings loads on entry and rejects an old tab list and detached voi
   expect(writes).toEqual([]);
   await expect(page.locator('#conversationVoiceMenuPanel [data-voice-id="en_US-retired-medium"]')).toHaveCount(0);
 });
+
+test('disabled Tools and Skills retain explicit Setup through cards and search', async ({ page, ownership }) => {
+  await page.addInitScript(() => localStorage.setItem('pi-webui-optional-features-disabled', JSON.stringify(['tuiToolsCommand', 'tuiSkillsCommand'])));
+  await page.route('**/api/commands?*', route => route.fulfill({ json: { ok: true, data: { commands: [
+    { name: 'tools', source: 'extension', description: 'Tools' },
+    { name: 'skills', source: 'extension', description: 'Skills' },
+  ] } } }));
+  await open(page, ownership);
+  for (const label of ['Tools', 'Skills']) {
+    await category(page, 'Models and resources').click();
+    await settings(page).getByRole('button', { name: label, exact: true }).click();
+    await expect(page.locator('#nativeCommandDialog')).toBeVisible();
+    await expect(page.locator('#nativeCommandTitle')).toHaveText(`${label} Setup`);
+    await page.keyboard.press('Escape');
+    await category(page, 'Features').click();
+    const row = page.locator(`[data-settings-feature="tui${label}Command"]`);
+    await expect(row).toContainText('Disabled');
+    await expect(row.getByRole('button', { name: `Set up TUI ${label} command`, exact: true })).toBeEnabled();
+    await settings(page).getByRole('searchbox', { name: 'Search settings', exact: true }).fill(label);
+    const result = settings(page).getByRole('list', { name: 'Settings search results' }).getByRole('listitem').filter({ has: page.getByText(label, { exact: true }) });
+    await result.getByRole('button', { name: new RegExp(`^${label}\\s`) }).click();
+    await expect(page.locator('#nativeCommandDialog')).toBeVisible();
+    await expect(page.locator('#nativeCommandTitle')).toHaveText(`${label} Setup`);
+    await page.keyboard.press('Escape');
+  }
+});
+
+test('empty Voice Settings explains shared persistence and restores popup semantics', async ({ page, ownership }, info) => {
+  await page.route('**/api/conversation-voices?*', route => route.fulfill({ json: { ok: true, data: { voices: [] } } }));
+  await open(page, ownership);
+  await settings(page).getByRole('searchbox', { name: 'Search settings', exact: true }).fill('Conversation voice');
+  const result = settings(page).getByRole('listitem').filter({ hasText: 'Conversation voice' });
+  await expect(result).toContainText('Shared Pi voice configuration');
+  await result.getByRole('button').click();
+  const panel = page.locator('#conversationVoiceMenuPanel');
+  await expect(panel).toHaveAttribute('role', 'group');
+  await expect(panel.getByRole('button', { name: 'No Piper voices — run /talk setup', exact: true })).toBeVisible();
+  await expect(settings(page)).toContainText('saved in the shared Pi voice configuration for future sessions');
+  const audit = await new AxeBuilder({ page }).include('.settings-workspace').withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze();
+  expect(audit.violations.map(({ id, nodes }) => ({ id, targets: nodes.map(node => node.target) }))).toEqual([]);
+  await page.screenshot({ path: info.outputPath('settings-empty-voice.png'), animations: 'disabled' });
+  await category(page, 'Appearance').click();
+  await expect(panel).toHaveAttribute('role', 'menu');
+  await expect(panel.locator('button')).toHaveAttribute('role', 'menuitem');
+  await category(page, 'Voice').click();
+  await expect(panel).toHaveAttribute('role', 'group');
+  await category(page, 'Appearance').click();
+  await page.locator('#desktopShellSelect').selectOption('classic');
+  await expect(page.locator('#focusedWorkspace')).toBeHidden();
+  await expect(panel).toHaveAttribute('role', 'menu');
+});

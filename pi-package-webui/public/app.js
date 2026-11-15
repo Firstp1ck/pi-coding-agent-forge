@@ -2310,6 +2310,7 @@ function renderFocusedShell() {
     actions: focusedToolsActions(),
     features: OPTIONAL_FEATURES.map(feature => ({ ...feature, description: `${feature.description} ${optionalFeatureStatus(feature.id).detail || ""}` })),
   });
+  syncConversationVoicePanelSemantics();
   const voiceTarget = focusedShell.active && focusedShellState.destination === "settings" && settingsCategory(focusedShellState.inspector) === "voice" ? shellActionTarget() : null;
   if (voiceTarget && (!settingsVoiceTarget || !isCurrentSettingsTarget(settingsVoiceTarget))) {
     settingsVoiceTarget = voiceTarget;
@@ -10964,6 +10965,17 @@ function showConversationVoiceFeedback(message, level = "info") {
   addTransientMessage({ role: level === "error" ? "error" : "native", title: "/talk voice", content: text, level });
 }
 
+function syncConversationVoicePanelSemantics() {
+  const panel = elements.conversationVoiceMenuPanel;
+  if (!panel) return;
+  const inline = !!panel.closest('.settings-page[data-settings-category="voice"]');
+  panel.setAttribute("role", inline ? "group" : "menu");
+  for (const button of panel.querySelectorAll("button")) {
+    if (inline) button.removeAttribute("role");
+    else button.setAttribute("role", "menuitem");
+  }
+}
+
 function renderConversationVoicePanelNotice(message, level = "info") {
   const panel = elements.conversationVoiceMenuPanel;
   if (!panel) return;
@@ -10974,6 +10986,7 @@ function renderConversationVoicePanelNotice(message, level = "info") {
   notice.setAttribute("role", level === "error" ? "alert" : "status");
   notice.textContent = message;
   panel.appendChild(notice);
+  syncConversationVoicePanelSemantics();
 }
 
 function renderConversationVoiceOptions(data = conversationVoiceLastData) {
@@ -11002,6 +11015,7 @@ function renderConversationVoiceOptions(data = conversationVoiceLastData) {
     empty.disabled = true;
     empty.textContent = "No Piper voices — run /talk setup";
     panel.appendChild(empty);
+    syncConversationVoicePanelSemantics();
     return;
   }
   for (const voice of voices) {
@@ -11051,6 +11065,7 @@ function renderConversationVoiceOptions(data = conversationVoiceLastData) {
     });
     panel.appendChild(item);
   }
+  syncConversationVoicePanelSemantics();
 }
 
 async function loadConversationVoices(tabContext = activeTabContext()) {
@@ -45646,6 +45661,13 @@ function commandPaletteCoreItems() {
     { id: "native:tree", scope: "session", destination: "conversation", kind: "Pi", label: "/tree", description: "Navigate the session tree", keywords: "branch history", run: () => runNativeCommandMenu("/tree") },
     { id: "native:settings", scope: "session", destination: "settings", kind: "Pi", label: "/settings", description: "Open settings", keywords: "configuration", run: () => runNativeCommandMenu("/settings") },
     { id: "native:scoped-models", scope: "session", destination: "settings", kind: "Pi", label: "/scoped-models", description: "Manage model cycling scope", keywords: "models cycle ctrl p", run: () => runNativeCommandMenu("/scoped-models") },
+    ...[["tools", "tuiToolsCommand"], ["skills", "tuiSkillsCommand"]].map(([kind, featureId]) => ({
+      id: `settings:${kind}-setup`, scope: "session", destination: "settings", kind: "Setup",
+      label: `${kind === "tools" ? "Tools" : "Skills"} Setup`, description: "Configure resource defaults, including when this companion is disabled", keywords: "resources defaults configuration",
+      available: optionalFeatureSetupAvailable(OPTIONAL_FEATURE_BY_ID.get(featureId)),
+      unavailableReason: `${kind === "tools" ? "Tools" : "Skills"} Setup is unavailable in this session. Check the companion in Settings → Features.`,
+      run: () => openOptionalFeatureSetup(OPTIONAL_FEATURE_BY_ID.get(featureId)),
+    })),
     { id: "native:tools", scope: "session", destination: "settings", kind: "Pi", label: "/tools", description: "Manage active tools", keywords: "capabilities", run: () => runNativeCommandMenu("/tools") },
     { id: "native:skills", scope: "session", destination: "settings", kind: "Pi", label: "/skills", description: "Manage active skills", keywords: "system prompt", run: () => runNativeCommandMenu("/skills") },
     { id: "native:append-system", scope: "server", destination: "settings", kind: "Pi", label: "/append-system", description: "Choose the APPEND_SYSTEM.md append prompt", keywords: "append system prompt settings global", run: () => openNativeAppendSystemSelector() },

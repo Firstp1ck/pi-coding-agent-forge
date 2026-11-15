@@ -18,15 +18,15 @@ const CONTROLS = [
   ['output-processing', 'system', 'Output processing', '#fastOutputModeSelect', 'Server', 'normal compact-v1 performance'],
   ['remote-access', 'connection', 'Remote access', '#openNetworkButton', 'Server network', 'lan qr connection'],
   ['remote-pin', 'connection', 'PIN protection', '#remoteAuthToggle', 'Server network', 'security authentication'],
-  ['voice', 'voice', 'Conversation voice', '#conversationVoiceMenuPanel', 'Active session', 'spoken piper download language talk'],
+  ['voice', 'voice', 'Conversation voice', '#conversationVoiceMenuPanel', 'Shared Pi voice configuration', 'spoken piper download language talk'],
   ['server-action', 'system', 'Server actions', '#serverActionSelect', 'Server', 'restart stop update'],
   ['webui-version', 'system', 'WebUI version and updates', '#webuiVersionButton', 'Server', 'package maintenance release'],
   ['pi-version', 'system', 'Pi version and release notes', '#piVersionButton', 'Server', 'changelog update'],
   ['report-issue', 'help', 'Report an issue', '#openIssueButton', 'Explicit submission', 'bug help support'],
 ];
 const ACTIONS = [
-  ['tools', 'resources', 'Tools', 'native:tools', 'Session / Global / exact Model', 'capabilities allowlist'],
-  ['skills', 'resources', 'Skills', 'native:skills', 'Session / Global / exact Model', 'instructions resources'],
+  ['tools', 'resources', 'Tools', 'settings:tools-setup', 'Session / Global / exact Model', 'capabilities allowlist'],
+  ['skills', 'resources', 'Skills', 'settings:skills-setup', 'Session / Global / exact Model', 'instructions resources'],
   ['models', 'resources', 'Model cycling', 'native:scoped-models', 'Pi settings', 'scoped models'],
   ['append-system', 'resources', 'Append system prompt', 'native:append-system', 'Global; new or reloaded tabs', 'append_system instructions'],
   ['runtime', 'resources', 'Runtime settings', 'native:settings', 'Scope shown beside each setting', 'thinking compaction images startup safety transport'],
@@ -66,7 +66,7 @@ export function createSettingsWorkspace({ document, viewHost, onNavigate, onInvo
   ].map(([category, selector, expand]) => ({ category, node: document.querySelector(selector), expand, hidden: null })).filter(record => record.node);
   const voicePanel = document.getElementById('conversationVoiceMenuPanel');
   for (const [category, text] of [
-    ['voice', 'Choose the spoken voice here. Starting a voice conversation and microphone consent remain explicit actions in Conversation. Voice installation may require /talk setup in Pi.'],
+    ['voice', 'Voice selection is saved in the shared Pi voice configuration for future sessions and applied immediately to this session’s active audio loop. Starting a voice conversation and microphone consent remain explicit actions in Conversation. Voice installation may require /talk setup in Pi.'],
     ['connection', 'Network and PIN controls follow this server’s access policy. Unavailable controls remain unavailable here.'],
     ['accounts', 'Provider login uses Pi’s terminal sign-in flow. Logout asks before removing stored credentials.'],
     ['help', 'Review an issue before submitting it. No support data is sent by opening Settings.'],
