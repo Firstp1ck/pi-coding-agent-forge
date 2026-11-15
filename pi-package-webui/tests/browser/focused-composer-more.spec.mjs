@@ -4,7 +4,7 @@ import { test } from './session-fixture.mjs';
 test.use({ video: 'off', serviceWorkers: 'block', reducedMotion: 'reduce' });
 
 for (const [width, height] of [[1100, 900], [1440, 900], [1440, 500]]) {
-  test(`More keeps primary controls compact and gives actions a full row at ${width}x${height}`, async ({ page, ownership }, info) => {
+  test(`More keeps primary controls compact and opens actions beside More at ${width}x${height}`, async ({ page, ownership }, info) => {
     await page.setViewportSize({ width, height });
     await page.addInitScript(() => localStorage.setItem('pi-webui-shell-preferences-v1', JSON.stringify({ v: 1, desktopLayout: 'focused' })));
     await page.goto(ownership.baseURL);
@@ -32,9 +32,10 @@ for (const [width, height] of [[1100, 900], [1440, 900], [1440, 500]]) {
     const row = await page.locator('.composer-row').boundingBox();
     expect(openSend.height).toBeLessThanOrEqual(closedSend.height + 2);
     expect(openMore.height).toBeLessThanOrEqual(closedMore.height + 2);
-    expect(actions.width).toBeGreaterThanOrEqual(row.width * .8);
-    await expect(panel).toHaveCSS('grid-column', '1 / -1');
-    expect(actions.y).toBeGreaterThanOrEqual(openSend.y + openSend.height);
+    expect(actions.x).toBeGreaterThanOrEqual(openMore.x + openMore.width);
+    expect(actions.x + actions.width).toBeLessThanOrEqual(openSend.x);
+    await expect(panel).toHaveCSS('grid-column-start', '2');
+    expect(actions.y).toBeCloseTo(openMore.y, 0);
     for (const selector of ['#newSessionButton', '#compactButton', '#optionsMenuButton', '#sendButton', '#composerActionsButton']) {
       await page.locator(selector).click({ trial: true });
     }

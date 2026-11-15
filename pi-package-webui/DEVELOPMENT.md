@@ -30,6 +30,10 @@ The modules ship with the package and participate in the service-worker cache. K
 
 ## Compact desktop integration
 
+Project and Activity are inspector destination tabs. `shell-workspace.mjs` keeps their section selector in the inspector header and exposes a conversation-local overview slot. `conversation-overview.mjs` only renders keyed snapshots; `app.js` reads existing owners, validates tab/session/folder identity and dispatches canonical catalog actions. It introduces no transport or polling owner. `overviewOpen` is an optional boolean browser preference; Home and Settings temporarily hide the card. Closing the card never stops feature resources.
+
+`themed-selects.css` uses native customizable-select support behind a CSS feature query. Options, disabled states, optgroups and change events remain browser-owned. Unsupported engines retain a themed native control. Shared styled tooltips use a manual popover when supported so clipped containers and native dialogs cannot cover them; the existing fixed portal remains the fallback. The scoped model picker records whether its opener was the footer or composer and resolves the current button after footer rerenders.
+
 `focused-shell-adapter.mjs` places canonical views in `shell-workspace.mjs` and restores them with the shared view host. It moves the existing model/effort rows, footer administration controls and Abort/End buttons; feature controllers retain request targets and resource lifetimes independently of view placement. The original Control Deck visibility and order are retained for Classic. Desktop preview preferences never write the durable layout schema.
 
 `shell-tools-launcher.mjs` renders caller-supplied action records, categories and pins in a native dialog. The app rebuilds the catalog and rechecks captured session/project targets before execution. Native modal ownership remains with the browser. History writes precede view changes and preserve unrelated state and URL identity.

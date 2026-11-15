@@ -19865,3 +19865,8 @@ body:has(#undoToast:not([hidden])) .notice-toast-stack { bottom: calc(max(1rem, 
   html[data-mobile-shell="v2"] body.mobile-keyboard-open #mobileSearchButton { grid-column: 3; grid-row: 1; }
   html[data-mobile-shell="v2"] body.mobile-keyboard-open #mobileMoreButton { grid-column: 4; grid-row: 1; }
 }
+
+/* Shared floating tooltips replace clipped per-button pseudo elements. */
+[data-tooltip-floating="true"]::before,
+[data-tooltip-floating="true"]::after { display: none !important; }
+.footer-floating-tooltip[popover] { margin: 0; inset: auto; overflow: auto; }

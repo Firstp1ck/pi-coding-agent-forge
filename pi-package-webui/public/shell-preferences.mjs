@@ -20,6 +20,10 @@ function normalizePreferences(value) {
     if (typeof value.navCollapsed !== "boolean") return null;
     normalized.navCollapsed = value.navCollapsed;
   }
+  if (Object.hasOwn(value, "overviewOpen")) {
+    if (typeof value.overviewOpen !== "boolean") return null;
+    normalized.overviewOpen = value.overviewOpen;
+  }
   if (Object.hasOwn(value, "pinnedActions")) {
     if (!Array.isArray(value.pinnedActions)) return null;
     const pins = new Set();

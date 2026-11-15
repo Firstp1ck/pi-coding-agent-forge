@@ -3,9 +3,10 @@ import { createToolsLauncher } from './shell-tools-launcher.mjs';
 import { createFocusedComposerControls } from './focused-composer-controls.mjs';
 import { createContextActions } from './shell-context-actions.mjs';
 import { createAttentionInbox } from './shell-attention-inbox.mjs';
+import { createConversationOverview } from './conversation-overview.mjs';
 
 /** Places existing application views. The caller retains feature state and navigation. */
-export function createFocusedShellAdapter({ document, viewHost, nodes, sections, onNavigate, onPreferences, onInvoke, getTools, getContextActions, onBehaviorChange, onModel, onEffort, onScopedModels, getAttention, onAttentionSelect }) {
+export function createFocusedShellAdapter({ document, viewHost, nodes, sections, onNavigate, onPreferences, onInvoke, getTools, getContextActions, onBehaviorChange, onModel, onEffort, onScopedModels, getAttention, onAttentionSelect, onOverviewAction }) {
   let mounted = false;
   let inspector = null;
   let toolsTrigger = null;
@@ -52,7 +53,22 @@ export function createFocusedShellAdapter({ document, viewHost, nodes, sections,
   const inbox = createAttentionInbox({ document, onSelect: onAttentionSelect,
     onClose: () => syncModalRunControls(),
   });
+  const overview = createConversationOverview({ document, onAction: onOverviewAction,
+    onClose: () => {
+      if (!onPreferences({ overviewOpen: false })) overview.update(snapshot.overview);
+      workspace.element.querySelector('[aria-controls="focusedWorkspaceOverview"]')?.focus({ preventScroll: true });
+    },
+  });
+  let lastInspector = { destination: 'project', inspector: 'files' };
   const workspace = createFocusedWorkspace({ document, onNavigate,
+    onToggleOverview: () => {
+      const open = !snapshot.overviewOpen;
+      if (open && ['home', 'settings'].includes(snapshot.destination) && onNavigate('conversation', null) === false) return;
+      onPreferences({ overviewOpen: open });
+    },
+    onToggleInspector: () => snapshot.inspectorOpen
+      ? onNavigate('conversation', null)
+      : onNavigate(lastInspector.destination, lastInspector.inspector),
     onTools: () => openTools(),
     onAttention: () => {
       inbox.open(getAttention(), document.activeElement);
@@ -66,6 +82,16 @@ export function createFocusedShellAdapter({ document, viewHost, nodes, sections,
     onConversation: () => onNavigate('conversation', null),
     onInspectorSelect: id => onNavigate(snapshot.destination, id),
   });
+  workspace.slots.overview.append(overview.element);
+  function sizeOverview() {
+    if (!snapshot.enabled || !snapshot.overviewOpen) return;
+    const host = workspace.slots.overview;
+    const transcript = nodes.chat?.getBoundingClientRect();
+    const available = transcript ? transcript.bottom - host.getBoundingClientRect().top - 8 : workspace.slots.conversation.clientHeight - 24;
+    host.style.height = `${Math.max(0, available)}px`;
+  }
+  const overviewResize = new document.defaultView.ResizeObserver(sizeOverview);
+  for (const node of [workspace.slots.conversation, nodes.composer, nodes.chat]) if (node) overviewResize.observe(node);
   workspace.element.hidden = true;
   document.body.append(workspace.element, tools.element, contextActions.element, inbox.element);
   let snapshot = {};
@@ -155,6 +181,8 @@ export function createFocusedShellAdapter({ document, viewHost, nodes, sections,
 
   function update(next) {
     snapshot = next;
+    if (['project', 'activity'].includes(next.destination) && next.inspector) lastInspector = { destination: next.destination, inspector: next.inspector };
+    overview.update(next.enabled ? next.overview || { open: false } : { open: false });
     sidebarSettings.hidden = !next.enabled || next.navigation === 'top';
     if (next.destination === 'settings') sidebarSettings.setAttribute('aria-current', 'page');
     else sidebarSettings.removeAttribute('aria-current');
@@ -211,6 +239,7 @@ export function createFocusedShellAdapter({ document, viewHost, nodes, sections,
       inspector = nextInspector;
       if (inspector) mountContent(inspector, workspace.slots.inspector);
     }
+    sizeOverview();
   }
 
   return { update, openTools, closeTools, closeAttention: () => inbox.close(), get modelTrigger() { return composerControls.querySelector('.focused-composer-scoped-models:not([hidden])') || composerControls.querySelector('.focused-composer-model-value').parentElement; }, get active() { return mounted; }, get inspector() { return mounted ? inspector : null; } };

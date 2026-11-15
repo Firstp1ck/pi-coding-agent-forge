@@ -8,7 +8,7 @@ const models = [
 ];
 
 for (const layout of ['flat', 'advanced']) {
-  test('focused model shortcuts retain ' + layout + ' picker and Classic recovery without duplicate summaries', async ({ page, ownership }, testInfo) => {
+  test('focused model shortcuts retain ' + layout + ' picker and Classic recovery with footer access', async ({ page, ownership }, testInfo) => {
     await page.addInitScript(layout => {
       localStorage.setItem('pi-webui-shell-preferences-v1', JSON.stringify({ v: 1, desktopLayout: 'focused' }));
       localStorage.setItem('pi-webui-footer-scoped-model-layout-v1', layout);
@@ -19,7 +19,7 @@ for (const layout of ['flat', 'advanced']) {
     await page.goto(ownership.baseURL);
     await expect(page.locator('#focusedWorkspace')).toBeVisible();
     await expect(page.locator('#modelSelect')).not.toBeEmpty();
-    await expect(page.locator('#statusBar .footer-model, #statusBar .footer-tui-model')).toBeHidden();
+    await expect(page.locator('#statusBar .footer-model, #statusBar .footer-tui-model')).toBeVisible();
     await expect(page.locator('.focused-composer-controls').getByRole('button', { name: /^Model:/ })).toBeVisible();
     const rail = page.getByRole('navigation', { name: 'Workspace destinations' });
     await rail.getByRole('button', { name: 'Settings', exact: true }).click();
@@ -86,6 +86,13 @@ for (const width of [1100, 1440]) {
     await expect(picker).toHaveCount(0);
     await expect(trigger).toBeFocused();
     await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    const footerTrigger = page.locator('#statusBar .footer-model.footer-meta-action, #statusBar .footer-tui-model');
+    await footerTrigger.click();
+    await expect(picker).toBeVisible();
+    await expect(current).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(footerTrigger).toBeFocused();
+    await expect(page.locator('#promptInput')).toHaveValue('Keep my scoped model draft');
     await trigger.press('Enter');
     await expect(picker).toBeVisible();
     const applied = page.waitForResponse(response => new URL(response.url()).pathname === '/api/model' && response.request().method() === 'POST');

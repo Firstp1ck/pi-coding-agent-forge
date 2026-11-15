@@ -5,7 +5,7 @@ test.use({ video: 'off', serviceWorkers: 'block', reducedMotion: 'reduce', actio
 test.setTimeout(60_000);
 
 const draft = 'Keep this draft while checking composer controls.';
-const model = page => page.getByRole('button', { name: /^Model:/ });
+const model = page => page.locator('.focused-composer-controls').getByRole('button', { name: /^Model:/ });
 const effort = page => page.getByRole('button', { name: /^Effort:/ });
 
 async function ready(page, ownership, { width = 1440, height = 900, theme = 'dark', inspector = false } = {}) {
@@ -95,12 +95,14 @@ async function checkMore(page, info, name) {
   const closedSend = await page.locator('#sendButton').boundingBox();
   await more.click();
   await expect(more).toHaveAttribute('aria-expanded', 'true');
-  await expect(panel).toHaveCSS('grid-column', '1 / -1');
+  await expect(panel).toHaveCSS('grid-column-start', '2');
   const actions = await panel.boundingBox();
   const row = await page.locator('.composer-row').boundingBox();
   const send = await page.locator('#sendButton').boundingBox();
-  expect(actions.width).toBeCloseTo(row.width, 0);
-  expect(actions.y).toBeGreaterThanOrEqual(send.y + send.height + 8);
+  const moreBounds = await more.boundingBox();
+  expect(actions.x).toBeGreaterThanOrEqual(moreBounds.x + moreBounds.width);
+  expect(actions.x + actions.width).toBeLessThanOrEqual(send.x);
+  expect(actions.y).toBeCloseTo(moreBounds.y, 0);
   expect(send.width).toBeCloseTo(closedSend.width, 0);
   expect(send.height).toBeCloseTo(closedSend.height, 0);
   const compact = await page.locator('#compactButton').boundingBox();
@@ -116,7 +118,7 @@ async function checkMore(page, info, name) {
     expect(bounds.y).toBeGreaterThanOrEqual(actions.y - 1);
     expect(bounds.x).toBeGreaterThanOrEqual(actions.x - 1);
     expect(bounds.x + bounds.width).toBeLessThanOrEqual(actions.x + actions.width + 1);
-    expect(bounds.y).toBeGreaterThanOrEqual(send.y + send.height);
+    expect(bounds.y + bounds.height).toBeLessThanOrEqual(actions.y + actions.height + 1);
   }
   await screenshot(page, info, `${name}-more`);
   for (const selector of ['#newSessionButton', '#compactButton', '#optionsMenuButton', '#sendButton']) {

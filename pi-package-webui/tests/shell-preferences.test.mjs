@@ -352,3 +352,16 @@ test('sidebar width roundtrips within bounds without changing other preferences'
     assert.equal(writeShellPreferences(fakeStorage(), { v: 1, desktopLayout: 'focused', navigationWidth }).reason, 'invalid');
   }
 });
+
+test('overview visibility is an optional browser preference with conservative validation', () => {
+  const storage = fakeStorage();
+  for (const overviewOpen of [true, false]) {
+    const value = { v: 1, desktopLayout: 'focused', overviewOpen };
+    assert.equal(writeShellPreferences(storage, value).ok, true);
+    assert.deepEqual(effectiveShellPreferences(readShellPreferences(storage), 'fresh'), value);
+  }
+  for (const overviewOpen of [1, 'true', null]) {
+    assert.equal(writeShellPreferences(storage, { v: 1, desktopLayout: 'focused', overviewOpen }).reason, 'invalid');
+  }
+  assert.equal(readShellPreferences(fakeStorage()).value.overviewOpen, undefined);
+});

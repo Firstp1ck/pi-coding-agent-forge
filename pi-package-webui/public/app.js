@@ -1328,7 +1328,7 @@ const activityAgents = createActivityAgentsController({
     if (subagentOverviewViewsChanged) renderTabs();
     subagentOverviewViewsChanged = false;
   },
-  onChange() { renderSubagents(); syncSubagentCancelSubmitting(); },
+  onChange() { renderSubagents(); syncSubagentCancelSubmitting(); if (shellPreferenceState.value.overviewOpen) scheduleFocusedShellRender(); },
   onEvent: addEvent,
   onCancelStatus: setSubagentCancelStatus,
   onCancelClosed(selection) {
@@ -1436,6 +1436,7 @@ let chatPausedScrollRestoreUntil = 0;
 let chatLastTouchClientY = null;
 let mobileFooterExpanded = false;
 let footerModelPickerOpen = false;
+let footerModelPickerOpener = "composer";
 let footerModelApplyInFlight = false;
 let footerThinkingPickerOpen = false;
 let footerAutoCompactionToggleInFlight = false;
@@ -2177,7 +2178,6 @@ function scheduleFocusedShellRender() {
 function focusedSectionDestination(id) {
   if (["controls", "optional-features"].includes(id)) return "settings";
   if (["files", "git", "runners", "release", "artifacts"].includes(id)) return "project";
-  if (["session", "sampling", "commands"].includes(id)) return "conversation";
   return "activity";
 }
 
@@ -2344,6 +2344,65 @@ async function openFocusedAttentionItem(item) {
   } catch (error) { addEvent(error.message || String(error), "error"); }
 }
 
+function focusedOverviewSnapshot() {
+  if (!shellPreferenceState.value.overviewOpen || !isFocusedShellRequested() || ["home", "settings"].includes(focusedShellState.destination)) return { open: false };
+  const tab = activeTab();
+  const target = shellActionTarget();
+  const payload = parseGitFooterWebuiPayload();
+  const workspace = normalizeGitWorkspaceInfo(tab?.gitWorkspace);
+  const branch = payload?.meta?.find(chip => chip.key === "git");
+  const changes = payload?.meta?.find(chip => chip.key === "changes");
+  const runner = tabAppRunnerRun(tab);
+  const agents = activityAgents.getSnapshot();
+  const groups = agents.data ? subagentOverviewGroups(agents.data).filter(group => group.tabId === tab?.id) : null;
+  const context = contextUsageSnapshot();
+  const usage = payload?.providerUsage;
+  const usageAction = usage?.provider === "anthropic" ? "view:claude-usage" : "view:codex-usage";
+  const actions = new Map(focusedToolsActions().map(action => [action.id, action]));
+  const item = (id, label, value, actionId, extra = {}) => {
+    const action = actions.get(actionId);
+    const availability = action && checkActionTarget({ ...action, scope: "project", target }, target);
+    return { id, label, value, ...extra, ...(actionId ? {
+      actionId, disabled: !availability?.ok,
+      reason: availability?.reason || (!action ? "This action is unavailable." : ""),
+    } : {}) };
+  };
+  const usageItems = [item("context", "Context", contextUsageDisplay(context), "view:session", {
+    detail: contextUsageDetail(context), ...(context?.percent != null ? { progress: context.percent } : {}),
+  })];
+  for (const key of ["primary", "secondary"]) {
+    const window = usage?.[key];
+    if (window) usageItems.push(item(`usage-${key}`, window.label, `${window.usedPercent.toFixed(0)}% used`, usageAction, {
+      progress: window.usedPercent, detail: `${usage.provider} · captured ${new Date(usage.capturedAt).toLocaleTimeString()}`,
+    }));
+  }
+  if (!usage?.primary && !usage?.secondary) usageItems.push(item("usage-unknown", "Provider limits", "Not loaded", null));
+  return {
+    open: true, target, title: tab?.title || "No active session", context: tab?.cwd || "Choose a session to inspect its workspace.",
+    sections: [
+      { id: "workspace", label: "Workspace", items: [
+        item("folder", "Folder", tab?.cwd || "Not selected", "view:files"),
+        item("branch", "Branch", cleanStatusText(branch?.value) || workspace?.branch || "Not available", "view:git"),
+        item("changes", "Changes", cleanStatusText(changes?.value) || "Open Changes to inspect", "view:git"),
+      ] },
+      { id: "work", label: "Work", items: [
+        item("session", "Session", tab ? tabIndicator(tab).label : "No active session", "view:session"),
+        item("runner", "Runner", runner ? cleanStatusText(runner.label || runner.displayCommand || runner.command || "App runner") : "No active runner", "view:runners", { detail: runner?.status || "" }),
+        item("agents", "Agents", groups ? `${groups.reduce((sum, group) => sum + group.runningAgents, 0)} running · ${groups.reduce((sum, group) => sum + group.agentCount, 0)} total` : "Not loaded", "view:subagents", { detail: agents.error ? "Latest refresh failed; open Agents to retry." : "" }),
+        item("queue", "Queue", `${Number(currentState?.pendingMessageCount || 0) || 0} pending`, "view:queue"),
+      ] },
+      { id: "usage", label: "Usage", items: usageItems },
+    ],
+  };
+}
+
+function invokeOverviewAction(actionId, target) {
+  const availability = checkActionTarget({ scope: "project", target }, shellActionTarget());
+  if (!availability.ok) { addEvent(availability.reason, "warn"); return; }
+  const action = focusedToolsActions().find(candidate => candidate.id === actionId);
+  if (action) return invokeFocusedTool({ ...action, target });
+}
+
 function renderFocusedShell() {
   if (!focusedShell) return;
   const wasActive = focusedShell.active;
@@ -2354,6 +2413,7 @@ function renderFocusedShell() {
     ...shellPreferenceState.value,
     ...focusedShellState,
     enabled: isFocusedShellRequested(),
+    overviewOpen: !!shellPreferenceState.value.overviewOpen && !["home", "settings"].includes(focusedShellState.destination),
     inspectorOpen: !!record && !["home", "settings"].includes(focusedShellState.destination),
     inspectorTitle: record?.label || record?.button?.querySelector(".side-panel-section-label")?.textContent || "",
     inspectorTopics: record && focusedShellState.destination !== "settings" ? focusedInspectorTopics(focusedShellState.destination) : [],
@@ -2362,6 +2422,7 @@ function renderFocusedShell() {
     attentionCount: focusedAttentionSnapshot().items.filter(item => item.state === "blocked").reduce((sum, item) => sum + item.decisionCount, 0),
     finishedCount: focusedAttentionSnapshot().items.filter(item => item.state === "done").length,
     homeCollapsed: workspaceDashboardCollapsed,
+    overview: focusedOverviewSnapshot(),
     composer: {
       runActive: isRunActive(), behavior: busyPromptBehavior,
       modelLabel: shortModelLabel(currentState?.model), effortLabel: footerThinkingDisplay(),
@@ -2460,7 +2521,7 @@ function settingsCategory(inspector) {
 }
 
 function normalizeFocusedNavigation(state) {
-  const { destination, inspector } = state || {};
+  let { destination, inspector } = state || {};
   if (!["conversation", "home", "project", "activity", "settings"].includes(destination)) return { destination: "conversation", inspector: null };
   if (destination === "settings") {
     const category = settingsCategory(inspector);
@@ -2469,7 +2530,9 @@ function normalizeFocusedNavigation(state) {
       || (category === "features" && OPTIONAL_FEATURES.some(feature => `feature:${feature.id}` === state.setting) ? { id: state.setting } : null));
     return { destination, inspector: `settings:${category}`, ...(entry ? { setting: entry.id } : {}) };
   }
-  return { destination, inspector: focusedInspectorRecords().some(({ id }) => id === inspector) ? inspector : destination === "project" ? "files" : destination === "activity" ? "subagents" : null };
+  const known = focusedInspectorRecords().some(({ id }) => id === inspector);
+  if (known && !["home", "settings"].includes(destination)) destination = focusedSectionDestination(inspector);
+  return { destination, inspector: known ? inspector : destination === "project" ? "files" : destination === "activity" ? "subagents" : null };
 }
 
 function focusedNavigationUrl(state) {
@@ -2626,6 +2689,7 @@ function initializeFocusedShell() {
     onPreferences: saveFocusedShellPreferences, onInvoke: invokeFocusedTool,
     getTools: focusedToolsSnapshot, getContextActions: focusedContextActions,
     getAttention: focusedAttentionSnapshot, onAttentionSelect: openFocusedAttentionItem,
+    onOverviewAction: invokeOverviewAction,
     onBehaviorChange: setBusyPromptBehavior,
     onModel: () => openNativeModelSelector(), onEffort: () => openNativeEffortSelector(),
     onScopedModels: () => {
@@ -2638,6 +2702,10 @@ function initializeFocusedShell() {
   $("#desktopShellSelect").addEventListener("change", event => saveFocusedShellPreferences({ desktopLayout: event.target.value }));
   $("#focusedNavigationSelect").addEventListener("change", event => saveFocusedShellPreferences({ navigation: event.target.value }));
   if (forceClassicShell) $("#desktopShellStatus").textContent = "Classic recovery is active. Remove shell=classic from the address to use the saved layout.";
+  for (const button of elements.terminalTabsShell.querySelectorAll('.terminal-sidebar-actions button')) {
+    const tooltip = button.getAttribute('data-tooltip') || button.getAttribute('title');
+    if (tooltip) applyStyledTooltip(button, tooltip, { ariaLabel: false });
+  }
   renderFocusedShell();
 }
 
@@ -7989,7 +8057,7 @@ function isFooterPickerOpen() {
 function footerActivePickerTarget() {
   if (footerBranchPickerOpen) return elements.statusBar.querySelector(".footer-branch.footer-meta-action");
   if (footerThinkingPickerOpen) return elements.statusBar.querySelector(".footer-thinking.footer-meta-action");
-  if (footerModelPickerOpen) return focusedShell?.active ? focusedShell.modelTrigger : elements.statusBar.querySelector(".footer-model.footer-meta-action, .footer-tui-model");
+  if (footerModelPickerOpen) return footerModelTrigger();
   return null;
 }
 
@@ -17900,7 +17968,7 @@ function renderTabs() {
     elements.workspaceSaveButton.disabled = !canSave;
     applyStyledTooltip(elements.workspaceSaveButton, canSave
       ? "Save workspace:\n• Captures all open tabs, sessions, order, custom groups, and the active tab."
-      : "Save workspace is available after you open a tab.", { ariaLabel: canSave ? "Save workspace" : "Save workspace (no open tabs)", floating: false });
+      : "Save workspace is available after you open a tab.", { ariaLabel: canSave ? "Save workspace" : "Save workspace (no open tabs)" });
   }
   updateTerminalTabGroupOpenState();
   reconcileTerminalSplitState();
@@ -19570,6 +19638,7 @@ function ensureFooterTooltipNode() {
     footerTooltipNode = make("div", "footer-floating-tooltip");
     footerTooltipNode.id = "footerFloatingTooltip";
     footerTooltipNode.setAttribute("role", "tooltip");
+    if (typeof footerTooltipNode.showPopover === "function") footerTooltipNode.setAttribute("popover", "manual");
     footerTooltipNode.hidden = true;
     document.body.append(footerTooltipNode);
   }
@@ -19592,6 +19661,7 @@ function positionFooterTooltip(target) {
   const rect = target.getBoundingClientRect();
   const maxWidth = Math.max(96, Math.min(384, window.innerWidth - margin * 2));
   footerTooltipNode.style.maxWidth = `${maxWidth}px`;
+  footerTooltipNode.style.maxHeight = `${Math.max(0, window.innerHeight - margin * 2)}px`;
 
   const width = footerTooltipNode.offsetWidth;
   const height = footerTooltipNode.offsetHeight;
@@ -19611,7 +19681,7 @@ function positionFooterTooltip(target) {
     if (top < margin) top = rect.bottom + gap;
   }
   left = Math.min(Math.max(margin, left), Math.max(margin, window.innerWidth - margin - width));
-  top = Math.min(Math.max(margin, top), window.innerHeight - margin - height);
+  top = Math.min(Math.max(margin, top), Math.max(margin, window.innerHeight - margin - height));
 
   footerTooltipNode.style.left = `${Math.round(left)}px`;
   footerTooltipNode.style.top = `${Math.round(top)}px`;
@@ -19636,6 +19706,7 @@ function showFooterTooltip(target) {
   else delete tooltip.dataset.variant;
   tooltip.textContent = text;
   tooltip.hidden = false;
+  if (tooltip.hasAttribute("popover") && !tooltip.matches(":popover-open")) tooltip.showPopover();
   tooltip.classList.add("visible");
   positionFooterTooltip(target);
 }
@@ -19660,6 +19731,7 @@ function hideFooterTooltip(target) {
   if (target && target !== footerTooltipTarget) return;
   footerTooltipTarget = null;
   if (!footerTooltipNode) return;
+  if (footerTooltipNode.hasAttribute("popover") && footerTooltipNode.matches(":popover-open")) footerTooltipNode.hidePopover();
   footerTooltipNode.hidden = true;
   footerTooltipNode.classList.remove("visible");
   delete footerTooltipNode.dataset.variant;
@@ -19668,6 +19740,7 @@ function hideFooterTooltip(target) {
 function bindStyledTooltipEvents(node) {
   if (!node || node._styledTooltipBound) return;
   node._styledTooltipBound = true;
+  node.dataset.tooltipFloating = "true";
   node.addEventListener("pointerenter", (event) => {
     if (event.pointerType === "touch") return;
     scheduleFooterTooltip(node);
@@ -23357,6 +23430,9 @@ function renderSavedWorkspacePicker() {
 
 function setFooterModelPickerOpen(open, { restoreFocus = false } = {}) {
   const wasOpen = footerModelPickerOpen;
+  if (open && !wasOpen) {
+    footerModelPickerOpener = document.activeElement?.matches?.(".footer-model.footer-meta-action, .footer-tui-model") ? "footer" : "composer";
+  }
   footerModelPickerOpen = !!open;
   if (footerModelPickerOpen) {
     footerThinkingPickerOpen = false;
@@ -24523,9 +24599,14 @@ async function applyFooterModel(model) {
   }
 }
 
+function footerModelTrigger() {
+  if (focusedShell?.active && footerModelPickerOpener !== "footer") return focusedShell.modelTrigger;
+  return elements.statusBar.querySelector(".footer-model.footer-meta-action, .footer-tui-model");
+}
+
 function focusFooterModelTrigger() {
   queueMicrotask(() => {
-    const trigger = focusedShell?.active ? focusedShell.modelTrigger : elements.statusBar.querySelector(".footer-model.footer-meta-action, .footer-tui-model");
+    const trigger = footerModelTrigger();
     trigger?.focus({ preventScroll: true });
   });
 }
@@ -25247,6 +25328,7 @@ function renderFooter() {
   focusedShell?.modelTrigger?.setAttribute("aria-expanded", String(footerModelPickerOpen));
   syncAdvancedFooterModelRovingTabStop();
   restoreTooltipContinuity(elements.statusBar, tooltipSnapshot);
+  if (shellPreferenceState.value.overviewOpen) scheduleFocusedShellRender();
 }
 
 function scheduleRefreshMessages(delay = 120, tabContext = activeTabContext()) {

@@ -22,10 +22,12 @@ Pi Web UI keeps the normal Pi agent experience while giving you more room to man
 | **Models and controls** | Change models and thinking effort, check Codex CLI subscription usage, manage scoped models, configure tools and skills, and use the command palette. |
 | **Files and prompts** | Upload or paste files and images, edit text attachments, use slash-command suggestions, browse project files, and reference project paths with `@`. |
 | **Git workflows** | Inspect changes, switch branches, review diffs, stage work, generate commit messages with an optional one-shot fallback model, push, and prepare pull requests through guided steps. |
-| **Project utilities** | Launch detected app runners, manage working directories, search files and transcripts, and customize themes. |
+| **Project utilities** | Inspect Project and Activity from one right panel, open a floating session overview, launch detected app runners, manage working directories, search files and transcripts, and customize themes. |
 | **Companion features** | Add stats, remote access, voice, `/btw`, richer Git status, themes, release tools, and other supported Pi packages. |
 | **Desktop and mobile** | Use a full desktop workspace with resizable left and right side panels, or a compact phone layout with touch-friendly navigation and controls. |
 | **Customizable controls** | Hide optional workspace, Control Deck, composer, workflow, attachment, and input-tag controls while keeping Send available. |
+
+In the compact layout, use **Inspector** in the conversation header to open Project or Activity. Use **Overview** for a floating summary of the current session and its work.
 
 ## Quick start
 

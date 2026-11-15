@@ -37,14 +37,18 @@ html[data-desktop-shell="focused"] #focusedWorkspace #sendButton {
   min-width: 96px;
 }
 html[data-desktop-shell="focused"] #composerActionsPanel { display: none; }
+html[data-desktop-shell="focused"] body.composer-actions-open #focusedWorkspace .composer-row {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+html[data-desktop-shell="focused"] body.composer-actions-open #focusedWorkspace #sendButton { grid-column: 3; }
 html[data-desktop-shell="focused"] body.composer-actions-open #composerActionsPanel {
   display: grid;
   grid-template-columns: repeat(auto-fill, var(--composer-action-cell-min-width, 3.2rem));
   grid-auto-flow: dense;
-  grid-column: 1 / -1;
-  /* Keep the disclosure below actions with a user-defined grid order. */
-  order: 2147483647;
-  flex: 0 0 100%;
+  grid-column: 2;
+  grid-row: 1;
+  order: 0;
+  min-width: 0;
   width: 100%;
   gap: .5rem;
   align-items: start;
@@ -148,8 +152,8 @@ html[data-desktop-shell="focused"] #focusedWorkspace { height: var(--visual-view
 #focusedWorkspace .focused-feature-widgets .btw-widget .release-npm-actions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; min-width: 0; }
 #focusedWorkspace .focused-feature-widgets .btw-widget .release-npm-actions button { max-width: 100%; white-space: normal; }
 
-html[data-desktop-shell="focused"] #statusBar .footer-model,
-html[data-desktop-shell="focused"] #statusBar .footer-tui-model { display: none; }
+/* The compact inspector owns panel navigation; Classic keeps its floating controls. */
+html[data-desktop-shell="focused"] .side-panel-expand-button { display: none !important; }
 
 .focused-inbox-button { position: relative; }
 .focused-inbox-button .focused-attention { position: static; }
