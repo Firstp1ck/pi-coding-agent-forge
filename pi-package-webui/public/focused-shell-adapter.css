@@ -56,59 +56,49 @@ html[data-desktop-shell="focused"] body.composer-actions-open #composerActionsPa
   position: fixed;
   z-index: 100;
   inset: var(--focused-flyout-top, 0) auto auto var(--focused-flyout-left, 0);
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--composer-action-cell-min-width, 3.2rem)), 1fr));
-  grid-auto-flow: dense;
+  display: flex;
+  flex-wrap: nowrap;
   grid-column: 2;
   grid-row: 1;
   order: 0;
   min-width: 0;
   box-sizing: border-box;
-  width: var(--focused-flyout-width, 26rem);
-  max-width: calc(100vw - 16px);
+  width: max-content;
+  max-width: var(--focused-flyout-width, calc(100vw - 16px));
   max-height: var(--focused-flyout-max-height, calc(100dvh - 16px));
   gap: .5rem;
-  align-items: start;
-  overflow: auto;
+  align-items: center;
+  overflow-x: auto;
+  overflow-y: hidden;
   overscroll-behavior: contain;
+  touch-action: pan-x;
   padding: 8px;
   border: 1px solid var(--border);
   border-radius: 10px;
   background: var(--ctp-mantle);
   box-shadow: 0 8px 24px var(--shadow);
 }
-/* Saved desktop columns can exceed the floating tray; keep order and wrap the spans. */
+/* Keep saved order and spans without letting saved grid coordinates wrap the row. */
 html[data-desktop-shell="focused"] #composerActionsPanel > [data-composer-action-id] {
-  grid-column: span var(--composer-action-grid-span, 1);
+  flex: 0 0 auto;
+  width: auto;
+  min-width: calc(var(--composer-action-grid-span, 1) * var(--composer-action-cell-min-width, 3.2rem));
+  grid-column: auto;
   grid-row: auto;
+  transform: none;
+  touch-action: pan-x;
 }
-/* Secondary menus without a measured anchor share the tray's bounded scroll area. */
-html[data-desktop-shell="focused"] #composerActionsPanel > .composer-publish-menu:not(.composer-options-menu) {
-  flex-direction: column;
-}
-html[data-desktop-shell="focused"] #composerActionsPanel > .composer-publish-menu:not(.composer-options-menu):is(.open, :hover, :focus-within):not(.menu-dismissed) {
-  grid-column: 1 / -1;
-}
-html[data-desktop-shell="focused"] #composerActionsPanel > .composer-publish-menu:not(.composer-options-menu) > .composer-publish-menu-panel {
+html[data-desktop-shell="focused"] #composerActionsPanel > .composer-publish-menu {
   position: static;
-  width: 100%;
-  min-width: 0;
-  max-width: 100%;
-  max-height: none;
+  isolation: auto;
 }
-html[data-desktop-shell="focused"] #composerActionsPanel > .composer-publish-menu:not(.composer-options-menu) .composer-publish-menu-item {
-  width: 100%;
-  min-width: 0;
-  max-width: 100%;
-  white-space: normal;
-}
-/* The conversation clips sideways flyouts, so keep nested Options in one scroll area. */
-html[data-desktop-shell="focused"] #focusedWorkspace .composer-options-menu { position: static; }
-html[data-desktop-shell="focused"] #focusedWorkspace .composer-options-menu-panel {
+/* Fixed descendants escape the row's scroll clip while keeping native event ancestry. */
+html[data-desktop-shell="focused"] #composerActionsPanel > .composer-publish-menu > .composer-publish-menu-panel {
   position: fixed;
   z-index: 101;
   inset: var(--focused-flyout-top, 0) auto auto var(--focused-flyout-left, 0);
-  width: var(--focused-flyout-width, 26rem);
+  box-sizing: border-box;
+  width: var(--focused-flyout-width, 14rem);
   min-width: 0;
   max-width: calc(100vw - 16px);
   max-height: var(--focused-flyout-max-height, calc(100dvh - 16px));
@@ -120,6 +110,13 @@ html[data-desktop-shell="focused"] #focusedWorkspace .composer-options-menu-pane
   background: var(--ctp-mantle);
   box-shadow: 0 8px 24px var(--shadow);
 }
+html[data-desktop-shell="focused"] #composerActionsPanel > .composer-publish-menu .composer-publish-menu-item {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+}
+/* The conversation clips sideways flyouts, so keep nested Options in one scroll area. */
 html[data-desktop-shell="focused"] #focusedWorkspace .composer-options-submenu { flex-direction: column; }
 html[data-desktop-shell="focused"] #focusedWorkspace .composer-options-submenu-panel {
   position: static;
@@ -249,7 +246,7 @@ html[data-desktop-shell="focused"] #composerActionsPanel > .composer-context-tag
 }
 html[data-desktop-shell="focused"] #composerActionsPanel > .composer-context-tags {
   grid-column: 1 / -1;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 html[data-desktop-shell="focused"] #composerActionsPanel .composer-workflow-overlay-open-button {
   position: static;

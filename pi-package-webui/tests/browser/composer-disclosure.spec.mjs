@@ -278,7 +278,7 @@ test('a narrow conversation keeps Send outside the tray and Options in the viewp
   const send = await page.locator('#sendButton').boundingBox();
   expect(tray.x + tray.width).toBeLessThanOrEqual(send.x - 7.5);
   expect(await geometry(page)).toEqual(before);
-  expect(await page.locator('#composerActionsPanel').evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
+  expect(await page.locator('#composerActionsPanel').evaluate(node => node.scrollWidth > node.clientWidth)).toBe(true);
   await page.locator('#sendButton').click({ trial: true });
   await page.locator('#optionsMenuButton').focus();
   await page.locator('#optionsMenuButton').press('ArrowDown');
@@ -347,7 +347,8 @@ test('open overlays follow resize, scroll and content changes, then Classic and 
       panel.append(button);
     }
   });
-  await expect.poll(async () => (await page.locator('#composerActionsPanel').boundingBox()).height).toBeGreaterThan(150);
+  await expect.poll(() => page.locator('#composerActionsPanel').evaluate(node => node.scrollWidth > node.clientWidth)).toBe(true);
+  expect((await page.locator('#composerActionsPanel').boundingBox()).height).toBeLessThan(100);
   await fitInViewport(page, '#composerActionsPanel');
   await page.evaluate(() => {
     document.documentElement.removeAttribute('data-desktop-shell');
