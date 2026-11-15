@@ -2495,12 +2495,23 @@ function focusedToolsActions() {
       focusFooterModelPickerInitialOption();
     },
   };
-  return [...sectionActions, modelShortcuts, modelShortcutsLayout, ...buildCommandPaletteItems().map(action => ({
+  const paletteActions = buildCommandPaletteItems();
+  const nativeLabels = new Set(paletteActions.filter(action => action.id.startsWith("native:")).map(action => action.label));
+  const distinctActions = paletteActions.filter(action => !action.id.startsWith("command:") || !nativeLabels.has(action.label));
+  return [...sectionActions, modelShortcuts, modelShortcutsLayout, ...distinctActions.map(action => ({
     ...action,
     category: action.kind === "Model" ? "Models" : action.kind === "Tab" ? "Sessions" : action.destination === "project" ? "Project" : action.destination === "settings" ? "Settings" : action.destination === "activity" ? "Activity" : "Session",
     available: checkActionTarget(action, context).ok,
     unavailableReason: checkActionTarget(action, context).reason || action.unavailableReason,
   }))];
+}
+
+function focusedToolsSnapshot() {
+  const actions = focusedToolsActions();
+  const aliases = new Map(actions.filter(action => action.id.startsWith("native:") && action.label.startsWith("/"))
+    .map(action => [`command:${encodeURIComponent(action.label.slice(1))}`, action.id]));
+  const pinnedIds = [...new Set((shellPreferenceState.value.pinnedActions || []).map(id => aliases.get(id) || id))];
+  return { actions, pinnedIds, contextLabel: activeTab()?.title || "No active session" };
 }
 
 async function invokeFocusedTool(captured) {
@@ -2533,7 +2544,7 @@ function initializeFocusedShell() {
     nodes: { ...elements, settingsRoot: settingsWorkspace.element, layout: $(".layout"), conversation: $(".workspace-column"), navigation: elements.terminalTabsShell, home: elements.workspaceDashboard, footer: $("[data-control-deck-shared-footer]"), versions: $(".side-panel-version-row") },
     sections: focusedInspectorRecords(), onNavigate: navigateFocusedShell,
     onPreferences: saveFocusedShellPreferences, onInvoke: invokeFocusedTool,
-    getTools: () => ({ actions: focusedToolsActions(), pinnedIds: shellPreferenceState.value.pinnedActions || [], contextLabel: activeTab()?.title || "No active session" }),
+    getTools: focusedToolsSnapshot,
   });
   $("#desktopShellSelect").value = shellPreferenceState.value.desktopLayout;
   $("#focusedNavigationSelect").value = shellPreferenceState.value.navigation || "left";
@@ -41439,6 +41450,8 @@ function openNativeCommandDialog({ title, message = "", searchPlaceholder = "" }
   elements.nativeCommandSearch.disabled = false;
   elements.nativeCommandSearch.oninput = null;
   elements.nativeCommandBody.replaceChildren();
+  elements.nativeCommandBody.inert = false;
+  elements.nativeCommandBody.removeAttribute("aria-busy");
   elements.nativeCommandError.hidden = true;
   elements.nativeCommandError.textContent = "";
   elements.nativeCommandActions.replaceChildren();
@@ -41663,11 +41676,56 @@ function modelOptionLabel(model) {
   return `${model.provider}/${model.id}`;
 }
 
+function nativeSessionChoiceOwner(options) {
+  const tabContext = projectTargetFromContext();
+  nativeCommandTabId = tabContext.tabId;
+  const generation = openNativeCommandDialog(options);
+  let saving = false;
+  const ownsDialog = () => elements.nativeCommandDialog.open && generation === nativeCommandDialogGeneration;
+  const isCurrent = () => ownsDialog() && isCurrentProjectTarget(tabContext);
+  return {
+    tabContext, isCurrent,
+    async apply(path, body, onApplied) {
+      if (saving || !ownsDialog()) return;
+      if (!isCurrent()) {
+        setNativeCommandError("The session changed. Close this picker and open it again.");
+        return;
+      }
+      saving = true;
+      setNativeCommandError("");
+      elements.nativeCommandBody.setAttribute("aria-busy", "true");
+      elements.nativeCommandBody.inert = true;
+      elements.nativeCommandSearch.disabled = true;
+      try {
+        const response = await nativeCommandApi(path, { method: "POST", body, tabId: tabContext.tabId });
+        if (!isCurrent()) return;
+        onApplied(response.data);
+        closeNativeCommandDialog();
+        await refreshState(tabContext);
+      } catch (error) {
+        if (isCurrent()) setNativeCommandError(error.message || String(error));
+      } finally {
+        saving = false;
+        if (ownsDialog()) {
+          elements.nativeCommandBody.inert = false;
+          elements.nativeCommandBody.removeAttribute("aria-busy");
+          elements.nativeCommandSearch.disabled = false;
+        }
+      }
+    },
+  };
+}
+
 async function openNativeModelSelector() {
-  openNativeCommandDialog({ title: "/model", message: "Select the active model for this Pi tab.", searchPlaceholder: "Filter models…" });
+  const owner = nativeSessionChoiceOwner({
+    title: "Choose model",
+    message: "Applies to this session. Changing the model does not restart a response already in progress.",
+    searchPlaceholder: "Filter models…",
+  });
   renderNativeLoading("Loading models…");
   try {
-    const response = await nativeCommandApi("/api/models");
+    const response = await nativeCommandApi("/api/models", { tabId: owner.tabContext.tabId });
+    if (!owner.isCurrent()) return;
     const models = Array.isArray(response.data?.models) ? response.data.models : [];
     const activeId = currentState?.model ? `${currentState.model.provider}/${currentState.model.id}` : "";
     const items = models.map((model) => ({
@@ -41679,35 +41737,61 @@ async function openNativeModelSelector() {
         model.reasoning ? "reasoning" : "",
         Array.isArray(model.input) && model.input.includes("image") ? "images" : "",
       ].filter(Boolean).join(" · ") || model.provider,
-      group: model.provider,
       model,
       badge: modelOptionLabel(model) === activeId ? "current" : "",
     }));
-    // The current model goes first so it is visible without scrolling through hundreds of rows.
     items.sort((a, b) => (b.badge === "current") - (a.badge === "current"));
-    const render = () => renderNativeSelectorItems(items, {
-      emptyText: "No models match this filter.",
-      activeId,
-      onSelect: async (item) => {
-        setNativeCommandError("");
-        const tabContext = activeTabContext(nativeCommandTabId || activeTabId);
-        try {
-          const response = await nativeCommandApi("/api/model", { method: "POST", body: { provider: item.model.provider, modelId: item.model.id } });
-          applyOptimisticModelSelection(response.data || item.model, tabContext);
-          addTransientMessage({ role: "native", title: "/model", content: `Model set to ${item.label}.`, level: "info" });
-          closeNativeCommandDialog();
-          await refreshState(tabContext);
-        } catch (error) {
-          setNativeCommandError(error.message || String(error));
-        }
-      },
-    });
+    const render = () => {
+      if (!owner.isCurrent()) return;
+      renderNativeSelectorItems(items, {
+        emptyText: "No models match this filter.", activeId,
+        onSelect: item => owner.apply("/api/model", { provider: item.model.provider, modelId: item.model.id }, data => {
+          setControlsPendingModel("");
+          applyOptimisticModelSelection(data || item.model, owner.tabContext);
+          addTransientMessage({ role: "native", title: "Model", content: `Model set to ${item.label}.`, level: "info" });
+        }),
+      });
+    };
     elements.nativeCommandSearch.oninput = render;
     render();
   } catch (error) {
+    if (!owner.isCurrent()) return;
     setNativeCommandError(error.message || String(error));
     elements.nativeCommandBody.replaceChildren();
+    addNativeCommandAction("Retry", openNativeModelSelector);
   }
+}
+
+function openNativeEffortSelector() {
+  const owner = nativeSessionChoiceOwner({
+    title: "Choose thinking effort",
+    message: "Applies to this session. While Pi is running or compacting, your choice is saved for the next prompt.",
+    searchPlaceholder: "Filter effort…",
+  });
+  const current = currentState?.thinkingLevel || "off";
+  const pending = currentState?.pendingThinkingLevel;
+  const items = footerThinkingLevels().map(level => ({
+    id: level, label: footerThinkingLevelLabel(level),
+    description: thinkingLevelSupportedByActiveModel(level) ? "" : "Not supported by the active model.",
+    disabled: !thinkingLevelSupportedByActiveModel(level),
+    badge: level === pending ? "next prompt" : level === current ? "current" : "",
+  }));
+  const render = () => {
+    if (!owner.isCurrent()) return;
+    renderNativeSelectorItems(items, {
+      emptyText: "No effort levels match this filter.", activeId: pending || current,
+      onSelect: item => owner.apply("/api/thinking", { level: item.id }, data => {
+        setControlsPendingThinking("");
+        applyOptimisticThinkingSelection(data, owner.tabContext);
+        const effective = data?.level || item.id;
+        const content = data?.pending ? `Effort ${effective} is saved for the next prompt.`
+          : `Thinking effort set to ${effective}${effective !== item.id ? `, the level supported by this model` : ""}.`;
+        addTransientMessage({ role: "native", title: "Thinking effort", content, level: "info" });
+      }),
+    });
+  };
+  elements.nativeCommandSearch.oninput = render;
+  render();
 }
 
 function openNativeThemeSelector() {
@@ -45851,6 +45935,7 @@ function commandPaletteCoreItems() {
     { id: "session:cwd", scope: "session", destination: "conversation", kind: "Action", label: "Change working directory", description: "Restart active tab in another cwd", keywords: "cwd folder workspace", run: () => changeActiveTabCwd() },
     { id: "conversation:search", scope: "session", destination: "conversation", kind: "Action", label: "Search transcript", description: "Open transcript search", keywords: "find", run: () => openChatSearch() },
     { id: "native:model", scope: "session", destination: "conversation", kind: "Pi", label: "/model", description: "Select the active model", keywords: "provider llm", run: () => runNativeCommandMenu("/model") },
+    { id: "native:effort", scope: "session", destination: "conversation", kind: "Pi", label: "Thinking effort", description: "Choose effort for this session; busy changes apply to the next prompt", keywords: "reasoning thinking level", run: () => openNativeEffortSelector() },
     { id: "native:resume", scope: "project", destination: "conversation", kind: "Pi", label: "/resume", description: "Resume a previous session", keywords: "sessions history", run: () => runNativeCommandMenu("/resume") },
     { id: "native:fork", scope: "session", destination: "conversation", kind: "Pi", label: "/fork", description: "Fork from a previous user message", keywords: "branch edit retry", run: () => runNativeCommandMenu("/fork") },
     { id: "native:tree", scope: "session", destination: "conversation", kind: "Pi", label: "/tree", description: "Navigate the session tree", keywords: "branch history", run: () => runNativeCommandMenu("/tree") },
