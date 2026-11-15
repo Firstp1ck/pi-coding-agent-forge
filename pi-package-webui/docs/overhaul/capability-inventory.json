@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "purpose": "W0 static migration evidence, not an executable action registry or proof of runtime parity",
+  "purpose": "Static capability inventory and accepted ownership mapping; not an executable action registry or proof of runtime parity",
   "reference": {
     "productionBaseline": "06351edae0d87829dfa8c747d31a061825568b0e",
     "integrationSeed": "cff3432ee63131ebb6150a906d9c06594ca2c401",
@@ -758,8 +758,40 @@
           "line": 6319
         }
       ],
-      "targetOwner": "Unassigned: W1+ extraction contract; legacy owner remains active",
-      "eventSources": "Existing tab-scoped HTTP/SSE and DOM handlers; see currentOwners, no new subscription",
+      "targetOwners": [
+        {
+          "file": "pi-package-webui/public/session-context.mjs",
+          "symbol": "createSessionContext",
+          "line": 1
+        },
+        {
+          "file": "pi-package-webui/public/session-attention-scheduler.mjs",
+          "symbol": "createAttentionScheduler",
+          "line": 14
+        },
+        {
+          "file": "pi-package-webui/public/app.js",
+          "symbol": "createTerminalTab",
+          "line": 17797
+        },
+        {
+          "file": "pi-package-webui/public/app.js",
+          "symbol": "openNativeResumeSelector",
+          "line": 43157
+        },
+        {
+          "file": "pi-package-webui/public/app.js",
+          "symbol": "saveWebuiWorkspace",
+          "line": 6319
+        }
+      ],
+      "targetOwner": "pi-package-webui/public/session-context.mjs#createSessionContext; pi-package-webui/public/session-attention-scheduler.mjs#createAttentionScheduler; pi-package-webui/public/app.js#createTerminalTab; pi-package-webui/public/app.js#openNativeResumeSelector; pi-package-webui/public/app.js#saveWebuiWorkspace",
+      "eventSources": "Tab mutations and bounded metadata reconciliation; source tab survives resume.",
+      "acceptanceScenarios": [
+        "pi-package-webui/tests/browser/session-ownership.spec.mjs",
+        "pi-package-webui/tests/browser/focused-shell-integration.spec.mjs"
+      ],
+      "acceptanceStatus": "Scenario coverage is partial; final W7 feature-access evidence remains pending",
       "availability": "Source present; runtime, companion, trust, busy and preference checks still apply",
       "legacyActive": true,
       "controls": [
@@ -894,8 +926,45 @@
           "line": 41211
         }
       ],
-      "targetOwner": "Unassigned: W1+ extraction contract; legacy owner remains active",
-      "eventSources": "Existing tab-scoped HTTP/SSE and DOM handlers; see currentOwners, no new subscription",
+      "targetOwners": [
+        {
+          "file": "pi-package-webui/public/session-context.mjs",
+          "symbol": "createSessionContext",
+          "line": 1
+        },
+        {
+          "file": "pi-package-webui/public/app.js",
+          "symbol": "openNativeForkSelector",
+          "line": 43061
+        },
+        {
+          "file": "pi-package-webui/public/app.js",
+          "symbol": "openNativeCloneDialog",
+          "line": 43101
+        },
+        {
+          "file": "pi-package-webui/public/app.js",
+          "symbol": "openNativeNameDialog",
+          "line": 43122
+        },
+        {
+          "file": "pi-package-webui/public/app.js",
+          "symbol": "openNativeTreeSelector",
+          "line": 43277
+        },
+        {
+          "file": "pi-package-webui/public/app.js",
+          "symbol": "openSessionSummaryForTab",
+          "line": 41211
+        }
+      ],
+      "targetOwner": "pi-package-webui/public/session-context.mjs#createSessionContext; pi-package-webui/public/app.js#openNativeForkSelector; pi-package-webui/public/app.js#openNativeCloneDialog; pi-package-webui/public/app.js#openNativeNameDialog; pi-package-webui/public/app.js#openNativeTreeSelector; pi-package-webui/public/app.js#openSessionSummaryForTab",
+      "eventSources": "Native session command replies, captured session generation and metadata.",
+      "acceptanceScenarios": [
+        "pi-package-webui/tests/browser/session-ownership.spec.mjs",
+        "pi-package-webui/tests/browser/session-summary.spec.mjs"
+      ],
+      "acceptanceStatus": "Scenario coverage is partial; final W7 feature-access evidence remains pending",
       "availability": "Source present; runtime, companion, trust, busy and preference checks still apply",
       "legacyActive": true,
       "controls": [
@@ -940,8 +1009,25 @@
           "line": 40997
         }
       ],
-      "targetOwner": "Unassigned: W1+ extraction contract; legacy owner remains active",
-      "eventSources": "Existing tab-scoped HTTP/SSE and DOM handlers; see currentOwners, no new subscription",
+      "targetOwners": [
+        {
+          "file": "pi-package-webui/public/app.js",
+          "symbol": "setTerminalSplitTab",
+          "line": 17748
+        },
+        {
+          "file": "pi-package-webui/public/app.js",
+          "symbol": "createTerminalTabSplitButton",
+          "line": 40997
+        }
+      ],
+      "targetOwner": "pi-package-webui/public/app.js#setTerminalSplitTab; pi-package-webui/public/app.js#createTerminalTabSplitButton",
+      "eventSources": "Independent iframe/tab events; split dismissal does not close its tab.",
+      "acceptanceScenarios": [
+        "pi-package-webui/tests/browser/focused-shell-integration.spec.mjs",
+        "pi-package-webui/tests/browser/mobile-foundation.spec.mjs"
+      ],
+      "acceptanceStatus": "Scenario coverage is partial; final W7 feature-access evidence remains pending",
       "availability": "Source present; runtime, companion, trust, busy and preference checks still apply",
       "legacyActive": true,
       "controls": [
@@ -979,8 +1065,25 @@
           "line": 23781
         }
       ],
-      "targetOwner": "Unassigned: W1+ extraction contract; legacy owner remains active",
-      "eventSources": "Existing tab-scoped HTTP/SSE and DOM handlers; see currentOwners, no new subscription",
+      "targetOwners": [
+        {
+          "file": "pi-package-webui/public/app.js",
+          "symbol": "changeActiveTabCwd",
+          "line": 24740
+        },
+        {
+          "file": "pi-package-webui/public/app.js",
+          "symbol": "openBranchWorktreePicker",
+          "line": 23781
+        }
+      ],
+      "targetOwner": "pi-package-webui/public/app.js#changeActiveTabCwd; pi-package-webui/public/app.js#openBranchWorktreePicker",
+      "eventSources": "CWD and worktree HTTP results; selected tab owns the destination.",
+      "acceptanceScenarios": [
+        "pi-package-webui/tests/browser/windows-drive-parent.spec.mjs",
+        "pi-package-webui/tests/browser/project-git-tools-integration.spec.mjs"
+      ],
+      "acceptanceStatus": "Scenario coverage is partial; final W7 feature-access evidence remains pending",
       "availability": "Source present; runtime, companion, trust, busy and preference checks still apply",
       "legacyActive": true,
       "controls": [
@@ -1052,8 +1155,51 @@
           "line": 49225
         }
       ],
-      "targetOwner": "Unassigned: W1+ extraction contract; legacy owner remains active",
-      "eventSources": "Existing tab-scoped HTTP/SSE and DOM handlers; see currentOwners, no new subscription",
+      "targetOwners": [
+        {
+          "file": "pi-package-webui/public/transcript-renderer.mjs",
+          "symbol": "createTranscriptRenderer",
+          "line": 143
+        },
+        {
+          "file": "pi-package-webui/public/stream-output-controller.mjs",
+          "symbol": "createStreamOutputController",
+          "line": 279
+        },
+        {
+          "file": "pi-package-webui/public/platform-event-stream.mjs",
+          "symbol": "createSessionEventStream",
+          "line": 6
+        },
+        {
+          "file": "pi-package-webui/public/app.js",
+          "symbol": "renderMessages",
+          "line": 43706
+        },
+        {
+          "file": "pi-package-webui/public/app.js",
+          "symbol": "setThinkingOutputVisible",
+          "line": 6810
+        },
+        {
+          "file": "pi-package-webui/public/app.js",
+          "symbol": "setToolOutputGloballyExpanded",
+          "line": 6827
+        },
+        {
+          "file": "pi-package-webui/public/app.js",
+          "symbol": "openChatSearch",
+          "line": 49225
+        }
+      ],
+      "targetOwner": "pi-package-webui/public/transcript-renderer.mjs#createTranscriptRenderer; pi-package-webui/public/stream-output-controller.mjs#createStreamOutputController; pi-package-webui/public/platform-event-stream.mjs#createSessionEventStream; pi-package-webui/public/app.js#renderMessages; pi-package-webui/public/app.js#setThinkingOutputVisible; pi-package-webui/public/app.js#setToolOutputGloballyExpanded; pi-package-webui/public/app.js#openChatSearch",
+      "eventSources": "One active tab EventSource; transcript and derived-output render scheduling.",
+      "acceptanceScenarios": [
+        "pi-package-webui/tests/browser/interaction-continuity.spec.mjs",
+        "pi-package-webui/tests/browser/stream-output-isolation.spec.mjs",
+        "pi-package-webui/tests/browser/search-match-highlighting.spec.mjs"
+      ],
+      "acceptanceStatus": "Scenario coverage is partial; final W7 feature-access evidence remains pending",
       "availability": "Source present; runtime, companion, trust, busy and preference checks still apply",
       "legacyActive": true,
       "controls": [
@@ -1102,8 +1248,19 @@
           "line": 1853
         }
       ],
-      "targetOwner": "Unassigned: W1+ extraction contract; legacy owner remains active",
-      "eventSources": "Existing tab-scoped HTTP/SSE and DOM handlers; see currentOwners, no new subscription",
+      "targetOwners": [
+        {
+          "file": "pi-package-webui/public/app.js",
+          "symbol": "setMobilePresentation",
+          "line": 1853
+        }
+      ],
+      "targetOwner": "pi-package-webui/public/app.js#setMobilePresentation",
+      "eventSources": "Origin-local presentation changes; transport output mode is independent.",
+      "acceptanceScenarios": [
+        "pi-package-webui/tests/browser/mobile-foundation.spec.mjs"
+      ],
+      "acceptanceStatus": "Scenario coverage is partial; final W7 feature-access evidence remains pending",
       "availability": "Source present; runtime, companion, trust, busy and preference checks still apply",
       "legacyActive": true,
       "controls": [
@@ -1137,8 +1294,36 @@
           "line": 45487
         }
       ],
-      "targetOwner": "Unassigned: W1+ extraction contract; legacy owner remains active",
-      "eventSources": "Existing tab-scoped HTTP/SSE and DOM handlers; see currentOwners, no new subscription",
+      "targetOwners": [
+        {
+          "file": "pi-package-webui/public/session-composer-store.mjs",
+          "symbol": "createSessionComposerStore",
+          "line": 1
+        },
+        {
+          "file": "pi-package-webui/public/session-context.mjs",
+          "symbol": "createSessionContext",
+          "line": 1
+        },
+        {
+          "file": "pi-package-webui/public/app.js",
+          "symbol": "sendPrompt",
+          "line": 46503
+        },
+        {
+          "file": "pi-package-webui/public/app.js",
+          "symbol": "renderCommandSuggestions",
+          "line": 45487
+        }
+      ],
+      "targetOwner": "pi-package-webui/public/session-composer-store.mjs#createSessionComposerStore; pi-package-webui/public/session-context.mjs#createSessionContext; pi-package-webui/public/app.js#sendPrompt; pi-package-webui/public/app.js#renderCommandSuggestions",
+      "eventSources": "Tab-owned drafts/attachments, prompt acknowledgments and session-generation checks.",
+      "acceptanceScenarios": [
+        "pi-package-webui/tests/browser/session-ownership.spec.mjs",
+        "pi-package-webui/tests/browser/optimistic-prompt.spec.mjs",
+        "pi-package-webui/tests/browser/interaction-continuity.spec.mjs"
+      ],
+      "acceptanceStatus": "Scenario coverage is partial; final W7 feature-access evidence remains pending",
       "availability": "Source present; runtime, companion, trust, busy and preference checks still apply",
       "legacyActive": true,
       "controls": [
@@ -1235,8 +1420,26 @@
           "line": 27282
         }
       ],
-      "targetOwner": "Unassigned: W1+ extraction contract; legacy owner remains active",
-      "eventSources": "Existing tab-scoped HTTP/SSE and DOM handlers; see currentOwners, no new subscription",
+      "targetOwners": [
+        {
+          "file": "pi-package-webui/public/app.js",
+          "symbol": "openNativeModelSelector",
+          "line": 41480
+        },
+        {
+          "file": "pi-package-webui/public/app.js",
+          "symbol": "renderSamplingParameters",
+          "line": 27282
+        }
+      ],
+      "targetOwner": "pi-package-webui/public/app.js#openNativeModelSelector; pi-package-webui/public/app.js#renderSamplingParameters",
+      "eventSources": "Live model catalog, session state and explicit sampling/effort commands.",
+      "acceptanceScenarios": [
+        "pi-package-webui/tests/browser/model-search-focus.spec.mjs",
+        "pi-package-webui/tests/browser/sampling-tooltip.spec.mjs",
+        "pi-package-webui/tests/browser/footer-model-advanced-layout.spec.mjs"
+      ],
+      "acceptanceStatus": "Scenario coverage is partial; final W7 feature-access evidence remains pending",
       "availability": "Source present; runtime, companion, trust, busy and preference checks still apply",
       "legacyActive": true,
       "controls": [
@@ -1322,8 +1525,35 @@
           "line": 34310
         }
       ],
-      "targetOwner": "Unassigned: W1+ extraction contract; legacy owner remains active",
-      "eventSources": "Existing tab-scoped HTTP/SSE and DOM handlers; see currentOwners, no new subscription",
+      "targetOwners": [
+        {
+          "file": "pi-package-webui/public/activity-queue-controller.mjs",
+          "symbol": "createActivityQueueController",
+          "line": 38
+        },
+        {
+          "file": "pi-package-webui/public/app.js",
+          "symbol": "renderQueue",
+          "line": 34072
+        },
+        {
+          "file": "pi-package-webui/public/app.js",
+          "symbol": "renderFollowUpQueueOverlay",
+          "line": 34071
+        },
+        {
+          "file": "pi-package-webui/public/app.js",
+          "symbol": "openPromptListDialog",
+          "line": 34310
+        }
+      ],
+      "targetOwner": "pi-package-webui/public/activity-queue-controller.mjs#createActivityQueueController; pi-package-webui/public/app.js#renderQueue; pi-package-webui/public/app.js#renderFollowUpQueueOverlay; pi-package-webui/public/app.js#openPromptListDialog",
+      "eventSources": "Tab queue snapshots and guarded reorder/edit/remove acknowledgments.",
+      "acceptanceScenarios": [
+        "pi-package-webui/tests/browser/activity-queue-controller.spec.mjs",
+        "pi-package-webui/tests/browser/activity-owner-integration.spec.mjs"
+      ],
+      "acceptanceStatus": "Scenario coverage is partial; final W7 feature-access evidence remains pending",
       "availability": "Source present; runtime, companion, trust, busy and preference checks still apply",
       "legacyActive": true,
       "controls": [
@@ -1417,8 +1647,36 @@
           "line": 26757
         }
       ],
-      "targetOwner": "Unassigned: W1+ extraction contract; legacy owner remains active",
-      "eventSources": "Existing tab-scoped HTTP/SSE and DOM handlers; see currentOwners, no new subscription",
+      "targetOwners": [
+        {
+          "file": "pi-package-webui/public/activity-agents-controller.mjs",
+          "symbol": "createActivityAgentsController",
+          "line": 5
+        },
+        {
+          "file": "pi-package-webui/public/activity-todo-view.mjs",
+          "symbol": "createActivityTodoView",
+          "line": 2
+        },
+        {
+          "file": "pi-package-webui/public/app.js",
+          "symbol": "renderSubagents",
+          "line": 26498
+        },
+        {
+          "file": "pi-package-webui/public/app.js",
+          "symbol": "renderSubagentLaunchSlots",
+          "line": 26757
+        }
+      ],
+      "targetOwner": "pi-package-webui/public/activity-agents-controller.mjs#createActivityAgentsController; pi-package-webui/public/activity-todo-view.mjs#createActivityTodoView; pi-package-webui/public/app.js#renderSubagents; pi-package-webui/public/app.js#renderSubagentLaunchSlots",
+      "eventSources": "Tab agent/todo widget snapshots; exact run and gate identity.",
+      "acceptanceScenarios": [
+        "pi-package-webui/tests/browser/activity-owner-integration.spec.mjs",
+        "pi-package-webui/tests/browser/activity-todo-view.spec.mjs",
+        "pi-package-webui/tests/browser/subagent-observability.spec.mjs"
+      ],
+      "acceptanceStatus": "Scenario coverage is partial; final W7 feature-access evidence remains pending",
       "availability": "Source present; runtime, companion, trust, busy and preference checks still apply",
       "legacyActive": true,
       "controls": [
@@ -1460,8 +1718,25 @@
           "line": 38745
         }
       ],
-      "targetOwner": "Unassigned: W1+ extraction contract; legacy owner remains active",
-      "eventSources": "Existing tab-scoped HTTP/SSE and DOM handlers; see currentOwners, no new subscription",
+      "targetOwners": [
+        {
+          "file": "pi-package-webui/public/activity-intercom-controller.mjs",
+          "symbol": "createActivityIntercomController",
+          "line": 77
+        },
+        {
+          "file": "pi-package-webui/public/app.js",
+          "symbol": "sendBtwQuestion",
+          "line": 38745
+        }
+      ],
+      "targetOwner": "pi-package-webui/public/activity-intercom-controller.mjs#createActivityIntercomController; pi-package-webui/public/app.js#sendBtwQuestion",
+      "eventSources": "Conversation identity, selected thread events and guarded send/cancel responses.",
+      "acceptanceScenarios": [
+        "pi-package-webui/tests/browser/activity-intercom-controller.spec.mjs",
+        "pi-package-webui/tests/browser/intercom-conversation-viewer.spec.mjs"
+      ],
+      "acceptanceStatus": "Scenario coverage is partial; final W7 feature-access evidence remains pending",
       "availability": "Source present; runtime, companion, trust, busy and preference checks still apply",
       "legacyActive": true,
       "controls": [
@@ -1513,8 +1788,30 @@
           "line": 15007
         }
       ],
-      "targetOwner": "Unassigned: W1+ extraction contract; legacy owner remains active",
-      "eventSources": "Existing tab-scoped HTTP/SSE and DOM handlers; see currentOwners, no new subscription",
+      "targetOwners": [
+        {
+          "file": "pi-package-webui/public/project-file-viewer-controller.mjs",
+          "symbol": "createProjectFileViewerController",
+          "line": 29
+        },
+        {
+          "file": "pi-package-webui/public/app.js",
+          "symbol": "renderFileTree",
+          "line": 12661
+        },
+        {
+          "file": "pi-package-webui/public/app.js",
+          "symbol": "openFileTreeEntryInWebui",
+          "line": 15007
+        }
+      ],
+      "targetOwner": "pi-package-webui/public/project-file-viewer-controller.mjs#createProjectFileViewerController; pi-package-webui/public/app.js#renderFileTree; pi-package-webui/public/app.js#openFileTreeEntryInWebui",
+      "eventSources": "File tree HTTP/watch refresh and buffer-owned async content/save results.",
+      "acceptanceScenarios": [
+        "pi-package-webui/tests/browser/project-file-buffer-integration.spec.mjs",
+        "pi-package-webui/tests/browser/file-tree-git-ignored.spec.mjs"
+      ],
+      "acceptanceStatus": "Scenario coverage is partial; final W7 feature-access evidence remains pending",
       "availability": "Source present; runtime, companion, trust, busy and preference checks still apply",
       "legacyActive": true,
       "controls": [
@@ -1599,8 +1896,30 @@
           "line": 35281
         }
       ],
-      "targetOwner": "Unassigned: W1+ extraction contract; legacy owner remains active",
-      "eventSources": "Existing tab-scoped HTTP/SSE and DOM handlers; see currentOwners, no new subscription",
+      "targetOwners": [
+        {
+          "file": "pi-package-webui/public/project-file-viewer-controller.mjs",
+          "symbol": "createProjectFileViewerController",
+          "line": 29
+        },
+        {
+          "file": "pi-package-webui/public/app.js",
+          "symbol": "sendFileSelectionToSession",
+          "line": 15515
+        },
+        {
+          "file": "pi-package-webui/public/app.js",
+          "symbol": "openImageLightbox",
+          "line": 35281
+        }
+      ],
+      "targetOwner": "pi-package-webui/public/project-file-viewer-controller.mjs#createProjectFileViewerController; pi-package-webui/public/app.js#sendFileSelectionToSession; pi-package-webui/public/app.js#openImageLightbox",
+      "eventSources": "Canonical selection and originating file/attachment identity at send.",
+      "acceptanceScenarios": [
+        "pi-package-webui/tests/browser/project-file-buffer-integration.spec.mjs",
+        "pi-package-webui/tests/browser/project-artifact-integration.spec.mjs"
+      ],
+      "acceptanceStatus": "Scenario coverage is partial; final W7 feature-access evidence remains pending",
       "availability": "Source present; runtime, companion, trust, busy and preference checks still apply",
       "legacyActive": true,
       "controls": [
@@ -1643,8 +1962,30 @@
           "line": 36808
         }
       ],
-      "targetOwner": "Unassigned: W1+ extraction contract; legacy owner remains active",
-      "eventSources": "Existing tab-scoped HTTP/SSE and DOM handlers; see currentOwners, no new subscription",
+      "targetOwners": [
+        {
+          "file": "pi-package-webui/public/project-artifact-controller.mjs",
+          "symbol": "createProjectArtifactController",
+          "line": 2
+        },
+        {
+          "file": "pi-package-webui/public/app.js",
+          "symbol": "ensureDocumentArtifactDialog",
+          "line": 36776
+        },
+        {
+          "file": "pi-package-webui/public/app.js",
+          "symbol": "openDocumentArtifact",
+          "line": 36808
+        }
+      ],
+      "targetOwner": "pi-package-webui/public/project-artifact-controller.mjs#createProjectArtifactController; pi-package-webui/public/app.js#ensureDocumentArtifactDialog; pi-package-webui/public/app.js#openDocumentArtifact",
+      "eventSources": "Artifact revision/page loading; original message identity and canonical dialog.",
+      "acceptanceScenarios": [
+        "pi-package-webui/tests/browser/project-artifact-controller.spec.mjs",
+        "pi-package-webui/tests/browser/project-artifact-integration.spec.mjs"
+      ],
+      "acceptanceStatus": "Scenario coverage is partial; final W7 feature-access evidence remains pending",
       "availability": "Source present; runtime, companion, trust, busy and preference checks still apply",
       "legacyActive": true,
       "controls": [
@@ -1675,8 +2016,25 @@
           "line": 32869
         }
       ],
-      "targetOwner": "Unassigned: W1+ extraction contract; legacy owner remains active",
-      "eventSources": "Existing tab-scoped HTTP/SSE and DOM handlers; see currentOwners, no new subscription",
+      "targetOwners": [
+        {
+          "file": "pi-package-webui/public/app.js",
+          "symbol": "openGitChangesDialog",
+          "line": 21631
+        },
+        {
+          "file": "pi-package-webui/public/app.js",
+          "symbol": "launchGuidedGitWorkflow",
+          "line": 32869
+        }
+      ],
+      "targetOwner": "pi-package-webui/public/app.js#openGitChangesDialog; pi-package-webui/public/app.js#launchGuidedGitWorkflow",
+      "eventSources": "Repository watcher snapshots, guarded workflow command and review payloads.",
+      "acceptanceScenarios": [
+        "pi-package-webui/tests/browser/guided-git-extension-command.spec.mjs",
+        "pi-package-webui/tests/browser/guided-git-fallback.spec.mjs"
+      ],
+      "acceptanceStatus": "Scenario coverage is partial; final W7 feature-access evidence remains pending",
       "availability": "Source present; runtime, companion, trust, busy and preference checks still apply",
       "legacyActive": true,
       "controls": [
@@ -1819,8 +2177,29 @@
           "line": 22453
         }
       ],
-      "targetOwner": "Unassigned: W1+ extraction contract; legacy owner remains active",
-      "eventSources": "Existing tab-scoped HTTP/SSE and DOM handlers; see currentOwners, no new subscription",
+      "targetOwners": [
+        {
+          "file": "pi-package-webui/public/project-git-tools-controller.mjs",
+          "symbol": "createProjectGitToolsController",
+          "line": 33
+        },
+        {
+          "file": "pi-package-webui/public/app.js",
+          "symbol": "openGitToolsFromFooter",
+          "line": 22493
+        },
+        {
+          "file": "pi-package-webui/public/app.js",
+          "symbol": "renderGitToolsSection",
+          "line": 22453
+        }
+      ],
+      "targetOwner": "pi-package-webui/public/project-git-tools-controller.mjs#createProjectGitToolsController; pi-package-webui/public/app.js#openGitToolsFromFooter; pi-package-webui/public/app.js#renderGitToolsSection",
+      "eventSources": "Repository-section HTTP reads/mutations bound to captured tab/cwd.",
+      "acceptanceScenarios": [
+        "pi-package-webui/tests/browser/project-git-tools-integration.spec.mjs"
+      ],
+      "acceptanceStatus": "Scenario coverage is partial; final W7 feature-access evidence remains pending",
       "availability": "Source present; runtime, companion, trust, busy and preference checks still apply",
       "legacyActive": true,
       "controls": [
@@ -1862,8 +2241,29 @@
           "line": 29576
         }
       ],
-      "targetOwner": "Unassigned: W1+ extraction contract; legacy owner remains active",
-      "eventSources": "Existing tab-scoped HTTP/SSE and DOM handlers; see currentOwners, no new subscription",
+      "targetOwners": [
+        {
+          "file": "pi-package-webui/public/project-runners-controller.mjs",
+          "symbol": "createProjectRunnersController",
+          "line": 25
+        },
+        {
+          "file": "pi-package-webui/public/app.js",
+          "symbol": "renderAppRunnerWidget",
+          "line": 29667
+        },
+        {
+          "file": "pi-package-webui/public/app.js",
+          "symbol": "openAppRunnerInfoDialog",
+          "line": 29576
+        }
+      ],
+      "targetOwner": "pi-package-webui/public/project-runners-controller.mjs#createProjectRunnersController; pi-package-webui/public/app.js#renderAppRunnerWidget; pi-package-webui/public/app.js#openAppRunnerInfoDialog",
+      "eventSources": "Tab-owned process/SSE output; stdin acknowledgment bound to run identity.",
+      "acceptanceScenarios": [
+        "pi-package-webui/tests/browser/focused-project-activity.spec.mjs"
+      ],
+      "acceptanceStatus": "Scenario coverage is partial; final W7 feature-access evidence remains pending",
       "availability": "Source present; runtime, companion, trust, busy and preference checks still apply",
       "legacyActive": true,
       "controls": [
@@ -1930,8 +2330,30 @@
           "line": 24807
         }
       ],
-      "targetOwner": "Unassigned: W1+ extraction contract; legacy owner remains active",
-      "eventSources": "Existing tab-scoped HTTP/SSE and DOM handlers; see currentOwners, no new subscription",
+      "targetOwners": [
+        {
+          "file": "pi-package-webui/public/activity-usage-controller.mjs",
+          "symbol": "createActivityUsageController",
+          "line": 162
+        },
+        {
+          "file": "pi-package-webui/public/app.js",
+          "symbol": "openStatsOverlay",
+          "line": 30908
+        },
+        {
+          "file": "pi-package-webui/public/app.js",
+          "symbol": "renderFooter",
+          "line": 24807
+        }
+      ],
+      "targetOwner": "pi-package-webui/public/activity-usage-controller.mjs#createActivityUsageController; pi-package-webui/public/app.js#openStatsOverlay; pi-package-webui/public/app.js#renderFooter",
+      "eventSources": "Provider snapshots and owned refresh/render timers; source-labelled usage.",
+      "acceptanceScenarios": [
+        "pi-package-webui/tests/browser/activity-usage-controller.spec.mjs",
+        "pi-package-webui/tests/browser/stats-overlay.spec.mjs"
+      ],
+      "acceptanceStatus": "Scenario coverage is partial; final W7 feature-access evidence remains pending",
       "availability": "Source present; runtime, companion, trust, busy and preference checks still apply",
       "legacyActive": true,
       "controls": [
@@ -1994,8 +2416,24 @@
           "line": 19026
         }
       ],
-      "targetOwner": "Unassigned: W1+ extraction contract; legacy owner remains active",
-      "eventSources": "Existing tab-scoped HTTP/SSE and DOM handlers; see currentOwners, no new subscription",
+      "targetOwners": [
+        {
+          "file": "pi-package-webui/public/app.js",
+          "symbol": "requestManualCompaction",
+          "line": 22581
+        },
+        {
+          "file": "pi-package-webui/public/app.js",
+          "symbol": "toggleFooterAutoCompaction",
+          "line": 19026
+        }
+      ],
+      "targetOwner": "pi-package-webui/public/app.js#requestManualCompaction; pi-package-webui/public/app.js#toggleFooterAutoCompaction",
+      "eventSources": "Active-tab compact events and queued prompt state; busy gating.",
+      "acceptanceScenarios": [
+        "pi-package-webui/tests/browser/focused-shell-integration.spec.mjs"
+      ],
+      "acceptanceStatus": "Scenario coverage is partial; final W7 feature-access evidence remains pending",
       "availability": "Source present; runtime, companion, trust, busy and preference checks still apply",
       "legacyActive": true,
       "controls": [
@@ -2036,8 +2474,35 @@
           "line": 41565
         }
       ],
-      "targetOwner": "Unassigned: W1+ extraction contract; legacy owner remains active",
-      "eventSources": "Existing tab-scoped HTTP/SSE and DOM handlers; see currentOwners, no new subscription",
+      "targetOwners": [
+        {
+          "file": "pi-package-webui/public/settings-resource-controller.mjs",
+          "symbol": "createSettingsResourceController",
+          "line": 40
+        },
+        {
+          "file": "pi-package-webui/public/app.js",
+          "symbol": "openNativeToolsSelector",
+          "line": 43535
+        },
+        {
+          "file": "pi-package-webui/public/app.js",
+          "symbol": "openNativeSkillsSelector",
+          "line": 43536
+        },
+        {
+          "file": "pi-package-webui/public/app.js",
+          "symbol": "openNativeAppendSystemSelector",
+          "line": 41565
+        }
+      ],
+      "targetOwner": "pi-package-webui/public/settings-resource-controller.mjs#createSettingsResourceController; pi-package-webui/public/app.js#openNativeToolsSelector; pi-package-webui/public/app.js#openNativeSkillsSelector; pi-package-webui/public/app.js#openNativeAppendSystemSelector",
+      "eventSources": "Explicit Session/Global/Model scope and exact model identity on reads/writes.",
+      "acceptanceScenarios": [
+        "pi-package-webui/tests/browser/settings-resource-lifetime.spec.mjs",
+        "pi-package-webui/tests/browser/resource-profiles.spec.mjs"
+      ],
+      "acceptanceStatus": "Scenario coverage is partial; final W7 feature-access evidence remains pending",
       "availability": "Source present; runtime, companion, trust, busy and preference checks still apply",
       "legacyActive": true,
       "controls": [
@@ -2104,8 +2569,41 @@
           "line": 13919
         }
       ],
-      "targetOwner": "Unassigned: W1+ extraction contract; legacy owner remains active",
-      "eventSources": "Existing tab-scoped HTTP/SSE and DOM handlers; see currentOwners, no new subscription",
+      "targetOwners": [
+        {
+          "file": "pi-package-webui/public/settings-workspace.mjs",
+          "symbol": "createSettingsWorkspace",
+          "line": 41
+        },
+        {
+          "file": "pi-package-webui/public/shell-preferences.mjs",
+          "symbol": "readShellPreferences",
+          "line": 39
+        },
+        {
+          "file": "pi-package-webui/public/app.js",
+          "symbol": "openThemeCustomizer",
+          "line": 12122
+        },
+        {
+          "file": "pi-package-webui/public/app.js",
+          "symbol": "showAllControls",
+          "line": 13915
+        },
+        {
+          "file": "pi-package-webui/public/app.js",
+          "symbol": "resetControlVisibilityDefaults",
+          "line": 13919
+        }
+      ],
+      "targetOwner": "pi-package-webui/public/settings-workspace.mjs#createSettingsWorkspace; pi-package-webui/public/shell-preferences.mjs#readShellPreferences; pi-package-webui/public/app.js#openThemeCustomizer; pi-package-webui/public/app.js#showAllControls; pi-package-webui/public/app.js#resetControlVisibilityDefaults",
+      "eventSources": "Browser appearance changes and revision-fenced durable layout snapshots.",
+      "acceptanceScenarios": [
+        "pi-package-webui/tests/browser/settings-navigation-integration.spec.mjs",
+        "pi-package-webui/tests/browser/persistent-ui-layout.spec.mjs",
+        "pi-package-webui/tests/browser/control-visibility.spec.mjs"
+      ],
+      "acceptanceStatus": "Scenario coverage is partial; final W7 feature-access evidence remains pending",
       "availability": "Source present; runtime, companion, trust, busy and preference checks still apply",
       "legacyActive": true,
       "controls": [
@@ -2369,8 +2867,25 @@
           "line": 40207
         }
       ],
-      "targetOwner": "Unassigned: W1+ extraction contract; legacy owner remains active",
-      "eventSources": "Existing tab-scoped HTTP/SSE and DOM handlers; see currentOwners, no new subscription",
+      "targetOwners": [
+        {
+          "file": "pi-package-webui/public/settings-workspace.mjs",
+          "symbol": "createSettingsWorkspace",
+          "line": 41
+        },
+        {
+          "file": "pi-package-webui/public/app.js",
+          "symbol": "renderOptionalFeaturePanel",
+          "line": 40207
+        }
+      ],
+      "targetOwner": "pi-package-webui/public/settings-workspace.mjs#createSettingsWorkspace; pi-package-webui/public/app.js#renderOptionalFeaturePanel",
+      "eventSources": "Canonical package catalog plus tab capabilities and enabled/setup state.",
+      "acceptanceScenarios": [
+        "pi-package-webui/tests/browser/settings-workspace-integration.spec.mjs",
+        "pi-package-webui/tests/browser/settings-navigation-integration.spec.mjs"
+      ],
+      "acceptanceStatus": "Scenario coverage is partial; final W7 feature-access evidence remains pending",
       "availability": "Source present; runtime, companion, trust, busy and preference checks still apply",
       "legacyActive": true,
       "controls": [
@@ -2438,8 +2953,24 @@
           "line": 28183
         }
       ],
-      "targetOwner": "Unassigned: W1+ extraction contract; legacy owner remains active",
-      "eventSources": "Existing tab-scoped HTTP/SSE and DOM handlers; see currentOwners, no new subscription",
+      "targetOwners": [
+        {
+          "file": "pi-package-webui/public/app.js",
+          "symbol": "renderReleaseNpmOutputWidget",
+          "line": 28111
+        },
+        {
+          "file": "pi-package-webui/public/app.js",
+          "symbol": "renderReleaseAurOutputWidget",
+          "line": 28183
+        }
+      ],
+      "targetOwner": "pi-package-webui/public/app.js#renderReleaseNpmOutputWidget; pi-package-webui/public/app.js#renderReleaseAurOutputWidget",
+      "eventSources": "Semantic extension release widgets and job actions; external publication remains mocked.",
+      "acceptanceScenarios": [
+        "pi-package-webui/tests/browser/feature-decision-output-popup.spec.mjs"
+      ],
+      "acceptanceStatus": "Scenario coverage is partial; final W7 feature-access evidence remains pending",
       "availability": "Source present; runtime, companion, trust, busy and preference checks still apply",
       "legacyActive": true,
       "controls": [
@@ -2484,8 +3015,19 @@
           "line": 43538
         }
       ],
-      "targetOwner": "Unassigned: W1+ extraction contract; legacy owner remains active",
-      "eventSources": "Existing tab-scoped HTTP/SSE and DOM handlers; see currentOwners, no new subscription",
+      "targetOwners": [
+        {
+          "file": "pi-package-webui/public/app.js",
+          "symbol": "openNativeAuthSelector",
+          "line": 43538
+        }
+      ],
+      "targetOwner": "pi-package-webui/public/app.js#openNativeAuthSelector",
+      "eventSources": "Native auth selector and provider account responses; local administration guards.",
+      "acceptanceScenarios": [
+        "pi-package-webui/tests/browser/settings-navigation-integration.spec.mjs"
+      ],
+      "acceptanceStatus": "Scenario coverage is partial; final W7 feature-access evidence remains pending",
       "availability": "Source present; runtime, companion, trust, busy and preference checks still apply",
       "legacyActive": true,
       "controls": [
@@ -2517,8 +3059,25 @@
           "line": 11213
         }
       ],
-      "targetOwner": "Unassigned: W1+ extraction contract; legacy owner remains active",
-      "eventSources": "Existing tab-scoped HTTP/SSE and DOM handlers; see currentOwners, no new subscription",
+      "targetOwners": [
+        {
+          "file": "pi-package-webui/public/app.js",
+          "symbol": "setNaturalConversationModeEnabled",
+          "line": 10888
+        },
+        {
+          "file": "pi-package-webui/public/app.js",
+          "symbol": "toggleVoiceConversationPaused",
+          "line": 11213
+        }
+      ],
+      "targetOwner": "pi-package-webui/public/app.js#setNaturalConversationModeEnabled; pi-package-webui/public/app.js#toggleVoiceConversationPaused",
+      "eventSources": "Microphone/conversation events and companion commands; voice selection persists shared config.",
+      "acceptanceScenarios": [
+        "pi-package-webui/tests/browser/settings-workspace-integration.spec.mjs",
+        "pi-package-webui/tests/browser/focused-shell-integration.spec.mjs"
+      ],
+      "acceptanceStatus": "Scenario coverage is partial; final W7 feature-access evidence remains pending",
       "availability": "Source present; runtime, companion, trust, busy and preference checks still apply",
       "legacyActive": true,
       "controls": [
@@ -2558,8 +3117,24 @@
           "line": 31494
         }
       ],
-      "targetOwner": "Unassigned: W1+ extraction contract; legacy owner remains active",
-      "eventSources": "Existing tab-scoped HTTP/SSE and DOM handlers; see currentOwners, no new subscription",
+      "targetOwners": [
+        {
+          "file": "pi-package-webui/public/app.js",
+          "symbol": "toggleRemoteAuth",
+          "line": 44650
+        },
+        {
+          "file": "pi-package-webui/public/app.js",
+          "symbol": "openRemoteWebuiQrPopup",
+          "line": 31494
+        }
+      ],
+      "targetOwner": "pi-package-webui/public/app.js#toggleRemoteAuth; pi-package-webui/public/app.js#openRemoteWebuiQrPopup",
+      "eventSources": "Health/network/auth metadata; server admission remains authoritative.",
+      "acceptanceScenarios": [
+        "pi-package-webui/tests/browser/mobile-foundation.spec.mjs"
+      ],
+      "acceptanceStatus": "Scenario coverage is partial; final W7 feature-access evidence remains pending",
       "availability": "Source present; runtime, companion, trust, busy and preference checks still apply",
       "legacyActive": true,
       "controls": [
@@ -2624,8 +3199,25 @@
           "line": 9424
         }
       ],
-      "targetOwner": "Unassigned: W1+ extraction contract; legacy owner remains active",
-      "eventSources": "Existing tab-scoped HTTP/SSE and DOM handlers; see currentOwners, no new subscription",
+      "targetOwners": [
+        {
+          "file": "pi-package-webui/public/app.js",
+          "symbol": "refreshUpdateStatus",
+          "line": 9272
+        },
+        {
+          "file": "pi-package-webui/public/app.js",
+          "symbol": "renderComponentUpdateDialogs",
+          "line": 9424
+        }
+      ],
+      "targetOwner": "pi-package-webui/public/app.js#refreshUpdateStatus; pi-package-webui/public/app.js#renderComponentUpdateDialogs",
+      "eventSources": "Server-owned update plans/status, restart and reconnect reconciliation.",
+      "acceptanceScenarios": [
+        "pi-package-webui/tests/browser/update-reconnect.spec.mjs",
+        "pi-package-webui/tests/browser/control-deck-component-updates.spec.mjs"
+      ],
+      "acceptanceStatus": "Scenario coverage is partial; final W7 feature-access evidence remains pending",
       "availability": "Source present; runtime, companion, trust, busy and preference checks still apply",
       "legacyActive": true,
       "controls": [
@@ -2702,8 +3294,25 @@
           "line": 3805
         }
       ],
-      "targetOwner": "Unassigned: W1+ extraction contract; legacy owner remains active",
-      "eventSources": "Existing tab-scoped HTTP/SSE and DOM handlers; see currentOwners, no new subscription",
+      "targetOwners": [
+        {
+          "file": "pi-package-webui/public/activity-events-controller.mjs",
+          "symbol": "createActivityEventsController",
+          "line": 13
+        },
+        {
+          "file": "pi-package-webui/public/app.js",
+          "symbol": "renderIssueWizard",
+          "line": 3805
+        }
+      ],
+      "targetOwner": "pi-package-webui/public/activity-events-controller.mjs#createActivityEventsController; pi-package-webui/public/app.js#renderIssueWizard",
+      "eventSources": "Bounded retained event DOM, filters/unread changes and redacted issue wizard.",
+      "acceptanceScenarios": [
+        "pi-package-webui/tests/browser/events-tree-context-menu.spec.mjs",
+        "pi-package-webui/tests/browser/activity-owner-integration.spec.mjs"
+      ],
+      "acceptanceStatus": "Scenario coverage is partial; final W7 feature-access evidence remains pending",
       "availability": "Source present; runtime, companion, trust, busy and preference checks still apply",
       "legacyActive": true,
       "controls": [
@@ -2818,8 +3427,29 @@
           "line": 46813
         }
       ],
-      "targetOwner": "Unassigned: W1+ extraction contract; legacy owner remains active",
-      "eventSources": "Existing tab-scoped HTTP/SSE and DOM handlers; see currentOwners, no new subscription",
+      "targetOwners": [
+        {
+          "file": "pi-package-webui/public/session-extension-requests.mjs",
+          "symbol": "createExtensionRequestStore",
+          "line": 11
+        },
+        {
+          "file": "pi-package-webui/public/app.js",
+          "symbol": "showNextDialog",
+          "line": 47040
+        },
+        {
+          "file": "pi-package-webui/public/app.js",
+          "symbol": "sendDialogResponse",
+          "line": 46813
+        }
+      ],
+      "targetOwner": "pi-package-webui/public/session-extension-requests.mjs#createExtensionRequestStore; pi-package-webui/public/app.js#showNextDialog; pi-package-webui/public/app.js#sendDialogResponse",
+      "eventSources": "Semantic SSE request/widget replay and exact originating tab/request response.",
+      "acceptanceScenarios": [
+        "pi-package-webui/tests/browser/session-ownership.spec.mjs"
+      ],
+      "acceptanceStatus": "Scenario coverage is partial; final W7 feature-access evidence remains pending",
       "availability": "Source present; runtime, companion, trust, busy and preference checks still apply",
       "legacyActive": true,
       "controls": [
@@ -2855,8 +3485,24 @@
           "line": 35495
         }
       ],
-      "targetOwner": "Unassigned: W1+ extraction contract; legacy owner remains active",
-      "eventSources": "Existing tab-scoped HTTP/SSE and DOM handlers; see currentOwners, no new subscription",
+      "targetOwners": [
+        {
+          "file": "pi-package-webui/public/app.js",
+          "symbol": "renderQuestionnaireOptionButton",
+          "line": 27807
+        },
+        {
+          "file": "pi-package-webui/public/app.js",
+          "symbol": "renderActionFeedbackControls",
+          "line": 35495
+        }
+      ],
+      "targetOwner": "pi-package-webui/public/app.js#renderQuestionnaireOptionButton; pi-package-webui/public/app.js#renderActionFeedbackControls",
+      "eventSources": "Message/action and questionnaire request identity; Other/free-text submission.",
+      "acceptanceScenarios": [
+        "pi-package-webui/tests/browser/feature-decision-output-popup.spec.mjs"
+      ],
+      "acceptanceStatus": "Scenario coverage is partial; final W7 feature-access evidence remains pending",
       "availability": "Source present; runtime, companion, trust, busy and preference checks still apply",
       "legacyActive": true,
       "controls": [
@@ -2905,8 +3551,25 @@
           "line": 26421
         }
       ],
-      "targetOwner": "Unassigned: W1+ extraction contract; legacy owner remains active",
-      "eventSources": "Existing tab-scoped HTTP/SSE and DOM handlers; see currentOwners, no new subscription",
+      "targetOwners": [
+        {
+          "file": "pi-package-webui/public/app.js",
+          "symbol": "renderWorkflowModeControls",
+          "line": 10623
+        },
+        {
+          "file": "pi-package-webui/public/app.js",
+          "symbol": "renderSubagentGate",
+          "line": 26421
+        }
+      ],
+      "targetOwner": "pi-package-webui/public/app.js#renderWorkflowModeControls; pi-package-webui/public/app.js#renderSubagentGate",
+      "eventSources": "Tab workflow status, gate and model-exception widgets with exact run identity.",
+      "acceptanceScenarios": [
+        "pi-package-webui/tests/browser/subagent-observability.spec.mjs",
+        "pi-package-webui/tests/browser/activity-owner-integration.spec.mjs"
+      ],
+      "acceptanceStatus": "Scenario coverage is partial; final W7 feature-access evidence remains pending",
       "availability": "Source present; runtime, companion, trust, busy and preference checks still apply",
       "legacyActive": true,
       "controls": [
@@ -3002,8 +3665,35 @@
           "line": 25370
         }
       ],
-      "targetOwner": "Unassigned: W1+ extraction contract; legacy owner remains active",
-      "eventSources": "Existing tab-scoped HTTP/SSE and DOM handlers; see currentOwners, no new subscription",
+      "targetOwners": [
+        {
+          "file": "pi-package-webui/public/activity-agents-controller.mjs",
+          "symbol": "createActivityAgentsController",
+          "line": 5
+        },
+        {
+          "file": "pi-package-webui/public/app.js",
+          "symbol": "openSubagentTerminal",
+          "line": 25990
+        },
+        {
+          "file": "pi-package-webui/public/app.js",
+          "symbol": "renderSubagentTerminalView",
+          "line": 25820
+        },
+        {
+          "file": "pi-package-webui/public/app.js",
+          "symbol": "openSubagentCancelDialog",
+          "line": 25370
+        }
+      ],
+      "targetOwner": "pi-package-webui/public/activity-agents-controller.mjs#createActivityAgentsController; pi-package-webui/public/app.js#openSubagentTerminal; pi-package-webui/public/app.js#renderSubagentTerminalView; pi-package-webui/public/app.js#openSubagentCancelDialog",
+      "eventSources": "Retained run projection updates; cancellation is a separate explicit operation.",
+      "acceptanceScenarios": [
+        "pi-package-webui/tests/browser/subagent-observability.spec.mjs",
+        "pi-package-webui/tests/browser/intercom-conversation-viewer.spec.mjs"
+      ],
+      "acceptanceStatus": "Scenario coverage is partial; final W7 feature-access evidence remains pending",
       "availability": "Source present; runtime, companion, trust, busy and preference checks still apply",
       "legacyActive": true,
       "controls": [
@@ -3126,8 +3816,20 @@
           "line": 2833
         }
       ],
-      "targetOwner": "Unassigned: W1+ extraction contract; legacy owner remains active",
-      "eventSources": "Existing tab-scoped HTTP/SSE and DOM handlers; see currentOwners, no new subscription",
+      "targetOwners": [
+        {
+          "file": "pi-package-webui/public/app.js",
+          "symbol": "renderMobileInstallPage",
+          "line": 2833
+        }
+      ],
+      "targetOwner": "pi-package-webui/public/app.js#renderMobileInstallPage",
+      "eventSources": "Service-worker lifecycle, boot/retry and target-aware notification navigation.",
+      "acceptanceScenarios": [
+        "pi-package-webui/tests/browser/mobile-foundation.spec.mjs",
+        "pi-package-webui/tests/browser/update-reconnect.spec.mjs"
+      ],
+      "acceptanceStatus": "Scenario coverage is partial; final W7 feature-access evidence remains pending",
       "availability": "Source present; runtime, companion, trust, busy and preference checks still apply",
       "legacyActive": true,
       "controls": [
@@ -3182,8 +3884,19 @@
           "line": 9135
         }
       ],
-      "targetOwner": "Unassigned: W1+ extraction contract; legacy owner remains active",
-      "eventSources": "Existing tab-scoped HTTP/SSE and DOM handlers; see currentOwners, no new subscription",
+      "targetOwners": [
+        {
+          "file": "pi-package-webui/public/app.js",
+          "symbol": "openPiReleaseNotes",
+          "line": 9135
+        }
+      ],
+      "targetOwner": "pi-package-webui/public/app.js#openPiReleaseNotes",
+      "eventSources": "Global help/release-note actions; no session mutation.",
+      "acceptanceScenarios": [
+        "pi-package-webui/tests/browser/shell-tools-launcher.spec.mjs"
+      ],
+      "acceptanceStatus": "Scenario coverage is partial; final W7 feature-access evidence remains pending",
       "availability": "Source present; runtime, companion, trust, busy and preference checks still apply",
       "legacyActive": true,
       "controls": [

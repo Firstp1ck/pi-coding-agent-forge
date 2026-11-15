@@ -52,6 +52,180 @@ const CONTRACTS = [
   ["help", "global navigation", "openPiReleaseNotes", "open-issue-wizard-static", /sponsor|help|release.notes|releaseNotes|about/i],
 ];
 
+// Accepted W1-W6 owners and relevant scenarios; paths do not imply a measured pass.
+const MIGRATION = {
+  "sessions": [
+    "session-context.mjs#createSessionContext session-attention-scheduler.mjs#createAttentionScheduler",
+    "Tab mutations and bounded metadata reconciliation; source tab survives resume.",
+    "session-ownership focused-shell-integration"
+  ],
+  "session-actions": [
+    "session-context.mjs#createSessionContext",
+    "Native session command replies, captured session generation and metadata.",
+    "session-ownership session-summary"
+  ],
+  "split": [
+    "",
+    "Independent iframe/tab events; split dismissal does not close its tab.",
+    "focused-shell-integration mobile-foundation"
+  ],
+  "directories": [
+    "",
+    "CWD and worktree HTTP results; selected tab owns the destination.",
+    "windows-drive-parent project-git-tools-integration"
+  ],
+  "transcript": [
+    "transcript-renderer.mjs#createTranscriptRenderer stream-output-controller.mjs#createStreamOutputController platform-event-stream.mjs#createSessionEventStream",
+    "One active tab EventSource; transcript and derived-output render scheduling.",
+    "interaction-continuity stream-output-isolation search-match-highlighting"
+  ],
+  "presentation": [
+    "",
+    "Origin-local presentation changes; transport output mode is independent.",
+    "mobile-foundation"
+  ],
+  "composer": [
+    "session-composer-store.mjs#createSessionComposerStore session-context.mjs#createSessionContext",
+    "Tab-owned drafts/attachments, prompt acknowledgments and session-generation checks.",
+    "session-ownership optimistic-prompt interaction-continuity"
+  ],
+  "model-runtime": [
+    "",
+    "Live model catalog, session state and explicit sampling/effort commands.",
+    "model-search-focus sampling-tooltip footer-model-advanced-layout"
+  ],
+  "queues": [
+    "activity-queue-controller.mjs#createActivityQueueController",
+    "Tab queue snapshots and guarded reorder/edit/remove acknowledgments.",
+    "activity-queue-controller activity-owner-integration"
+  ],
+  "agent-work": [
+    "activity-agents-controller.mjs#createActivityAgentsController activity-todo-view.mjs#createActivityTodoView",
+    "Tab agent/todo widget snapshots; exact run and gate identity.",
+    "activity-owner-integration activity-todo-view subagent-observability"
+  ],
+  "intercom-btw": [
+    "activity-intercom-controller.mjs#createActivityIntercomController",
+    "Conversation identity, selected thread events and guarded send/cancel responses.",
+    "activity-intercom-controller intercom-conversation-viewer"
+  ],
+  "files": [
+    "project-file-viewer-controller.mjs#createProjectFileViewerController",
+    "File tree HTTP/watch refresh and buffer-owned async content/save results.",
+    "project-file-buffer-integration file-tree-git-ignored"
+  ],
+  "annotations": [
+    "project-file-viewer-controller.mjs#createProjectFileViewerController",
+    "Canonical selection and originating file/attachment identity at send.",
+    "project-file-buffer-integration project-artifact-integration"
+  ],
+  "artifacts": [
+    "project-artifact-controller.mjs#createProjectArtifactController",
+    "Artifact revision/page loading; original message identity and canonical dialog.",
+    "project-artifact-controller project-artifact-integration"
+  ],
+  "git": [
+    "",
+    "Repository watcher snapshots, guarded workflow command and review payloads.",
+    "guided-git-extension-command guided-git-fallback"
+  ],
+  "git-tools": [
+    "project-git-tools-controller.mjs#createProjectGitToolsController",
+    "Repository-section HTTP reads/mutations bound to captured tab/cwd.",
+    "project-git-tools-integration"
+  ],
+  "runners": [
+    "project-runners-controller.mjs#createProjectRunnersController",
+    "Tab-owned process/SSE output; stdin acknowledgment bound to run identity.",
+    "focused-project-activity"
+  ],
+  "usage": [
+    "activity-usage-controller.mjs#createActivityUsageController",
+    "Provider snapshots and owned refresh/render timers; source-labelled usage.",
+    "activity-usage-controller stats-overlay"
+  ],
+  "compaction": [
+    "",
+    "Active-tab compact events and queued prompt state; busy gating.",
+    "focused-shell-integration"
+  ],
+  "resources": [
+    "settings-resource-controller.mjs#createSettingsResourceController",
+    "Explicit Session/Global/Model scope and exact model identity on reads/writes.",
+    "settings-resource-lifetime resource-profiles"
+  ],
+  "appearance": [
+    "settings-workspace.mjs#createSettingsWorkspace shell-preferences.mjs#readShellPreferences",
+    "Browser appearance changes and revision-fenced durable layout snapshots.",
+    "settings-navigation-integration persistent-ui-layout control-visibility"
+  ],
+  "companions": [
+    "settings-workspace.mjs#createSettingsWorkspace",
+    "Canonical package catalog plus tab capabilities and enabled/setup state.",
+    "settings-workspace-integration settings-navigation-integration"
+  ],
+  "releases": [
+    "",
+    "Semantic extension release widgets and job actions; external publication remains mocked.",
+    "feature-decision-output-popup"
+  ],
+  "accounts": [
+    "",
+    "Native auth selector and provider account responses; local administration guards.",
+    "settings-navigation-integration"
+  ],
+  "voice": [
+    "",
+    "Microphone/conversation events and companion commands; voice selection persists shared config.",
+    "settings-workspace-integration focused-shell-integration"
+  ],
+  "connection": [
+    "",
+    "Health/network/auth metadata; server admission remains authoritative.",
+    "mobile-foundation"
+  ],
+  "system": [
+    "",
+    "Server-owned update plans/status, restart and reconnect reconciliation.",
+    "update-reconnect control-deck-component-updates"
+  ],
+  "diagnostics": [
+    "activity-events-controller.mjs#createActivityEventsController",
+    "Bounded retained event DOM, filters/unread changes and redacted issue wizard.",
+    "events-tree-context-menu activity-owner-integration"
+  ],
+  "extensions": [
+    "session-extension-requests.mjs#createExtensionRequestStore",
+    "Semantic SSE request/widget replay and exact originating tab/request response.",
+    "session-ownership"
+  ],
+  "responses": [
+    "",
+    "Message/action and questionnaire request identity; Other/free-text submission.",
+    "feature-decision-output-popup"
+  ],
+  "workflow": [
+    "",
+    "Tab workflow status, gate and model-exception widgets with exact run identity.",
+    "subagent-observability activity-owner-integration"
+  ],
+  "projections": [
+    "activity-agents-controller.mjs#createActivityAgentsController",
+    "Retained run projection updates; cancellation is a separate explicit operation.",
+    "subagent-observability intercom-conversation-viewer"
+  ],
+  "recovery": [
+    "",
+    "Service-worker lifecycle, boot/retry and target-aware notification navigation.",
+    "mobile-foundation update-reconnect"
+  ],
+  "help": [
+    "",
+    "Global help/release-note actions; no session mutation.",
+    "shell-tools-launcher"
+  ]
+};
+
 const PLAN_ANCHORS = {
   "sessions": "New, close, resume and switch sessions",
   "session-actions": "New session within a tab",
@@ -312,7 +486,14 @@ export async function buildInventory(root = DEFAULT_ROOT) {
     const owners = symbols.split(" ").map((symbol) => requireBrowserSymbol(sources, symbol));
     const tests = testNames.split(" ").map((name) => `${PACKAGE}/tests/${name}.test.mjs`);
     for (const test of tests) await lstat(path.join(root, test));
-    families.push({ id, capability: rows[index][1], destination: rows[index][2], preservation: rows[index][3], scope, currentOwners: owners, targetOwner: "Unassigned: W1+ extraction contract; legacy owner remains active", eventSources: "Existing tab-scoped HTTP/SSE and DOM handlers; see currentOwners, no new subscription", availability: "Source present; runtime, companion, trust, busy and preference checks still apply", legacyActive: true, controls: controls.filter((item) => item.family === id).map((item) => item.id), persistedKeys: persistence.filter((item) => item.family === id).map((item) => item.id), startingTests: tests });
+    const migration = MIGRATION[id];
+    if (!migration) throw new Error(`Missing migration contract for ${id}`);
+    const extractedOwners = migration[0].split(" ").filter(Boolean).map((reference) => requireBrowserSymbol(sources, reference));
+    const targetOwners = [...extractedOwners, ...owners].filter((owner, index, all) =>
+      all.findIndex((item) => item.file === owner.file && item.symbol === owner.symbol) === index);
+    const acceptanceScenarios = migration[2].split(" ").map((name) => `${PACKAGE}/tests/browser/${name}.spec.mjs`);
+    for (const scenario of acceptanceScenarios) await lstat(path.join(root, scenario));
+    families.push({ id, capability: rows[index][1], destination: rows[index][2], preservation: rows[index][3], scope, currentOwners: owners, targetOwners, targetOwner: targetOwners.map((owner) => `${owner.file}#${owner.symbol}`).join("; "), eventSources: migration[1], acceptanceScenarios, acceptanceStatus: "Scenario coverage is partial; final W7 feature-access evidence remains pending", availability: "Source present; runtime, companion, trust, busy and preference checks still apply", legacyActive: true, controls: controls.filter((item) => item.family === id).map((item) => item.id), persistedKeys: persistence.filter((item) => item.family === id).map((item) => item.id), startingTests: tests });
   }
   const catalogFile = `${PACKAGE}/lib/optional-feature-catalog.mjs`;
   const catalog = sources.get(catalogFile);
@@ -350,7 +531,7 @@ export async function buildInventory(root = DEFAULT_ROOT) {
   const categories = ["family", "shared-chrome", "non-action", "dynamic-template", "unresolved"];
   return {
     schemaVersion: 1,
-    purpose: "W0 static migration evidence, not an executable action registry or proof of runtime parity",
+    purpose: "Static capability inventory and accepted ownership mapping; not an executable action registry or proof of runtime parity",
     reference: { productionBaseline: "06351edae0d87829dfa8c747d31a061825568b0e", integrationSeed: "cff3432ee63131ebb6150a906d9c06594ca2c401", provenance: "Reference revisions supplied by integration owner; scanned content is identified by source hashes below" },
     method: { bounds: { maxFiles: MAX_FILES, maxFileBytes: MAX_FILE_BYTES, maxTotalBytes: MAX_TOTAL_BYTES }, sourceScope: "Recursive regular source files in public/lib/bin, three package entry sources, native parity JSON and canonical plan; no dependencies, tests, app execution or settings reads", limits: ["Quoted HTML attributes and literal markup candidates only; JS-created controls are represented by source functions/dynamic families, not complete DOM instances.", "JavaScript scanning is lexical, not an AST or call graph. Nearest preceding named function is a locator only; anonymous callbacks inherit that locator.", "Source IDs and symbol/data anchors identify records; line numbers are navigation hints. Anonymous tag hashes can change when markup changes; duplicate instances use occurrence suffixes.", "Browser key declarations and access expressions are enumerated. Dynamic keys remain expressions. Server settings contracts are linked in capability-ledger.md; schema references do not prove writes or runtime availability.", "Family matching is a deterministic lexical annotation. Unresolved entries require human reconciliation; zero unresolved would not establish runtime parity."] },
     sources: [...sources].map(([file, text]) => ({ file, bytes: Buffer.byteLength(text), sha256: digest(text) })),

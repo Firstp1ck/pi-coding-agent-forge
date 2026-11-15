@@ -15,7 +15,7 @@ const evidencePath = path.join(root, "pi-package-webui/docs/overhaul/capability-
 async function withSourceFixture(run) {
   const fixture = await mkdtemp(path.join(tmpdir(), "webui-overhaul-inventory-"));
   try {
-    const paths = new Set([...inventory.sources.map((item) => item.file), ...inventory.families.flatMap((item) => item.startingTests)]);
+    const paths = new Set([...inventory.sources.map((item) => item.file), ...inventory.families.flatMap((item) => [...item.startingTests, ...item.acceptanceScenarios])]);
     for (const file of paths) {
       await mkdir(path.dirname(path.join(fixture, file)), { recursive: true });
       await copyFile(path.join(root, file), path.join(fixture, file));
@@ -42,6 +42,11 @@ test("baseline evidence reconciles controls and all canonical families without r
   for (const family of inventory.families) {
     assert.ok(family.currentOwners.length && family.startingTests.length && family.destination && family.scope, family.id);
     assert.equal(family.legacyActive, true);
+    assert.ok(family.targetOwners.length && family.acceptanceScenarios.length, family.id);
+    assert.ok(!family.targetOwner.includes("Unassigned"), family.id);
+    assert.match(family.acceptanceStatus, /partial/);
+    for (const owner of family.targetOwners) assert.ok(inventory.sources.some((source) => source.file === owner.file));
+
     assert.match(family.availability, /runtime/);
     for (const id of family.controls) assert.equal(inventory.controls.find((item) => item.id === id).family, family.id);
   }
