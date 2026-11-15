@@ -68,7 +68,13 @@ Heap uses CDP `HeapProfiler.collectGarbage` and `Runtime.getHeapUsage`, before a
 
 The raw JSON preserves full numeric precision. Missing/invalid raw samples, inconsistent summary statistics, incomplete stream/heap runs and page errors cannot inherit a numeric pass. Performance requires matching platform, kernel release, architecture, CPU model/count, Node and Chromium versions. A mismatch records the raw measurements and limits but classifies performance as missing evidence. Density can still be compared when machine speed differs, provided fixture identities match. Missing or incompatible evidence is distinct from a measured budget failure.
 
-## Observed run
+## Parent integrated result
+
+At `af88d9c`, the complete matching-runtime run passed **16/16 cases**, exit 0. Artifacts: `test-results/overhaul-w7/run-2026-11-15T03-49-01-627Z-3064119/`; log: `/tmp/webui-w7-final-measurements.log`. All 33 view/state captures and seven samples per repeated metric are complete. Machine and fixture identities match; frozen references and thresholds are unchanged.
+
+Desktop secondary controls are 18 idle and 20 streaming (37.9% and 35.5% reductions), with zero duplicate summaries. Mobile/tablet counts do not increase. Cold/warm useful-render p95 are 352.8/224.4ms, input 28.6ms, tab switching 64.1ms, stream gap 500.1ms, and retained heap 10,044,144 bytes. All six budgets pass and no final output is lost. This supersedes the historical failed run below; it does not alone accept W7.
+
+## Historical worker run
 
 Final full run: `test-results/overhaul-w7/run-2026-11-15T02-36-51-312Z-1665299/`, using the complete browser command above. Exit **1**: 14 tests passed and the final frozen-gate test failed. All 33 view/state records and screenshots, seven samples per repeated metric, seven stream runs/28 gaps and seven heap runs were retained. Browser page errors: zero. Final outputs: seven exact matches, zero losses.
 
