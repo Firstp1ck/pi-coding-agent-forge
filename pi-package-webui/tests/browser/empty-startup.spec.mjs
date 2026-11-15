@@ -173,22 +173,19 @@ test("navigation and another session draft cannot redirect the pending first pro
   await page.locator("#promptInput").fill("Captured before navigation");
   await page.locator("#sendButton").click();
   const first = await hold.created;
-  const nextCreated = page.waitForResponse(response => new URL(response.url()).pathname === "/api/tabs" && response.request().method() === "POST");
   await page.locator(".focused-brand").click();
-  const second = (await (await nextCreated).json()).data.tab;
-  expect(second.id).not.toBe(first.id);
   await expect(page.locator("#promptInput")).toHaveValue("");
-  await page.locator("#promptInput").fill("Other session draft");
+  await page.locator("#promptInput").fill("Other browser draft");
   hold.release();
   const [command] = await expectPrompt(emptyStartup, "Captured before navigation");
   expect(command.cwd).toBe(first.cwd);
-  await expect(page.locator("#promptInput")).toHaveValue("Other session draft");
-  await expect(page.locator(`#tabBar [data-tab-id="${second.id}"] .terminal-tab-button`)).toHaveAttribute("aria-selected", "true");
+  await expect(page.locator("#promptInput")).toHaveValue("Other browser draft");
+  await expect(page.locator('#tabBar [data-tab-id] [aria-selected="true"]')).toHaveCount(0);
   expect(requests.filter(item => item.path === "/api/prompt").map(item => item.tab)).toEqual([first.id]);
-  expect((await emptyStartup.api("/api/tabs")).tabs.map(tab => tab.id).sort()).toEqual([first.id, second.id].sort());
+  expect((await emptyStartup.api("/api/tabs")).tabs.map(tab => tab.id)).toEqual([first.id]);
   await page.locator(`#tabBar [data-tab-id="${first.id}"] .terminal-tab-button`).click();
-  await page.locator(`#tabBar [data-tab-id="${second.id}"] .terminal-tab-button`).click();
-  await expect(page.locator("#promptInput")).toHaveValue("Other session draft");
+  await page.getByRole("tab", { name: "Draft: Other browser draft", exact: true }).click();
+  await expect(page.locator("#promptInput")).toHaveValue("Other browser draft");
 });
 
 test("first native selector opens normally when its new session stays selected", async ({ page, emptyStartup }) => {
@@ -211,12 +208,9 @@ for (const destination of ["another session", "settings"]) test(`first native se
   await page.locator("#promptInput").fill("/name");
   await page.locator("#sendButton").click();
   const first = await hold.created;
-  let second;
   if (destination === "another session") {
-    const created = page.waitForResponse(response => new URL(response.url()).pathname === "/api/tabs" && response.request().method() === "POST");
     await page.locator(".focused-brand").click();
-    second = (await (await created).json()).data.tab;
-    await page.locator("#promptInput").fill("Other session draft");
+    await page.locator("#promptInput").fill("Other browser draft");
   } else {
     await page.getByRole("navigation", { name: "Workspace destinations" }).getByRole("button", { name: "Settings", exact: true }).click();
   }
@@ -224,9 +218,9 @@ for (const destination of ["another session", "settings"]) test(`first native se
   await expect(page.getByText(/Its command is saved in that conversation's draft\./).first()).toBeAttached();
   await expect(page.locator("#nativeCommandDialog")).not.toBeVisible();
   expect(requests.filter(item => item.path === "/api/prompt")).toHaveLength(0);
-  if (second) {
-    await expect(page.locator("#promptInput")).toHaveValue("Other session draft");
-    await expect(page.locator(`#tabBar [data-tab-id="${second.id}"] .terminal-tab-button`)).toHaveAttribute("aria-selected", "true");
+  if (destination === "another session") {
+    await expect(page.locator("#promptInput")).toHaveValue("Other browser draft");
+    await expect(page.locator('#tabBar [data-tab-id] [aria-selected="true"]')).toHaveCount(0);
   } else {
     await expect(page).toHaveURL(/view=settings/);
     await page.getByRole("button", { name: "Back to conversation", exact: true }).click();

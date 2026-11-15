@@ -1,6 +1,7 @@
 import { groupModelCatalog, modelReleaseDate } from "./model-catalog-order.mjs";
 import { createSessionShelfState } from "./session-shelf-state.mjs";
 import { createSessionShelves } from "./session-shelves.mjs";
+import { createDraftConversations } from "./draft-conversations.mjs";
 import { createFocusedComposerDisclosure } from "./focused-composer-disclosure.mjs";
 import { composerSubmissionPresentation } from "./focused-composer-controls.mjs";
 import { createSettingsResourceController } from "./settings-resource-controller.mjs";
@@ -12640,6 +12641,7 @@ function reconcileUnknownTranscriptEvidenceAtBarrier(event) {
 
 function setActiveTabId(tabId, { remember = false } = {}) {
   const nextTabId = tabId || null;
+  if (nextTabId && draftConversations.activeId) draftConversations.select(null);
   const tabChanged = nextTabId !== activeTabId;
   if (tabChanged) {
     closeFeatureDecisionDialog({ restoreFocus: false });
@@ -16294,19 +16296,49 @@ function updateDocumentTitle() {
   document.title = tab ? `Pi Web UI · ${tab.title}` : "Pi Web UI";
 }
 
-let emptyStartDraft = "";
-let emptyStartDraftRevision = 0;
+const draftConversations = createDraftConversations();
+const draftSubmissions = new Set();
+let draftNavigationRevision = 0;
+let reportedDraftStorageError = "";
+
+function reportDraftStorageError() {
+  const message = draftConversations.error;
+  if (message && message !== reportedDraftStorageError) {
+    addEvent(message, "error");
+  }
+  let status = document.getElementById("draftStorageStatus");
+  if (!status && message) {
+    status = make("p", "draft-storage-status");
+    status.id = "draftStorageStatus";
+    status.setAttribute("role", "status");
+    elements.composer.append(status);
+  }
+  if (status) {
+    status.textContent = message;
+    status.hidden = !message;
+  }
+  reportedDraftStorageError = message;
+}
+
+function saveClientDraft({ leaving = false } = {}) {
+  const id = draftConversations.activeId;
+  if (activeTabId || !id) return;
+  draftConversations.edit(id, elements.promptInput.value || "");
+  if (leaving && !elements.promptInput.value.trim() && !draftSubmissions.has(id)) draftConversations.remove(id);
+  else draftConversations.save(id);
+  reportDraftStorageError();
+}
 
 function saveActiveDraft() {
   if (activeTabId) composerStore.setDraft(activeTabId, elements.promptInput.value || "");
-  else emptyStartDraft = elements.promptInput.value || "";
+  else saveClientDraft({ leaving: true });
   persistMobileContinuityState();
   persistDesktopDrafts();
 }
 
 function restoreActiveDraft() {
   resetPromptHistoryNavigation();
-  elements.promptInput.value = activeTabId ? composerStore.getDraft(activeTabId) || "" : emptyStartDraft;
+  elements.promptInput.value = activeTabId ? composerStore.getDraft(activeTabId) || "" : draftConversations.get(draftConversations.activeId)?.text || "";
   resizePromptInput();
   renderCommandSuggestions();
   renderAttachmentTray();
@@ -17872,6 +17904,36 @@ function createTerminalTabSettlementButton(tab) {
   return button;
 }
 
+function renderClientDraft(draft) {
+  const selected = !activeTabId && draftConversations.activeId === draft.id;
+  const row = make("div", `terminal-tab terminal-tab-draft${selected ? " active" : ""}`);
+  row.dataset.draftId = draft.id;
+  const title = draft.text.trim().split(/\r?\n/)[0].slice(0, 60) || "Untitled draft";
+  const button = make("button", "terminal-tab-button");
+  button.type = "button";
+  button.setAttribute("role", "tab");
+  button.setAttribute("aria-selected", String(selected));
+  button.setAttribute("aria-label", `Draft: ${title}`);
+  button.append(make("span", "terminal-tab-title", title), make("span", "terminal-tab-meta", "Draft · browser only"));
+  button.addEventListener("click", () => openClientDraft(draft.id));
+  const close = make("button", "terminal-tab-close", "×");
+  close.type = "button";
+  close.setAttribute("aria-label", `Close draft: ${title}`);
+  close.addEventListener("click", () => {
+    const isSelected = !activeTabId && draftConversations.activeId === draft.id;
+    draftConversations.remove(draft.id);
+    if (isSelected) {
+      elements.promptInput.value = "";
+      void openClientDraft();
+    } else {
+      reportDraftStorageError();
+      renderTabs();
+    }
+  });
+  row.append(button, close);
+  return row;
+}
+
 function renderSessionShelves(groups, subagentGroups, projection) {
   if (!sessionShelves) sessionShelves = createSessionShelves({ document, onToggle(section, expanded) {
     const result = sessionShelfState.setExpanded(section, expanded);
@@ -17886,6 +17948,11 @@ function renderSessionShelves(groups, subagentGroups, projection) {
     const ids = new Set(projection[section].map(record => record.id));
     slot.replaceChildren();
     counts[section] = ids.size;
+    if (section === "inbox") {
+      const drafts = draftConversations.list();
+      counts[section] += drafts.length;
+      slot.append(...drafts.map(renderClientDraft));
+    }
     for (const group of groups) {
       const members = group.tabs.filter(tab => ids.has(tab.id));
       if (!members.length) continue;
@@ -17914,6 +17981,8 @@ function renderSessionShelves(groups, subagentGroups, projection) {
 
 function terminalTabControlKey(node) {
   if (node?.dataset?.sessionShelfToggle) return `session-shelf:${node.dataset.sessionShelfToggle}`;
+  const draftId = node?.closest?.("[data-draft-id]")?.dataset?.draftId;
+  if (draftId) return `client-${draftId}:${node.classList.contains("terminal-tab-close") ? "close" : "switch"}`;
   const viewId = node?.closest?.("[data-subagent-view-id]")?.dataset?.subagentViewId;
   if (viewId) return `subagent-view:${viewId}:${node.classList.contains("terminal-tab-close") ? "close" : "switch"}`;
   if (node?.id && elements.newTabMenu?.contains(node)) return `terminal-new-tab:${node.id}`;
@@ -17937,7 +18006,7 @@ function terminalTabControlKey(node) {
 function renderTabs() {
   scheduleFocusedShellRender();
   if (deferUiRenderDuringPointerActivation("tabs", renderTabs)) return;
-  const continuityContextKey = `${activeTabId || ""}:${activeTabGeneration}:${activeSubagentTerminalId || ""}`;
+  const continuityContextKey = `${activeTabId || draftConversations.activeId || ""}:${activeTabGeneration}:${activeSubagentTerminalId || ""}`;
   const focusSnapshot = captureScopedControlContinuity(elements.tabBar, continuityContextKey, terminalTabControlKey);
   const tooltipSnapshot = captureTooltipContinuity(elements.tabBar);
   const activeSubagent = activeSubagentTerminalView();
@@ -17982,6 +18051,7 @@ function renderTabs() {
       if (group.views.length > 1) elements.tabBar.append(renderSubagentTerminalTabGroup(group));
       else elements.tabBar.append(renderSubagentTerminalTab(group.views[0]));
     }
+    elements.tabBar.append(...draftConversations.list().map(renderClientDraft));
     elements.tabBar.append(elements.newTabMenu);
   }
   if (openTerminalTabGroupKey && !renderedGroupKeys.has(openTerminalTabGroupKey)) openTerminalTabGroupKey = null;
@@ -18130,7 +18200,7 @@ async function refreshTabs({ selectStored = false, signal } = {}) {
   }
   const requested = selectStored ? requestedTabIdFromUrl() : null;
   const stored = selectStored ? restoreStoredTabId() : null;
-  if (!activeTabId || !tabs.some((tab) => tab.id === activeTabId)) {
+  if ((!activeTabId && !draftConversations.activeId) || (activeTabId && !tabs.some((tab) => tab.id === activeTabId)) || (selectStored && requested && tabs.some(tab => tab.id === requested))) {
     setActiveTabId((requested && tabs.some((tab) => tab.id === requested) ? requested : stored && tabs.some((tab) => tab.id === stored) ? stored : tabs[0]?.id) || null, { remember: true });
   }
   rememberServerStartCwd(tabs.find((tab) => tab.id === activeTabId)?.cwd || tabs[0]?.cwd);
@@ -18170,6 +18240,7 @@ async function switchTab(tabId) {
   footerBranchPickerRequestSerial += 1;
   if (tabId === splitTabId) closeTerminalSplitView();
   saveActiveDraft();
+  draftNavigationRevision += 1;
   cacheMessagesForTab(activeTabId);
   cacheWidgetsForTab(activeTabId);
   cacheActiveFileViewerForTab(activeTabId);
@@ -18300,20 +18371,45 @@ async function splitTerminalTab(tabId, { triggerButton = null } = {}) {
   }
 }
 
-let noProjectCreationPending = false;
-
-async function openNoProjectConversation({ triggerButton = document.querySelector(".focused-brand") } = {}) {
-  if (noProjectCreationPending) return;
-  noProjectCreationPending = true;
-  try {
-    const tab = await createTerminalTab(undefined, { triggerButton, workspaceKind: "no-project" });
-    if (tab?.id === activeTabId) {
-      navigateFocusedShell("conversation", null);
-      focusPromptInput({ defer: true });
-    }
-  } finally {
-    noProjectCreationPending = false;
+async function openClientDraft(id = null) {
+  if (id && !draftConversations.get(id)) return;
+  if (id && !activeTabId && draftConversations.activeId === id) {
+    navigateFocusedShell("conversation", null);
+    focusPromptInput({ defer: true });
+    return;
   }
+  if (themeCustomizerState?.saving) {
+    setThemeCustomizerStatus("Wait for the theme save to finish before switching conversations.", "warn");
+    return;
+  }
+  if (activeSubagentTerminalId) deactivateSubagentTerminalView({ render: false });
+  if (themeCustomizerState) closeThemeCustomizer({ restore: true });
+  saveActiveDraft();
+  cacheMessagesForTab(activeTabId);
+  cacheWidgetsForTab(activeTabId);
+  cacheActiveFileViewerForTab(activeTabId);
+  if (activeTabId && currentState) tabStateCache.set(activeTabId, currentState);
+  if (activeTabId && latestStats) tabStatsCache.set(activeTabId, latestStats);
+  if (activeTabId && latestWorkspace) tabWorkspaceCache.set(activeTabId, latestWorkspace);
+  clearOpenTerminalTabGroup(null, { force: true });
+  setFollowUpQueueOpen(false);
+  setMobileTabsExpanded(false);
+  setNewTabMenuOpen(false);
+  closeTerminalSplitView();
+  if (voiceConversation) stopVoiceConversationLoop();
+  draftNavigationRevision += 1;
+  draftConversations.select(id || draftConversations.create());
+  setActiveTabId(null);
+  resetActiveTabUi();
+  renderTabs();
+  restoreActiveDraft();
+  navigateFocusedShell("conversation", null);
+  reportDraftStorageError();
+  focusPromptInput({ defer: true });
+}
+
+async function openNoProjectConversation() {
+  await openClientDraft();
 }
 
 async function createTerminalTab(cwd, { triggerButton = elements.newTabButton, customGroupId = null, workspaceKind = cwd === undefined && activeTab()?.workspaceKind === "no-project" ? "no-project" : "project", activate = true } = {}) {
@@ -18510,9 +18606,11 @@ async function initializeTabs() {
   syncTerminalCustomGroupsWithTabs(tabs, { persist: false });
   restoreMobileContinuityState();
   restoreDesktopDrafts();
+  if (!activeTabId && !draftConversations.activeId) draftConversations.select(draftConversations.create());
   resetActiveTabUi({ preserveFileTree: isCurrentProjectTarget(previousProject) });
   renderTabs();
   restoreActiveDraft();
+  reportDraftStorageError();
   if (!loadedTabs.length) {
     refreshSavedWorkspaces().catch((error) => {
       addEvent(`Could not list saved workspaces: ${error.message || String(error)}`, "error");
@@ -47328,54 +47426,82 @@ function discardMobileFailedSend() {
   recordMobileDiagnostic("failed send discarded");
 }
 
-let emptyStartSubmissionPending = false;
-
 async function sendEmptyStartPrompt(inputMessage) {
+  const sourceDraftId = draftConversations.activeId || draftConversations.create();
+  if (draftSubmissions.has(sourceDraftId)) return;
+  draftConversations.edit(sourceDraftId, inputMessage);
+  const sourceDraftRevision = draftConversations.get(sourceDraftId).revision;
   const sourceContext = activeTabContext();
   const sourceNavigation = focusedShellState;
-  const sourceDraftRevision = emptyStartDraftRevision;
-  emptyStartSubmissionPending = true;
-  saveActiveDraft();
+  const sourceDraftNavigation = draftNavigationRevision;
+  draftSubmissions.add(sourceDraftId);
+  saveClientDraft();
   try {
     // Creation must not switch away from a destination chosen while it was pending.
     const tab = await createTerminalTab(undefined, { workspaceKind: "no-project", triggerButton: null, activate: false });
     if (!tab?.id) return;
-    if (isCurrentTabContext(sourceContext) && focusedShellState === sourceNavigation) {
-      const draft = elements.promptInput.value;
-      const unchanged = draft === inputMessage && emptyStartDraftRevision === sourceDraftRevision;
-      composerStore.setDraft(tab.id, unchanged ? "" : draft);
-      await switchTab(tab.id);
+    const selected = !activeTabId && draftConversations.activeId === sourceDraftId;
+    if (selected) draftConversations.edit(sourceDraftId, elements.promptInput.value);
+    const draft = draftConversations.get(sourceDraftId);
+    const unchanged = draft?.text === inputMessage && draft.revision === sourceDraftRevision;
+    composerStore.setDraft(tab.id, draft && !unchanged ? draft.text : "");
+    // Retire only the submitted client identity. Other blank conversations and
+    // edits remain independent even when two creation responses cross.
+    draftConversations.remove(sourceDraftId);
+    if (selected) {
+      elements.promptInput.value = "";
+      if (!isCurrentTabContext(sourceContext) || focusedShellState !== sourceNavigation || draftNavigationRevision !== sourceDraftNavigation) {
+        draftConversations.select(draftConversations.create());
+      }
     }
+    if (selected && isCurrentTabContext(sourceContext) && focusedShellState === sourceNavigation && draftNavigationRevision === sourceDraftNavigation) {
+      await switchTab(tab.id);
+    } else {
+      renderTabs();
+      if (selected) restoreActiveDraft();
+    }
+    persistDesktopDrafts();
+    reportDraftStorageError();
     const tabContext = activeTabContext(tab.id);
+    const retainSubmittedText = () => {
+      const newer = isCurrentTabContext(tabContext) ? elements.promptInput.value : composerStore.getDraft(tab.id);
+      const recovered = newer && newer !== inputMessage && !newer.startsWith(`${inputMessage}\n\n`)
+        ? `${inputMessage}\n\n${newer}` : newer || inputMessage;
+      composerStore.setDraft(tab.id, recovered);
+      if (isCurrentTabContext(tabContext)) restoreActiveDraft();
+      persistDesktopDrafts();
+    };
     const opensSelector = NATIVE_SELECTOR_COMMANDS.has(slashCommandName(inputMessage))
       || /^\/summary\s+refresh$/i.test(inputMessage.trim());
     // Native selectors operate on the visible session. Keep a background
     // command in its own draft instead of opening it for another session.
     if (opensSelector && (!isCurrentTabContext(tabContext) || focusedShellState !== sourceNavigation)) {
-      restorePromptInputAfterRoutingError(inputMessage, { usesPromptInput: true, targetTabId: tab.id, tabContext });
+      retainSubmittedText();
       addEvent(`Select ${tab.title || "the new conversation"} to finish ${inputMessage.trim()}. Its command is saved in that conversation's draft.`, "info");
       return;
     }
     try {
-      await sendPrompt("prompt", inputMessage, { targetTabId: tab.id, throwOnError: true });
-      if (emptyStartDraft === inputMessage && emptyStartDraftRevision === sourceDraftRevision) emptyStartDraft = "";
+      await sendPrompt("prompt", inputMessage, { targetTabId: tab.id, throwOnError: true, preserveWhitespace: true });
     } catch (error) {
-      restorePromptInputAfterRoutingError(inputMessage, { usesPromptInput: true, targetTabId: tab.id, tabContext });
+      // A newer edit must not hide the failed submitted text. Keep both in
+      // the real session's composer so retry never allocates another terminal.
+      retainSubmittedText();
       if (!isCurrentTabContext(tabContext)) addEvent(error.message || String(error), "error");
     }
   } finally {
-    emptyStartSubmissionPending = false;
+    draftSubmissions.delete(sourceDraftId);
+    persistDesktopDrafts();
   }
 }
 
-async function sendPrompt(kind = "prompt", explicitMessage, { targetTabId = activeTabId, throwOnError = false, streamingBehavior } = {}) {
+async function sendPrompt(kind = "prompt", explicitMessage, { targetTabId = activeTabId, throwOnError = false, streamingBehavior, preserveWhitespace = false } = {}) {
   const usesPromptInput = explicitMessage === undefined;
-  if (usesPromptInput && emptyStartSubmissionPending) return;
+  if (usesPromptInput && !activeTabId && draftSubmissions.has(draftConversations.activeId)) return;
   const rawMessage = usesPromptInput ? elements.promptInput.value : explicitMessage;
   const inputMessage = String(rawMessage || "");
   const originalMessage = inputMessage.trim();
   if (!targetTabId) {
-    if (usesPromptInput && kind === "prompt" && originalMessage && tabs.length === 0) await sendEmptyStartPrompt(inputMessage);
+    if (usesPromptInput && kind === "prompt" && originalMessage) await sendEmptyStartPrompt(inputMessage);
     return;
   }
   if (voiceConversationActiveFor(targetTabId)) voiceConversation.handleUserActivity();
@@ -47432,12 +47558,12 @@ async function sendPrompt(kind = "prompt", explicitMessage, { targetTabId = acti
     }
   }
 
-  let message = originalMessage;
+  let message = preserveWhitespace && !originalMessage.startsWith("/") ? inputMessage : originalMessage;
   let dispatchedRequest = null;
   try {
     const prepared = attachments.length ? await prepareAttachmentsForPrompt(attachments, targetTabId) : { images: [], uploadedFiles: [], inlineImageIds: new Set() };
     if (!sessionContext.isLifetimeCurrent(lifetime)) return;
-    message = composeMessageWithAttachments(originalMessage, prepared.uploadedFiles, prepared.inlineImageIds);
+    message = composeMessageWithAttachments(message, prepared.uploadedFiles, prepared.inlineImageIds);
     // Dispatch against the captured target tab, never the tab that happened
     // to become active while attachments/requests were resolving.
     if (kind === "prompt" && attachments.length === 0) message = resolveRpcSlashCommandMessage(message, { tabId: targetTabId });
@@ -50662,8 +50788,9 @@ elements.fileViewerCloseButton?.addEventListener("click", async () => {
   closeFileViewer();
 });
 // Reload/close with unsaved file edits or a non-empty composer asks first (browser-native prompt).
-window.addEventListener("pagehide", () => persistDesktopDrafts());
+window.addEventListener("pagehide", () => { saveClientDraft(); persistDesktopDrafts(); });
 window.addEventListener("beforeunload", (event) => {
+  saveClientDraft();
   persistDesktopDrafts();
   // Text drafts are persisted above; only unsaved file edits and file attachments would be lost.
   const attachmentsPending = activeTabId ? attachmentsForTab(activeTabId).some((attachment) => attachment?.file) : false;
@@ -50868,7 +50995,10 @@ elements.promptInput.addEventListener("keydown", (event) => {
 });
 
 elements.promptInput.addEventListener("input", () => {
-  if (!activeTabId) emptyStartDraftRevision += 1;
+  if (!activeTabId && draftConversations.activeId) {
+    draftConversations.edit(draftConversations.activeId, elements.promptInput.value);
+    reportDraftStorageError();
+  }
   resetPromptHistoryNavigation();
   // Typed text always stays editable in the composer; only large pastes become attachments
   // (handleAttachmentPaste). Ripping a prompt out mid-typing was surprising and lossy.
