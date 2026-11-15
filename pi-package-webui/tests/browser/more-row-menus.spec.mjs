@@ -220,3 +220,39 @@ for (const [name, triggerId, panelId] of [['Publish', '#publishButton', '#publis
     if (name === 'runner') await expect(page.locator('#appRunnerInfoButton')).toBeVisible();
   });
 }
+
+for (const nextAction of ['dismiss', 'options']) {
+  test(`late runner discovery preserves the later ${nextAction} interaction`, async ({ page, ownership }, info) => {
+    await more(page).click();
+    let release;
+    const gate = new Promise(resolve => { release = resolve; });
+    let started = false;
+    await page.route('**/api/app-runners?*', async route => {
+      started = true;
+      await gate;
+      await route.fulfill({ json: { ok: true, data: {
+        cwd: ownership.tabs[0].cwd, activeRun: null,
+        runners: [{ id: 'late-discovery-runner', label: 'late-discovery.sh', kind: 'shell', command: 'bash', args: ['late-discovery.sh'], displayCommand: 'bash late-discovery.sh' }],
+      } } });
+    });
+    try {
+      await page.locator('#appRunnerMenuButton').click();
+      await expect.poll(() => started).toBe(true);
+      if (nextAction === 'dismiss') {
+        await page.keyboard.press('Escape');
+        await expect(page.locator('#composerActionsPanel')).toBeHidden();
+      } else {
+        await page.locator('#optionsMenuButton').click();
+        await expect(page.locator('#optionsMenu')).toBeVisible();
+      }
+      release();
+      await expect(page.locator('#appRunnerMenuPanel')).toContainText('late-discovery.sh');
+      await page.screenshot({ path: info.outputPath(`late-runner-${nextAction}.png`) });
+      await expect(page.locator('#appRunnerMenuButton')).toHaveAttribute('aria-expanded', 'false');
+      expect(await page.locator('#appRunnerMenuPanel').evaluate(node => Boolean(node.closest('.focused-feature-controls')))).toBe(true);
+      if (nextAction === 'options') await expect(page.locator('#optionsMenu')).toBeVisible();
+    } finally {
+      release();
+    }
+  });
+}
