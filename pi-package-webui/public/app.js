@@ -17795,6 +17795,9 @@ function renderTabs() {
   if (footerTooltipTarget && elements.tabBar.contains(footerTooltipTarget) && !tooltipSnapshot) hideFooterTooltip();
   const previousScrollTop = elements.tabBar.scrollTop;
   const previousShelfScrollTop = sessionShelves?.element.scrollTop || 0;
+  const previousShelfFocusOffset = focusSnapshot && sessionShelves?.element.contains(document.activeElement)
+    ? document.activeElement.getBoundingClientRect().top - sessionShelves.element.getBoundingClientRect().top + previousShelfScrollTop
+    : null;
   elements.tabBar.replaceChildren();
   const shelfProjection = reconcileSessionShelves();
   renderedSessionShelves = usesSessionShelves();
@@ -17845,10 +17848,13 @@ function renderTabs() {
     if (focusSnapshot && sessionShelves.element.contains(focused)) {
       const bounds = sessionShelves.element.getBoundingClientRect();
       const target = focused.getBoundingClientRect();
+      const moved = previousShelfFocusOffset !== null
+        && Math.abs(target.top - bounds.top + sessionShelves.element.scrollTop - previousShelfFocusOffset) > 1;
+      // Preserve deliberate wheel scrolling; reveal only controls displaced by rendering.
       // Leave room for the focus outline and fractional layout rounding.
-      if (target.top < bounds.top + 2) {
+      if (moved && target.top < bounds.top + 2) {
         sessionShelves.element.scrollTop -= Math.ceil(bounds.top + 2 - target.top);
-      } else if (target.bottom > bounds.bottom - 2) {
+      } else if (moved && target.bottom > bounds.bottom - 2) {
         sessionShelves.element.scrollTop += Math.ceil(target.bottom - bounds.bottom + 2);
       }
     }

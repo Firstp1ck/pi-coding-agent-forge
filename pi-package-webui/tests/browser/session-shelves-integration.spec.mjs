@@ -193,3 +193,26 @@ test('focused session remains visible when background work moves it between over
   await expect(control).toBeFocused();
   await expect(control).toBeInViewport({ ratio: 1 });
 });
+
+test('metadata refresh preserves deliberate wheel scrolling away from retained focus', async ({ page, ownership }, info) => {
+  for (let index = 0; index < 6; index += 1) await ownership.api('/api/tabs', {});
+  await page.setViewportSize({ width: 1440, height: 600 });
+  await ready(page, ownership);
+  const list = page.locator('.session-shelves');
+  const control = row(page, ownership.tabs[1].id).locator('.terminal-tab-button');
+  await control.focus();
+  await list.hover();
+  await page.mouse.wheel(0, 600);
+  await expect.poll(() => list.evaluate(node => node.scrollTop)).toBeGreaterThan(200);
+  await expect(control).toBeFocused();
+  const before = await list.evaluate(node => node.scrollTop);
+  const snapshot = await ownership.api('/api/tabs');
+  const last = snapshot.tabs.at(-1);
+  last.title = 'Title refresh without moving sessions';
+  await page.route('**/api/tabs', route => route.fulfill({ json: { ok: true, data: snapshot } }));
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expect(row(page, last.id).locator('.terminal-tab-title')).toHaveText(last.title);
+  await expect(control).toBeFocused();
+  expect(await list.evaluate(node => node.scrollTop)).toBe(before);
+  await page.screenshot({ path: info.outputPath('wheel-position-preserved.png') });
+});
