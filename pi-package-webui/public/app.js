@@ -1,3 +1,4 @@
+import { createSettingsResourceController } from "./settings-resource-controller.mjs";
 import { createActivityQueueController, normalizeQueuedMessages, queueMessageCount } from "./activity-queue-controller.mjs";
 import { createActivityAgentsController } from "./activity-agents-controller.mjs";
 import { createActivityTodoView } from "./activity-todo-view.mjs";
@@ -1185,6 +1186,20 @@ const gitChangesUntrackedContentRequests = new Set();
 let nativeCommandTabId = null;
 let nativeCommandDialogGeneration = 0;
 let nativeSettingsDirty = false;
+const settingsResources = createSettingsResourceController({
+  read: async (kind, selection, target) => (await api(`/api/${kind}?${nativeResourceSelectionQuery(selection)}`, { tabId: target.tabId })).data,
+  write: async (kind, selection, change, target) => {
+    const body = { scope: selection.scope };
+    if (selection.scope === "model") Object.assign(body, { provider: selection.provider, modelId: selection.modelId });
+    if (change.inherit) body.inherit = true;
+    else body[kind === "tools" ? "enabledTools" : "enabledSkills"] = change.enabled;
+    return (await api(`/api/${kind}`, { method: "POST", body, tabId: target.tabId })).data;
+  },
+  listModels: async target => (await api("/api/models", { tabId: target.tabId })).data?.models || [],
+  isCurrent: isCurrentNativeResourceTarget,
+  onChange: renderNativeResourceSelector,
+  onMutation: announceNativeResourceMutation,
+});
 let guidedGitSetupDialogOwner = null;
 let sessionSummaryOverlayTabId = null;
 let sessionSummaryOverlayFocusReturn = null;
@@ -41134,6 +41149,7 @@ function slashCommandName(message) {
 }
 
 function openNativeCommandDialog({ title, message = "", searchPlaceholder = "" } = {}) {
+  settingsResources.close();
   nativeCommandDialogGeneration += 1;
   const dialogGeneration = nativeCommandDialogGeneration;
   nativeCommandTabId ||= activeTabId;
@@ -41170,6 +41186,7 @@ function closeNativeCommandDialog({ force = false } = {}) {
     });
     return;
   }
+  settingsResources.close();
   nativeCommandDialogGeneration += 1;
   if (elements.nativeCommandDialog.open) elements.nativeCommandDialog.close();
   elements.nativeCommandSearch.oninput = null;
@@ -43335,297 +43352,97 @@ function nativeResourceModelControl(models, modelIndex, { saving = false, onChan
   return control.field;
 }
 
-async function loadNativeResourceModels() {
-  const response = await nativeCommandApi("/api/models");
-  return (Array.isArray(response.data?.models) ? response.data.models : [])
-    .filter((model) => model?.provider && model?.id)
-    .sort((left, right) => `${left.provider}/${left.id}`.localeCompare(`${right.provider}/${right.id}`));
+function nativeResourceSelectionQuery(selection) {
+  const params = new URLSearchParams({ scope: selection.scope });
+  if (selection.scope === "model") {
+    params.set("provider", selection.provider);
+    params.set("modelId", selection.modelId);
+  }
+  return params.toString();
 }
 
-async function openNativeToolsSelector() {
-  openNativeCommandDialog({ title: "Tools Setup", message: "Enable or disable tool access for this session, or save a global or exact-model default.", searchPlaceholder: "Filter tools…" });
-  let tools = [];
-  let savingName = "";
-  let filter = "all";
-  let scope = "session";
-  let configured = false;
-  let models = [];
-  let modelIndex = 0;
+function isCurrentNativeResourceTarget(target) {
+  return elements.nativeCommandDialog.open && nativeCommandDialogGeneration === target?.dialogGeneration
+    && nativeCommandTabId === target.tabId && isCurrentProjectTarget(target);
+}
 
-  const modelQuery = () => scope === "model" && models[modelIndex]
-    ? `&provider=${encodeURIComponent(models[modelIndex].provider)}&modelId=${encodeURIComponent(models[modelIndex].id)}`
-    : "";
+function isCurrentNativeResourceSnapshot(snapshot) {
+  const current = settingsResources.getSnapshot();
+  return current.target === snapshot.target && current.selection === snapshot.selection
+    && current.kind === snapshot.kind && isCurrentNativeResourceTarget(snapshot.target);
+}
 
-  const load = async () => {
-    renderNativeLoading(`Loading ${scope === "global" ? "global tool defaults" : scope === "model" ? "model tool defaults" : "session tools"}…`);
-    try {
-      const response = await nativeCommandApi(`/api/tools?scope=${encodeURIComponent(scope)}${modelQuery()}`);
-      tools = Array.isArray(response.data?.tools) ? response.data.tools : [];
-      configured = response.data?.configured === true;
-      if (scope === "model" && Array.isArray(response.data?.models)) models = response.data.models;
-      render();
-    } catch (error) {
-      setNativeCommandError(error.message || String(error));
-      elements.nativeCommandBody.replaceChildren();
-    }
-  };
-
-  const applyModelScope = async () => {
-    if (!models.length) {
-      try {
-        models = await loadNativeResourceModels();
-      } catch (error) {
-        setNativeCommandError(error.message || String(error));
-        return false;
-      }
-    }
-    if (!models.length) {
-      setNativeCommandError("No authenticated Pi models are available for a model default.");
-      return false;
-    }
-    modelIndex = Math.min(Math.max(modelIndex, 0), models.length - 1);
-    return true;
-  };
-
-  const inheritSelection = async () => {
-    if (savingName) return;
-    savingName = "inherit";
-    setNativeCommandError("");
-    render();
-    try {
-      const body = { scope, inherit: true };
-      if (scope === "model" && models[modelIndex]) {
-        body.provider = models[modelIndex].provider;
-        body.modelId = models[modelIndex].id;
-      }
-      const response = await nativeCommandApi("/api/tools", { method: "POST", body });
-      tools = Array.isArray(response.data?.tools) ? response.data.tools : [];
-      configured = response.data?.configured === true;
-      const content = scope === "model"
-        ? `Tool default for ${body.provider}/${body.modelId} cleared. It now inherits the global or Pi runtime default.`
-        : scope === "global"
-          ? "Global tool default cleared. Unpinned active tools now follow the Pi runtime default; pinned tools are unchanged."
-          : "Tools for this session now follow the inherited model, global, or Pi runtime defaults.";
-      addTransientMessage({ role: "native", title: "/tools", content, level: "info" });
-    } catch (error) {
-      setNativeCommandError(error.message || String(error));
-    } finally {
-      savingName = "";
-      render();
-    }
-  };
-
-  const render = () => {
-    renderNativeResourceToggles(tools, {
-      savingName,
-      filter,
-      getResourceTag: nativeToolOriginTag,
-      onToggle: async (tool) => {
-        if (!tool || savingName) return;
-        const enabledTools = new Set(tools.filter((item) => item.enabled !== false).map((item) => item.name));
-        if (tool.enabled === false) enabledTools.add(tool.name);
-        else enabledTools.delete(tool.name);
-        savingName = tool.name;
-        setNativeCommandError("");
-        render();
-        try {
-          const body = { enabledTools: [...enabledTools], scope };
-          if (scope === "model" && models[modelIndex]) {
-            body.provider = models[modelIndex].provider;
-            body.modelId = models[modelIndex].id;
-          }
-          const response = await nativeCommandApi("/api/tools", { method: "POST", body });
-          tools = Array.isArray(response.data?.tools) ? response.data.tools : [];
-          configured = response.data?.configured === true;
-          const enabled = enabledTools.has(tool.name);
-          const content = scope === "model"
-            ? `Model default for tool ${tool.name} ${enabled ? "enabled" : "disabled"} (${body.provider}/${body.modelId}). Unpinned active tools update immediately when this model is active; pinned tools are unchanged.`
-            : scope === "global"
-              ? `Global default for tool ${tool.name} ${enabled ? "enabled" : "disabled"}. Unpinned active tools update immediately; pinned tools are unchanged.`
-              : `Tool ${tool.name} ${enabled ? "enabled" : "disabled"} for this session.`;
-          addTransientMessage({ role: "native", title: "/tools", content, level: "info" });
-        } catch (error) {
-          setNativeCommandError(error.message || String(error));
-        } finally {
-          savingName = "";
-          render();
-        }
+function renderNativeResourceSelector(snapshot = settingsResources.getSnapshot()) {
+  if (!snapshot.kind || !isCurrentNativeResourceTarget(snapshot.target)) return;
+  const { kind, selection, resources, models, configured, filter, loading, savingName, error } = snapshot;
+  const exactModelAvailable = selection.scope !== "model" || models.some(model => model.provider === selection.provider && model.id === selection.modelId);
+  const mutationBlocked = loading || !!savingName || !exactModelAvailable;
+  setNativeCommandError(error);
+  if (loading) renderNativeLoading(`Loading ${selection.scope} ${kind}…`);
+  else renderNativeResourceToggles(resources, {
+    savingName: mutationBlocked ? savingName || "unavailable" : "", filter,
+    getResourceTag: kind === "tools" ? nativeToolOriginTag : undefined,
+    onToggle: resource => { if (isCurrentNativeResourceSnapshot(snapshot)) settingsResources.toggle(resource.name); },
+  });
+  if (selection.scope === "model" && models.length) {
+    const modelIndex = models.findIndex(model => model.provider === selection.provider && model.id === selection.modelId);
+    const control = nativeResourceModelControl(models, modelIndex, {
+      saving: !!savingName,
+      onChange: index => {
+        const model = models[index];
+        if (model && isCurrentNativeResourceSnapshot(snapshot)) settingsResources.setModel({ provider: model.provider, modelId: model.id });
       },
     });
-    if (scope === "model" && models.length) {
-      elements.nativeCommandBody.prepend(nativeResourceModelControl(models, modelIndex, {
-        saving: !!savingName,
-        onChange: async (nextIndex) => {
-          if (nextIndex === modelIndex || savingName || !models[nextIndex]) return;
-          modelIndex = nextIndex;
-          await load();
-        },
-      }));
-    }
-    elements.nativeCommandBody.prepend(nativeResourceScopeControl(scope, {
-      configured,
-      saving: !!savingName,
-      onChange: async (nextScope) => {
-        if (nextScope === scope || savingName) return;
-        if (nextScope === "model" && !(await applyModelScope())) {
-          render();
-          return;
-        }
-        scope = nextScope;
-        await load();
-      },
-    }));
-    renderNativeResourceFilterActions(filter, (value) => { filter = value; }, render, [
-      { label: "Use inherited defaults", handler: inheritSelection, disabled: !!savingName },
-    ]);
-  };
-
-  elements.nativeCommandSearch.oninput = render;
-  await load();
+    if (modelIndex < 0) control.querySelector("select").selectedIndex = -1;
+    elements.nativeCommandBody.prepend(control);
+  }
+  elements.nativeCommandBody.prepend(nativeResourceScopeControl(selection.scope, {
+    configured, saving: !!savingName,
+    onChange: scope => { if (isCurrentNativeResourceSnapshot(snapshot)) settingsResources.setScope(scope); },
+  }));
+  renderNativeResourceFilterActions(filter, value => { if (isCurrentNativeResourceSnapshot(snapshot)) settingsResources.setFilter(value); }, () => {}, [
+    { label: "Use inherited defaults", handler: () => { if (isCurrentNativeResourceSnapshot(snapshot)) settingsResources.inherit(); }, disabled: mutationBlocked },
+  ]);
 }
 
-async function openNativeSkillsSelector() {
-  openNativeCommandDialog({ title: "Skills Setup", message: "Enable or disable skill invocation for this session, or save a global or exact-model default.", searchPlaceholder: "Filter skills…" });
-  let skills = [];
-  let savingName = "";
-  let filter = "all";
-  let scope = "session";
-  let configured = false;
-  let models = [];
-  let modelIndex = 0;
-
-  const modelQuery = () => scope === "model" && models[modelIndex]
-    ? `&provider=${encodeURIComponent(models[modelIndex].provider)}&modelId=${encodeURIComponent(models[modelIndex].id)}`
-    : "";
-
-  const load = async () => {
-    renderNativeLoading(`Loading ${scope === "global" ? "global skill defaults" : scope === "model" ? "model skill defaults" : "session skills"}…`);
-    try {
-      const response = await nativeCommandApi(`/api/skills?scope=${encodeURIComponent(scope)}${modelQuery()}`);
-      skills = Array.isArray(response.data?.skills) ? response.data.skills : [];
-      configured = response.data?.configured === true;
-      if (scope === "model" && Array.isArray(response.data?.models)) models = response.data.models;
-      render();
-    } catch (error) {
-      setNativeCommandError(error.message || String(error));
-      elements.nativeCommandBody.replaceChildren();
-    }
-  };
-
-  const applyModelScope = async () => {
-    if (!models.length) {
-      try {
-        models = await loadNativeResourceModels();
-      } catch (error) {
-        setNativeCommandError(error.message || String(error));
-        return false;
-      }
-    }
-    if (!models.length) {
-      setNativeCommandError("No authenticated Pi models are available for a model default.");
-      return false;
-    }
-    modelIndex = Math.min(Math.max(modelIndex, 0), models.length - 1);
-    return true;
-  };
-
-  const inheritSelection = async () => {
-    if (savingName) return;
-    savingName = "inherit";
-    setNativeCommandError("");
-    render();
-    try {
-      const body = { scope, inherit: true };
-      if (scope === "model" && models[modelIndex]) {
-        body.provider = models[modelIndex].provider;
-        body.modelId = models[modelIndex].id;
-      }
-      const response = await nativeCommandApi("/api/skills", { method: "POST", body });
-      skills = Array.isArray(response.data?.skills) ? response.data.skills : [];
-      configured = response.data?.configured === true;
-      const content = scope === "model"
-        ? `Skill default for ${body.provider}/${body.modelId} cleared. It now inherits the global or Pi runtime default.`
-        : scope === "global"
-          ? "Global skill default cleared. Unpinned active skills now follow the Pi runtime default; pinned skills are unchanged."
-          : "Skills for this session now follow the inherited model, global, or Pi runtime defaults.";
-      addTransientMessage({ role: "native", title: "/skills", content, level: "info" });
-      if (scope === "session") refreshCommands(activeTabContext()).catch((error) => addEvent(error.message || String(error), "error"));
-    } catch (error) {
-      setNativeCommandError(error.message || String(error));
-    } finally {
-      savingName = "";
-      render();
-    }
-  };
-
-  const render = () => {
-    renderNativeResourceToggles(skills, {
-      savingName,
-      filter,
-      onToggle: async (skill) => {
-        if (!skill || savingName) return;
-        const enabledSkills = new Set(skills.filter((item) => item.enabled !== false).map((item) => item.name));
-        if (skill.enabled === false) enabledSkills.add(skill.name);
-        else enabledSkills.delete(skill.name);
-        savingName = skill.name;
-        setNativeCommandError("");
-        render();
-        try {
-          const body = { enabledSkills: [...enabledSkills], scope };
-          if (scope === "model" && models[modelIndex]) {
-            body.provider = models[modelIndex].provider;
-            body.modelId = models[modelIndex].id;
-          }
-          const response = await nativeCommandApi("/api/skills", { method: "POST", body });
-          skills = Array.isArray(response.data?.skills) ? response.data.skills : [];
-          configured = response.data?.configured === true;
-          const enabled = enabledSkills.has(skill.name);
-          const content = scope === "model"
-            ? `Model default for skill ${skill.name} ${enabled ? "enabled" : "disabled"} (${body.provider}/${body.modelId}). Unpinned active skills update immediately when this model is active; pinned skills are unchanged.`
-            : scope === "global"
-              ? `Global default for skill ${skill.name} ${enabled ? "enabled" : "disabled"}. Unpinned active skills update immediately; pinned skills are unchanged.`
-              : `Skill ${skill.name} ${enabled ? "enabled" : "disabled"} for this session.`;
-          addTransientMessage({ role: "native", title: "/skills", content, level: "info" });
-          if (scope === "session") refreshCommands(activeTabContext()).catch((error) => addEvent(error.message || String(error), "error"));
-        } catch (error) {
-          setNativeCommandError(error.message || String(error));
-        } finally {
-          savingName = "";
-          render();
-        }
-      },
-    });
-    if (scope === "model" && models.length) {
-      elements.nativeCommandBody.prepend(nativeResourceModelControl(models, modelIndex, {
-        saving: !!savingName,
-        onChange: async (nextIndex) => {
-          if (nextIndex === modelIndex || savingName || !models[nextIndex]) return;
-          modelIndex = nextIndex;
-          await load();
-        },
-      }));
-    }
-    elements.nativeCommandBody.prepend(nativeResourceScopeControl(scope, {
-      configured,
-      saving: !!savingName,
-      onChange: async (nextScope) => {
-        if (nextScope === scope || savingName) return;
-        if (nextScope === "model" && !(await applyModelScope())) {
-          render();
-          return;
-        }
-        scope = nextScope;
-        await load();
-      },
-    }));
-    renderNativeResourceFilterActions(filter, (value) => { filter = value; }, render, [
-      { label: "Use inherited defaults", handler: inheritSelection, disabled: !!savingName },
-    ]);
-  };
-
-  elements.nativeCommandSearch.oninput = render;
-  await load();
+function announceNativeResourceMutation({ kind, target, selection, name, enabled, inherit }) {
+  if (!isCurrentNativeResourceTarget(target)) return;
+  const singular = kind === "tools" ? "tool" : "skill";
+  const title = kind === "tools" ? "Tool" : "Skill";
+  let content;
+  if (inherit) {
+    content = selection.scope === "model"
+      ? `${title} default for ${selection.provider}/${selection.modelId} cleared. It now inherits the global or Pi runtime default.`
+      : selection.scope === "global"
+        ? `Global ${singular} default cleared. Unpinned active ${kind} now follow the Pi runtime default; pinned ${kind} are unchanged.`
+        : `${title}s for this session now follow the inherited model, global, or Pi runtime defaults.`;
+  } else {
+    const change = `${singular} ${name} ${enabled ? "enabled" : "disabled"}`;
+    content = selection.scope === "model"
+      ? `Model default for ${change} (${selection.provider}/${selection.modelId}). Unpinned active ${kind} update immediately when this model is active; pinned ${kind} are unchanged.`
+      : selection.scope === "global"
+        ? `Global default for ${change}. Unpinned active ${kind} update immediately; pinned ${kind} are unchanged.`
+        : `${title} ${name} ${enabled ? "enabled" : "disabled"} for this session.`;
+  }
+  addTransientMessage({ role: "native", title: `/${kind}`, content, level: "info" });
+  if (kind === "skills" && selection.scope === "session") refreshCommands(target).catch(error => {
+    if (isCurrentNativeResourceTarget(target)) addEvent(error.message || String(error), "error");
+  });
 }
+
+async function openNativeResourceSelector(kind) {
+  const label = kind === "tools" ? "Tools" : "Skills";
+  const dialogGeneration = openNativeCommandDialog({
+    title: `${label} Setup`, message: `Enable or disable ${kind === "tools" ? "tool access" : "skill invocation"} for this session, or save a global or exact-model default.`,
+    searchPlaceholder: `Filter ${kind}…`,
+  });
+  const target = { ...projectTargetFromContext(activeTabContext(nativeCommandTabId)), dialogGeneration };
+  elements.nativeCommandSearch.oninput = () => renderNativeResourceSelector();
+  return settingsResources.open(kind, target);
+}
+
+async function openNativeToolsSelector() { return openNativeResourceSelector("tools"); }
+async function openNativeSkillsSelector() { return openNativeResourceSelector("skills"); }
 
 async function openNativeAuthSelector(mode) {
   const command = mode === "logout" ? "/logout" : "/login";
@@ -48370,6 +48187,8 @@ elements.nativeCommandDialog.querySelector("form")?.addEventListener("submit", (
 });
 elements.nativeCommandSearch.addEventListener("keydown", handleNativeSelectorSearchKeydown);
 elements.nativeCommandDialog.addEventListener("close", () => {
+  if (elements.nativeCommandDialog.open) return;
+  settingsResources.close();
   nativeCommandDialogGeneration += 1;
   elements.nativeCommandSearch.oninput = null;
   nativeSettingsDirty = false;
