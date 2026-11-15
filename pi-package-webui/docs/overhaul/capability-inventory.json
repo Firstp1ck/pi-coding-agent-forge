@@ -49,8 +49,8 @@
     },
     {
       "file": "pi-package-webui/bin/pi-webui.mjs",
-      "bytes": 816652,
-      "sha256": "39b5ff8216b1ce6a6b25c89ae1539e561e8d3d3b1ee17001a721bf11a16ffba3"
+      "bytes": 816704,
+      "sha256": "2a5d7e128504fcfac489c474b2c0b85efd5540054bab485539a15ce0b46eac27"
     },
     {
       "file": "pi-package-webui/index.ts",
@@ -128,9 +128,14 @@
       "sha256": "9ab9af73eeee26604573aa6076af4c8dbf044c7fa44a0990e51eaf3bf236df93"
     },
     {
+      "file": "pi-package-webui/lib/git-workflow-preference-values.mjs",
+      "bytes": 5401,
+      "sha256": "2f1b0150ff2058f81c78f3b6ffdf1a25dde7235fa1c582b5cb3f4195dbc0c8fe"
+    },
+    {
       "file": "pi-package-webui/lib/git-workflow-preferences.mjs",
-      "bytes": 23298,
-      "sha256": "326f1f6774db91332af30fa19c61ce50e4f227bc7a4493dcbc7e370c641b863e"
+      "bytes": 1355,
+      "sha256": "2060fe55a2b63df813efd74bcedcb365f76ed77323247f424d27c6c43e3c474f"
     },
     {
       "file": "pi-package-webui/lib/git-worktrees.mjs",
@@ -211,6 +216,11 @@
       "file": "pi-package-webui/lib/scoped-models.mjs",
       "bytes": 864,
       "sha256": "c27ffe07866ab9e7bd72414b3ffd3de6920eca16365d989c7192c4ffcb7cdc6f"
+    },
+    {
+      "file": "pi-package-webui/lib/server/settings-store.mjs",
+      "bytes": 17687,
+      "sha256": "1587f3cf6007623f59945087ac99fbfb87bb7c61a6e5e7dc5ceca4b8518f4c1a"
     },
     {
       "file": "pi-package-webui/lib/session-actions.mjs",
@@ -634,8 +644,8 @@
     },
     {
       "file": "plans/planned/webui-design-architecture-overhaul.md",
-      "bytes": 248648,
-      "sha256": "4c28b7df7579180b3247ddcd1bedea9eec4f2135f6cb5b5dd050f9780cbe8357"
+      "bytes": 251225,
+      "sha256": "acea2f7097301cb325a09fae6f03f97512bb68ca9ddd11562becb5ddb66f13b3"
     }
   ],
   "reconciliation": {
@@ -2206,7 +2216,7 @@
         "pi-package-webui/public/index.html#tag:ffbaafa6f1041afb/occurrence:4"
       ],
       "persistedKeys": [
-        "pi-package-webui/lib/git-workflow-preferences.mjs#WEBUI_SETTINGS_FILE_ENV",
+        "pi-package-webui/lib/server/settings-store.mjs#WEBUI_SETTINGS_FILE_ENV",
         "pi-package-webui/public/app.js#COMPOSER_ACTION_LAYOUT_STORAGE_KEY",
         "pi-package-webui/public/app.js#CONTROL_DECK_LAYOUT_STORAGE_KEY",
         "pi-package-webui/public/app.js#CONTROL_VISIBILITY_HIDDEN_IDS_STORAGE_KEY",
@@ -25630,14 +25640,14 @@
   ],
   "persistence": [
     {
-      "id": "pi-package-webui/lib/git-workflow-preferences.mjs#WEBUI_SETTINGS_FILE_ENV",
+      "id": "pi-package-webui/lib/server/settings-store.mjs#WEBUI_SETTINGS_FILE_ENV",
       "key": "PI_WEBUI_SETTINGS_FILE",
       "kind": "file-override-environment",
       "family": "appearance",
       "anchor": {
-        "file": "pi-package-webui/lib/git-workflow-preferences.mjs",
+        "file": "pi-package-webui/lib/server/settings-store.mjs",
         "symbol": "WEBUI_SETTINGS_FILE_ENV",
-        "line": 35
+        "line": 16
       }
     },
     {
@@ -27646,14 +27656,14 @@
       ],
       "owners": [
         {
-          "file": "pi-package-webui/lib/git-workflow-preferences.mjs",
+          "file": "pi-package-webui/lib/git-workflow-preference-values.mjs",
           "symbol": "defaultGitWorkflowPreferences",
-          "line": 52
+          "line": 30
         },
         {
-          "file": "pi-package-webui/lib/git-workflow-preferences.mjs",
+          "file": "pi-package-webui/lib/git-workflow-preference-values.mjs",
           "symbol": "normalizeGitWorkflowPreferences",
-          "line": 78
+          "line": 56
         }
       ],
       "method": "Reviewed schema paths; unknown future fields may also survive normalization. No settings file read."
@@ -27667,9 +27677,9 @@
       ],
       "owners": [
         {
-          "file": "pi-package-webui/lib/git-workflow-preferences.mjs",
+          "file": "pi-package-webui/lib/server/settings-store.mjs",
           "symbol": "normalizeInterfacePreferences",
-          "line": 158
+          "line": 36
         }
       ],
       "method": "Reviewed schema paths; unknown future fields may also survive normalization. No settings file read."
@@ -27848,19 +27858,19 @@
       ],
       "owners": [
         {
-          "file": "pi-package-webui/lib/git-workflow-preferences.mjs",
+          "file": "pi-package-webui/lib/server/settings-store.mjs",
           "symbol": "normalizeWebuiSettings",
-          "line": 177
+          "line": 55
         },
         {
-          "file": "pi-package-webui/lib/git-workflow-preferences.mjs",
+          "file": "pi-package-webui/lib/server/settings-store.mjs",
           "symbol": "webuiSettingsFile",
-          "line": 146
+          "line": 24
         },
         {
-          "file": "pi-package-webui/lib/git-workflow-preferences.mjs",
+          "file": "pi-package-webui/lib/server/settings-store.mjs",
           "symbol": "mergeWebuiSettings",
-          "line": 486
+          "line": 364
         }
       ],
       "method": "Reviewed schema paths; unknown future fields may also survive normalization. No settings file read."

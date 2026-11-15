@@ -102,18 +102,20 @@ import {
   GIT_WORKFLOW_STAGING_POLICIES,
   GIT_WORKFLOW_THINKING_LEVELS,
   GIT_WORKFLOW_VERIFICATION_POLICIES,
-  WEBUI_SIDE_PANEL_WIDTH_MAX_PX,
-  WEBUI_SIDE_PANEL_WIDTH_MIN_PX,
   isGitWorkflowSetupComplete,
   mergeGitWorkflowPreferences,
   readGitWorkflowPreferences,
-  readWebuiSettings,
   supportedGitWorkflowThinkingLevels,
+  writeGitWorkflowPreferences,
+} from "../lib/git-workflow-preferences.mjs";
+import {
+  WEBUI_SIDE_PANEL_WIDTH_MAX_PX,
+  WEBUI_SIDE_PANEL_WIDTH_MIN_PX,
+  readWebuiSettings,
   updateWebuiSettings,
   webuiSettingsFile,
-  writeGitWorkflowPreferences,
   writeWebuiSettings,
-} from "../lib/git-workflow-preferences.mjs";
+} from "../lib/server/settings-store.mjs";
 import {
   exactModelProfile,
   preserveUnavailableResourceNames,

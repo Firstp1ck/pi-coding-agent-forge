@@ -84,11 +84,14 @@ node tests/append-system-selector-static.test.mjs
 
 ## Web UI settings write lock
 
+`lib/server/settings-store.mjs` owns generic normalization, migration, locking and atomic persistence. `lib/git-workflow-preference-values.mjs` owns pure Git preference values. The former `lib/git-workflow-preferences.mjs` path retains its Git read/write wrappers and re-exports the same store bindings, so mixed imports share one update queue. The server imports generic settings directly from the store. Storage paths, schema 8 and layout v3 remain unchanged.
+
 `updateWebuiSettings` serializes same-process updates and uses per-writer records under `<settings-file>.lock` for cross-process writes. A process can exit after creating its record but before writing valid JSON, leaving an empty file. Lock acquisition removes incomplete records immediately when their PID is dead. It gives a live writer a one-second grace period, then removes records that are still empty or malformed so one interrupted write cannot block every later settings save.
 
 Focused contributor validation:
 
 ```bash
+node tests/server-settings-store.test.mjs
 node tests/webui-settings-locking.test.mjs
 ```
 
