@@ -2,6 +2,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect } from "@playwright/test";
 import { test } from "./session-fixture.mjs";
+import { navigateFocused } from './focused-navigation-fixture.mjs';
 
 test.use({
   video: "off",
@@ -19,13 +20,9 @@ const original = {
 const originDraft = original["origin.txt"].replace("Origin line 1:", "Unsaved origin line 1:");
 const peerDraft = "Unsaved peer buffer belongs to the peer tab.\n";
 
-function destination(page, name) {
-  return page.getByRole("navigation", { name: "Workspace destinations" }).getByRole("button", { name, exact: true });
-}
-
 async function showFiles(page) {
-  await destination(page, "Project").click();
-  await page.getByRole("tab", { name: "Files", exact: true }).click();
+  await navigateFocused(page, "Project");
+  await page.getByRole('combobox', { name: 'Project section', exact: true }).selectOption({ label: 'Files' });
   await expect(page.locator("#fileTreeRoot")).toBeVisible();
 }
 
@@ -100,7 +97,7 @@ test("dirty file survives Project, Activity and Settings until an explicit save"
   await expect(page.locator("#fileViewerSaveButton")).toBeEnabled();
 
   for (const name of ["Activity", "Settings"]) {
-    await destination(page, name).click();
+    await navigateFocused(page, name);
     await expect(page.locator("#focusedWorkspace")).toHaveAttribute("data-destination", name.toLowerCase());
     if (name === "Activity") {
       await page.getByRole('combobox', { name: 'Activity section', exact: true }).selectOption({ label: 'Events' });
@@ -216,7 +213,7 @@ test("editor selection and vertical scroll survive destinations and another tab'
   };
 
   for (const name of ["Activity", "Settings"]) {
-    await destination(page, name).click();
+    await navigateFocused(page, name);
     await showFiles(page);
     await expectContinuity(name);
   }

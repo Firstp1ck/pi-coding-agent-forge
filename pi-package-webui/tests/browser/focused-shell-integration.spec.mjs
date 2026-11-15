@@ -1,6 +1,7 @@
 import { expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { test } from './session-fixture.mjs';
+import { navigateFocused } from './focused-navigation-fixture.mjs';
 
 test.use({ video: 'off', serviceWorkers: 'block', viewport: { width: 1440, height: 900 }, reducedMotion: 'reduce' });
 test.setTimeout(45_000);
@@ -20,7 +21,7 @@ test('compact workspace retains real drafts, settings and inspector fields acros
   const prompt = page.locator('#promptInput');
   await prompt.fill('retain this compact draft');
   await prompt.evaluate(node => { window.originalPrompt = node; node.setSelectionRange(2, 7, 'backward'); });
-  await rail.getByRole('button', { name: 'Project', exact: true }).click();
+  await navigateFocused(page, 'Project');
   await expect(page.locator('#fileTreeSearchInput')).toBeVisible();
   await page.locator('#fileTreeSearchInput').fill('keep filter');
   await rail.getByRole('button', { name: 'Settings', exact: true }).click();
@@ -126,7 +127,7 @@ test('compact navigation remains usable at 1100 and 1920 pixels with top and col
   await expect(page.locator('#promptInput')).toHaveValue('original session draft');
   for (const width of [1100, 1920]) {
     await page.setViewportSize({ width, height: 900 });
-    await rail.getByRole('button', { name: 'Project', exact: true }).click();
+    await navigateFocused(page, 'Project');
     await page.locator('#fileTreeSearchInput').click({ trial: true });
     await page.locator('#promptInput').click({ trial: true });
     await expect(page.locator('#tabBar [role="tab"]')).toHaveCount(2);

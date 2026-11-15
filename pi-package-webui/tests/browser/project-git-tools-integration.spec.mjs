@@ -3,6 +3,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect } from "@playwright/test";
 import { test as sessionTest } from "./session-fixture.mjs";
+import { navigateFocused } from './focused-navigation-fixture.mjs';
 
 const baseline = "committed fixture line\n";
 const seedChange = "stashed fixture line\n";
@@ -81,9 +82,8 @@ async function openSection(page, key, tabId) {
 }
 
 async function openProjectChanges(page, cwd) {
-  const rail = page.getByRole("navigation", { name: "Workspace destinations" });
-  await rail.getByRole("button", { name: "Project", exact: true }).click();
-  await page.getByRole("tab", { name: "Changes", exact: true }).click();
+  await navigateFocused(page, 'Project');
+  await page.getByRole('combobox', { name: 'Project section', exact: true }).selectOption({ label: 'Changes' });
   const repository = page.locator("#gitPanelGroups [data-git-root]").filter({ hasText: cwd });
   await expect(repository).toHaveCount(1);
   await repository.getByRole("button", { name: "Git actions for project", exact: true }).click();

@@ -1,5 +1,6 @@
 import { expect } from "@playwright/test";
 import { test } from "./session-fixture.mjs";
+import { navigateFocused } from './focused-navigation-fixture.mjs';
 
 test.use({ video: "off", serviceWorkers: "block", viewport: { width: 1440, height: 900 }, reducedMotion: "reduce" });
 test.setTimeout(45_000);
@@ -11,7 +12,7 @@ test.beforeEach(async ({ page }) => {
 async function openActivity(page, ownership, topic) {
   await page.goto(`${ownership.baseURL}/?tab=${encodeURIComponent(ownership.tabs[0].id)}`);
   await expect(page.locator("#modelSelect")).not.toBeEmpty();
-  await page.getByRole("navigation", { name: "Workspace destinations" }).getByRole("button", { name: "Activity", exact: true }).click();
+  await navigateFocused(page, 'Activity');
   await page.getByRole('combobox', { name: 'Activity section', exact: true }).selectOption({ label: topic });
 }
 
@@ -71,7 +72,7 @@ test("Activity and composer conversations share the exact dialog and originating
   expect(await page.locator("#intercomConversationDialog").evaluate(node => node === window.canonicalConversation)).toBe(true);
   await page.keyboard.press("Escape");
   await page.locator(`#tabBar [data-tab-id="${ownership.tabs[1].id}"] .terminal-tab-button`).click();
-  await rail.getByRole("button", { name: "Activity", exact: true }).click();
+  await navigateFocused(page, 'Activity');
   await page.getByRole('combobox', { name: 'Activity section', exact: true }).selectOption({ label: 'Conversations' });
   await expect(link).toHaveCount(0);
   expect(detailTargets.length).toBeGreaterThanOrEqual(2);
@@ -96,7 +97,7 @@ test("Agents output navigation preserves runs and explicit cancel and dismiss us
   const before = await ownership.api("/api/subagents");
   expect(before.groups.flatMap(group => group.runs).find(run => run.id === "fixture-run").status).toBe("running");
   expect(mutations).toEqual([]);
-  await rail.getByRole("button", { name: "Activity", exact: true }).click();
+  await navigateFocused(page, 'Activity');
   await page.getByRole('combobox', { name: 'Activity section', exact: true }).selectOption({ label: 'Agents' });
   await page.locator("#subagentsBox .subagent-agent-row").first().click();
   await page.locator(".subagent-overlay-cancel-action").click();
@@ -143,7 +144,7 @@ test("Queues share authoritative edits, reorder, and removal across Activity and
   await expect(page.getByRole("textbox", { name: "Queued follow-up 2", exact: true })).toHaveValue("edited first");
   await page.screenshot({ path: testInfo.outputPath("activity-queue-edits.png") });
   await page.keyboard.press("Escape");
-  await rail.getByRole("button", { name: "Activity", exact: true }).click();
+  await navigateFocused(page, 'Activity');
   await page.getByRole('combobox', { name: 'Activity section', exact: true }).selectOption({ label: 'Queues' });
   await expect(page.locator("#queueBox")).toContainText("edited first");
   await page.locator("#queueBox").getByRole("button", { name: "Remove queued follow-up #2", exact: true }).click();

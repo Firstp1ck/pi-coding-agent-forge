@@ -1,5 +1,6 @@
 import { expect } from '@playwright/test';
 import { test } from './session-fixture.mjs';
+import { navigateFocused } from './focused-navigation-fixture.mjs';
 
 test.use({ video: 'off', serviceWorkers: 'block', viewport: { width: 1440, height: 900 }, reducedMotion: 'reduce' });
 test.setTimeout(45_000);
@@ -42,8 +43,8 @@ test('document inspector loads lazily and retains page/zoom through destinations
   await content.getByRole('button', { name: 'Next', exact: true }).click();
   await content.getByRole('button', { name: '+', exact: true }).click();
   await rail(page).getByRole('button', { name: 'Settings', exact: true }).click();
-  await rail(page).getByRole('button', { name: 'Project', exact: true }).click();
-  await page.getByRole('tab', { name: 'Documents', exact: true }).click();
+  await navigateFocused(page, 'Project');
+  await page.getByRole('combobox', { name: 'Project section', exact: true }).selectOption({ label: 'Documents' });
   await expect(content.locator('.document-artifact-meta')).toContainText('Page 2 of 2 · 125%');
   expect(await content.evaluate(node => node === window.canonicalArtifact)).toBe(true);
   expect(requests).toHaveLength(1);

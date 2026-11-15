@@ -2,6 +2,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { expect } from '@playwright/test';
 import { test } from './session-fixture.mjs';
+import { navigateFocused } from './focused-navigation-fixture.mjs';
 
 test.use({ video: 'off', serviceWorkers: 'block', launchOptions: { executablePath: '/usr/bin/chromium' }, viewport: { width: 1440, height: 900 } });
 test.setTimeout(45_000);
@@ -16,9 +17,8 @@ async function open(page, ownership) {
 }
 
 async function topic(page, destination, name) {
-  await page.getByRole('navigation', { name: 'Workspace destinations' }).getByRole('button', { name: destination, exact: true }).click();
-  if (destination === 'Activity') await page.getByRole('combobox', { name: 'Activity section', exact: true }).selectOption({ label: name });
-  else await page.getByRole('tab', { name, exact: true }).click();
+  await navigateFocused(page, destination);
+  await page.getByRole('combobox', { name: `${destination} section`, exact: true }).selectOption({ label: name });
 }
 
 test('custom runner configuration, discovery and process lifecycle', async ({ page, ownership }, info) => {

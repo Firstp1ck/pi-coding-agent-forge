@@ -3,12 +3,12 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { expect } from '@playwright/test';
 import { test } from './session-fixture.mjs';
+import { navigateFocused } from './focused-navigation-fixture.mjs';
 
 test.use({ video: 'off', serviceWorkers: 'block', viewport: { width: 1440, height: 900 }, reducedMotion: 'reduce', actionTimeout: 5_000,
   launchOptions: { executablePath: process.env.PI_WEBUI_TEST_CHROMIUM || '/usr/bin/chromium' } });
 test.setTimeout(40_000);
 
-const destination = (page, name) => page.getByRole('navigation', { name: 'Workspace destinations' }).getByRole('button', { name, exact: true });
 const category = (page, name) => page.getByRole('navigation', { name: 'Settings categories' }).getByRole('button', { name, exact: true });
 const tab = (page, id) => page.locator(`#tabBar [data-tab-id="${id}"] .terminal-tab-button`);
 
@@ -52,8 +52,8 @@ const reachability = [
     await expect(page.locator('#attachmentTray')).toContainText('w7-context.txt');
   }],
   ['find changed file', 2, async (page, _ownership, act) => {
-    await act('open Project', () => destination(page, 'Project').click());
-    await act('open Changes', () => page.getByRole('tab', { name: 'Changes', exact: true }).click());
+    await navigateFocused(page, 'Project', act);
+    await act('open Changes', () => page.getByRole('combobox', { name: 'Project section', exact: true }).selectOption({ label: 'Changes' }));
     const repository = page.locator('.git-side-panel-repository-toggle');
     await expect(repository).toBeVisible();
     if (await repository.getAttribute('aria-expanded') !== 'true') await act('expand repository changes', () => repository.click());
@@ -63,8 +63,8 @@ const reachability = [
     await expect(page.locator('#fileViewerTitle')).toHaveText('w7-changed.txt');
   }],
   ['open runner output', 2, async (page, _ownership, act) => {
-    await act('open Project', () => destination(page, 'Project').click());
-    await act('open Runners', () => page.getByRole('tab', { name: 'Runners', exact: true }).click());
+    await navigateFocused(page, 'Project', act);
+    await act('open Runners', () => page.getByRole('combobox', { name: 'Project section', exact: true }).selectOption({ label: 'Runners' }));
     await expect(page.locator('#appRunnerMenuPanel')).toBeVisible();
     await page.locator('#appRunnerMenuPanel button').filter({ hasText: 'w7-runner.sh' }).first().click();
     await expect(page.locator('[data-feature-host="runners"] .app-runner-widget')).toContainText('W7_RUNNER_OUTPUT');
@@ -79,14 +79,14 @@ const reachability = [
     expect(reply.request().postDataJSON()).toMatchObject({ id: 'fixture_blocker_12345678', confirmed: false });
   }],
   ['configure tool profile', 3, async (page, _ownership, act) => {
-    await act('open Settings', () => destination(page, 'Settings').click());
+    await act('open Settings', () => navigateFocused(page, 'Settings'));
     await act('open Models and resources', () => category(page, 'Models and resources').click());
     await act('open Tools Setup', () => page.locator('.settings-workspace').getByRole('button', { name: 'Tools', exact: true }).click());
     await expect(page.locator('#nativeCommandTitle')).toHaveText('Tools Setup');
     await expect(page.locator('#nativeCommandDialog')).toContainText('Session');
   }],
   ['change theme', 3, async (page, _ownership, act) => {
-    await act('open Settings', () => destination(page, 'Settings').click());
+    await act('open Settings', () => navigateFocused(page, 'Settings'));
     await act('open Appearance', () => category(page, 'Appearance').click());
     await expect(page.locator('#themeSelect')).toBeVisible();
     await page.locator('#themeSelect').selectOption('dracula');
@@ -128,8 +128,8 @@ test('file annotation sends the selected path, text and comment to its original 
     await route.fulfill({ json: { ok: true, data: {} } });
   });
   await open(page, ownership);
-  await destination(page, 'Project').click();
-  await page.getByRole('tab', { name: 'Files', exact: true }).click();
+  await navigateFocused(page, 'Project');
+  await page.getByRole('combobox', { name: 'Project section', exact: true }).selectOption({ label: 'Files' });
   await page.locator('#fileTreeRoot [data-path="w7-note.txt"]').click();
   const editor = page.locator('#fileViewerEditor');
   await expect(editor).toBeVisible();
@@ -141,8 +141,8 @@ test('file annotation sends the selected path, text and comment to its original 
   await editor.press('Shift+End');
   await expect(page.locator('#fileSelectionBar')).toBeVisible();
   await page.locator('#fileSelectionCommentInput').fill('Explain this exact selection');
-  await destination(page, 'Settings').click();
-  await destination(page, 'Project').click();
+  await navigateFocused(page, 'Settings');
+  await navigateFocused(page, 'Project');
   await expect(page.locator('#fileSelectionCommentInput')).toHaveValue('Explain this exact selection');
   await capture(page, info, 'file-annotation');
   await page.locator('#fileSelectionSendButton').click();
@@ -205,7 +205,13 @@ test('queued feedback survives failure, offers retry and stays with its original
 
 test('saved workspace retains exact group membership and recovers a failed listing', async ({ page, ownership }, info) => {
   const ids = ownership.tabs.map(tab => tab.id);
-  await page.addInitScript(ids => localStorage.setItem('pi-webui-terminal-custom-groups-v1', JSON.stringify({ version: 1, groups: [{ id: 'w7-group', title: 'W7 review group', tabIds: ids }] })), ids);
+  const groups = { version: 1, groups: [{ id: 'w7-group', title: 'W7 review group', tabIds: ids }] };
+  const preferences = await ownership.api('/api/interface-preferences');
+  const seeded = await page.request.put(`${ownership.baseURL}/api/interface-preferences`, {
+    data: { expectedLayoutRevision: preferences.layoutRevision, layout: { version: 3, terminalTabs: { customGroups: groups } } },
+  });
+  expect(seeded.ok(), await seeded.text()).toBe(true);
+  expect((await ownership.api('/api/interface-preferences')).layout.terminalTabs.customGroups).toEqual(groups);
   let fail = true;
   await page.route('**/api/workspaces', async route => {
     if (route.request().method() !== 'GET') return route.continue();
@@ -213,7 +219,7 @@ test('saved workspace retains exact group membership and recovers a failed listi
     return route.continue();
   });
   await open(page, ownership);
-  await destination(page, 'All tools').click();
+  await navigateFocused(page, 'All tools');
   await page.getByRole('searchbox', { name: 'Search all tools' }).fill('Workspace: Load');
   await page.locator('#shellToolsLauncher').getByRole('button', { name: 'Workspace: Load…', exact: true }).click();
   await expect(page.locator('#workspaceLoadDialog')).toContainText('W7 saved workspace listing unavailable');
@@ -228,7 +234,7 @@ test('saved workspace retains exact group membership and recovers a failed listi
   const response = await saved;
   expect(response.request().postDataJSON()).toMatchObject({ name: 'W7 saved group', activeTabId: ids[0], groups: [{ title: 'W7 review group', tabIds: ids }] });
   expect(response.ok()).toBe(true);
-  await destination(page, 'All tools').click();
+  await navigateFocused(page, 'All tools');
   await page.getByRole('searchbox', { name: 'Search all tools' }).fill('Workspace: Load');
   await page.locator('#shellToolsLauncher').getByRole('button', { name: 'Workspace: Load…', exact: true }).click();
   await expect(page.locator('#workspaceLoadDialog')).toContainText('W7 saved group');
@@ -281,11 +287,11 @@ test('hidden attachment control can be recovered from All tools and Settings', a
   await page.locator('#attachButton').click({ button: 'right' });
   await page.locator('#visibilityContextMenu [data-visibility-menu-action="hide"]').click();
   await expect(page.locator('#attachButton')).toBeHidden();
-  await destination(page, 'All tools').click();
+  await navigateFocused(page, 'All tools');
   await page.getByRole('searchbox', { name: 'Search all tools' }).fill('Show all controls');
   await page.locator('#shellToolsLauncher').getByRole('button', { name: 'Show all controls', exact: true }).click();
   await expect(page.locator('#attachButton')).toBeVisible();
-  await destination(page, 'Settings').click();
+  await navigateFocused(page, 'Settings');
   await category(page, 'Appearance').click();
   await expect(page.locator('.settings-workspace').getByRole('button', { name: 'Reset control visibility', exact: true })).toBeVisible();
   await capture(page, info, 'hidden-control-recovery');

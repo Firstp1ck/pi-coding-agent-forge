@@ -1,11 +1,11 @@
 import { expect } from '@playwright/test';
 import { OPTIONAL_FEATURE_CATALOG } from '../../lib/optional-feature-catalog.mjs';
 import { test } from './session-fixture.mjs';
+import { navigateFocused } from './focused-navigation-fixture.mjs';
 
 test.use({ video: 'off', serviceWorkers: 'block', viewport: { width: 1440, height: 900 }, reducedMotion: 'reduce', actionTimeout: 5_000,
   launchOptions: { executablePath: process.env.PI_WEBUI_TEST_CHROMIUM || '/usr/bin/chromium' } });
 test.setTimeout(40_000);
-const destination = (page, name) => page.getByRole('navigation', { name: 'Workspace destinations' }).getByRole('button', { name, exact: true });
 const category = (page, name) => page.getByRole('navigation', { name: 'Settings categories' }).getByRole('button', { name, exact: true });
 const row = (page, id) => page.locator(`[data-settings-feature="${id}"]`);
 
@@ -16,7 +16,7 @@ async function open(page, ownership) {
   await expect(page.locator('#focusedWorkspace')).toBeVisible();
 }
 async function features(page) {
-  await destination(page, 'Settings').click();
+  await navigateFocused(page, 'Settings');
   await category(page, 'Features').click();
   await expect(page.locator('#optionalFeaturesBox')).toBeVisible();
 }
@@ -107,8 +107,8 @@ test('disabled Setup stays reachable while ordinary release access explains its 
     await expect(page.locator('#nativeCommandTitle')).toHaveText(`${name} Setup`);
     await page.keyboard.press('Escape');
   }
-  await destination(page, 'Project').click();
-  await page.getByRole('tab', { name: 'Release', exact: true }).click();
+  await navigateFocused(page, 'Project');
+  await page.getByRole('combobox', { name: 'Project section', exact: true }).selectOption({ label: 'Release' });
   await expect(page.locator('#releaseNpmButton')).toBeHidden();
   await expect(page.locator('#releaseAurButton')).toBeHidden();
   await expect(page.locator('[data-feature-host="release"]')).toContainText('configure missing companions in Settings');
@@ -136,8 +136,8 @@ for (const state of ['failed', 'busy']) {
       await expect(row(page, 'releaseAur').getByRole('alert')).toContainText('W7 package download unavailable');
       await expect(row(page, 'releaseAur').getByRole('button', { name: 'Retry failed', exact: true })).toBeEnabled();
     }
-    await destination(page, 'Activity').click();
-    await destination(page, 'Settings').click();
+    await navigateFocused(page, 'Activity');
+    await navigateFocused(page, 'Settings');
     await category(page, 'Features').click();
     await expect(row(page, 'releaseAur')).toContainText(busy ? 'Installing' : 'W7 package download unavailable');
     await row(page, 'releaseAur').scrollIntoViewIfNeeded();
@@ -161,17 +161,17 @@ test('npm and AUR progress stay in their Project host and explicit controls reta
   });
   await open(page, ownership);
   release();
-  await destination(page, 'Project').click();
-  await page.getByRole('tab', { name: 'Release', exact: true }).click();
+  await navigateFocused(page, 'Project');
+  await page.getByRole('combobox', { name: 'Project section', exact: true }).selectOption({ label: 'Release' });
   const npm = page.getByRole('region', { name: 'npm release output', exact: true });
   const aur = page.getByRole('region', { name: 'AUR release output', exact: true });
   await expect(npm).toBeVisible();
   await expect(aur).toBeVisible();
   await expect(page.locator('#widgetArea .release-npm-live-widget')).toHaveCount(0);
-  await destination(page, 'Settings').click();
+  await navigateFocused(page, 'Settings');
   expect(prompts).toEqual([]);
-  await destination(page, 'Project').click();
-  await page.getByRole('tab', { name: 'Release', exact: true }).click();
+  await navigateFocused(page, 'Project');
+  await page.getByRole('combobox', { name: 'Project section', exact: true }).selectOption({ label: 'Release' });
   await expect(npm).toContainText('W7 npm preflight output');
   await expect(aur).toContainText('W7 aur preflight output');
   await capture(page, info, 'release-progress');
@@ -200,7 +200,7 @@ test('native questionnaire Other and free text retain the exact request and orig
     await route.fulfill({ json: { ok: true, data: {} } });
   });
   await open(page, ownership);
-  await destination(page, 'Settings').click();
+  await navigateFocused(page, 'Settings');
   release();
   await expect(page.locator('#extensionDialog')).toHaveClass(/questionnaire-dialog/);
   await expect(page.locator('.questionnaire-option')).toHaveCount(2);
@@ -228,7 +228,7 @@ test('untrusted theme administration explains why project save is unavailable', 
     await route.fulfill({ response, json: payload });
   });
   await open(page, ownership);
-  await destination(page, 'Settings').click();
+  await navigateFocused(page, 'Settings');
   await category(page, 'Appearance').click();
   await page.locator('#themeCustomizeButton').click();
   await expect(page.locator('#themeCustomizerDialog')).toBeVisible();
@@ -249,14 +249,14 @@ test('Activity Progress keeps the fake-Pi run alive and routes Pause to the same
     await route.fulfill({ json: { ok: true, data: {} } });
   });
   await open(page, ownership);
-  await destination(page, 'Activity').click();
+  await navigateFocused(page, 'Activity');
   await page.getByRole('combobox', { name: 'Activity section', exact: true }).selectOption({ label: 'Progress' });
   const widget = page.locator('[data-feature-host="progress"] .workflow-inspector-widget');
   await expect(widget).toContainText('Fixture Workflow');
   await expect(widget).toContainText('Status: running');
-  await destination(page, 'Settings').click();
+  await navigateFocused(page, 'Settings');
   await page.locator(`#tabBar [data-tab-id="${ownership.tabs[1].id}"] .terminal-tab-button`).click();
-  await destination(page, 'Activity').click();
+  await navigateFocused(page, 'Activity');
   await page.getByRole('combobox', { name: 'Activity section', exact: true }).selectOption({ label: 'Progress' });
   await expect(widget).toHaveCount(0);
   await page.locator(`#tabBar [data-tab-id="${tabId}"] .terminal-tab-button`).click();

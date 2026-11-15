@@ -3,6 +3,7 @@ import { readFile, writeFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { expect } from '@playwright/test';
 import { test as sessionTest } from './session-fixture.mjs';
+import { navigateFocused } from './focused-navigation-fixture.mjs';
 
 const test = sessionTest.extend({
   repo: async ({ ownership }, use) => {
@@ -27,8 +28,8 @@ async function openChanges(page, ownership, repo) {
   await page.addInitScript(() => localStorage.setItem('pi-webui-shell-preferences-v1', JSON.stringify({ v: 1, desktopLayout: 'focused' })));
   await page.goto(`${ownership.baseURL}/?tab=${encodeURIComponent(ownership.tabs[0].id)}`);
   await expect(page.locator('#focusedWorkspace')).toBeVisible();
-  await page.getByRole('navigation', { name: 'Workspace destinations' }).getByRole('button', { name: 'Project', exact: true }).click();
-  await page.getByRole('tab', { name: 'Changes', exact: true }).click();
+  await navigateFocused(page, 'Project');
+  await page.getByRole('combobox', { name: 'Project section', exact: true }).selectOption({ label: 'Changes' });
   const card = page.locator('#gitPanelGroups [data-git-root]').filter({ hasText: repo.cwd });
   await expect(card).toHaveCount(1);
   await card.getByRole('button', { name: 'Git actions for project' }).click();
@@ -125,6 +126,7 @@ test('remove and prune disposable worktree records', async ({ page, ownership, r
 test('create a branch worktree from current HEAD through the picker', async ({ page, ownership, repo }, info) => {
   await page.addInitScript(() => localStorage.setItem('pi-webui-shell-preferences-v1', JSON.stringify({ v: 1, desktopLayout: 'focused' })));
   await page.goto(`${ownership.baseURL}/?tab=${encodeURIComponent(ownership.tabs[0].id)}`);
+  await expect(page.locator('#modelSelect')).not.toBeEmpty();
   await page.locator('#newTabButton').click();
   await page.locator('#newTabWorktreeButton').click();
   await expect(page.getByRole('listbox', { name: 'Git branches and worktrees' })).toBeVisible();
@@ -146,6 +148,7 @@ test('switch an existing local branch in this checkout', async ({ page, ownershi
   repo.git('branch', 'fixture-switch');
   await page.addInitScript(() => localStorage.setItem('pi-webui-shell-preferences-v1', JSON.stringify({ v: 1, desktopLayout: 'focused' })));
   await page.goto(`${ownership.baseURL}/?tab=${encodeURIComponent(ownership.tabs[0].id)}`);
+  await expect(page.locator('#modelSelect')).not.toBeEmpty();
   await page.locator('#newTabButton').click();
   await page.locator('#newTabWorktreeButton').click();
   const option = page.getByRole('option').filter({ hasText: 'fixture-switch' });

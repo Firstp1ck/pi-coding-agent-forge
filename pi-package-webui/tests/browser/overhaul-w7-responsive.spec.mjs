@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import AxeBuilder from '@axe-core/playwright';
 import { expect } from '@playwright/test';
 import { test } from './session-fixture.mjs';
+import { navigateFocused } from './focused-navigation-fixture.mjs';
 
 test.use({ serviceWorkers: 'block', video: 'off', reducedMotion: 'reduce' });
 test.setTimeout(60_000);
@@ -10,7 +11,6 @@ test.setTimeout(60_000);
 const viewports = [[360, 800], [390, 844], [844, 390], [768, 1024], [1024, 768], [1440, 900], [1920, 1080]];
 const composer = ['#promptInput', '#attachButton', '#sendButton'];
 const compactComposer = [...composer, '#composerActionsButton'];
-const destination = (page, name) => page.getByRole('navigation', { name: 'Workspace destinations' }).getByRole('button', { name, exact: true });
 
 async function seed(page, desktopLayout, navigation = 'left') {
   await page.addInitScript(({ desktopLayout, navigation }) => {
@@ -228,7 +228,7 @@ for (const placement of ['left', 'right', 'both']) {
     await hitChecks(page, [...composer, '#modelSelect', '#thinkingSelect'], info, `custom-${placement}`);
     await page.locator('#desktopShellSelect').selectOption('focused');
     await expect(page.locator('#focusedWorkspace')).toBeVisible();
-    await destination(page, 'Settings').click();
+    await navigateFocused(page, 'Settings');
     await page.locator('#desktopShellSelect').selectOption('classic');
     await expect(page.locator('#focusedWorkspace')).toBeHidden();
     await expect(page.locator('#promptInput')).toHaveValue('custom layout retained draft');
@@ -357,8 +357,8 @@ test('200-message history selection find scroll and draft survive real streaming
   }
   await screenshot(page, info, 'long-transcript-selection');
   await page.locator('#promptInput').fill('reading return draft');
-  await destination(page, 'Settings').click();
-  await destination(page, 'Conversation').click();
+  await navigateFocused(page, 'Settings');
+  await navigateFocused(page, 'Conversation');
   await expect(page.locator('#promptInput')).toHaveValue('reading return draft');
   expect.soft(Math.abs(await page.locator('#chat').evaluate(node => node.scrollTop) - before)).toBeLessThanOrEqual(1);
 });
@@ -370,8 +370,8 @@ test('120 real files and long filename retain editor state across destination re
   await page.setViewportSize({ width: 1440, height: 900 });
   await seed(page, 'focused');
   await open(page, ownership);
-  await destination(page, 'Project').click();
-  await page.getByRole('tab', { name: 'Files', exact: true }).click();
+  await navigateFocused(page, 'Project');
+  await page.getByRole('combobox', { name: 'Project section', exact: true }).selectOption({ label: 'Files' });
   await expect(page.locator('#fileTreeRoot [role="treeitem"]')).toHaveCount(120);
   await screenshot(page, info, 'expanded-files');
   await page.locator('#fileTreeSearchInput').fill(longName);
@@ -386,8 +386,8 @@ test('120 real files and long filename retain editor state across destination re
     return node.scrollTop;
   });
   expect(scrollBefore).toBeGreaterThan(0);
-  await destination(page, 'Settings').click();
-  await destination(page, 'Project').click();
+  await navigateFocused(page, 'Settings');
+  await navigateFocused(page, 'Project');
   await expect(page.locator('#fileViewerEditor')).toHaveValue(draft);
   expect(await page.locator('#fileViewerEditor').evaluate(node => [node.selectionStart, node.selectionEnd])).toEqual([8, 10]);
   expect.soft(Math.abs(await page.locator('#fileViewerEditor').evaluate(node => node.scrollTop) - scrollBefore)).toBeLessThanOrEqual(1);

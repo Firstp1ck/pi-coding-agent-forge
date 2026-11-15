@@ -2,6 +2,7 @@ import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect } from '@playwright/test';
 import { test } from './session-fixture.mjs';
+import { navigateFocused } from './focused-navigation-fixture.mjs';
 
 test.use({ video: 'off', serviceWorkers: 'block', viewport: { width: 1440, height: 900 }, reducedMotion: 'reduce' });
 test.setTimeout(45_000);
@@ -13,19 +14,18 @@ test.beforeEach(async ({ page, ownership }) => {
   await expect(page.locator('#modelSelect')).not.toBeEmpty();
 });
 
-test('Project topics reveal canonical Files and Changes without losing filters or drafts', async ({ page }) => {
-  const rail = page.getByRole('navigation', { name: 'Workspace destinations' });
+test('Project sections reveal canonical Files and Changes without losing filters or drafts', async ({ page }) => {
   await page.locator('#promptInput').fill('keep project draft');
-  await rail.getByRole('button', { name: 'Project', exact: true }).click();
+  await navigateFocused(page, 'Project');
   const filter = page.locator('#fileTreeSearchInput');
   await filter.fill('project filter');
   await filter.evaluate(node => { window.originalFileFilter = node; });
-  await page.getByRole('tab', { name: 'Changes', exact: true }).click();
+  await page.getByRole('combobox', { name: 'Project section', exact: true }).selectOption({ label: 'Changes' });
   await expect(page.locator('#gitPanelGroups')).toBeVisible();
   await expect(page.locator('#gitPanelGroups')).not.toBeEmpty();
   expect(new URL(page.url()).searchParams.get('inspector')).toBe('git');
   await page.goBack();
-  await expect(page.getByRole('tab', { name: 'Files', exact: true })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('combobox', { name: 'Project section', exact: true })).toHaveValue('files');
   await expect(filter).toHaveValue('project filter');
   expect(await filter.evaluate(node => node === window.originalFileFilter)).toBe(true);
   await expect(page.locator('#promptInput')).toHaveValue('keep project draft');
@@ -33,7 +33,7 @@ test('Project topics reveal canonical Files and Changes without losing filters o
 
 test('Activity topics preserve queue controls and Events filter through navigation and Classic restore', async ({ page }, testInfo) => {
   const rail = page.getByRole('navigation', { name: 'Workspace destinations' });
-  await rail.getByRole('button', { name: 'Activity', exact: true }).click();
+  await navigateFocused(page, 'Activity');
   await page.getByRole('combobox', { name: 'Activity section', exact: true }).selectOption({ label: 'Queues' });
   await expect(page.locator('#createPromptListButton')).toBeVisible();
   await page.locator('#queueBox').evaluate(node => { window.originalQueue = node; });
@@ -98,8 +98,8 @@ test('runner input and drafts survive destination changes and only explicit Stop
   expect(await widget.evaluate(node => node === window.retainedRunnerWidget)).toBe(true);
   const hiddenRun = await ownership.api(`/api/app-runners?tab=${encodeURIComponent(ownership.tabs[0].id)}`);
   expect(hiddenRun.activeRun.status).toBe('running');
-  await rail.getByRole('button', { name: 'Project', exact: true }).click();
-  await page.getByRole('tab', { name: 'Runners', exact: true }).click();
+  await navigateFocused(page, 'Project');
+  await page.getByRole('combobox', { name: 'Project section', exact: true }).selectOption({ label: 'Runners' });
   await expect(input).toHaveValue('keep stdin draft');
   await rail.getByRole('button', { name: 'Settings', exact: true }).click();
   await page.locator('#desktopShellSelect').selectOption('classic');

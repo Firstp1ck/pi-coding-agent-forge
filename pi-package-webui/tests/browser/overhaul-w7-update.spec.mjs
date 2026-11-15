@@ -1,6 +1,7 @@
 import { writeFile } from 'node:fs/promises';
 import { expect } from '@playwright/test';
 import { test } from './session-fixture.mjs';
+import { navigateFocused } from './focused-navigation-fixture.mjs';
 
 test.use({ viewport: { width: 1440, height: 900 }, serviceWorkers: 'block', video: 'off', reducedMotion: 'reduce', actionTimeout: 5_000 });
 test.setTimeout(60_000);
@@ -93,7 +94,7 @@ test('System update keeps its job through destination changes and a real browser
   await expect(page.locator('#confirmationSummary')).toContainText(plan.digest);
   await page.locator('#confirmationConfirmButton').click();
   await expect(page.locator('#webuiVersionButton')).toHaveAttribute('data-update-state', 'running');
-  await destinations(page).getByRole('button', { name: 'Project', exact: true }).click();
+  await navigateFocused(page, 'Project');
   await expect(page.locator('#fileTreeSearchInput')).toBeVisible();
   await page.locator('#fileTreeSearchInput').fill('retained project filter');
   expect(streams.length, 'Destination changes must retain the existing active-tab stream').toBe(streamCount);
