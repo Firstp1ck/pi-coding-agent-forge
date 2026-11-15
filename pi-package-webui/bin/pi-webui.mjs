@@ -73,13 +73,14 @@ import {
   isWindowsDriveRoot,
   windowsDrivesPickerData,
 } from "../lib/windows-drive-roots.mjs";
+import { createPackageUpdates } from "../lib/package-updates.mjs";
 import { ComponentUpdateState, sanitizeComponentUpdateError, validateUpdateApplyRequest, validateUpdatePlanRequest } from "../lib/component-update-state.mjs";
 import { parseRuntimeVersion, resolveCanonicalPiRuntime, resolveWebuiRuntimeIdentity } from "../lib/update/resolver.mjs";
 import { resolveUpdatePathPi } from "../lib/update/path-pi.mjs";
 import { npmGlobalWebuiTarget, piUserWebuiTarget, selfUpdateCommand } from "../lib/update/native-targets.mjs";
 import { acknowledgeUpdateFence, affectedParticipants, assertEffectAdmission, createUpdateAdmissionCounter, effectLockForRoot, persistSharedJob, readSharedJob, registerUpdateParticipant, releaseEffectLocks, sharedUpdateRoot, unregisterUpdateParticipant } from "../lib/update/coordination.mjs";
 import { affectedActivePiDependency, createNativeUpdatePlan, inspectNativeJob, launchNativeUpdate, validateNativePlan } from "../lib/update/native-jobs.mjs";
-import { discoverNativeJobs, nativeJobBlocksUpdates, publicNativeJob } from "../lib/update/discovery.mjs";
+import { publicNativeJob } from "../lib/update/discovery.mjs";
 import { assertRestoredPiState, nativeUpdateOutcome } from "../lib/update/verification.mjs";
 import { frozenUpdateEnvironment, readUpdateContext } from "./pi-webui-update-context.mjs";
 import { packageOwnerRoot } from "../lib/update/package-layout.mjs";
@@ -7598,6 +7599,7 @@ async function spawnRestartServer(restorableTabs, supervisorCursor, updateRestar
 let updateStatusCache = null;
 let updateStatusCacheAt = 0;
 const componentUpdateState = new ComponentUpdateState();
+const packageUpdates = createPackageUpdates({ agentDir, cwd: options.cwd });
 
 async function canonicalUpdateIdentities({ forcePi = false } = {}) {
   const pi = await canonicalPiRuntimeIdentity({ force: forcePi });
@@ -7963,15 +7965,11 @@ function basePackageUpdateStatus(packageName, currentVersion) {
 }
 
 async function checkLatestPiReleaseStatus() {
-  const [selected, pathPi] = await Promise.all([
-    canonicalPiRuntimeIdentity({ force: true }).catch(() => null),
-    resolveUpdatePathPi({ runVersion: runCommand }),
-  ]);
-  const currentVersion = pathPi.eligible ? pathPi.version : "";
+  const currentVersion = String(piPackageJson.version || "");
   const status = basePackageUpdateStatus(PI_CODING_AGENT_PACKAGE, currentVersion);
-  status.activeRuntimeVersion = selected?.active?.version || "unknown";
-  status.pathInstallationVersion = currentVersion || "unknown";
-  status.pathGuidance = pathPi.eligible ? "" : pathPi.guidance;
+  status.activeRuntimeVersion = "unknown";
+  status.pathInstallationVersion = "unknown";
+  status.pathGuidance = "";
   const skippedReason = updateChecksSkippedReason();
   if (skippedReason) {
     status.skipped = true;
@@ -8030,25 +8028,15 @@ async function checkLatestNpmPackageStatus(packageName, currentVersion) {
 
 async function updateStatusForRequest(status, req) {
   const localRequest = isLocalRequest(req);
-  let nativeJobs = { pi: null, webui: null };
-  let nativeJobDiscoveryError = "";
-  if (localRequest) {
-    try {
-      nativeJobs = await discoverNativeJobs(await sharedUpdateRoot(), {
-        agentDir: await realpath(agentDir), ownerPackageRoot: realpathSync(packageRoot), ownerBootIdentity: bootIdentity,
-      });
-    } catch {
-      nativeJobDiscoveryError = "Durable update history could not be verified. Inspect the host before retrying or restarting.";
-    }
-  }
-  const updateInProgress = await privilegedUpdateInProgress() || Boolean(nativeJobDiscoveryError) ||
-    Object.values(nativeJobs).some(nativeJobBlocksUpdates);
+  const nativeJobs = packageUpdates.getJobs();
+  const updateInProgress = packageUpdates.running;
   return {
     ...status,
     canRunUpdate: localRequest && !updateInProgress,
     updateInProgress,
-    componentUpdates: await componentUpdatesForRequest(req, updateInProgress),
-    ...(localRequest ? { nativeJobs, nativeJobDiscoveryError } : {}),
+    restartRequired: Object.values(nativeJobs).some((job) => job?.restartRequired),
+    componentUpdates: componentUpdateState.publicStates({ localRequest, updateInProgress, webuiAvailable: true, webuiUnavailableReason: "" }),
+    ...(localRequest ? { nativeJobs, nativeJobDiscoveryError: "" } : {}),
   };
 }
 
@@ -8071,7 +8059,7 @@ async function getUpdateStatus({ force = false } = {}) {
     webui: webuiStatus,
     packages: {
       checked: false,
-      note: "Separate native Pi and Web UI actions use confirmed PATH Pi or proven npm ownership; uncertain targets require a manual update."
+      note: "Updates use PATH Pi and detected npm-global or Pi-managed Web UI installations. Restart Web UI manually after updating."
     },
   };
   updateStatusCacheAt = now;
@@ -11226,7 +11214,7 @@ const server = createServer(async (req, res) => {
       if (process.env.PI_WEBUI_STARTUP_PROBE === "1") throw makeHttpError(409, "Isolated startup probes cannot plan updates.");
       const validation = validateUpdatePlanRequest(await readJsonBody(req));
       if (!validation.ok) throw makeHttpError(400, validation.error);
-      const plan = await createNativeServerPlan(validation.targets);
+      const plan = await packageUpdates.plan(validation.targets[0]);
       sendJson(res, 201, { ok: true, data: { plan } });
       return;
     }
@@ -11236,7 +11224,7 @@ const server = createServer(async (req, res) => {
       if (process.env.PI_WEBUI_STARTUP_PROBE === "1") throw makeHttpError(409, "Isolated startup probes cannot apply updates.");
       const validation = validateUpdateApplyRequest(await readJsonBody(req));
       if (!validation.ok) throw makeHttpError(400, validation.error);
-      const data = await applyNativeServerPlan(validation.transactionId, validation.planDigest);
+      const data = packageUpdates.apply(validation.transactionId, validation.planDigest);
       sendJson(res, 202, { ok: true, data });
       return;
     }
@@ -11244,9 +11232,10 @@ const server = createServer(async (req, res) => {
     const updateTransactionRoute = url.pathname.match(/^\/api\/update\/transactions\/([A-Za-z0-9._-]{1,128})$/);
     if (updateTransactionRoute && req.method === "GET") {
       requireLocalhost(req, "Viewing update transactions is only allowed from localhost");
-      const job = await finalizeNativeJob(updateTransactionRoute[1]);
+      const simpleJob = packageUpdates.getJob(updateTransactionRoute[1]);
+      const job = simpleJob || await finalizeNativeJob(updateTransactionRoute[1]);
       if (!job) throw makeHttpError(404, "Update job was not found.");
-      sendJson(res, 200, { ok: true, data: publicNativeJob(job) });
+      sendJson(res, 200, { ok: true, data: simpleJob || publicNativeJob(job) });
       return;
     }
 

@@ -41,10 +41,10 @@ export function validateUpdatePlanRequest(body) {
   if (!body || typeof body !== "object" || Array.isArray(body)) return { ok: false, error: "Request body must be an object." };
   const keys = Object.keys(body).sort();
   if (keys.some((key) => key !== "targets") || !Array.isArray(body.targets) || body.targets.length !== 1) {
-    return { ok: false, error: "targets must contain exactly one value: pi or webui." };
+    return { ok: false, error: "targets must contain exactly one value: all, webui or pi." };
   }
   const targets = body.targets;
-  if (!TARGET_SET.has(targets[0])) return { ok: false, error: "targets contains an unsupported target." };
+  if (!["all", "webui", "pi"].includes(targets[0])) return { ok: false, error: "targets contains an unsupported target." };
   return { ok: true, targets };
 }
 
