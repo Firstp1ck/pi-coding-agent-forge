@@ -1,0 +1,35 @@
+# No Project conversations and stable compact controls
+
+## Outcome and classification
+
+Parent owns integration. This is complex: a new No Project session lifecycle crosses process/filesystem persistence, while resize and disclosure behavior cross presentation and canonical control owners. User requests Sol/high workers/reviewers, parallel isolated writes, maximum two review rounds, no Anthropic. Existing PR38 authorization continues; no merge, deployment, installs or live settings changes.
+
+## Decisions and invariants
+
+- Pi brand opens a fresh empty No Project conversation without replacing existing sessions/drafts. No Project is distinct from a chosen project folder. Each new No Project conversation receives a unique persistent application-owned directory, never a user's repository, shared temporary cwd or previous conversation directory. Files survive tab close. Resume preserves a conversation's directory. Exact allocation and restoration seams must be settled from the lifecycle scout before backend implementation; this does not block independent UI work.
+- Overview grows naturally with its content. Remove arbitrary 32rem height truncation and avoid a nested clipped content viewport. At normal desktop dimensions all rows must be fully visible. At physically constrained viewport sizes keep content reachable and controls accessible without pretending unbounded content can fit; prefer reflow across columns when width allows. Final overflow handling must be explicit, not silently cut off.
+- Remove only header All tools; keep lower-left launcher, Ctrl/Cmd+K and canonical command actions. Move the pulse/Attention inbox button from header to the lower rail before All tools/Settings, preserving badges, exact decision routes and run controls.
+- Right inspector has a drag/keyboard separator, browser-local inspectorWidth already supported at 240–640px. Preserve a usable conversation minimum, effective clamping on viewport/sidebar changes without overwriting preference, no write on no-op click, Escape cancels even after Tab, pointer loss cancels, close/Classic cancels. Reuse conventions from left resizing without changing its established contract.
+- More becomes a floating disclosure beside its trigger; opening/closing does not move prompt, Send, chat or footer. Use an appropriate chevron disclosure affordance instead of a minus. Canonical secondary controls, saved order and nested menus remain. Options anchors beside its actual trigger and stays in viewport, above overview; retain keyboard focus/Escape/outside dismissal and native dialog ownership.
+- Remove duplicate compact Session/Model/Scoped models/Effort strip. Existing footer provides model/scoped/effort actions. Preserve legacy/mobile controls, action availability, per-tab targets and saved ordering.
+- No backend authorization/HTTP/SSE/supervisor weakening. All browser/server/Git verification uses isolated HOME/XDG/Pi/npm/Git and fake Pi. Real provider/physical-device verification is out of scope.
+
+## Dependency graph and write ownership
+
+1. Read-only Sol lifecycle scout produces handoffs/no-project-scout.md; parent settles and records backend contract.
+2. In parallel, two dependency-ready isolated Sol workers:
+   - A shell chrome and right resize: public/shell-workspace.mjs, public/shell-workspace.css, new public/shell-inspector-resize.mjs, tests/browser/inspector-resize.spec.mjs, tests/browser/shell-workspace.spec.mjs, tests/browser/inspector-header.spec.mjs. Add optional onHome and onInspectorResize callbacks. Remove header tools, move existing attention node to rail bottom. Parent wires callback persistence/home behavior in adapter/app. Do not change preferences schema, adapter, app, index/cache or overview CSS.
+   - B floating composer disclosure: public/focused-shell-adapter.css, new public/focused-composer-disclosure.mjs, new tests/browser/composer-disclosure.spec.mjs. Export createFocusedComposerDisclosure({document,trigger,panel,optionsTrigger,optionsPanel}) -> {update({enabled,open,optionsOpen}),dispose()}; preserve canonical nodes and existing handlers. Own immediate measured placement and presentation only, no dispatch/new state/persistence. Parent calls update from existing setters and render, owns app.js and adapter.js. Do not edit other source/tests, caches/docs.
+3. Parent owns overview natural sizing, adapter integration, duplicate-strip removal, app.js event wiring, No Project integration after scout decision, shared tests/docs/cache/inventory and fixture migration. A later backend worker may own a narrow allocator/storage module plus tests after its contract is settled; never overlap active writer paths.
+4. Integrate worker commits, verify full combined flows and screenshots. Two fresh read-only Sol R1 review outputs with lifecycle/security and UI/ownership angles. Parent verifies and fixes accepted findings. At most one bounded R2 for fixes. Do not count scouts/self-checks as implementation or independent review.
+5. Self-contained HTML evidence report, archive completed verified plan, update authorized PR38 and link immediately after push. No merge.
+
+## Worker contracts and validation
+
+Each worker reads AGENTS and this plan, stays in exact paths, commits only owned files, supplies base/result hashes, commands/exits, screenshots shown/inspected, omissions/API notes and unique handoff (layout-shell-worker.md / composer-disclosure-worker.md). No children, dependency changes, global config, installs, preview tools or live provider calls. Stop for a required unapproved contract change or ownership conflict. Use copied parent ignored run-ui-polish-command.sh and playwright.ui-polish.config.mjs with existing shared deps and system Chromium.
+
+Acceptance includes dark/light at 1440×900 and 1100×500, narrow inspector, retained drafts/streams, More geometry invariant, Options pointer and keyboard anchoring, bounded right-resize persistence/cancel, complete normal-height overview rows, footer-only model/scoped/effort access, Pi new empty No Project creation with unique directories, chosen project preservation, reload/restore/resume correctness, failure handling and server path ownership. Package check and targeted cross-workstream browser/PWA checks required; preserve static assertions when owners move. No coverage claims for unrun environments.
+
+## Rollback and open risks
+
+Classic remains a layout fallback; additive inspector preference already validated. No Project data is retained and has no automatic deletion. Backend paths/lifecycle details await scout and parent decision. New directory creation must be race-safe and must not allow client-controlled arbitrary allocation roots. Overflow on a physically smaller viewport needs accessible recovery; normal content must not be clipped behind a fixed card cap. Model/effort footer availability must be checked before removing duplicate strip. No implementation acceptance yet.
