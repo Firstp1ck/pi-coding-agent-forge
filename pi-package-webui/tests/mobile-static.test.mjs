@@ -1,3 +1,4 @@
+import { createActivityAgentsController } from "../public/activity-agents-controller.mjs";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import vm from "node:vm";
@@ -5,6 +6,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+const agentsControllerSource = await readFile(join(root, "public", "activity-agents-controller.mjs"), "utf8");
 const runnersControllerSource = await readFile(join(root, "public", "project-runners-controller.mjs"), "utf8");
 const eventsControllerSource = await readFile(join(root, "public", "activity-events-controller.mjs"), "utf8");
 const [pkgRaw, html, css, app, server, extension, readme, technical, development, startScript, manifestRaw, serviceWorker, appleIcon, icon192, icon512, matrixBackground, mochaBackground] = await Promise.all([
@@ -1253,13 +1255,16 @@ assert.match(css, /\.subagent-agent-list \{[\s\S]*gap: 0\.16rem;[\s\S]*\.subagen
 assert.match(css, /\.subagent-workflow \{[\s\S]*\.subagent-workflow-header \{[\s\S]*list-style: none;[\s\S]*\.subagent-workflow:not\(\[open\]\)[\s\S]*\.subagent-workflow-agents \{[\s\S]*border-left:/, "workflow disclosures should have a distinct collapsible header and visually nested child-agent section");
 assert.match(app, /function renderSubagentOverlayWidget\(\)[\s\S]*openSubagentCancelDialog\(selection\.tab, selection\.run, agent\)[\s\S]*subagent-overlay-cancel-action/, "running overlays should route cancel through the shared dialog");
 assert.match(app, /subagentTerminalCancelButton[\s\S]*openSubagentCancelDialog\(view\.tab \|\| \{ tabId: view\.parentTabId, tabTitle: view\.parentTitle \}, view\.run, view\.data\?\.agent \|\| view\.agent\)/, "running terminal headers should route cancel through the shared dialog");
-assert.match(app, /function openSubagentCancelDialog\(tab, run, agent = null\)[\s\S]*agentCount[\s\S]*The entire run will be stopped[\s\S]*subagentCancelDialog\.showModal\(\)[\s\S]*async function submitSubagentCancel\(\)[\s\S]*api\("\/api\/subagents\/cancel", \{[\s\S]*method: "POST",[\s\S]*scoped: false,[\s\S]*group: selection\.groupId,[\s\S]*runId: selection\.runId/, "the shared cancel dialog should honestly describe and submit whole-run cancellation with optional reason/note data");
+assert.match(app, /function openSubagentCancelDialog[\s\S]*activityAgents\.beginCancel\(tab, run, agent\)[\s\S]*The entire run will be stopped[\s\S]*subagentCancelDialog\.showModal\(\)/, "the shared dialog explains whole-run cancellation and captures its owner");
+assert.match(agentsControllerSource, /async function submitCancel[\s\S]*api\("\/api\/subagents\/cancel", \{[\s\S]*method: "POST",[\s\S]*scoped: false,[\s\S]*group: selection\.groupId,[\s\S]*runId: selection\.runId/, "cancellation retains the explicit owning group and run");
 assert.doesNotMatch(app, /body: \{\n\s+tab: selection\.tabId,\n\s+runId: selection\.runId,\n\s+\.\.\.\(selection\.agentId/, "the frontend must not imply unsupported per-agent cancellation in its request contract");
-assert.match(app, /async function dismissSubagentRun\(tab, run\)[\s\S]*api\("\/api\/subagents\/dismiss", \{[\s\S]*method: "POST",[\s\S]*scoped: false,[\s\S]*body: \{ group: tab\.groupId, runId: run\.id \}/, "finished-run dismiss controls should call the owning group endpoint");
-assert.match(app, /function finishedSubagentRunSelections\(data = latestSubagents\)[\s\S]*subagentRunIsTerminal\(run\) && subagentRunCanDismiss\(run\)[\s\S]*async function clearFinishedSubagentRuns\(\{ automatic = false \} = \{\}\)[\s\S]*for \(const selection of selections\)[\s\S]*api\("\/api\/subagents\/dismiss", \{[\s\S]*body: \{ group: selection\.groupId, runId: selection\.runId \}[\s\S]*subagentsClearFinishedButton\.disabled = subagentsLoading \|\| subagentsClearingFinished \|\| finishedRuns\.length === 0/, "clear-finished should dismiss visible terminal ordinary runs while preserving retry-gated, active, and workflow runs");
+assert.match(agentsControllerSource, /async function dismiss\(tab, run\)[\s\S]*const groupId = tab\.groupId;[\s\S]*const runId = run\.id;[\s\S]*api\("\/api\/subagents\/dismiss", \{ method: "POST", scoped: false, body: \{ group: groupId, runId \} \}\)/, "finished-run dismiss controls retain the owning group endpoint");
+assert.match(app, /function finishedSubagentRunSelections[\s\S]*subagentRunIsTerminal\(run\) && subagentRunCanDismiss\(run\)/, "clear policy excludes active and ineligible runs");
+assert.match(agentsControllerSource, /for \(const selection of selections\)[\s\S]*body: \{ group: selection\.groupId, runId: selection\.runId \}/, "clear applies exact selected group/run identities");
+assert.match(app, /subagentsClearFinishedButton\.disabled = activityAgents\.getSnapshot\(\)\.loading \|\| activityAgents\.getSnapshot\(\)\.clearingFinished \|\| finishedRuns\.length === 0/, "clear controls use the sole loading/clearing owner");
 assert.match(app, /subagentsAutoClearButton\?\.addEventListener\("click", \(\) => \{[\s\S]*setSubagentAutoClearEnabled\(!subagentAutoClearEnabled, \{ announce: true \}\)/, "the Auto-Clear button should toggle the selected browser preference");
 assert.match(app, /SUBAGENT_AUTO_CLEAR_STORAGE_KEY = "pi-webui-subagent-auto-clear"[\s\S]*function readStoredSubagentAutoClearEnabled\(\)[\s\S]*localStorage\.getItem\(SUBAGENT_AUTO_CLEAR_STORAGE_KEY\) === "1"[\s\S]*function setSubagentAutoClearEnabled[\s\S]*clearFinishedSubagentRuns\(\{ automatic: true \}\)[\s\S]*restoreSubagentAutoClearSetting\(\)/, "Auto-Clear should persist per browser and immediately clear already-finished ordinary runs when selected");
-assert.match(app, /async function refreshSubagents\(\)[\s\S]*refreshed = true[\s\S]*refreshed && subagentAutoClearEnabled && finishedSubagentRunSelections\(\)\.length[\s\S]*await clearFinishedSubagentRuns\(\{ automatic: true \}\)/, "successful overview refreshes should await guarded auto-clear when terminal runs appear");
+assert.match(agentsControllerSource, /refreshed && getAutoClear\(\) && finishedSelections\(data\)\.length[\s\S]*await clearFinished\(\{ automatic: true \}\)/, "successful refreshes await guarded Auto-Clear");
 assert.match(app, /subagentsClearFinishedButton\?\.addEventListener\("click", \(\) => \{[\s\S]*clearFinishedSubagentRuns\(\)/, "the clear-finished button should invoke the guarded bulk dismissal action");
 assert.match(css, /\.subagents-status-row \{[\s\S]*display: flex;[\s\S]*\.subagents-auto-clear-button,[\s\S]*\.subagents-clear-finished-button \{[\s\S]*min-height: 2rem;[\s\S]*\.subagents-auto-clear-button\[aria-pressed="true"\]/, "the clear controls should share a compact row with a visible Auto-Clear selected state");
 const clearFinishedSourceStart = app.indexOf("function finishedSubagentRunSelections(");
@@ -1285,17 +1290,22 @@ const clearFinishedContext = {
   },
   subagentRunIsTerminal(run) { return ["done", "failed", "cancelled"].includes(run?.status); },
   subagentRunCanDismiss(run) { return clearFinishedContext.subagentRunIsTerminal(run) && run?.source !== "workflow"; },
-  subagentsClearingFinished: false,
-  subagentsLoading: false,
-  refreshSubagentsTimer: null,
-  clearTimeout() {},
-  renderSubagents() {},
-  async api(path, options) { clearFinishedCalls.push({ path, options }); },
-  async refreshSubagents() { clearFinishedRefreshes += 1; },
-  scheduleRefreshSubagents() {},
-  addEvent(message, level, options = {}) { clearFinishedEvents.push({ message, level, options }); },
 };
-vm.runInNewContext(`${app.slice(clearFinishedSourceStart, clearFinishedSourceEnd)}\nthis.runClearFinishedSubagentRuns = clearFinishedSubagentRuns;`, clearFinishedContext);
+vm.runInNewContext(`${app.slice(clearFinishedSourceStart, clearFinishedSourceEnd)}\nthis.runClearFinishedSubagentRuns = clearFinishedSubagentRuns; this.finishedSelections = finishedSubagentRunSelections;`, clearFinishedContext);
+clearFinishedContext.activityAgents = createActivityAgentsController({
+  getVisibility: () => "visible", getAutoClear: () => false,
+  finishedSelections: data => clearFinishedContext.finishedSelections(data),
+  canCancel: () => false, canDismiss: clearFinishedContext.subagentRunCanDismiss,
+  isAttachedProjection: () => false, agentCount: () => 0,
+  setTimeout() { return 1; }, clearTimeout() {},
+  async api(path, options) {
+    if (path === "/api/subagents") { clearFinishedRefreshes += 1; return { data: clearFinishedContext.latestSubagents }; }
+    clearFinishedCalls.push({ path, options });
+  },
+  onEvent(message, level, options = {}) { clearFinishedEvents.push({ message, level, options }); },
+});
+await clearFinishedContext.activityAgents.refresh();
+clearFinishedRefreshes = 0;
 await clearFinishedContext.runClearFinishedSubagentRuns();
 assert.deepEqual(JSON.parse(JSON.stringify(clearFinishedCalls)), [
   { path: "/api/subagents/dismiss", options: { method: "POST", scoped: false, body: { group: "tab:tab-a", runId: "done-a" } } },
@@ -1303,10 +1313,12 @@ assert.deepEqual(JSON.parse(JSON.stringify(clearFinishedCalls)), [
   { path: "/api/subagents/dismiss", options: { method: "POST", scoped: false, body: { group: "tab:tab-b", runId: "cancelled-b" } } },
 ], "clear-finished should call the existing dismiss endpoint only for visible terminal ordinary runs");
 assert.equal(clearFinishedRefreshes, 1, "clear-finished should refresh the overview once after all dismissals");
-assert.equal(clearFinishedContext.subagentsClearingFinished, false, "clear-finished should always release its in-flight guard");
+assert.equal(clearFinishedContext.activityAgents.getSnapshot().clearingFinished, false, "clear-finished should always release its in-flight guard");
 assert.deepEqual(clearFinishedEvents, [{ message: "cleared 3 finished subagent runs", level: "info", options: {} }]);
 clearFinishedContext.latestSubagents = { tabs: [{ tabId: "tab-c", runs: [{ id: "done-c", status: "done", source: "async" }] }] };
+await clearFinishedContext.activityAgents.refresh();
 await clearFinishedContext.runClearFinishedSubagentRuns({ automatic: true });
+clearFinishedContext.activityAgents.dispose();
 assert.deepEqual(JSON.parse(JSON.stringify(clearFinishedEvents.at(-1))), {
   message: "auto-cleared",
   level: "info",
@@ -1516,8 +1528,8 @@ const subagentWidgetSource = appFunctionSource("renderSubagentOverlayWidget", "s
 assert.ok(subagentWidgetSource.includes("const visibleFallbackText = !hasStructuredTranscript ? fallbackText : emptyTranscriptFallback;"), "the widget should render a fallback instead of leaving structured-but-hidden output blank");
 assert.ok(subagentWidgetSource.includes("if (visibleFallbackText) {"), "the widget should append the nonblank fallback bubble");
 assert.ok(subagentWidgetSource.includes("if (running) appendSubagentRunIndicator(output, { agent, run: selection.run });"), "running subagent widgets should append the shared live activity indicator");
-assert.match(app, /api\("\/api\/subagents", \{ scoped: false \}\)/, "frontend should refresh the cross-tab subagent overview");
-assert.match(app, /SUBAGENTS_ACTIVE_REFRESH_MS = 1500/, "running subagents should receive a fast live refresh cadence");
+assert.match(agentsControllerSource, /api\("\/api\/subagents", \{ scoped: false \}\)/, "frontend should refresh the cross-tab subagent overview");
+assert.match(agentsControllerSource, /ACTIVE_REFRESH_MS = 1500/, "running subagents retain their live refresh cadence");
 assert.match(server, /url\.pathname === "\/api\/subagents" && req\.method === "GET"[\s\S]*await webuiSubagentsData\(\)/, "server should await enriched cross-tab running-subagent titles");
 assert.match(server, /async function resolveSubagentDisplayTitle\(tab\)[\s\S]*tab\.titleSource !== "auto"[\s\S]*get_messages[\s\S]*message\?\.role === "user"[\s\S]*generatedTabTitleFromPrompt\(extractSessionTextContent\(firstUserMessage\?\.content\)\)/, "existing auto-named subagent groups should recover their longer title from the first user message without relaunching children");
 assert.match(server, /const tabSummaries = await Promise\.all\([\s\S]*runs\.length \|\| gates\.length \|\| tab\.webuiAgentRuns\?\.instances\?\.length \? await resolveSubagentDisplayTitle\(tab\) : tab\.title/, "subagent title recovery should run once for visible run and retry-gate groups");
@@ -1754,7 +1766,7 @@ assert.match(app, /const workflowInspectorByTab = new Map\(\)[\s\S]*workflowInsp
 assert.match(app, /const workflowTerminalScrollByTab = new Map\(\);\s*const workflowSubprocessMinimizedByTab = new Set\(\);\s*const workflowOverlayMinimizedByTab = new Set\(\);/, "Workflow subprocess and complete-overlay minimize state should be isolated per browser tab");
 assert.match(app, /function setWorkflowOverlayMinimized\(minimized\)[\s\S]*workflowOverlayMinimizedByTab\.(?:add|delete)[\s\S]*renderWidgets\(\)[\s\S]*workflowOverlayOpenButton[\s\S]*workflow-overlay-close-button[\s\S]*focus\(\{ preventScroll: true \}\)/, "complete Workflow overlay minimize and restore should survive rerenders and move focus to the replacement control");
 assert.match(app, /function workflowOverlayHasContent\(\)[\s\S]*getWidgetLines\("workflow"\)\.length[\s\S]*getWidgetLines\("workflow:subprocess"\)/, "the Workflow restore affordance should remain available when only the legacy status/details widget remains");
-assert.match(app, /function renderWidgets\(\)[\s\S]*if \(!workflowOverlayIsMinimized\(\)\)[\s\S]*attachWorkflowOverlayCloseButton\(workflowInspectorWidget \|\| workflowSubprocessWidget\)[\s\S]*for \(const \[key, value\] of widgets\)[\s\S]*widgetFeatureId === "workflows" && workflowOverlayIsMinimized\(\)/, "closing the complete Workflow overlay should omit specialized surfaces and the legacy workflow status/details widget");
+assert.match(app, /function renderWidgets\(\)[\s\S]*if \(visible\("progress"\) && !workflowOverlayIsMinimized\(\)\)[\s\S]*attachWorkflowOverlayCloseButton\(workflowInspectorWidget \|\| workflowSubprocessWidget\)[\s\S]*for \(const \[key, value\] of widgets\)[\s\S]*widgetFeatureId === "workflows" && workflowOverlayIsMinimized\(\)/, "closing the complete Workflow overlay should omit specialized surfaces and the legacy workflow status/details widget");
 assert.match(app, /workflowOverlayOpenButton\?\.addEventListener\("click", \(\) => setWorkflowOverlayMinimized\(false\)\)/, "the Workflow-button restore affordance should reopen the complete overlay");
 assert.match(app, /function workflowInspectorSetMinimized\(minimized\)[\s\S]*workflowInspectorMinimizedByTab\.(?:add|delete)[\s\S]*renderWidgets\(\)[\s\S]*requestAnimationFrame[\s\S]*workflow-inspector-minimize-button[\s\S]*focus\(\{ preventScroll: true \}\)/, "Workflow inspector minimize state should survive rerenders and restore focus to the replacement control");
 assert.match(app, /function renderWorkflowInspectorWidget\(\)[\s\S]*workflow-inspector-body[\s\S]*workflow-inspector-minimize-button[\s\S]*minimized \? "Restore" : "Minimize"[\s\S]*minimizeButton\.type = "button"[\s\S]*aria-controls[\s\S]*aria-expanded[\s\S]*aria-label[\s\S]*if \(minimized\) return node/, "Workflow inspector should expose an accessible minimize and restore disclosure control");
@@ -1955,7 +1967,7 @@ assert.match(app, /renderReleaseNpmOutputDetails\("release-npm:output", streamHe
 assert.match(app, /function renderReleaseAurOutputWidget\(\)/, "release-aur live output should use a specialized Web UI renderer");
 assert.match(app, /releaseNpmActionButton\("Abort", "\/release-abort", "danger"\)/, "release-npm Web UI output should expose an abort action");
 assert.match(app, /releaseNpmActionButton\("Abort", "\/release-aur abort", "danger"\)/, "release-aur Web UI output should expose an abort action");
-assert.match(app, /key === "todo-progress" && isOptionalFeatureEnabled\("todoProgressWidget"\) \? renderTodoProgressWidget\(key, lines\) : null/, "todo-progress should use the specialized widget renderer only when enabled");
+assert.match(app, /const isTodo = key === "todo-progress" && isOptionalFeatureEnabled\("todoProgressWidget"\)[\s\S]*const specialized = isTodo \? renderTodoProgressWidget\(key, lines\) : null/, "todo-progress should use the specialized widget renderer only when enabled");
 assert.match(app, /let transientMessages = \[\]/, "frontend should keep transient Web UI/extension output messages");
 assert.match(app, /function orderedTranscriptItems\(\)/, "frontend should merge persisted and transient messages chronologically");
 assert.match(app, /items\.sort\(\(a, b\) => a\.timestampMs - b\.timestampMs \|\| a\.order - b\.order\)/, "transient extension output should not pin itself below newer persisted messages");

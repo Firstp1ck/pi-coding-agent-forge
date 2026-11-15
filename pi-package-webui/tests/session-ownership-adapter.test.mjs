@@ -38,6 +38,8 @@ const fileViews=new Map([[activeTabId,{dirty:true,text:'unsaved file'}]]);
 const queued=[], connected=[], refreshed=[], errors=[], network=[];
 const queueMicrotask=fn=>queued.push(fn);
 const noop=()=>{};
+const activityQueue={activate(){}}, latestQueuedMessagesByTab=new Map();
+const activityIntercom={prune:noop,activate:noop}, projectTargetFromContext=ctx=>ctx,renderIntercomActivityLinks=noop,tabs=[{id:"tab-a"}];
 const clearRefreshTimers=noop, cancelNormalStreamRenders=noop, resetStreamBubble=noop, resetChatOutput=noop;
 const connectEvents=ctx=>connected.push(ctx);
 const refreshAll=async ctx=>refreshed.push(ctx);

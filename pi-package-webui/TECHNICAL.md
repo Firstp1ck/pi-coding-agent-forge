@@ -8,6 +8,8 @@ Advanced user setup, configuration, compatibility, security, and troubleshooting
 
 The compact layout is opt-in under **Controls → Interface → Desktop layout**. Its session navigation can sit on the left or above the conversation. **All tools** supports up to twenty pins, saved with the layout choice in this browser. Settings and inspectors reuse your existing controls and their original scopes.
 
+Project and Activity share one topic inspector. Files retain separate unsaved buffers per session; changing views does not save them or stop app runners. Agent output and conversation viewers remain read-only; stopping a run requires its explicit cancel action. The composer queue and Activity Queues operate on the same session queue, including edits, reordering, and removal. Provider usage remains account-wide.
+
 Missing, invalid, or unavailable browser storage keeps Classic. To recover from a layout problem, add `?shell=classic` to the address, or `&shell=classic` when it already has a query. This forces Classic without deleting the saved preference. Remove that parameter to use your choice again. Switching layouts preserves the saved Classic arrangement; phone and tablet preview choices remain independent.
 
 This preview is still undergoing complete feature and platform verification. Native keyboard, cross-browser, and installed-companion checks remain pending.

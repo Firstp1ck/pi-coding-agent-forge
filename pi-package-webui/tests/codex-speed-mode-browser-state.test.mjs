@@ -5,7 +5,7 @@ import * as modes from "../public/codex-speed-mode.mjs";
 
 const source = await readFile(new URL("../public/app.js", import.meta.url), "utf8");
 const start = source.indexOf("// Codex subscription Fast mode is owned");
-const end = source.indexOf("function scheduleRefreshCodexUsage", start);
+const end = source.indexOf("const SUBAGENT_LAUNCHER_LABELS", start);
 assert.ok(start >= 0 && end > start, "execute the actual browser speed-control implementation");
 const controlSource = source.slice(start, end);
 

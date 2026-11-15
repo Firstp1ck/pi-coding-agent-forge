@@ -17,7 +17,7 @@ function fixture() {
 let tabs=[{id:'a',title:'A',running:true,activity:{isWorking:false}},{id:'b',title:'B',running:true,activity:{isWorking:false}}];
 let activeTabId='a',tabsRefreshSerial=0;
 const oldSnapshot=tabs.map(tab=>({...tab,activity:{isWorking:true}}));
-const closingTerminalTabIds=new Set(), intercomConversationSummariesByTab=new Map(),subagentTerminalViews=new Map();
+const closingTerminalTabIds=new Set(), activityIntercom={prune(){}},subagentTerminalViews=new Map();
 const commandCatalogsByTab=new Map(),appRunnerDataByTab=new Map(),tabMessagesCache=new Map(),fileViewersByTab=new Map(),fileViewerSelectionsByTab=new Map(),btwWidgetDismissedIdsByTab=new Map();
 const composerStore={clearTab(){}},sessionContext={invalidate(){}},sessionEvents={close(){assert.fail('inactive close must not close foreground SSE')}};
 const noop=()=>{},syncTabMetadata=noop,syncBlockedTabNotificationsFromTabs=noop,syncAgentDoneNotificationsFromTabs=noop,rememberServerStartCwd=noop,renderSessionSkillTags=noop,renderTabs=noop,syncTabPolling=noop,prefetchInactiveTabCommandCatalogs=noop;

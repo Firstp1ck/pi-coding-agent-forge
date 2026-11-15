@@ -77,7 +77,12 @@ test('runner input and drafts survive destination changes and only explicit Stop
   await expect(input).toHaveValue('keep stdin draft');
   await page.screenshot({ path: testInfo.outputPath('runner-inspector.png') });
   const rail = page.getByRole('navigation', { name: 'Workspace destinations' });
+  await widget.evaluate(node => { window.retainedRunnerWidget = node; });
   await rail.getByRole('button', { name: 'Settings', exact: true }).click();
+  const overview = page.waitForResponse(response => new URL(response.url()).pathname === '/api/subagents');
+  await ownership.api(`/api/prompt?tab=${encodeURIComponent(ownership.tabs[0].id)}`, { message: 'fixture subagents running', requestId: 'hidden-widget-refresh' });
+  await overview;
+  expect(await widget.evaluate(node => node === window.retainedRunnerWidget)).toBe(true);
   const hiddenRun = await ownership.api(`/api/app-runners?tab=${encodeURIComponent(ownership.tabs[0].id)}`);
   expect(hiddenRun.activeRun.status).toBe('running');
   await rail.getByRole('button', { name: 'Project', exact: true }).click();

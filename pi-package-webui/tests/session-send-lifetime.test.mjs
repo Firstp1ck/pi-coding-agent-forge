@@ -20,6 +20,8 @@ const network=[],revoked=[],queued=[],errors=[],promptRoutingTabs=new Set(),guid
 const elements={dialog:{open:true,close(){this.open=false;}},promptInput:{value:'old prompt'}};
 const URL={revokeObjectURL:value=>revoked.push(value)};
 const noop=()=>{};
+const activityQueue={activate(){}}, latestQueuedMessagesByTab=new Map();
+const activityIntercom={prune:noop,activate:noop}, projectTargetFromContext=ctx=>ctx,renderIntercomActivityLinks=noop,tabs=[{id:"tab-a"}];
 const clearRefreshTimers=noop,cancelNormalStreamRenders=noop,resetStreamBubble=noop,resetChatOutput=noop,connectEvents=noop;
 const queueMicrotask=callback=>queued.push(callback),refreshAll=async()=>{};
 const addEvent=(...args)=>errors.push(args),applyResponseTab=()=>true,decrementTabPendingBlockerCount=()=>false,renderTabs=noop;

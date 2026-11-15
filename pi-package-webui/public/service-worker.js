@@ -1,4 +1,4 @@
-const CACHE_NAME = "pi-webui-pwa-v160";
+const CACHE_NAME = "pi-webui-pwa-v161";
 const APP_SHELL = [
   "/",
   "/index.html",
@@ -11,6 +11,8 @@ const APP_SHELL = [
   "/activity-usage-controller.mjs",
   "/activity-intercom-controller.mjs",
   "/activity-todo-view.mjs",
+  "/activity-agents-controller.mjs",
+  "/activity-queue-controller.mjs",
   "/project-git-tools-controller.mjs",
   "/project-runners-controller.mjs",
   "/project-file-viewer-controller.mjs",

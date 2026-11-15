@@ -1238,7 +1238,7 @@ function emitSubagentFixtureStatus({ legacyOnly = false } = {}) {
       version: 1,
       instanceId: agent.id,
       runId: run.id,
-      parentSessionId: "fake-session",
+      parentSessionId: ownedSessionId,
       launcher: run.source === "workflow" ? "workflow" : "pi-subagents",
       provider: run.source === "workflow" ? "workflow-run" : "pi-subagents",
       origin: run.source,

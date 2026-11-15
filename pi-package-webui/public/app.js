@@ -1,3 +1,5 @@
+import { createActivityQueueController, normalizeQueuedMessages, queueMessageCount } from "./activity-queue-controller.mjs";
+import { createActivityAgentsController } from "./activity-agents-controller.mjs";
 import { createActivityTodoView } from "./activity-todo-view.mjs";
 import { createActivityIntercomController } from "./activity-intercom-controller.mjs";
 import { createActivityUsageController } from "./activity-usage-controller.mjs";
@@ -1277,14 +1279,38 @@ const activityUsage = createActivityUsageController({
   api,
   getFooterPayload: () => parseGitFooterWebuiPayload(),
 });
-let latestSubagents = null;
-let subagentsError = null;
-let subagentsLoading = false;
-let subagentsRefreshQueued = false;
-let subagentsRefreshPromise = null;
-let subagentsClearingFinished = false;
+let subagentOverviewViewsChanged = false;
+const activityAgents = createActivityAgentsController({
+  api,
+  getVisibility: () => document.visibilityState,
+  getAutoClear: () => subagentAutoClearEnabled,
+  finishedSelections: finishedSubagentRunSelections,
+  canCancel: subagentRunCanCancel,
+  canDismiss: subagentRunCanDismiss,
+  isAttachedProjection: subagentRunIsAttachedProjection,
+  agentCount: run => subagentRunAgents(run).length,
+  onOverview(data) {
+    pruneDismissedSubagentGateKeys(data?.tabs, dismissedSubagentGateKeys);
+    subagentOverviewViewsChanged = syncSubagentTerminalViewsFromOverview() || subagentOverviewViewsChanged;
+    subagentOverviewViewsChanged = materializeRetainedSubagentTerminalViews() || subagentOverviewViewsChanged;
+  },
+  onRefreshSettled() {
+    if (subagentOverlaySelection?.tabId === activeTabId) renderWidgets();
+    if (activeSubagentTerminalId) {
+      renderSubagentTerminalView();
+      scheduleSubagentTerminalRefresh();
+    }
+    if (subagentOverviewViewsChanged) renderTabs();
+    subagentOverviewViewsChanged = false;
+  },
+  onChange() { renderSubagents(); syncSubagentCancelSubmitting(); },
+  onEvent: addEvent,
+  onCancelStatus: setSubagentCancelStatus,
+  onCancelClosed(selection) {
+    if (activityAgents.getSnapshot().cancelSelection === selection && elements.subagentCancelDialog?.open) elements.subagentCancelDialog.close();
+  },
+});
 let subagentAutoClearEnabled = false;
-let refreshSubagentsTimer = null;
 const dismissedSubagentGateKeys = new Set();
 const collapsedSubagentWorkflowRunKeys = new Set();
 let subagentOverlaySelection = null;
@@ -1294,8 +1320,6 @@ let subagentOverlayLoading = false;
 let subagentOverlayRefreshTimer = null;
 let subagentOverlayRequestSerial = 0;
 let subagentOpenMode = "overlay";
-let subagentCancelSelection = null;
-let subagentCancelSubmitting = false;
 const subagentTerminalViews = new Map();
 const subagentTerminalRestoredParentTabs = new Set();
 let activeSubagentTerminalId = null;
@@ -1404,12 +1428,34 @@ let abortRequestInFlight = false;
 let userBashByTab = new Map();
 let userBashQueuesByTab = new Map();
 let latestQueuedMessagesByTab = new Map();
-let followUpQueueOpen = false;
-const followUpQueueMutationsInFlightByTab = new Set();
-let followUpQueueStatus = { text: "", level: "" };
-let followUpQueueRestoreFocus = null;
-let followUpQueueDrag = null;
-let followUpQueueSuppressBlurFor = null;
+const activityQueue = createActivityQueueController({
+  document, nodes: elements, api,
+  getContext: (tabId = activeTabId) => projectTargetFromContext(activeTabContext(tabId)),
+  isCurrent: isCurrentProjectTarget,
+  isAlive: isAliveProjectTarget,
+  getSnapshot: queuedSnapshotForTab,
+  setSnapshot: (tabId, snapshot) => latestQueuedMessagesByTab.set(tabId, snapshot),
+  onBeforeOpen() {
+    setComposerActionsOpen(false);
+    setPublishMenuOpen(false);
+    setNativeCommandMenuOpen(false);
+    setAppRunnerMenuOpen(false);
+    setOptionsMenuOpen(false);
+    setConversationVoiceMenuOpen(false);
+    setBusyPromptBehaviorMenuOpen(false);
+    setNewTabMenuOpen(false);
+  },
+  onAfterClose: scheduleDeferredUiFlushAfterDropdownClose,
+  onProjectionChange() {
+    updateStickyUserPromptButton();
+    if (mobilePhoneExperienceInstalled && isMobileShellV2Active()) renderMobilePhoneExperience();
+  },
+  onEvent: addEvent,
+  deferRender: deferUiRenderDuringPointerActivation,
+  captureContinuity: captureScopedControlContinuity,
+  restoreContinuity: restoreScopedControlContinuity,
+  isFileDrag,
+});
 let loadedPromptList = null;
 let promptListRunning = false;
 let workspaceDashboardCollapsed = false;
@@ -1638,9 +1684,6 @@ const STICKY_USER_PROMPT_TOP_GAP_PX = 12;
 const CHAT_FOLLOW_SETTLE_DELAY_MS = 80;
 const CHAT_PROGRAMMATIC_SCROLL_GRACE_MS = 500;
 const CHAT_USER_SCROLL_INTENT_MS = 700;
-const SUBAGENTS_ACTIVE_REFRESH_MS = 1500;
-const SUBAGENTS_IDLE_REFRESH_MS = 4000;
-const SUBAGENTS_HIDDEN_REFRESH_MS = 10_000;
 const SUBAGENT_OVERLAY_REFRESH_MS = 1000;
 const UPDATE_STATUS_REFRESH_MS = 6 * 60 * 60 * 1000;
 const COMPONENT_UPDATE_POLL_MS = 1000;
@@ -2180,9 +2223,18 @@ function appendFeatureWidget(node, destination) {
   focusedWidgetPlacements.set(node, destination);
 }
 
-function restoreFocusedWidgetsForRender() {
-  for (const node of focusedWidgetPlacements.keys()) canonicalViewHost.restore(node);
-  focusedWidgetPlacements.clear();
+function visibleFeatureWidgetDestination() {
+  if (!focusedShell?.active) return null;
+  return ["project", "activity"].includes(focusedShellState.destination) ? focusedShell.inspector : "";
+}
+
+function restoreFocusedWidgetsForRender(destination = null) {
+  for (const [node, owner] of focusedWidgetPlacements) {
+    if (destination !== null && owner !== destination) continue;
+    canonicalViewHost.restore(node);
+    node.remove();
+    focusedWidgetPlacements.delete(node);
+  }
 }
 
 function syncFocusedWidgetPlacement() {
@@ -2213,6 +2265,8 @@ function focusedInspectorTopics(destination) {
     .map(record => ({ id: record.id, label: labels[record.id] || record.label || record.button?.querySelector(".side-panel-section-label")?.textContent || record.id }));
 }
 
+let renderedFeatureWidgetDestination = null;
+
 function renderFocusedShell() {
   if (!focusedShell) return;
   const wasActive = focusedShell.active;
@@ -2233,6 +2287,11 @@ function renderFocusedShell() {
   });
   syncDocumentArtifactHost();
   syncFocusedWidgetPlacement();
+  const widgetDestination = visibleFeatureWidgetDestination();
+  if (wasActive !== focusedShell.active || renderedFeatureWidgetDestination !== widgetDestination) {
+    renderedFeatureWidgetDestination = widgetDestination;
+    renderWidgets();
+  }
   renderIntercomActivityLinks();
   syncUsageVisibility();
   if (wasActive !== focusedShell.active) {
@@ -4255,7 +4314,7 @@ function isInteractiveDropdownOpen() {
       || optionsMenuOpen
       || conversationVoiceMenuOpen
       || busyPromptBehaviorMenuOpen
-      || followUpQueueOpen
+      || activityQueue.isOpen()
       || newTabMenuOpen
       || isFooterPickerOpen()
       || elements.commandSuggest?.hidden === false
@@ -6007,7 +6066,7 @@ function setSubagentAutoClearEnabled(enabled, { persist = true, announce = false
   if (persist) persistSubagentAutoClearEnabled(subagentAutoClearEnabled);
   renderSubagents();
   if (announce) addEvent(`subagent auto-clear ${subagentAutoClearEnabled ? "enabled" : "disabled"}`, "info");
-  if (subagentAutoClearEnabled && !subagentsLoading && !subagentsClearingFinished && finishedSubagentRunSelections().length) {
+  if (subagentAutoClearEnabled && !activityAgents.getSnapshot().loading && !activityAgents.getSnapshot().clearingFinished && finishedSubagentRunSelections().length) {
     void clearFinishedSubagentRuns({ automatic: true });
   }
 }
@@ -7434,7 +7493,7 @@ function renderBusyPromptBehaviorTag() {
 }
 
 function setBusyPromptBehaviorMenuOpen(open, { focusCurrent = false } = {}) {
-  if (open && followUpQueueOpen) setFollowUpQueueOpen(false);
+  if (open && activityQueue.isOpen()) setFollowUpQueueOpen(false);
   busyPromptBehaviorMenuOpen = !!open;
   elements.busyPromptBehaviorTag?.setAttribute("aria-expanded", busyPromptBehaviorMenuOpen ? "true" : "false");
   elements.busyPromptBehaviorTag?.classList.toggle("menu-open", busyPromptBehaviorMenuOpen);
@@ -7510,7 +7569,7 @@ function mobileComposerSecondaryNodes() {
     elements.btwButton,
     elements.conversationVoiceMenu,
     elements.conversationModeEndButton,
-  ].filter(Boolean);
+  ].filter(node => node && (!focusedShell?.active || node !== elements.followUpQueueTrigger));
 }
 
 function rememberMobileComposerOriginalPositions() {
@@ -7549,7 +7608,7 @@ function setComposerActionsOpen(open, { restoreFocus = false } = {}) {
   const shouldOpen = open && (isMobileView() || focusedShell?.active === true);
   if (shouldOpen) {
     composerActionsFocusReturn = document.activeElement instanceof HTMLElement ? document.activeElement : elements.composerActionsButton;
-    if (followUpQueueOpen) setFollowUpQueueOpen(false);
+    if (activityQueue.isOpen()) setFollowUpQueueOpen(false);
     setMobileTabsExpanded(false);
     setMobileFooterExpanded(false);
   }
@@ -10632,7 +10691,7 @@ let conversationVoicePending = null;
 // panel (hover/focus-within still work on desktop via CSS), so it also works
 // on touch devices where :hover never fires.
 function setConversationVoiceMenuOpen(open) {
-  if (open && followUpQueueOpen) setFollowUpQueueOpen(false);
+  if (open && activityQueue.isOpen()) setFollowUpQueueOpen(false);
   conversationVoiceMenuOpen = !!open;
   elements.conversationVoiceButton?.setAttribute("aria-expanded", conversationVoiceMenuOpen ? "true" : "false");
   elements.conversationVoiceButton?.classList.toggle("menu-open", conversationVoiceMenuOpen);
@@ -12220,7 +12279,10 @@ function setActiveTabId(tabId, { remember = false } = {}) {
   activeTabGeneration = context.generation;
   renderMainOutputLoading();
   bindGitWorkflowToActiveTab();
-  if (tabChanged) activityIntercom.activate(projectTargetFromContext());
+  if (tabChanged) {
+    activityIntercom.activate(projectTargetFromContext());
+    activityQueue.activate();
+  }
   else activityIntercom.renderTags(nextTabId);
   renderIntercomActivityLinks();
   renderFeatureCategoryTag(nextTabId);
@@ -12250,6 +12312,8 @@ function reconcileReplacedSession(context) {
   activeTabGeneration = context.generation;
   activityIntercom.prune(tabs.filter(tab => tab.id !== context.tabId).map(tab => tab.id));
   activityIntercom.activate(projectTargetFromContext(context));
+  latestQueuedMessagesByTab.delete(context.tabId);
+  activityQueue.activate();
   renderIntercomActivityLinks();
   retireSessionDialogs(context.tabId);
   promptRoutingTabs.delete(context.tabId);
@@ -17213,7 +17277,7 @@ function clearOpenTerminalTabGroup(groupKey, { force = false } = {}) {
 }
 
 function setNewTabMenuOpen(open) {
-  if (open && followUpQueueOpen) setFollowUpQueueOpen(false);
+  if (open && activityQueue.isOpen()) setFollowUpQueueOpen(false);
   newTabMenuOpen = !!open;
   elements.newTabButton?.setAttribute("aria-expanded", newTabMenuOpen ? "true" : "false");
   elements.newTabButton?.classList.toggle("menu-open", newTabMenuOpen);
@@ -17487,7 +17551,7 @@ async function switchTab(tabId) {
   if (themeCustomizerState) closeThemeCustomizer({ restore: true });
   clearOpenTerminalTabGroup(null, { force: true });
   setFollowUpQueueOpen(false);
-  setFollowUpQueueStatus("");
+  activityQueue.setStatus("");
   setMobileTabsExpanded(false);
   footerModelPickerOpen = false;
   footerThinkingPickerOpen = false;
@@ -25032,7 +25096,7 @@ function subagentCapabilities(run = {}, agent = null) {
   return agentCapabilities || runCapabilities || null;
 }
 
-function subagentOverviewGroups(data = latestSubagents) {
+function subagentOverviewGroups(data = activityAgents.getSnapshot().data) {
   const serverNow = Number(data?.updatedAt);
   const now = Number.isFinite(serverNow) ? serverNow : Date.now();
   if (Number(data?.version) === 2 && Array.isArray(data?.groups)) {
@@ -25184,145 +25248,55 @@ function setSubagentCancelStatus(message = "", level = "muted") {
   elements.subagentCancelStatus.hidden = !message;
 }
 
-function setSubagentCancelSubmitting(submitting) {
-  subagentCancelSubmitting = !!submitting;
+function syncSubagentCancelSubmitting() {
+  const submitting = activityAgents.getSnapshot().cancelSubmitting;
   if (elements.subagentCancelSubmitButton) {
-    elements.subagentCancelSubmitButton.disabled = subagentCancelSubmitting;
-    elements.subagentCancelSubmitButton.textContent = subagentCancelSubmitting ? "Cancelling…" : "Cancel subagent";
+    elements.subagentCancelSubmitButton.disabled = submitting;
+    elements.subagentCancelSubmitButton.textContent = submitting ? "Cancelling…" : "Cancel subagent";
   }
-  if (elements.subagentCancelKeepRunningButton) elements.subagentCancelKeepRunningButton.disabled = subagentCancelSubmitting;
+  if (elements.subagentCancelKeepRunningButton) elements.subagentCancelKeepRunningButton.disabled = submitting;
 }
 
-function subagentCancelTargetLabel(selection = subagentCancelSelection) {
+function subagentCancelTargetLabel(selection = activityAgents.getSnapshot().cancelSelection) {
   if (!selection) return "subagent run";
   return `run ${selection.runId}`;
 }
 
 function openSubagentCancelDialog(tab, run, agent = null) {
-  if (!tab?.groupId || !run?.id || !subagentRunCanCancel(run, agent) || !elements.subagentCancelDialog) return;
-  const agentCount = subagentRunAgents(run).length;
-  subagentCancelSelection = {
-    groupId: tab.groupId,
-    tabId: tab.tabId,
-    runId: run.id,
-    agentId: agent?.instanceId || agent?.id || "",
-    agentCount,
-  };
+  if (!elements.subagentCancelDialog) return;
+  const selection = activityAgents.beginCancel(tab, run, agent);
+  if (!selection) return;
   if (elements.subagentCancelDialogSubtitle) {
-    const scope = agentCount > 1 ? ` and all ${agentCount} agents in it` : "";
-    elements.subagentCancelDialogSubtitle.textContent = `Cancel ${subagentCancelTargetLabel()}${scope}? The entire run will be stopped and the parent agent will be notified.`;
+    const scope = selection.agentCount > 1 ? ` and all ${selection.agentCount} agents in it` : "";
+    elements.subagentCancelDialogSubtitle.textContent = `Cancel ${subagentCancelTargetLabel(selection)}${scope}? The entire run will be stopped and the parent agent will be notified.`;
   }
   if (elements.subagentCancelReason) elements.subagentCancelReason.value = "";
   if (elements.subagentCancelNote) elements.subagentCancelNote.value = "";
-  setSubagentCancelStatus();
-  setSubagentCancelSubmitting(false);
   if (!elements.subagentCancelDialog.open) elements.subagentCancelDialog.showModal();
-  queueMicrotask(() => elements.subagentCancelReason?.focus());
+  queueMicrotask(() => {
+    if (activityAgents.getSnapshot().cancelSelection === selection && elements.subagentCancelDialog.open) elements.subagentCancelReason?.focus();
+  });
 }
 
 function closeSubagentCancelDialog() {
-  if (subagentCancelSubmitting) return;
+  if (activityAgents.getSnapshot().cancelSubmitting) return;
   if (elements.subagentCancelDialog?.open) elements.subagentCancelDialog.close();
 }
 
-async function submitSubagentCancel() {
-  const selection = subagentCancelSelection;
-  if (!selection || subagentCancelSubmitting) return;
-  const reason = String(elements.subagentCancelReason?.value || "").trim();
-  const note = String(elements.subagentCancelNote?.value || "").trim();
-  setSubagentCancelSubmitting(true);
-  setSubagentCancelStatus("Cancelling subagent…");
-  try {
-    await api("/api/subagents/cancel", {
-      method: "POST",
-      scoped: false,
-      body: {
-        group: selection.groupId,
-        runId: selection.runId,
-        ...(selection.agentId ? { agentId: selection.agentId } : {}),
-        ...(reason ? { reason } : {}),
-        ...(note ? { note } : {}),
-      },
-    });
-    if (elements.subagentCancelDialog?.open) elements.subagentCancelDialog.close();
-    addEvent(`cancelled ${subagentCancelTargetLabel(selection)}; the parent agent was notified`, "info");
-    await refreshSubagents();
-    scheduleRefreshSubagents();
-  } catch (error) {
-    const message = `subagent cancel failed: ${error.message || String(error)}`;
-    setSubagentCancelStatus(message, "error");
-    addEvent(message, "error");
-  } finally {
-    setSubagentCancelSubmitting(false);
-  }
+function submitSubagentCancel() {
+  return activityAgents.submitCancel({ reason: elements.subagentCancelReason?.value || "", note: elements.subagentCancelNote?.value || "" });
 }
 
-async function dismissSubagentRun(tab, run) {
-  if (!tab?.groupId || !run?.id || !subagentRunCanDismiss(run)) return;
-  const attachedProjection = subagentRunIsAttachedProjection(run);
-  try {
-    await api("/api/subagents/dismiss", {
-      method: "POST",
-      scoped: false,
-      body: { group: tab.groupId, runId: run.id },
-    });
-    addEvent(attachedProjection ? `detached persisted session projection ${run.id}` : `dismissed finished subagent run ${run.id}`, "info");
-    await refreshSubagents();
-    scheduleRefreshSubagents();
-  } catch (error) {
-    addEvent(`subagent dismiss failed: ${error.message || String(error)}`, "error");
-  }
-}
+function dismissSubagentRun(tab, run) { return activityAgents.dismiss(tab, run); }
 
-function finishedSubagentRunSelections(data = latestSubagents) {
+function finishedSubagentRunSelections(data = activityAgents.getSnapshot().data) {
   return subagentOverviewGroups(data).flatMap((tab) => tab.displayRuns
     .filter((run) => subagentRunIsTerminal(run) && subagentRunCanDismiss(run))
     .map((run) => ({ groupId: tab.groupId, runId: run.id }))
     .filter((selection) => selection.groupId && selection.runId));
 }
 
-async function clearFinishedSubagentRuns({ automatic = false } = {}) {
-  if (subagentsClearingFinished || subagentsLoading) return;
-  const selections = finishedSubagentRunSelections();
-  if (!selections.length) return;
-  clearTimeout(refreshSubagentsTimer);
-  subagentsClearingFinished = true;
-  renderSubagents();
-  let dismissed = 0;
-  const failures = [];
-  try {
-    for (const selection of selections) {
-      try {
-        await api("/api/subagents/dismiss", {
-          method: "POST",
-          scoped: false,
-          body: { group: selection.groupId, runId: selection.runId },
-        });
-        dismissed += 1;
-      } catch (error) {
-        failures.push(error);
-      }
-    }
-    await refreshSubagents();
-  } finally {
-    subagentsClearingFinished = false;
-    renderSubagents();
-    scheduleRefreshSubagents();
-  }
-  if (dismissed) {
-    if (automatic) {
-      addEvent("auto-cleared", "info", {
-        aggregateKey: "subagent-auto-clear",
-        aggregateIncrement: dismissed,
-        aggregateSingular: "finished subagent run",
-        aggregatePlural: "finished subagent runs",
-      });
-    } else {
-      addEvent(`cleared ${dismissed} finished subagent ${dismissed === 1 ? "run" : "runs"}`, "info");
-    }
-  }
-  if (failures.length) addEvent(`could not ${automatic ? "auto-clear" : "clear"} ${failures.length} finished subagent ${failures.length === 1 ? "run" : "runs"}`, "warn");
-}
+function clearFinishedSubagentRuns(options) { return activityAgents.clearFinished(options); }
 
 function subagentOverlayTranscriptMessages(data = subagentOverlayData) {
   const agent = data?.agent || subagentOverlaySelection?.agent || {};
@@ -26445,16 +26419,16 @@ function renderSubagents() {
       : "Auto-Clear is off: keep finished subagent runs until they are cleared manually";
   }
   if (elements.subagentsClearFinishedButton) {
-    elements.subagentsClearFinishedButton.disabled = subagentsLoading || subagentsClearingFinished || finishedRuns.length === 0;
-    elements.subagentsClearFinishedButton.textContent = subagentsClearingFinished ? "Clearing…" : "Clear finished";
+    elements.subagentsClearFinishedButton.disabled = activityAgents.getSnapshot().loading || activityAgents.getSnapshot().clearingFinished || finishedRuns.length === 0;
+    elements.subagentsClearFinishedButton.textContent = activityAgents.getSnapshot().clearingFinished ? "Clearing…" : "Clear finished";
     elements.subagentsClearFinishedButton.title = finishedRuns.length
       ? `Clear ${finishedRuns.length} finished subagent ${finishedRuns.length === 1 ? "run" : "runs"}`
       : "No finished subagent runs to clear";
   }
   if (elements.subagentsStatus) {
     elements.subagentsStatus.textContent = hasItems
-      ? [`${totalAgents} total`, `${runningAgents} running`, staleAgents ? `${staleAgents} stale` : "", Number(latestSubagents?.fleet?.omitted || 0) ? `${latestSubagents.fleet.omitted} active ${latestSubagents.fleet.omitted === 1 ? "child" : "children"} omitted upstream` : "", retainedRuns ? `${retainedRuns} retained ${retainedRuns === 1 ? "run" : "runs"}` : "", totalGates ? `${totalGates} retry ${totalGates === 1 ? "gate" : "gates"}` : "", `across ${activeTabs.length} ${activeTabs.length === 1 ? "group" : "groups"}`].filter(Boolean).join(" · ")
-      : subagentsLoading && !latestSubagents
+      ? [`${totalAgents} total`, `${runningAgents} running`, staleAgents ? `${staleAgents} stale` : "", Number(activityAgents.getSnapshot().data?.fleet?.omitted || 0) ? `${activityAgents.getSnapshot().data.fleet.omitted} active ${activityAgents.getSnapshot().data.fleet.omitted === 1 ? "child" : "children"} omitted upstream` : "", retainedRuns ? `${retainedRuns} retained ${retainedRuns === 1 ? "run" : "runs"}` : "", totalGates ? `${totalGates} retry ${totalGates === 1 ? "gate" : "gates"}` : "", `across ${activeTabs.length} ${activeTabs.length === 1 ? "group" : "groups"}`].filter(Boolean).join(" · ")
+      : activityAgents.getSnapshot().loading && !activityAgents.getSnapshot().data
         ? "Checking subagents and retry gates…"
         : "No running subagents, retained runs, or retry gates.";
   }
@@ -26463,80 +26437,18 @@ function renderSubagents() {
   box.classList.toggle("muted", !hasItems);
   box.classList.toggle("has-items", hasItems);
   if (!hasItems) {
-    box.append(make("div", "subagents-empty", subagentsError ? `Subagent status unavailable: ${subagentsError.message || subagentsError}` : "Managed and registered Pi agent runs will appear here, grouped by terminal or under External agents."));
+    box.append(make("div", "subagents-empty", activityAgents.getSnapshot().error ? `Subagent status unavailable: ${activityAgents.getSnapshot().error.message || activityAgents.getSnapshot().error}` : "Managed and registered Pi agent runs will appear here, grouped by terminal or under External agents."));
     restoreFocus();
     return;
   }
   for (const tab of activeTabs) box.append(renderSubagentTabGroup(tab));
-  if (subagentsError) box.append(make("div", "subagents-stale muted", `Latest refresh failed: ${subagentsError.message || subagentsError}`));
+  if (activityAgents.getSnapshot().error) box.append(make("div", "subagents-stale muted", `Latest refresh failed: ${activityAgents.getSnapshot().error.message || activityAgents.getSnapshot().error}`));
   restoreFocus();
 }
 
-async function refreshSubagents() {
-  if (subagentsRefreshPromise) {
-    subagentsRefreshQueued = true;
-    return subagentsRefreshPromise;
-  }
-  let refreshed = false;
-  let subagentViewsChanged = false;
-  let materializedTerminalViews = false;
-  subagentsLoading = true;
-  renderSubagents();
-  let settleRefresh;
-  let rejectRefresh;
-  const refreshPromise = new Promise((resolve, reject) => {
-    settleRefresh = resolve;
-    rejectRefresh = reject;
-  });
-  subagentsRefreshPromise = refreshPromise;
-  (async () => {
-    try {
-      do {
-        subagentsRefreshQueued = false;
-        try {
-          const response = await api("/api/subagents", { scoped: false });
-          latestSubagents = response.data || null;
-          pruneDismissedSubagentGateKeys(latestSubagents?.tabs, dismissedSubagentGateKeys);
-          subagentViewsChanged = syncSubagentTerminalViewsFromOverview() || subagentViewsChanged;
-          materializedTerminalViews = materializeRetainedSubagentTerminalViews() || materializedTerminalViews;
-          subagentsError = null;
-          refreshed = true;
-        } catch (error) {
-          subagentsError = error;
-        }
-      } while (subagentsRefreshQueued);
-    } finally {
-      if (subagentsRefreshPromise === refreshPromise) subagentsRefreshPromise = null;
-      subagentsLoading = false;
-      renderSubagents();
-      if (subagentOverlaySelection?.tabId === activeTabId) renderWidgets();
-      if (activeSubagentTerminalId) {
-        renderSubagentTerminalView();
-        scheduleSubagentTerminalRefresh();
-      }
-      if (subagentViewsChanged || materializedTerminalViews) renderTabs();
-    }
-  })().then(settleRefresh, rejectRefresh);
-  await refreshPromise;
-  if (refreshed && subagentAutoClearEnabled && finishedSubagentRunSelections().length) {
-    await clearFinishedSubagentRuns({ automatic: true });
-  }
-}
-
-function scheduleRefreshSubagents(delay) {
-  clearTimeout(refreshSubagentsTimer);
-  const totalAgents = Number(latestSubagents?.runningAgents || 0);
-  const hasRunningGate = (Array.isArray(latestSubagents?.tabs) ? latestSubagents.tabs : []).some((tab) => (Array.isArray(tab?.gates) ? tab.gates : []).some((gate) => gate?.status === "running"));
-  const nextDelay = delay ?? (document.visibilityState === "hidden" ? SUBAGENTS_HIDDEN_REFRESH_MS : totalAgents > 0 || hasRunningGate ? SUBAGENTS_ACTIVE_REFRESH_MS : SUBAGENTS_IDLE_REFRESH_MS);
-  refreshSubagentsTimer = setTimeout(() => {
-    refreshSubagents().finally(() => scheduleRefreshSubagents());
-  }, nextDelay);
-}
-
-function initializeSubagents() {
-  renderSubagents();
-  refreshSubagents().finally(() => scheduleRefreshSubagents());
-}
+function refreshSubagents() { return activityAgents.refresh(); }
+function scheduleRefreshSubagents(delay) { activityAgents.schedule(delay); }
+function initializeSubagents() { activityAgents.start(); }
 
 function subagentLaunchSlotLimits() {
   return {
@@ -31558,20 +31470,22 @@ function renderWidgets() {
   if (deferUiRenderDuringPointerActivation("widgets", renderWidgets)) return;
   const appRunnerInputFocus = captureAppRunnerInputFocus();
   for (const root of featureWidgetRoots()) captureScopedScrollContinuity(root);
-  restoreFocusedWidgetsForRender();
+  const destination = visibleFeatureWidgetDestination();
+  const visible = (id) => destination === null || destination === id;
+  restoreFocusedWidgetsForRender(destination);
   captureScopedScrollContinuity(elements.widgetArea);
-  elements.widgetArea.replaceChildren();
-  const releaseOutput = renderReleaseNpmOutputWidget();
+  if (destination === null) elements.widgetArea.replaceChildren();
+  const releaseOutput = visible("release") ? renderReleaseNpmOutputWidget() : null;
   if (releaseOutput) appendFeatureWidget(releaseOutput, "release");
-  const releaseLog = renderReleaseNpmLogWidget();
+  const releaseLog = visible("release") ? renderReleaseNpmLogWidget() : null;
   if (releaseLog) appendFeatureWidget(releaseLog, "release");
-  const releaseAurOutput = renderReleaseAurOutputWidget();
+  const releaseAurOutput = visible("release") ? renderReleaseAurOutputWidget() : null;
   if (releaseAurOutput) appendFeatureWidget(releaseAurOutput, "release");
-  const releaseAurLog = renderReleaseAurLogWidget();
+  const releaseAurLog = visible("release") ? renderReleaseAurLogWidget() : null;
   if (releaseAurLog) appendFeatureWidget(releaseAurLog, "release");
-  const aurReviewWidget = renderAurReviewWidget();
+  const aurReviewWidget = visible("release") ? renderAurReviewWidget() : null;
   if (aurReviewWidget) appendFeatureWidget(aurReviewWidget, "release");
-  if (!workflowOverlayIsMinimized()) {
+  if (visible("progress") && !workflowOverlayIsMinimized()) {
     const workflowInspectorWidget = renderWorkflowInspectorWidget();
     const workflowSubprocessWidget = renderWorkflowSubprocessWidget();
     attachWorkflowOverlayCloseButton(workflowInspectorWidget || workflowSubprocessWidget);
@@ -31579,11 +31493,11 @@ function renderWidgets() {
     if (workflowSubprocessWidget) appendFeatureWidget(workflowSubprocessWidget, "progress");
   }
   renderWorkflowOverlayControls();
-  const appRunnerWidget = renderAppRunnerWidget();
+  const appRunnerWidget = visible("runners") ? renderAppRunnerWidget() : null;
   if (appRunnerWidget) appendFeatureWidget(appRunnerWidget, "runners");
-  const subagentWidget = renderSubagentOverlayWidgetSafely();
+  const subagentWidget = visible("subagents") ? renderSubagentOverlayWidgetSafely() : null;
   if (subagentWidget) appendFeatureWidget(subagentWidget, "subagents");
-  const btwWidget = renderBtwOutputWidget();
+  const btwWidget = visible("conversations") ? renderBtwOutputWidget() : null;
   if (btwWidget) appendFeatureWidget(btwWidget, "conversations");
 
   for (const [key, value] of widgets) {
@@ -31598,7 +31512,9 @@ function renderWidgets() {
     if (widgetFeatureId && optionalFeatureWidgetHasSpecializedRenderer(key)) continue;
     const lines = Array.isArray(value.widgetLines) ? value.widgetLines : [];
     if (key === "pi-remote-webui") continue;
-    const specialized = key === "todo-progress" && isOptionalFeatureEnabled("todoProgressWidget") ? renderTodoProgressWidget(key, lines) : null;
+    const isTodo = key === "todo-progress" && isOptionalFeatureEnabled("todoProgressWidget");
+    if (!visible(isTodo ? "progress" : "extensions")) continue;
+    const specialized = isTodo ? renderTodoProgressWidget(key, lines) : null;
     if (specialized) {
       appendFeatureWidget(specialized, "progress");
       continue;
@@ -34041,467 +33957,13 @@ function resumeGitWorkflowForActiveTab(tabContext = activeTabContext()) {
   }
 }
 
-function normalizeQueuedMessages(event) {
-  const normalize = (items) => (Array.isArray(items) ? items.map((item) => String(item || "")).filter((item) => item.trim()) : []);
-  const source = event?.source === "webui-compaction" ? "webui-compaction" : "pi-runtime";
-  return {
-    source,
-    revision: source === "webui-compaction" && Number.isSafeInteger(event?.revision) && event.revision >= 0 ? event.revision : undefined,
-    draining: source === "webui-compaction" && event?.draining === true,
-    steering: normalize(event?.steering),
-    followUp: normalize(event?.followUp),
-  };
-}
-
 function queuedSnapshotForTab(tabId = activeTabId) {
   return tabId ? latestQueuedMessagesByTab.get(tabId) || normalizeQueuedMessages({}) : normalizeQueuedMessages({});
 }
 
-function queueMessageCount(snapshot) {
-  return (snapshot?.steering?.length || 0) + (snapshot?.followUp?.length || 0);
-}
-
-function updateQueueHeaderBadge(total) {
-  if (!elements.queueCountBadge) return;
-  elements.queueCountBadge.hidden = total === 0;
-  elements.queueCountBadge.textContent = String(total);
-  elements.queueCountBadge.setAttribute("aria-label", `${total} queued message${total === 1 ? "" : "s"}`);
-}
-
-function queueSummaryPill(label, count, tone) {
-  const pill = make("span", `queue-summary-pill ${tone}`.trim());
-  pill.append(make("strong", undefined, String(count)), make("span", undefined, label));
-  return pill;
-}
-
-function followUpQueueMutationInFlight(tabId = activeTabId) {
-  return !!tabId && followUpQueueMutationsInFlightByTab.has(tabId);
-}
-
-function setFollowUpQueueStatus(text = "", level = "") {
-  followUpQueueStatus = { text, level };
-  if (!elements.followUpQueueStatus) return;
-  elements.followUpQueueStatus.textContent = text;
-  elements.followUpQueueStatus.className = `follow-up-queue-status${level ? ` ${level}` : ""}`;
-}
-
-function syncFollowUpQueueMutationControls() {
-  const tabId = activeTabId;
-  const locked = followUpQueueMutationInFlight(tabId);
-  const draining = queuedSnapshotForTab(tabId).draining;
-  elements.followUpQueueOverlay?.classList.toggle("is-busy", locked);
-  elements.followUpQueueOverlay?.classList.toggle("is-draining", draining);
-  for (const textarea of elements.followUpQueueRows?.querySelectorAll("textarea") || []) textarea.disabled = locked || draining;
-  for (const control of elements.followUpQueueRows?.querySelectorAll("[data-follow-up-queue-mutation-control]") || []) control.disabled = locked || draining || control.dataset.queueBoundary === "true";
-  for (const row of elements.followUpQueueRows?.querySelectorAll(".follow-up-queue-row") || []) row.draggable = false;
-  for (const handle of elements.followUpQueueRows?.querySelectorAll(".follow-up-queue-drag-handle") || []) handle.draggable = !locked && !draining;
-}
-
-function setFollowUpQueueMutationInFlight(tabId, inFlight) {
-  if (!tabId) return;
-  if (inFlight) followUpQueueMutationsInFlightByTab.add(tabId);
-  else followUpQueueMutationsInFlightByTab.delete(tabId);
-  if (tabId === activeTabId) syncFollowUpQueueMutationControls();
-}
-
-function preservedFocusedFollowUpQueueDraft(draft, followUps) {
-  if (!draft || !Array.isArray(followUps) || !Number.isSafeInteger(draft.index) || draft.index < 0) return null;
-  const authoritativeText = String(draft.authoritativeText ?? "");
-  const value = String(draft.value ?? "");
-  if (value === authoritativeText || followUps[draft.index] !== authoritativeText) return null;
-  const selectionStart = Math.max(0, Math.min(value.length, Number.isSafeInteger(draft.selectionStart) ? draft.selectionStart : value.length));
-  const selectionEnd = Math.max(selectionStart, Math.min(value.length, Number.isSafeInteger(draft.selectionEnd) ? draft.selectionEnd : selectionStart));
-  return { index: draft.index, value, selectionStart, selectionEnd };
-}
-
-function focusedFollowUpQueueDraft() {
-  const textarea = document.activeElement;
-  if (!textarea?.matches?.("textarea.follow-up-queue-textarea") || !elements.followUpQueueRows?.contains(textarea)) return null;
-  const index = Number(textarea.closest(".follow-up-queue-row")?.dataset.followUpIndex);
-  if (!Number.isSafeInteger(index) || index < 0) return null;
-  const authoritativeText = String(textarea.dataset.followUpQueueAuthoritativeText ?? "");
-  if (textarea.value === authoritativeText) return null;
-  return {
-    textarea,
-    index,
-    authoritativeText,
-    value: textarea.value,
-    selectionStart: textarea.selectionStart,
-    selectionEnd: textarea.selectionEnd,
-  };
-}
-
-function queueTabContext(tabId = activeTabId) {
-  const tab = tabs.find((item) => item.id === tabId);
-  return {
-    ...activeTabContext(tabId),
-    sessionFile: typeof tab?.sessionFile === "string" && tab.sessionFile ? tab.sessionFile : null,
-    startedAt: typeof tab?.startedAt === "string" && tab.startedAt ? tab.startedAt : null,
-  };
-}
-
-function queuedSnapshotTargetsCurrentTab(tabContext, currentTabId = activeTabId, currentTabs = tabs) {
-  if (!tabContext?.tabId || tabContext.tabId !== currentTabId || !Array.isArray(currentTabs)) return false;
-  const currentTab = currentTabs.find((tab) => tab?.id === tabContext.tabId);
-  if (!currentTab) return false;
-  const sessionFile = typeof tabContext.sessionFile === "string" && tabContext.sessionFile ? tabContext.sessionFile : null;
-  const currentSessionFile = typeof currentTab.sessionFile === "string" && currentTab.sessionFile ? currentTab.sessionFile : null;
-  if (sessionFile && currentSessionFile && sessionFile !== currentSessionFile) return false;
-  const startedAt = typeof tabContext.startedAt === "string" && tabContext.startedAt ? tabContext.startedAt : null;
-  const currentStartedAt = typeof currentTab.startedAt === "string" && currentTab.startedAt ? currentTab.startedAt : null;
-  return !(startedAt && currentStartedAt && startedAt !== currentStartedAt);
-}
-
-function setFollowUpQueueOpen(open, { restoreFocus = false } = {}) {
-  const snapshot = queuedSnapshotForTab();
-  const shouldOpen = !!open && snapshot.followUp.length > 0;
-  if (shouldOpen && !followUpQueueOpen) {
-    followUpQueueRestoreFocus = document.activeElement instanceof HTMLElement ? document.activeElement : elements.followUpQueueTrigger;
-    setComposerActionsOpen(false);
-    setPublishMenuOpen(false);
-    setNativeCommandMenuOpen(false);
-    setAppRunnerMenuOpen(false);
-    setOptionsMenuOpen(false);
-    setConversationVoiceMenuOpen(false);
-    setBusyPromptBehaviorMenuOpen(false);
-    setNewTabMenuOpen(false);
-  }
-  followUpQueueOpen = shouldOpen;
-  elements.followUpQueueTrigger?.setAttribute("aria-expanded", shouldOpen ? "true" : "false");
-  if (elements.followUpQueueOverlay) elements.followUpQueueOverlay.hidden = !shouldOpen;
-  if (!shouldOpen) {
-    followUpQueueDrag = null;
-    scheduleDeferredUiFlushAfterDropdownClose();
-    if (restoreFocus) {
-      const focusTarget = followUpQueueRestoreFocus?.isConnected ? followUpQueueRestoreFocus : elements.followUpQueueTrigger;
-      requestAnimationFrame(() => focusTarget?.focus({ preventScroll: true }));
-    }
-    followUpQueueRestoreFocus = null;
-    return;
-  }
-  renderFollowUpQueueOverlay();
-}
-
-function queueMutationBody(snapshot, operation) {
-  const body = {
-    source: snapshot.source,
-    kind: "followUp",
-    expected: { steering: [...snapshot.steering], followUp: [...snapshot.followUp] },
-    operation,
-  };
-  if (snapshot.source === "webui-compaction") body.revision = snapshot.revision;
-  return body;
-}
-
-function applyAuthoritativeQueuedSnapshot(tabContext, queue) {
-  if (!tabContext?.tabId || !queue) return;
-  const snapshot = normalizeQueuedMessages(queue);
-  latestQueuedMessagesByTab.set(tabContext.tabId, snapshot);
-  if (queuedSnapshotTargetsCurrentTab(tabContext)) renderQueue({ tabId: tabContext.tabId, ...snapshot });
-}
-
-async function mutateQueuedFollowUp(operation, tabId = activeTabId) {
-  if (!tabId || followUpQueueMutationInFlight(tabId)) return false;
-  const tabContext = queueTabContext(tabId);
-  const snapshot = queuedSnapshotForTab(tabId);
-  if (!snapshot.followUp.length || snapshot.draining) {
-    if (isCurrentTabContext(tabContext)) setFollowUpQueueStatus("Queue is draining; follow-ups can no longer be changed.", "warn");
-    return false;
-  }
-  setFollowUpQueueMutationInFlight(tabId, true);
-  if (isCurrentTabContext(tabContext)) {
-    const pendingStatus = operation.type === "edit"
-      ? "Saving queued follow-up…"
-      : operation.type === "delete"
-        ? "Removing queued follow-up…"
-        : "Reordering queued follow-ups…";
-    setFollowUpQueueStatus(pendingStatus);
-  }
-  try {
-    const response = await api("/api/queue/mutate", { method: "POST", body: queueMutationBody(snapshot, operation), tabId });
-    const result = response?.data || {};
-    if (result.queue) applyAuthoritativeQueuedSnapshot(tabContext, result.queue);
-    if (!result.mutated) {
-      if (isCurrentTabContext(tabContext)) setFollowUpQueueStatus("Queue changed before the update could be applied.", "warn");
-      return false;
-    }
-    if (isCurrentTabContext(tabContext)) {
-      const message = operation.type === "edit"
-        ? `Saved queued follow-up ${operation.index + 1}.`
-        : operation.type === "delete"
-          ? `Removed queued follow-up ${operation.index + 1}.`
-          : `Moved queued follow-up ${operation.from + 1} to position ${operation.to + 1}.`;
-      setFollowUpQueueStatus(message, "success");
-    }
-    return true;
-  } catch (error) {
-    const result = error?.data?.data || {};
-    if (result.queue) applyAuthoritativeQueuedSnapshot(tabContext, result.queue);
-    if (isCurrentTabContext(tabContext)) {
-      if (error?.statusCode === 409) setFollowUpQueueStatus(result.reason === "queue-draining" ? "Queue is draining; refreshed the authoritative queue." : "Queue changed elsewhere; refreshed the authoritative queue.", "warn");
-      else setFollowUpQueueStatus(error.message || "Unable to update the queued follow-up.", "error");
-    }
-    return false;
-  } finally {
-    setFollowUpQueueMutationInFlight(tabId, false);
-    if (isCurrentTabContext(tabContext)) renderFollowUpQueueOverlay();
-  }
-}
-
-function saveQueuedFollowUpText(index, expectedText, value) {
-  const text = String(value ?? "");
-  if (text === expectedText) return;
-  if (!text.trim()) {
-    setFollowUpQueueStatus("Queued follow-ups cannot be empty; restored the authoritative text.", "warn");
-    renderFollowUpQueueOverlay();
-    return;
-  }
-  void mutateQueuedFollowUp({ type: "edit", index, expectedText, text });
-}
-
-function clearFollowUpQueueDragVisuals() {
-  for (const row of elements.followUpQueueRows?.querySelectorAll(".follow-up-queue-row.is-dragging, .follow-up-queue-row.is-drop-target") || []) {
-    row.classList.remove("is-dragging", "is-drop-target");
-  }
-}
-
-function renderFollowUpQueueOverlay() {
-  if (deferUiRenderDuringPointerActivation("follow-up-queue", renderFollowUpQueueOverlay)) return;
-  const snapshot = queuedSnapshotForTab();
-  const followUps = snapshot.followUp;
-  const count = followUps.length;
-  const trigger = elements.followUpQueueTrigger;
-  if (trigger) {
-    trigger.hidden = count === 0;
-    trigger.setAttribute("aria-expanded", followUpQueueOpen && count ? "true" : "false");
-    trigger.setAttribute("aria-label", `${count} queued follow-up${count === 1 ? "" : "s"}`);
-  }
-  if (elements.followUpQueueTriggerCount) elements.followUpQueueTriggerCount.textContent = String(count);
-  if (elements.followUpQueueOverlayCount) elements.followUpQueueOverlayCount.textContent = String(count);
-  if (!count) {
-    if (followUpQueueOpen) setFollowUpQueueOpen(false);
-    if (elements.followUpQueueRows) elements.followUpQueueRows.replaceChildren();
-    return;
-  }
-  if (!followUpQueueOpen || !elements.followUpQueueRows) return;
-
-  const locked = followUpQueueMutationInFlight();
-  const unavailable = locked || snapshot.draining;
-  const focusedDraft = focusedFollowUpQueueDraft();
-  const preservedDraft = preservedFocusedFollowUpQueueDraft(focusedDraft, followUps);
-  const rows = followUps.map((item, index) => {
-    const row = make("article", "follow-up-queue-row");
-    row.dataset.followUpIndex = String(index);
-    row.draggable = false;
-    const dragHandle = make("span", "follow-up-queue-drag-handle", "⠿");
-    dragHandle.draggable = !unavailable;
-    dragHandle.setAttribute("aria-hidden", "true");
-    dragHandle.title = "Drag to reorder";
-    const textarea = make("textarea", "follow-up-queue-textarea");
-    const textareaDraft = preservedDraft?.index === index ? preservedDraft : null;
-    textarea.value = textareaDraft ? textareaDraft.value : item;
-    textarea.dataset.followUpQueueAuthoritativeText = item;
-    textarea.rows = Math.max(2, Math.min(6, item.split("\n").length + 1));
-    textarea.disabled = unavailable;
-    textarea.setAttribute("aria-label", `Queued follow-up ${index + 1}`);
-    textarea.dataset.followUpQueueMutationControl = "true";
-    textarea.addEventListener("blur", () => {
-      if (textarea === followUpQueueSuppressBlurFor) return;
-      saveQueuedFollowUpText(index, item, textarea.value);
-    });
-    textarea.addEventListener("keydown", (event) => {
-      if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key === "Enter") {
-        event.preventDefault();
-        saveQueuedFollowUpText(index, item, textarea.value);
-        return;
-      }
-      if (event.key !== "Escape") return;
-      event.preventDefault();
-      event.stopPropagation();
-      if (textarea.value !== item) {
-        textarea.value = item;
-        setFollowUpQueueStatus(`Restored queued follow-up ${index + 1}.`, "warn");
-      } else {
-        setFollowUpQueueOpen(false, { restoreFocus: true });
-      }
-    });
-    const controls = make("div", "follow-up-queue-row-controls");
-    const moveUp = make("button", "follow-up-queue-move-button", "↑");
-    moveUp.type = "button";
-    moveUp.dataset.followUpQueueMutationControl = "true";
-    moveUp.dataset.queueBoundary = index === 0 ? "true" : "false";
-    moveUp.disabled = unavailable || index === 0;
-    moveUp.title = `Move queued follow-up ${index + 1} up`;
-    moveUp.setAttribute("aria-label", `Move queued follow-up ${index + 1} up`);
-    moveUp.addEventListener("click", () => void mutateQueuedFollowUp({ type: "move", from: index, to: index - 1, expectedText: item }));
-    const moveDown = make("button", "follow-up-queue-move-button", "↓");
-    moveDown.type = "button";
-    moveDown.dataset.followUpQueueMutationControl = "true";
-    moveDown.dataset.queueBoundary = index === followUps.length - 1 ? "true" : "false";
-    moveDown.disabled = unavailable || index === followUps.length - 1;
-    moveDown.title = `Move queued follow-up ${index + 1} down`;
-    moveDown.setAttribute("aria-label", `Move queued follow-up ${index + 1} down`);
-    moveDown.addEventListener("click", () => void mutateQueuedFollowUp({ type: "move", from: index, to: index + 1, expectedText: item }));
-    const remove = make("button", "follow-up-queue-remove-button", "Remove");
-    remove.type = "button";
-    remove.dataset.followUpQueueMutationControl = "true";
-    remove.title = `Remove queued follow-up ${index + 1}`;
-    remove.setAttribute("aria-label", `Remove queued follow-up ${index + 1}`);
-    remove.addEventListener("pointerdown", () => { followUpQueueSuppressBlurFor = textarea; });
-    remove.addEventListener("pointercancel", () => {
-      if (followUpQueueSuppressBlurFor === textarea) followUpQueueSuppressBlurFor = null;
-    });
-    remove.addEventListener("click", () => {
-      if (followUpQueueSuppressBlurFor === textarea) followUpQueueSuppressBlurFor = null;
-      void removeQueuedFollowUpPrompt(index, item);
-    });
-    controls.append(moveUp, moveDown, remove);
-    row.append(dragHandle, textarea, controls);
-    row.addEventListener("dragstart", (event) => {
-      if (unavailable || event.target?.closest?.(".follow-up-queue-drag-handle") !== dragHandle) {
-        event.preventDefault();
-        return;
-      }
-      followUpQueueDrag = { tabId: activeTabId, index, expectedText: item };
-      event.dataTransfer?.setData("application/x-pi-webui-follow-up", JSON.stringify(followUpQueueDrag));
-      if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
-      row.classList.add("is-dragging");
-    });
-    row.addEventListener("dragover", (event) => {
-      if (!followUpQueueDrag || followUpQueueDrag.tabId !== activeTabId || unavailable || isFileDrag(event)) return;
-      event.preventDefault();
-      event.stopPropagation();
-      if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
-      clearFollowUpQueueDragVisuals();
-      row.classList.add("is-drop-target");
-    });
-    row.addEventListener("dragleave", (event) => {
-      if (!row.contains(event.relatedTarget)) row.classList.remove("is-drop-target");
-    });
-    row.addEventListener("drop", (event) => {
-      if (!followUpQueueDrag || followUpQueueDrag.tabId !== activeTabId || unavailable || isFileDrag(event)) return;
-      event.preventDefault();
-      event.stopPropagation();
-      const drag = followUpQueueDrag;
-      clearFollowUpQueueDragVisuals();
-      followUpQueueDrag = null;
-      if (drag.index !== index) void mutateQueuedFollowUp({ type: "move", from: drag.index, to: index, expectedText: drag.expectedText });
-    });
-    row.addEventListener("dragend", () => {
-      followUpQueueDrag = null;
-      clearFollowUpQueueDragVisuals();
-    });
-    return row;
-  });
-  followUpQueueSuppressBlurFor = focusedDraft?.textarea || null;
-  try {
-    elements.followUpQueueRows.replaceChildren(...rows);
-  } finally {
-    followUpQueueSuppressBlurFor = null;
-  }
-  if (preservedDraft && !unavailable) {
-    requestAnimationFrame(() => {
-      if (!followUpQueueOpen || activeTabId === null) return;
-      const activeElement = document.activeElement;
-      if (activeElement && activeElement !== document.body && activeElement !== document.documentElement) return;
-      const textarea = elements.followUpQueueRows?.querySelector(`.follow-up-queue-row[data-follow-up-index="${preservedDraft.index}"] textarea`);
-      if (!textarea) return;
-      textarea.focus({ preventScroll: true });
-      textarea.setSelectionRange(preservedDraft.selectionStart, preservedDraft.selectionEnd);
-    });
-  }
-  setFollowUpQueueStatus(followUpQueueStatus.text, followUpQueueStatus.level);
-  syncFollowUpQueueMutationControls();
-}
-
-async function removeQueuedFollowUpPrompt(index, message, tabId = activeTabId) {
-  if (!tabId) return false;
-  const tabContext = queueTabContext(tabId);
-  const removed = await mutateQueuedFollowUp({ type: "delete", index, expectedText: message }, tabId);
-  if (removed && isCurrentTabContext(tabContext)) addEvent(`removed queued follow-up #${index + 1}`);
-  return removed;
-}
-
-function renderQueueGroup(label, items, tone, { removable = false, tabId } = {}) {
-  const group = make("section", `queue-group ${tone}`.trim());
-  const heading = make("h3", "queue-group-title");
-  heading.append(make("span", undefined, label), make("span", "queue-group-count", String(items.length)));
-  const list = make("ol", "queue-list");
-  items.forEach((item, index) => {
-    const row = make("li", `queue-item${removable ? " can-remove" : ""}`);
-    row.append(make("span", "queue-item-number", `#${index + 1}`), make("div", "queue-item-text", item));
-    if (removable) {
-      const removeButton = make("button", "queue-remove-button", "Remove");
-      removeButton.type = "button";
-      removeButton.dataset.queueContinuityKey = `remove:${tabId || ""}:${index}:${item}`;
-      removeButton.title = `Remove queued follow-up #${index + 1}`;
-      removeButton.setAttribute("aria-label", `Remove queued follow-up #${index + 1}`);
-      removeButton.addEventListener("click", async () => {
-        removeButton.disabled = true;
-        removeButton.textContent = "Removing…";
-        const removed = await removeQueuedFollowUpPrompt(index, item, tabId);
-        if (!removed && removeButton.isConnected) {
-          removeButton.disabled = false;
-          removeButton.textContent = "Remove";
-        }
-      });
-      row.append(removeButton);
-    }
-    list.append(row);
-  });
-  group.append(heading, list);
-  return group;
-}
-
-function renderQueue(event) {
-  if (deferUiRenderDuringPointerActivation("queue", () => renderQueue(event))) return;
-  const snapshot = normalizeQueuedMessages(event);
-  const tabId = event?.tabId || activeTabId;
-  if (tabId) latestQueuedMessagesByTab.set(tabId, snapshot);
-  if (tabId && tabId !== activeTabId) return;
-  const continuityContextKey = `${tabId || activeTabId || ""}:${activeTabGeneration}:queue`;
-  const focusSnapshot = captureScopedControlContinuity(elements.queueBox, continuityContextKey, (node) => node?.dataset?.queueContinuityKey || "");
-  const scrollTop = elements.queueBox.scrollTop;
-  const scrollLeft = elements.queueBox.scrollLeft;
-  const restoreContinuity = () => {
-    restoreScopedControlContinuity(elements.queueBox, continuityContextKey, focusSnapshot, (key) => [...elements.queueBox.querySelectorAll("[data-queue-continuity-key]")]
-      .find((node) => node.dataset.queueContinuityKey === key));
-    elements.queueBox.scrollTop = scrollTop;
-    elements.queueBox.scrollLeft = scrollLeft;
-  };
-  const steering = snapshot.steering;
-  const followUp = snapshot.followUp;
-  const total = queueMessageCount(snapshot);
-  updateQueueHeaderBadge(total);
-  elements.queueBox.replaceChildren();
-  elements.queueBox.classList.toggle("muted", total === 0);
-  elements.queueBox.classList.toggle("has-items", total > 0);
-  if (total === 0) {
-    elements.queueBox.append(make("div", "queue-empty", "No queued messages."));
-    if (tabId === activeTabId) renderFollowUpQueueOverlay();
-    updateStickyUserPromptButton();
-    restoreContinuity();
-    return;
-  }
-
-  const summary = make("div", "queue-summary");
-  summary.append(make("strong", undefined, `${total} queued message${total === 1 ? "" : "s"}`));
-  const counts = make("div", "queue-summary-counts");
-  if (steering.length) counts.append(queueSummaryPill("steering", steering.length, "steering"));
-  if (followUp.length) counts.append(queueSummaryPill("follow-up", followUp.length, "follow-up"));
-  summary.append(counts);
-
-  elements.queueBox.append(summary);
-  if (steering.length) elements.queueBox.append(renderQueueGroup("Steering", steering, "steering", { tabId }));
-  if (followUp.length) elements.queueBox.append(renderQueueGroup("Follow-up", followUp, "follow-up", { removable: !snapshot.draining, tabId }));
-  elements.queueBox.append(make("div", "queue-hint", snapshot.source === "pi-runtime"
-    ? "Alt+Up restores this queue snapshot to the composer without clearing Pi's queue. Use Remove beside follow-ups to drop them from the queue."
-    : "Alt+Up restores this queue snapshot to the composer without clearing Pi's queue. Edit, reorder, or remove compaction-held follow-ups with the composer Queue control."));
-  if (tabId === activeTabId) renderFollowUpQueueOverlay();
-  updateStickyUserPromptButton();
-  if (mobilePhoneExperienceInstalled && isMobileShellV2Active()) renderMobilePhoneExperience();
-  restoreContinuity();
-}
+function setFollowUpQueueOpen(open, options) { activityQueue.setOpen(open, options); }
+function renderFollowUpQueueOverlay() { activityQueue.renderOverlay(); }
+function renderQueue(event) { activityQueue.ingest(event); }
 
 function queuedMessagesForComposer(tabId = activeTabId) {
   const snapshot = queuedSnapshotForTab(tabId);
@@ -39243,7 +38705,7 @@ function clearComposerMenuDismissal(container) {
 
 function setPublishMenuOpen(open) {
   if (open && composerMenuDismissed(elements.publishButton?.parentElement)) return;
-  if (open && followUpQueueOpen) setFollowUpQueueOpen(false);
+  if (open && activityQueue.isOpen()) setFollowUpQueueOpen(false);
   publishMenuOpen = !!open;
   elements.publishButton.setAttribute("aria-expanded", publishMenuOpen ? "true" : "false");
   elements.publishButton.classList.toggle("menu-open", publishMenuOpen);
@@ -39254,7 +38716,7 @@ function setPublishMenuOpen(open) {
 
 function setNativeCommandMenuOpen(open) {
   if (open && composerMenuDismissed(elements.nativeCommandMenuButton?.parentElement)) return;
-  if (open && followUpQueueOpen) setFollowUpQueueOpen(false);
+  if (open && activityQueue.isOpen()) setFollowUpQueueOpen(false);
   nativeCommandMenuOpen = !!open;
   elements.nativeCommandMenuButton.setAttribute("aria-expanded", nativeCommandMenuOpen ? "true" : "false");
   elements.nativeCommandMenuButton.classList.toggle("menu-open", nativeCommandMenuOpen);
@@ -39265,7 +38727,7 @@ function setNativeCommandMenuOpen(open) {
 
 function setAppRunnerMenuOpen(open) {
   if (open && composerMenuDismissed(elements.appRunnerMenuButton?.parentElement)) return;
-  if (open && followUpQueueOpen) setFollowUpQueueOpen(false);
+  if (open && activityQueue.isOpen()) setFollowUpQueueOpen(false);
   appRunnerMenuOpen = !!open;
   elements.appRunnerMenuButton?.setAttribute("aria-expanded", appRunnerMenuOpen ? "true" : "false");
   elements.appRunnerMenuButton?.classList.toggle("menu-open", appRunnerMenuOpen);
@@ -39276,7 +38738,7 @@ function setAppRunnerMenuOpen(open) {
 
 function setOptionsMenuOpen(open) {
   if (open && composerMenuDismissed(elements.optionsMenuButton?.parentElement)) return;
-  if (open && followUpQueueOpen) setFollowUpQueueOpen(false);
+  if (open && activityQueue.isOpen()) setFollowUpQueueOpen(false);
   optionsMenuOpen = !!open;
   elements.optionsMenuButton.setAttribute("aria-expanded", optionsMenuOpen ? "true" : "false");
   elements.optionsMenuButton.classList.toggle("menu-open", optionsMenuOpen);
@@ -48496,7 +47958,7 @@ elements.composer.addEventListener("submit", (event) => {
 elements.mobileFailedSendRetryButton?.addEventListener("click", retryMobileFailedSend);
 elements.mobileFailedSendDiscardButton?.addEventListener("click", discardMobileFailedSend);
 elements.followUpQueueTrigger?.addEventListener("click", () => {
-  setFollowUpQueueOpen(!followUpQueueOpen);
+  setFollowUpQueueOpen(!activityQueue.isOpen());
 });
 elements.followUpQueueCloseButton?.addEventListener("click", () => setFollowUpQueueOpen(false, { restoreFocus: true }));
 elements.composerActionsButton.addEventListener("click", () => {
@@ -49538,12 +49000,10 @@ elements.subagentCancelDialog?.querySelector("form")?.addEventListener("submit",
   void submitSubagentCancel();
 });
 elements.subagentCancelDialog?.addEventListener("cancel", (event) => {
-  if (subagentCancelSubmitting) event.preventDefault();
+  if (activityAgents.getSnapshot().cancelSubmitting) event.preventDefault();
 });
 elements.subagentCancelDialog?.addEventListener("close", () => {
-  subagentCancelSelection = null;
-  setSubagentCancelSubmitting(false);
-  setSubagentCancelStatus();
+  if (!elements.subagentCancelDialog.open) activityAgents.resetCancel();
 });
 elements.piVersionButton?.addEventListener("click", () => {
   openPiReleaseNotes().catch((error) => addEvent(error.message || String(error), "error"));
@@ -49612,7 +49072,7 @@ document.addEventListener("pointerdown", (event) => {
   if (document.body.classList.contains("composer-actions-open") && !elements.composer.contains(event.target)) {
     setComposerActionsOpen(false);
   }
-  if (followUpQueueOpen && !event.target?.closest?.("#followUpQueueOverlay, #followUpQueueTrigger")) {
+  if (activityQueue.isOpen() && !event.target?.closest?.("#followUpQueueOverlay, #followUpQueueTrigger")) {
     setFollowUpQueueOpen(false, { restoreFocus: true });
   }
   if (publishMenuOpen && !event.target?.closest?.(".composer-publish-menu")) {
@@ -50005,7 +49465,7 @@ window.addEventListener("keydown", (event) => {
   if (event.key !== "Escape") return;
   if (event.defaultPrevented) return;
   if (document.querySelector("dialog:modal")) return;
-  if (followUpQueueOpen) {
+  if (activityQueue.isOpen()) {
     event.preventDefault();
     setFollowUpQueueOpen(false, { restoreFocus: true });
     return;

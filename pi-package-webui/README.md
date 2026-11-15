@@ -60,6 +60,8 @@ Check the server at any time with:
 
 Open **Controls → Interface → Desktop layout** and choose **Compact preview**. The narrow rail opens Conversation, Project, Activity, and Settings. **All tools** searches the real commands and panels; pin frequent actions there. Model and effort controls stay beside your draft, and **More** opens secondary composer actions.
 
+**Project** groups Files, Changes, Runners, Releases, and Documents. **Activity** groups Agents, Queues, Progress, Conversations, Events, and provider usage. Open a topic when you need it; changing views keeps running work and unsaved drafts. A queue count beside the draft opens pending follow-ups for editing and reordering.
+
 Choose **Classic** in Settings to return. Your open sessions, drafts, and saved Classic arrangement remain available. Phone and tablet modes have separate preferences.
 
 ### Your first session
