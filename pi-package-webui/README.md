@@ -56,9 +56,9 @@ Check the server at any time with:
 /webui-status detailed
 ```
 
-### Try the compact desktop preview
+### Choose your desktop layout
 
-Open **Controls → Interface → Desktop layout** and choose **Compact preview**. The narrow rail opens Conversation, Project, Activity, and Settings. **All tools** searches the real commands and panels; pin frequent actions there. Model and effort controls stay beside your draft, and **More** opens secondary composer actions. In **Settings**, search for a setting or choose a category such as Appearance, Models and resources, or Features. Search opens the original control or Setup dialog.
+Fresh installations start with the compact desktop layout when the Web UI can confirm there is no earlier Web UI state. Existing installations keep Classic until you choose **Controls → Interface → Desktop layout → Compact preview**. The narrow rail opens Conversation, Project, Activity, and Settings. **All tools** searches the real commands and panels; pin frequent actions there. Model and effort controls stay beside your draft, and **More** opens secondary composer actions. In **Settings**, search for a setting or choose a category such as Appearance, Models and resources, or Features. Search opens the original control or Setup dialog.
 
 **Project** groups Files, Changes, Runners, Releases, and Documents. **Activity** groups Agents, Queues, Progress, Conversations, Events, and provider usage. Open a topic when you need it; changing views keeps running work and unsaved drafts. A queue count beside the draft opens pending follow-ups for editing and reordering.
 
@@ -70,8 +70,8 @@ Choose **Classic** in Settings to return. Your open sessions, drafts, and saved 
 2. Confirm the working directory in the footer or choose another project. You can paste or type a full path in the picker; on Windows, use a rooted drive path such as `C:/` or `D:/project`. From a drive root, choose **Parent** to open **This PC** and select another available drive.
 3. Select a model and thinking effort.
 4. Enter a prompt, attach context if needed, and follow the live response. The prompt grows to a bounded height, then scrolls vertically so every line stays reachable.
-5. Open the Control Deck for sessions, Git, app runners, themes, updates, and optional features. Under **Controls → Interface**, choose **Top bar** or **Sidebar** for terminal tabs, then choose **Right**, **Left**, or **Both** for the Control Deck. In **Sidebar**, **Both** is unavailable; choosing **Right** or **Left** swaps the Control Deck and terminal/tabs rails across the chat.
-6. On desktop, drag the workspace-facing edge of any visible Control Deck—or the terminal/tabs rail in **Sidebar**—to choose a comfortable width. In **Both**, resize the left and right Control Decks independently; widths return on your next visit.
+5. In the compact layout, use **Project**, **Activity**, **Settings**, or **All tools**. In Classic, open the Control Deck for sessions, Git, app runners, themes, updates, and optional features. Under **Controls → Interface**, choose **Top bar** or **Sidebar** for terminal tabs, then choose **Right**, **Left**, or **Both** for the Control Deck. In **Sidebar**, **Both** is unavailable; choosing **Right** or **Left** swaps the Control Deck and terminal/tabs rails across the chat.
+6. In Classic on desktop, drag the workspace-facing edge of any visible Control Deck—or the terminal/tabs rail in **Sidebar**—to choose a comfortable width. In **Both**, resize the left and right Control Decks independently; widths return on your next visit.
 
 The completed response replaces the live draft, including thinking the provider corrects or removes. On older Pi releases, tool arguments may appear only after the tool is identified, so Intercom content stays out of the main transcript.
 

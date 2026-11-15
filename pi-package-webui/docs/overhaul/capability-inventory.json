@@ -49,8 +49,8 @@
     },
     {
       "file": "pi-package-webui/bin/pi-webui.mjs",
-      "bytes": 538710,
-      "sha256": "4482e222a4b7a2c5c2fe428acd410c7e12cfe6e971fb9403e0d0ef555c178097"
+      "bytes": 539390,
+      "sha256": "4b3ed73206374aca3670d00b99cfe30a5709f6d84f444763440c1a923c238161"
     },
     {
       "file": "pi-package-webui/index.ts",
@@ -134,8 +134,8 @@
     },
     {
       "file": "pi-package-webui/lib/git-workflow-preferences.mjs",
-      "bytes": 1355,
-      "sha256": "2060fe55a2b63df813efd74bcedcb365f76ed77323247f424d27c6c43e3c474f"
+      "bytes": 1417,
+      "sha256": "ae28d85282e55dbd23eed0bcc042e487d7915138ca8ec4c863044ab641237e52"
     },
     {
       "file": "pi-package-webui/lib/git-worktrees.mjs",
@@ -274,8 +274,8 @@
     },
     {
       "file": "pi-package-webui/lib/server/settings-store.mjs",
-      "bytes": 17687,
-      "sha256": "1587f3cf6007623f59945087ac99fbfb87bb7c61a6e5e7dc5ceca4b8518f4c1a"
+      "bytes": 22421,
+      "sha256": "da84b50a440d52454c13f160a20724d6a6559de9ee586b1dd34e52142840c858"
     },
     {
       "file": "pi-package-webui/lib/server/sse-delivery.mjs",
@@ -709,8 +709,8 @@
     },
     {
       "file": "plans/planned/webui-design-architecture-overhaul.md",
-      "bytes": 278025,
-      "sha256": "12d03d195ea534bdecc2b1bd7ffacf433293c40f252808f641af3baa6be64036"
+      "bytes": 279845,
+      "sha256": "ead6c8d1420bc728831be516379941e79110ce63b223ac04e62fa06ac75bb876"
     }
   ],
   "reconciliation": {
@@ -28632,7 +28632,9 @@
         "resourceDefaults",
         "interfacePreferences",
         "uiLayout",
-        "subagentLaunchSlots"
+        "subagentLaunchSlots",
+        "shellRollout.version",
+        "shellRollout.cohort"
       ],
       "owners": [
         {
@@ -28648,7 +28650,12 @@
         {
           "file": "pi-package-webui/lib/server/settings-store.mjs",
           "symbol": "mergeWebuiSettings",
-          "line": 364
+          "line": 467
+        },
+        {
+          "file": "pi-package-webui/lib/server/settings-store.mjs",
+          "symbol": "initializeWebuiShellRollout",
+          "line": 386
         }
       ],
       "method": "Reviewed schema paths; unknown future fields may also survive normalization. No settings file read."

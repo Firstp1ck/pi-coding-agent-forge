@@ -10,7 +10,7 @@ Classic and mobile adapters in `public/app.js` share five flat ES modules:
 
 - `shell-actions.mjs` preserves palette matching and checks captured session/project targets before dispatch. Stable action IDs identify entries across catalog refreshes. The app rebuilds the catalog at execution. Captured session identity rejects same-tab replacements without changing stream ownership; successful New session replies invalidate actions before refreshed state arrives. Compact availability includes both authoritative busy state and locally pending requests. Existing handlers retain asynchronous guards and server authorization remains authoritative.
 - `shell-navigation.mjs` owns the browser history listener and writes. Mobile navigation commits history before changing the rendered state, so a failed write leaves the current view intact. Unrelated history fields and URL parameters survive.
-- `shell-preferences.mjs` reads the versioned browser preference without repairing unknown records. Missing, corrupt or unavailable storage falls back to Classic. Phone and tablet mode choices remain independent; `shell=classic` takes precedence. Focused desktop is opt-in through the browser preference. Pins use bounded printable catalog IDs; inspector navigation keeps its stricter ID grammar.
+- `shell-preferences.mjs` reads the versioned browser preference without repairing unknown records. The pure effectiveShellPreferences resolver selects Focused only for an absent browser record and exact fresh server cohort; corrupt or unavailable storage stays Classic. Phone and tablet mode choices remain independent; `shell=classic` takes precedence. A valid explicit browser choice always wins, including when cohort metadata arrives after that choice. Pins use bounded printable catalog IDs; inspector navigation keeps its stricter ID grammar.
 - `shell-view-host.mjs` moves canonical DOM nodes and restores their original homes, focus, selection and scroll. The app retains section visibility and disclosure attributes. Moving or restoring a view never owns its session, runner or stream lifetime.
 - `shell-surfaces.mjs` owns one drawer keyboard listener and restores prior attributes. Native modal dialogs retain keyboard ownership. Replacing a drawer invalidates pending focus returns without closing feature resources.
 
@@ -81,6 +81,14 @@ node tests/append-system-selection.test.mjs
 node tests/append-system-http.test.mjs
 node tests/append-system-selector-static.test.mjs
 ```
+
+## Shell rollout initialization
+
+Immediately after CLI and startup-CWD validation, before service construction, registry initialization or restore reads, the server calls initializeWebuiShellRollout from the canonical settings store. Prior-use evidence includes the default settings root, legacy config root, XDG Web UI state, configured agent Web UI state and explicit fast-pick, optional-feature migration and restore paths. Only absence proven under the bounded sibling initialization lock can qualify a default root as fresh. Custom settings targets and ambiguous evidence cannot establish freshness. The existing settings lock and private atomic writer persist the raw-preserving version-1 shellRollout marker without changing settings schema 8, layout v3 or layout revisions. Generic settings reads never initialize the marker.
+
+GET /api/interface-preferences adds only validated shellRolloutCohort metadata. The existing PUT allowlist rejects cohort and marker fields. Browser hydration is outside the layout revision/generation fences and performs no preference write; the original read status remains separate from the effective layout. Late metadata cannot override an explicit choice. Existing startup migration of missing durable layout fields remains independent. Recovery URLs and independent mobile modes retain precedence.
+
+The initializer preserves valid markers, leaves invalid/future own markers untouched, migrates applicable legacy data before any marker-only write, and returns unknown after failed proof or persistence. A crash after root creation leaves conservative established state on the next startup. Unit fault/race tests live in server-shell-rollout.test.mjs; whole-app startup, browser hydration and platform acceptance remain separate gates.
 
 ## Web UI settings write lock
 

@@ -120,6 +120,9 @@ import {
 import {
   WEBUI_SIDE_PANEL_WIDTH_MAX_PX,
   WEBUI_SIDE_PANEL_WIDTH_MIN_PX,
+  initializeWebuiShellRollout,
+  legacyWebuiSettingsFile,
+  validatedShellRolloutCohort,
   readWebuiSettings,
   updateWebuiSettings,
   webuiSettingsFile,
@@ -4634,6 +4637,19 @@ try {
   usage();
   process.exit(2);
 }
+
+await initializeWebuiShellRollout({
+  additionalEvidencePaths: [
+    path.dirname(legacyWebuiSettingsFile()),
+    path.join(process.env.XDG_STATE_HOME || path.join(homedir(), ".local", "state"), "pi-webui"),
+    path.join(path.resolve(expandUserPath(agentDir)), "webui"),
+    ...[
+      process.env.PI_WEBUI_FAST_PICKS_FILE,
+      process.env.PI_WEBUI_OPTIONAL_FEATURE_MIGRATION_FILE,
+      process.env.PI_WEBUI_RESTORE_FILE,
+    ].filter(Boolean).map(filename => path.resolve(expandUserPath(filename))),
+  ],
+});
 
 const { PiRpcProcess, SupervisorPiRpcProcess } = createRpcTransportTypes({
   assertNativeRpcAdmission, sanitizeError, requestTimeoutMs: REQUEST_TIMEOUT_MS,
@@ -10022,6 +10038,7 @@ async function saveOutputModeDefault(value) {
 
 function interfacePreferencesResponse(settings) {
   return {
+    shellRolloutCohort: validatedShellRolloutCohort(settings.shellRollout),
     preferences: settings.interfacePreferences,
     layout: settings.uiLayout,
     layoutRevision: uiLayoutRevision(settings.uiLayout),
