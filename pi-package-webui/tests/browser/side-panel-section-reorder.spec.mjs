@@ -87,13 +87,15 @@ test("desktop Control Deck always enables and persists pointer and keyboard reor
   expect(desktopReorderVisuals.labelMarker).toBe("none");
   const git = page.locator('[data-side-panel-section-toggle="git"]');
   const controlsBox = await controls.boundingBox();
-  const gitBox = await git.boundingBox();
+  let gitBox = await git.boundingBox();
   expect(controlsBox).toBeTruthy();
   expect(gitBox).toBeTruthy();
   await page.mouse.move(controlsBox.x + controlsBox.width / 2, controlsBox.y + controlsBox.height / 2);
   await page.mouse.down();
   await page.mouse.move(controlsBox.x + controlsBox.width / 2, controlsBox.y + controlsBox.height / 2 + 12, { steps: 2 });
   await expect(controls.locator("xpath=../..")).toHaveClass(/dragging/);
+  gitBox = await git.boundingBox();
+  expect(gitBox).toBeTruthy();
   await page.mouse.move(gitBox.x + gitBox.width / 2, gitBox.y + gitBox.height - 4, { steps: 6 });
   await page.mouse.up();
 

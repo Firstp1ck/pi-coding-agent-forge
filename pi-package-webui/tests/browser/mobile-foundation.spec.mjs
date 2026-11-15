@@ -311,10 +311,11 @@ test("legacy phone keeps terminal navigation and secondary composer actions coll
     const target = sections[1]?.querySelector("[data-side-panel-section-toggle]");
     const before = sections.map((section) => section.dataset.sidePanelSection);
     const sourceRect = source.getBoundingClientRect();
-    const targetRect = target.getBoundingClientRect();
     source.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerId: id, button: 0, clientX: sourceRect.left + 10, clientY: sourceRect.top + 10 }));
-    window.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, pointerId: id, button: 0, clientX: targetRect.left + 10, clientY: targetRect.bottom - 4 }));
-    window.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: id, button: 0, clientX: targetRect.left + 10, clientY: targetRect.bottom - 4 }));
+    window.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, pointerId: id, button: 0, clientX: sourceRect.left + 10, clientY: sourceRect.top + 24 }));
+    const dropRect = target.getBoundingClientRect();
+    window.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, pointerId: id, button: 0, clientX: dropRect.left + 10, clientY: dropRect.bottom - 4 }));
+    window.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: id, button: 0, clientX: dropRect.left + 10, clientY: dropRect.bottom - 4 }));
     return {
       before,
       after: [...document.querySelectorAll("[data-side-panel-section]")].filter((section) => !section.hidden).map((section) => section.dataset.sidePanelSection),

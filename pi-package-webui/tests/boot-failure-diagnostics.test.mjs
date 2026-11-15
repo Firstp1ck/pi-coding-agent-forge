@@ -63,6 +63,7 @@ function makeEnvironment({
     report: new FakeElement({ value: "Collecting diagnostics…" }),
     copy: new FakeElement(),
     reload: new FakeElement(),
+    classic: new FakeElement(),
     copyStatus: new FakeElement(),
   };
   const styleLink = new FakeElement({ href: "http://127.0.0.1:31415/styles.css?v=157", sheet: stylesheetLoaded ? {} : null });
@@ -93,6 +94,7 @@ function makeEnvironment({
         "#webuiBootFailureReport": elements.report,
         "#copyWebuiBootFailureReportButton": elements.copy,
         "#reloadWebuiAfterBootFailureButton": elements.reload,
+        "#classicWebuiAfterBootFailureLink": elements.classic,
         "#webuiBootFailureCopyStatus": elements.copyStatus,
         'link[rel="stylesheet"]': styleLink,
       }[selector] || null;
@@ -157,6 +159,9 @@ const missingModule = makeEnvironment({
 vm.runInNewContext(loaderSource, missingModule.context, { filename: "webui-boot-loader.js" });
 await settleAsyncWork();
 assert.equal(missingModule.elements.panel.hidden, false, "a rejected app import should expose the boot-failure panel");
+assert.equal(new URL(missingModule.elements.classic.href).searchParams.get("shell"), "classic");
+assert.equal(new URL(missingModule.elements.classic.href).searchParams.get("pin"), "SUPERSECRET");
+assert.equal(new URL(missingModule.elements.classic.href).hash, "#private");
 assert.match(missingModule.elements.report.value, /Pi Web UI startup failure/);
 assert.match(missingModule.elements.report.value, /Diagnosis[\s\S]*Summary: Missing startup module: \/workflow-status-stack\.mjs \(HTTP 404\)\./, "the diagnosis should name the actual missing transitive import before the full checks list");
 assert.match(missingModule.elements.report.value, /Likely cause: The backend is healthy, but the running server's static asset allowlist is out of sync with app\.js\./);

@@ -641,7 +641,7 @@ assert.match(css, /\.action-feedback-controls \{[\s\S]*?position:\s*absolute/, "
 assert.match(css, /\.action-feedback-controls \{[\s\S]*?bottom:\s*0\.48rem/, "action reactions should sit inside the message box by default");
 assert.match(css, /\.action-feedback-controls \{[\s\S]*?opacity:\s*0/, "action reactions should stay hidden until hovered or focused");
 assert.match(css, /\.action-feedback-controls:hover,[\s\S]*?\.action-feedback-controls:focus-within/, "action reactions should reveal on hover or keyboard focus");
-assert.match(css, /\.action-feedback-controls:not\(:hover\):not\(:focus-within\) \.action-feedback-button/, "hidden action reactions should not expose button hit targets until the hover area is reached");
+assert.match(css, /@media \(hover: hover\)[\s\S]*?\.message:not\(:hover\):not\(:focus-within\) > \.action-feedback-controls:not\(:hover\):not\(:focus-within\) \.action-feedback-button\s*\{\s*pointer-events:\s*none/, "hidden action reactions should not expose button hit targets until the message hover area is reached");
 assert.match(css, /\.action-feedback-button\.feedback-question\.active/, "question-mark reaction should have selected styling");
 assert.match(css, /\.composer-row button\[data-tooltip\]::after/, "composer-row button tooltips should be shared across Git, Steer, and Follow-up buttons");
 assert.doesNotMatch(css, /\.composer-row \.composer-workflow-mode-button\[data-tooltip\]/, "isolated Workflow Mode dock should not retain composer-row pseudo-tooltip overrides");

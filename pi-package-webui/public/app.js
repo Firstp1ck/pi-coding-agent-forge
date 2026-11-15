@@ -1208,6 +1208,7 @@ let sessionSummaryOverlayFocusReturn = null;
 let sessionSummaryOverlayFocusReturnKey = "";
 let sessionSummaryControlsRenderSignature = "";
 const sessionSummaryByTab = new Map();
+const sessionSummaryGenerationByTab = new Map();
 let pathPickerState = null;
 let firstTerminalCwdPromptShown = false;
 let pathFastPicks = [];
@@ -3029,8 +3030,8 @@ function captureMobileSurfaceRenderFocus(surface) {
   const active = document.activeElement;
   const userDirected = Date.now() <= mobileSurfaceUserFocusIntentUntil;
   const targetKey = mobileSurfaceFocusKey(active);
-  if (active instanceof HTMLElement && targetKey && surface?.contains(active) && (!mobileSurfaceRenderFocus || active === mobileSurfaceRenderFocus.element || userDirected)) {
-    const domDraft = active.dataset.mobileDraftAuthority === "dom" && (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement);
+  const domDraft = active?.dataset?.mobileDraftAuthority === "dom" && (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement);
+  if (active instanceof HTMLElement && targetKey && surface?.contains(active) && (!mobileSurfaceRenderFocus || active === mobileSurfaceRenderFocus.element || userDirected || domDraft)) {
     mobileSurfaceRenderFocus = {
       element: active,
       targetKey,
@@ -9430,7 +9431,7 @@ function componentUpdateButtonState(target) {
   const job = nativeUpdateJob(target);
   if (componentUpdateStartInProgress) return { disabled: true, label: "Starting…" };
   if (nativeJobPollError || latestUpdateStatus?.nativeJobDiscoveryError || latestUpdateStatus?.canRunUpdate === false ||
-      latestUpdateStatus?.updateInProgress || anyComponentUpdateRunning() || job?.phase === "unknown" ||
+      latestUpdateStatus?.updateInProgress || anyComponentUpdateRunning() || job?.phase === "unknown" || job?.phase === "partial" ||
       updateRequestInProgress) {
     return { disabled: true, label: `Update ${label}` };
   }
@@ -16195,7 +16196,7 @@ function cachedStateForTabSwitch(tabId = activeTabId) {
   };
 }
 
-function resetActiveTabUi() {
+function resetActiveTabUi({ preserveFileTree = false } = {}) {
   clearRefreshTimers();
   sessionEvents.close();
   setControlsPendingModel("");
@@ -16210,7 +16211,7 @@ function resetActiveTabUi() {
   latestMessages = [];
   latestMessagesSessionKey = "";
   resetFileViewerUi();
-  resetFileTreeState();
+  if (!preserveFileTree) resetFileTreeState();
   restoreFileViewerForActiveTab();
   clearRunIndicatorActivity({ render: false });
   if (currentState) syncRunIndicatorFromState(currentState);
@@ -18035,6 +18036,7 @@ async function closeAllTerminalTabs() {
 }
 
 async function initializeTabs() {
+  const previousProject = projectTargetFromContext();
   const loadedTabs = await refreshTabs({ selectStored: true });
   // Durable groups can arrive before the initial tab catalog. Rehydrate them
   // after tabs load so valid memberships are not filtered against an empty set.
@@ -18042,7 +18044,7 @@ async function initializeTabs() {
   syncTerminalCustomGroupsWithTabs(tabs, { persist: false });
   restoreMobileContinuityState();
   restoreDesktopDrafts();
-  resetActiveTabUi();
+  resetActiveTabUi({ preserveFileTree: isCurrentProjectTarget(previousProject) });
   renderTabs();
   restoreActiveDraft();
   if (!loadedTabs.length) {
@@ -18392,7 +18394,7 @@ function eventsSectionRecord() {
 
 function syncUsageVisibility() {
   for (const [provider, box] of [["codex", elements.codexUsageBox], ["claude", elements.claudeUsageBox]]) {
-    activityUsage.setVisible(provider, !!box?.getClientRects().length && !box.closest("[hidden], [inert]") && getComputedStyle(box).visibility !== "hidden");
+    activityUsage.setVisible(provider, !!box && !box.closest("[hidden], [inert]") && !!box.getClientRects().length && getComputedStyle(box).visibility !== "hidden");
   }
 }
 
@@ -41031,7 +41033,8 @@ function normalizeSessionSummaryClientState(value, previous = null, { resetProje
 function sessionSummaryStateForTab(tabId = activeTabId) {
   if (!tabId) return null;
   const cached = sessionSummaryByTab.get(tabId);
-  if (cached) return cached;
+  const pending = sessionSummaryGenerationByTab.get(tabId);
+  if (cached) return pending && isAliveProjectTarget(pending) ? { ...cached, status: "generating" } : cached;
   const metadata = tabs.find((tab) => tab.id === tabId)?.sessionSummary;
   const normalized = normalizeSessionSummaryClientState(metadata);
   if (normalized) sessionSummaryByTab.set(tabId, normalized);
@@ -41226,12 +41229,18 @@ function updateSessionSummaryForTab(tabId, value, { resetProjection = false } = 
   if (previous && tabsSnapshotSignature(previous) === tabsSnapshotSignature(normalized)) return previous;
   sessionSummaryByTab.set(tabId, normalized);
   renderSessionSummaryControls();
+  if (tabId !== activeTabId) scheduleTabsRender();
   if (sessionSummaryOverlayTabId === tabId) renderSessionSummaryOverlay();
   return normalized;
 }
 
 async function requestSessionSummaryGeneration(tabId, { refresh = false } = {}) {
+  const target = projectTargetFromContext(activeTabContext(tabId));
+  if (!isAliveProjectTarget(target)) return;
+  const pending = sessionSummaryGenerationByTab.get(tabId);
+  if (pending && isAliveProjectTarget(pending)) return;
   const previous = sessionSummaryStateForTab(tabId);
+  sessionSummaryGenerationByTab.set(tabId, target);
   updateSessionSummaryForTab(tabId, {
     version: SESSION_SUMMARY_PROTOCOL_VERSION,
     status: "generating",
@@ -41243,10 +41252,12 @@ async function requestSessionSummaryGeneration(tabId, { refresh = false } = {}) 
   try {
     const signal = globalThis.AbortSignal?.timeout?.(SESSION_SUMMARY_REQUEST_TIMEOUT_MS);
     const response = await api("/api/session-summary/generate", { method: "POST", body: { refresh }, tabId, signal });
+    if (!isAliveProjectTarget(target)) return response;
     if (response.data?.summary) updateSessionSummaryForTab(tabId, response.data.summary);
     if (response.data?.tab) applyTabMetadata(response.data.tab);
     return response;
   } catch (error) {
+    if (!isAliveProjectTarget(target)) throw error;
     updateSessionSummaryForTab(tabId, {
       version: SESSION_SUMMARY_PROTOCOL_VERSION,
       status: "failure",
@@ -41257,6 +41268,11 @@ async function requestSessionSummaryGeneration(tabId, { refresh = false } = {}) 
       updatedAt: new Date().toISOString(),
     });
     throw error;
+  } finally {
+    if (sessionSummaryGenerationByTab.get(tabId) === target) sessionSummaryGenerationByTab.delete(tabId);
+    renderSessionSummaryControls();
+    scheduleTabsRender();
+    if (sessionSummaryOverlayTabId === tabId) renderSessionSummaryOverlay();
   }
 }
 

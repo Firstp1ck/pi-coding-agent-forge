@@ -110,7 +110,7 @@ test("model selector supports Enter-to-select and arrow-key navigation from the 
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true, data: route.request().postDataJSON() }) });
   });
   await page.goto(baseURL);
-  await expect(page.locator("#promptInput")).toBeVisible();
+  await expect(page.locator("#promptInput")).toBeFocused();
 
   await page.keyboard.press("Control+l");
   const dialog = page.locator("#nativeCommandDialog");

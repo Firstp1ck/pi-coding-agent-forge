@@ -9037,6 +9037,11 @@ button.git-workflow-step:hover:not(:disabled) {
   opacity: 1;
   transform: translateY(0) scale(1);
 }
+@media (hover: hover) {
+  .message:not(:hover):not(:focus-within) > .action-feedback-controls:not(:hover):not(:focus-within) .action-feedback-button {
+    pointer-events: none;
+  }
+}
 @media (hover: none) {
   .action-feedback-controls {
     opacity: 1;

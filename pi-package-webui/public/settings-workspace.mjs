@@ -124,6 +124,7 @@ export function createSettingsWorkspace({ document, viewHost, onNavigate, onInvo
       else viewHost.restore(voicePanel);
     }
     for (const [id, page] of pages) page.hidden = id !== next.category;
+    if (next.destination !== 'settings') return;
     const records = entries();
     for (const entry of records.filter(record => record.actionId)) {
       let card = cards.get(entry.id);

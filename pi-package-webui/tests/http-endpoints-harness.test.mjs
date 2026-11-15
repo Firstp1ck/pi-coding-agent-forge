@@ -16,7 +16,13 @@ import { REQUIRED_THEME_TOKENS, serializeTheme } from "../public/theme-contract.
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const serverScript = join(root, "bin", "pi-webui.mjs");
 const fakePi = join(root, "tests", "fixtures", "fake-pi.mjs");
-const port = 30000 + Math.floor(Math.random() * 20000);
+const portReservation = createServer();
+await new Promise((resolve, reject) => {
+  portReservation.once("error", reject);
+  portReservation.listen(0, "0.0.0.0", resolve);
+});
+portReservation.unref();
+const port = portReservation.address().port;
 const optionalFeatureFocus = process.env.PI_WEBUI_OPTIONAL_FEATURES_FOCUS === "1";
 
 function themeFixture(name, color = "#123456") {
@@ -282,6 +288,7 @@ for (const [producerId, status, updatedAt] of [
   }, { recordId: `${producerId}-record` });
 }
 
+await new Promise((resolve, reject) => portReservation.close(error => error ? reject(error) : resolve()));
 const child = spawn(process.execPath, [serverScript, "--cwd", cwd, "--host", "0.0.0.0", "--port", String(port), "--pi", fakePiCli], {
   stdio: ["ignore", "pipe", "pipe"],
   env: {
