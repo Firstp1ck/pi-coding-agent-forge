@@ -92,9 +92,9 @@ test("server dispatch requires extension provenance and completes on a fresh nat
 test("fixture, cache revisions, and layered docs expose the migration contract", () => {
   assert.match(fakePi, /FAKE_PI_GUIDED_GIT_ACTIVATION/u);
   assert.match(fakePi, /git-guided-workflow:webui-start/u);
-  assert.match(html, /styles\.css\?v=159/u);
-  assert.match(html, /app\.js\?v=200/u);
-  assert.match(serviceWorker, /pi-webui-pwa-v171/u);
+  assert.match(html, /styles\.css\?v=160/u);
+  assert.match(html, /app\.js\?v=201/u);
+  assert.match(serviceWorker, /pi-webui-pwa-v172/u);
   assert.match(serviceWorker, /"\/guided-git-command-state\.mjs"/u);
   assert.match(readme, /pi-extension-git-guided-workflow/u);
   assert.match(technical, /\/git-guided-workflow/u);
