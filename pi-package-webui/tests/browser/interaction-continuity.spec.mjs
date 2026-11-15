@@ -347,10 +347,28 @@ test("autosizing the main input does not move settled agent output", async ({ pa
   await expect(outputCard).toBeVisible();
 
   const promptInput = page.locator("#promptInput");
-  const initial = await outputCard.evaluate((node) => ({
-    top: node.getBoundingClientRect().top,
-    inputHeight: document.querySelector("#promptInput")?.getBoundingClientRect().height || 0,
-  }));
+  await expect(page.locator("#chat")).toHaveAttribute("aria-busy", "false");
+  const initial = await outputCard.evaluate(async (node) => {
+    await document.fonts.ready;
+    const started = performance.now();
+    let stableSince = started;
+    let previous = null;
+    while (performance.now() - started < 4_000) {
+      if (!node.isConnected) throw new Error("settled output was replaced during startup");
+      const current = {
+        top: node.getBoundingClientRect().top,
+        inputHeight: document.querySelector("#promptInput")?.getBoundingClientRect().height || 0,
+        chatHeight: document.querySelector("#chat")?.clientHeight || 0,
+        chatScroll: document.querySelector("#chat")?.scrollTop || 0,
+      };
+      if (!previous || Object.keys(current).some((key) => current[key] !== previous[key])) stableSince = performance.now();
+      previous = current;
+      // Initial transcript following has a delayed settling pass; measure only after layout stops moving.
+      if (performance.now() - stableSince >= 200) return current;
+      await new Promise(requestAnimationFrame);
+    }
+    throw new Error("initial transcript layout did not settle");
+  });
   await promptInput.fill("composer stability ".repeat(120));
   await expect.poll(() => promptInput.evaluate((node) => node.getBoundingClientRect().height)).toBeGreaterThan(initial.inputHeight + 40);
   const expandedTop = await outputCard.evaluate((node) => node.getBoundingClientRect().top);
