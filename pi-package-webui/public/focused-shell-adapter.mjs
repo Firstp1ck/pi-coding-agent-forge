@@ -30,7 +30,7 @@ export function createFocusedShellAdapter({ document, viewHost, nodes, sections,
   settingsIcon.setAttribute('aria-hidden', 'true');
   settingsIcon.setAttribute('focusable', 'false');
   const settingsPath = document.createElementNS(settingsIcon.namespaceURI, 'path');
-  settingsPath.setAttribute('d', 'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2');
+  settingsPath.setAttribute('d', 'M9.5 3h5l.6 2.4 1.8 1 2.4-.7 2.5 4.3-1.8 1.7v2.1l1.8 1.7-2.5 4.3-2.4-.7-1.8 1-.6 2.4h-5l-.6-2.4-1.8-1-2.4.7-2.5-4.3L4 13.8v-2.1L2.2 10l2.5-4.3 2.4.7 1.8-1 .6-2.4Z M15 12.75a3 3 0 1 0-6 0 3 3 0 0 0 6 0Z');
   settingsIcon.append(settingsPath);
   sidebarSettings.append(settingsIcon);
   sidebarSettings.addEventListener('click', () => { if (mounted) onNavigate('settings', 'settings:appearance'); });
