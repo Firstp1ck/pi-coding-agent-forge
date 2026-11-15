@@ -714,8 +714,8 @@
     },
     {
       "file": "pi-package-webui/public/sidebar-update-menu.mjs",
-      "bytes": 9492,
-      "sha256": "5e040844f49045b87a948c591995016d5e20deb8fd313eeeb7def015c1fc7e43"
+      "bytes": 9559,
+      "sha256": "f4055485f8b488bfa494da40101dd13780ccde52b424e3a2511eee77de079bc9"
     },
     {
       "file": "pi-package-webui/public/stream-derived-output.mjs",

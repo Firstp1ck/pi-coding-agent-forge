@@ -84,7 +84,7 @@ test('all three scopes close before one exact callback, preserving the parent tr
     await page.locator('#updates').click();
     await expect(page.getByRole('menu', { name: 'Updates', exact: true })).toBeVisible();
     await expect(items(page)).toHaveText([
-      'Pi and extensions + WebUIUpdate Pi, configured extensions, and WebUI.',
+      'Pi and extensions + WebUIUpdate Pi, extensions and WebUI.',
       'WebUI onlyUpdate existing WebUI installations.',
       'Pi onlyUpdate the Pi coding agent.',
     ]);

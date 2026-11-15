@@ -67,7 +67,7 @@ assert.match(readme, /PNG, JPEG, GIF, WebP, and AVIF/i, "the Files panel guide s
 assert.match(technical, /supported raster images[\s\S]*2 MiB/i, "the advanced reference should document image support and its size limit");
 assert.match(development, /kind: "image"[\s\S]*base64/i, "the contributor guide should document the image response contract");
 assert.match(serviceWorker, /const CACHE_NAME = "pi-webui-pwa-v190"/, "changed viewer assets should advance the PWA cache identity");
-assert.match(html, /styles\.css\?v=165/, "changed image styles should advance the stylesheet revision");
-assert.match(html, /app\.js\?v=211/, "changed image rendering should advance the app revision");
+assert.match(html, /styles\.css\?v=166/, "changed image styles should advance the stylesheet revision");
+assert.match(html, /app\.js\?v=212/, "changed image rendering should advance the app revision");
 
 console.log("file viewer image static tests passed");

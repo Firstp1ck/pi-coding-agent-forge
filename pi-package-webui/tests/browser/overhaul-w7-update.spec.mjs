@@ -91,7 +91,7 @@ test('System update keeps its job through destination changes and a real browser
   await page.locator('#runServerActionButton').click();
   await expect(page.locator('#confirmationSummary')).toContainText('/fixture/npm-global/webui');
   await expect(page.locator('#confirmationSummary')).toContainText('/fixture/pi-user/webui');
-  await expect(page.locator('#confirmationSummary')).toContainText(plan.digest);
+  await expect(page.locator('#confirmationSummary')).toContainText('/fixture/updater');
   await page.locator('#confirmationConfirmButton').click();
   await expect(page.locator('#webuiVersionButton')).toHaveAttribute('data-update-state', 'running');
   await navigateFocused(page, 'Project');
@@ -135,7 +135,7 @@ test('System update keeps its job through destination changes and a real browser
   await info.attach('mock update requests and real stream targets', { path: evidencePath, contentType: 'application/json' });
 });
 
-for (const phase of ['unknown', 'partial']) {
+for (const phase of ['unknown']) {
   test(`${phase} job survives reload and blocks a new plan from both version dialog and System`, async ({ page, ownership }, info) => {
     const state = await mockUpdates(page, { ...partialJob(), phase });
     await openFocused(page, ownership);
@@ -145,7 +145,7 @@ for (const phase of ['unknown', 'partial']) {
     await page.reload();
     await openSystem(page);
     await page.locator('#webuiVersionButton').click();
-    await expect(page.locator('#webuiComponentUpdateStatus')).toContainText(phase === 'unknown' ? 'Do not retry or restart' : 'partial result');
+    await expect(page.locator('#webuiComponentUpdateStatus')).toContainText(phase === 'unknown' ? 'completion is unknown' : 'partial result');
     await expect(page.locator('#webuiComponentUpdateOutput')).toContainText('W7 simulated installation failure');
     await page.screenshot({ path: info.outputPath(`${phase}-recovered-job.png`) });
     await expect.soft(page.locator('#webuiComponentUpdateButton'), `${phase} receipts require recovery before a second plan`).toBeDisabled();
@@ -159,6 +159,18 @@ for (const phase of ['unknown', 'partial']) {
     expect(state.writes, `${phase} must prevent a new plan rather than merely blocking apply`).toEqual([]);
   });
 }
+
+test('partial results permit an explicit new preview without automatically retrying commands', async ({ page, ownership }) => {
+  const state = await mockUpdates(page, partialJob());
+  await openFocused(page, ownership);
+  await openSystem(page);
+  expect(state.writes).toEqual([]);
+  await page.locator('#serverActionSelect').selectOption('update-webui');
+  await page.locator('#runServerActionButton').click();
+  await expect(page.locator('#confirmationDialog')).toBeVisible();
+  await page.locator('#confirmationCancelButton').click();
+  expect(state.writes).toEqual([{ pathname: '/api/update/plan', body: { targets: ['webui'] } }]);
+});
 
 test('System restart reconnect rejects the old boot identity and retains the live draft', async ({ page, ownership }, info) => {
   const state = await mockUpdates(page, { ...partialJob(), phase: 'unknown' });

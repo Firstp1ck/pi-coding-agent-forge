@@ -129,7 +129,7 @@ assert.match(styles, /\.event-tree-context-menu \{[\s\S]*max-width: calc\(100vw 
 
 // Cache tuple for this browser-asset change.
 assert.match(serviceWorker, /const CACHE_NAME = "pi-webui-pwa-v190";/, "the PWA cache identity should advance");
-assert.match(html, /styles\.css\?v=165/, "compact-mode styles should advance the stylesheet revision");
-assert.match(html, /data-app-src="\/app\.js\?v=211"/, "the app query revision should advance");
+assert.match(html, /styles\.css\?v=166/, "compact-mode styles should advance the stylesheet revision");
+assert.match(html, /data-app-src="\/app\.js\?v=212"/, "the app query revision should advance");
 
 console.log("events-tree-context-menu-static.test.mjs passed");

@@ -99,3 +99,21 @@ test('Classic navigation retains the same update actions and keyboard dismissal'
   await expect(page.locator('#sidebarUpdateButton')).toBeFocused();
   expect(requests).toEqual([]);
 });
+
+for (const target of ['pi', 'all']) test(`${target} feedback replaces an older partial WebUI result`, async ({ page, emptyStartup }) => {
+  const { jobs } = await setup(page, emptyStartup);
+  jobs.webui = { transactionId: 'old-webui', plan: planFor('webui'), phase: 'partial',
+    receipts: [{ id: 'webui', status: 'failed', stderr: 'old WebUI output' }] };
+  await page.keyboard.press('Escape');
+  await page.locator('#sidebarUpdateButton').click();
+  await expect(page.locator('.sidebar-update-menu-status')).toContainText('old WebUI output');
+  await page.getByRole('menuitem').filter({ hasText: names[target] }).click();
+  await page.locator('#confirmationConfirmButton').click();
+  await page.locator('#sidebarUpdateButton').click();
+  const status = page.locator('.sidebar-update-menu-status');
+  await expect(status).toContainText(`menu-${target}`);
+  await expect(status).not.toContainText('old WebUI output');
+  jobs[target] = { ...jobs[target], phase: 'failed', receipts: [{ id: target, status: 'failed', stderr: 'new command error' }] };
+  await expect(status).toContainText('new command error', { timeout: 10_000 });
+  await expect(status).not.toContainText('old WebUI output');
+});

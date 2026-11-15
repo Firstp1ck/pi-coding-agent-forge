@@ -1,7 +1,7 @@
 export const SIDEBAR_UPDATE_ICON = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7v5h-5"/><path d="M4 17v-5h5"/><path d="M6.1 7a7 7 0 0 1 11.6-1L20 9M4 15l2.3 3A7 7 0 0 0 17.9 17"/></svg>';
 
 const CHOICES = [
-  ['all', 'Pi and extensions + WebUI', 'Update Pi, configured extensions, and WebUI.'],
+  ['all', 'Pi and extensions + WebUI', 'Update Pi, extensions and WebUI.'],
   ['webui', 'WebUI only', 'Update existing WebUI installations.'],
   ['pi', 'Pi only', 'Update the Pi coding agent.'],
 ];
@@ -184,7 +184,8 @@ export function createSidebarUpdateMenu({ button, onSelect }) {
     } else return;
     event.preventDefault();
     event.stopPropagation();
-    choices[next].focus();
+    choices[next].focus({ preventScroll: true });
+    choices[next].scrollIntoView({ block: 'nearest' });
   });
   listen(document, 'keydown', (event) => {
     if (!opened || event.key !== 'Escape') return;
