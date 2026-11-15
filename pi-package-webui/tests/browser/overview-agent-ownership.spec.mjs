@@ -43,4 +43,3 @@ test('unavailable agent reporting is distinct from an empty session', async ({ p
   await expect(agentRow(overview)).toContainText('Reporting unavailable');
   await info.attach('ownership evidence', { body: JSON.stringify({ input: data, actual: await agentRow(overview).innerText() }, null, 2), contentType: 'application/json' });
 });
-
