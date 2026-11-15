@@ -1103,12 +1103,15 @@ assert.match(server, /url\.pathname === "\/api\/restart" && req\.method === "POS
 assert.match(server, /PI_WEBUI_RESTORE_FILE: restore\.file/, "server restart should pass tab metadata through a private read-once restore file");
 assert.match(server, /if \(webuiDevServer\) env\.PI_WEBUI_DEV = "1";/, "server restart should explicitly preserve dev mode");
 assert.match(server, /url\.pathname === "\/api\/update\/plan"[\s\S]*validateUpdatePlanRequest[\s\S]*packageUpdates\.plan/, "server should expose single-action native update planning");
-assert.match(server, /url\.pathname === "\/api\/update\/apply"[\s\S]*validateUpdateApplyRequest[\s\S]*packageUpdates\.apply/, "server should apply only a confirmed native transaction id and digest");
+assert.match(server, /url\.pathname === "\/api\/update\/apply"[\s\S]*validateUpdateApplyRequest[\s\S]*packageUpdates\.apply/, "server should apply only a validated native transaction id and digest");
 assert.match(server, /updateTransactionRoute && req\.method === "GET"[\s\S]*finalizeNativeJob\(updateTransactionRoute\[1\]\)/, "native job status should reconnect to the same transaction");
 assert.match(server, /Legacy update mutation is disabled/, "divergent legacy update mutation routes should fail closed");
 assert.doesNotMatch(server, /function resolveUpdateTasks|function projectPackageRootUpdateTasks|function npmGlobalPackageRootUpdateTask|function bunGlobalPackageRootUpdateTask/, "broad heuristic package-root mutation should be removed");
-assert.match(app, /componentUpdateConfirmationText\(plan\)[\s\S]*item\.installedRoot[\s\S]*item\.command\.command[\s\S]*item\.command\.args[\s\S]*Restart Web UI/, "frontend should preview detected installations and fixed commands");
-assert.match(app, /api\("\/api\/update\/apply", \{ method: "POST", body: \{ transactionId: plan\.transactionId, planDigest: plan\.digest \}/, "frontend should apply only the confirmed transaction and digest");
+const updateMenuSource = await readFile(join(root, "public", "sidebar-update-menu.mjs"), "utf8");
+assert.match(updateMenuSource, /item\.command\.command[\s\S]*item\.command\.args[\s\S]*item\.installedRoot/, "job Details should retain detected installations and fixed commands");
+const updateSelectionSource = app.slice(app.indexOf("async function startComponentUpdate(target)"), app.indexOf("async function openWebuiPackageDialog()"));
+assert.doesNotMatch(updateSelectionSource, /appConfirmText|confirmationDialog/, "selecting an update scope should launch without another confirmation");
+assert.match(app, /api\("\/api\/update\/apply", \{ method: "POST", body: \{ transactionId: plan\.transactionId, planDigest: plan\.digest \}/, "frontend should apply only the selected transaction and digest");
 assert.match(html, /<option value="update-webui">Update Web UI<\/option>/, "side panel should offer Web UI separately from Pi");
 assert.doesNotMatch(html, /update-all|Update all/, "combined update action should be removed");
 assert.match(readme, /Updates[\s\S]*WebUI only[\s\S]*Pi only[\s\S]*Package scripts/, "README should explain the three update choices and package script behavior");
