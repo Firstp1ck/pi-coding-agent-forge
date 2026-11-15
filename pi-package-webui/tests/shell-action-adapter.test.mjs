@@ -42,6 +42,13 @@ const elements={compactButton:{disabled:false,textContent:'Compact'},
 const noop=()=>{};
 const contextUsageDetail=()=>'', footerAutoCompactionEnabled=()=>true;
 const footerAutoCompactionToggleAction=()=>'', isOptionalFeatureEnabled=()=>false;
+const OPTIONAL_FEATURE_BY_ID=new Map([
+  ['tuiToolsCommand',{id:'tuiToolsCommand',setupAvailable:true}],
+  ['tuiSkillsCommand',{id:'tuiSkillsCommand',setupAvailable:false}],
+]);
+const optionalFeatureSetupAvailable=feature=>feature?.setupAvailable===true;
+const setupRequests=[];
+const openOptionalFeatureSetup=feature=>setupRequests.push(feature.id);
 const tabIndicator=()=>({label:'Idle'}), normalizeDisplayPath=value=>value;
 const visibleCommands=()=>[], gitFooterRelevantStateChanged=()=>false;
 const modelStateKey=()=>'';
@@ -137,5 +144,25 @@ test('a pending real compaction request rejects a second palette invocation and 
     await first;
     assert.equal(composerStore.isCompactionPending(activeTabId), false);
     assert.equal(buildCommandPaletteItems().find(a => a.id === 'session:compact').available, true);
+  })()`);
+});
+
+
+test('explicit Setup actions retain current availability and captured session checks', async () => {
+  const run = fixture();
+  await run(`(async () => {
+    const tools = buildCommandPaletteItems().find(action => action.id === 'settings:tools-setup');
+    const skills = buildCommandPaletteItems().find(action => action.id === 'settings:skills-setup');
+    assert.equal(tools.available, true);
+    assert.equal(skills.available, false);
+    await executeCommandPaletteItem(skills);
+    assert.equal(setupRequests.length, 0);
+    await executeCommandPaletteItem(tools);
+    assert.equal(setupRequests[0], 'tuiToolsCommand');
+    setupRequests.length = 0;
+    invalidateShellSessionActions(activeTabId);
+    await executeCommandPaletteItem(tools);
+    assert.equal(setupRequests.length, 0);
+    assert.match(errors.at(-1), /session has changed/);
   })()`);
 });
