@@ -546,7 +546,10 @@ test("focus reconciliation and terminal switching keep the running status geomet
   expect(focusMovement.gapDrift).toBeLessThanOrEqual(1.5);
   assert.equal(focusMovement.stickyStable, true, "focus reconciliation should preserve unchanged sticky-prompt children");
 
-  await triggerDelayedStream(page, foregroundTabId);
+  // Keep the fixture running until sampling ends, independent of navigation latency.
+  await api(page, `/api/prompt?tab=${encodeURIComponent(foregroundTabId)}`, {
+    method: "POST", data: { message: "fixture continuity held stream", requestId: `geometry-${Date.now()}` },
+  });
   await expect(runIndicator).toBeVisible();
   await page.locator(`[data-tab-id="${backgroundTabId}"] .terminal-tab-button`).click();
   await expect.poll(() => activeTabId(page)).toBe(backgroundTabId);
@@ -580,6 +583,9 @@ test("focus reconciliation and terminal switching keep the running status geomet
   expect(switchMovement.indicatorTop).toBeLessThanOrEqual(1.5);
   expect(switchMovement.composerHeight).toBeLessThanOrEqual(1.5);
   expect(switchMovement.contextHeight).toBeLessThanOrEqual(1.5);
+
+  await api(page, `/api/abort?tab=${encodeURIComponent(foregroundTabId)}`, { method: "POST", data: {} });
+  await waitForFixtureSettlement(page, foregroundTabId);
 
   await api(page, `/api/tabs/${encodeURIComponent(backgroundTabId)}`, { method: "DELETE" });
   await expect.poll(async () => (await tabIds(page)).length).toBe(1);

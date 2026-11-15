@@ -611,7 +611,11 @@ test("mobile continuity preserves drafts, restores metadata honestly, and retrie
   const pasteInput = page.locator(".mobile-paste-context-text");
   const pasteDraft = Array.from({ length: 18 }, (_, index) => `pasted context line ${index}`).join("\n");
   await pasteInput.fill(pasteDraft);
-  const pasteBefore = await pasteInput.evaluate((node) => {
+  // Resolve and edit in one browser task. A reconnect can replace this field
+  // between locator resolution and evaluate, leaving an already-detached handle.
+  const pasteBefore = await page.evaluate(() => {
+    const node = document.querySelector(".mobile-paste-context-text");
+    if (!(node instanceof HTMLTextAreaElement)) throw new Error("Paste context field is unavailable");
     node.focus();
     node.setSelectionRange(14, 41, "backward");
     node.scrollTop = 48;
@@ -864,7 +868,7 @@ test("shell modules survive the service-worker offline cache and online refresh"
     const cache = await caches.open(active);
     return { active, modules: await Promise.all(names.map(async name => !!await cache.match(`/${name}.mjs`))), api: (await cache.keys()).some(request => new URL(request.url).pathname.startsWith('/api/')) };
   }, modules);
-  assert.equal(cacheState.active, 'pi-webui-pwa-v172');
+  assert.equal(cacheState.active, 'pi-webui-pwa-v173');
   assert.deepEqual(cacheState.modules, modules.map(() => true));
   assert.equal(cacheState.api, false);
   try {

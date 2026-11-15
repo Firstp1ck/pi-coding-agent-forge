@@ -19796,6 +19796,11 @@ body:has(#undoToast:not([hidden])) .notice-toast-stack { bottom: calc(max(1rem, 
 @media (max-width: 720px), (max-width: 950px) and (max-height: 500px) and (pointer: coarse) {
   html[data-mobile-shell="v2"] .notice-toast-stack { bottom: calc(4.7rem + env(safe-area-inset-bottom)); }
   html[data-mobile-shell="v2"] body.mobile-keyboard-open .notice-toast-stack { bottom: calc(0.5rem + env(safe-area-inset-bottom)); }
+  /* Failed-send actions stay usable while the error notice remains available. */
+  html[data-mobile-shell="v2"] body:has(#mobileFailedSendRecovery:not([hidden])) .notice-toast-stack {
+    top: calc(4.7rem + env(safe-area-inset-top));
+    bottom: auto;
+  }
 }
 
 @media (min-width: 721px) and (max-width: 1050px) {

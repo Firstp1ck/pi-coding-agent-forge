@@ -413,7 +413,7 @@ function handleIntercomLivePrompt(command, base) {
   return true;
 }
 
-function runContinuityDelayedStream() {
+function runContinuityDelayedStream({ holdOpen = false } = {}) {
   scriptedStreaming = true;
   const text = "continuity stream complete";
   const run = ++continuityRun;
@@ -429,7 +429,7 @@ function runContinuityDelayedStream() {
       appendDynamicMessage(message);
       emitScriptedEvent(tagged({ type: "message_end", continuityStep: "message-end", message }));
     } },
-    { afterMs: 80, run: () => emitScriptedEvent(tagged({ type: "agent_end", continuityStep: "end" })) },
+    { afterMs: holdOpen ? 30_000 : 80, run: () => emitScriptedEvent(tagged({ type: "agent_end", continuityStep: "end" })) },
     { afterMs: 10, run: () => {
       scriptedStreaming = false;
       emitScriptedEvent(tagged({ type: "agent_settled", continuityStep: "settled" }));
@@ -618,12 +618,12 @@ function handleActivityDecisionPrompt(command, base) {
 function handleContinuityPrompt(command, base) {
   if (!continuityModeEnabled) return false;
   const message = String(command.message || "").trim();
-  if (!["fixture continuity delayed stream", "fixture continuity delayed start", "fixture continuity confirmed before tool"].includes(message)) return false;
+  if (!["fixture continuity delayed stream", "fixture continuity held stream", "fixture continuity delayed start", "fixture continuity confirmed before tool"].includes(message)) return false;
   appendDynamicMessage({ role: "user", content: String(command.message), timestamp: Date.now() });
   respond({ ...base, data: { output: "fake continuity stream accepted", pid: process.pid } });
   if (message === "fixture continuity delayed start") runContinuityDelayedStart();
   else if (message === "fixture continuity confirmed before tool") runContinuityConfirmedBeforeTool();
-  else runContinuityDelayedStream();
+  else runContinuityDelayedStream({ holdOpen: message === "fixture continuity held stream" });
   return true;
 }
 

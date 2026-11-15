@@ -60,8 +60,8 @@ assert.match(css, /\.markdown-code \.syntax-comment \{[^}]*font-style: italic;/,
 
 // --- Offline/PWA startup closure and coherent revisions ---
 assert.match(serviceWorker, /"\/syntax-highlight\.mjs",/, "the eagerly imported tokenizer must be part of the offline app shell");
-assert.match(serviceWorker, /const CACHE_NAME = "pi-webui-pwa-v172"/, "adding a startup module should advance the PWA cache identity");
-assert.match(html, /styles\.css\?v=160/, "new token styles should advance the stylesheet revision");
+assert.match(serviceWorker, /const CACHE_NAME = "pi-webui-pwa-v173"/, "adding a startup module should advance the PWA cache identity");
+assert.match(html, /styles\.css\?v=161/, "new token styles should advance the stylesheet revision");
 assert.match(html, /data-app-src="\/app\.js\?v=201"/, "new renderer wiring should advance the app module revision");
 assert.match(pkg, /node --check public\/syntax-highlight\.mjs/, "the package check should syntax-check the startup-critical tokenizer");
 

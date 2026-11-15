@@ -40,8 +40,8 @@ assert.match(pkg.scripts.check, /node --check public\/transcript-renderer\.mjs/,
 assert.match(server, /STATIC_PUBLIC_FILE_EXTENSIONS[\s\S]*"\.mjs"/, "the server must serve typed startup modules from the public asset boundary");
 assert.match(serviceWorker, /"\/mobile-shell-state\.mjs"/, "the PWA shell must cache the new startup module");
 assert.match(serviceWorker, /"\/transcript-renderer\.mjs"/, "the PWA shell must cache the transcript startup module");
-assert.match(serviceWorker, /const CACHE_NAME = "pi-webui-pwa-v172"/, "the cache identity must change with the startup graph");
-assert.match(html, /styles\.css\?v=160/, "the stylesheet revision must change with mobile/tablet CSS fixes");
+assert.match(serviceWorker, /const CACHE_NAME = "pi-webui-pwa-v173"/, "the cache identity must change with the startup graph");
+assert.match(html, /styles\.css\?v=161/, "the stylesheet revision must change with mobile/tablet CSS fixes");
 assert.match(html, /app\.js\?v=201/, "the app revision must change with continuity/tablet wiring");
 assert.match(serviceWorker, /const APP_SHELL_NETWORK_TIMEOUT_MS = 8_000;[\s\S]*?event\.waitUntil\([\s\S]*?cache\.put\(request, response\.clone\(\)\)[\s\S]*?return networkResponse;/, "runtime cache writes must extend the event lifetime without blocking bounded network responses");
 assert.match(serviceWorker, /MOBILE_NAVIGATION_MESSAGE_TYPE = "pi-webui:navigate:v1"/, "the service worker must use a versioned active-client navigation message");
