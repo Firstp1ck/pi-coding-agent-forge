@@ -174,3 +174,22 @@ test('closing a group fragment closes only its visible members and preserves the
   await expect(page.locator('#promptInput')).toHaveValue('Keep the other group member');
   expect((await ownership.api('/api/tabs')).tabs.map(tab => tab.id)).toEqual([first.id]);
 });
+
+test('focused session remains visible when background work moves it between overflowing shelves', async ({ page, ownership }) => {
+  test.setTimeout(45_000);
+  for (let index = 0; index < 6; index += 1) await ownership.api('/api/tabs', {});
+  await page.setViewportSize({ width: 1440, height: 600 });
+  await ready(page, ownership);
+  const background = ownership.tabs[1];
+  const control = row(page, background.id).locator('.terminal-tab-button');
+  await control.focus();
+  await expect(control).toBeFocused();
+  await ownership.api('/api/prompt?tab=' + background.id, { message: 'fixture continuity held stream', requestId: 'shelves-visible-focus-12345678' });
+  await expect(body(page, 'working').locator(`[data-tab-id="${background.id}"]`)).toHaveCount(1, { timeout: 16_000 });
+  await expect(control).toBeFocused();
+  await expect(control).toBeInViewport({ ratio: 1 });
+  await ownership.api('/api/abort?tab=' + background.id, {});
+  await expect(body(page, 'inbox').locator(`[data-tab-id="${background.id}"]`)).toHaveCount(1, { timeout: 16_000 });
+  await expect(control).toBeFocused();
+  await expect(control).toBeInViewport({ ratio: 1 });
+});

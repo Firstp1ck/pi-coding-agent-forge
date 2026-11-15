@@ -62,6 +62,6 @@ assert.match(technical, /prompt-impact indicators[\s\S]*?tool schemas and ordina
 assert.match(development, /reports\/pi-default-system-prompt-evaluation\.md[\s\S]*?promptImpact/, "contributor guide should identify the evidence source and catalog field");
 assert.match(html, /styles\.css\?v=161/, "indicator styles should advance the stylesheet revision");
 assert.match(html, /app\.js\?v=203/, "indicator rendering should advance the app revision");
-assert.match(serviceWorker, /const CACHE_NAME = "pi-webui-pwa-v176"/, "browser asset changes should advance the PWA cache identity");
+assert.match(serviceWorker, /const CACHE_NAME = "pi-webui-pwa-v177"/, "browser asset changes should advance the PWA cache identity");
 
 console.log("optional-feature-prompt-impact-static.test.mjs passed");

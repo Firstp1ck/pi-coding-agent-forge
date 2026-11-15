@@ -17839,7 +17839,20 @@ function renderTabs() {
   elements.tabBar.prepend(tabList);
   restoreScopedControlContinuity(elements.tabBar, continuityContextKey, focusSnapshot, (key) => [...elements.tabBar.querySelectorAll("button")].find((node) => terminalTabControlKey(node) === key));
   elements.tabBar.scrollTop = previousScrollTop;
-  if (sessionShelves && renderedSessionShelves) sessionShelves.element.scrollTop = previousShelfScrollTop;
+  if (sessionShelves && renderedSessionShelves) {
+    sessionShelves.element.scrollTop = previousShelfScrollTop;
+    const focused = document.activeElement;
+    if (focusSnapshot && sessionShelves.element.contains(focused)) {
+      const bounds = sessionShelves.element.getBoundingClientRect();
+      const target = focused.getBoundingClientRect();
+      // Leave room for the focus outline and fractional layout rounding.
+      if (target.top < bounds.top + 2) {
+        sessionShelves.element.scrollTop -= Math.ceil(bounds.top + 2 - target.top);
+      } else if (target.bottom > bounds.bottom - 2) {
+        sessionShelves.element.scrollTop += Math.ceil(target.bottom - bounds.bottom + 2);
+      }
+    }
+  }
   restoreTooltipContinuity(elements.tabBar, tooltipSnapshot);
   elements.closeAllTabsButton.disabled = tabs.length === 0;
   if (elements.workspaceSaveButton) {
