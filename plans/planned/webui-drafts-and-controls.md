@@ -37,3 +37,7 @@ Reviewers report concrete violations of their task contract and direct regressio
 ## Execution record
 
 Plan committed before delegation. All seven tasks pending. No acceptance claim.
+
+T1, T2 and T3 workers are running from 3749f78, using isolated worktrees and Sol/high. Their client request IDs are `webui-drafts-controls-t1-worker-20261115`, `webui-drafts-controls-t2-worker-20261115` and `webui-drafts-controls-t3-worker-20261115`. Each returns its own `handoffs/drafts-controls-tN.md`. No reviewers launched yet. T4/T5/T7 wait for shared app.js ownership; T6 is independent of these and can start when an execution slot frees.
+
+Parent seam notes for queued workers: last-tab close UI is conditional on `tabs.length > 1` and the close API already accepts `allowEmpty`. +Tab positioning measures the stretched menu container and its hover CSS includes the wrapper; fix both hit area and width. Username cancellation returns null from `configureGitFooterStatusSetup`; inspect its callers before touching workflow state. Folder picker markup is one canonical dialog in index.html; dynamic titles/root labels are app.js-owned and can be wired by the parent after the active app writer finishes.
