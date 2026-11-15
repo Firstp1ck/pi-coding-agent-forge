@@ -1,3 +1,4 @@
+import { groupModelCatalog, modelReleaseDate } from "./model-catalog-order.mjs";
 import { createSessionShelfState } from "./session-shelf-state.mjs";
 import { createSessionShelves } from "./session-shelves.mjs";
 import { composerSubmissionPresentation } from "./focused-composer-controls.mjs";
@@ -20101,8 +20102,8 @@ function isCurrentGitFooterVisibilityTarget(target) {
   return !!target && gitFooterVisibilityTarget === target && elements.gitFooterVisibilityDialog?.open && isCurrentProjectTarget(target);
 }
 
-async function runGitFooterVisibilityCommand(action, keys = [], target = gitFooterVisibilityTarget) {
-  if (!isCurrentGitFooterVisibilityTarget(target)) throw new Error("The session changed. Reopen Git-footer Visibility before applying changes.");
+async function runGitFooterVisibilityCommand(action, keys = [], target = gitFooterVisibilityTarget, { dialogOwned = true } = {}) {
+  if (!(dialogOwned ? isCurrentGitFooterVisibilityTarget(target) : target && isCurrentProjectTarget(target))) throw new Error("The session changed. Reopen Git-footer Visibility before applying changes.");
   const commandName = target.commandName;
   if (!commandName) throw new Error(commandUnavailableMessage("git-footer-visibility"));
   const suffix = keys.length > 0 ? ` ${keys.join(" ")}` : "";
@@ -20251,11 +20252,14 @@ function bindGitFooterContextMenu(node, chip) {
 }
 
 async function disableGitFooterContextChip(key, label) {
+  const target = { ...projectTargetFromContext(), commandName: gitFooterVisibilityCommandName() };
   try {
-    await runGitFooterVisibilityCommand("hide", [key]);
+    await runGitFooterVisibilityCommand("hide", [key], target, { dialogOwned: false });
+    if (!isCurrentProjectTarget(target)) return;
     addEvent(`Disabled the ${label || key} Git footer box.`, "success");
-    requestGitFooterWebuiPayload(activeTabContext(), { force: true, allowDuringRun: true });
+    requestGitFooterWebuiPayload(target, { force: true, allowDuringRun: true });
   } catch (error) {
+    if (!isCurrentProjectTarget(target)) return;
     addEvent(error.message || String(error), "error");
   }
 }
@@ -41943,7 +41947,7 @@ function handleNativeSelectorSearchKeydown(event) {
   }
 }
 
-function renderNativeSelectorItems(items, { emptyText = "No choices.", onSelect, activeId, numbered = false } = {}) {
+function renderNativeSelectorItems(items, { emptyText = "No choices.", onSelect, activeId, numbered = false, grouped = false } = {}) {
   const query = elements.nativeCommandSearch.value.trim();
   const filtered = items.filter((item) => nativeSelectorMatches(item, query));
   elements.nativeCommandBody.replaceChildren();
@@ -41957,8 +41961,17 @@ function renderNativeSelectorItems(items, { emptyText = "No choices.", onSelect,
   list.setAttribute("role", "listbox");
   list.id = "nativeSelectorList";
   let lastGroup = null;
+  let groupHost = list;
   for (const [index, item] of filtered.entries()) {
-    if (item.group && item.group !== lastGroup && !item.badge) {
+    if (grouped && item.group !== lastGroup) {
+      groupHost = make("div", "native-model-provider");
+      groupHost.setAttribute("role", "group");
+      groupHost.setAttribute("aria-label", item.group);
+      const heading = make("div", "native-selector-group", item.group);
+      heading.setAttribute("role", "presentation");
+      groupHost.append(heading);
+      list.append(groupHost);
+    } else if (!grouped && item.group && item.group !== lastGroup && !item.badge) {
       const heading = make("div", "native-selector-group", item.group);
       heading.setAttribute("role", "presentation");
       list.append(heading);
@@ -41994,7 +42007,7 @@ function renderNativeSelectorItems(items, { emptyText = "No choices.", onSelect,
     button.append(title);
     if (item.description) button.append(detail);
     if (item.meta) button.append(meta);
-    list.append(button);
+    groupHost.append(button);
   }
   elements.nativeCommandBody.append(list);
   // Unfiltered: highlight (and reveal) the current choice; filtered: the best match on top.
@@ -42068,23 +42081,24 @@ async function openNativeModelSelector() {
     if (!owner.isCurrent()) return;
     const models = Array.isArray(response.data?.models) ? response.data.models : [];
     const activeId = currentState?.model ? `${currentState.model.provider}/${currentState.model.id}` : "";
-    const items = models.map((model) => ({
+    const items = groupModelCatalog(models).flatMap(({ provider, models }) => models.map((model) => ({
+      group: provider,
       id: modelOptionLabel(model),
       label: modelOptionLabel(model),
       description: model.name || model.description || "",
       meta: [
+        modelReleaseDate(model) ? `released ${modelReleaseDate(model)}` : "",
         model.contextWindow ? `context ${formatFooterTokenCount(model.contextWindow)}` : "",
         model.reasoning ? "reasoning" : "",
         Array.isArray(model.input) && model.input.includes("image") ? "images" : "",
       ].filter(Boolean).join(" · ") || model.provider,
       model,
       badge: modelOptionLabel(model) === activeId ? "current" : "",
-    }));
-    items.sort((a, b) => (b.badge === "current") - (a.badge === "current"));
+    })));
     const render = () => {
       if (!owner.isCurrent()) return;
       renderNativeSelectorItems(items, {
-        emptyText: "No models match this filter.", activeId,
+        emptyText: "No models match this filter.", activeId, grouped: true,
         onSelect: item => owner.apply("/api/model", { provider: item.model.provider, modelId: item.model.id }, data => {
           setControlsPendingModel("");
           applyOptimisticModelSelection(data || item.model, owner.tabContext);

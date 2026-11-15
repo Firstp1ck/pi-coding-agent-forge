@@ -14417,6 +14417,16 @@ body.subagent-terminal-active .composer-remote-mic-consent {
   display: grid;
   gap: 0.45rem;
 }
+.native-model-provider {
+  display: grid;
+  gap: 0.45rem;
+  min-width: 0;
+  padding-left: 0.6rem;
+  border-left: 1px solid var(--border);
+}
+.native-model-provider + .native-model-provider { margin-top: 0.6rem; }
+.native-model-provider .native-selector-item { scroll-margin-block-start: 2rem; }
+.native-model-provider .native-selector-title strong { overflow-wrap: anywhere; min-width: 0; }
 .native-selector-item {
   display: grid;
   gap: 0.18rem;

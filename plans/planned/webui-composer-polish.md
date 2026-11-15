@@ -16,3 +16,7 @@ Real disposable app at1440 and1100withProject inspector, short500px window, dark
 ## Integration evidence
 
 Worker4f8e005 integrated as4a420ed3;25 worker browser cases passed. Parent combined run reported22 browser cases passed, but its wrapper ended143, so it is not a clean command exit. Screenshot inspection exposed Workflow Mode overlapping Send because the control moved into More retained absolute input-frame positioning. Parent reset placement for moved workflow/context controls and strengthened bounds assertions. All11 composer cases then passed with exit0; corrected narrow light screenshot inspected. Sol review and final combined cache/package verification remain pending.
+
+## Review disposition
+
+Round 1 found two confirmed issues: short-window suggestions prevented Send/More scroll recovery, and the minimized workflow pair overlapped Compact. Both accepted. Restore vertical focus-driven recovery on the chat container, contain horizontal overflow within the composer row, and give the two workflow buttons two action cells. All 27 affected Chromium cases pass with zero retries. Round 2 will check only these fixes and direct regressions.

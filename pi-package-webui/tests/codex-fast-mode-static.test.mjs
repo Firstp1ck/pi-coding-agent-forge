@@ -49,7 +49,7 @@ assert.match(app, /id: "codexFastMode"[\s\S]*?packageName: "@firstpick\/pi-exten
 assert.match(app, /OPTIONAL_FEATURE_DISABLE_PREREQUISITES = new Map\([\s\S]*?\["codexFastMode", \(\) => disableCodexFastModeIntegration\(\)\]/, "browser should register disable-off-first behavior");
 assert.match(app, /if \(disabled\) \{[\s\S]*?OPTIONAL_FEATURE_DISABLE_PREREQUISITES\.get\(feature\.id\)[\s\S]*?await turnOff\(\)[\s\S]*?setOptionalFeatureDisabled\(feature\.id, disabled\)/, "Optional Features Disable should abort before hiding integration if turn-off fails");
 assert.match(app, /function applyCodexFastModeStatus\(statusText\)[\s\S]*?codexSpeedModeFromStatus\(statusText\)[\s\S]*?if \(mode === null\) return false[\s\S]*?enabled: mode !== "normal"[\s\S]*?statusKnown: true/, "browser should consume only exact extension status values");
-assert.match(app, /async function refreshCodexFastMode\(tabContext = activeTabContext\(\)\)[\s\S]*?api\("\/api\/codex-fast-mode", \{ tabId: tabContext\.tabId \}\)[\s\S]*?!featureEnabled && data\.available[\s\S]*?enabled: false[\s\S]*?isCurrentTabContext\(tabContext\)/, "browser status refresh should stay tab-scoped and disarm restored branches while the feature is hidden");
+assert.match(app, /async function refreshCodexFastMode\(tabContext = activeTabContext\(\), \{ readOnly = false \} = \{\}\)[\s\S]*?api\("\/api\/codex-fast-mode", \{ tabId: tabContext\.tabId \}\)[\s\S]*?!readOnly && !featureEnabled && data\.available[\s\S]*?enabled: false[\s\S]*?isCurrentTabContext\(tabContext\)/, "browser status refresh should stay tab-scoped and disarm restored branches while the feature is hidden");
 assert.match(app, /async function applyCodexFastMode\(\)[\s\S]*?await appConfirm\([\s\S]*?8x Standard included usage[\s\S]*?6x purchased-credit[\s\S]*?if \(!confirmed[\s\S]*?body: \{ mode \}, tabId: tabContext\.tabId/, "browser should confirm Ultrafast costs before applying explicit mode intent");
 assert.match(app, /async function disableCodexFastModeIntegration\(\)[\s\S]*?tabs\.filter[\s\S]*?Promise\.all\(tabIds\.map[\s\S]*?data\.busy[\s\S]*?enabled: false[\s\S]*?codexFastModeConfirmedOff\(response\.data\)/, "browser-global Disable should preflight every live tab and require each mutation to confirm off");
 assert.match(app, /refreshNaturalConversationMode\(tabContext\),[\s\S]*?refreshCodexFastMode\(tabContext\),/, "tab refreshes should reload branch-scoped Fast-mode state");
@@ -59,8 +59,8 @@ assert.match(technical, /## Normal and compact output[\s\S]*?select \*\*Compact\
 assert.match(development, /### Codex subscription Fast mode[\s\S]*?service_tier: "priority"[\s\S]*?service_tier: "ultrafast"[\s\S]*?8× Standard included usage[\s\S]*?6×/, "development guide should document both tiers and cost semantics");
 assert.match(technical, /Normal \/ Fast \/ Ultrafast[\s\S]*?Pro \$500/, "technical reference should document the third mode and subscription eligibility");
 // Intent preserved: browser-asset changes must advance the coherent cache tuple.
-assert.match(serviceWorker, /pi-webui-pwa-v179[\s\S]*?"\/codex-speed-mode\.mjs"/, "PWA should refresh and cache the shared mode helper");
-assert.match(html, /data-app-src="\/app\.js\?v=204"/, "browser module URL should be cache-busted for speed-mode wiring");
+assert.match(serviceWorker, /pi-webui-pwa-v180[\s\S]*?"\/codex-speed-mode\.mjs"/, "PWA should refresh and cache the shared mode helper");
+assert.match(html, /data-app-src="\/app\.js\?v=205"/, "browser module URL should be cache-busted for speed-mode wiring");
 
 assert.match(server, /createCodexFastModeService\(\{[\s\S]*packageName: OPTIONAL_FEATURE_PACKAGES\.get\("codexFastMode"\)/, "server must wire the speed adapter to the canonical package catalog");
 

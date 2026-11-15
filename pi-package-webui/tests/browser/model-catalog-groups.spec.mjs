@@ -23,10 +23,11 @@ async function openCatalog(page, ownership) {
   await expect(page.locator('#nativeSelectorList').getByRole('option')).toHaveCount(catalog.length);
 }
 
-for (const width of [1440, 520]) {
+for (const width of [1440, 1100]) {
   test(`provider hierarchy, release order and search preserve context at ${width}px`, async ({ page, ownership }, info) => {
     await page.setViewportSize({ width, height: 800 });
     await openCatalog(page, ownership);
+    if (width === 1100) await page.locator('#nativeCommandDialog').evaluate(node => { node.style.width = '500px'; });
     const list = page.locator('#nativeSelectorList');
     await expect(list.getByRole('group')).toHaveCount(3);
     expect(await list.getByRole('group').evaluateAll(groups => groups.map(group => group.getAttribute('aria-label')))).toEqual(['alpha', 'fake', 'zeta']);
@@ -35,6 +36,12 @@ for (const width of [1440, 520]) {
     await expect(list.getByRole('option', { name: /fake\/fake-model current/i })).toHaveAttribute('aria-selected', 'true');
     await expect(list.getByRole('option', { name: /alpha\/new/ })).toContainText('2026-10-15');
     await expect.poll(() => page.locator('#nativeCommandDialog').evaluate(node => node.scrollWidth - node.clientWidth)).toBeLessThanOrEqual(1);
+    await page.locator('#nativeCommandSearch').press('Home');
+    await expect(list.locator('.keyboard-active')).toContainText('alpha/new');
+    const firstGroup = list.getByRole('group', { name: 'alpha', exact: true });
+    const heading = await firstGroup.locator('.native-selector-group').boundingBox();
+    const firstTitle = await firstGroup.locator('.native-selector-title').first().boundingBox();
+    expect(firstTitle.y).toBeGreaterThanOrEqual(heading.y + heading.height);
     await page.screenshot({ path: info.outputPath('provider-model-hierarchy.png') });
     const search = page.locator('#nativeCommandSearch');
     await search.fill('zulu');

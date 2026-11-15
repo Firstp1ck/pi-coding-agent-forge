@@ -254,3 +254,42 @@ for (const theme of ['dark', 'light']) {
     await expect(page.locator('#promptInput')).toHaveValue(draft);
   });
 }
+
+
+for (const height of [500, 900]) {
+  test(`minimized workflow controls and slash suggestions stay reachable at 1100x${height}`, async ({ page, ownership }, info) => {
+    await ready(page, ownership, { width: 1100, height, theme: 'dark', inspector: true });
+    await ownership.api(`/api/prompt?tab=${ownership.tabs[0].id}`, {
+      message: 'fixture workflow inspector running', requestId: 'composer-minimized-workflow',
+    });
+    const rail = page.getByRole('navigation', { name: 'Workspace destinations' });
+    await rail.getByRole('button', { name: 'Activity', exact: true }).click();
+    await page.getByRole('combobox', { name: 'Activity section', exact: true }).selectOption({ label: 'Progress' });
+    await page.locator('.workflow-overlay-close-button').first().click();
+    await rail.getByRole('button', { name: 'Project', exact: true }).click();
+    await page.locator('#composerActionsButton').click();
+    const restore = page.locator('#workflowOverlayOpenButton');
+    await expect(restore).toBeVisible();
+    await expect(page.locator('#workflowModeButton')).toBeVisible();
+    const controls = page.locator('#composerActionsPanel button');
+    const bounds = await controls.evaluateAll(nodes => nodes.filter(node => node.getClientRects().length && !node.closest('.composer-options-menu-panel')).map(node => {
+      const { x, y, right, bottom } = node.getBoundingClientRect();
+      return { id: node.id, x, y, right, bottom };
+    }));
+    for (const id of ['workflowOverlayOpenButton', 'workflowModeButton']) {
+      const own = bounds.find(button => button.id === id);
+      for (const other of bounds.filter(button => button.id !== id)) {
+        expect(Math.min(own.right, other.right) <= Math.max(own.x, other.x) + 1
+          || Math.min(own.bottom, other.bottom) <= Math.max(own.y, other.y) + 1, `${id} overlaps ${other.id}`).toBe(true);
+      }
+    }
+    await restore.click({ trial: true });
+    await page.locator('#workflowModeButton').click({ trial: true });
+    await page.locator('#promptInput').fill('/');
+    await expect(page.locator('#commandSuggest')).toBeVisible();
+    await page.locator('#sendButton').click({ trial: true });
+    await page.locator('#composerActionsButton').click({ trial: true });
+    await expect(page.locator('#promptInput')).toHaveValue('/');
+    await screenshot(page, info, 'short-window-suggestions-recovery');
+  });
+}

@@ -50,6 +50,7 @@ const optionalFeatureSetupAvailable=feature=>feature?.setupAvailable===true;
 const setupRequests=[];
 const openOptionalFeatureSetup=feature=>setupRequests.push(feature.id);
 const tabIndicator=()=>({label:'Idle'}), normalizeDisplayPath=value=>value;
+const hasLoadedRpcCommand=()=>false, commandUnavailableMessage=()=>"Unavailable in this fixture";
 const visibleCommands=()=>[], gitFooterRelevantStateChanged=()=>false;
 const modelStateKey=()=>'';
 const syncActiveTabActivityFromState=noop, syncRunIndicatorFromState=noop;

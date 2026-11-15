@@ -37,7 +37,7 @@ assert.match(
 );
 assert.match(
   app,
-  /async function disableGitFooterContextChip\(key, label\)[\s\S]*runGitFooterVisibilityCommand\("hide", \[key\]\)[\s\S]*requestGitFooterWebuiPayload/,
+  /async function disableGitFooterContextChip\(key, label\)[\s\S]*runGitFooterVisibilityCommand\("hide", \[key\], target, \{ dialogOwned: false \}\)[\s\S]*requestGitFooterWebuiPayload/,
   "disabling a box should persist its matching WebUI visibility key and refresh the payload",
 );
 assert.match(

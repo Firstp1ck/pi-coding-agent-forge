@@ -38,6 +38,8 @@ const fileViews=new Map([[activeTabId,{dirty:true,text:'unsaved file'}]]);
 const queued=[], connected=[], refreshed=[], errors=[], network=[];
 const queueMicrotask=fn=>queued.push(fn);
 const noop=()=>{};
+let samplingParametersRequestSerial=0, samplingParametersLoading=false, samplingParametersState=null, samplingParametersStateTabId=null;
+const setSamplingParametersDraft=noop, renderSamplingParameters=noop, renderAppRunnerInfoDialog=noop;
 const restoredShelves=[], sessionShelfState={restore:id=>restoredShelves.push(id)}, scheduleTabsRender=noop;
 const activityQueue={activate(){}}, latestQueuedMessagesByTab=new Map();
 const activityIntercom={prune:noop,activate:noop}, projectTargetFromContext=ctx=>ctx,renderIntercomActivityLinks=noop,tabs=[{id:"tab-a"}];

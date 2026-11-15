@@ -434,3 +434,25 @@ test('runner configuration cannot save a draft after the same tab changes its wo
   await card(page, 'Runner configuration').click();
   await expect(page.locator('#appRunnerCustomPathInput')).toHaveValue('');
 });
+
+
+test('Git-footer context hide remains available without opening its Settings dialog', async ({ page, ownership }) => {
+  await page.addInitScript(() => localStorage.setItem('pi-webui-git-footer-webui-payload-cache', JSON.stringify({ raw: JSON.stringify({
+    type: 'firstpick.git-footer-status.footer', version: 1, generatedAt: Date.now(),
+    main: [{ key: 'tokens', label: 'tokens', value: '0' }],
+    meta: [{ key: 'cwd', label: 'cwd', value: 'fixture' }], visibility: {},
+  }) })));
+  const prompts = [];
+  await page.route(/\/api\/prompt(?:\?|$)/, async route => {
+    prompts.push(route.request());
+    await reply(route, { accepted: true });
+  });
+  await open(page, ownership);
+  await page.getByRole('navigation', { name: 'Workspace destinations' }).getByRole('button', { name: 'Conversation', exact: true }).click();
+  await page.locator('.footer-workspace.footer-meta-action').click({ button: 'right' });
+  await page.locator('#gitFooterContextMenu [data-git-footer-menu-action="disable"]').click();
+  await expect.poll(() => prompts.length).toBe(1);
+  expect(prompts[0].postDataJSON().message).toContain('/git-footer-visibility hide webui cwd');
+  expect(new URL(prompts[0].url()).searchParams.get('tab')).toBe(ownership.tabs[0].id);
+  await expect(page.locator('#gitFooterVisibilityDialog')).toBeHidden();
+});
