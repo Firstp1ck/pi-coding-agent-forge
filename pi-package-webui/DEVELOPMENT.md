@@ -1192,3 +1192,9 @@ Focused ownership checks are the `session-*.test.mjs`, `platform-event-stream.te
 The compact composer permits vertical focus recovery in short windows and contains horizontal overflow within its action row. The minimized workflow pair occupies two action cells. `shell-navigation-resize.mjs` owns pointer capture, active-drag Escape handling and effective width bounds; only changed user widths are persisted. Viewport clamping must not overwrite the preferred width.
 
 Coverage includes `composer-toolbar-polish.spec.mjs`, `settings-complete-home.spec.mjs`, `model-catalog-groups.spec.mjs` and `session-sidebar-resize.spec.mjs`. Run these with the package's Chromium browser configuration and isolated test state.
+
+### Deferred workspace selection
+
+Browser draft records retain optional `cwd` in the existing version-1 envelope. It is bounded to 4096 UTF-16 code units and rejects NUL; absent or empty values keep No Project behavior. The empty-screen workspace picker captures its originating draft identity, and first-send promotion captures cwd alongside text/revision. Selection cannot reassign a promoted draft or create a Pi child early.
+
+The shared path-fast-pick and directory-creation routes allow absent tab context only when there are zero tabs and no explicit tab identifier. Explicit unknown identifiers still fail, and real-tab Natural Conversation guards retain their existing behavior. `tests/browser/workspace-draft-selection.spec.mjs` covers these route contracts and browser draft selection/promotion races.

@@ -21,3 +21,7 @@ Deliver owned commit and ignored handoffs/workspace-draft-worker.md with base/re
 ## Evidence and disposition
 
 User reported path-fast-picks POST throwing No Pi tabs are available at getRequestedTab, then Open workspace immediately created a terminal. Source confirms mandatory getRequestedTab in shared preference POST and eager createTerminalTabFromChosenDirectory from the empty-screen action. Parent will verify the integrated candidate, record reviewer findings individually, fix accepted defects, update cache/inventory/docs, archive this plan and push PR38. Full-suite omissions and live-provider limits must be stated.
+
+## Integration
+
+Worker 479c4aaa changes only three approved source files and two tests. Parent inspected the diff and exact handoff. Optional cwd is backward-compatible and bounded; no dependency changes. Worker passed 54 unit cases, 43 browser/API cases and the direct/supervised No Project HTTP lifecycle harness. Parent owns combined verification and one fresh review.
