@@ -27,7 +27,7 @@ async function chooseDesktop(page, layout) {
 for (const [state, cohort] of [
   ["fresh", "fresh"], ["established", "established"], ["legacy", "established"],
   ["legacy-root", "established"], ["xdg-state", "established"], ["agent-root", "established"],
-  ["unknown", null], ["custom", null],
+  ["unknown", null], ["custom", "established"],
 ]) {
   test.describe(`unmocked ${state} installation`, () => {
     test.use({ rolloutState: state });

@@ -127,24 +127,40 @@ export async function measureInput(page, text) {
 
 export async function measureTabSwitch(page, tabId, expectedDraft) {
   const selector = `[data-tab-id="${tabId}"] .terminal-tab-button`;
-  await page.locator(selector).evaluate((button, { target, draft }) => {
+  await page.evaluate(({ target, draft }) => {
+    window.__overhaul.stopTabProbe?.();
     window.__overhaul.tabMs = null;
-    button.addEventListener("click", () => {
+    let frame = null;
+    const capture = (event) => {
+      if (!event.target.closest?.(`#tabBar [data-tab-id="${CSS.escape(target)}"] .terminal-tab-button`)) return;
+      document.removeEventListener("click", capture, true);
       const start = performance.now();
       const check = () => {
         const selected = document.querySelector(`#tabBar [data-tab-id="${CSS.escape(target)}"] [aria-selected="true"]`);
         if (!selected || document.querySelector("#promptInput").value !== draft || !document.querySelector("#chat").textContent.includes("fake answer")) {
-          requestAnimationFrame(check);
+          frame = requestAnimationFrame(check);
           return;
         }
-        requestAnimationFrame(() => requestAnimationFrame(() => { window.__overhaul.tabMs = performance.now() - start; }));
+        frame = requestAnimationFrame(() => {
+          frame = requestAnimationFrame(() => { window.__overhaul.tabMs = performance.now() - start; });
+        });
       };
-      requestAnimationFrame(check);
-    }, { once: true, capture: true });
+      frame = requestAnimationFrame(check);
+    };
+    window.__overhaul.stopTabProbe = () => {
+      document.removeEventListener("click", capture, true);
+      if (frame !== null) cancelAnimationFrame(frame);
+    };
+    // Roster rendering can replace the button before Playwright dispatches the click.
+    document.addEventListener("click", capture, true);
   }, { target: tabId, draft: expectedDraft });
-  await page.locator(selector).click();
-  await page.waitForFunction(() => window.__overhaul.tabMs !== null);
-  return page.evaluate(() => window.__overhaul.tabMs);
+  try {
+    await page.locator(selector).click();
+    await page.waitForFunction(() => window.__overhaul.tabMs !== null);
+    return await page.evaluate(() => window.__overhaul.tabMs);
+  } finally {
+    await page.evaluate(() => window.__overhaul.stopTabProbe());
+  }
 }
 
 export async function startStreamProbe(page) {

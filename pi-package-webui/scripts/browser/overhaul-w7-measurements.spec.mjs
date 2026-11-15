@@ -98,6 +98,41 @@ test("input probe includes earlier synchronous application handlers", async ({ p
   assert.ok(measured >= handlerMs, `input interval ${measured}ms must include ${handlerMs}ms of synchronous work`);
 });
 
+test("tab timing survives roster button replacement before dispatch", async ({ page }) => {
+  await page.setContent('<div id="tabBar"><div data-tab-id="target"><button class="terminal-tab-button" aria-selected="false">Target</button></div></div><textarea id="promptInput"></textarea><div id="chat"></div>');
+  await page.evaluate(() => {
+    window.__overhaul = {};
+    document.addEventListener("click", (event) => {
+      const button = event.target.closest(".terminal-tab-button");
+      if (!button) return;
+      const start = performance.now();
+      while (performance.now() - start < 40) {}
+      window.__overhaul.handlerMs = performance.now() - start;
+      button.setAttribute("aria-selected", "true");
+      document.querySelector("#promptInput").value = "target draft";
+      document.querySelector("#chat").textContent = "fake answer";
+    });
+  });
+  const replacingPage = {
+    evaluate: (...args) => page.evaluate(...args),
+    waitForFunction: (fn) => page.waitForFunction(fn, null, { timeout: 2_000 }),
+    locator(selector) {
+      const locator = page.locator(selector);
+      return {
+        evaluate: (...args) => locator.evaluate(...args),
+        async click() {
+          await locator.evaluate((button) => button.replaceWith(button.cloneNode(true)));
+          await locator.click();
+        },
+      };
+    },
+  };
+  const measured = await measureTabSwitch(replacingPage, "target", "target draft");
+  const handlerMs = await page.evaluate(() => window.__overhaul.handlerMs);
+  assert.ok(handlerMs >= 40);
+  assert.ok(measured >= handlerMs, "tab timing includes synchronous application work after replacement");
+});
+
 test("W7 repeated rendering and retained heap", async ({ browser, request }) => {
   test.setTimeout(180_000);
   const cold = [], warm = [], input = [], switches = [], streams = [], heap = [];
