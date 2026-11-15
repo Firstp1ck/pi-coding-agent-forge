@@ -9645,7 +9645,7 @@ function componentUpdateStatusText(target) {
       case "running": {
         const progress = job.progress;
         const step = progress ? `Step ${Math.min(progress.completedSteps + 1, progress.totalSteps)} of ${progress.totalSteps}` : "Running update command";
-        return { text: `${label}: ${step}${progress?.currentTargetId ? ` · ${progress.currentTargetId}` : ""}.`, level: "info" };
+        return { text: `${id}: ${label}: ${step}${progress?.currentTargetId ? ` · ${progress.currentTargetId}` : ""}.`, level: "info" };
       }
       default: return { text: `${id}: ${job.phase || "status pending"}. Waiting for command completion.`, level: "warn" };
     }

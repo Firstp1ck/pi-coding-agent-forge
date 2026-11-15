@@ -184,8 +184,8 @@
     },
     {
       "file": "pi-package-webui/lib/package-updates.mjs",
-      "bytes": 9509,
-      "sha256": "8d15ba5ae3ca6ee94d43d2d5997f37d6dcac18f843b227121561bb3d7abc2a9d"
+      "bytes": 14060,
+      "sha256": "86c1b527950bda294b497f716edc055d1a3653d2d62c4d4fb416fe89ada92eb9"
     },
     {
       "file": "pi-package-webui/lib/process-tree.mjs",
@@ -494,8 +494,8 @@
     },
     {
       "file": "pi-package-webui/public/app.js",
-      "bytes": 2411282,
-      "sha256": "88a68d67da77c9f761914f902a11b3a902223c4104c5f6be38025490c7371f96"
+      "bytes": 2411289,
+      "sha256": "ef43a8d32ccb96ee8956729696e5f8580696a4ac59f64ad24bbf0b4b404805e4"
     },
     {
       "file": "pi-package-webui/public/aur-review-payload.mjs",

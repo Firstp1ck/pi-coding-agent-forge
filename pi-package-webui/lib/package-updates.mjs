@@ -108,15 +108,19 @@ function unchangedEvidence(item) {
   const extension = `npm:${WEBUI} is already up to date`;
   const npm = /^up to date(?:, audited \d+ packages?)? in \d+(?:\.\d+)?(?:ms|s|m|h|d|w|y)$/;
   const all = item.command.args.includes("--all");
-  const allowed = item.id === "webui:npm-global" ? (line) => npm.test(line) :
+  const selfOnlyNote = "Extensions are skipped. Run pi update --extensions to update extensions.";
+  const npmInfo = (line) => /^\d+ packages? (?:is|are) looking for funding$/.test(line) ||
+    line === "run `npm fund` for details" || line === "found 0 vulnerabilities";
+  const allowed = item.id === "webui:npm-global" ? (line) => npm.test(line) || npmInfo(line) :
     item.id === "webui:pi-user" ? (line) => line === extension :
-    (line) => self.test(line) || (all && line === packages);
+    (line) => self.test(line) || (all && line === packages) || (!all && line === selfOnlyNote);
   const lines = (text) => String(text || "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   return {
     safe(stdout, stderr) { return !String(stderr || "").trim() && lines(stdout).every(allowed); },
     complete(stdout) {
       const output = lines(stdout);
       return output.length > 0 && output.every(allowed) &&
+        (item.id !== "webui:npm-global" || output.some((line) => npm.test(line))) &&
         (item.id !== "pi" || (output.some((line) => self.test(line)) && (!all || output.includes(packages))));
     },
   };

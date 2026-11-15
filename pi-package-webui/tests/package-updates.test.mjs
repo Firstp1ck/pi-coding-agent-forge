@@ -293,6 +293,9 @@ async function classificationFlow(globalModules, userAgent) {
   const npm = "up to date, audited 12 packages in 428ms";
   const cases = [
     ["pi", self, "unchanged"],
+    ["pi", `Extensions are skipped. Run pi update --extensions to update extensions.\n${self}`, "unchanged"],
+    ["pi", "Extensions are skipped. Run pi update --extensions to update extensions.", "success"],
+    ["all", `Extensions are skipped. Run pi update --extensions to update extensions.\n${self}\n${packages}`, "success"],
     ["pi", `\u001b[32m${self}\u001b[39m\r\n`, "unchanged"],
     ["webui", extension, "unchanged"],
     ["all", `${self}\n${packages}`, "unchanged"],
@@ -334,7 +337,11 @@ async function classificationFlow(globalModules, userAgent) {
   }
 
   for (const [stdout, expected] of [
-    [npm, "unchanged"], ["up to date in 2s", "unchanged"], ["up to date, audited 1 package in 1m", "unchanged"],
+    [npm, "unchanged"],
+    ["up to date in 2s\n\n3 packages are looking for funding\n  run `npm fund` for details", "unchanged"],
+    ["up to date, audited 1 package in 2s\nfound 0 vulnerabilities", "unchanged"],
+    ["3 packages are looking for funding\nrun `npm fund` for details", "success"],
+    ["up to date in 2s\n1 high severity vulnerability", "success"], ["up to date in 2s", "unchanged"], ["up to date, audited 1 package in 1m", "unchanged"],
     ["\nup to date in 1.5s\n", "unchanged"], ["everything is up to date in 2s", "success"],
     ["up to date", "success"], ["up to date in someday", "success"],
     ["up to date, changed 1 package in 2s", "success"], ["up to date in 2s\nadded 1 package in 2s", "success"],
