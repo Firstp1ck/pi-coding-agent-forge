@@ -1125,14 +1125,11 @@ assert.match(app, /function setAppRunnerMenuOpen\(open\)[\s\S]*scheduleMobileDro
 assert.match(app, /function setOptionsMenuOpen\(open\)[\s\S]*scheduleMobileDropdownScrollBoundsUpdate\(\)/, "Options dropdown opening should refresh mobile scroll bounds");
 assert.match(app, /function focusPromptInput\(\{ defer = false \} = \{\}\)/, "frontend should focus the prompt composer programmatically after tab/app startup");
 assert.match(app, /async function switchTab\(tabId\)[\s\S]*?restoreActiveDraft\(\);\n\s+focusPromptInput\(\{ defer: true \}\);/, "switching to a newly opened tab should focus the prompt input immediately");
-assert.match(app, /async function initializeTabs\(\)[\s\S]*?restoreActiveDraft\(\);[\s\S]*if \(!loadedTabs\.length\)[\s\S]*focusPromptInput\(\{ defer: true \}\);/, "starting the Web UI should prompt for cwd when needed and focus active tabs");
+assert.match(app, /async function initializeTabs\(\)[\s\S]*?restoreActiveDraft\(\);[\s\S]*if \(!loadedTabs\.length\)[\s\S]*focusPromptInput\(\{ defer: true \}\);/, "empty startup should restore the draft and focus the composer");
 assert.match(app, /resizePromptInput\(\);\nclearRemovedSidePanelSectionHeightState\(\);\nrestoreDurableUiLayoutPendingJournal\(\);\nrestoreSidePanelWidthPreference\(\);\nrestoreFileViewerWidthPreference\(\);\nrestoreTerminalTabsSidebarWidthPreference\(\);\nfocusPromptInput\(\{ defer: true \}\);\nrestoreStoredSkillUsage\(\);\nrestoreBusyPromptBehaviorSetting\(\);\nsyncMobileComposerDisclosureLayout\(\);\nupdateComposerModeButtons\(\);/, "startup should clear retired section-height state, restore resizable panel preferences, request prompt focus, and restore skill tags before waiting for tab state refreshes");
 assert.match(app, /elements\.promptInput\.addEventListener\("focus", \(\) => \{\n\s+syncMobileChatToBottomForInput\(\);/, "focusing mobile input should scroll output to bottom");
 assert.match(app, /navigator\.serviceWorker\.register\("\/service-worker\.js"\)/, "PWA service worker should be registered by the app");
 assert.match(app, /function serverStartCommandText\(\)[\s\S]*return `pi-webui\$\{currentPortArg\(\)\}`/, "PWA/offline shell should build a pathless pi-webui recovery command");
-assert.match(app, /async function createFirstTerminalTabFromChosenDirectory\(\)/, "frontend should define the first-terminal cwd prompt");
-assert.match(app, /async function initializeTabs\(\)[\s\S]*?if \(!saved\.length\) await createFirstTerminalTabFromChosenDirectory\(\)/, "frontend should still prompt for the first terminal cwd when no saved workspace can be loaded");
-assert.match(app, /Choose CWD for first terminal/, "frontend should title the first-terminal cwd picker clearly");
 assert.match(app, /Pi Web UI server is offline/, "PWA/offline shell should clearly report backend-down state");
 assert.match(app, /navigator\.clipboard\.writeText\(text\)/, "backend-offline recovery panel should copy the start command when possible");
 assert.match(app, /function messageCopyText\(message, body = null\)/, "frontend should derive copy text from transcript messages");
@@ -2710,3 +2707,5 @@ assert.match(css, /\.chat-search-bar,\n\.file-viewer-search-bar \{/, "transcript
 assert.match(server, /case "\/api\/git-workflow\/create-pr":[\s\S]*return await createGitWorkflowPr\(cwd, body\);/, "the PR route must pass the selected cwd and request to its confirmed mutation owner");
 
 console.log("mobile static checks passed");
+
+assert.doesNotMatch(app, /createFirstTerminalTabFromChosenDirectory/, "empty startup must not open a directory picker automatically");

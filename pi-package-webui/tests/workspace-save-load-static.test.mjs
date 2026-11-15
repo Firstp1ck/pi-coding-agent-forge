@@ -45,7 +45,7 @@ assert.match(app, /label: "Workspace: Save"/, "The command palette must offer wo
 assert.match(app, /label: "Workspace: Load…"/, "The command palette must offer workspace load when no tabs exist");
 assert.match(app, /function closeAllTerminalTabs[\s\S]*?allowEmpty: true/, "Close all must permit the planned zero-tab workspace-load state");
 assert.match(app, /function closeTerminalTabs[\s\S]*?if \(!tabs\.length\) setWorkspaceDashboardCollapsed\(false, \{ persist: false \}\)/, "Closing all tabs must reveal the workspace picker dashboard");
-assert.match(app, /function initializeTabs[\s\S]*?if \(!saved\.length\) await createFirstTerminalTabFromChosenDirectory\(\)/, "Fresh installs without saved workspaces must retain the first-terminal cwd prompt");
+assert.match(app, /async function initializeTabs\(\)[\s\S]*?if \(!loadedTabs\.length\)[\s\S]*?refreshSavedWorkspaces\(\)/, "Empty startup must retain saved workspace discovery without requiring a folder choice");
 
 const emptyStart = app.slice(app.indexOf("function renderEmptyStartState"), app.indexOf("function userPromptTargets"));
 assert.match(emptyStart, /title: "Load workspace"[\s\S]*?description: "Restore a saved tab constellation"[\s\S]*?openWorkspaceLoadPicker/, "The empty-start card must offer a labelled saved-workspace picker action");

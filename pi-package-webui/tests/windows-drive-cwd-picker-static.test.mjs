@@ -60,10 +60,8 @@ assert.match(server, /platform\(\) === "win32" && viewPath === WINDOWS_DRIVES_PI
 
 const splitFlow = sourceBetween(app, "async function splitTerminalTab", "async function createTerminalTabFromChosenDirectory");
 assert.match(splitFlow, /pickCwd\([\s\S]*body: sourceTab\.workspaceKind === "no-project" \? \{ workspaceKind: "no-project" \} : \{ cwd: resolvedCwd \}/, "split terminals without a cwd should use the shared drive-aware picker");
-const newTabFlow = sourceBetween(app, "async function createTerminalTabFromChosenDirectory", "async function createFirstTerminalTabFromChosenDirectory");
+const newTabFlow = sourceBetween(app, "async function createTerminalTabFromChosenDirectory", "function tabHasActiveAgent");
 assert.match(newTabFlow, /pickCwd\([\s\S]*createTerminalTab\(cwd/, "new terminal tabs should use the shared drive-aware picker");
-const firstTabFlow = sourceBetween(app, "async function createFirstTerminalTabFromChosenDirectory", "function tabHasActiveAgent");
-assert.match(firstTabFlow, /pickCwd\([\s\S]*createTerminalTab\(cwd/, "the first terminal should use the shared drive-aware picker");
 const cwdChangeFlow = sourceBetween(app, "async function changeActiveTabCwd()", "function footerControlKey(node)");
 assert.match(cwdChangeFlow, /await pickCwd\([\s\S]*method: "PATCH", body: \{ cwd \}/, "cwd changes should use the shared picker and pass its selected drive-qualified path to the existing tab route");
 
@@ -75,7 +73,7 @@ assert.match(development, /virtual \*\*This PC\*\* response with an empty cwd an
 assert.ok(packageJson.files.includes("TECHNICAL.md"), "the published package should include its advanced user reference");
 assert.ok(packageJson.files.includes("DEVELOPMENT.md"), "the published package should include its contributor guide");
 assert.match(html, /styles\.css\?v=164/, "the existing picker layout should retain its stylesheet revision");
-assert.match(html, /app\.js\?v=208/, "the changed picker behavior should advance the app revision");
-assert.match(serviceWorker, /pi-webui-pwa-v186/, "the changed browser assets should advance the PWA cache identity");
+assert.match(html, /app\.js\?v=209/, "the changed picker behavior should advance the app revision");
+assert.match(serviceWorker, /pi-webui-pwa-v187/, "the changed browser assets should advance the PWA cache identity");
 
 console.log("windows-drive-cwd-picker-static.test.mjs passed");
