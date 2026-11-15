@@ -44,9 +44,11 @@ A group can appear in more than one section. Its membership is unchanged; closin
 
 ## No Project conversations
 
-Press the compact layout's **Pi** button or choose **+ Tab → No Project** to open a fresh conversation without selecting a repository. Each fresh conversation receives its own directory under `~/.pi/agent/webui/no-project/`. If you set `PI_CODING_AGENT_DIR`, the directory is under that agent location instead. Explicitly opening a conversation allocates its folder immediately. A default startup with no active session waits until you submit the first message.
+Press the compact layout's **Pi** button or choose **+ Tab → No Project** to open a fresh conversation without selecting a repository. Each fresh conversation receives its own directory under `~/.pi/agent/webui/no-project/`. If you set `PI_CODING_AGENT_DIR`, the directory is under that agent location instead. Opening an empty conversation does not allocate a folder or start Pi. The first submitted message creates its terminal and directory.
 
-To attach files before sending your first message, open a conversation with **+ Tab → No Project** first. Text can be pasted directly into the empty startup composer. If you submit a command that opens a dialog and navigate away while its conversation is being created, the command stays in that conversation's draft. Return there and submit it to open the dialog.
+Paste text directly into the empty composer. File attachments require a running session; choose a project or send the first message before attaching files. If you submit a command that opens a dialog and navigate away while its conversation is being created, the command stays in that conversation's draft. Return there and submit it to open the dialog.
+
+Unsent No Project text becomes a **Draft** in Inbox when you switch away. Drafts are saved in this browser for the same Web UI address, including port. They are not shared with another browser or device. Closing a draft discards it; drafts cannot be settled. If browser storage is unavailable or full, a message explains that edits remain only in the current page. Copy them before closing or reloading.
 
 Your files remain after closing a tab. Resume, reopen and saved-workspace restoration reuse that conversation's directory. **New session** and `/new` from a No Project conversation open a new tab with a new directory and keep the old tab available. Choosing a project explicitly uses that project folder. Missing No Project folders produce an error rather than silently switching to another folder. There is no automatic deletion of these directories.
 

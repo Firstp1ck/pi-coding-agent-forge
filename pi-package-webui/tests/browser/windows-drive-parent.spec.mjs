@@ -135,6 +135,7 @@ test("Windows drive Parent flow remains navigation-only, accessible, and cwd-saf
   await expect(dialog).toBeVisible();
   await expect(current).toHaveText("C:\\");
 
+  await page.locator(".path-picker-pinned summary").click();
   await page.locator("#pathPickerFastPicks .path-picker-fast-pick-button", { hasText: "D:" }).click();
   await expect(current).toHaveText("D:\\");
   await expect(search).toBeFocused();

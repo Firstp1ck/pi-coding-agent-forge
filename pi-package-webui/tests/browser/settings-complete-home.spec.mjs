@@ -128,9 +128,13 @@ test('all six homes and Runtime aliases are discoverable; navigation preserves c
   await expect(page.locator('.codex-fast-mode-control')).toHaveCount(1);
   await page.getByRole('navigation', { name: 'Workspace destinations' }).getByRole('button', { name: 'Conversation', exact: true }).click();
   await expect(page.locator('#promptInput')).toHaveValue('Keep this unsent draft');
-  await expect(page.getByRole('group', { name: 'Session composer controls' }).getByRole('button', { name: /^Model:/ })).toBeVisible();
-  await expect(page.getByRole('group', { name: 'Session composer controls' }).getByRole('button', { name: 'Scoped models', exact: true })).toBeVisible();
-  await expect(page.getByRole('group', { name: 'Session composer controls' }).getByRole('button', { name: /^Effort:/ })).toBeVisible();
+  const model = page.locator('#statusBar .footer-model.footer-meta-action, #statusBar .footer-tui-model');
+  await expect(model).toBeVisible();
+  await expect(page.locator('#statusBar .footer-thinking.footer-meta-action')).toBeVisible();
+  await model.click();
+  await expect(page.getByRole('listbox', { name: /Scoped models/ })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(model).toBeFocused();
   expect(writes).toEqual([]);
 });
 

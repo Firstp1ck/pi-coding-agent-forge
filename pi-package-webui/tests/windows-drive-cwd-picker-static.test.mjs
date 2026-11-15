@@ -25,7 +25,7 @@ function sourceBetween(source, start, end) {
 }
 
 assert.equal(win32.resolve("C:\\repo", "D:/"), "D:\\", "Node should treat a slash-form drive root as an absolute Windows cwd");
-assert.match(html, /id="pathPickerPathInput"[^>]*placeholder="Path, e\.g\. C:\/ or D:\/project"[^>]*aria-label="Directory path"/, "the cwd picker should expose an accessible direct-path field with Windows drive examples");
+assert.match(html, /for="pathPickerPathInput"[^>]*>Go to a folder<\/label>[\s\S]*id="pathPickerPathInput"[^>]*type="text"[^>]*placeholder="Enter a path, e\.g\. \/home\/me or C:\/Projects"/, "the folder picker should expose a labeled direct-path field with Windows examples");
 assert.match(html, /id="pathPickerPathButton"[^>]*>Go<\/button>/, "the direct-path field should have an explicit Go action");
 assert.match(app, /pathPickerPathInput: \$\("#pathPickerPathInput"\)[\s\S]*pathPickerPathButton: \$\("#pathPickerPathButton"\)/, "the browser should bind both direct-path controls");
 
@@ -66,7 +66,7 @@ const cwdChangeFlow = sourceBetween(app, "async function changeActiveTabCwd()", 
 assert.match(cwdChangeFlow, /await pickCwd\([\s\S]*method: "PATCH", body: \{ cwd \}/, "cwd changes should use the shared picker and pass its selected drive-qualified path to the existing tab route");
 
 assert.match(styles, /\.path-picker-path-row[\s\S]*grid-template-columns: minmax\(0, 1fr\) auto/, "the direct-path controls should use the picker row layout");
-assert.match(styles, /\.path-picker-current-row,[\s\S]*\.path-picker-path-row,[\s\S]*grid-template-columns: 1fr/, "the direct-path controls should stack on narrow screens");
+assert.match(styles, /\.path-picker-search-row \{ grid-template-columns: minmax\(0, 1fr\) auto; \}[\s\S]*\.path-picker-create-row \{ grid-template-columns: 1fr; \}/, "narrow search retains its action beside the input while folder creation stacks");
 assert.match(readme, /Windows[\s\S]*`C:\/`[\s\S]*`D:\/project`[\s\S]*\*\*Parent\*\*[\s\S]*\*\*This PC\*\*/, "the README should explain both typed paths and Parent-based Windows drive switching");
 assert.match(technical, /working-directory picker accepts a direct path[\s\S]*\*\*Parent\*\* opens a \*\*This PC\*\*[\s\S]*navigation-only/i, "the technical reference should document the virtual drive view and its control limits");
 assert.match(development, /virtual \*\*This PC\*\* response with an empty cwd and `selectable: false`/i, "the contributor guide should record the server/browser virtual-view contract");
