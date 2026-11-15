@@ -169,7 +169,7 @@ export function createToolsLauncher({ document, onInvoke, onPinsChange, onClose 
     if (disposed) return;
     if (!element.open) {
       search.value = '';
-      selectedCategory = 'all';
+      selectedCategory = snapshot.initialCategory ? `category:${snapshot.initialCategory}` : 'all';
     }
     update(snapshot);
     if (!element.open) element.showModal();
