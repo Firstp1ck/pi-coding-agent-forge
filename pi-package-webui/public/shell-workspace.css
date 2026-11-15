@@ -164,7 +164,7 @@
 #focusedWorkspace .focused-inspector-section { box-sizing: border-box; width: 100%; min-width: 0; max-width: 100%; min-height: 32px; margin: 0; padding-block: 4px; padding-left: 4px; color: var(--text); background-color: transparent; background-size: 0.34rem 0.34rem, 0.34rem 0.34rem, 0 0, 0 0; border: 1px solid transparent; border-radius: 4px; box-shadow: none; font: inherit; font-weight: 600; text-overflow: ellipsis; }
 #focusedWorkspace .focused-inspector-section:hover { border-color: var(--border); box-shadow: none; }
 #focusedWorkspace .focused-inspector-content { flex: 1; min-height: 0; min-width: 0; overflow: auto; padding: 12px; }
-#focusedWorkspace .focused-overview-host { position: absolute; z-index: 10; top: 12px; right: 12px; max-width: calc(100% - 24px); max-height: calc(100% - 24px); pointer-events: none; }
+#focusedWorkspace .focused-overview-host { position: absolute; z-index: 14; top: 12px; right: 12px; max-width: calc(100% - 24px); max-height: calc(100% - 24px); pointer-events: none; }
 
 #focusedWorkspace[data-nav-collapsed="true"],
 #focusedWorkspace[data-navigation="top"] { grid-template-columns: 46px minmax(0, 1fr); }

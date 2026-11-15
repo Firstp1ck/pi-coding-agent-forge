@@ -21,7 +21,8 @@ async function ready(page, ownership, { width = 1440, height = 900, theme = 'dar
   await expect(page.locator('#chat')).toContainText('fake answer');
   await expect(model(page)).toBeEnabled();
   if (inspector) {
-    await page.getByRole('navigation', { name: 'Workspace destinations' }).getByRole('button', { name: 'Project', exact: true }).click();
+    await page.getByRole('button', { name: 'Inspector', exact: true }).click();
+    await page.getByRole('tab', { name: 'Project', exact: true }).click();
     await expect(page.locator('#fileTreeSearchInput')).toBeVisible();
   }
   await page.locator('#promptInput').fill(draft);
@@ -264,11 +265,10 @@ for (const height of [500, 900]) {
     await ownership.api(`/api/prompt?tab=${ownership.tabs[0].id}`, {
       message: 'fixture workflow inspector running', requestId: 'composer-minimized-workflow',
     });
-    const rail = page.getByRole('navigation', { name: 'Workspace destinations' });
-    await rail.getByRole('button', { name: 'Activity', exact: true }).click();
+    await page.getByRole('tab', { name: 'Activity', exact: true }).click();
     await page.getByRole('combobox', { name: 'Activity section', exact: true }).selectOption({ label: 'Progress' });
     await page.locator('.workflow-overlay-close-button').first().click();
-    await rail.getByRole('button', { name: 'Project', exact: true }).click();
+    await page.getByRole('tab', { name: 'Project', exact: true }).click();
     await page.locator('#composerActionsButton').click();
     const restore = page.locator('#workflowOverlayOpenButton');
     await expect(restore).toBeVisible();

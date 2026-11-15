@@ -128,8 +128,8 @@ assert.match(styles, /\.event-log\[data-display-mode="compact"\] \.event\[data-e
 assert.match(styles, /\.event-tree-context-menu \{[\s\S]*max-width: calc\(100vw - 1rem\)/, "the dedicated menu should remain viewport bounded");
 
 // Cache tuple for this browser-asset change.
-assert.match(serviceWorker, /const CACHE_NAME = "pi-webui-pwa-v181";/, "the PWA cache identity should advance");
-assert.match(html, /styles\.css\?v=163/, "compact-mode styles should advance the stylesheet revision");
-assert.match(html, /data-app-src="\/app\.js\?v=205"/, "the app query revision should advance");
+assert.match(serviceWorker, /const CACHE_NAME = "pi-webui-pwa-v182";/, "the PWA cache identity should advance");
+assert.match(html, /styles\.css\?v=164/, "compact-mode styles should advance the stylesheet revision");
+assert.match(html, /data-app-src="\/app\.js\?v=206"/, "the app query revision should advance");
 
 console.log("events-tree-context-menu-static.test.mjs passed");

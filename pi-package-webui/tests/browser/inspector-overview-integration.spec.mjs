@@ -8,7 +8,7 @@ for (const [width, height] of [[1440, 900], [1100, 500]]) {
     test(`inspector tabs and floating overview at ${width}x${height} ${theme}`, async ({ page, ownership }, info) => {
       await page.setViewportSize({ width, height });
       await page.addInitScript(theme => {
-        localStorage.setItem('pi-webui-shell-preferences-v1', JSON.stringify({ v: 1, desktopLayout: 'focused' }));
+        if (!localStorage.getItem('pi-webui-shell-preferences-v1')) localStorage.setItem('pi-webui-shell-preferences-v1', JSON.stringify({ v: 1, desktopLayout: 'focused' }));
         localStorage.setItem('pi-webui-theme', theme === 'light' ? 'catppuccin-latte' : 'catppuccin-mocha');
       }, theme);
       await page.goto(ownership.baseURL);
@@ -35,6 +35,12 @@ for (const [width, height] of [[1440, 900], [1100, 500]]) {
       await destinations.getByRole('tab', { name: 'Activity' }).click();
       const section = page.getByRole('combobox', { name: 'Activity section' });
       await expect(section).toHaveValue('subagents');
+      await expect(section).toHaveCSS('appearance', 'base-select');
+      await section.click();
+      await expect.poll(() => section.evaluate(node => node.matches(':open'))).toBe(true);
+      await page.screenshot({ path: info.outputPath('inspector-section-menu.png') });
+      await section.locator('option[value="queue"]').click();
+      await expect(section).toHaveValue('queue');
       for (const value of ['session', 'sampling', 'commands', 'queue']) {
         await section.selectOption(value);
         await expect(section).toHaveValue(value);
@@ -67,3 +73,28 @@ for (const [width, height] of [[1440, 900], [1100, 500]]) {
     });
   }
 }
+
+test('overview follows the active session without ending background work', async ({ page, ownership }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.addInitScript(() => localStorage.setItem('pi-webui-shell-preferences-v1', JSON.stringify({ v: 1, desktopLayout: 'focused', overviewOpen: true })));
+  await page.goto(ownership.baseURL);
+  await expect(page.locator('#chat')).toContainText('fake answer');
+  const overview = page.getByRole('region', { name: 'Conversation overview', exact: true });
+  await expect(overview.locator('.conversation-overview-title')).toHaveText('Terminal 1');
+  await page.locator('#promptInput').fill('First session draft');
+  await ownership.api(`/api/prompt?tab=${ownership.tabs[0].id}`, {
+    message: 'fixture continuity held stream', requestId: 'overview-stream-continuity',
+  });
+  await expect(page.locator('.focused-run-controls #abortButton')).toBeVisible();
+  await page.locator(`#tabBar [data-tab-id="${ownership.tabs[1].id}"] .terminal-tab-button`).click();
+  await expect(overview.locator('.conversation-overview-title')).toHaveText('Terminal 2');
+  await overview.getByRole('button', { name: 'Open Folder', exact: true }).click();
+  await expect(page.locator('#fileTreeSearchInput')).toBeVisible();
+  expect((await ownership.api(`/api/state?tab=${ownership.tabs[0].id}`)).isStreaming).toBe(true);
+  await overview.getByRole('button', { name: 'Close conversation overview' }).click();
+  await page.locator(`#tabBar [data-tab-id="${ownership.tabs[0].id}"] .terminal-tab-button`).click();
+  await expect(page.locator('#promptInput')).toHaveValue('First session draft');
+  await expect(page.locator('.focused-run-controls #abortButton')).toBeVisible();
+  await page.locator('.focused-run-controls #abortButton').press('Enter', { delay: 1400 });
+  await expect.poll(async () => (await ownership.api(`/api/state?tab=${ownership.tabs[0].id}`)).isStreaming).toBe(false);
+});

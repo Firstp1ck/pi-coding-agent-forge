@@ -11,7 +11,8 @@ for (const [width, height] of [[1100, 900], [1440, 900], [1440, 500]]) {
     await expect(page.locator('#focusedWorkspace')).toBeVisible();
     await expect(page.locator('#chat')).toContainText('fake answer');
     if (width === 1100) {
-      await page.getByRole('navigation', { name: 'Workspace destinations' }).getByRole('button', { name: 'Project', exact: true }).click();
+      await page.getByRole('button', { name: 'Inspector', exact: true }).click();
+    await page.getByRole('tab', { name: 'Project', exact: true }).click();
       await expect(page.locator('#fileTreeSearchInput')).toBeVisible();
     }
     const prompt = page.locator('#promptInput');

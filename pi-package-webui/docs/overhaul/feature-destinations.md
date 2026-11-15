@@ -13,12 +13,13 @@ This map incorporates the UI scout's inventory and the design review corrections
 | New, close, resume and switch sessions; tab groups; saved workspaces | Session navigation and Home | Preserve top/left presentation, drafts per tab, close confirmations and restore behavior |
 | Settle / Restore and activity shelves | Compact left session sidebar | Browser-local, explicit organization; new work/input or a newer completed run wakes a settled session; never close or abort; preserve group membership |
 | New session within a tab, rename, clone, fork, tree, export and summary | Conversation session menu and Session details | Keep tab identity distinct from the durable Pi session it hosts; preserve inline message actions |
+| Floating conversation overview | Conversation header → Overview | Read current workspace, Git, runner, agents, queue and usage owners; guarded links to canonical controls; closing never stops work |
 | Split conversations | Conversation layout action | Preserve independent session ownership, embed links and return on sufficient width |
 | CWD picker, recent/saved directories, create directory, branch worktrees | Session context and Project | Browsing files must not implicitly change CWD; show target before mutation |
 | Transcript, thinking, tools, Markdown, code, images and search | Conversation | Keep output modes, follow/history scroll and context-sensitive find |
 | Mobile Essential/Detailed presentation | More: Presentation and Settings: Appearance | Retain the existing browser-local preference; this changes process chrome, never transcript content or server `compact-v1` output processing |
 | Prompt editor, uploads, paste, text attachments, slash/path/bash suggestions | Composer | Preserve attachment lifetime, queue intent and suggestion-versus-send precedence |
-| Model, effort, speed, plan/operating mode and per-session sampling | Composer/context controls and Session inspector | Compact model/effort pickers apply to the captured session and show effective or pending-next-prompt values; persistent defaults belong in Settings |
+| Model, effort, speed, plan/operating mode and per-session sampling | Composer/context controls and Activity: Session/Sampling | Compact model/effort pickers apply to the captured session and show effective or pending-next-prompt values; persistent defaults belong in Settings |
 | Steering, follow-ups, bash queue and prompt lists | Composer and Activity inspector | One compact submission button follows the visible During this run choice; Activity retains queue editing and ownership |
 | Todo/workflow progress, subagent runs, launch/cancel/details, relationships | Activity inspector | Session attention counts and exact-item navigation; policy setup in Settings |
 | Intercom conversations and `/btw` | Activity inspector plus compact conversation entry | Keep separate read-only agent messages and side-question semantics |

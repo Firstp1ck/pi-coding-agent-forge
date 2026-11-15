@@ -146,6 +146,16 @@ Candidate `04dc31f` passed 60 combined Chromium cases, 27 composer cases and the
 
 Inspected captures: [compact composer](screenshots/controls/composer.png), [provider-grouped models](screenshots/controls/model-providers.png), and [canonical Sampling controls in Settings](screenshots/controls/settings-sampling.png). These use disposable fake-Pi fixtures and do not demonstrate installed provider behavior.
 
+### Inspector header and conversation overview
+
+Project and Activity now live as two tabs above the right inspector header. The header itself selects the current section. Session, Sampling and Commands are included under Activity. Header controls reopen the inspector and toggle a floating conversation overview; the compact layout hides the obsolete Control Deck toggles. Classic and mobile keep their own navigation.
+
+The overview projects existing owner data and opens canonical actions. It adds no polling. Session generation, identity and working folder are checked before dispatch. Its browser-local visibility preference survives reload, while Settings and Home hide it temporarily. Missing data is explicit. The card stays above the sticky prompt banner and within the transcript's available height.
+
+More opens actions beside its button, with Send at the right. Both composer and footer open the saved scoped-model picker; focus returns to the actual opener. Restoring the footer access is an explicit user-requested exception to the earlier duplicate-model-summary reduction. Sidebar tooltips use the shared top-layer owner instead of clipped pseudo elements. Native single-select dropdowns use app-themed pickers when supported; option ownership and change events remain native.
+
+Component integration passed 52 Chromium cases. The initial combined tests found the sticky prompt covered the overview close control; the parent fixed its stacking order. The corrected four overview journeys and two workflow reachability cases passed. Parent acceptance and independent review remain pending for this unit.
+
 ### Platform limits
 
 Linux Chromium is the verified browser environment. Physical Android/iOS keyboards, IME, microphones, Windows/macOS behavior, WebKit and installed live-provider/companion combinations remain unmeasured. Existing platform-specific behavior is preserved in code and focused contracts, not claimed as device-tested.
