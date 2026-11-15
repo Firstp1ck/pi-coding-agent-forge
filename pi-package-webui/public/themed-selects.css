@@ -1,0 +1,156 @@
+/* Load after the shell styles. Keep specificity low so contextual controls,
+   including transparent inspector headers, retain their own presentation. */
+select {
+  appearance: auto;
+  -webkit-appearance: auto;
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+  padding: 0.45rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  color: var(--text);
+  background: var(--panel-3);
+  box-shadow: none;
+  font: inherit;
+  font-size: var(--text-sm, 0.875rem);
+  color-scheme: var(--theme-color-scheme);
+  accent-color: var(--accent);
+}
+
+select:hover {
+  border-color: var(--accent);
+  box-shadow: none;
+}
+
+select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-color: var(--accent);
+  box-shadow: none;
+}
+
+select:disabled {
+  color: var(--muted);
+  border-color: var(--border);
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+select option,
+select optgroup {
+  color: var(--text);
+  background: var(--bg);
+  font: inherit;
+}
+
+select option:checked {
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 22%, var(--bg));
+}
+
+select option:disabled,
+select optgroup:disabled {
+  color: var(--muted);
+  background: var(--bg);
+}
+
+/* Listboxes keep their platform presentation and multiple-selection behavior.
+   Only single-line selects opt into the browser-owned top-layer picker. */
+@supports (appearance: base-select) and selector(select::picker(select)) {
+  select:where(:not([multiple]):not([size]), :not([multiple])[size="0"], :not([multiple])[size="1"]) {
+    appearance: base-select;
+    -webkit-appearance: base-select;
+    position: relative;
+    display: inline-block;
+    padding-inline-end: 2rem;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  select:where(:not([multiple]):not([size]), :not([multiple])[size="0"], :not([multiple])[size="1"])::picker(select) {
+    appearance: base-select;
+    box-sizing: border-box;
+    max-inline-size: calc(100dvi - 1rem);
+    max-block-size: min(24rem, calc(100dvb - 1rem));
+    margin-block: 0.25rem;
+    padding: 0.25rem;
+    overflow: auto;
+    overscroll-behavior: contain;
+    border: 1px solid var(--border);
+    border-radius: 0.5rem;
+    color: var(--text);
+    /* Composite translucent theme panels over the theme background, rather
+       than letting unrelated dialog or conversation content show through. */
+    background: linear-gradient(var(--panel-3), var(--panel-3)), var(--bg);
+    box-shadow: 0 0.5rem 1.5rem var(--shadow);
+    font: inherit;
+    white-space: normal;
+  }
+
+  select:where(:not([multiple]):not([size]), :not([multiple])[size="0"], :not([multiple])[size="1"])::picker-icon {
+    position: absolute;
+    inset-inline-end: 0.65rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--accent);
+  }
+
+  select:where(:not([multiple]):not([size]), :not([multiple])[size="0"], :not([multiple])[size="1"]) option {
+    min-inline-size: 0;
+    min-block-size: 2rem;
+    gap: 0.5rem;
+    padding: 0.4rem 0.6rem;
+    border-radius: 0.25rem;
+    background: transparent;
+    font-weight: 400;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  select:where(:not([multiple]):not([size]), :not([multiple])[size="0"], :not([multiple])[size="1"]) optgroup {
+    padding-block-start: 0.25rem;
+    background: transparent;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+  }
+
+  select:where(:not([multiple]):not([size]), :not([multiple])[size="0"], :not([multiple])[size="1"]) option:checked {
+    color: var(--text);
+    background: color-mix(in srgb, var(--accent) 22%, transparent);
+  }
+
+  select:where(:not([multiple]):not([size]), :not([multiple])[size="0"], :not([multiple])[size="1"]) option:where(:hover, :focus-visible):not(:disabled) {
+    color: var(--text);
+    background: color-mix(in srgb, var(--accent) 16%, transparent);
+    outline: 1px solid var(--accent);
+    outline-offset: -1px;
+  }
+
+  select:where(:not([multiple]):not([size]), :not([multiple])[size="0"], :not([multiple])[size="1"]) option:disabled {
+    color: var(--muted);
+    opacity: 0.55;
+  }
+}
+
+@media (forced-colors: active) {
+  select {
+    border-color: ButtonText;
+    color: ButtonText;
+    background: Canvas;
+    box-shadow: none;
+  }
+
+  select::picker(select) {
+    border-color: ButtonText;
+    color: ButtonText;
+    background: Canvas;
+    box-shadow: none;
+  }
+
+  select:focus-visible { outline-color: Highlight; }
+  select option:checked { color: HighlightText; background: Highlight; }
+  select:disabled,
+  select option:disabled,
+  select optgroup:disabled { color: GrayText; opacity: 1; }
+}
