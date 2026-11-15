@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 
+const fileService = await readFile(new URL("../lib/server/workspace-files.mjs", import.meta.url), "utf8");
 const fileOwner = await readFile(new URL("../public/project-file-viewer-controller.mjs", import.meta.url), "utf8");
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const [app, css, html, server, readme, technical, development, serviceWorker] = await Promise.all([
@@ -23,6 +24,8 @@ function sourceBetween(source, startMarker, endMarker, label) {
   assert.ok(start >= 0 && end > start, `${label} should remain independently inspectable`);
   return source.slice(start, end);
 }
+
+assert.match(server, /createWorkspaceFilesService\(\{/, "the server should bind the Files owner");
 
 const imageHelpers = sourceBetween(app, "const FILE_VIEWER_IMAGE_MIME_TYPES", "\n// Changes mode only exists", "image data helper");
 const modeSource = sourceBetween(fileOwner, "export function resolveFileViewerMode(", "\n/**", "image-aware mode resolver").replace("export ", "");
@@ -44,10 +47,10 @@ const modes = JSON.parse(vm.runInNewContext(`${modeSource}\nJSON.stringify([
 ])`));
 assert.deepEqual(modes, ["image", "image", "changes", "preview"], "supported images should default back to Image mode while preserving Git Changes mode");
 
-assert.match(server, /const FILE_VIEWER_IMAGE_MIME_TYPES_BY_EXTENSION = Object\.freeze\(\{[\s\S]*"\.png": "image\/png"[\s\S]*"\.jpe?g": "image\/jpeg"[\s\S]*"\.gif": "image\/gif"[\s\S]*"\.webp": "image\/webp"[\s\S]*"\.avif": "image\/avif"/, "the server should use an explicit raster extension allowlist");
-assert.doesNotMatch(server, /"\.svg": "image\/svg\+xml"/, "active SVG documents should remain outside image-viewer scope");
-assert.match(server, /if \(imageMimeType\) \{\s*return \{ \.\.\.shared, kind: "image", mimeType: imageMimeType, data: buffer\.toString\("base64"\) \};\s*\}/, "the bounded content endpoint should return image bytes without UTF-8 reinterpretation");
-assert.match(server, /resolved\.info\.size > FILE_VIEWER_MAX_BYTES[\s\S]*const buffer = await readFile\(resolved\.targetPath\);[\s\S]*const imageMimeType = fileViewerImageMimeType/, "image reads should stay behind the existing workspace file size limit");
+assert.match(fileService, /const FILE_VIEWER_IMAGE_MIME_TYPES_BY_EXTENSION = Object\.freeze\(\{[\s\S]*"\.png": "image\/png"[\s\S]*"\.jpe?g": "image\/jpeg"[\s\S]*"\.gif": "image\/gif"[\s\S]*"\.webp": "image\/webp"[\s\S]*"\.avif": "image\/avif"/, "the server should use an explicit raster extension allowlist");
+assert.doesNotMatch(fileService, /"\.svg": "image\/svg\+xml"/, "active SVG documents should remain outside image-viewer scope");
+assert.match(fileService, /if \(imageMimeType\) \{\s*return \{ \.\.\.shared, kind: "image", mimeType: imageMimeType, data: buffer\.toString\("base64"\) \};\s*\}/, "the bounded content endpoint should return image bytes without UTF-8 reinterpretation");
+assert.match(fileService, /resolved\.info\.size > FILE_VIEWER_MAX_BYTES[\s\S]*const buffer = await readFile\(resolved\.targetPath\);[\s\S]*const imageMimeType = fileViewerImageMimeType/, "image reads should stay behind the existing workspace file size limit");
 
 assert.match(html, /id="fileViewerImage"[^>]*role="group"[^>]*aria-label="Image preview"[^>]*hidden>[\s\S]*<img id="fileViewerImageElement" alt="" \/>/, "the viewer should expose a labelled, initially hidden image surface");
 assert.match(app, /fileViewerImage: \$\("#fileViewerImage"\)[\s\S]*fileViewerImageElement: \$\("#fileViewerImageElement"\)/, "the image surface should be registered in the frontend element map");

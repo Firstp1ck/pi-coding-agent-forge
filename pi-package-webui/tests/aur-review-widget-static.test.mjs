@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+const fileService = await readFile(new URL("../lib/server/workspace-files.mjs", import.meta.url), "utf8");
 const fileOwner = await readFile(new URL("../public/project-file-viewer-controller.mjs", import.meta.url), "utf8");
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const [app, css, pkg, server, payloadParser, optionalFeatureCatalog] = await Promise.all([
@@ -36,7 +37,8 @@ assert.equal(JSON.parse(pkg).pi?.extensions?.some((entry) => String(entry).inclu
 assert.match(optionalFeatureCatalog, /\["aurReview", "@firstpick\/pi-extension-aur-review", "\^0\.1\.1"\]/, "optional-feature catalog should retain the future/local review companion mapping without bundling it");
 assert.match(server, /STATIC_PUBLIC_FILE_EXTENSIONS[\s\S]*"\.mjs"/, "server must serve typed browser modules from the public asset boundary");
 assert.match(server, /STAGED_CONTENT_HASH_DOMAIN = "firstpick\/aur-review\/staged-content\/v1\\0"[\s\S]*git diff --cached[\s\S]*\/api\/git-workflow\/staged-content/, "server must expose the bounded read-only staged-content hash helper");
-assert.match(server, /async function getAurReviewReportContentData\(tab, \{ path: requestedPath = "", repoRoot = "" \} = \{\}\)[\s\S]*repoRoot !== root[\s\S]*lstat\(targetPath\)[\s\S]*isSymbolicLink\(\)[\s\S]*readBoundedAurReviewReport[\s\S]*\/api\/aur-review\/report-content/s, "server must bind report reads to the canonical Git root and reject symlinked paths through a dedicated read-only route");
+assert.match(fileService, /async function getAurReviewReportContentData\(tab, \{ path: requestedPath = "", repoRoot = "" \} = \{\}\)[\s\S]*repoRoot !== root[\s\S]*lstat\(targetPath\)[\s\S]*isSymbolicLink\(\)[\s\S]*readBoundedAurReviewReport/s, "server must bind report reads to the canonical Git root and reject symlinked paths in the Files owner");
+assert.match(server, /url\.pathname === "\/api\/aur-review\/report-content" && req\.method === "GET"[\s\S]*getRequestedTab\(req, url\)[\s\S]*data: await getAurReviewReportContentData\(tab,/, "the read-only report route should call the Files owner with its requested tab");
 assert.match(server, /entry\.name\.startsWith\("pi-"\)[\s\S]*packageNameForResourcePath\(path\.join\(candidate, "package\.json"\)\)/, "workspace optional-package discovery must recognize the pi-extension-aur-review sibling by manifest name");
 assert.match(app, /const normalized = aurReviewSafePath\(path\);[\s\S]*projectFiles.openReport\(normalized, String\(repoRoot\)\)/);
 console.log("aur review widget static tests passed");

@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+const gitReads = await readFile(new URL("../lib/server/git-reads.mjs", import.meta.url), "utf8");
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const [app, server, watcher, development] = await Promise.all([
   readFile(join(root, "public", "app.js"), "utf8"),
@@ -35,7 +36,7 @@ assert.match(watcher, /if \(!record\.tabs\.size\) closeRoot/, "the last tab unsu
 assert.match(watcher, /function closeAll\(\)[\s\S]*closeRoot\(root\)/, "server shutdown should release every root watcher");
 
 assert.match(server, /createGitLiveWatcher\(\{[\s\S]*type: "webui_git_changed"[\s\S]*broadcastServerEvent/, "watcher changes should use the existing server-wide SSE channel");
-assert.match(server, /env: \{ GIT_OPTIONAL_LOCKS: "0" \}/, "read-only Git commands should not feed optional index refreshes back into the watcher");
+assert.match(gitReads, /env: \{ GIT_OPTIONAL_LOCKS: "0" \}/, "read-only Git commands should not feed optional index refreshes back into the watcher");
 assert.match(server, /trackGitRepositoryForTab\(tab, await getGitRoot\(tab\.cwd\)\)/, "Git-root discovery should register the tab watcher");
 assert.match(server, /trackGitRepositoryForTab\(tab, data\.root\)/, "Git-panel reads should ensure watcher registration");
 assert.match(server, /async function updateTabCwd[\s\S]*gitLiveWatcher\.unsubscribe\(tab\.id\)/, "cwd changes should release old repository subscriptions");

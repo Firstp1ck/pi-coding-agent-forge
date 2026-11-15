@@ -49,8 +49,8 @@
     },
     {
       "file": "pi-package-webui/bin/pi-webui.mjs",
-      "bytes": 816704,
-      "sha256": "2a5d7e128504fcfac489c474b2c0b85efd5540054bab485539a15ce0b46eac27"
+      "bytes": 702211,
+      "sha256": "fb1501b5fbbdaa6f7ae54e1500593d31e59c86cb1a070adbe0c1dc3123379c9b"
     },
     {
       "file": "pi-package-webui/index.ts",
@@ -218,9 +218,24 @@
       "sha256": "c27ffe07866ab9e7bd72414b3ffd3de6920eca16365d989c7192c4ffcb7cdc6f"
     },
     {
+      "file": "pi-package-webui/lib/server/app-runners.mjs",
+      "bytes": 71193,
+      "sha256": "80e16c638d321443f928b4d79e545cc67bfb714ea7cd3dd7d55785b646d26467"
+    },
+    {
+      "file": "pi-package-webui/lib/server/git-reads.mjs",
+      "bytes": 25537,
+      "sha256": "76ccd61875ec9545712c50864b19f987a7e32b2e0c396d91bee3349e0857b402"
+    },
+    {
       "file": "pi-package-webui/lib/server/settings-store.mjs",
       "bytes": 17687,
       "sha256": "1587f3cf6007623f59945087ac99fbfb87bb7c61a6e5e7dc5ceca4b8518f4c1a"
+    },
+    {
+      "file": "pi-package-webui/lib/server/workspace-files.mjs",
+      "bytes": 27618,
+      "sha256": "5957c65bd982ed3617a07e50f1b63e4b159acd5c5d18c37e60468b61d61f4e5a"
     },
     {
       "file": "pi-package-webui/lib/session-actions.mjs",
@@ -644,8 +659,8 @@
     },
     {
       "file": "plans/planned/webui-design-architecture-overhaul.md",
-      "bytes": 251225,
-      "sha256": "acea2f7097301cb325a09fae6f03f97512bb68ca9ddd11562becb5ddb66f13b3"
+      "bytes": 254363,
+      "sha256": "1afdbb2abeea2840b21aa736251946ea22982771b29c1a020d7adf7c73c349e5"
     }
   ],
   "reconciliation": {

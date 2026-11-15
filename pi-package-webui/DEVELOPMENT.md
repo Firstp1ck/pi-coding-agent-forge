@@ -95,6 +95,14 @@ node tests/server-settings-store.test.mjs
 node tests/webui-settings-locking.test.mjs
 ```
 
+## Backend service ownership
+
+`lib/server/workspace-files.mjs` owns workspace containment, tree/search limits, file reads and mutations, strict AUR report reads, and editor selection. The entrypoint retains route authorization, body limits, requested-tab selection and error envelopes. A single factory receives the validated default directory and shared Git read functions.
+
+`lib/server/git-reads.mjs` owns bounded Git reads, porcelain parsing, change/commit payloads and Files status/ignore decorations. Its read commands preserve optional-lock suppression and output bounds; mutations and watcher ownership remain separate. Both services retain their previous payloads and error behavior. Focused contracts live in `server-workspace-files.test.mjs` and `server-git-reads.test.mjs`; the HTTP harness and Project browser scenarios verify their integration.
+
+`lib/server/app-runners.mjs` owns runner detection, configuration, process execution, stdin, output and context transfer. Its one service instance keeps caches while each real tab retains its run record and timers. HTTP guards and tab/working-directory/shutdown call sites remain in the entrypoint. The service uses the existing process-tree and terminal-reducer modules; hiding a view does not stop a runner. `server-app-runners.test.mjs` covers disposable processes, and `app-runner-process-tree-harness.test.mjs` checks lifecycle integration.
+
 ## File viewer image contract
 
 `GET /api/files/content` keeps workspace-path confinement and the shared 2 MiB `FILE_VIEWER_MAX_BYTES` cap before reading either text or images. Text responses use `kind: "text"` with UTF-8 `content` and `language`. The explicit extension allowlist maps `.png`, `.jpg`/`.jpeg`, `.gif`, `.webp`, and `.avif` to fixed MIME types; those responses use `kind: "image"`, `mimeType`, and base64 `data` without decoding the bytes as UTF-8. SVG and all unlisted binary formats continue to return `415` through the text/binary guard.
