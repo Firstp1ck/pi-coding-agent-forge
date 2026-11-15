@@ -115,6 +115,10 @@ function normalizeRestoreTab(item, seen) {
   const id = rawId && /^[A-Za-z0-9._:-]+$/.test(rawId) && !seen.has(rawId) ? rawId : undefined;
   if (id) seen.add(id);
   const tab = { id, title: text(item.title, 160), titleSource: text(item.titleSource, 32), cwd: text(item.cwd, 4096), sessionFile: text(item.sessionFile, 4096), conversationStarted: item.conversationStarted === true };
+  if (item.workspaceKind === "no-project") {
+    tab.workspaceKind = "no-project";
+    tab.noProjectId = text(item.noProjectId, 128);
+  }
   if (Number.isInteger(item.index) && item.index > 0) tab.index = item.index;
   return tab;
 }
