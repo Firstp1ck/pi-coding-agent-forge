@@ -155,3 +155,44 @@ test("invalid revisions, duplicate identities and invalid selections preserve un
     assert.equal(f.raw(), raw);
   }
 });
+
+test("optional workspace survives saved draft navigation and version-1 reload without saving blanks", () => {
+  const f = fixture();
+  const blank = f.store.create();
+  assert.equal(f.store.setCwd(blank, "/tmp/blank workspace"), true);
+  assert.equal(f.store.save(blank), true);
+  assert.deepEqual(f.store.list(), []);
+  assert.deepEqual(JSON.parse(f.raw()).records, []);
+  f.store.edit(blank, "Text with a workspace");
+  f.store.save(blank);
+  const revision = f.store.get(blank).revision;
+  f.store.setCwd(blank, "/tmp/updated workspace");
+  assert.ok(f.store.get(blank).revision > revision);
+  f.store.select(f.store.create());
+  const restored = f.reload();
+  restored.select(blank);
+  assert.equal(restored.get(blank).text, "Text with a workspace");
+  assert.equal(restored.get(blank).cwd, "/tmp/updated workspace");
+  const copy = restored.get(blank);
+  copy.cwd = "/external";
+  assert.equal(restored.get(blank).cwd, "/tmp/updated workspace");
+  restored.setCwd(blank, "");
+  assert.equal(f.reload().get(blank).cwd, undefined);
+  assert.equal(restored.setCwd("draft:missing", "/tmp/valid"), false);
+});
+
+test("old version-1 drafts remain readable and invalid workspace metadata never replaces storage", () => {
+  const record = { id: "draft:legacy", text: "Legacy text", revision: 1, updatedAt: 100 };
+  const legacy = fixture(JSON.stringify({ version: 1, records: [record], activeId: record.id }));
+  assert.equal(legacy.store.error, "");
+  assert.equal(legacy.store.get(record.id).cwd, undefined);
+  for (const cwd of [null, 123, "x".repeat(DRAFT_LIMITS.cwd + 1), "/tmp/\u0000bad"]) {
+    const raw = JSON.stringify({ version: 1, records: [{ ...record, cwd }], activeId: record.id });
+    const f = fixture(raw);
+    assert.match(f.store.error, /could not be loaded/);
+    assert.equal(f.store.persist(), false);
+    assert.equal(f.raw(), raw);
+    assert.throws(() => legacy.store.setCwd(record.id, cwd), /invalid or too long/);
+    assert.equal(legacy.store.get(record.id).cwd, undefined);
+  }
+});

@@ -1,7 +1,8 @@
 export const DRAFT_STORAGE_KEY = "pi-webui-draft-conversations-v1";
-export const DRAFT_LIMITS = Object.freeze({ records: 100, text: 200_000, serialized: 2_000_000 });
+export const DRAFT_LIMITS = Object.freeze({ records: 100, text: 200_000, cwd: 4096, serialized: 2_000_000 });
 
 const validId = id => typeof id === "string" && /^draft:[a-zA-Z0-9-]{1,80}$/.test(id);
+const validCwd = cwd => typeof cwd === "string" && cwd.length <= DRAFT_LIMITS.cwd && !cwd.includes("\u0000");
 
 function browserDraftId() {
   return globalThis.crypto?.randomUUID?.() || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
@@ -17,6 +18,7 @@ function decode(raw) {
   for (const record of value.records) {
     if (!validId(record?.id) || ids.has(record.id) || typeof record.text !== "string"
       || record.text.length > DRAFT_LIMITS.text || !record.text.trim()
+      || (record.cwd !== undefined && !validCwd(record.cwd))
       || !Number.isSafeInteger(record.revision) || record.revision < 0
       || !Number.isSafeInteger(record.updatedAt) || record.updatedAt < 0) {
       throw new Error("A saved draft is invalid. The saved data was kept unchanged.");
@@ -67,7 +69,7 @@ export function createDraftConversations({ storage = () => globalThis.localStora
       const serialized = JSON.stringify({
         version: 1,
         activeId: activeId ? saved.some(record => record.id === activeId) ? activeId : "blank" : null,
-        records: saved.map(({ id, text, revision, updatedAt }) => ({ id, text, revision, updatedAt })),
+        records: saved.map(({ id, text, revision, updatedAt, cwd }) => ({ id, text, revision, updatedAt, ...(cwd ? { cwd } : {}) })),
       });
       if (serialized.length > DRAFT_LIMITS.serialized) throw new Error("The browser draft storage limit was reached.");
       storage().setItem(DRAFT_STORAGE_KEY, serialized);
@@ -85,6 +87,18 @@ export function createDraftConversations({ storage = () => globalThis.localStora
     create,
     get(id) { const record = records.get(id); return record ? { ...record } : null; },
     list() { return [...records.values()].filter(record => record.saved).map(record => ({ ...record })); },
+    setCwd(id, cwd) {
+      if (!validCwd(cwd)) throw new Error("The draft workspace path is invalid or too long.");
+      const record = records.get(id);
+      if (!record) return false;
+      if (record.cwd !== cwd) {
+        record.cwd = cwd;
+        record.revision += 1;
+        record.updatedAt = now();
+      }
+      if (record.saved) persist();
+      return true;
+    },
     edit(id, text) {
       const record = records.get(id);
       if (!record) return false;

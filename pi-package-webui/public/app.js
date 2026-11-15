@@ -18534,6 +18534,28 @@ async function createTerminalTabFromChosenDirectory({ triggerButton = elements.n
   await createTerminalTab(cwd, { triggerButton });
 }
 
+async function chooseClientDraftWorkspace({ cwd, triggerButton } = {}) {
+  if (activeTabId) return;
+  const draftId = draftConversations.activeId || draftConversations.create();
+  if (draftSubmissions.has(draftId)) return;
+  const initialCwd = draftConversations.get(draftId)?.cwd || "";
+  const selectedCwd = cwd || await pickCwd(null, initialCwd, { title: "Choose a workspace for this draft", returnFocus: triggerButton });
+  // Selection belongs to the opening draft, even if navigation or first send
+  // finishes while the picker is open. A promoted draft no longer owns a cwd.
+  if (!selectedCwd || draftSubmissions.has(draftId) || !draftConversations.get(draftId)) return;
+  try {
+    draftConversations.setCwd(draftId, selectedCwd);
+    reportDraftStorageError();
+    renderTabs();
+    if (!activeTabId && draftConversations.activeId === draftId) {
+      elements.chat.querySelector(".empty-start-state")?.remove();
+      renderEmptyStartState();
+    }
+  } catch (error) {
+    addEvent(error.message, "error");
+  }
+}
+
 function tabHasActiveAgent(tab) {
   const activity = activityForTab(tab);
   const indicator = tabIndicator(tab);
@@ -37094,8 +37116,9 @@ function emptyStartAction({ title, description, symbol, className = "", onClick 
 function renderEmptyStartState() {
   if (elements.chat.querySelector(".empty-start-state")) return;
   const tab = activeTab();
+  const draftCwd = !tab ? draftConversations.get(draftConversations.activeId)?.cwd || "" : "";
   const noProject = !tab || tab.workspaceKind === "no-project";
-  const workspace = noProject ? "No Project" : latestWorkspace?.displayCwd || (tab?.cwd ? normalizeDisplayPath(tab.cwd) : "");
+  const workspace = draftCwd ? normalizeDisplayPath(draftCwd) : noProject ? "No Project" : latestWorkspace?.displayCwd || (tab?.cwd ? normalizeDisplayPath(tab.cwd) : "");
   const workspaceInfo = normalizeGitWorkspaceInfo(tab?.gitWorkspace);
   const branch = workspaceInfo?.branch || "";
   const model = currentState?.model ? shortModelLabel(currentState.model) : "";
@@ -37110,7 +37133,9 @@ function renderEmptyStartState() {
   const title = make("h1", undefined, noProject ? "Start a conversation" : "Choose where to work");
   title.id = "emptyStartTitle";
   const description = !tab
-    ? "No Project. Start typing below; your first message starts a conversation in its own folder for files and tools."
+    ? draftCwd
+      ? `Your first message starts a conversation in ${normalizeDisplayPath(draftCwd)}.`
+      : "No Project. Start typing below; your first message starts a conversation in its own folder for files and tools."
     : noProject
       ? "No Project. Start typing below; this conversation has its own folder for files and tools."
       : "Open a workspace, return to a session, or isolate branch work. To start here, just type below.";
@@ -37127,10 +37152,12 @@ function renderEmptyStartState() {
     })] : []),
     emptyStartAction({
       title: "Open workspace",
-      description: "Choose a folder for a new Pi tab",
+      description: tab ? "Choose a folder for a new Pi tab" : "Choose a folder for your first message",
       symbol: "+",
       className: "primary",
-      onClick: (button) => createTerminalTabFromChosenDirectory({ triggerButton: button }),
+      onClick: (button) => tab
+        ? createTerminalTabFromChosenDirectory({ triggerButton: button })
+        : chooseClientDraftWorkspace({ triggerButton: button }),
     }),
     emptyStartAction({
       title: "Load workspace",
@@ -37164,7 +37191,9 @@ function renderEmptyStartState() {
       button.type = "button";
       button.title = `Open ${item.cwd}`;
       button.append(make("span", "empty-start-recent-icon", "▰"), make("span", "empty-start-recent-path", item.label), make("span", "empty-start-recent-arrow", "→"));
-      button.addEventListener("click", () => createTerminalTab(item.cwd, { triggerButton: button }));
+      button.addEventListener("click", () => tab
+        ? createTerminalTab(item.cwd, { triggerButton: button })
+        : chooseClientDraftWorkspace({ cwd: item.cwd, triggerButton: button }));
       recentList.append(button);
     }
     recent.append(recentHeading, recentList);
@@ -47524,7 +47553,9 @@ async function sendEmptyStartPrompt(inputMessage) {
   const sourceDraftId = draftConversations.activeId || draftConversations.create();
   if (draftSubmissions.has(sourceDraftId)) return;
   draftConversations.edit(sourceDraftId, inputMessage);
-  const sourceDraftRevision = draftConversations.get(sourceDraftId).revision;
+  const sourceDraft = draftConversations.get(sourceDraftId);
+  const sourceDraftRevision = sourceDraft.revision;
+  const sourceCwd = sourceDraft.cwd;
   const sourceContext = activeTabContext();
   const sourceNavigation = focusedShellState;
   const sourceDraftNavigation = draftNavigationRevision;
@@ -47532,7 +47563,7 @@ async function sendEmptyStartPrompt(inputMessage) {
   saveClientDraft();
   try {
     // Creation must not switch away from a destination chosen while it was pending.
-    const tab = await createTerminalTab(undefined, { workspaceKind: "no-project", triggerButton: null, activate: false });
+    const tab = await createTerminalTab(sourceCwd, { workspaceKind: sourceCwd ? "project" : "no-project", triggerButton: null, activate: false });
     if (!tab?.id) return;
     const selected = !activeTabId && draftConversations.activeId === sourceDraftId;
     if (selected) draftConversations.edit(sourceDraftId, elements.promptInput.value);

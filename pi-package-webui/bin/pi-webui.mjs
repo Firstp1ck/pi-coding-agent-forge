@@ -9835,6 +9835,11 @@ function getRequestedTab(req, url, body = {}) {
   return tab;
 }
 
+function optionalRequestedTab(req, url, body = {}) {
+  if (!requestedTabId(req, url, body) && tabs.size === 0) return null;
+  return getRequestedTab(req, url, body);
+}
+
 function directoryPickerActiveCwd(req, url, body = {}) {
   const id = requestedTabId(req, url, body);
   if (id) return getRequestedTab(req, url, body).cwd;
@@ -11357,8 +11362,8 @@ const server = createServer(async (req, res) => {
 
     if (url.pathname === "/api/directories" && req.method === "POST") {
       const body = await readJsonBody(req);
-      const tab = getRequestedTab(req, url, body);
-      ensureNaturalConversationRouteAllowed(tab, "directory creation is blocked");
+      const tab = optionalRequestedTab(req, url, body);
+      if (tab) ensureNaturalConversationRouteAllowed(tab, "directory creation is blocked");
       const activeCwd = directoryPickerActiveCwd(req, url, body);
       sendJson(res, 201, {
         ok: true,
@@ -11386,8 +11391,8 @@ const server = createServer(async (req, res) => {
 
     if (url.pathname === "/api/path-fast-picks" && req.method === "POST") {
       const body = await readJsonBody(req);
-      const tab = getRequestedTab(req, url, body);
-      ensureNaturalConversationRouteAllowed(tab, "path fast-pick changes are blocked");
+      const tab = optionalRequestedTab(req, url, body);
+      if (tab) ensureNaturalConversationRouteAllowed(tab, "path fast-pick changes are blocked");
       const picks = await writePathFastPicks(body.picks ?? body);
       sendJson(res, 200, { ok: true, data: { picks } });
       return;
