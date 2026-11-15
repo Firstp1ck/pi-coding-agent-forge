@@ -76,7 +76,7 @@ test("Pi and Web UI actions confirm independent native targets and show durable 
   await expect(page.locator("#piComponentUpdateStatus")).toContainText("fixture-pi");
   await expect(page.locator("#piComponentUpdateStatus")).toHaveAttribute("data-update-running");
   jobs.pi = { ...jobs.pi, phase: "unchanged", receipts: [{ id: "pi", status: "unchanged", stdout: "Already current", stderr: "" }] };
-  await expect(page.locator("#piComponentUpdateStatus")).toContainText("No automatic restart", { timeout: 8_000 });
+  await expect(page.locator("#piComponentUpdateStatus")).toContainText("Already up to date. No restart is needed.", { timeout: 8_000 });
   await expect(page.locator("#piComponentUpdateOutput")).toContainText("Already current");
   await page.locator("#piReleaseNotesCloseButton").click();
   await page.locator("#updateNotificationDismissButton").click();

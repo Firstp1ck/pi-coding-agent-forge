@@ -494,8 +494,8 @@
     },
     {
       "file": "pi-package-webui/public/app.js",
-      "bytes": 2411289,
-      "sha256": "ef43a8d32ccb96ee8956729696e5f8580696a4ac59f64ad24bbf0b4b404805e4"
+      "bytes": 2411296,
+      "sha256": "e689cc8f95e969888211cfdddfc5019b2744a727ecab678c6df63598ffc33f49"
     },
     {
       "file": "pi-package-webui/public/aur-review-payload.mjs",
@@ -714,8 +714,8 @@
     },
     {
       "file": "pi-package-webui/public/sidebar-update-menu.mjs",
-      "bytes": 9559,
-      "sha256": "f4055485f8b488bfa494da40101dd13780ccde52b424e3a2511eee77de079bc9"
+      "bytes": 18734,
+      "sha256": "f10096a17b501405de034bfef4a7ebd287158deaddaa3b3b1d63e0ac95fe45eb"
     },
     {
       "file": "pi-package-webui/public/stream-derived-output.mjs",
@@ -784,12 +784,12 @@
     }
   ],
   "reconciliation": {
-    "records": 1360,
+    "records": 1362,
     "classifications": {
       "family": 732,
       "shared-chrome": 50,
       "non-action": 5,
-      "dynamic-template": 573,
+      "dynamic-template": 575,
       "unresolved": 0
     },
     "staticDialogs": 29,
@@ -3419,11 +3419,13 @@
         "pi-package-webui/public/index.html#tag:332bf579864898ef",
         "pi-package-webui/public/index.html#tag:332bf579864898ef/occurrence:2",
         "pi-package-webui/public/sidebar-update-menu.mjs#createSidebarUpdateMenu/computed-construction:document.createElement:tag);",
+        "pi-package-webui/public/sidebar-update-menu.mjs#createSidebarUpdateMenu/data-assignment:card:state",
         "pi-package-webui/public/sidebar-update-menu.mjs#createSidebarUpdateMenu/data-assignment:item:mode",
         "pi-package-webui/public/sidebar-update-menu.mjs#createSidebarUpdateMenu/data-assignment:status:tone",
         "pi-package-webui/public/sidebar-update-menu.mjs#createSidebarUpdateMenu/id-assignment:availability:`${id}Availability`",
         "pi-package-webui/public/sidebar-update-menu.mjs#createSidebarUpdateMenu/id-assignment:detail:`${id}${mode}Description`",
         "pi-package-webui/public/sidebar-update-menu.mjs#createSidebarUpdateMenu/id-assignment:popup:id",
+        "pi-package-webui/public/sidebar-update-menu.mjs#createSidebarUpdateMenu/id-assignment:progressTitle:`${id}ProgressTitle`",
         "pi-package-webui/public/sidebar-update-menu.mjs#createSidebarUpdateMenu/id-assignment:status:`${id}Status`",
         "pi-package-webui/public/sidebar-update-menu.mjs#createSidebarUpdateMenu/id-assignment:title:`${id}Title`"
       ],
@@ -27129,7 +27131,23 @@
       "anchor": {
         "file": "pi-package-webui/public/sidebar-update-menu.mjs",
         "symbol": "createSidebarUpdateMenu",
-        "line": 21
+        "line": 23
+      },
+      "ancestors": [],
+      "classification": "dynamic-template",
+      "family": "system"
+    },
+    {
+      "id": "pi-package-webui/public/sidebar-update-menu.mjs#createSidebarUpdateMenu/data-assignment:card:state",
+      "sourceId": null,
+      "tag": null,
+      "actionable": false,
+      "data": {},
+      "expression": "card.dataset.state = progress.state;",
+      "anchor": {
+        "file": "pi-package-webui/public/sidebar-update-menu.mjs",
+        "symbol": "createSidebarUpdateMenu",
+        "line": 202
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -27145,7 +27163,7 @@
       "anchor": {
         "file": "pi-package-webui/public/sidebar-update-menu.mjs",
         "symbol": "createSidebarUpdateMenu",
-        "line": 47
+        "line": 52
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -27161,7 +27179,7 @@
       "anchor": {
         "file": "pi-package-webui/public/sidebar-update-menu.mjs",
         "symbol": "createSidebarUpdateMenu",
-        "line": 143
+        "line": 311
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -27177,7 +27195,7 @@
       "anchor": {
         "file": "pi-package-webui/public/sidebar-update-menu.mjs",
         "symbol": "createSidebarUpdateMenu",
-        "line": 35
+        "line": 40
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -27193,7 +27211,7 @@
       "anchor": {
         "file": "pi-package-webui/public/sidebar-update-menu.mjs",
         "symbol": "createSidebarUpdateMenu",
-        "line": 52
+        "line": 57
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -27209,7 +27227,23 @@
       "anchor": {
         "file": "pi-package-webui/public/sidebar-update-menu.mjs",
         "symbol": "createSidebarUpdateMenu",
-        "line": 28
+        "line": 33
+      },
+      "ancestors": [],
+      "classification": "dynamic-template",
+      "family": "system"
+    },
+    {
+      "id": "pi-package-webui/public/sidebar-update-menu.mjs#createSidebarUpdateMenu/id-assignment:progressTitle:`${id}ProgressTitle`",
+      "sourceId": null,
+      "tag": null,
+      "actionable": false,
+      "data": {},
+      "expression": "progressTitle.id = `${id}ProgressTitle`;",
+      "anchor": {
+        "file": "pi-package-webui/public/sidebar-update-menu.mjs",
+        "symbol": "createSidebarUpdateMenu",
+        "line": 72
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -27225,7 +27259,7 @@
       "anchor": {
         "file": "pi-package-webui/public/sidebar-update-menu.mjs",
         "symbol": "createSidebarUpdateMenu",
-        "line": 37
+        "line": 42
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -27241,7 +27275,7 @@
       "anchor": {
         "file": "pi-package-webui/public/sidebar-update-menu.mjs",
         "symbol": "createSidebarUpdateMenu",
-        "line": 33
+        "line": 38
       },
       "ancestors": [],
       "classification": "dynamic-template",

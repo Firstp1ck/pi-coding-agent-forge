@@ -126,7 +126,7 @@ for (const outcome of ['unchanged', 'failed']) test(`persistent progress starts 
   await page.getByRole('menuitem').filter({ hasText: names.webui }).click();
   await page.locator('#confirmationConfirmButton').click();
   try {
-    await expect(page.getByRole('progressbar')).toBeVisible();
+    await expect(page.locator('.sidebar-update-progress-track')).toBeVisible();
     await expect(page.getByRole('menu', { name: 'Updates', exact: true })).toBeHidden();
     await expect(page.locator('#sidebarUpdateButton')).toHaveAttribute('aria-busy', 'true');
     expect(requests.filter(item => item.kind === 'apply')).toHaveLength(1);
@@ -137,13 +137,18 @@ for (const outcome of ['unchanged', 'failed']) test(`persistent progress starts 
   jobs.webui = { ...jobs.webui, progress: { totalSteps: 2, completedSteps: 0,
     currentTargetId: 'webui:pi-user', startedAt, stepStartedAt: startedAt, stdout: 'Fetching package metadata', stderr: '' } };
   await expect.poll(() => page.locator('body').innerText()).toContain('Fetching package metadata');
-  const progress = page.getByRole('progressbar');
+  const progress = page.locator('.sidebar-update-progress-track');
   await expect(progress).toBeVisible();
-  await expect.poll(async () => Number(await progress.getAttribute('aria-valuenow'))).toBeGreaterThan(0);
-  expect(Number(await progress.getAttribute('aria-valuenow'))).toBeLessThan(100);
+  await expect.poll(async () => Number((await progress.getAttribute('aria-label')).match(/Estimated (\d+)/)?.[1])).toBeGreaterThan(0);
+  expect(Number((await progress.getAttribute('aria-label')).match(/Estimated (\d+)/)?.[1])).toBeLessThan(100);
   await expect.poll(() => page.locator('body').innerText()).toMatch(/estimat/i);
   jobs.webui.progress = { ...jobs.webui.progress, completedSteps: 1, currentTargetId: 'webui:npm-global', stepStartedAt: new Date().toISOString(), stdout: 'Checking global WebUI' };
   await expect.poll(() => page.locator('body').innerText()).toContain('Checking global WebUI');
+  if (outcome === 'unchanged') {
+    await page.reload();
+    await expect.poll(() => page.locator('body').innerText()).toContain('Checking global WebUI');
+    await expect(page.locator('.sidebar-update-progress-track')).toBeVisible();
+  }
   await page.screenshot({ path: info.outputPath('update-progress-running.png') });
   jobs.webui = { ...jobs.webui, phase: outcome, restartRequired: false,
     progress: { ...jobs.webui.progress, completedSteps: 2, currentTargetId: null },

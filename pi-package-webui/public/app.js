@@ -9641,7 +9641,7 @@ function componentUpdateStatusText(target) {
       case "restart-authorized": return { text: `${id}: commands completed and healthy changed active components are waiting for idle before automatic restart.`, level: "warn" };
       case "restart-in-progress": return { text: `${id}: automatic restart is in progress; reconnecting to the same job.`, level: "warn" };
       case "restart-pending": return { text: `${id}: successor health and session restoration are not yet confirmed. Do not infer restart success.`, level: "warn" };
-      case "launching": return { text: `Starting ${label} update…`, level: "info" };
+      case "launching": return { text: `${id}: Starting ${label} update…`, level: "info" };
       case "running": {
         const progress = job.progress;
         const step = progress ? `Step ${Math.min(progress.completedSteps + 1, progress.totalSteps)} of ${progress.totalSteps}` : "Running update command";
