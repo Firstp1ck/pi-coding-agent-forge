@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   SHELL_PREFERENCES_STORAGE_KEY,
+  effectiveShellPreferences,
   readShellPreferences,
   resolveShellMode,
   writeShellPreferences,
@@ -210,4 +211,132 @@ test("focused optional fields preserve storage failure status and mobile recover
   assert.equal(resolveShellMode({ ...preferences, viewportMode: "tablet", phoneMode: "v2" }), "classic");
   assert.equal(resolveShellMode({ ...preferences, viewportMode: "tablet", tabletMode: "preview" }), "tablet-v2");
   assert.equal(storage.records.get(SHELL_PREFERENCES_STORAGE_KEY), raw);
+});
+
+const serverCohorts = [
+  undefined, null, "fresh", "established", "legacy", "unknown", "future", "", "Fresh", "fresh ",
+  true, false, 1, 0, {}, { cohort: "fresh" }, ["fresh"], new String("fresh"),
+];
+
+test("effective preferences cover every read status and cohort with conservative fallbacks", () => {
+  const cases = [
+    { name: "absent", record: { status: "absent", value: fallback }, fresh: true },
+    { name: "explicit Classic", record: { status: "valid", value: fallback } },
+    { name: "explicit focused", record: { status: "valid", value: { v: 1, desktopLayout: "focused" } }, focused: true },
+    ...["invalid", "unavailable", "future", "VALID", "", null, undefined].map((status) => ({
+      name: `unrecognized or failed status ${status}`, record: { status, value: { v: 1, desktopLayout: "focused" } },
+    })),
+    ...[undefined, null, false, 0, "absent", [], {}, fallback].map((record, i) => ({
+      name: `unrecognized record ${i}`, record,
+    })),
+    ...[undefined, null, [], true, "focused", {}, { v: 2, desktopLayout: "focused" },
+      { v: "1", desktopLayout: "focused" }, { v: 1 }, { v: 1, desktopLayout: "future" },
+      { v: 1, desktopLayout: "focused", navigation: "bottom" },
+      { v: 1, desktopLayout: "focused", navCollapsed: "false" },
+      { v: 1, desktopLayout: "focused", pinnedActions: ["invalid id"] },
+      { v: 1, desktopLayout: "focused", inspectorWidth: 641 },
+      { v: 1, get desktopLayout() { throw new Error("denied choice"); } },
+    ].map((value, i) => ({ name: `invalid explicit value ${i}`, record: { status: "valid", value } })),
+    { name: "unreadable status", record: { get status() { throw new Error("denied status"); } } },
+    { name: "unreadable value", record: { status: "valid", get value() { throw new Error("denied value"); } } },
+  ];
+  for (const { name, record, fresh, focused } of cases) {
+    for (const cohort of serverCohorts) {
+      assert.deepEqual(effectiveShellPreferences(record, cohort), {
+        v: 1, desktopLayout: focused || (fresh && cohort === "fresh") ? "focused" : "classic",
+      }, `${name}, cohort ${String(cohort)}`);
+    }
+  }
+  assert.deepEqual(effectiveShellPreferences(), fallback);
+  assert.deepEqual(effectiveShellPreferences({ status: "absent", value: fallback }), fallback);
+});
+
+test("effective explicit preferences preserve validated optional fields without sharing or mutating them", () => {
+  const optionals = [
+    {}, { navigation: "left" }, { navigation: "top" }, { navCollapsed: false }, { navCollapsed: true },
+    { pinnedActions: [] }, { pinnedActions: ["project:files", "session:new"] },
+    { inspectorWidth: 240 }, { inspectorWidth: 640 },
+    { navigation: "top", navCollapsed: true, pinnedActions: ["project:files", "project:files"], inspectorWidth: 320 },
+  ];
+  for (const desktopLayout of ["classic", "focused"]) {
+    for (const optional of optionals) {
+      const value = Object.freeze({ v: 1, desktopLayout, ...optional, unknown: "not a preference" });
+      if (value.pinnedActions) Object.freeze(value.pinnedActions);
+      const record = Object.freeze({ status: "valid", value });
+      const before = JSON.stringify(record);
+      const expected = { v: 1, desktopLayout, ...optional };
+      if (expected.pinnedActions) expected.pinnedActions = [...new Set(expected.pinnedActions)];
+      for (const cohort of serverCohorts) {
+        const effective = effectiveShellPreferences(record, cohort);
+        assert.deepEqual(effective, expected);
+        assert.notEqual(effective, value);
+        if (effective.pinnedActions) {
+          assert.notEqual(effective.pinnedActions, value.pinnedActions);
+          effective.pinnedActions.push("session:other");
+        }
+        effective.desktopLayout = "changed by caller";
+        assert.equal(JSON.stringify(record), before);
+        assert.deepEqual(effectiveShellPreferences(record, cohort), expected);
+      }
+    }
+  }
+});
+
+test("cohort hydration performs no storage operations and preserves original read results", () => {
+  for (const raw of [null, "{", '{"v":9,"desktopLayout":"focused"}',
+    '{"v":1,"desktopLayout":"classic"}', '{"v":1,"desktopLayout":"focused"}']) {
+    const storage = fakeStorage(raw === null ? [] : [[SHELL_PREFERENCES_STORAGE_KEY, raw]]);
+    const record = readShellPreferences(storage);
+    const before = JSON.stringify(record);
+    for (const cohort of serverCohorts) effectiveShellPreferences(record, cohort);
+    assert.deepEqual(storage.calls, [["get", SHELL_PREFERENCES_STORAGE_KEY]]);
+    assert.equal(storage.records.get(SHELL_PREFERENCES_STORAGE_KEY), raw ?? undefined);
+    assert.equal(JSON.stringify(record), before);
+  }
+  const storage = fakeStorage();
+  storage.getItem = (key) => { storage.calls.push(["get", key]); throw new Error("denied"); };
+  const record = readShellPreferences(storage);
+  for (const cohort of serverCohorts) assert.deepEqual(effectiveShellPreferences(record, cohort), fallback);
+  assert.deepEqual(record, { status: "unavailable", value: fallback });
+  assert.deepEqual(storage.calls, [["get", SHELL_PREFERENCES_STORAGE_KEY]]);
+  assert.equal(storage.records.size, 0);
+});
+
+test("explicit choices survive late cohort changes and only deliberate writes persist", () => {
+  const storage = fakeStorage();
+  const absent = readShellPreferences(storage);
+  assert.deepEqual(effectiveShellPreferences(absent, "fresh"), { v: 1, desktopLayout: "focused" });
+  for (const desktopLayout of ["classic", "focused"]) {
+    const value = { v: 1, desktopLayout, navigation: "top", navCollapsed: false };
+    assert.deepEqual(writeShellPreferences(storage, value), { ok: true, reason: null });
+    const explicit = readShellPreferences(storage);
+    const callsBeforeHydration = storage.calls.length;
+    for (const cohort of serverCohorts) assert.deepEqual(effectiveShellPreferences(explicit, cohort), value);
+    assert.equal(storage.calls.length, callsBeforeHydration);
+    assert.equal(storage.records.get(SHELL_PREFERENCES_STORAGE_KEY), JSON.stringify(value));
+    assert.equal(explicit.status, "valid");
+  }
+  assert.deepEqual(storage.calls.map(([operation]) => operation), ["get", "set", "get", "set", "get"]);
+  assert.deepEqual(absent, { status: "absent", value: fallback });
+});
+
+test("effective cohort defaults leave independent compact modes and recovery precedence unchanged", () => {
+  const record = Object.freeze({ status: "absent", value: Object.freeze({ ...fallback }) });
+  for (const cohort of serverCohorts) {
+    const preferences = effectiveShellPreferences(record, cohort);
+    for (const phoneMode of ["legacy", "preview", "v2", "unknown"]) {
+      for (const tabletMode of ["legacy", "preview", "v2", "unknown"]) {
+        const modes = { ...preferences, phoneMode, tabletMode };
+        for (const viewportMode of ["desktop", "phone", "tablet", "unknown"]) {
+          const expected = viewportMode === "desktop" ? preferences.desktopLayout
+            : viewportMode === "phone" && ["preview", "v2"].includes(phoneMode) ? "mobile-v2"
+            : viewportMode === "tablet" && ["preview", "v2"].includes(tabletMode) ? "tablet-v2" : "classic";
+          assert.equal(resolveShellMode({ ...modes, viewportMode }), expected);
+          assert.equal(resolveShellMode({ ...modes, viewportMode, recovery: true }), "classic");
+          assert.equal(resolveShellMode({ ...modes, viewportMode, recovery: false }), expected);
+        }
+      }
+    }
+  }
+  assert.deepEqual(record, { status: "absent", value: fallback });
 });

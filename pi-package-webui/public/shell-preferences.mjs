@@ -53,6 +53,18 @@ export function readShellPreferences(storage) {
   return { status: "invalid", value: defaultPreferences() };
 }
 
+/** Resolve a read result without persisting cohort defaults or repairing records. */
+export function effectiveShellPreferences(record, serverCohort = null) {
+  try {
+    if (!record || typeof record !== "object" || Array.isArray(record)) return defaultPreferences();
+    if (record.status === "valid") return normalizePreferences(record.value) ?? defaultPreferences();
+    if (record.status === "absent" && serverCohort === "fresh") return { v: 1, desktopLayout: "focused" };
+  } catch {
+    // Unreadable fields cannot establish an explicit choice or a fresh default.
+  }
+  return defaultPreferences();
+}
+
 /** Explicit writes store only validated preview fields; failures never escape to chat. */
 export function writeShellPreferences(storage, value) {
   let normalized;
