@@ -13,7 +13,7 @@ const context=vm.createContext({ sessionShelfState: { restore() {} }, scheduleTa
 vm.runInContext(`
 const sessionContext=createSessionContext(), composerStore=createSessionComposerStore(), extensionRequests=createExtensionRequestStore();
 let activeTabId='tab-a';sessionContext.activate(activeTabId);let activeTabGeneration=sessionContext.generation;
-let emptyStartSubmissionPending=false;
+const draftSubmissions=new Set(),draftConversations={activeId:null};
 let currentState={sessionId:'session-a',isStreaming:false};sessionContext.observeSession(activeTabId,'session-a');
 let latestMessages=[],latestMessagesSessionKey='',transientMessages=[],latestStats=null,activeDialogCancel=null,activeTextAttachmentEditor=null;
 const tabMessagesCache=new Map(),tabStatsCache=new Map(),tabStateCache=new Map(),liveToolRuns=new Map();

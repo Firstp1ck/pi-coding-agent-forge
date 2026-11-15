@@ -2293,7 +2293,9 @@ function syncFocusedWidgetPlacement() {
     const host = focusedFeatureRecords.find(record => record.id === id)?.controls;
     for (const node of nodes) {
       if (!node) continue;
-      if (enabled && host) canonicalViewHost.move(node, host);
+      const composerMenuOpen = (node === elements.publishMenu && publishMenuOpen)
+        || (node === elements.appRunnerMenuPanel && appRunnerMenuOpen);
+      if (enabled && host && !composerMenuOpen) canonicalViewHost.move(node, host);
       else canonicalViewHost.restore(node);
     }
   }
@@ -39604,6 +39606,8 @@ function setPublishMenuOpen(open) {
   elements.publishButton.setAttribute("aria-expanded", publishMenuOpen ? "true" : "false");
   elements.publishButton.classList.toggle("menu-open", publishMenuOpen);
   elements.publishButton.parentElement?.classList.toggle("open", publishMenuOpen);
+  syncFocusedWidgetPlacement();
+  syncFocusedComposerDisclosure();
   scheduleMobileDropdownScrollBoundsUpdate();
   if (!publishMenuOpen) scheduleDeferredUiFlushAfterDropdownClose();
 }
@@ -39626,6 +39630,8 @@ function setAppRunnerMenuOpen(open) {
   elements.appRunnerMenuButton?.setAttribute("aria-expanded", appRunnerMenuOpen ? "true" : "false");
   elements.appRunnerMenuButton?.classList.toggle("menu-open", appRunnerMenuOpen);
   elements.appRunnerMenuButton?.parentElement?.classList.toggle("open", appRunnerMenuOpen);
+  syncFocusedWidgetPlacement();
+  syncFocusedComposerDisclosure();
   scheduleMobileDropdownScrollBoundsUpdate();
   if (!appRunnerMenuOpen) scheduleDeferredUiFlushAfterDropdownClose();
 }
@@ -49012,7 +49018,6 @@ elements.gitWorkflowButton.addEventListener("click", () => {
 });
 const publishMenuContainer = elements.publishButton.parentElement;
 elements.publishButton.addEventListener("click", () => {
-  if (focusedShell?.active) { setComposerActionsOpen(false); navigateFocusedShell("project", "release"); return; }
   clearComposerMenuDismissal(elements.publishButton.parentElement);
   setNativeCommandMenuOpen(false);
   setAppRunnerMenuOpen(false);
@@ -49025,7 +49030,9 @@ publishMenuContainer?.addEventListener("pointerenter", () => {
   setOptionsMenuOpen(false);
   setPublishMenuOpen(true);
 });
-publishMenuContainer?.addEventListener("pointerleave", () => setPublishMenuOpen(false));
+publishMenuContainer?.addEventListener("pointerleave", () => {
+  if (!publishMenuContainer.contains(document.activeElement)) setPublishMenuOpen(false);
+});
 publishMenuContainer?.addEventListener("focusin", () => {
   setNativeCommandMenuOpen(false);
   setAppRunnerMenuOpen(false);
@@ -49071,6 +49078,7 @@ elements.appRunnerInfoButton?.addEventListener("click", (event) => {
 });
 elements.appRunnerInfoCloseButton?.addEventListener("click", closeAppRunnerInfoDialog);
 elements.appRunnerMenuButton?.addEventListener("click", async () => {
+  clearComposerMenuDismissal(elements.appRunnerMenuButton.parentElement);
   setPublishMenuOpen(false);
   setNativeCommandMenuOpen(false);
   setOptionsMenuOpen(false);
@@ -49079,8 +49087,7 @@ elements.appRunnerMenuButton?.addEventListener("click", async () => {
   try {
     await refreshAppRunners(tabContext);
     if (!isCurrentTabContext(tabContext)) return;
-    if (focusedShell?.active) { setComposerActionsOpen(false); navigateFocusedShell("project", "runners"); }
-    else if (appRunnerMenuCanOpen()) setAppRunnerMenuOpen(true);
+    if (appRunnerMenuCanOpen()) setAppRunnerMenuOpen(true);
     else if (!appRunnerIsRunning(activeAppRunnerData().activeRun)) openAppRunnerInfoDialog();
   } catch (error) {
     if (isCurrentTabContext(tabContext)) addEvent(error.message || String(error), "error");
@@ -49093,7 +49100,9 @@ appRunnerMenuContainer?.addEventListener("pointerenter", () => {
   setOptionsMenuOpen(false);
   setAppRunnerMenuOpen(true);
 });
-appRunnerMenuContainer?.addEventListener("pointerleave", () => setAppRunnerMenuOpen(false));
+appRunnerMenuContainer?.addEventListener("pointerleave", () => {
+  if (!appRunnerMenuContainer.contains(document.activeElement)) setAppRunnerMenuOpen(false);
+});
 appRunnerMenuContainer?.addEventListener("focusin", () => {
   if (elements.appRunnerMenuButton?.disabled || !appRunnerMenuCanOpen()) return;
   setPublishMenuOpen(false);

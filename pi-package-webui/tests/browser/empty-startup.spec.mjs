@@ -1,3 +1,4 @@
+import { navigateFocused } from './focused-navigation-fixture.mjs';
 import { rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -212,7 +213,7 @@ for (const destination of ["another session", "settings"]) test(`first native se
     await page.locator(".focused-brand").click();
     await page.locator("#promptInput").fill("Other browser draft");
   } else {
-    await page.getByRole("navigation", { name: "Workspace destinations" }).getByRole("button", { name: "Settings", exact: true }).click();
+    await navigateFocused(page, 'Settings');
   }
   hold.release();
   await expect(page.getByText(/Its command is saved in that conversation's draft\./).first()).toBeAttached();
@@ -255,7 +256,7 @@ test("a destination chosen during creation stays open", async ({ page, emptyStar
   await page.locator("#promptInput").fill("Captured before settings navigation");
   await page.locator("#sendButton").click();
   const tab = await hold.created;
-  await page.getByRole("navigation", { name: "Workspace destinations" }).getByRole("button", { name: "Settings", exact: true }).click();
+  await navigateFocused(page, 'Settings');
   hold.release();
   const [command] = await expectPrompt(emptyStartup, "Captured before settings navigation");
   expect(command.cwd).toBe(tab.cwd);
