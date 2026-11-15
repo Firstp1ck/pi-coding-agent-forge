@@ -74,9 +74,28 @@ test("Controls use aligned name and parameter columns with viewport-safe tooltip
   await openControls(page);
 
   const rows = page.locator("#sidePanelSectionControls .control-row");
-  await expect(rows).toHaveCount(13);
+  const rowLabels = [
+    "Model",
+    "Thinking effort",
+    "Thinking output",
+    "Desktop layout",
+    "Compact session navigation",
+    "Tab placement",
+    "Control Deck placement",
+    "Theme mode",
+    "Theme",
+    "Background",
+    "Notifications",
+    "Compact mode (Experimental)",
+    "Connection",
+    "PIN protection",
+    "Network access",
+    "Action",
+  ];
+  await expect(rows.locator(".control-row-label")).toHaveText(rowLabels);
   const visibleRows = rows.filter({ visible: true });
-  await expect(visibleRows).toHaveCount(10);
+  const hiddenNetworkRows = new Set(["Connection", "PIN protection", "Network access"]);
+  await expect(visibleRows.locator(".control-row-label")).toHaveText(rowLabels.filter((label) => !hiddenNetworkRows.has(label)));
   for (let index = 0; index < await visibleRows.count(); index += 1) {
     const columns = await visibleRows.nth(index).evaluate((row) => getComputedStyle(row).gridTemplateColumns.split(" ").filter(Boolean));
     assert.equal(columns.length, 2, `visible setting row ${index + 1} should have two grid columns`);

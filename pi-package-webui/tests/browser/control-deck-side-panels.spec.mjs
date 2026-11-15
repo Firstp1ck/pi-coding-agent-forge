@@ -259,16 +259,30 @@ test("Right, Left, Both, Sidebar rail, independent state, overlay, singleton ARI
   await page.waitForTimeout(300);
   if (await files.getAttribute("aria-expanded") !== "true") await files.click();
   if (await controls.getAttribute("aria-expanded") !== "true") await controls.click();
+  await expect(files).toHaveAttribute("aria-expanded", "true");
+  await expect(controls).toHaveAttribute("aria-expanded", "true");
+  await files.click();
   await expect(files).toHaveAttribute("aria-expanded", "false");
   await controls.press("Alt+ArrowRight");
+  await expect(controls).toBeFocused();
   await expect(controls).toHaveAttribute("aria-expanded", "true");
-  if (await files.getAttribute("aria-expanded") !== "true") await files.click();
+  await expect(files).toHaveAttribute("aria-expanded", "false");
+  await files.click();
   await expect(files).toHaveAttribute("aria-expanded", "true");
   await files.press("Alt+ArrowRight");
+  await expect(files).toBeFocused();
   await expect(files).toHaveAttribute("aria-expanded", "true");
+  await expect(controls).toHaveAttribute("aria-expanded", "true");
+  await controls.click();
   await expect(controls).toHaveAttribute("aria-expanded", "false");
+  await expect(files).toHaveAttribute("aria-expanded", "true");
 
   await files.press("Alt+ArrowLeft");
+  await expect(files).toBeFocused();
+  await expect(files).toHaveAttribute("aria-expanded", "true");
+  await expect(controls).toHaveAttribute("aria-expanded", "false");
+  await files.click();
+  await expect(files).toHaveAttribute("aria-expanded", "false");
   const latentLeftBefore = await page.evaluate(() => JSON.parse(localStorage.getItem("pi-webui-control-deck-layout-v2") || "null")?.sectionLayout?.leftSectionIds || []);
   await selectPlacement(page, "right");
   await controls.focus();
@@ -279,6 +293,8 @@ test("Right, Left, Both, Sidebar rail, independent state, overlay, singleton ARI
   await expect.poll(() => page.locator("#sidePanelBodyRight > [data-side-panel-section]").evaluateAll((nodes) => nodes.map((node) => node.dataset.sidePanelSection))).toEqual(rightOrder);
   await selectPlacement(page, "both");
   await expect(page.locator('#sidePanelBodyLeft > [data-side-panel-section="files"]')).toHaveCount(1);
+  await expect(files).toHaveAttribute("aria-expanded", "false");
+  await expect(controls).toHaveAttribute("aria-expanded", "true");
 
   await page.locator("#toggleSidePanelLeftButton").click();
   await expect(page.locator("body")).toHaveClass(/side-panel-left-collapsed/);
