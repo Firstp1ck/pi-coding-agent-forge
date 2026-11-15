@@ -48,6 +48,7 @@ import {
   listWebuiWorkspaces,
   saveWebuiWorkspace,
 } from "../lib/webui-workspaces.mjs";
+import { allocateNoProjectWorkspace, resolveNoProjectWorkspace, validateNoProjectCreateIntent, noProjectPiArgs } from "../lib/server/no-project-workspaces.mjs";
 import { nativeExportDownloadPayload } from "../lib/native-export-payload.mjs";
 import { discoverStartAttachRpcSupervisor } from "../lib/rpc-supervisor-client.mjs";
 import { deriveSupervisorRecoveryToken } from "../lib/rpc-supervisor-protocol.mjs";
@@ -5003,6 +5004,8 @@ function normalizeRestoreTabDescriptor(item, seenIds) {
     title: normalizedRestoreString(item.title, 160),
     titleSource: ["explicit", "auto", "default"].includes(item.titleSource) ? item.titleSource : undefined,
     cwd: normalizedRestoreString(item.cwd || item.workspace?.cwd, 4096),
+    workspaceKind: item.workspaceKind ?? undefined,
+    noProjectId: item.noProjectId ?? undefined,
     conversationStarted: item.conversationStarted === true,
     sessionFile: normalizedRestoreString(item.sessionFile || state.sessionFile, 4096),
   };
@@ -5222,7 +5225,7 @@ async function selectedAppendSystemPromptPath() {
   return null;
 }
 
-async function buildPiLaunchForTab(tabIndex, title, tabCwd = options.cwd) {
+async function buildPiLaunchForTab(tabIndex, title, tabCwd = options.cwd, workspaceKind) {
   const args = ["--mode", "rpc", "--no-extensions", "--no-skills", "--no-prompt-templates", "--no-themes"];
   if (options.noSession) args.push("--no-session");
 
@@ -5248,7 +5251,7 @@ async function buildPiLaunchForTab(tabIndex, title, tabCwd = options.cwd) {
   // Keep tab naming inside Web UI metadata. Some bundled Pi CLI versions do not
   // support --name, and passing Web UI-generated tab titles through to child
   // RPC processes makes every tab after the first exit immediately.
-  args.push(...options.piArgs);
+  args.push(...(workspaceKind === "no-project" ? noProjectPiArgs(options.piArgs) : options.piArgs));
   return { args, prompt: appendSystemPromptDescriptor(appendSystemPromptPath) };
 }
 
@@ -5463,13 +5466,15 @@ async function initializeRpcSupervisor() {
   });
 }
 
-function supervisedTabMetadata(tab, { cwd = tab.cwd, prompt = tab.prompt } = {}) {
+function supervisedTabMetadata(tab, { cwd = tab.cwd, prompt = tab.prompt, workspaceKind = tab.workspaceKind, noProjectId = tab.noProjectId } = {}) {
   return {
     index: tab.index,
     title: tab.title,
     titleSource: tab.titleSource,
     conversationStarted: tab.conversationStarted === true,
     cwd,
+    workspaceKind,
+    noProjectId,
     sessionFile: tabRestorableSessionFile(tab),
     gitWorkspace: tab.gitWorkspace || null,
     createdAt: tab.createdAt,
@@ -6606,15 +6611,16 @@ function defaultTabTitle(tabIndex) {
   return `Terminal ${tabIndex}`;
 }
 
-async function primeTabRpc(tab) {
+async function primeTabRpc(tab, { strict = false } = {}) {
   try {
-    const response = await tab.rpc.send({ type: "get_state" }, 1500);
+    const response = await tab.rpc.send({ type: "get_state" }, strict ? 15_000 : 1500);
+    if (strict && response.success === false) throw new Error(response.error || "Pi state is unavailable");
     if (response.success !== false) {
       rememberTabState(tab, response.data);
       reconcileTabActivityFromState(tab, response.data);
     }
   } catch (error) {
-    if (!/Timed out waiting for RPC response/i.test(sanitizeError(error))) throw error;
+    if (strict || !/Timed out waiting for RPC response/i.test(sanitizeError(error))) throw error;
   }
 }
 
@@ -6651,7 +6657,7 @@ function attachRpcToTab(tab, rpc) {
   });
 }
 
-function createTabRecord({ id, index, title, titleSource, conversationStarted, cwd, createdAt = new Date().toISOString(), sessionFile, gitWorkspace, prompt, rpc }) {
+function createTabRecord({ id, index, title, titleSource, conversationStarted, cwd, workspaceKind, noProjectId, createdAt = new Date().toISOString(), sessionFile, gitWorkspace, prompt, rpc }) {
   const tab = {
     id,
     index,
@@ -6659,6 +6665,8 @@ function createTabRecord({ id, index, title, titleSource, conversationStarted, c
     titleSource,
     conversationStarted: conversationStarted === true,
     cwd,
+    workspaceKind,
+    noProjectId,
     createdAt,
     sessionFile: options.noSession ? undefined : normalizedRestoreString(sessionFile, 4096),
     gitWorkspace: gitWorkspace || null,
@@ -6687,6 +6695,7 @@ function createTabRecord({ id, index, title, titleSource, conversationStarted, c
     compactionQueueRevision: 0,
     compactionQueueDraining: false,
     cwdChangeInProgress: false,
+    noProjectResetInProgress: false,
     rpc,
     rpcUnsubscribe: undefined,
     sseClients: new Set(),
@@ -6698,7 +6707,7 @@ function createTabRecord({ id, index, title, titleSource, conversationStarted, c
   return tab;
 }
 
-async function createTab({ id: requestedId, index, title, titleSource, conversationStarted, cwd, sessionFile, gitWorkspace } = {}) {
+async function createTab({ id: requestedId, index, title, titleSource, conversationStarted, cwd, sessionFile, gitWorkspace, workspaceKind, noProjectId, freshNoProject = false } = {}) {
   const releaseAdmittedWork = nativeAdmittedWork.begin();
   try {
   if (!nativeAdmissionState) throw new Error("Update admission is not initialized.");
@@ -6709,9 +6718,12 @@ async function createTab({ id: requestedId, index, title, titleSource, conversat
   const tabTitle = explicitTitle || defaultTabTitle(tabIndex);
   const titleIsExplicit = Boolean(explicitTitle || (options.name && tabIndex === 1));
   const resolvedTitleSource = ["explicit", "auto", "default"].includes(titleSource) ? titleSource : titleIsExplicit ? "explicit" : "default";
-  const tabCwd = cwd ? await resolveCwd(cwd, options.cwd) : options.cwd;
+  const allocation = freshNoProject ? await allocateNoProjectWorkspace(agentDir) : null;
+  const requestedCwd = allocation?.cwd || cwd || options.cwd;
+  const identity = allocation || await resolveNoProjectWorkspace(agentDir, { cwd: requestedCwd, workspaceKind, noProjectId });
+  const tabCwd = identity.workspaceKind === "no-project" ? requestedCwd : cwd ? await resolveCwd(cwd, options.cwd) : options.cwd;
   const id = requestedId && !tabs.has(requestedId) ? requestedId : randomUUID();
-  const launch = await buildPiLaunchForTab(tabIndex, tabTitle, tabCwd);
+  const launch = await buildPiLaunchForTab(tabIndex, tabTitle, tabCwd, identity.workspaceKind);
   const piArgs = launch.args;
   if (sessionFile && !options.noSession) piArgs.push("--session", sessionFile);
   const piCommand = await resolvePiCommand(piArgs);
@@ -6726,6 +6738,8 @@ async function createTab({ id: requestedId, index, title, titleSource, conversat
     titleSource: resolvedTitleSource,
     conversationStarted,
     cwd: tabCwd,
+    workspaceKind: identity.workspaceKind,
+    noProjectId: identity.noProjectId,
     createdAt,
     sessionFile,
     gitWorkspace,
@@ -6748,8 +6762,12 @@ async function createTab({ id: requestedId, index, title, titleSource, conversat
       await rpc.start();
     }
     tab.prompt = launch.prompt;
-    await primeTabRpc(tab);
+    await primeTabRpc(tab, { strict: identity.workspaceKind === "no-project" });
   } catch (error) {
+    if (identity.workspaceKind === "no-project") {
+      await discardTab(tab).catch((cleanupError) => console.warn(`failed to stop rejected No Project tab: ${sanitizeError(cleanupError)}`));
+      throw new Error(`Pi RPC process failed while starting ${tabTitle}: ${sanitizeError(error)}`);
+    }
     if (!tab.rpc.isRunning()) {
       tab.rpcUnsubscribe?.();
       rpc.dispose?.();
@@ -6777,6 +6795,7 @@ async function hydrateManagedTabs(snapshot) {
       if (!descriptor?.id || !descriptor.cwd || tabs.has(descriptor.id)) {
         throw new Error("RPC supervisor returned invalid or duplicate managed tab metadata");
       }
+      const identity = await resolveNoProjectWorkspace(agentDir, descriptor);
       const tabIndex = Number.isInteger(descriptor.index) && descriptor.index > 0 ? descriptor.index : nextTabIndex;
       nextTabIndex = Math.max(nextTabIndex, tabIndex + 1);
       const tabTitle = descriptor.title || defaultTabTitle(tabIndex);
@@ -6794,6 +6813,7 @@ async function hydrateManagedTabs(snapshot) {
         titleSource: resolvedTitleSource,
         conversationStarted: descriptor.conversationStarted,
         cwd: descriptor.cwd,
+        ...identity,
         createdAt: normalizedRestoreString(metadata?.createdAt, 128) || managed.startedAt || new Date().toISOString(),
         sessionFile: descriptor.sessionFile,
         gitWorkspace: metadata?.gitWorkspace || null,
@@ -6832,6 +6852,8 @@ function tabMeta(tab) {
     titleSource: tab.titleSource || "default",
     conversationStarted: !!tab.conversationStarted,
     cwd: tab.cwd,
+    workspaceKind: tab.workspaceKind,
+    noProjectId: tab.noProjectId,
     sessionFile: tabRestorableSessionFile(tab),
     gitWorkspace: tab.gitWorkspace || null,
     prompt: normalizeTabPromptDescriptor(tab.prompt),
@@ -7359,6 +7381,8 @@ function restorableTabDescriptor(tab, state = null) {
     titleSource: tab.titleSource,
     conversationStarted: tab.conversationStarted,
     cwd: tab.cwd,
+    workspaceKind: tab.workspaceKind,
+    noProjectId: tab.noProjectId,
     sessionFile: sessionFileFromState(state) || tabRestorableSessionFile(tab),
   }, new Set());
 }
@@ -7405,6 +7429,14 @@ function workspaceLoadWarning(savedTabId, code, message) {
 
 async function workspaceLoadDescriptor(descriptor, warnings) {
   const next = { ...descriptor };
+  const identity = await resolveNoProjectWorkspace(agentDir, next);
+  if (identity.workspaceKind === "no-project") {
+    Object.assign(next, identity);
+    if (next.sessionFile && !(await stat(next.sessionFile).catch(() => null))?.isFile()) {
+      throw makeHttpError(400, "No Project saved session file is unavailable");
+    }
+    return next;
+  }
   if (next.sessionFile) {
     const sessionInfo = await stat(next.sessionFile).catch(() => null);
     if (!sessionInfo?.isFile()) {
@@ -7496,8 +7528,8 @@ async function loadWebuiWorkspace(id, body = {}) {
     const warnings = [];
     const idMap = {};
     for (const descriptor of workspace.tabs) {
-      const preflighted = await workspaceLoadDescriptor(descriptor, warnings);
       try {
+        const preflighted = await workspaceLoadDescriptor(descriptor, warnings);
         const tab = await createTab(preflighted);
         idMap[descriptor.id] = tab.id;
       } catch (error) {
@@ -8147,6 +8179,21 @@ function resetAutomaticTabTitleForNewSession(tab) {
   return renameTab(tab, defaultTabTitle(tab.index), { source: "default", unique: false });
 }
 
+async function createNoProjectResetTab(source) {
+  if (source.noProjectResetInProgress || source.cwdChangeInProgress) throw makeHttpError(409, "A No Project session change is already in progress");
+  source.noProjectResetInProgress = true;
+  try {
+    enforceNaturalConversationCommandAllowed(source, { type: "new_session" });
+    await requireIdleForSessionAction(source, "starting a new No Project conversation");
+    if (source.compactionQueueDraining || compactionQueueForTab(source).length) throw makeHttpError(409, "Wait for queued compaction work before starting a new conversation");
+    await resolveNoProjectWorkspace(agentDir, source);
+    const next = await createTab({ freshNoProject: true });
+    return { nextTabId: next.id, tab: tabMeta(next), tabs: listTabs(), sourceTab: tabMeta(source) };
+  } finally {
+    source.noProjectResetInProgress = false;
+  }
+}
+
 function responseWithTab(response, tab) {
   if (!response || typeof response !== "object") return response;
   return { ...response, tab: tabMeta(tab) };
@@ -8155,6 +8202,7 @@ function responseWithTab(response, tab) {
 async function updateTabCwd(id, cwd) {
   const tab = tabs.get(id);
   if (!tab) throw makeHttpError(404, `Unknown Pi tab: ${id}`);
+  if (tab.noProjectResetInProgress) throw makeHttpError(409, "A new No Project conversation is already starting");
   if (tab.cwdChangeInProgress) throw makeHttpError(409, `${tab.title} is already changing its working folder`);
 
   tab.cwdChangeInProgress = true;
@@ -8168,6 +8216,7 @@ async function updateTabCwd(id, cwd) {
 
 async function performTabCwdUpdate(tab, cwd) {
   const nextCwd = await resolveCwd(cwd, tab.cwd);
+  const identity = await resolveNoProjectWorkspace(agentDir, { cwd: nextCwd });
   if (nextCwd === tab.cwd) return { tab, changed: false };
   if (tab.rpc instanceof SupervisorPiRpcProcess && !tab.rpc.supervisor.isCurrentVersion()) {
     throw makeHttpError(503, "The detached Pi supervisor is from an older WebUI build. Fully shut down Pi WebUI (not Restart), then start it again before changing working folders.");
@@ -8179,7 +8228,7 @@ async function performTabCwdUpdate(tab, cwd) {
   if (tab.rpc?.isRunning()) await safeRpcData(tab, { type: "get_state" }, STATUS_RPC_TIMEOUT_MS);
   const sessionFile = tabRestorableSessionFile(tab);
 
-  const launch = await buildPiLaunchForTab(tab.index, tab.title, nextCwd);
+  const launch = await buildPiLaunchForTab(tab.index, tab.title, nextCwd, identity.workspaceKind);
   const piArgs = launch.args;
   if (sessionFile && !options.noSession) piArgs.push("--session", sessionFile);
   const piCommand = await resolvePiCommand(piArgs);
@@ -8202,7 +8251,7 @@ async function performTabCwdUpdate(tab, cwd) {
     if (oldRpc instanceof SupervisorPiRpcProcess) {
       const snapshot = await oldRpc.replace({
         child: { command: piCommand.command, args: piCommand.args, cwd: nextCwd },
-        metadata: supervisedTabMetadata(tab, { cwd: nextCwd, prompt: launch.prompt }),
+        metadata: supervisedTabMetadata(tab, { cwd: nextCwd, prompt: launch.prompt, workspaceKind: identity.workspaceKind || null, noProjectId: identity.noProjectId || null }),
         displayCommand: piCommand.displayCommand,
       });
       oldRpc.dispose();
@@ -8231,6 +8280,8 @@ async function performTabCwdUpdate(tab, cwd) {
     }
   }
   tab.cwd = nextCwd;
+  tab.workspaceKind = identity.workspaceKind;
+  tab.noProjectId = identity.noProjectId;
   resetTabActivity(tab);
   tab.prompt = launch.prompt;
   gitLiveWatcher.unsubscribe(tab.id);
@@ -8268,7 +8319,8 @@ async function restartTabRpc(tab, reason = "reload", restart = null) {
   if (state.data?.isStreaming) throw makeHttpError(409, "Wait for the current response to finish before reloading.");
   if (state.data?.isCompacting) throw makeHttpError(409, "Wait for compaction to finish before reloading.");
 
-  const launch = await buildPiLaunchForTab(tab.index, tab.title, tab.cwd);
+  await resolveNoProjectWorkspace(agentDir, tab);
+  const launch = await buildPiLaunchForTab(tab.index, tab.title, tab.cwd, tab.workspaceKind);
   const piArgs = launch.args;
   if (state.data?.sessionFile && !options.noSession) piArgs.push("--session", state.data.sessionFile);
   const piCommand = await resolvePiCommand(piArgs);
@@ -9274,6 +9326,8 @@ async function runForkCommand(tab, entryId) {
     titleSource: title ? "auto" : undefined,
     conversationStarted: true,
     cwd: tab.cwd,
+    workspaceKind: tab.workspaceKind,
+    noProjectId: tab.noProjectId,
     sessionFile: fork.sessionFile,
     gitWorkspace: tab.gitWorkspace,
   });
@@ -9558,6 +9612,16 @@ async function handleNativeSlashCommand(tab, body, req) {
       });
     }
     case "new": {
+      if (tab.workspaceKind === "no-project") {
+        if (parsed.args) throw makeHttpError(400, "Use /new without arguments to start a No Project conversation");
+        const created = await createNoProjectResetTab(tab);
+        return respondNative("new", {
+          status: "succeeded",
+          message: "Started a new No Project conversation in a new tab.",
+          ...created,
+          refresh: ["tabs", "state"],
+        });
+      }
       const response = await tab.rpc.send({ type: "new_session" });
       if (response.success === false) return response;
       tab.conversationStarted = false;
@@ -9686,9 +9750,12 @@ async function discardTab(tab) {
   tab.rpcUnsubscribe?.();
   rejectTabBashQueue(tab, new Error("Pi recovery tab initialization failed"));
   stopAppRunnerForTab(tab, "recovery initialization failed", { force: true });
-  await tab.rpc.stop();
-  tab.rpc.dispose?.();
-  tabs.delete(tab.id);
+  try {
+    await tab.rpc.stop();
+  } finally {
+    tab.rpc.dispose?.();
+    tabs.delete(tab.id);
+  }
 }
 
 function recoveryText(value, field, maxChars) {
@@ -9911,7 +9978,7 @@ async function createInitialTabs() {
     }
   }
 
-  return created.length ? created : options.cwdExplicit ? [await createTab()] : [];
+  return created.length || restoreTabs.some((tab) => tab.workspaceKind === "no-project") ? created : options.cwdExplicit ? [await createTab()] : [];
 }
 
 const serverStartedAt = new Date().toISOString();
@@ -10840,7 +10907,14 @@ const server = createServer(async (req, res) => {
     if (url.pathname === "/api/tabs" && req.method === "POST") {
       if (!optionalFeatureStartupReady) throw makeHttpError(503, "Optional feature startup audit is still checking; retry after /api/health is ready");
       const body = await readJsonBody(req);
-      const tab = await createTab({ title: body.title, cwd: body.cwd });
+      const freshNoProject = validateNoProjectCreateIntent(body);
+      if (!freshNoProject && body.cwd) {
+        const cwd = await resolveCwd(body.cwd, options.cwd);
+        if ((await resolveNoProjectWorkspace(agentDir, { cwd })).workspaceKind === "no-project") {
+          throw makeHttpError(400, "Use workspaceKind: no-project to create a fresh owned conversation; resume existing conversations through session selection");
+        }
+      }
+      const tab = await createTab({ title: body.title, cwd: body.cwd, freshNoProject });
       sendJson(res, 201, { ok: true, data: { tab: tabMeta(tab), tabs: listTabs() } });
       return;
     }
@@ -10859,14 +10933,17 @@ const server = createServer(async (req, res) => {
       const wanted = String(body.id || "").trim();
       const index = closedRestorableTabs.findIndex((item) => item.id === wanted);
       if (!wanted || index === -1) throw makeHttpError(404, "That closed tab can no longer be reopened");
-      const [descriptor] = closedRestorableTabs.splice(index, 1);
+      const descriptor = closedRestorableTabs[index];
       const tab = await createTab({
         title: descriptor.titleSource === "explicit" || descriptor.titleSource === "auto" ? descriptor.title : undefined,
         titleSource: descriptor.titleSource,
         conversationStarted: descriptor.conversationStarted,
         cwd: descriptor.cwd,
+        workspaceKind: descriptor.workspaceKind,
+        noProjectId: descriptor.noProjectId,
         sessionFile: descriptor.sessionFile,
       });
+      closedRestorableTabs.splice(index, 1);
       sendJson(res, 201, { ok: true, data: { tab: tabMeta(tab), tabs: listTabs() } });
       return;
     }
@@ -12061,6 +12138,11 @@ const server = createServer(async (req, res) => {
       if (command) {
         const tab = getRequestedTab(req, url, body);
         enforceNaturalConversationCommandAllowed(tab, command);
+        if (command.type === "new_session" && tab.workspaceKind === "no-project") {
+          const created = await createNoProjectResetTab(tab);
+          sendJson(res, 200, responseWithTab(rpcSuccess("new_session", created), tab));
+          return;
+        }
         if (command.type === "abort") await cancelPendingExtensionUiRequests(tab);
         const queuedForCompaction = maybeQueueCommandDuringCompaction(tab, command);
         if (queuedForCompaction) {

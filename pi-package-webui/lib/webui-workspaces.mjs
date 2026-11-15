@@ -48,6 +48,8 @@ export function normalizeWorkspaceTabDescriptor(value, seenIds = new Set()) {
     title: boundedString(value.title, 160),
     titleSource: ["explicit", "auto", "default"].includes(value.titleSource) ? value.titleSource : undefined,
     cwd,
+    ...(value.workspaceKind !== undefined ? { workspaceKind: value.workspaceKind } : {}),
+    ...(value.noProjectId !== undefined ? { noProjectId: value.noProjectId } : {}),
     conversationStarted: value.conversationStarted === true,
     sessionFile: boundedString(value.sessionFile || value.state?.sessionFile, 4096),
   };
