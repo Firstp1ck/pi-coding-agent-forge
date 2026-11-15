@@ -1,4 +1,4 @@
-import { mkdir, open, readFile, readdir, rename, rm, rmdir, stat } from "node:fs/promises";
+import { lstat, mkdir, open, readFile, readdir, realpath, rename, rm, rmdir, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -349,6 +349,109 @@ export async function migrateLegacyWebuiSettings(targetFile, legacyFile) {
 async function ensureDefaultSettingsMigration(storageFile, env = process.env) {
   if (!isDefaultSettingsTarget(storageFile, env)) return false;
   return migrateLegacyWebuiSettings(storageFile, legacyWebuiSettingsFile(env));
+}
+
+export function validatedShellRolloutCohort(rawMarker) {
+  if (!rawMarker || typeof rawMarker !== "object" || Array.isArray(rawMarker) || rawMarker.version !== 1) return null;
+  return rawMarker.cohort === "fresh" || rawMarker.cohort === "established" ? rawMarker.cohort : null;
+}
+
+async function rolloutPathStat(filename) {
+  try {
+    return await lstat(filename);
+  } catch (error) {
+    if (error?.code === "ENOENT") return null;
+    throw error;
+  }
+}
+
+async function hasRolloutEvidence(filenames) {
+  let found = false;
+  for (const filename of filenames) {
+    if (await rolloutPathStat(filename)) found = true;
+  }
+  return found;
+}
+
+async function readRolloutSettings(storageFile) {
+  const entry = await rolloutPathStat(storageFile);
+  if (!entry) return null;
+  const file = entry.isSymbolicLink() ? await stat(storageFile) : entry;
+  // Reading a special file could block startup outside the lock's deadline.
+  if (!file.isFile()) throw new TypeError("Rollout settings must be a regular file");
+  return readRawWebuiSettings(storageFile, { missing: null });
+}
+
+/** Initializes startup-only rollout evidence without normalizing stored settings. */
+export async function initializeWebuiShellRollout({
+  env = process.env,
+  storageFile = webuiSettingsFile(env),
+  legacyFile = legacyWebuiSettingsFile(env),
+  additionalEvidencePaths = [],
+} = {}) {
+  try {
+    const target = path.resolve(storageFile);
+    const root = path.dirname(target);
+    const defaultTarget = isDefaultSettingsTarget(target, env);
+    // Canonicalize the parent, never the root: creating the root here loses proof.
+    await mkdir(path.dirname(root), { recursive: true, mode: 0o700 });
+    const parent = await realpath(path.dirname(root));
+    const initializationLock = path.join(parent, `.${path.basename(root)}-shell-rollout-init`);
+    return await withWebuiSettingsLock(initializationLock, async () => {
+      const rootBefore = await rolloutPathStat(root);
+      const targetBefore = await rolloutPathStat(target);
+      const initialRaw = targetBefore ? await readRolloutSettings(target) : null;
+      if (initialRaw && Object.hasOwn(initialRaw, "shellRollout")) {
+        return withWebuiSettingsLock(target, async () => {
+          const raw = await readRolloutSettings(target);
+          return { cohort: validatedShellRolloutCohort(raw?.shellRollout) };
+        });
+      }
+      if (rootBefore && !rootBefore.isDirectory()) return { cohort: null };
+      if (targetBefore && !targetBefore.isFile()) return { cohort: null };
+
+      const evidencePaths = [legacyFile, ...additionalEvidencePaths];
+      const priorUse = await hasRolloutEvidence(evidencePaths);
+      let legacy = null;
+      if (defaultTarget && !targetBefore && path.resolve(legacyFile) !== target) {
+        const legacyStat = await rolloutPathStat(legacyFile);
+        if (legacyStat && !legacyStat.isFile()) return { cohort: null };
+        legacy = await readRawWebuiSettings(legacyFile, { missing: null });
+      }
+
+      let createdRoot = false;
+      if (defaultTarget && !rootBefore && !targetBefore && !priorUse) {
+        try {
+          await mkdir(root, { mode: 0o700 });
+          createdRoot = true;
+        } catch (error) {
+          if (error?.code !== "EEXIST") throw error;
+        }
+      }
+      // Migration must precede the marker, which would otherwise hide legacy data.
+      if (defaultTarget && legacy) await migrateLegacyWebuiSettings(target, legacyFile);
+      return withWebuiSettingsLock(target, async () => {
+        const raw = await readRolloutSettings(target);
+        if (raw && Object.hasOwn(raw, "shellRollout")) {
+          return { cohort: validatedShellRolloutCohort(raw.shellRollout) };
+        }
+        const currentRoot = await rolloutPathStat(root);
+        const currentTarget = await rolloutPathStat(target);
+        if (!currentRoot?.isDirectory() || (currentTarget && !currentTarget.isFile())) return { cohort: null };
+        // A source appearing after migration must be handled by the next startup.
+        if (!raw && defaultTarget && path.resolve(legacyFile) !== target
+          && await rolloutPathStat(legacyFile)) return { cohort: null };
+        if (!raw && legacy) return { cohort: null };
+        const cohort = createdRoot && !raw && !await hasRolloutEvidence(evidencePaths) ? "fresh" : "established";
+        await writePrivateAtomicSettings(target, { ...raw, shellRollout: { version: 1, cohort } });
+        const persisted = await readRolloutSettings(target);
+        return { cohort: validatedShellRolloutCohort(persisted?.shellRollout) };
+      });
+    });
+  } catch {
+    // Failed proof or persistence must never enable a transient fresh default.
+    return { cohort: null };
+  }
 }
 
 export async function readWebuiSettings(storageFile = webuiSettingsFile(), { reportInvalidOutputMode = false } = {}) {

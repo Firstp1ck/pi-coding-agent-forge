@@ -27,6 +27,8 @@ export {
   normalizeWebuiSettings,
   withWebuiSettingsLock,
   migrateLegacyWebuiSettings,
+  validatedShellRolloutCohort,
+  initializeWebuiShellRollout,
   readWebuiSettings,
   updateWebuiSettings,
   writeWebuiSettings,
