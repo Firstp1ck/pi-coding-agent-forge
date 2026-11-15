@@ -439,6 +439,8 @@ test('a scheduled refresh survives an intervening direct refresh and a pending d
   await respond(page,1,{conversations:[summary(2)]});
   await expect(tags(page)).toHaveAttribute('data-intercom-conversation-id',conversationId(2));
   await page.evaluate((id)=>{controller.open(id);},conversationId(2));
+  // Reset owns detail frames; settle summary layout and modal resize before the detail response.
+  await page.clock.runFor(32);
   await page.evaluate(()=>{window.afterChange=()=>{
     window.pendingFrames=[...frames];controller.reset();controller.reset();window.remainingFrames=[...frames];window.afterChange=null;
   };});

@@ -30890,6 +30890,7 @@ function openBtwComposerWidget() {
   setNativeCommandMenuOpen(false);
   setAppRunnerMenuOpen(false);
   setOptionsMenuOpen(false);
+  if (focusedShell?.active) navigateFocusedShell("activity", "conversations");
   renderWidgets();
 }
 
@@ -38668,6 +38669,7 @@ async function sendBtwPromptFromButton() {
     openBtwComposerWidget();
     return;
   }
+  openBtwComposerWidget();
   await sendBtwQuestion(question, { clearComposerDraft: true });
 }
 

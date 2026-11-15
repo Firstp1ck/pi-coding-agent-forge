@@ -155,3 +155,46 @@ test("Queues share authoritative edits, reorder, and removal across Activity and
   expect(requests.map(request => request.postDataJSON().operation.type)).toEqual(["edit", "move", "delete"]);
   expect(requests.every(request => new URL(request.url()).searchParams.get("tab") === tabId)).toBe(true);
 });
+
+
+for (const question of ["", "Explain this separately"]) {
+  test(`compact /btw entry reveals and focuses its composer with ${question ? "a question" : "an empty prompt"}`, async ({ page, ownership }, testInfo) => {
+    await page.route("**/api/commands*", async route => {
+      const response = await route.fetch();
+      const payload = await response.json();
+      payload.data.commands.push({ name: "btw", source: "extension", description: "Ask a side question" });
+      await route.fulfill({ response, json: payload });
+    });
+    await page.goto(`${ownership.baseURL}/?tab=${encodeURIComponent(ownership.tabs[0].id)}`);
+    await expect(page.locator("#modelSelect")).not.toBeEmpty();
+    await page.locator("#promptInput").fill(question);
+    const sent = question ? page.waitForRequest(request => new URL(request.url()).pathname === "/api/prompt") : null;
+    await page.locator("#composerActionsButton").click();
+    await page.locator("#btwButton").click();
+    await expect(page.locator("#focusedWorkspace")).toHaveAttribute("data-destination", "activity");
+    await expect(page.getByRole("tab", { name: "Conversations", exact: true })).toHaveAttribute("aria-selected", "true");
+    const input = page.locator('[data-feature-host="conversations"] .btw-widget-input');
+    await expect(input).toBeVisible();
+    await expect(input).toBeFocused();
+    if (sent) {
+      const request = await sent;
+      expect(new URL(request.url()).searchParams.get("tab")).toBe(ownership.tabs[0].id);
+      expect(request.postDataJSON().message).toBe(`/btw ${question}`);
+      await expect(page.locator("#promptInput")).toHaveValue("");
+    }
+    await input.fill("Retain this side draft");
+    const rail = page.getByRole("navigation", { name: "Workspace destinations" });
+    await rail.getByRole("button", { name: "Conversation", exact: true }).click();
+    await page.locator("#composerActionsButton").click();
+    await page.locator("#btwButton").click();
+    await expect(input).toHaveValue("Retain this side draft");
+    await expect(input).toBeFocused();
+    const header = page.locator(".btw-widget .release-npm-header");
+    const title = await header.locator(".release-npm-title-wrap").boundingBox();
+    const meta = await header.locator(".release-npm-meta").boundingBox();
+    const actions = await header.locator(".release-npm-actions").boundingBox();
+    expect(title.x + title.width).toBeLessThanOrEqual(meta.x + 1);
+    expect(actions.y).toBeGreaterThanOrEqual(Math.max(title.y + title.height, meta.y + meta.height) - 1);
+    await page.screenshot({ path: testInfo.outputPath("btw-conversations-entry.png") });
+  });
+}

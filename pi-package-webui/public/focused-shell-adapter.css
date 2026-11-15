@@ -76,3 +76,8 @@ html[data-desktop-shell="focused"] #focusedWorkspace { height: var(--visual-view
 #focusedWorkspace .focused-feature-widgets .app-runner-stdin-form { display: grid; grid-template-columns: 1fr auto; }
 #focusedWorkspace .focused-feature-widgets .app-runner-stdin-input { grid-column: 1 / -1; width: 100%; }
 #focusedWorkspace .focused-conversation-link { width: 100%; min-width: 0; white-space: normal; text-align: left; }
+
+#focusedWorkspace .focused-feature-widgets .btw-widget .release-npm-header { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .4rem; align-items: start; }
+#focusedWorkspace .focused-feature-widgets .btw-widget .release-npm-meta { min-width: 0; max-width: 100%; }
+#focusedWorkspace .focused-feature-widgets .btw-widget .release-npm-actions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; min-width: 0; }
+#focusedWorkspace .focused-feature-widgets .btw-widget .release-npm-actions button { max-width: 100%; white-space: normal; }
