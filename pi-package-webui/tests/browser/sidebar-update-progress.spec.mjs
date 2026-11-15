@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { expect, test } from '@playwright/test';
+import AxeBuilder from '@axe-core/playwright';
 
 test.use({ video: 'off', serviceWorkers: 'block' });
 
@@ -37,6 +38,8 @@ async function mount(page) {
       jobId: 'job-a', state: 'running', label: 'Pi and extensions + WebUI', totalSteps: 3, completedSteps: 0,
       currentTargetId: 'pi-self', startedAt: '2026-11-15T12:00:00.000Z', stepStartedAt: '2026-11-15T12:00:00.000Z',
       stdout: 'Checking packages…', stderr: '',
+      steps: ['pi-self', 'extensions', 'webui'].map(id => ({ id, installedRoot: `/fixture/${id}`,
+        command: { command: 'pi', args: ['update', ...(id === 'extensions' ? ['--all'] : [])] } })),
     };
     window.publish = (changes = {}, statusText = '') => {
       Object.assign(window.snapshot, changes);
@@ -111,31 +114,33 @@ test('live snapshots, elapsed time and capped heuristic change without focus or 
   await capture(page, info, 'progress-live');
 });
 
-test('launching feedback precedes execution; Details and keyboard never duplicate an action', async ({ page }) => {
+test('launching Details stays on command results and returns to progress without duplicate actions', async ({ page }) => {
   await mount(page);
-  await page.locator('#outside').focus();
   await page.evaluate(() => window.publish({ state: 'launching', totalSteps: 0, currentTargetId: null, stdout: '' }));
   await expect(card(page)).toHaveAccessibleName('Preparing update');
-  await expect(timing(page)).toContainText('Estimated 0%');
-  await expect(page.locator('#outside')).toBeFocused();
   await page.getByRole('button', { name: 'Details', exact: true }).focus();
   await page.keyboard.press('Enter');
-  await expect(page.getByRole('menuitem').first()).toBeFocused();
-  await expect(page.locator('.sidebar-update-progress')).toBeHidden();
-  await page.keyboard.press('Enter');
-  await page.keyboard.press('Space');
-  await page.getByRole('menuitem').last().dispatchEvent('click');
-  expect(await page.evaluate(() => window.selections)).toEqual([]);
+  await expect(page.getByRole('button', { name: 'Back to progress' })).toBeFocused();
+  await expect(page.getByRole('menu')).toBeHidden();
+  await expect(page.getByLabel('Command results', { exact: true })).toContainText('"pi" "update"');
+  await page.evaluate(() => window.publish({ state: 'running', totalSteps: 3, currentTargetId: 'pi-self' }));
+  await expect(page.getByLabel('Command results', { exact: true })).toContainText('pi-self: running');
+  await expect(page.getByRole('button', { name: 'Back to progress' })).toBeFocused();
+  await page.clock.fastForward(10000);
+  await expect(timing(page)).toContainText('Elapsed 40s');
   await page.keyboard.press('Escape');
-  await expect(page.locator('#updates')).toBeFocused();
-  await expect(card(page)).toBeVisible();
-  await page.evaluate(() => window.publish({ state: 'success', completedSteps: 0 }, 'Commands completed. Restart this WebUI when ready.'));
-  await page.getByRole('button', { name: 'Details', exact: true }).click();
-  await expect(page.locator('.sidebar-update-menu-status')).toHaveText('Commands completed. Restart this WebUI when ready.');
-  await page.keyboard.press('End');
+  await expect(page.getByRole('button', { name: 'Details', exact: true })).toBeFocused();
+  await page.locator('#updates').click();
+  await expect(page.getByRole('menuitem').first()).toBeFocused();
+  await expect(page.getByRole('menuitem').first()).toBeDisabled();
+  await page.keyboard.press('Tab');
+  await expect(page.getByRole('button', { name: 'Back to progress' })).toBeFocused();
+  await page.keyboard.press('Shift+Tab');
+  await expect(page.getByRole('menuitem').last()).toBeFocused();
+  await page.keyboard.press('Tab');
   await page.keyboard.press('Enter');
-  await page.locator('.sidebar-update-menu-choice[data-mode="pi"]').dispatchEvent('click');
-  expect(await page.evaluate(() => window.selections)).toEqual(['pi']);
+  await expect(page.getByRole('button', { name: 'Details', exact: true })).toBeFocused();
+  expect(await page.evaluate(() => window.selections)).toEqual([]);
 });
 
 for (const [state, title, resultText] of [
@@ -160,7 +165,13 @@ for (const [state, title, resultText] of [
     const previousWidth = await fill(page).getAttribute('style');
     const complete = state === 'success' || state === 'unchanged';
     expect(await fill(page).evaluate((node) => Number.parseFloat(node.style.width))).toBe(complete ? 100 : 19);
-    if (state === 'unchanged') await expect(card(page)).not.toContainText(/restart/i);
+    if (state === 'unchanged') {
+      expect((await card(page).innerText()).split(/\n+/)).toEqual(['Already up to date', 'Pi and extensions + WebUI', 'Details', 'Dismiss']);
+      await expect(timing(page)).toBeHidden();
+      await expect(track(page)).toBeHidden();
+      await expect(page.locator('.sidebar-update-progress-step')).toBeHidden();
+      await expect(page.locator('.sidebar-update-progress-output')).toBeHidden();
+    }
     await page.clock.fastForward(90_000);
     await page.evaluate(({ state, resultText }) => window.publish({ state }, resultText), { state, resultText });
     await expect(timing(page)).toHaveText('Elapsed 35s');
@@ -272,10 +283,11 @@ for (const scenario of [
     await capture(page, info, `progress-${scenario.name}`);
     await page.getByRole('button', { name: 'Details', exact: true }).focus();
     await page.keyboard.press('Enter');
-    await expect(page.getByRole('menuitem').first()).toBeFocused();
-    await page.keyboard.press('End');
-    await expect(page.getByRole('menuitem').last()).toBeInViewport({ ratio: 0.99 });
+    await expect(page.getByRole('button', { name: 'Back to progress' })).toBeFocused();
+    await expectGeometry(page);
+    await capture(page, info, `details-${scenario.name}`);
     await page.keyboard.press('Escape');
+    await expect(page.getByRole('button', { name: 'Details', exact: true })).toBeFocused();
     await expectGeometry(page);
     await page.locator('#updates').click();
     await expect(page.getByRole('menu')).toBeVisible();
@@ -360,4 +372,50 @@ test('dispose clears running timers, listeners, observers and pending positionin
   await page.locator('#updates').click();
   await page.keyboard.press('ArrowDown');
   expect(await page.evaluate(() => window.selections)).toEqual([]);
+});
+
+test('Details preserves view across polls and menu close; later jobs replace receipts and reset the view', async ({ page }, info) => {
+  await mount(page);
+  await page.evaluate(() => window.publish());
+  await page.getByRole('button', { name: 'Details', exact: true }).click();
+  await page.evaluate(() => window.publish({ steps: [{ id: 'pi-self', command: { command: 'pi', args: ['update'] },
+    receipt: { status: 'success', exitCode: 0, stdout: 'old command receipt' } }] }));
+  await expect(page.getByLabel('Command results', { exact: true })).toContainText('old command receipt');
+  await page.locator('#updates').click();
+  await page.keyboard.press('Escape');
+  await expect(card(page)).toHaveAttribute('data-details', 'true');
+  await page.getByRole('button', { name: 'Back to progress' }).click();
+  await page.getByRole('button', { name: 'Details', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Back to progress' })).toBeFocused();
+  await capture(page, info, 'running-details-back');
+  const accessibility = await new AxeBuilder({ page }).include('.sidebar-update-progress').analyze();
+  expect(accessibility.violations).toEqual([]);
+  await page.evaluate(() => window.publish({ jobId: 'job-b', state: 'launching', stdout: '', steps: [{ id: 'webui', command: { command: 'npm', args: ['update', '-g'] } }] }));
+  await expect(card(page)).toHaveAttribute('data-details', 'false');
+  await page.getByRole('button', { name: 'Details', exact: true }).click();
+  await expect(page.getByLabel('Command results', { exact: true })).not.toContainText('old command receipt');
+  await expect(page.getByLabel('Command results', { exact: true })).toContainText('"npm" "update" "-g"');
+});
+
+test('unchanged retains bounded escaped receipts only in Details and can be restored after dismissal', async ({ page }, info) => {
+  await mount(page);
+  await page.evaluate(() => window.publish({ state: 'unchanged', completedSteps: 3,
+    steps: [{ id: 'webui', command: { command: 'npm', args: ['update', '-g'] },
+      receipt: { status: 'unchanged', exitCode: 0, stdout: 'x'.repeat(9000) + '<script>bad()</script>' } }] }, 'No changes.'));
+  await capture(page, info, 'minimal-unchanged');
+  expect((await card(page).innerText()).split(/\n+/)).toEqual(['Already up to date', 'Pi and extensions + WebUI', 'Details', 'Dismiss']);
+  const accessibility = await new AxeBuilder({ page }).include('.sidebar-update-progress').analyze();
+  expect(accessibility.violations).toEqual([]);
+  await page.getByRole('button', { name: 'Dismiss update result' }).click();
+  await page.locator('#updates').click();
+  await page.getByRole('button', { name: 'Back to progress' }).click();
+  await page.getByRole('button', { name: 'Details', exact: true }).click();
+  await expect(page.getByLabel('Command results', { exact: true })).toContainText('webui: unchanged · exit 0');
+  await expect(page.getByLabel('Command results', { exact: true })).toContainText('<script>bad()</script>');
+  await expect(card(page).locator('script')).toHaveCount(0);
+  expect((await page.getByLabel('Command results', { exact: true }).textContent()).length).toBeLessThan(2200);
+  await expect(timing(page)).toBeVisible();
+  await expect(page.locator('.sidebar-update-progress-result')).toHaveText('No changes.');
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('button', { name: 'Details', exact: true })).toBeFocused();
 });

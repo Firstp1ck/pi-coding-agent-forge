@@ -9514,7 +9514,7 @@ function renderUpdateNotification(status = latestUpdateStatus, { force = false }
   if (elements.updateNotificationTitle) elements.updateNotificationTitle.textContent = items.length === 1 ? `${items[0]} available` : "Pi updates available";
   if (elements.updateNotificationMessage) {
     const message = canRunUpdate
-      ? "Choose Pi or Web UI separately. Confirm the exact native command and installation before it runs."
+      ? "Choose Pi or Web UI to start its update."
       : "Updates must start locally, with no other update in progress. Open a version tag for status and recovery guidance.";
     elements.updateNotificationMessage.textContent = message;
   }
@@ -9717,25 +9717,31 @@ function renderSidebarUpdateMenu() {
     || sidebarUpdateTarget || "all";
   const job = nativeUpdateJob(target);
   const status = componentUpdateStatusText(target);
-  const receipts = (job?.receipts || []).map((receipt) => [
-    `${receipt.id}: ${receipt.status || "unknown"}`,
-    ...[receipt.stdout, receipt.stderr, receipt.error].filter(Boolean).map((text) => String(text).slice(-600)),
-  ].join("\n"));
+  const readOnlyFailure = (job?.receipts || []).some((receipt) => receipt.status === "failed"
+    && /\bEROFS\b|read-only file system/i.test([receipt.stdout, receipt.stderr, receipt.error].filter(Boolean).join("\n")));
+  const summary = job?.phase === "partial" ? "Some commands completed; others failed."
+    : job?.phase === "failed" ? "The update command failed. See Details before retrying." : status.text;
+  const resultText = readOnlyFailure
+    ? `${summary} The installation is read-only. Run the update outside the preview or sandbox.` : summary;
   let disabledReason = "";
   if (componentUpdateButtonState(target).disabled) {
     disabledReason = latestUpdateStatus?.canRunUpdate === false && !latestUpdateStatus?.updateInProgress && !job
       ? "Updates can only be started from localhost."
-      : componentUpdateStartInProgress ? "Preparing or confirming an update."
+      : componentUpdateStartInProgress ? "Preparing an update."
       : "Wait for the current update or resolve its reported status before starting another.";
   }
   sidebarUpdateMenu.update({
     busy: componentUpdateStartInProgress || anyComponentUpdateRunning() || Boolean(latestUpdateStatus?.updateInProgress),
     disabledReason,
-    statusText: sidebarUpdateError || [status.text, ...receipts].filter(Boolean).join("\n"),
+    statusText: sidebarUpdateError || resultText,
     statusTone: sidebarUpdateError ? "error" : status.level,
     progress: job ? {
       ...job.progress,
       jobId: job.transactionId,
+      steps: (job.plan?.targets || []).map((item) => ({
+        ...item,
+        receipt: (job.receipts || []).find((receipt) => receipt.id === item.id),
+      })),
       state: nativeJobPollError || latestUpdateStatus?.nativeJobDiscoveryError ? "unknown" : job.phase,
       label: componentUpdateLabel(target),
       totalSteps: job.progress?.totalSteps ?? job.plan?.targets?.length ?? 1,
@@ -9810,20 +9816,6 @@ function syncComponentUpdatePolling() {
   }
 }
 
-function componentUpdateConfirmationText(plan) {
-  const commands = (plan.targets || []).map((item) => [
-    `${item.id}${item.installedRoot ? ` at ${item.installedRoot}` : ""}`,
-    ...(item.coveredInstallations || []).map((covered) => `Includes ${covered.id} at ${covered.installedRoot}`),
-    [item.command.command, ...item.command.args].map((part) => JSON.stringify(part)).join(" "),
-  ].join("\n")).join("\n\n");
-  return [
-    `Update ${componentUpdateLabel(plan.requested)}?`,
-    commands,
-    plan.refusals?.length ? `Installation notes: ${plan.refusals.join(" · ")}` : "",
-    "Restart Web UI after the update to load the updated code.",
-  ].filter(Boolean).join("\n\n");
-}
-
 async function startComponentUpdate(target) {
   if (componentUpdateStartInProgress) return;
   const label = componentUpdateLabel(target);
@@ -9845,16 +9837,6 @@ async function startComponentUpdate(target) {
   if (plan?.requested !== target || !plan.transactionId || !plan.digest || !Array.isArray(plan.targets) || !plan.targets.length) {
     sidebarUpdateError = "Update preview is incomplete; no command was launched.";
     addEvent(sidebarUpdateError, "error");
-    componentUpdateStartInProgress = false;
-    renderComponentUpdateDialogs();
-    return;
-  }
-  const confirmed = await appConfirmText(componentUpdateConfirmationText(plan), {
-    affected: plan.targets.map((item) => item.installedRoot ? `${item.id}: ${item.installedRoot}` : item.id).join(" · "),
-    confirmLabel: `Run ${label} update`,
-    danger: false,
-  });
-  if (!confirmed) {
     componentUpdateStartInProgress = false;
     renderComponentUpdateDialogs();
     return;

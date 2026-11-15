@@ -43,7 +43,7 @@ test.afterAll(async () => {
   await rm(tempRoot, { recursive: true, force: true });
 });
 
-test("Pi and Web UI actions confirm independent native targets and show durable receipts", async ({ page }) => {
+test("Pi and Web UI actions start independent native targets and show durable receipts", async ({ page }) => {
   const requests = [];
   const jobs = { pi: null, webui: null };
   const status = () => ({ updateAvailable: true, updateInProgress: Object.values(jobs).some((job) => job?.phase === "running"), canRunUpdate: !Object.values(jobs).some((job) => job?.phase === "running"), nativeJobs: jobs, nativeJobDiscoveryError: "", pi: { checked: true, currentVersion: "0.87.1", activeRuntimeVersion: "0.80.10", pathInstallationVersion: "0.87.1", latestVersion: "0.88.0", updateAvailable: true }, webui: { checked: true, currentVersion: "0.8.1", latestVersion: "0.8.2", updateAvailable: true } });
@@ -69,10 +69,6 @@ test("Pi and Web UI actions confirm independent native targets and show durable 
   await page.goto(baseURL);
   await page.locator("#piVersionButton").click();
   await page.locator("#piComponentUpdateButton").click();
-  await expect(page.locator("#confirmationSummary")).toContainText("/safe/path-pi/cli.js");
-  await expect(page.locator("#confirmationSummary")).toContainText("/safe/path-pi/cli.js");
-  await expect(page.locator("#confirmationSummary")).toContainText("Restart Web UI after the update");
-  await page.locator("#confirmationConfirmButton").click();
   await expect(page.locator("#piComponentUpdateStatus")).toContainText("fixture-pi");
   await expect(page.locator("#piComponentUpdateStatus")).toHaveAttribute("data-update-running");
   jobs.pi = { ...jobs.pi, phase: "unchanged", receipts: [{ id: "pi", status: "unchanged", stdout: "Already current", stderr: "" }] };
@@ -83,11 +79,7 @@ test("Pi and Web UI actions confirm independent native targets and show durable 
   await expect(page.locator("#updateNotification")).toBeHidden();
   await page.locator("#webuiVersionButton").click();
   await page.locator("#webuiComponentUpdateButton").click();
-  await expect(page.locator("#confirmationSummary")).toContainText("/safe/npm/webui");
-  await expect(page.locator("#confirmationSummary")).toContainText("/safe/agent/npm/webui");
-  await expect(page.locator("#confirmationSummary")).toContainText("/safe/path-pi/cli.js");
-  await expect(page.locator("#confirmationSummary")).toContainText("Project installation needs manual update");
-  await page.locator("#confirmationConfirmButton").click();
+  await expect.poll(() => jobs.webui?.transactionId).toBe("fixture-webui");
   jobs.webui = { ...jobs.webui, phase: "partial", outcome: "partial", receipts: [{ id: "webui:npm-global", status: "changed", stdout: "updated" }, { id: "webui:pi-user", status: "failed", stderr: "fixture failure" }], verifiedTargets: [{ id: "webui:npm-global", status: "healthy" }] };
   await expect(page.locator("#webuiComponentUpdateStatus")).toContainText("partial result", { timeout: 8_000 });
   await expect(page.locator("#webuiComponentUpdateOutput")).toContainText("fixture failure");
@@ -117,7 +109,6 @@ test("ambiguous apply observes confirmed ID before authoritative discovery clear
     await page.goto(baseURL);
     await page.locator("#piVersionButton").click();
     await page.locator("#piComponentUpdateButton").click();
-    await page.locator("#confirmationConfirmButton").click();
     await expect(page.locator("#piComponentUpdateButton")).toBeDisabled();
     await expect(page.locator("#piComponentUpdateStatus")).toContainText("uncertain-pi-job");
     assert.equal(applyCount, 1, "no second apply before job inspection");
