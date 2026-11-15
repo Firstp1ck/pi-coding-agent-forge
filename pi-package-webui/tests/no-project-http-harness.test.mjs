@@ -302,8 +302,8 @@ await import(${JSON.stringify(pathToFileURL(fakePi).href)});
           const value = await health();
           return value?.webuiPid !== retiringPid && value;
         });
+        // The detached replacement discards stdio; verify its authoritative tab state.
         assert.deepEqual(await tabs(), [], "missing owned restore must not fall back to startup project");
-        assert.match(output.join(""), /owned working directory is missing/);
         await rename(unavailable, lone.cwd);
       }
     }
