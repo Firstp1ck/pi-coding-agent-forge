@@ -54,6 +54,13 @@ test('one busy submission matches Enter and changing behavior preserves the draf
   await expect(page.locator('.focused-composer-controls')).toBeHidden();
 });
 
+async function assertFooterFocusSurvivesRefresh(page, trigger) {
+  const previous = await trigger.elementHandle();
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expect.poll(() => previous.evaluate(node => node.isConnected)).toBe(false);
+  await expect(trigger).toBeFocused();
+}
+
 test('footer scoped-model Escape restores focus and preserves the draft', async ({ page, ownership }) => {
   await ready(page, ownership);
   const model = page.locator('#statusBar .footer-model.footer-meta-action, #statusBar .footer-tui-model');
@@ -65,6 +72,7 @@ test('footer scoped-model Escape restores focus and preserves the draft', async 
   await page.keyboard.press('Escape');
   await expect(scoped).toHaveCount(0);
   await expect(model).toBeFocused();
+  await assertFooterFocusSurvivesRefresh(page, model);
   await expect(input).toHaveValue('Retain this draft');
 });
 
@@ -80,6 +88,7 @@ test('footer effort Escape restores focus and preserves the draft', async ({ pag
   await page.keyboard.press('Escape');
   await expect(thinking).toHaveCount(0);
   await expect(effort).toBeFocused();
+  await assertFooterFocusSurvivesRefresh(page, effort);
   await expect(input).toHaveValue('Retain this draft');
 });
 
@@ -103,7 +112,12 @@ test('effective footer effort and all-model search preserve draft and exact targ
   await expect(effort).toContainText('high');
   await effort.click();
   await expect(thinking.getByRole('option', { name: 'high', exact: true })).toHaveAttribute('aria-selected', 'true');
+  await expect(thinking.getByRole('option', { name: 'high', exact: true })).toBeFocused();
   await page.screenshot({ path: info.outputPath('effective-footer-effort.png') });
+  await page.keyboard.press('Escape');
+  await expect(effort).toBeFocused();
+  await effort.press('Enter');
+  await expect(thinking.getByRole('option', { name: 'high', exact: true })).toBeFocused();
   await page.keyboard.press('Escape');
   await expect(effort).toBeFocused();
 

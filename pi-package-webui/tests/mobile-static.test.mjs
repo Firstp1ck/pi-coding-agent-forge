@@ -2524,7 +2524,7 @@ assert.match(server, /url\.pathname === "\/api\/commands" && req\.method === "GE
 assert.match(server, /WEBUI_TUI_NATIVE_PARITY\.json/, "server should load the native parity matrix");
 assert.match(server, /url\.pathname === "\/api\/native-parity" && req\.method === "GET"/, "server should expose the native parity matrix endpoint");
 assert.match(server, /function safeRpcResponse\(tab, command/, "server should provide stopped-RPC fallbacks for refresh endpoints");
-assert.match(server, /function primeTabRpc\(tab\)/, "server should prime new terminal RPC state before returning created tabs");
+assert.match(server, /function primeTabRpc\(tab, \{ strict = false \} = \{\}\)/, "server should prime new terminal RPC state before returning created tabs");
 assert.match(server, /specific Web UI action or final-output cards/, "server feedback-learning prompt should cover final outputs as well as actions");
 assert.match(server, /function formatActionFeedbackLearningPrompt\(items\)/, "server should convert feedback into a LEARNING prompt");
 assert.match(server, /url\.pathname === "\/api\/action-feedback" && req\.method === "POST"[\s\S]*?handleActionFeedback\(tab, body\)/, "POST /api/action-feedback should trigger the feedback-learning prompt");

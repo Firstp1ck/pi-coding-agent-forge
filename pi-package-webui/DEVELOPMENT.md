@@ -16,6 +16,18 @@ Contributor-only implementation, API, architecture, testing, and maintenance inf
 
 Run the `interaction-*` browser specs together with existing focused-shell, session-ownership, launcher and mobile coverage. `native-session-choice-owner.test.mjs` exercises deferred responses against the actual application function. Browser fixtures use disposable state and fake Pi; the busy-submission test records HTTP delivery metadata while holding a real fixture stream, because fake Pi does not implement upstream busy prompt delivery.
 
+## No Project lifecycle and compact layout
+
+`POST /api/tabs` accepts `{workspaceKind:"no-project"}` without a client cwd or session selector. `lib/server/no-project-workspaces.mjs` allocates a private exclusive UUID directory under the resolved agent root's `webui/no-project`, validates its canonical identity, and filters inherited session-selection and initial-input arguments before launch. Tab metadata carries `workspaceKind` and `noProjectId` alongside the physical cwd. Supervisor metadata, private restart handoffs and saved workspaces preserve those fields. Resume retains the original directory. Missing or mismatched owned directories fail validation; closing a tab never deletes its directory.
+
+For No Project tabs, `/api/new-session` and exact `/new` return `data.nextTabId`, the fresh `data.tab`, all `data.tabs`, and `data.sourceTab`. The outer response tab remains the source request context. The frontend adopts the new tab only while that originating context is current. The source process, session, draft and files remain intact. Normal project resets retain their existing behavior. Concurrent resets, active work, compaction and natural-conversation admission remain guarded. These directories isolate working files, not shell permissions.
+
+`shell-inspector-resize.mjs` reports committed widths through the shell callback; the app persists the existing browser-local `inspectorWidth`. Effective viewport clamping does not overwrite the saved value. Cancellation restores the pre-drag width, including Escape after focus moves. `focused-composer-disclosure.mjs` positions the original More tray and Options menu without taking over dispatch or visibility. Tooltip portals keep invisible legacy pseudo-elements from extending the tray. The overview uses natural card height and a two-column layout where needed; constrained windows scroll the whole card host instead of clipping its content.
+
+The compact application hides its duplicate model/effort strip and retains the busy submission selector. Footer controls and options have stable focus keys across footer replacement. The effort picker focuses its selected value before falling back to the first enabled option. Classic and mobile retain their established settings controls.
+
+Verification lives in `no-project-workspaces.test.mjs`, `no-project-http-harness.test.mjs`, `update-tab-restore-harness.test.mjs`, and the No Project, compact-layout, composer-disclosure, More, footer and inspector-resize browser specs. All use disposable state and fake Pi; they do not establish real-provider or Windows filesystem parity.
+
 ## Shell ownership
 
 Classic and mobile adapters in `public/app.js` share five flat ES modules:

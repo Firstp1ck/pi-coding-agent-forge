@@ -1441,6 +1441,7 @@ let footerModelPickerOpen = false;
 let footerModelPickerOpener = "composer";
 let footerModelApplyInFlight = false;
 let footerThinkingPickerOpen = false;
+let footerThinkingPickerFocusTarget = null;
 let footerAutoCompactionToggleInFlight = false;
 let footerBranchPickerOpen = false;
 let footerBranchPickerState = { loading: false, error: "", branches: [], current: "", root: "", repoRoot: "", currentWorktreePath: "", defaultWorktreesRoot: "", worktrees: [], occupiedBranches: [], switching: "", switchingKey: "", tabId: null };
@@ -2684,6 +2685,9 @@ async function invokeFocusedTool(captured) {
 }
 
 function syncFocusedComposerDisclosure() {
+  if (focusedShell?.active && document.body.classList.contains("composer-actions-open")) {
+    for (const node of elements.composerActionsPanel.querySelectorAll('[data-tooltip]')) bindStyledTooltipEvents(node);
+  }
   focusedComposerDisclosure?.update({
     enabled: focusedShell?.active === true,
     open: document.body.classList.contains("composer-actions-open"),
@@ -23535,6 +23539,7 @@ function setFooterModelPickerOpen(open, { restoreFocus = false } = {}) {
 function setFooterThinkingPickerOpen(open, { restoreFocus = false } = {}) {
   const wasOpen = footerThinkingPickerOpen;
   footerThinkingPickerOpen = !!open;
+  footerThinkingPickerFocusTarget = footerThinkingPickerOpen ? activeTabContext() : null;
   if (footerThinkingPickerOpen) {
     footerModelPickerOpen = false;
     footerBranchPickerOpen = false;
@@ -23549,9 +23554,6 @@ function setFooterThinkingPickerOpen(open, { restoreFocus = false } = {}) {
   document.body.classList.toggle("footer-model-picker-open", isFooterPickerOpen());
   renderFooter();
   updateFooterModelPickerPosition();
-  if (footerThinkingPickerOpen) queueMicrotask(() => {
-    elements.statusBar.querySelector('.footer-thinking-picker [aria-selected="true"]:not(:disabled), .footer-thinking-picker button:not(:disabled)')?.focus({ preventScroll: true });
-  });
   if (wasOpen && !footerThinkingPickerOpen) {
     scheduleDeferredUiFlushAfterDropdownClose();
     if (restoreFocus) queueMicrotask(() => elements.statusBar.querySelector(".footer-thinking.footer-meta-action")?.focus({ preventScroll: true }));
@@ -24915,6 +24917,7 @@ function renderFooterThinkingPicker() {
     const supported = thinkingLevelSupportedByActiveModel(level);
     const button = make("button", `footer-model-option${selected ? " active" : ""}${supported ? "" : " unsupported"}`);
     button.type = "button";
+    button.dataset.footerThinkingLevel = level;
     button.setAttribute("role", "option");
     button.setAttribute("aria-selected", selected ? "true" : "false");
     button.title = supported ? `Set thinking effort to ${level}` : `${level} is not supported by the active model`;
@@ -25394,7 +25397,10 @@ async function changeActiveTabCwd() {
 function footerControlKey(node) {
   if (node?.id) return `footer:id:${node.id}`;
   if (node?.dataset?.footerModelKey) return `footer:model:${node.dataset.footerModelKey}`;
+  if (node?.dataset?.footerThinkingLevel) return `footer:thinking:${node.dataset.footerThinkingLevel}`;
   if (node?.matches?.(".footer-tui-cwd")) return "footer:cwd";
+  if (node?.matches?.(".footer-model.footer-meta-action, .footer-tui-model")) return "footer:model-trigger";
+  if (node?.matches?.(".footer-thinking.footer-meta-action")) return "footer:thinking-trigger";
   return "";
 }
 
@@ -25410,6 +25416,14 @@ function renderFooter() {
   restoreScopedControlContinuity(elements.statusBar, continuityContextKey, focusSnapshot, (key) => [...elements.statusBar.querySelectorAll("input, textarea, select, button")].find((node) => footerControlKey(node) === key));
   focusedShell?.modelTrigger?.setAttribute("aria-expanded", String(footerModelPickerOpen));
   syncAdvancedFooterModelRovingTabStop();
+  if (footerThinkingPickerFocusTarget) {
+    if (footerThinkingPickerOpen && isCurrentTabContext(footerThinkingPickerFocusTarget)) {
+      const option = elements.statusBar.querySelector('.footer-thinking-picker [aria-selected="true"]:not(:disabled)')
+        || elements.statusBar.querySelector('.footer-thinking-picker button:not(:disabled)');
+      option?.focus({ preventScroll: true });
+    }
+    footerThinkingPickerFocusTarget = null;
+  }
   restoreTooltipContinuity(elements.statusBar, tooltipSnapshot);
   if (shellPreferenceState.value.overviewOpen) scheduleFocusedShellRender();
 }
