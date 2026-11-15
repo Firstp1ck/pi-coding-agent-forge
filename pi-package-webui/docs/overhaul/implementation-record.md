@@ -154,7 +154,11 @@ The overview projects existing owner data and opens canonical actions. It adds n
 
 More opens actions beside its button, with Send at the right. Both composer and footer open the saved scoped-model picker; focus returns to the actual opener. Restoring the footer access is an explicit user-requested exception to the earlier duplicate-model-summary reduction. Sidebar tooltips use the shared top-layer owner instead of clipped pseudo elements. Native single-select dropdowns use app-themed pickers when supported; option ownership and change events remain native.
 
-Component integration passed 52 Chromium cases. The initial combined tests found the sticky prompt covered the overview close control; the parent fixed its stacking order. The corrected four overview journeys and two workflow reachability cases passed. Parent acceptance and independent review remain pending for this unit.
+Verification passed: all 255 package test files, 128 migrated workflow browser cases, 52 component browser cases, 23 composer/overview cases, seven ownership/continuity cases, six final offline/recovery cases, and ten inventory checks. These are separate runs with overlapping cases, not a whole-browser-suite total. Mobile/Classic compatibility passed 17 cases after correcting the icon-count fixture; earlier offline cases were repeated against the final asset graph. The original two-action Changes/Runners budgets remain unchanged.
+
+Round-one Sol reviews found three issues, all repaired by the parent: external-agent counts leaking into selected-session summaries, unavailable agent reporting displayed as zero, and Overview intercepting Options clicks. Overview now uses explicit tab ownership and raw capability metadata; stale refreshes identify prior counts. Compact composer menus stack above the overview. New disposable-app regressions pass. Final round-two review and parent acceptance remain pending.
+
+Captures: [Overview and inspector tabs](screenshots/inspector-overview/overview.png), [themed header picker](screenshots/inspector-overview/section-menu.png), [More actions beside the button](screenshots/inspector-overview/more-actions.png). Final browser assets are app207, adapter CSS10 and PWA184. No dependency exports or ranges changed.
 
 ### Platform limits
 
