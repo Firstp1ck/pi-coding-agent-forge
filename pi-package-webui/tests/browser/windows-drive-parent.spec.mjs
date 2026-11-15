@@ -124,7 +124,7 @@ test("Windows drive Parent flow remains navigation-only, accessible, and cwd-saf
   await expect(page.locator("#promptInput")).toBeFocused();
 
   await page.keyboard.press("Control+k");
-  await page.locator("#commandPaletteInput").fill("Choose directory for new tab");
+  await page.locator("#commandPaletteInput").fill("Choose directory for new thread");
   await page.keyboard.press("Enter");
 
   const dialog = page.locator("#pathPickerDialog");

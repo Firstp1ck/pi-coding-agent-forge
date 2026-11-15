@@ -27,10 +27,10 @@ test('external agents stay outside selected-session overview counts', async ({ p
   const overview = await openOverview(page, ownership);
   const row = agentRow(overview);
   await expect(row).toContainText('0 running · 0 total');
-  await expect(overview.locator('.conversation-overview-title')).toHaveText('Terminal 1');
+  await expect(overview.locator('.conversation-overview-title')).toHaveText('Thread 1');
   await page.screenshot({ path: info.outputPath('external-excluded-from-terminal-1.png') });
   await page.locator(`#tabBar [data-tab-id="${ownership.tabs[1].id}"] .terminal-tab-button`).click();
-  await expect(overview.locator('.conversation-overview-title')).toHaveText('Terminal 2');
+  await expect(overview.locator('.conversation-overview-title')).toHaveText('Thread 2');
   await expect(row).toContainText('0 running · 0 total');
   await info.attach('ownership evidence', { body: JSON.stringify({ input: data, actual: await row.innerText() }, null, 2), contentType: 'application/json' });
 });

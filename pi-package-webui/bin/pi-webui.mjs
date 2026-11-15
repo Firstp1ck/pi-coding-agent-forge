@@ -1859,7 +1859,7 @@ async function installOptionalFeaturePackage(featureId, cwd = options.cwd) {
     stdout: result.stdout,
     stderr: result.stderr,
     status: afterStatus,
-    message: `${operation} optional feature package ${packageName}${afterStatus.installedVersion ? ` at ${afterStatus.installedVersion}` : ""} with Pi. Reload the active Pi tab to load new resources.`,
+    message: `${operation} optional feature package ${packageName}${afterStatus.installedVersion ? ` at ${afterStatus.installedVersion}` : ""} with Pi. Reload the active Pi thread to load new resources.`,
   };
 }
 
@@ -2623,7 +2623,7 @@ async function triggerSessionSummary(tab, { refresh = false } = {}) {
   if (!preferences.configured) throw makeHttpError(409, "Session summary setup must be confirmed before generation.");
   const commands = await safeRpcData(tab, { type: "get_commands" }, STATUS_RPC_TIMEOUT_MS);
   const available = Array.isArray(commands.data?.commands) && commands.data.commands.some((command) => String(command?.name || "").replace(/:\d+$/, "") === "summary");
-  if (!commands.ok || !available) throw makeHttpError(409, "The /summary extension command is not loaded in this Pi tab. Reload the tab and retry.");
+  if (!commands.ok || !available) throw makeHttpError(409, "The /summary extension command is not loaded in this Pi thread. Reload the thread and retry.");
   tab.sessionSummary = {
     ...(tab.sessionSummary || {}),
     version: SESSION_SUMMARY_PROTOCOL_VERSION,
@@ -6609,7 +6609,7 @@ function updateTabActivityFromEvent(tab, event) {
 
 function defaultTabTitle(tabIndex) {
   if (options.name) return tabIndex === 1 ? options.name : `${options.name} ${tabIndex}`;
-  return `Terminal ${tabIndex}`;
+  return `Thread ${tabIndex}`;
 }
 
 async function primeTabRpc(tab, { strict = false } = {}) {
@@ -7481,7 +7481,7 @@ async function saveCurrentWorkspaceForReplacement(saveCurrent, tabIds) {
   const descriptors = await restorableTabsForRestart();
   const descriptorIds = new Set(descriptors.map((descriptor) => descriptor.id));
   if (descriptors.length !== tabIds.length || tabIds.some((id) => !descriptorIds.has(id))) {
-    throw makeHttpError(400, `Only ${RESTORE_TAB_LIMIT} open tabs can be saved; close some tabs or choose Load without saving`);
+    throw makeHttpError(400, `Only ${RESTORE_TAB_LIMIT} open threads can be saved; close some threads or choose Load without saving`);
   }
   try {
     return await saveWebuiWorkspace({
@@ -7521,7 +7521,7 @@ async function loadWebuiWorkspace(id, body = {}) {
       }
       if (!openTabsUnchanged(openTabIds)) {
         const savedNote = savedCurrent ? "The current workspace was saved, but " : "";
-        throw makeHttpError(409, `${savedNote}open tabs changed before the workspace could be replaced`);
+        throw makeHttpError(409, `${savedNote}open threads changed before the workspace could be replaced`);
       }
       closedIds = (await closeTabs(openTabIds, { allowEmpty: true })).map((tab) => tab.id);
     }
@@ -7534,7 +7534,7 @@ async function loadWebuiWorkspace(id, body = {}) {
         const tab = await createTab(preflighted);
         idMap[descriptor.id] = tab.id;
       } catch (error) {
-        warnings.push(workspaceLoadWarning(descriptor.id, "tab_create_failed", `Could not restore this tab: ${sanitizeError(error)}`));
+        warnings.push(workspaceLoadWarning(descriptor.id, "tab_create_failed", `Could not restore this thread: ${sanitizeError(error)}`));
       }
     }
     const groups = workspace.groups.map((group) => ({
@@ -8361,7 +8361,7 @@ async function restartTabRpc(tab, reason = "reload", restart = null) {
 }
 
 function rpcUnavailableMessage(tab) {
-  return `Pi RPC process for ${tab?.title || "terminal"} is not running`;
+  return `Pi RPC process for ${tab?.title || "thread"} is not running`;
 }
 
 function fallbackRpcResponse(tab, command, error) {
@@ -9321,7 +9321,7 @@ async function runForkCommand(tab, entryId) {
   });
   const forkTabMeta = tabMeta(forkTab);
   return rpcSuccess("fork", {
-    message: "Forked the current session in a new terminal tab.",
+    message: "Forked the current session in a new thread.",
     text: fork.text || "",
     result: { cancelled: false, text: fork.text || "", sessionFile: fork.sessionFile, targetEntryId: fork.targetEntryId },
     sessionFile: fork.sessionFile,
@@ -9363,7 +9363,7 @@ async function resumeSessionInNewTab(sourceTab, sessionPath) {
     sessionFile: manager.getSessionFile(),
   });
   return rpcSuccess("switch_session", {
-    message: "Resumed selected session in a new terminal tab.",
+    message: "Resumed selected session in a new thread.",
     result: { cancelled: false, sessionFile: manager.getSessionFile() },
     tab: tabMeta(resumedTab),
     tabs: listTabs(),
@@ -9605,7 +9605,7 @@ async function handleNativeSlashCommand(tab, body, req) {
         const created = await createNoProjectResetTab(tab);
         return respondNative("new", {
           status: "succeeded",
-          message: "Started a new No Project conversation in a new tab.",
+          message: "Started a new No Project conversation in a new thread.",
           ...created,
           refresh: ["tabs", "state"],
         });
@@ -9647,7 +9647,7 @@ async function handleNativeSlashCommand(tab, body, req) {
       renameTab(tab, parsed.args, { source: "explicit" });
       return respondNative("name", {
         status: "succeeded",
-        message: `Session and tab name set to: ${tab.title}`,
+        message: `Session and thread name set to: ${tab.title}`,
         tab: tabMeta(tab),
         refresh: ["tabs"],
       });
@@ -9704,7 +9704,7 @@ async function handleNativeSlashCommand(tab, body, req) {
 async function closeTab(id, { allowLast = false } = {}) {
   const tab = tabs.get(id);
   if (!tab) throw makeHttpError(404, `Unknown Pi tab: ${id}`);
-  if (!allowLast && tabs.size <= 1) throw makeHttpError(400, "Cannot close the last Pi tab");
+  if (!allowLast && tabs.size <= 1) throw makeHttpError(400, "Cannot close the last Pi thread");
 
   let restorableState = null;
   if (!options.noSession) {
@@ -10795,10 +10795,10 @@ const server = createServer(async (req, res) => {
     }
 
     if (url.pathname === "/api/workspaces" && req.method === "POST") {
-      if (!tabs.size) throw makeHttpError(400, "A workspace requires at least one open tab");
+      if (!tabs.size) throw makeHttpError(400, "A workspace requires at least one open thread");
       const body = await readJsonBody(req);
       const descriptors = await restorableTabsForRestart();
-      if (!descriptors.length) throw makeHttpError(400, "A workspace requires at least one open tab");
+      if (!descriptors.length) throw makeHttpError(400, "A workspace requires at least one open thread");
       let data;
       try {
         data = await saveWebuiWorkspace({
@@ -10925,7 +10925,7 @@ const server = createServer(async (req, res) => {
       const body = await readJsonBody(req);
       const wanted = String(body.id || "").trim();
       const index = closedRestorableTabs.findIndex((item) => item.id === wanted);
-      if (!wanted || index === -1) throw makeHttpError(404, "That closed tab can no longer be reopened");
+      if (!wanted || index === -1) throw makeHttpError(404, "That closed thread can no longer be reopened");
       const descriptor = closedRestorableTabs[index];
       const tab = await createTab({
         title: descriptor.titleSource === "explicit" || descriptor.titleSource === "auto" ? descriptor.title : undefined,

@@ -84,7 +84,7 @@ test('all twenty catalog identities remain distinguishable from loaded capabilit
   await expect(page.locator('[data-settings-feature]')).toHaveCount(20);
   expect(await page.locator('[data-settings-feature]').evaluateAll(nodes => nodes.map(node => node.dataset.settingsFeature).sort())).toEqual(OPTIONAL_FEATURE_CATALOG.map(feature => feature.featureId).sort());
   await expect(row(page, 'releaseNpm')).toContainText('Installed');
-  await expect(row(page, 'releaseNpm')).toContainText('not loaded in the active tab');
+  await expect(row(page, 'releaseNpm')).toContainText('not loaded in the active thread');
   await expect(row(page, 'releaseNpm').getByRole('button', { name: 'Reload', exact: true })).toBeEnabled();
   await expect(row(page, 'releaseAur')).toContainText('Registration needed');
   await expect(row(page, 'aurReview')).toContainText('Duplicate conflict');

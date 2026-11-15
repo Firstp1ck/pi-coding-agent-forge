@@ -1709,7 +1709,7 @@ let themeCustomizerState = null;
 const TERMINAL_TABS_LAYOUTS = new Set(["top", "left"]);
 const TERMINAL_TABS_LAYOUT_LABELS = { top: "Top bar", left: "Sidebar" };
 const SUBAGENT_OPEN_MODES = new Set(["overlay", "tab"]);
-const SUBAGENT_OPEN_MODE_LABELS = { overlay: "Overlay", tab: "Tab / terminal" };
+const SUBAGENT_OPEN_MODE_LABELS = { overlay: "Overlay", tab: "Thread view" };
 const BUSY_PROMPT_BEHAVIOR_VALUES = new Set(["followUp", "steer"]);
 const BUSY_PROMPT_BEHAVIOR_LABELS = { followUp: "Follow-up", steer: "Steer" };
 const SKILL_USAGE_LIMIT_PER_TAB = 32;
@@ -2323,7 +2323,7 @@ function focusedAttentionSnapshot() {
     const state = tabIndicator(tab).state;
     if (!["blocked", "working", "done"].includes(state)) return [];
     const decisionCount = tabPendingBlockerCount(tab);
-    return [{ id: `tab:${tab.id}`, tabId: tab.id, title: tab.title || "Untitled session", state, decisionCount,
+    return [{ id: `tab:${tab.id}`, tabId: tab.id, title: threadDisplayTitle(tab.title) || "Untitled session", state, decisionCount,
       detail: state === "blocked" ? `${decisionCount} decision${decisionCount === 1 ? "" : "s"} waiting · ${tab.cwd || ""}`
         : state === "done" ? `Finished since last viewed · ${tab.cwd || ""}` : `Pi is running · ${tab.cwd || ""}`,
       target: { lifetime: sessionContext.captureLifetime(tab.id), cwd: tab.cwd || "", completionSerial: activityForTab(tab).completionSerial },
@@ -2400,7 +2400,7 @@ function focusedOverviewSnapshot() {
   }
   if (!usage?.primary && !usage?.secondary) usageItems.push(item("usage-unknown", "Provider limits", "Not loaded", null));
   return {
-    open: true, target, title: tab?.title || "No active session", context: tab?.cwd || "Choose a session to inspect its workspace.",
+    open: true, target, title: threadDisplayTitle(tab?.title) || "No active session", context: tab?.cwd || "Choose a session to inspect its workspace.",
     sections: [
       { id: "workspace", label: "Workspace", items: [
         item("folder", "Folder", tab?.cwd || "Not selected", "view:files"),
@@ -2439,7 +2439,7 @@ function renderFocusedShell() {
     inspectorOpen: !!record && !["home", "settings"].includes(focusedShellState.destination),
     inspectorTitle: record?.label || record?.button?.querySelector(".side-panel-section-label")?.textContent || "",
     inspectorTopics: record && focusedShellState.destination !== "settings" ? focusedInspectorTopics(focusedShellState.destination) : [],
-    title: active?.title || "Start a conversation",
+    title: threadDisplayTitle(active?.title) || "Start a conversation",
     context: !active || active.workspaceKind === "no-project" ? "No Project" : active.cwd || "",
     attentionCount: focusedAttentionSnapshot().items.filter(item => item.state === "blocked").reduce((sum, item) => sum + item.decisionCount, 0),
     finishedCount: focusedAttentionSnapshot().items.filter(item => item.state === "done").length,
@@ -2659,7 +2659,7 @@ function focusedToolsActions() {
   const distinctActions = paletteActions.filter(action => !action.id.startsWith("command:") || !nativeLabels.has(action.label));
   return [...sectionActions, modelShortcuts, modelShortcutsLayout, ...distinctActions.map(action => ({
     ...action,
-    category: action.kind === "Model" ? "Models" : action.kind === "Tab" ? "Sessions" : action.destination === "project" ? "Project" : action.destination === "settings" ? "Settings" : action.destination === "activity" ? "Activity" : "Session",
+    category: action.kind === "Model" ? "Models" : action.kind === "Thread" ? "Sessions" : action.destination === "project" ? "Project" : action.destination === "settings" ? "Settings" : action.destination === "activity" ? "Activity" : "Session",
     available: checkActionTarget(action, context).ok,
     unavailableReason: checkActionTarget(action, context).reason || action.unavailableReason,
   }))];
@@ -2825,7 +2825,7 @@ function mobileRenderSessions() {
     const priority = { blocked: 0, running: 1, failed: 2, completed: 3, idle: 4 };
     return (priority[mobileTabActivityState(a)] ?? 5) - (priority[mobileTabActivityState(b)] ?? 5);
   });
-  const visible = ordered.filter((tab) => !query || [tab.title, tab.cwd, tab.model, mobileTabCwdLabel(tab)].filter(Boolean).join(" ").toLocaleLowerCase().includes(query));
+  const visible = ordered.filter((tab) => !query || [tab.title, threadDisplayTitle(tab.title), tab.cwd, tab.model, mobileTabCwdLabel(tab)].filter(Boolean).join(" ").toLocaleLowerCase().includes(query));
   list.replaceChildren();
   if (!visible.length) {
     mobileSetText(status, tabs.length ? "No sessions match this search." : "No sessions are open. Start one in the current folder or choose a folder.");
@@ -2850,18 +2850,18 @@ function mobileRenderSessions() {
       const row = make("article", `mobile-session-row is-${state}${tab.id === activeTabId ? " is-active" : ""}`);
       const select = mobileButton("", "mobile-session-select", () => mobileSwitchToTab(tab.id, { focus: true }));
       select.setAttribute("aria-current", tab.id === activeTabId ? "page" : "false");
-      select.setAttribute("aria-label", `${tab.title || "Untitled session"}, ${state}${tab.id === activeTabId ? ", current session" : ""}`);
+      select.setAttribute("aria-label", `${threadDisplayTitle(tab.title) || "Untitled session"}, ${state}${tab.id === activeTabId ? ", current session" : ""}`);
       select.append(
         make("span", "mobile-state-glyph", state === "blocked" ? "!" : state === "running" ? "●" : state === "failed" ? "×" : state === "completed" ? "✓" : "○"),
         make("span", "mobile-session-copy", ""),
       );
       const copy = select.querySelector(".mobile-session-copy");
-      copy.append(make("strong", undefined, tab.title || "Untitled session"), make("span", "muted", `${mobileTabCwdLabel(tab)} · ${state}`));
+      copy.append(make("strong", undefined, threadDisplayTitle(tab.title) || "Untitled session"), make("span", "muted", `${mobileTabCwdLabel(tab)} · ${state}`));
       const more = mobileButton("Close", "mobile-row-action", (event) => {
         event.stopPropagation();
         void closeTerminalTab(tab.id);
       });
-      more.setAttribute("aria-label", `Close ${tab.title || "session"}`);
+      more.setAttribute("aria-label", `Close ${threadDisplayTitle(tab.title) || "session"}`);
       row.append(select, more);
       section.append(row);
     }
@@ -2896,7 +2896,7 @@ function mobileRenderActivity() {
     for (const item of items) {
       const { tab, state, itemKey, kind } = item;
       const row = make("article", `mobile-activity-item is-${state}`);
-      const heading = kind === "workflow" ? "Workflow run" : kind === "app" ? "App runner" : tab.title || "Untitled session";
+      const heading = kind === "workflow" ? "Workflow run" : kind === "app" ? "App runner" : threadDisplayTitle(tab.title) || "Untitled session";
       const detail = kind === "workflow" ? `${workflowRunningCountForTab(tab.id)} workflow run${workflowRunningCountForTab(tab.id) === 1 ? "" : "s"} active` : kind === "app" ? "App runner is active" : state === "blocked" ? `${tabPendingBlockerCount(tab)} decision${tabPendingBlockerCount(tab) === 1 ? "" : "s"} need attention` : `${mobileTabCwdLabel(tab)} · ${state}`;
       row.append(make("strong", undefined, heading), make("p", "muted", detail));
       const actions = make("div", "mobile-activity-actions");
@@ -2919,7 +2919,7 @@ function mobileRenderActivity() {
     }
     list.append(section);
   }
-  mobileSetText(status, total ? `${total} work item${total === 1 ? "" : "s"}; opening an item uses its existing tab, blocker, workflow, or app-runner action.` : "No current, failed, or recently completed work. Sessions stay available in Sessions.");
+  mobileSetText(status, total ? `${total} work item${total === 1 ? "" : "s"}; opening an item uses its existing thread, blocker, workflow, or app-runner action.` : "No current, failed, or recently completed work. Sessions stay available in Sessions.");
 }
 
 function mobileRenderProject() {
@@ -3141,7 +3141,7 @@ function mobileRenderActionSheet() {
       mobileButton("Queue", "mobile-more-topic", () => mobileSetSurfacePage("queue"), { continuityKey: "actions:queue" }),
     );
     if (isAbortAvailable()) root.append(mobileButton("Abort active run…", "danger mobile-abort-confirm", async () => {
-      const confirmed = await appConfirm({ title: "Abort active run?", summary: "Pi will be told to stop the active run. Any partial answer remains in the canonical transcript.", affected: "This active tab only", undoable: false, confirmLabel: "Abort run" });
+      const confirmed = await appConfirm({ title: "Abort active run?", summary: "Pi will be told to stop the active run. Any partial answer remains in the canonical transcript.", affected: "This active thread only", undoable: false, confirmLabel: "Abort run" });
       if (confirmed) abortActiveRun({ source: "mobile confirm" });
     }, { continuityKey: "actions:abort" }));
     return;
@@ -3293,7 +3293,7 @@ function mobileRenderLifecycle() {
   }
   if (signature === mobileLifecycleSignature) return;
   mobileLifecycleSignature = signature;
-  const session = active?.title || "Current session";
+  const session = threadDisplayTitle(active?.title) || "Current session";
   announcer.textContent = offline ? "Pi Web UI is offline; your draft remains in the composer." : state === "blocked" ? `${session} needs your decision.` : state === "running" ? `${session} is running.` : state === "completed" ? `${session} completed.` : state === "failed" ? `${session} failed. Review the session for details.` : `${session} is idle.`;
 }
 
@@ -4549,8 +4549,8 @@ const GIT_WORKFLOW_CREATE_PR_TOOLTIP = [
   "2. Read dev/COMMIT/staged-branch-name.txt.",
   "3. Let you confirm or edit the generated branch name.",
   "4. Create or open a Git worktree for that branch instead of switching this checkout.",
-  "5. Copy staged changes and commit message files into the worktree, then switch to its tab.",
-  "6. Commit short, long, or typed input in the worktree tab.",
+  "5. Copy staged changes and commit message files into the worktree, then switch to its thread.",
+  "6. Commit short, long, or typed input in the worktree thread.",
   "7. Push and Create PR will push upstream, run /pr, let you review, then run gh pr create.",
 ].join("\n");
 const GIT_WORKFLOW_MANUAL_BRANCH_TOOLTIP = [
@@ -4559,8 +4559,8 @@ const GIT_WORKFLOW_MANUAL_BRANCH_TOOLTIP = [
   "2. Prefill a branch from the commit message if possible.",
   "3. Let you type or edit the type/feature-name branch name.",
   "4. Create or open a Git worktree for that branch instead of switching this checkout.",
-  "5. Copy staged changes and commit message files into the worktree, then switch to its tab.",
-  "6. Commit short, long, or typed input in the worktree tab.",
+  "5. Copy staged changes and commit message files into the worktree, then switch to its thread.",
+  "6. Commit short, long, or typed input in the worktree thread.",
   "7. Push and Create PR will push upstream, run /pr, let you review, then run gh pr create.",
 ].join("\n");
 const GIT_BRANCH_TYPE_SUGGESTIONS = ["feat", "fix", "change", "perf", "test", "chore", "refactor", "docs", "style", "build", "ci", "revert"];
@@ -5057,10 +5057,10 @@ function reconcileControlDeckHosts() {
     const label = `${placement[0].toUpperCase()}${placement.slice(1)}`;
     const statusText = sidebarPresentation
       ? placement === "right"
-        ? `${label} · Control Deck right, terminal/tabs left`
+        ? `${label} · Control Deck right, threads left`
         : placement === "left"
-          ? `${label} · Control Deck left, terminal/tabs right`
-          : `${label} · Control Deck on both sides, terminal/tabs right`
+          ? `${label} · Control Deck left, threads right`
+          : `${label} · Control Deck on both sides, threads right`
       : `${label} · saved in WebUI layout`;
     if (elements.controlDeckPlacementStatus.textContent !== statusText) elements.controlDeckPlacementStatus.textContent = statusText;
   }
@@ -6213,7 +6213,7 @@ function setTerminalTabsLayout(layout, { persist = true, announce = false } = {}
   renderTerminalTabsLayoutControl();
   reconcileControlDeckHosts?.();
   requestAnimationFrame(syncTerminalTabsSidebarWidthForViewport);
-  if (announce) addEvent(`terminal tabs layout changed to ${terminalTabsLayoutStatusText(next).toLowerCase()}`);
+  if (announce) addEvent(`thread list layout changed to ${terminalTabsLayoutStatusText(next).toLowerCase()}`);
 }
 
 function restoreTerminalTabsLayoutSetting() {
@@ -6547,7 +6547,7 @@ function installLoadedWorkspaceGroups(groups, idMap = {}) {
 }
 
 function workspaceRestoreSummary(restoredCount, warnings) {
-  const restored = `${restoredCount} tab${restoredCount === 1 ? "" : "s"} restored`;
+  const restored = `${restoredCount} thread${restoredCount === 1 ? "" : "s"} restored`;
   if (!warnings.length) return restored;
   return `${restored}; ${warnings.length} warning${warnings.length === 1 ? "" : "s"}`;
 }
@@ -6571,7 +6571,7 @@ async function hydrateLoadedWorkspaceActiveTab(requestedTabId) {
 
 async function saveWebuiWorkspace({ triggerButton = elements.workspaceSaveButton } = {}) {
   if (!tabs.length) return;
-  const promptedName = await appPromptText({ title: "Save workspace", summary: "Captures all open tabs, sessions, groups, and the active tab.", defaultValue: workspaceDefaultName(), confirmLabel: "Save workspace" });
+  const promptedName = await appPromptText({ title: "Save workspace", summary: "Captures all open threads, sessions, groups, and the active thread.", defaultValue: workspaceDefaultName(), confirmLabel: "Save workspace" });
   if (promptedName === null) return;
   const body = {
     name: promptedName.trim() || workspaceDefaultName(),
@@ -6589,7 +6589,7 @@ async function saveWebuiWorkspace({ triggerButton = elements.workspaceSaveButton
       const overwrite = await appConfirm({
         title: "Overwrite saved workspace?",
         summary: `A workspace named “${body.name || workspaceDefaultName()}” already exists.`,
-        affected: "The existing saved workspace will be replaced with the current tabs and groups.",
+        affected: "The existing saved workspace will be replaced with the current threads and groups.",
         confirmLabel: "Overwrite",
       });
       if (!overwrite) return;
@@ -6599,7 +6599,7 @@ async function saveWebuiWorkspace({ triggerButton = elements.workspaceSaveButton
     setSavedWorkspaces(data.workspaces);
     const saved = data.workspace;
     const evicted = Array.isArray(data.evicted) ? data.evicted : [];
-    const message = `Saved workspace ${saved?.name || "workspace"} (${saved?.tabCount || tabs.length} tabs).`;
+    const message = `Saved workspace ${saved?.name || "workspace"} (${saved?.tabCount || tabs.length} threads).`;
     settleUndoToast(evicted.length ? `${message} Oldest saved workspace removed.` : message);
     addEvent(message, "success");
     if (evicted.length) addEvent(`Removed ${evicted.length} oldest saved workspace${evicted.length === 1 ? "" : "s"} to keep the saved-workspace limit.`, "warn");
@@ -6631,8 +6631,8 @@ function renderWorkspaceLoadDialog() {
   }
   if (!savedWorkspaces.length) {
     status.textContent = tabs.length
-      ? "No saved workspaces yet. Use Save workspace to capture the current tabs."
-      : "No saved workspaces yet. Open tabs, then use Save workspace.";
+      ? "No saved workspaces yet. Use Save workspace to capture the current threads."
+      : "No saved workspaces yet. Open threads, then use Save workspace.";
     return;
   }
   status.textContent = `${savedWorkspaces.length} saved workspace${savedWorkspaces.length === 1 ? "" : "s"} available.`;
@@ -6643,7 +6643,7 @@ function renderWorkspaceLoadDialog() {
     title.title = workspace.name;
     const detail = [
       formatDate(workspace.savedAt),
-      `${workspace.tabCount || 0} tab${workspace.tabCount === 1 ? "" : "s"}`,
+      `${workspace.tabCount || 0} thread${workspace.tabCount === 1 ? "" : "s"}`,
       workspace.groupCount ? `${workspace.groupCount} group${workspace.groupCount === 1 ? "" : "s"}` : "",
       Array.isArray(workspace.cwds) && workspace.cwds.length ? normalizeDisplayPath(workspace.cwds[0]) : "",
     ].filter(Boolean).join(" · ");
@@ -6717,7 +6717,7 @@ function finishWorkspaceReplacement(choice = null) {
 function workspaceReplacementTabRow(tab) {
   const indicator = tabIndicator(tab);
   const item = make("li", `workspace-replace-current-tab activity-${indicator.state}`);
-  const title = make("strong", "workspace-replace-current-tab-title", tab.title || "Untitled tab");
+  const title = make("strong", "workspace-replace-current-tab-title", threadDisplayTitle(tab.title) || "Untitled thread");
   const detail = [
     tab.id === activeTabId ? "Active" : "",
     indicator.label,
@@ -6750,10 +6750,10 @@ function chooseWorkspaceReplacement(workspace) {
   }
   if (activeWorkspaceReplacementResolve) finishWorkspaceReplacement(null);
   if (elements.workspaceReplaceTargetName) elements.workspaceReplaceTargetName.textContent = workspace?.name || "this workspace";
-  if (elements.workspaceReplaceCurrentTabsCount) elements.workspaceReplaceCurrentTabsCount.textContent = `${tabs.length} tab${tabs.length === 1 ? "" : "s"}`;
+  if (elements.workspaceReplaceCurrentTabsCount) elements.workspaceReplaceCurrentTabsCount.textContent = `${tabs.length} thread${tabs.length === 1 ? "" : "s"}`;
   elements.workspaceReplaceCurrentTabsList?.replaceChildren(...tabs.map(workspaceReplacementTabRow));
   if (elements.workspaceReplaceSaveName) elements.workspaceReplaceSaveName.value = workspaceDefaultName();
-  if (elements.workspaceReplaceDialogStatus) elements.workspaceReplaceDialogStatus.textContent = "Cancel leaves every current tab unchanged.";
+  if (elements.workspaceReplaceDialogStatus) elements.workspaceReplaceDialogStatus.textContent = "Cancel leaves every current thread unchanged.";
   return new Promise((resolve) => {
     activeWorkspaceReplacementResolve = resolve;
     dialog.showModal();
@@ -6798,7 +6798,7 @@ async function loadWebuiWorkspace(workspaceId, { triggerButton = null } = {}) {
       const overwrite = await appConfirm({
         title: "Overwrite saved workspace?",
         summary: `A workspace named “${saveCurrent.name || workspaceDefaultName()}” already exists.`,
-        affected: "The existing saved workspace will be replaced before the current tabs are closed.",
+        affected: "The existing saved workspace will be replaced before the current threads are closed.",
         confirmLabel: "Overwrite & load",
       });
       if (!overwrite) return "cancelled";
@@ -6819,11 +6819,11 @@ async function loadWebuiWorkspace(workspaceId, { triggerButton = null } = {}) {
     await hydrateLoadedWorkspaceActiveTab(data.activeTabId);
     const warnings = Array.isArray(data.warnings) ? data.warnings : [];
     const restoredCount = Array.isArray(data.tabs) ? data.tabs.length : tabs.length;
-    const replacement = closedIds.length ? `Replaced ${closedIds.length} current tab${closedIds.length === 1 ? "" : "s"}; ` : "";
+    const replacement = closedIds.length ? `Replaced ${closedIds.length} current thread${closedIds.length === 1 ? "" : "s"}; ` : "";
     const message = `${replacement}${workspaceRestoreSummary(restoredCount, warnings)}`;
     settleUndoToast(message, { error: warnings.length > 0, timeoutMs: warnings.length ? 7000 : 3500 });
     addEvent(message, warnings.length ? "warn" : "success");
-    for (const warning of warnings) addEvent(`Workspace restore: ${warning.message || "A saved tab could not be fully restored."}`, "warn");
+    for (const warning of warnings) addEvent(`Workspace restore: ${warning.message || "A saved thread could not be fully restored."}`, "warn");
     return "loaded";
   } catch (error) {
     const message = `Could not load workspace: ${error.message || String(error)}`;
@@ -6840,7 +6840,7 @@ async function deleteWebuiWorkspace(workspace) {
   const confirmed = await appConfirm({
     title: "Delete saved workspace?",
     summary: `Delete “${workspace.name}” from the saved workspace list?`,
-    affected: "The saved tab constellation will be permanently removed; open tabs are unchanged.",
+    affected: "The saved thread constellation will be permanently removed; open threads are unchanged.",
     confirmLabel: "Delete",
   });
   if (!confirmed) return false;
@@ -7039,7 +7039,7 @@ function handleTerminalTabDrop(sourceTabId, target) {
   clearOpenTerminalTabGroup(null, { force: true });
   clearTerminalTabDragState();
   renderTabs();
-  addEvent(`added ${sourceTab.title || "tab"} to ${normalizeTerminalCustomGroupTitle(group.title).toLowerCase()}`, "info");
+  addEvent(`added ${threadDisplayTitle(sourceTab.title) || "thread"} to ${normalizeTerminalCustomGroupTitle(group.title).toLowerCase()}`, "info");
 }
 
 function removeLiveTranscriptBubble(bubble, key = "live-output") {
@@ -7386,7 +7386,7 @@ function renderSessionSkillTags(tabId = activeTabId) {
     tag.type = "button";
     tag.dataset.skillName = entry.name;
     tag.dataset.skillPath = skillPathForEntry(entry);
-    tag.title = `Open and edit skill ${entry.name} (${skillKindsLabel(entry)}) tracked in this tab/session.`;
+    tag.title = `Open and edit skill ${entry.name} (${skillKindsLabel(entry)}) tracked in this thread/session.`;
     tag.setAttribute("aria-label", `Open skill ${entry.name}`);
     tag.addEventListener("click", () => openSkillEditor(entry));
     container.append(tag);
@@ -7413,7 +7413,7 @@ function renderSessionSkillTags(tabId = activeTabId) {
     item.type = "button";
     item.dataset.skillName = entry.name;
     item.dataset.skillPath = skillPathForEntry(entry);
-    item.title = `Open and edit skill ${entry.name} (${skillKindsLabel(entry)}) tracked in this tab/session.`;
+    item.title = `Open and edit skill ${entry.name} (${skillKindsLabel(entry)}) tracked in this thread/session.`;
     item.setAttribute("aria-label", `Open skill ${entry.name}`);
     item.addEventListener("click", () => {
       setSessionSkillOverflowOpen(false);
@@ -7775,7 +7775,7 @@ async function openSkillEditor(entry) {
     if (elements.skillEditorText) elements.skillEditorText.value = data.content || "";
     if (elements.skillEditorSaveButton) elements.skillEditorSaveButton.disabled = false;
     updateSkillEditorMeta(activeSkillEditor);
-    setSkillEditorStatus("Edit this SKILL.md, then save. Reload the tab if title/description metadata should refresh immediately.", "muted");
+    setSkillEditorStatus("Edit this SKILL.md, then save. Reload the thread if title/description metadata should refresh immediately.", "muted");
     queueMicrotask(() => elements.skillEditorText?.focus());
   } catch (error) {
     if (elements.skillEditorSaveButton) elements.skillEditorSaveButton.disabled = true;
@@ -7809,7 +7809,7 @@ async function saveSkillEditor() {
     trackSkillUsage(editor.tabId, savedName, "read", "skill-editor", { path: activeSkillEditor.path });
     if (elements.skillEditorTitle) elements.skillEditorTitle.textContent = `Edit skill: ${savedName}`;
     updateSkillEditorMeta(activeSkillEditor);
-    setSkillEditorStatus("Saved SKILL.md. Reload/restart affected tabs before relying on updated skill metadata or newly loaded instructions.", "ok");
+    setSkillEditorStatus("Saved SKILL.md. Reload/restart affected threads before relying on updated skill metadata or newly loaded instructions.", "ok");
   } catch (error) {
     setSkillEditorStatus(`Failed to save skill: ${error.message || String(error)}`, "error");
   } finally {
@@ -8599,7 +8599,7 @@ function setWorkspaceDashboardCollapsed(collapsed, { persist = true } = {}) {
   if (elements.workspaceDashboardToggleButton) {
     elements.workspaceDashboardToggleButton.setAttribute("aria-expanded", workspaceDashboardCollapsed ? "false" : "true");
     const tooltip = workspaceDashboardCollapsed ? "Show workspace overview" : "Hide workspace overview";
-    const tooltipDetail = `${tooltip}:\n• Shows current tab, cwd, model, context, session, and queue.\n• Opens common workspace/session actions from one place.`;
+    const tooltipDetail = `${tooltip}:\n• Shows current thread, cwd, model, context, session, and queue.\n• Opens common workspace/session actions from one place.`;
     elements.workspaceDashboardToggleButton.removeAttribute("title");
     elements.workspaceDashboardToggleButton.setAttribute("aria-label", tooltip);
     elements.workspaceDashboardToggleButton.setAttribute("data-tooltip", tooltipDetail);
@@ -9023,13 +9023,13 @@ async function submitEditRetry({ send = false } = {}) {
     const forkTabId = forkTab?.id || activeTabId;
     closeEditRetryDialog();
     if (send) {
-      addEvent("forked session in a new tab; sending edited prompt", "info");
+      addEvent("forked session in a new thread; sending edited prompt", "info");
       await sendPrompt("prompt", editedText, { targetTabId: forkTabId, throwOnError: true });
     } else {
       elements.promptInput.value = editedText;
       resizePromptInput();
       focusPromptInput({ defer: true });
-      addEvent("forked session in a new tab; edited prompt restored in composer", "info");
+      addEvent("forked session in a new thread; edited prompt restored in composer", "info");
     }
   } catch (error) {
     setEditRetryStatus(error.message || String(error), "error");
@@ -10970,9 +10970,9 @@ function renderWorkflowModeControls() {
     if (pending) elements.workflowModeButton.setAttribute("aria-busy", "true");
     else elements.workflowModeButton.removeAttribute("aria-busy");
     const tooltip = pending
-      ? "Updating JavaScript Workflow Mode for this Pi tab."
+      ? "Updating JavaScript Workflow Mode for this Pi thread."
       : commandName
-        ? `${active ? "Disable" : "Enable"} JavaScript Workflow Mode for this Pi tab via /${commandName} mode ${active ? "off" : "on"}.`
+        ? `${active ? "Disable" : "Enable"} JavaScript Workflow Mode for this Pi thread via /${commandName} mode ${active ? "off" : "on"}.`
         : "Workflow Mode is unavailable because the /workflow command is not loaded.";
     applyStyledTooltip(elements.workflowModeButton, tooltip, { ariaLabel: true, align: "end" });
   }
@@ -10983,7 +10983,7 @@ function renderWorkflowModeControls() {
     elements.workflowModeChip.disabled = !commandName || pending;
     elements.workflowModeChip.textContent = mode.phase === "running" ? "Workflow: running" : mode.behavior === "once" ? "Workflow: once" : "Workflow: on";
     elements.workflowModeChip.setAttribute("aria-pressed", "true");
-    elements.workflowModeChip.title = "Workflow Mode is active. Click to return this tab to normal Pi prompting.";
+    elements.workflowModeChip.title = "Workflow Mode is active. Click to return this thread to normal Pi prompting.";
     elements.workflowModeChip.setAttribute("aria-label", `${elements.workflowModeChip.textContent}. Click to disable Workflow Mode.`);
   }
 }
@@ -11015,7 +11015,7 @@ async function setWorkflowModeEnabled(enabled) {
       statusText: enabled ? "Workflow: on" : "",
       updatedAt: new Date().toISOString(),
     });
-    addEvent(enabled ? "Workflow Mode enabled for this tab." : "Workflow Mode disabled for this tab.", "info");
+    addEvent(enabled ? "Workflow Mode enabled for this thread." : "Workflow Mode disabled for this thread.", "info");
   } catch (error) {
     if (isCurrentTabContext(tabContext)) addEvent(error.message || String(error), "error");
   } finally {
@@ -11151,7 +11151,7 @@ function renderConversationModeControls() {
     elements.optionsConversationModeButton.classList.toggle("active", active);
     elements.optionsConversationModeButton.querySelector("span").textContent = conversationModeButtonLabel(mode);
     const tooltip = commandName
-      ? `${active ? "End" : "Start"} Natural Conversation Mode for this Pi tab via /${commandName}. Safety is owned by @firstpick/pi-package-natural-conversation.`
+      ? `${active ? "End" : "Start"} Natural Conversation Mode for this Pi thread via /${commandName}. Safety is owned by @firstpick/pi-package-natural-conversation.`
       : conversationModeUnavailableText();
     applyStyledTooltip(elements.optionsConversationModeButton, tooltip, { ariaLabel: false, align: "end" });
     elements.optionsConversationModeButton.setAttribute("aria-pressed", active ? "true" : "false");
@@ -11162,7 +11162,7 @@ function renderConversationModeControls() {
     elements.conversationModeChip.textContent = conversationModeDisplayText(mode);
     elements.conversationModeChip.setAttribute("data-voice-state", active ? mode.uiState || "listening" : "off");
     const chipAction = mode.uiState === "paused" ? "Click to resume browser listening." : "Click to pause browser listening; use End conversation to leave the safe mode.";
-    elements.conversationModeChip.title = `Natural Conversation Mode is active in this tab (${voiceConversationProviderLabel()}). Thinking is forced off; tools are limited to ${mode.allowedTools.join(", ")}. ${chipAction}`;
+    elements.conversationModeChip.title = `Natural Conversation Mode is active in this thread (${voiceConversationProviderLabel()}). Thinking is forced off; tools are limited to ${mode.allowedTools.join(", ")}. ${chipAction}`;
     elements.conversationModeChip.setAttribute("aria-label", `Natural Conversation Mode ${mode.uiState || "listening"}. ${chipAction}`);
   }
 
@@ -12421,7 +12421,7 @@ function closeThemeCustomizer({ restore = true } = {}) {
     return;
   }
   if (state.saving) {
-    setThemeCustomizerStatus("Wait for the theme save to finish before closing or switching tabs.", "warn");
+    setThemeCustomizerStatus("Wait for the theme save to finish before closing or switching threads.", "warn");
     return false;
   }
   const generation = state.generation;
@@ -12477,7 +12477,7 @@ async function openThemeCustomizer() {
   elements.themeCustomizerProjectOption.disabled = !projectTrusted;
   elements.themeCustomizerScope.value = source.custom ? source.scope : projectTrusted ? "project" : "global";
   elements.themeCustomizerScopeHint.textContent = projectTrusted
-    ? "Project saves use this active trusted tab’s .pi/themes directory; global saves use Pi’s agent themes directory."
+    ? "Project saves use this active trusted thread’s .pi/themes directory; global saves use Pi’s agent themes directory."
     : "This active project is not saved as trusted in Pi, so only Global themes is available.";
   elements.themeCustomizerSourceBadge.textContent = `${themeScopeLabel(source.scope)} source`;
   elements.themeCustomizerSourceBadge.className = `theme-scope-badge ${source.scope || "bundled"}`;
@@ -12516,7 +12516,7 @@ async function saveThemeCustomizer({ overwrite = false } = {}) {
   const state = themeCustomizerState;
   if (!state?.draftValid || !state.validTheme || state.saving) return;
   if (!isCurrentTabContext(state.tabContext)) {
-    setThemeCustomizerStatus("The active tab changed. Cancel and reopen Customize so the project destination is bound to the intended tab.", "warn");
+    setThemeCustomizerStatus("The active thread changed. Cancel and reopen Customize so the project destination is bound to the intended thread.", "warn");
     return;
   }
   const confirmation = state.overwrite;
@@ -14187,7 +14187,7 @@ const CONTROL_VISIBILITY_CATALOG = [
   { id: "workspace.save", group: "workspace", label: "Save workspace", selector: "#workspaceSaveButton" },
   { id: "workspace.command-palette", group: "workspace", label: "Command palette", selector: "#commandPaletteButton" },
   { id: "workspace.overview", group: "workspace", label: "Show workspace overview", selector: "#workspaceDashboardToggleButton" },
-  { id: "workspace.close-all-tabs", group: "workspace", label: "Close all tabs", selector: "#closeAllTabsButton" },
+  { id: "workspace.close-all-tabs", group: "workspace", label: "Close all threads", selector: "#closeAllTabsButton" },
   { id: "control-deck.sponsor", group: "control-deck", label: "Sponsor", selector: ".sponsor-link" },
   { id: "control-deck.open-issue", group: "control-deck", label: "Open Issue", selector: "#openIssueButton" },
   { id: "composer.new", group: "composer", label: "New", selector: '[data-composer-action-id="new"]' },
@@ -16164,6 +16164,19 @@ function activityForTab(tab) {
   return tabActivities.get(tab.id) || setTabActivity(tab.id, tab.activity) || normalizeTabActivity();
 }
 
+/**
+ * Returns the label shown for a stored Pi conversation title.
+ * Older servers named default conversations "Terminal N"; those display as "Thread N".
+ * The stored title is never rewritten, so renames, workspaces, and saved sessions keep their data.
+ * @param {unknown} title stored conversation title
+ * @returns {string} display label, or "" when the title is empty or not a string
+ */
+function threadDisplayTitle(title) {
+  if (typeof title !== "string") return "";
+  const legacy = /^Terminal (\d+)$/.exec(title);
+  return legacy ? `Thread ${legacy[1]}` : title;
+}
+
 function tabIndicator(tab) {
   const activity = activityForTab(tab);
   const pendingBlockerCount = tabPendingBlockerCount(tab);
@@ -16359,7 +16372,7 @@ function updateDocumentTitle() {
     return;
   }
   const tab = activeTab();
-  document.title = tab ? `Pi Web UI · ${tab.title}` : "Pi Web UI";
+  document.title = tab ? `Pi Web UI · ${threadDisplayTitle(tab.title)}` : "Pi Web UI";
 }
 
 const draftConversations = createDraftConversations();
@@ -17403,7 +17416,7 @@ function renderGitPanel() {
   }
   if (elements.gitPanelStatus) {
     elements.gitPanelStatus.textContent = !groups.length
-      ? "No terminal tabs are open."
+      ? "No threads are open."
       : discovering
         ? "Discovering repositories…"
         : `${repositoryCount} Git ${repositoryCount === 1 ? "repository" : "repositories"} · ⋯ or right-click for actions`;
@@ -17492,7 +17505,7 @@ function terminalTabGroupRepresentedTab(groupTabs = []) {
 
 function terminalTabTooltip(tab) {
   const lines = [
-    `${tab?.title || "Terminal tab"} · ${tabIndicator(tab).label}`,
+    `${threadDisplayTitle(tab?.title) || "Thread"} · ${tabIndicator(tab).label}`,
     `Working folder: ${normalizeDisplayPath(tab?.cwd || "") || "Not set"}`,
   ];
   const git = terminalTabGitTooltip(tab);
@@ -17533,7 +17546,7 @@ function terminalTabGroupActiveTooltip(groupTabs = []) {
   return [
     appRunners ? `${appRunners} app runner${appRunners === 1 ? "" : "s"}` : "",
     voices ? `${voices} voice` : "",
-    workflowTabs ? `${workflowTabs} workflow tab${workflowTabs === 1 ? "" : "s"}` : "",
+    workflowTabs ? `${workflowTabs} workflow thread${workflowTabs === 1 ? "" : "s"}` : "",
     workflowRuns ? `${workflowRuns} workflow run${workflowRuns === 1 ? "" : "s"}` : "",
   ].filter(Boolean).join(" · ");
 }
@@ -17541,15 +17554,15 @@ function terminalTabGroupActiveTooltip(groupTabs = []) {
 function terminalTabGroupTooltip(group, groupTitle = terminalDisplayGroupTitle(group)) {
   const groupTabs = group?.tabs || [];
   const lines = [
-    `${groupTitle} · ${groupTabs.length} tab${groupTabs.length === 1 ? "" : "s"}`,
+    `${groupTitle} · ${groupTabs.length} thread${groupTabs.length === 1 ? "" : "s"}`,
     terminalTabGroupWorkspaceTooltip(group),
-    `Status: ${terminalTabGroupStatusTooltip(groupTabs) || "No tabs"}`,
+    `Status: ${terminalTabGroupStatusTooltip(groupTabs) || "No threads"}`,
   ];
   const active = terminalTabGroupActiveTooltip(groupTabs);
   if (active) lines.push(`Active: ${active}`);
   const prompt = terminalTabPromptTooltip(terminalTabGroupRepresentedTab(groupTabs));
   if (prompt) lines.push(prompt);
-  lines.push(isMobileView() ? "Tap to open group terminals" : "Click to switch · Drop tabs here to add");
+  lines.push(isMobileView() ? "Tap to open group threads" : "Click to switch · Drop threads here to add");
   return lines.join("\n");
 }
 
@@ -17576,10 +17589,10 @@ function createTerminalTabCwdAddMenu(tab) {
   const menu = make("div", "terminal-tab-cwd-add-menu");
   menu.setAttribute("role", "group");
   menu.setAttribute("aria-label", `Actions for ${cwdTitle}`);
-  const add = make("button", "terminal-tab-group-add terminal-tab-cwd-add", "+ Tab");
+  const add = make("button", "terminal-tab-group-add terminal-tab-cwd-add", "+ Thread");
   add.type = "button";
   add.draggable = false;
-  const addTooltip = `Add tab in ${cwdTitle}`;
+  const addTooltip = `Add thread in ${cwdTitle}`;
   applyStyledTooltip(add, addTooltip, { ariaLabel: addTooltip, targetKey: `terminal-tab:${tab.id}:add` });
   add.addEventListener("click", (event) => {
     event.stopPropagation();
@@ -17606,9 +17619,9 @@ function renderTerminalTab(tab, { showCwdAdd = false } = {}) {
   button.draggable = false;
   button.setAttribute("role", "tab");
   button.setAttribute("aria-selected", isActive ? "true" : "false");
-  button.setAttribute("aria-label", `${tab.title}: ${indicator.label}${appRunnerLabel ? `, ${appRunnerLabel}` : ""}${conversationLabel}${workflowModeActive ? ", workflow mode active" : ""}${workflowCount ? `, ${workflowCount} workflow runs active` : ""}`);
+  button.setAttribute("aria-label", `${threadDisplayTitle(tab.title)}: ${indicator.label}${appRunnerLabel ? `, ${appRunnerLabel}` : ""}${conversationLabel}${workflowModeActive ? ", workflow mode active" : ""}${workflowCount ? `, ${workflowCount} workflow runs active` : ""}`);
   applyStyledTooltip(button, terminalTabTooltip(tab), { ariaLabel: false, align: "start", description: true, preserveInternalSpaces: true, variant: "workspace", targetKey: `terminal-tab:${tab.id}:switch` });
-  appendTerminalTabContent(button, { title: tab.title, indicator, meta: terminalTabMeta(tab, indicator), appRunnerRun, conversationModeActive, workflowModeActive, workflowCount });
+  appendTerminalTabContent(button, { title: threadDisplayTitle(tab.title), indicator, meta: terminalTabMeta(tab, indicator), appRunnerRun, conversationModeActive, workflowModeActive, workflowCount });
   button.addEventListener("click", () => switchTab(tab.id));
   wrapper.append(button, createTerminalTabActions(tab));
   if (showCwdAdd) wrapper.append(createTerminalTabCwdAddMenu(tab));
@@ -17616,7 +17629,7 @@ function renderTerminalTab(tab, { showCwdAdd = false } = {}) {
   const close = make("button", "terminal-tab-close", "×");
   close.type = "button";
   close.draggable = false;
-  const closeTooltip = `Close ${tab.title}`;
+  const closeTooltip = `Close ${threadDisplayTitle(tab.title)}`;
   applyStyledTooltip(close, closeTooltip, { ariaLabel: closeTooltip, targetKey: `terminal-tab:${tab.id}:close` });
   close.addEventListener("click", (event) => {
     event.stopPropagation();
@@ -17644,9 +17657,9 @@ function renderTerminalTabGroupItem(tab, group) {
   button.draggable = false;
   button.setAttribute("role", "tab");
   button.setAttribute("aria-selected", isActive ? "true" : "false");
-  button.setAttribute("aria-label", `${tab.title}: ${indicator.label}${appRunnerLabel ? `, ${appRunnerLabel}` : ""}${conversationLabel}${workflowModeActive ? ", workflow mode active" : ""}${workflowCount ? `, ${workflowCount} workflow runs active` : ""}`);
+  button.setAttribute("aria-label", `${threadDisplayTitle(tab.title)}: ${indicator.label}${appRunnerLabel ? `, ${appRunnerLabel}` : ""}${conversationLabel}${workflowModeActive ? ", workflow mode active" : ""}${workflowCount ? `, ${workflowCount} workflow runs active` : ""}`);
   applyStyledTooltip(button, terminalTabTooltip(tab), { ariaLabel: false, align: "start", description: true, preserveInternalSpaces: true, variant: "workspace", targetKey: `terminal-tab:${tab.id}:switch` });
-  appendTerminalTabContent(button, { title: tab.title, indicator, meta: terminalTabMeta(tab, indicator), appRunnerRun, conversationModeActive, workflowModeActive, workflowCount });
+  appendTerminalTabContent(button, { title: threadDisplayTitle(tab.title), indicator, meta: terminalTabMeta(tab, indicator), appRunnerRun, conversationModeActive, workflowModeActive, workflowCount });
   button.addEventListener("click", (event) => {
     event.stopPropagation();
     switchTab(tab.id);
@@ -17656,7 +17669,7 @@ function renderTerminalTabGroupItem(tab, group) {
   const close = make("button", "terminal-tab-close terminal-tab-group-item-close", "×");
   close.type = "button";
   close.draggable = false;
-  const closeTooltip = `Close ${tab.title}`;
+  const closeTooltip = `Close ${threadDisplayTitle(tab.title)}`;
   applyStyledTooltip(close, closeTooltip, { ariaLabel: closeTooltip, targetKey: `terminal-tab:${tab.id}:close` });
   close.addEventListener("click", (event) => {
     event.stopPropagation();
@@ -17684,8 +17697,9 @@ function renderTerminalTabGroup(group, groupCount = 1) {
   const groupAppRunnerMeta = appRunnerCount > 1 ? `${appRunnerCount} app runners` : appRunnerRun ? "app runner" : "";
   const workflowCount = groupTabs.reduce((total, tab) => total + workflowRunningCountForTab(tab.id), 0);
   const workflowModeActive = groupTabs.some(tabWorkflowModeActive);
-  const groupTitle = terminalDisplayGroupTitle(group, activeGroupTab?.title || "group");
-  const activeTitle = activeGroupTab?.title || groupTitle;
+  const activeGroupTitle = threadDisplayTitle(activeGroupTab?.title);
+  const groupTitle = terminalDisplayGroupTitle(group, activeGroupTitle || "group");
+  const activeTitle = activeGroupTitle || groupTitle;
   const wrapper = make("div", `terminal-tab terminal-tab-group${group.custom ? " terminal-tab-custom-group" : ""} activity-${indicator.state}${isActive ? " active" : ""}${isStopped ? " stopped" : ""}${appRunnerRun ? " app-runner-running" : ""}${workflowModeActive ? " workflow-mode-running" : ""}${workflowCount ? " workflow-run-running" : ""}`);
   wrapper.dataset.groupKey = group.key;
   if (group.customGroupId) wrapper.dataset.customGroupId = group.customGroupId;
@@ -17714,7 +17728,7 @@ function renderTerminalTabGroup(group, groupCount = 1) {
   button.setAttribute("aria-selected", isActive ? "true" : "false");
   button.setAttribute("aria-haspopup", "true");
   button.setAttribute("aria-expanded", group.key === openTerminalTabGroupKey ? "true" : "false");
-  button.setAttribute("aria-label", `${groupTitle} ${group.custom ? "custom" : "cwd"} group: ${groupTabs.length} tabs, ${indicator.label}${appRunnerSummary ? `, ${appRunnerSummary}` : ""}${workflowModeActive ? ", workflow mode active" : ""}${workflowCount ? `, ${workflowCount} workflow runs active` : ""}. Active ${activeTitle}. ${isMobileView() ? "Toggle group terminal list" : "Switch to the active group terminal"}`);
+  button.setAttribute("aria-label", `${groupTitle} ${group.custom ? "custom" : "cwd"} group: ${groupTabs.length} threads, ${indicator.label}${appRunnerSummary ? `, ${appRunnerSummary}` : ""}${workflowModeActive ? ", workflow mode active" : ""}${workflowCount ? `, ${workflowCount} workflow runs active` : ""}. Active ${activeTitle}. ${isMobileView() ? "Toggle group thread list" : "Switch to the active group thread"}`);
   applyStyledTooltip(button, terminalTabGroupTooltip(group, groupTitle), { ariaLabel: false, description: true, placement: "right", preserveInternalSpaces: true, variant: "workspace", targetKey: `terminal-group:${group.key}:switch` });
   appendTerminalTabContent(button, { title: activeTitle, indicator, meta: `${groupTitle} · ${indicator.meta}${groupAppRunnerMeta ? ` · ${groupAppRunnerMeta}` : ""}${workflowModeActive ? " · workflow mode" : ""}${workflowCount ? ` · ${workflowCount} workflows` : ""}`, appRunnerRun, count: groupTabs.length, workflowModeActive, workflowCount, dropdown: true });
   button.addEventListener("click", () => {
@@ -17742,14 +17756,14 @@ function renderTerminalTabGroup(group, groupCount = 1) {
   const menu = make("div", "terminal-tab-group-menu");
   menu.id = `terminalTabGroupMenu${++terminalTabGroupMenuSerial}`;
   menu.setAttribute("role", "group");
-  menu.setAttribute("aria-label", `${groupTitle} tabs`);
+  menu.setAttribute("aria-label", `${groupTitle} threads`);
   button.setAttribute("aria-controls", menu.id);
   for (const tab of groupTabs) menu.append(renderTerminalTabGroupItem(tab, group));
 
-  const add = make("button", "terminal-tab-group-add", "+ Tab");
+  const add = make("button", "terminal-tab-group-add", "+ Thread");
   add.type = "button";
   add.draggable = false;
-  const addTooltip = `Add tab in ${groupTitle}`;
+  const addTooltip = `Add thread in ${groupTitle}`;
   applyStyledTooltip(add, addTooltip, { ariaLabel: addTooltip, targetKey: `terminal-group:${group.key}:add` });
   add.addEventListener("click", (event) => {
     event.stopPropagation();
@@ -17844,8 +17858,8 @@ function setNewTabMenuOpen(open) {
 }
 
 function initializeTerminalHeaderTooltips() {
-  applyStyledTooltip(elements.newTabButton, "Start a separate isolated Pi terminal", { ariaLabel: "Start a separate isolated Pi terminal" });
-  applyStyledTooltip(elements.closeAllTabsButton, "Close all terminal tabs", { ariaLabel: "Close all terminal tabs" });
+  applyStyledTooltip(elements.newTabButton, "Start a separate isolated Pi thread", { ariaLabel: "Start a separate isolated Pi thread" });
+  applyStyledTooltip(elements.closeAllTabsButton, "Close all threads", { ariaLabel: "Close all threads" });
 }
 
 function initializeControlSettingTooltips() {
@@ -17957,9 +17971,9 @@ function createTerminalTabSettlementButton(tab) {
   button.dataset.settlementAction = settled ? "restore" : "settle";
   const unavailable = !settled && ["input", "working"].includes(record.state);
   button.disabled = unavailable;
-  const label = `${settled ? "Restore" : "Settle"} ${tab.title || "session"}`;
+  const label = `${settled ? "Restore" : "Settle"} ${threadDisplayTitle(tab.title) || "session"}`;
   applyStyledTooltip(button, unavailable
-    ? `Finish the current work or respond to pending input before settling ${tab.title || "this session"}.`
+    ? `Finish the current work or respond to pending input before settling ${threadDisplayTitle(tab.title) || "this session"}.`
     : `${label}. ${settled ? "Return to Inbox." : "Move to Settled without closing or stopping it."}`,
     { ariaLabel: label, targetKey: `terminal-tab:${tab.id}:settlement` });
   button.addEventListener("click", event => {
@@ -18089,10 +18103,10 @@ function renderTabs() {
   const activeSubagent = activeSubagentTerminalView();
   const active = activeSubagent || activeTab();
   const activeIndicator = activeSubagent ? { glyph: "◉", label: "Subagent view" } : active ? tabIndicator(active) : null;
-  const activeTitle = activeSubagent ? subagentTerminalViewTitle(activeSubagent) : active?.title;
+  const activeTitle = activeSubagent ? subagentTerminalViewTitle(activeSubagent) : threadDisplayTitle(active?.title);
   const totalTabCount = tabs.length + subagentTerminalViews.size;
-  elements.terminalTabsToggleButton.textContent = active ? `${activeIndicator.glyph} ${activeTitle}${totalTabCount > 1 ? ` · ${totalTabCount}` : ""}` : "Tabs";
-  const toggleTooltip = active ? `Show terminal tabs · active: ${activeTitle} · ${activeIndicator.label}` : "Show terminal tabs";
+  elements.terminalTabsToggleButton.textContent = active ? `${activeIndicator.glyph} ${activeTitle}${totalTabCount > 1 ? ` · ${totalTabCount}` : ""}` : "Threads";
+  const toggleTooltip = active ? `Show threads · active: ${activeTitle} · ${activeIndicator.label}` : "Show threads";
   applyStyledTooltip(elements.terminalTabsToggleButton, toggleTooltip, { ariaLabel: toggleTooltip, targetKey: "terminal-tabs-toggle" });
   if (footerTooltipTarget && elements.tabBar.contains(footerTooltipTarget) && !tooltipSnapshot) hideFooterTooltip();
   const previousScrollTop = elements.tabBar.scrollTop;
@@ -18136,7 +18150,7 @@ function renderTabs() {
   // controls in the tablist so assistive technology does not treat actions as tabs.
   const tabList = make("div");
   tabList.setAttribute("role", "tablist");
-  tabList.setAttribute("aria-label", "Pi terminal tabs");
+  tabList.setAttribute("aria-label", "Pi threads");
   tabList.style.display = "contents";
   const tabControls = [...elements.tabBar.querySelectorAll('[role="tab"]')];
   tabControls.forEach((control, index) => { control.id = `terminalTabOption${index}`; });
@@ -18168,8 +18182,8 @@ function renderTabs() {
     const canSave = tabs.length > 0;
     elements.workspaceSaveButton.disabled = !canSave;
     applyStyledTooltip(elements.workspaceSaveButton, canSave
-      ? "Save workspace:\n• Captures all open tabs, sessions, order, custom groups, and the active tab."
-      : "Save workspace is available after you open a tab.", { ariaLabel: canSave ? "Save workspace" : "Save workspace (no open tabs)" });
+      ? "Save workspace:\n• Captures all open threads, sessions, order, custom groups, and the active thread."
+      : "Save workspace is available after you open a thread.", { ariaLabel: canSave ? "Save workspace" : "Save workspace (no open threads)" });
   }
   updateTerminalTabGroupOpenState();
   reconcileTerminalSplitState();
@@ -18302,7 +18316,7 @@ async function switchTab(tabId) {
     return;
   }
   if (themeCustomizerState?.saving) {
-    setThemeCustomizerStatus("Wait for the theme save to finish before switching tabs.", "warn");
+    setThemeCustomizerStatus("Wait for the theme save to finish before switching threads.", "warn");
     return;
   }
   if (activeSubagentTerminalId) deactivateSubagentTerminalView({ render: false });
@@ -18367,8 +18381,8 @@ function updateTerminalSplitControls(canShowSplit, splitTab = terminalSplitTab()
     button.setAttribute("aria-pressed", isOpenSplit ? "true" : "false");
     button.dataset.splitState = isOpenSplit ? "unsplit" : "split";
     const label = isOpenSplit
-      ? `Close split view for ${tab?.title || "Pi terminal"}`
-      : `Split ${tab?.title || "Pi terminal"} to the right`;
+      ? `Close split view for ${threadDisplayTitle(tab?.title) || "Pi thread"}`
+      : `Split ${threadDisplayTitle(tab?.title) || "Pi thread"} to the right`;
     applyStyledTooltip(button, label, { ariaLabel: label, targetKey: tabId ? `terminal-tab:${tabId}:split` : "" });
   });
 }
@@ -18382,7 +18396,7 @@ function updateTerminalSplitUi() {
   scheduleControlDeckPresentationReconciliation();
   updateTerminalSplitControls(canShowSplit, tab);
   if (!canShowSplit) return;
-  if (elements.terminalSplitTitle) elements.terminalSplitTitle.textContent = tab.title || "Split terminal";
+  if (elements.terminalSplitTitle) elements.terminalSplitTitle.textContent = threadDisplayTitle(tab.title) || "Split thread";
   if (elements.terminalSplitMeta) elements.terminalSplitMeta.textContent = [tab.running ? `pid ${tab.pid || "starting"}` : "stopped", normalizeDisplayPath(tab.cwd || "")].filter(Boolean).join(" · ");
   if (elements.terminalSplitFrame && elements.terminalSplitFrame.dataset.tabId !== tab.id) {
     elements.terminalSplitFrame.dataset.tabId = tab.id;
@@ -18438,7 +18452,7 @@ async function splitTerminalTab(tabId, { triggerButton = null } = {}) {
     if (tab?.id) {
       setTerminalSplitTab(tab.id);
       renderTabs();
-      addEvent(`split ${sourceTab.title || "terminal"} into independent ${tab.title}`, "info");
+      addEvent(`split ${threadDisplayTitle(sourceTab.title) || "thread"} into independent ${threadDisplayTitle(tab.title)}`, "info");
     }
   } catch (error) {
     addEvent(error.message, "error");
@@ -18513,7 +18527,7 @@ async function createTerminalTab(cwd, { triggerButton = elements.newTabButton, c
     renderTabs();
     if (tab?.id) {
       if (activate && (workspaceKind !== "no-project" || isCurrentTabContext(sourceContext))) await switchTab(tab.id);
-      addEvent(`created isolated terminal ${tab.title}`, "info");
+      addEvent(`created thread ${threadDisplayTitle(tab.title)}`, "info");
     }
     return tab;
   } catch (error) {
@@ -18529,7 +18543,7 @@ async function createTerminalTabFromChosenDirectory({ triggerButton = elements.n
   setMobileTabsExpanded(false);
   setNewTabMenuOpen(false);
   const returnFocus = triggerButton === elements.newTabChooseDirectoryButton ? elements.newTabButton : triggerButton;
-  const cwd = await pickCwd(sourceTab || { id: "new-tab", title: "new tab" }, initialCwd, { title: "Choose a folder for new session", returnFocus });
+  const cwd = await pickCwd(sourceTab || { id: "new-tab", title: "new thread" }, initialCwd, { title: "Choose a folder for new session", returnFocus });
   if (!cwd) return;
   await createTerminalTab(cwd, { triggerButton });
 }
@@ -18578,25 +18592,25 @@ function shouldOpenCwdChangeInNewTab(tab) {
 
 async function confirmCloseTerminalTabs(targetTabs, label) {
   const count = targetTabs.length;
-  const noun = count === 1 ? "tab" : "tabs";
+  const noun = count === 1 ? "thread" : "threads";
   const activeAgentTabs = targetTabs.filter(tabHasActiveAgent);
-  const tabList = targetTabs.map((tab) => `- ${tab.title}`).join("\n");
-  const activeList = activeAgentTabs.map((tab) => `- ${tab.title} (${tabIndicator(tab).label})`).join("\n");
+  const tabList = targetTabs.map((tab) => `- ${threadDisplayTitle(tab.title)}`).join("\n");
+  const activeList = activeAgentTabs.map((tab) => `- ${threadDisplayTitle(tab.title)} (${tabIndicator(tab).label})`).join("\n");
   const base = [
-    `Close ${label || `${count} terminal ${noun}`}?`,
+    `Close ${label || `${count} ${noun}`}?`,
     "",
     `This terminates ${count === 1 ? "its isolated Pi process" : "their isolated Pi processes"}.`,
-    count > 1 ? `\nTabs to close:\n${tabList}` : "",
+    count > 1 ? `\nThreads to close:\n${tabList}` : "",
   ].filter(Boolean).join("\n");
   const warning = activeAgentTabs.length
-    ? `WARNING: ${activeAgentTabs.length} ${activeAgentTabs.length === 1 ? "tab has an agent" : "tabs have agents"} still running or waiting for input:\n${activeList}`
-    : "No agent work is currently running in these tabs.";
+    ? `WARNING: ${activeAgentTabs.length} ${activeAgentTabs.length === 1 ? "thread has an agent" : "threads have agents"} still running or waiting for input:\n${activeList}`
+    : "No agent work is currently running in these threads.";
   return appConfirm({
-    title: `Close ${count === 1 ? "tab" : `${count} tabs`}?`,
+    title: `Close ${count === 1 ? "thread" : `${count} threads`}?`,
     summary: `${base}\n\n${warning}`,
-    affected: tabList || label || `${count} terminal ${noun}`,
+    affected: tabList || label || `${count} ${noun}`,
     undoable: false,
-    confirmLabel: activeAgentTabs.length ? "Close and stop work" : count === 1 ? "Close tab" : "Close tabs",
+    confirmLabel: activeAgentTabs.length ? "Close and stop work" : count === 1 ? "Close thread" : "Close threads",
   });
 }
 
@@ -18607,7 +18621,7 @@ async function reopenClosedTerminalTab(tabId) {
   if (reopened) await switchTab(reopened);
 }
 
-async function closeTerminalTabs(tabIds, { label = "selected terminal tabs", allowEmpty = false, allowQuickClose = !allowEmpty } = {}) {
+async function closeTerminalTabs(tabIds, { label = "selected threads", allowEmpty = false, allowQuickClose = !allowEmpty } = {}) {
   const targetIds = [...new Set(tabIds.filter(Boolean))];
   const targetTabs = targetIds.map((id) => tabs.find((item) => item.id === id)).filter(Boolean);
   if (!targetTabs.length) return;
@@ -18643,7 +18657,7 @@ async function closeTerminalTabs(tabIds, { label = "selected terminal tabs", all
     clearOpenTerminalTabGroup(null, { force: true });
     if (!tabs.length) setWorkspaceDashboardCollapsed(false, { persist: false });
     if (quickClose && closedIds.length === 1) {
-      const closedTitle = targetTabs[0].title || "tab";
+      const closedTitle = threadDisplayTitle(targetTabs[0].title) || "thread";
       offerUndo({
         message: `Closed ${closedTitle}.`,
         undo: () => reopenClosedTerminalTab(closedIds[0]),
@@ -18676,7 +18690,7 @@ async function closeTerminalTabs(tabIds, { label = "selected terminal tabs", all
     } else {
       renderTabs();
     }
-    addEvent(`closed ${closedIds.length || targetTabs.length} terminal ${closedIds.length === 1 ? "tab" : "tabs"}`, "info");
+    addEvent(`closed ${closedIds.length || targetTabs.length} ${closedIds.length === 1 ? "thread" : "threads"}`, "info");
   } catch (error) {
     if (closedActiveTab && targetIds.includes(activeTabId)) connectEvents(activeTabContext());
     addEvent(error.message, "error");
@@ -18688,7 +18702,7 @@ async function closeTerminalTabs(tabIds, { label = "selected terminal tabs", all
 async function closeTerminalTab(tabId) {
   const tab = tabs.find((item) => item.id === tabId);
   if (!tab) return;
-  await closeTerminalTabs([tabId], { label: tab.title, allowEmpty: true, allowQuickClose: true });
+  await closeTerminalTabs([tabId], { label: threadDisplayTitle(tab.title), allowEmpty: true, allowQuickClose: true });
 }
 
 async function closeTerminalTabGroup(group) {
@@ -18697,7 +18711,7 @@ async function closeTerminalTabGroup(group) {
 }
 
 async function closeAllTerminalTabs() {
-  await closeTerminalTabs(tabs.map((tab) => tab.id), { label: "all terminal tabs", allowEmpty: true });
+  await closeTerminalTabs(tabs.map((tab) => tab.id), { label: "all threads", allowEmpty: true });
 }
 
 async function initializeTabs() {
@@ -19124,7 +19138,7 @@ async function ensureBlockedTabNotificationPermission() {
   try {
     const permission = await Notification.requestPermission();
     if (permission === "granted") {
-      addEvent("browser notifications enabled for blocked tabs", "info");
+      addEvent("browser notifications enabled for blocked threads", "info");
       return true;
     }
   } catch (error) {
@@ -19154,7 +19168,7 @@ async function ensureAgentDoneNotificationPermission() {
 function noteBlockedTabNotificationFallback(reason) {
   if (blockedTabNotificationFallbackNoted) return;
   blockedTabNotificationFallbackNoted = true;
-  addEvent(`browser notifications unavailable for blocked tabs: ${reason}`, "warn");
+  addEvent(`browser notifications unavailable for blocked threads: ${reason}`, "warn");
 }
 
 function blockedTabNotificationDetail({ method, count } = {}) {
@@ -19232,7 +19246,7 @@ function notifyBlockedTab(tabOrId, { request = null, count } = {}) {
 
   const pendingCount = normalizePendingExtensionUiRequestCount(count ?? request?.pendingExtensionUiRequestCount ?? tabPendingBlockerCount(tab));
   const method = request?.method && EXTENSION_UI_BLOCKING_METHODS.has(request.method) ? request.method : "";
-  const tabTitle = tab?.title || request?.tabTitle || "terminal";
+  const tabTitle = threadDisplayTitle(tab?.title || request?.tabTitle) || "thread";
   const detail = blockedTabNotificationDetail({ method, count: pendingCount });
   const title = "Pi needs your response";
   const body = `${tabTitle} is blocked, ${detail}.`;
@@ -19346,7 +19360,7 @@ function notifyAgentDone(tabOrId, { activity = null, tabTitle = "" } = {}) {
   agentDoneNotificationKeys.add(key);
   if (isAutoRetryingTab(tabId)) return;
 
-  const displayTitle = tabTitle || tab?.title || "terminal";
+  const displayTitle = threadDisplayTitle(tabTitle || tab?.title) || "thread";
   const failed = normalizedActivity.status === "failed" || normalizedActivity.failed === true || tab?.failed === true;
   queueAgentDoneBrowserNotification({
     key,
@@ -19790,7 +19804,7 @@ async function runGitFooterPiCalibration(tabContext = activeTabContext()) {
 
   const commandName = resolveAvailableCommandName("calibrate", { rpcOnly: true });
   if (!commandName) {
-    addEvent("PI calibration unavailable: /calibrate is not loaded in this Pi tab.", "warn");
+    addEvent("PI calibration unavailable: /calibrate is not loaded in this Pi thread.", "warn");
     return;
   }
 
@@ -20212,15 +20226,15 @@ const GIT_FOOTER_TOOLTIP_COPY = {
   cost: "Estimated session cost. sub means subscription-backed provider; api means metered API usage.",
   context: "Context window pressure. Shows percent used over the model limit; auto means auto-compaction is enabled.",
   usage: "Provider subscription usage. Shows the used share of every available provider-reported rate window.",
-  cwd: "Active working directory for this Web UI tab.",
+  cwd: "Active working directory for this Web UI thread.",
   git: "Current Git branch. detached means HEAD is not on a branch; no repo means the cwd is outside a Git work tree.",
   "git-state": "Active Git operation or detached state. Finish or abort rebase/merge/cherry-pick/revert/bisect before normal commits.",
   sync: "Remote tracking divergence. ↑ means local commits to push; ↓ means remote commits to pull. Incoming-only Sync pulls from origin; outgoing Sync uses the confirmed push flow, including the guarded force-with-lease fallback when needed.",
-  changes: "Working tree and fetched remote summary. 🟢 staged, ✏️ modified unstaged, ➕ untracked, ⚠️ conflicted; ⬇️ means fetched remote commits to pull; 🔄/✓/⚠️ fetch shows the tab git fetch state; ✅ means no changes.",
+  changes: "Working tree and fetched remote summary. 🟢 staged, ✏️ modified unstaged, ➕ untracked, ⚠️ conflicted; ⬇️ means fetched remote commits to pull; 🔄/✓/⚠️ fetch shows the thread git fetch state; ✅ means no changes.",
   "git-extra": "Extra Git signals. 📦 stash, 🧩 dirty submodules, 🌳 worktrees, 🏷️ tag at HEAD, 🕒 last commit age, 🔓 signing mismatch.",
-  worktree: "Git worktree checkout for this tab. Use branch worktrees to work on branches in parallel without switching this checkout.",
-  model: "Scoped model for this tab.",
-  thinking: "Reasoning/thinking effort for this tab.",
+  worktree: "Git worktree checkout for this thread. Use branch worktrees to work on branches in parallel without switching this checkout.",
+  model: "Scoped model for this thread.",
+  thinking: "Reasoning/thinking effort for this thread.",
 };
 
 const GIT_FOOTER_VISIBILITY_GROUPS = Object.freeze([
@@ -20328,7 +20342,7 @@ const GIT_FOOTER_VISIBILITY_HINTS = Object.freeze({
   "webui-pi-calibration": "Click action on the PI card for calibration/probe commands.",
   "webui-context-auto-compaction": "Click action on context chips for auto-compaction.",
   "webui-branch-picker": "Click action on the git branch/worktree chips.",
-  "webui-git-init": "Git initialization affordance when a tab has no repository.",
+  "webui-git-init": "Git initialization affordance when a thread has no repository.",
   "webui-sync-push": "Compatibility visibility key for incoming pull and outgoing push actions on Sync chips.",
   "webui-changes-modal": "Click action opening the changes/conflicts modal.",
   "webui-git-tools-modal": "Click action opening extra git tools.",
@@ -20933,7 +20947,7 @@ function renderTuiFooterLine({ cwd, cwdTitle, message = "", stats = [], model = 
   const line = make("div", "footer-line footer-line-tui");
   line.append(footerTuiItem(cwd || "loading…", "footer-tui-cwd", tab ? {
     onClick: changeActiveTabCwd,
-    title: cwdTitle || `Change cwd for ${tab.title}: ${cwd}`,
+    title: cwdTitle || `Change cwd for ${threadDisplayTitle(tab.title)}: ${cwd}`,
     middleTruncate: true,
   } : { title: cwdTitle, middleTruncate: true }));
   if (worktreeLabel) line.append(footerTuiItem(worktreeLabel, "footer-tui-worktree", { title: workspace?.worktreePath || worktreeLabel }));
@@ -21172,7 +21186,7 @@ async function integrateGitPullDivergence(mode) {
   const { tabId, syncValue, requestId } = gitPullErrorContext;
   const targetTab = tabs.find((tab) => tab.id === tabId);
   const activeBranch = tabId === activeTabId ? gitFooterCurrentBranch() : "";
-  const target = activeBranch || targetTab?.title || targetTab?.cwd || "the selected branch";
+  const target = activeBranch || threadDisplayTitle(targetTab?.title) || targetTab?.cwd || "the selected branch";
   const merge = mode === "merge";
   const confirmed = await appConfirmText([
     `${merge ? "Merge upstream changes into" : "Rebase local commits onto the upstream of"} ${target}?`,
@@ -21275,7 +21289,7 @@ async function pushGitFooterSync(tabId = activeTabId, syncValue = "") {
   let recoverWithPullFirst = false;
   const tabContext = activeTabContext(tabId);
   const tab = tabs.find((item) => item.id === tabId);
-  const target = tab?.title || tab?.cwd || "this tab";
+  const target = threadDisplayTitle(tab?.title) || tab?.cwd || "this thread";
   hideFooterTooltip();
   const branch = gitFooterCurrentBranch();
   const protectedWarning = ["main", "master"].includes(branch)
@@ -21327,7 +21341,7 @@ function renderGitFooterPayloadMeta(chip, tab, payload) {
   let action = "";
   if (chip.key === "cwd" && tab && visible("webui-cwd-picker")) {
     options.onClick = changeActiveTabCwd;
-    action = `Click to change the working directory for ${tab.title}.`;
+    action = `Click to change the working directory for ${threadDisplayTitle(tab.title)}.`;
   } else if (chip.key === "git" && cleanFooterPayloadText(chip.value, "").toLowerCase() === "no repo" && visible("webui-git-init")) {
     options.onClick = () => startGitInitWorkflow();
     action = "No Git repository detected. Click to initialize a repo, create README.md, add origin, and push main.";
@@ -21819,13 +21833,13 @@ function gitFileViewerTarget(repoRelPath, root, candidates = []) {
 async function openGitFileInViewer(repoRelPath, { root = "", candidates = [], closeChanges = false, category = "" } = {}) {
   const target = gitFileViewerTarget(repoRelPath, root, candidates);
   if (!target) {
-    addEvent(`Cannot open ${repoRelPath}: it is outside the available tab working directories.`, "error");
+    addEvent(`Cannot open ${repoRelPath}: it is outside the available thread working directories.`, "error");
     return;
   }
   if (closeChanges) closeGitChangesDialog();
   if (target.tabId !== activeTabId) await switchTab(target.tabId);
   if (target.tabId !== activeTabId) {
-    addEvent(`Cannot open ${repoRelPath}: its terminal tab is no longer available.`, "error");
+    addEvent(`Cannot open ${repoRelPath}: its thread is no longer available.`, "error");
     return;
   }
   setSidePanelCollapsed(false);
@@ -22270,7 +22284,7 @@ function renderGitChangesDialog() {
     const commitData = data?.commit || commit;
     const base = commitView
       ? [commitData?.shortHash || String(commitData?.hash || "").slice(0, 12), commitData?.subject, data?.root].filter(Boolean).join(" · ") || "Commit diff"
-      : data?.root ? `${data.branch || "detached"} · ${data.root}` : "Current tab git diff";
+      : data?.root ? `${data.branch || "detached"} · ${data.root}` : "Current thread git diff";
     elements.gitChangesSubtitle.textContent = !commitView && data?.remote?.upstream ? `${base} · upstream ${data.remote.upstream}` : base;
   }
   if (elements.gitChangesRefreshButton) {
@@ -22537,7 +22551,7 @@ function gitChangesFetchStateLines() {
   const lines = [];
   const chip = parseGitFooterWebuiPayload()?.meta?.find((item) => item.key === "changes");
   const extensionLine = String(chip?.title || "").split("\n").find((line) => /git fetch/i.test(line));
-  if (extensionLine) lines.push(`Tab fetch state: ${extensionLine.trim()}`);
+  if (extensionLine) lines.push(`Thread fetch state: ${extensionLine.trim()}`);
   const lastFetch = gitChangesState.lastFetch;
   if (lastFetch?.at) {
     const time = new Date(lastFetch.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
@@ -22752,7 +22766,7 @@ function renderGitOperationPanel(operation) {
     const resolveWithAgent = make("button", "git-operation-button primary", "Resolve with agent");
     resolveWithAgent.type = "button";
     resolveWithAgent.disabled = busy;
-    resolveWithAgent.title = `Open a new Pi tab in ${operation.root} and send it the ${kind} conflict context`;
+    resolveWithAgent.title = `Open a new Pi thread in ${operation.root} and send it the ${kind} conflict context`;
     resolveWithAgent.addEventListener("click", async () => {
       const sourceTabId = gitChangesState.tabId || activeTabId;
       if (!projectGitTools.isCurrent(token)) return;
@@ -22764,7 +22778,7 @@ function renderGitOperationPanel(operation) {
         if (!response.ok) throw new Error(response.error || "Failed to open a conflict-resolution agent");
         closeGitChangesDialog();
         const targetTab = await switchToResponseTab(response);
-        addEvent(`Opened ${targetTab?.title || "a new Pi tab"} and sent the ${kind} conflict context.`, "success");
+        addEvent(`Opened ${threadDisplayTitle(targetTab?.title) || "a new Pi thread"} and sent the ${kind} conflict context.`, "success");
       } catch (error) {
         if (!projectGitTools.isCurrent(token)) return;
         gitChangesState = { ...gitChangesState, error: error.message || String(error) };
@@ -22833,7 +22847,7 @@ function renderGitDivergedBar(data) {
   };
   addButton("Merge upstream…", "", `git merge --no-edit ${remote.upstream || "@{upstream}"}`, () => integrateGitChangesDialog("merge"));
   addButton("Rebase onto upstream…", "", `git rebase ${remote.upstream || "@{upstream}"}`, () => integrateGitChangesDialog("rebase"));
-  addButton("Create integration worktree", "", "Open the branch picker to integrate in a separate worktree tab", () => {
+  addButton("Create integration worktree", "", "Open the branch picker to integrate in a separate worktree thread", () => {
     closeGitChangesDialog();
     openBranchWorktreePicker();
   });
@@ -23053,7 +23067,7 @@ function renderGitWorktreeTools(body, data, busy) {
               `Remove worktree ${worktree.path}?`,
               "",
               `Branch: ${worktree.branch || "detached"}`,
-              "This deletes the checkout directory. Dirty worktrees and worktrees with open tabs are refused.",
+              "This deletes the checkout directory. Dirty worktrees and worktrees with open threads are refused.",
             ].join("\n"),
             success: `Removed worktree ${worktree.path}.`,
           }),
@@ -23106,8 +23120,8 @@ function renderGitSubmoduleTools(body, data, busy) {
     );
     const actions = gitFileActionButtons([
       {
-        label: "Open tab",
-        title: "Open a Web UI tab rooted at this submodule",
+        label: "Open thread",
+        title: "Open a Web UI thread rooted at this submodule",
         onClick: () => {
           const root = String(data.root || "").replace(/\/+$/, "");
           closeGitChangesDialog();
@@ -23282,7 +23296,7 @@ function renderMinimalFooter() {
   document.body.classList.toggle("footer-model-picker-open", isFooterPickerOpen());
   elements.statusBar.append(renderTuiFooterLine({
     cwd: workspaceLabel,
-    cwdTitle: tab ? `Change cwd for ${tab.title}: ${workspaceLabel}` : undefined,
+    cwdTitle: tab ? `Change cwd for ${threadDisplayTitle(tab.title)}: ${workspaceLabel}` : undefined,
     message: footerMessage,
     stats: fallbackFooterStats(),
     model: modelLine,
@@ -23420,7 +23434,7 @@ function renderContextMeter() {
   const compact = make("button", "context-meter-compact", currentState?.isCompacting ? "Compacting…" : "Compact now");
   compact.type = "button";
   compact.disabled = !!currentState?.isCompacting;
-  compact.title = "Manually compact this tab's conversation context";
+  compact.title = "Manually compact this thread's conversation context";
   compact.addEventListener("click", () => requestManualCompaction({ triggerButton: compact }));
   const auto = make("button", "context-meter-auto", autoCompactionEnabled ? "Auto on" : "Auto off");
   auto.type = "button";
@@ -23511,7 +23525,7 @@ function renderWorkspaceDashboard() {
   if (!root) return;
   const tab = activeTab();
   const snapshot = contextUsageSnapshot();
-  const workspaceLabel = latestWorkspace?.displayCwd || (tab?.cwd ? normalizeDisplayPath(tab.cwd) : "Choose or create a tab to start");
+  const workspaceLabel = latestWorkspace?.displayCwd || (tab?.cwd ? normalizeDisplayPath(tab.cwd) : "Choose or create a thread to start");
   const workspaceInfo = normalizeGitWorkspaceInfo(tab?.gitWorkspace);
   const worktreeLabel = gitWorkspaceBadgeLabel(workspaceInfo);
   const queueCount = Number(currentState?.pendingMessageCount || 0) || 0;
@@ -23524,7 +23538,7 @@ function renderWorkspaceDashboard() {
   // changed. Extension status pushes during streaming would otherwise rebuild
   // every workspace button on each token, causing flicker.
   const signature = JSON.stringify({
-    title: tab?.title || "Pi Web UI",
+    title: threadDisplayTitle(tab?.title) || "Pi Web UI",
     workspaceLabel,
     gitWorkspace: workspaceInfo ? {
       branch: workspaceInfo.branch,
@@ -23544,7 +23558,7 @@ function renderWorkspaceDashboard() {
     session: sessionSummary,
     hasSession: !!(currentState?.sessionId || currentState?.sessionName),
     activeTabId,
-    tabs: tabs.slice(0, 8).map((item) => ({ id: item.id, title: item.title, indicator: tabIndicator(item), active: item.id === activeTabId, cwd: item.cwd ? normalizeDisplayPath(item.cwd) : "" })),
+    tabs: tabs.slice(0, 8).map((item) => ({ id: item.id, title: threadDisplayTitle(item.title), indicator: tabIndicator(item), active: item.id === activeTabId, cwd: item.cwd ? normalizeDisplayPath(item.cwd) : "" })),
     overflow: tabs.length > 8 ? tabs.length - 8 : 0,
     savedWorkspaces: !tabs.length ? savedWorkspaces.map((workspace) => ({ id: workspace.id, name: workspace.name, savedAt: workspace.savedAt, tabCount: workspace.tabCount, groupCount: workspace.groupCount, cwds: workspace.cwds })) : [],
     savedWorkspacesLoading,
@@ -23556,8 +23570,9 @@ function renderWorkspaceDashboard() {
 
   const header = make("div", "workspace-dashboard-header");
   const title = make("div", "workspace-dashboard-title");
-  const heading = make("h2", undefined, tab?.title || "Pi Web UI");
-  heading.title = tab?.title || "Pi Web UI";
+  const headingText = threadDisplayTitle(tab?.title) || "Pi Web UI";
+  const heading = make("h2", undefined, headingText);
+  heading.title = headingText;
   const cwd = make("p", "workspace-dashboard-cwd muted", workspaceLabel);
   cwd.title = workspaceLabel;
   const meta = make("div", "workspace-dashboard-title-meta");
@@ -23575,7 +23590,7 @@ function renderWorkspaceDashboard() {
     meta.append(worktreeChip);
   }
   meta.append(
-    make("span", "workspace-dashboard-chip", `${tabs.length} tab${tabs.length === 1 ? "" : "s"}`),
+    make("span", "workspace-dashboard-chip", `${tabs.length} thread${tabs.length === 1 ? "" : "s"}`),
     make("span", `workspace-dashboard-chip ${queueCount ? "attention" : ""}`.trim(), queueCount ? `${queueCount} queued` : "queue clear"),
   );
   const summary = make("div", "workspace-dashboard-summary-row");
@@ -23586,7 +23601,7 @@ function renderWorkspaceDashboard() {
   const actions = make("div", "workspace-dashboard-actions");
   actions.append(
     dashboardAction("Command palette", () => openCommandPalette(), "primary"),
-    dashboardAction("New tab", () => createTerminalTab()),
+    dashboardAction("New thread", () => createTerminalTab()),
   );
   if (tabs.length) {
     actions.append(
@@ -23625,8 +23640,8 @@ function renderWorkspaceDashboard() {
   const tabsPanel = make("div", "workspace-dashboard-tabs");
   const tabsHeader = make("div", "workspace-dashboard-tabs-header");
   tabsHeader.append(
-    make("span", "workspace-dashboard-tabs-title", `Open tabs (${tabs.length})`),
-    make("span", "workspace-dashboard-tabs-hint", tabs.length ? "Click a tab to switch" : "No tabs yet"),
+    make("span", "workspace-dashboard-tabs-title", `Open threads (${tabs.length})`),
+    make("span", "workspace-dashboard-tabs-hint", tabs.length ? "Click a thread to switch" : "No threads yet"),
   );
   tabsPanel.append(tabsHeader);
   const tabList = make("div", "workspace-dashboard-tab-list");
@@ -23634,12 +23649,12 @@ function renderWorkspaceDashboard() {
     const indicator = tabIndicator(item);
     const button = make("button", `workspace-dashboard-tab activity-${indicator.state}${item.id === activeTabId ? " active" : ""}`);
     button.type = "button";
-    button.title = `${item.title} · ${indicator.label}${item.cwd ? ` · ${normalizeDisplayPath(item.cwd)}` : ""}`;
-    button.append(make("span", "workspace-dashboard-tab-dot", indicator.glyph), make("span", "workspace-dashboard-tab-label", item.title));
+    button.title = `${threadDisplayTitle(item.title)} · ${indicator.label}${item.cwd ? ` · ${normalizeDisplayPath(item.cwd)}` : ""}`;
+    button.append(make("span", "workspace-dashboard-tab-dot", indicator.glyph), make("span", "workspace-dashboard-tab-label", threadDisplayTitle(item.title)));
     button.addEventListener("click", () => switchTab(item.id));
     tabList.append(button);
   }
-  if (!tabs.length) tabList.append(make("span", "workspace-dashboard-tab-empty", "Create a tab to start a workspace."));
+  if (!tabs.length) tabList.append(make("span", "workspace-dashboard-tab-empty", "Create a thread to start a workspace."));
   if (tabs.length > 8) tabList.append(make("span", "workspace-dashboard-tab-more", `+${tabs.length - 8} more`));
   tabsPanel.append(tabList);
 
@@ -23657,7 +23672,7 @@ function renderSavedWorkspacePicker() {
   const heading = make("div", "workspace-saved-workspaces-heading");
   heading.append(
     make("span", "workspace-dashboard-kicker", "Saved workspaces"),
-    make("span", "workspace-saved-workspaces-hint", "Load a complete saved tab constellation"),
+    make("span", "workspace-saved-workspaces-hint", "Load a complete saved thread constellation"),
   );
   panel.append(heading);
   if (savedWorkspacesLoading) {
@@ -23676,7 +23691,7 @@ function renderSavedWorkspacePicker() {
     return panel;
   }
   if (!savedWorkspaces.length) {
-    panel.append(make("p", "workspace-saved-workspaces-empty muted", "No saved workspaces yet. Open tabs, then use Save workspace."));
+    panel.append(make("p", "workspace-saved-workspaces-empty muted", "No saved workspaces yet. Open threads, then use Save workspace."));
     return panel;
   }
   const list = make("div", "workspace-saved-workspaces-list");
@@ -23687,7 +23702,7 @@ function renderSavedWorkspacePicker() {
     title.title = workspace.name;
     const detail = [
       formatDate(workspace.savedAt),
-      `${workspace.tabCount || 0} tab${workspace.tabCount === 1 ? "" : "s"}`,
+      `${workspace.tabCount || 0} thread${workspace.tabCount === 1 ? "" : "s"}`,
       workspace.groupCount ? `${workspace.groupCount} group${workspace.groupCount === 1 ? "" : "s"}` : "",
       Array.isArray(workspace.cwds) && workspace.cwds.length ? normalizeDisplayPath(workspace.cwds[0]) : "",
     ].filter(Boolean).join(" · ");
@@ -23943,7 +23958,7 @@ function footerBranchActiveAgentTabs(tabContext = activeTabContext()) {
 function footerBranchAgentWarningLines(tabContext = activeTabContext()) {
   const busyTabs = footerBranchActiveAgentTabs(tabContext);
   if (!busyTabs.length) return [];
-  const list = busyTabs.slice(0, 4).map((tab) => `- ${tab.title || tab.id}`).join("\n");
+  const list = busyTabs.slice(0, 4).map((tab) => `- ${threadDisplayTitle(tab.title) || tab.id}`).join("\n");
   const extra = busyTabs.length > 4 ? `\n- … +${busyTabs.length - 4} more` : "";
   return [
     "",
@@ -23979,7 +23994,7 @@ async function confirmFooterGitBranchAction(branch, { create = false, requireCon
   const message = [
     `${action}: ${branchName}?`,
     "",
-    `Repository: ${footerBranchPickerState.root || currentGitFooterCacheCwd(tabContext.tabId) || "current tab"}`,
+    `Repository: ${footerBranchPickerState.root || currentGitFooterCacheCwd(tabContext.tabId) || "current thread"}`,
     ...(trackedRemoteRef ? [`Remote ref: ${trackedRemoteRef}`, `Command: git switch --track -c ${branchName} ${trackedRemoteRef}`] : []),
     ...dirtyLines,
     ...warningLines,
@@ -23997,12 +24012,12 @@ async function confirmFooterGitWorktreeAction(branch, { path = "", create = fals
   const message = [
     `${create ? "Create" : "Open"} branch worktree: ${branchName || targetPath}?`,
     "",
-    `Repository: ${footerBranchPickerState.repoRoot || footerBranchPickerState.root || currentGitFooterCacheCwd() || "current tab"}`,
+    `Repository: ${footerBranchPickerState.repoRoot || footerBranchPickerState.root || currentGitFooterCacheCwd() || "current thread"}`,
     ...(trackedRemoteRef ? [`Remote ref: ${trackedRemoteRef}`, `Creates local branch ${branchName} tracking ${trackedRemoteRef}.`] : []),
     targetPath ? `Worktree: ${targetPath}` : `Default location: ${footerBranchPickerState.defaultWorktreesRoot || "repo sibling .worktrees directory"}`,
     "",
-    "This creates a separate checkout without changing this tab's branch.",
-    "After creation, you can choose whether to open it in a separate Pi tab and switch to it.",
+    "This creates a separate checkout without changing this thread's branch.",
+    "After creation, you can choose whether to open it in a separate Pi thread and switch to it.",
     "Ignored dependencies such as node_modules or .venv are not copied; bootstrap them manually if needed.",
     "",
     "Continue?",
@@ -24084,8 +24099,8 @@ function footerBranchCreateTooltip(branchName = footerBranchCreateName(), state 
     "",
     "What happens:",
     "• asks whether to base the new branch on origin/main (default) or this workspace's current HEAD",
-    "• creates the worktree, then asks whether to open and switch to it in a separate Pi tab",
-    "• does not switch this tab's branch, commit, push, or delete anything",
+    "• creates the worktree, then asks whether to open and switch to it in a separate Pi thread",
+    "• does not switch this thread's branch, commit, push, or delete anything",
     "",
     "Tip: ignored dependencies such as node_modules or .venv are not copied.",
   ].join("\n");
@@ -24132,7 +24147,7 @@ async function confirmSwitchToCreatedFooterGitWorktree(payload = {}, branchName 
   if (!worktreePath) return false;
   return appConfirm({
     title: "Switch to new worktree?",
-    summary: `The${branch ? ` ${branch}` : ""} worktree was created. Open it in a separate Pi tab and switch to it now? The worktree remains available if you stay here.`,
+    summary: `The${branch ? ` ${branch}` : ""} worktree was created. Open it in a separate Pi thread and switch to it now? The worktree remains available if you stay here.`,
     affected: normalizeDisplayPath(worktreePath),
     undoable: true,
     confirmLabel: "Switch to worktree",
@@ -24295,7 +24310,7 @@ function renderFooterBranchCreateForm(state = footerBranchPickerState) {
   nameInput.spellcheck = false;
   nameInput.setAttribute("aria-label", "New branch name");
 
-  const submitButton = make("button", "footer-branch-create-submit", state.switching ? "Opening…" : "Open worktree tab");
+  const submitButton = make("button", "footer-branch-create-submit", state.switching ? "Opening…" : "Open worktree thread");
   submitButton.type = "submit";
 
   const preview = make("div", "footer-branch-create-preview");
@@ -24372,8 +24387,8 @@ function footerBranchOptionDetail(branch, state, { selected, worktreePath } = {}
   if (state.switchingKey ? state.switchingKey === branch.key : state.switching === footerBranchOptionLabel(branch)) return "opening…";
   if (selected) return branch.worktreeCurrent ? "current branch in this worktree" : "current branch";
   if (branch.remote) return `remote-only · creates local branch ${branch.name} tracking ${branch.remoteRef}`;
-  if (worktreePath) return branch.mainWorktree ? "checked out in main worktree · open tab" : "checked out in another worktree · open tab";
-  return "open branch in a new worktree tab";
+  if (worktreePath) return branch.mainWorktree ? "checked out in main worktree · open thread" : "checked out in another worktree · open thread";
+  return "open branch in a new worktree thread";
 }
 
 function openFooterBranchOption(branch, state = footerBranchPickerState) {
@@ -24424,8 +24439,8 @@ function renderFooterBranchOption(branch, state = footerBranchPickerState) {
   primary.title = selected
     ? `Current branch: ${branch.name}`
     : branch.remote
-      ? `Remote-only branch ${branch.remoteRef}: create local branch ${branch.name} tracking it and open a new Git worktree tab`
-      : worktreePath ? `Open existing worktree: ${worktreePath}` : `Open ${branch.name} in a new Git worktree tab`;
+      ? `Remote-only branch ${branch.remoteRef}: create local branch ${branch.name} tracking it and open a new Git worktree thread`
+      : worktreePath ? `Open existing worktree: ${worktreePath}` : `Open ${branch.name} in a new Git worktree thread`;
   primary.append(
     make("span", "footer-model-option-main", footerBranchOptionLabel(branch)),
     make("span", "footer-model-option-name", footerBranchOptionDetail(branch, state, { selected, worktreePath })),
@@ -24461,7 +24476,7 @@ async function removeFooterGitWorktree(worktree, tabContext = activeTabContext()
     "",
     `Branch: ${worktree.branch || "detached"}`,
     "Command: git worktree remove",
-    "This deletes the checkout directory. Dirty worktrees and worktrees with open tabs are refused.",
+    "This deletes the checkout directory. Dirty worktrees and worktrees with open threads are refused.",
   ].join("\n"), { affected: worktree.path, confirmLabel: "Remove worktree" }))) return;
   footerBranchPickerState = { ...footerBranchPickerState, loading: true, error: "" };
   renderFooter();
@@ -25110,7 +25125,7 @@ function renderFooterThinkingPicker() {
   picker.setAttribute("role", "listbox");
   picker.setAttribute("aria-label", "Thinking effort");
   picker.append(make("div", "footer-model-picker-title", "Thinking effort"));
-  picker.append(make("div", "footer-model-picker-source", "Applies to this Pi tab."));
+  picker.append(make("div", "footer-model-picker-source", "Applies to this Pi thread."));
   const current = currentState?.pendingThinkingLevel || currentState?.thinkingLevel || "off";
   for (const level of footerThinkingLevels()) {
     const selected = current === level;
@@ -25502,7 +25517,7 @@ function pickCwd(tab, initialCwd, { title, returnFocus = document.activeElement 
   }
 
   return new Promise((resolve) => {
-    const pickerTab = tab || { id: "path-picker", title: "tab" };
+    const pickerTab = tab || { id: "path-picker", title: "thread" };
     pathPickerState = {
       tabId: pickerTab.id, activeTabId, activeTabGeneration,
       returnFocus, returnFocusKey: elements.statusBar.contains(returnFocus) ? footerControlKey(returnFocus) : "",
@@ -25548,7 +25563,7 @@ async function changeActiveTabCwd() {
     return;
   }
 
-  if (!(await appConfirmText(`Restart ${tab.title} in:\n${cwd}\n\nCurrent in-flight work in this tab will be stopped. The conversation continues in the new directory.`, { affected: tab.title, confirmLabel: "Change working folder" }))) return;
+  if (!(await appConfirmText(`Restart ${threadDisplayTitle(tab.title)} in:\n${cwd}\n\nCurrent in-flight work in this thread will be stopped. The conversation continues in the new directory.`, { affected: threadDisplayTitle(tab.title), confirmLabel: "Change working folder" }))) return;
   if (projectFiles.viewer?.dirty && !(await confirmDiscardEdits({ what: "unsaved file edits", target: projectFiles.viewer.path }))) return;
 
   saveActiveDraft();
@@ -25556,7 +25571,7 @@ async function changeActiveTabCwd() {
     addTransientMessage({
       role: "native",
       title: "Changing working folder…",
-      content: `Restarting ${tab.title} in ${cwd}. This can take a few seconds.`,
+      content: `Restarting ${threadDisplayTitle(tab.title)} in ${cwd}. This can take a few seconds.`,
       level: "info",
     });
   }
@@ -25564,9 +25579,9 @@ async function changeActiveTabCwd() {
   try {
     response = await api(`/api/tabs/${encodeURIComponent(tab.id)}`, { method: "PATCH", body: { cwd }, scoped: false });
   } catch (error) {
-    const message = `Could not change ${tab.title} to ${cwd}. The existing working folder was kept.\n\n${error.message || String(error)}`;
+    const message = `Could not change ${threadDisplayTitle(tab.title)} to ${cwd}. The existing working folder was kept.\n\n${error.message || String(error)}`;
     if (isCurrentTabContext(tabContext)) surfaceRuntimeDiagnostic("Working folder change failed", message);
-    else addEvent(`working folder change failed for ${tab.title}: ${error.message || String(error)}`, "error");
+    else addEvent(`working folder change failed for ${threadDisplayTitle(tab.title)}: ${error.message || String(error)}`, "error");
     return;
   }
 
@@ -25578,7 +25593,7 @@ async function changeActiveTabCwd() {
   clearGitFooterPayloadState(changedTabId);
   if (!isCurrentTabContext(tabContext)) {
     renderTabs();
-    addEvent(response.data?.changed === false ? `cwd unchanged: ${changedCwd}` : `changed ${tab.title} cwd to ${changedCwd}`, "info");
+    addEvent(response.data?.changed === false ? `cwd unchanged: ${changedCwd}` : `changed ${threadDisplayTitle(tab.title)} cwd to ${changedCwd}`, "info");
     return;
   }
 
@@ -25590,9 +25605,9 @@ async function changeActiveTabCwd() {
   connectEvents(nextContext);
   await refreshAll(nextContext);
   if (!isCurrentTabContext(nextContext)) return;
-  const successMessage = response.data?.changed === false ? `cwd unchanged: ${changedCwd}` : `changed ${tab.title} cwd to ${changedCwd}`;
+  const successMessage = response.data?.changed === false ? `cwd unchanged: ${changedCwd}` : `changed ${threadDisplayTitle(tab.title)} cwd to ${changedCwd}`;
   addEvent(successMessage, "info");
-  if (response.data?.changed !== false) addTransientMessage({ role: "native", title: "Working folder changed", content: `${tab.title} restarted in ${changedCwd}.`, level: "info" });
+  if (response.data?.changed !== false) addTransientMessage({ role: "native", title: "Working folder changed", content: `${threadDisplayTitle(tab.title)} restarted in ${changedCwd}.`, level: "info" });
 }
 
 function footerControlKey(node) {
@@ -25763,14 +25778,14 @@ function codexFastModeStatusText() {
   if (!isOptionalFeatureEnabled("codexFastMode")) return optionalFeatureUnavailableMessage("codexFastMode");
   if (!codexFastModeLoaded) return "Checking…";
   if (!codexFastModeState.available) return codexFastModeState.unavailableReason || optionalFeatureUnavailableMessage("codexFastMode");
-  if (!codexFastModeState.statusKnown) return "Status unknown · This tab";
+  if (!codexFastModeState.statusKnown) return "Status unknown · This thread";
   const label = codexSpeedModeLabel(codexFastModeState.mode);
   if (codexFastModeState.busy) return `${label} · Busy`;
   const eligible = codexFastModeState.mode === "ultrafast" ? codexFastModeState.ultrafastModelEligible : codexFastModeState.modelEligible;
   if (codexFastModeState.enabled && codexFastModeState.model && !eligible) {
     return `${label} · Inactive for current model`;
   }
-  return `${label} · This tab`;
+  return `${label} · This thread`;
 }
 
 function renderCodexFastModeControl({ syncSelection = true } = {}) {
@@ -25847,7 +25862,7 @@ async function refreshCodexFastMode(tabContext = activeTabContext(), { readOnly 
     // Browser disable is global while extension state is session/branch local. Keep querying even
     // when hidden and disarm a restored branch before it can silently remain on.
     if (!readOnly && !featureEnabled && data.available && !codexFastModeConfirmedOff(data)) {
-      if (data.busy) throw new Error("this tab is busy; Fast mode will be disarmed when it becomes idle");
+      if (data.busy) throw new Error("this thread is busy; Fast mode will be disarmed when it becomes idle");
       response = await api("/api/codex-fast-mode", { method: "PUT", body: { enabled: false }, tabId: tabContext.tabId });
       data = response.data || {};
       if (!codexFastModeConfirmedOff(data)) throw new Error("the extension did not confirm Fast mode off");
@@ -25883,7 +25898,7 @@ async function applyCodexFastMode() {
       const confirmed = await appConfirm({
         title: "Use Codex Ultrafast?",
         summary: "Ultrafast uses 8x Standard included usage or 6x purchased-credit/pay-as-you-go usage. It requires GPT-6 Astra and Pro $500 or eligible Enterprise/Edu access; workspace terms may differ.",
-        affected: "This tab's session branch. Future requests may cost more.",
+        affected: "This thread's session branch. Future requests may cost more.",
         undoable: true,
         confirmLabel: "Use Ultrafast",
       });
@@ -25918,16 +25933,16 @@ async function disableCodexFastModeIntegration() {
 
   for (const { tabId, data } of snapshots) {
     if (!data.available) {
-      if (data.statusKnown && data.enabled) throw new Error(`tab ${tabId} still reports Fast mode on but /fast-mode is unavailable`);
+      if (data.statusKnown && data.enabled) throw new Error(`thread ${tabId} still reports Fast mode on but /fast-mode is unavailable`);
       continue;
     }
-    if (data.busy && !codexFastModeConfirmedOff(data)) throw new Error(`tab ${tabId} is busy; wait for it to finish before disabling Codex Fast mode`);
+    if (data.busy && !codexFastModeConfirmedOff(data)) throw new Error(`thread ${tabId} is busy; wait for it to finish before disabling Codex Fast mode`);
   }
 
   for (const { tabId, data } of snapshots) {
     if (!data.available || codexFastModeConfirmedOff(data)) continue;
     const response = await api("/api/codex-fast-mode", { method: "PUT", body: { enabled: false }, tabId });
-    if (!codexFastModeConfirmedOff(response.data)) throw new Error(`tab ${tabId} did not confirm Codex Fast mode off`);
+    if (!codexFastModeConfirmedOff(response.data)) throw new Error(`thread ${tabId} did not confirm Codex Fast mode off`);
     if (tabId === activeTabId) applyCodexFastModeData(response.data);
   }
 }
@@ -26030,7 +26045,7 @@ function subagentOverviewGroups(data = activityAgents.getSnapshot().data) {
         groupKind: group.kind,
         tabId: group.tabId || activeTabId || "external",
         tabIndex: group.tabIndex || legacy.tabIndex || index + 1,
-        tabTitle: group.title || legacy.tabTitle || (group.kind === "external" ? "External agents" : `Terminal ${index + 1}`),
+        tabTitle: threadDisplayTitle(group.title || legacy.tabTitle) || (group.kind === "external" ? "External agents" : `Thread ${index + 1}`),
         sessionName: group.cwdLabel || legacy.sessionName || "registered agents",
         available: true,
         gates,
@@ -26456,7 +26471,7 @@ function renderSubagentOverlayWidget() {
   if (subagentRunCanRefresh(selection.run, agent)) actions.append(refreshButton);
   actions.append(appRunnerActionButton("Close", closeSubagentOverlay, "subagent-overlay-close-action"));
   const details = [
-    `${selection.tab?.tabTitle || tab?.title || `Terminal ${selection.tabIndex || "?"}`} · run ${selection.runId}`,
+    `${threadDisplayTitle(selection.tab?.tabTitle || tab?.title) || `Thread ${selection.tabIndex || "?"}`} · run ${selection.runId}`,
     agent.currentPath ? `path: ${agent.currentPath}` : "",
     agent.activityState ? `activity: ${agent.activityState}` : "",
     agent.error ? `status warning: ${agent.error}` : "",
@@ -26660,7 +26675,7 @@ function renderSubagentTerminalView() {
   if (transcript.dataset.continuityScrollKey === scrollKey) rememberScopedScrollContinuity(transcript, scrollKey);
   else if (!scopedScrollContinuityByKey.has(scrollKey)) scopedScrollContinuityByKey.set(scrollKey, { mode: "follow-end", scrollTop: 0, scrollLeft: 0 });
   elements.subagentTerminalTitle.textContent = subagentTerminalViewTitle(view);
-  elements.subagentTerminalMeta.textContent = `${facts.join(" · ")} · parent ${parent?.title || view.parentTitle || "terminal"} · run ${view.runId}`;
+  elements.subagentTerminalMeta.textContent = `${facts.join(" · ")} · parent ${parent?.title || view.parentTitle || "thread"} · run ${view.runId}`;
   renderSubagentTerminalCards(agent);
   transcript.replaceChildren();
   transcript.setAttribute("aria-live", running ? "polite" : "off");
@@ -26772,7 +26787,7 @@ function ensureSubagentTerminalView(tab, run, agent) {
     existing.tab = tab;
     existing.run = run;
     existing.agent = agent;
-    existing.parentTitle = tab.tabTitle;
+    existing.parentTitle = threadDisplayTitle(tab.tabTitle);
     if (run.gateAttempt) existing.gateAttempt = run.gateAttempt;
     return existing;
   }
@@ -26780,7 +26795,7 @@ function ensureSubagentTerminalView(tab, run, agent) {
     id,
     groupId: tab.groupId,
     parentTabId: tab.tabId,
-    parentTitle: tab.tabTitle,
+    parentTitle: threadDisplayTitle(tab.tabTitle),
     tabIndex: tab.tabIndex,
     tab,
     run,
@@ -26806,7 +26821,7 @@ async function openSubagentTerminal(tab, run, agent) {
   try {
     await activateSubagentTerminalView(view.id);
   } catch (error) {
-    addEvent(`could not open subagent terminal: ${error.message || String(error)}`, "error");
+    addEvent(`could not open subagent thread: ${error.message || String(error)}`, "error");
   }
 }
 
@@ -26876,7 +26891,7 @@ function syncSubagentTerminalViewsFromOverview() {
     const agent = (Array.isArray(run?.agents) ? run.agents : []).find((candidate) => candidate.id === view.agentId);
     if (tab) {
       view.tab = tab;
-      view.parentTitle = tab.tabTitle;
+      view.parentTitle = threadDisplayTitle(tab.tabTitle);
       changed = true;
     }
     if (run) {
@@ -26972,11 +26987,11 @@ function renderSubagentTerminalTab(view, { groupItem = false } = {}) {
   button.type = "button";
   button.setAttribute("role", "tab");
   button.setAttribute("aria-selected", active ? "true" : "false");
-  button.setAttribute("aria-label", `${subagentTerminalViewTitle(view)} subagent view, parent ${view.parentTitle || "terminal"}`);
+  button.setAttribute("aria-label", `${subagentTerminalViewTitle(view)} subagent view, parent ${view.parentTitle || "thread"}`);
   appendTerminalTabContent(button, {
     title: subagentTerminalViewTitle(view),
     indicator: { state: running ? "working" : "done" },
-    meta: ["Subagent", subagentSourceLabel(view.data?.source || view.run?.source), ...subagentExecutionFacts(view.data?.agent || view.agent), view.parentTitle || "parent terminal"].join(" · "),
+    meta: ["Subagent", subagentSourceLabel(view.data?.source || view.run?.source), ...subagentExecutionFacts(view.data?.agent || view.agent), view.parentTitle || "parent thread"].join(" · "),
     subagent: true,
   });
   button.addEventListener("click", (event) => {
@@ -27127,9 +27142,9 @@ function renderSubagentAgent(tab, run, agent) {
     const open = make("span", "subagent-agent-open", "›");
     open.setAttribute("aria-hidden", "true");
     row.append(open);
-    const destination = subagentOpenMode === "tab" ? "subagent tab" : "output overlay";
+    const destination = subagentOpenMode === "tab" ? "subagent view" : "output overlay";
     row.title = `${name} · ${launcher} · ${status} · ${model} · ${thinking} · open ${destination}`;
-    row.setAttribute("aria-label", `Open ${destination} for ${name}, launched by ${launcher}, ${status}, model ${model}, reasoning ${thinking}, in ${tab?.tabTitle || `Terminal ${tab?.tabIndex || "?"}`}`);
+    row.setAttribute("aria-label", `Open ${destination} for ${name}, launched by ${launcher}, ${status}, model ${model}, reasoning ${thinking}, in ${threadDisplayTitle(tab?.tabTitle) || `Thread ${tab?.tabIndex || "?"}`}`);
     row.addEventListener("click", () => openSubagentOutput(tab, run, agent));
   } else {
     row.title = `${name} · ${launcher} · ${status} · output is unavailable from this provider`;
@@ -27211,7 +27226,7 @@ function renderSubagentGateAttempt(tab, attempt) {
   if (target) {
     row.type = "button";
     row.dataset.subagentContinuityKey = `gate:${tab?.tabId || ""}:${attempt?.runId || ""}:${target.agent?.id || ""}`;
-    const destination = subagentOpenMode === "tab" ? "subagent tab" : "output overlay";
+    const destination = subagentOpenMode === "tab" ? "subagent view" : "output overlay";
     row.title = `${title} · open ${destination}`;
     row.setAttribute("aria-label", `Open ${destination} for ${title}, ${attempt?.status || "unknown"}, ${attempt?.retrySafety || "may-write"}`);
     row.addEventListener("click", () => openSubagentGateAttemptOutput(tab, target, attempt));
@@ -27270,11 +27285,11 @@ function renderSubagentTabGroup(tab) {
   const header = make(isExternal ? "div" : "button", "subagent-tab-header");
   if (!isExternal) header.type = "button";
   header.dataset.subagentContinuityKey = `tab:${tab?.tabId || ""}`;
-  if (!isExternal) header.setAttribute("aria-label", `Open ${tab.tabTitle || `Terminal ${tab.tabIndex || ""}`}`);
+  if (!isExternal) header.setAttribute("aria-label", `Open ${threadDisplayTitle(tab.tabTitle) || `Thread ${tab.tabIndex || ""}`}`);
   const title = make("span", "subagent-tab-title");
   title.append(
-    make("strong", undefined, tab.tabTitle || `Terminal ${tab.tabIndex || "?"}`),
-    make("span", "subagent-tab-session", isExternal ? "Registered outside open WebUI tabs" : `Terminal ${tab.tabIndex || "?"} · ${subagentTabMeta(tab)}`),
+    make("strong", undefined, threadDisplayTitle(tab.tabTitle) || `Thread ${tab.tabIndex || "?"}`),
+    make("span", "subagent-tab-session", isExternal ? "Registered outside open WebUI threads" : `Thread ${tab.tabIndex || "?"} · ${subagentTabMeta(tab)}`),
   );
   const runs = (Array.isArray(tab.displayRuns) ? tab.displayRuns : ungatedSubagentRuns(tab))
     .slice()
@@ -27354,7 +27369,7 @@ function renderSubagents() {
   box.classList.toggle("muted", !hasItems);
   box.classList.toggle("has-items", hasItems);
   if (!hasItems) {
-    box.append(make("div", "subagents-empty", activityAgents.getSnapshot().error ? `Subagent status unavailable: ${activityAgents.getSnapshot().error.message || activityAgents.getSnapshot().error}` : "Managed and registered Pi agent runs will appear here, grouped by terminal or under External agents."));
+    box.append(make("div", "subagents-empty", activityAgents.getSnapshot().error ? `Subagent status unavailable: ${activityAgents.getSnapshot().error.message || activityAgents.getSnapshot().error}` : "Managed and registered Pi agent runs will appear here, grouped by thread or under External agents."));
     restoreFocus();
     return;
   }
@@ -27588,10 +27603,10 @@ function renderSubagentLaunchSlots() {
         : dirty
           ? "Unsaved changes"
           : subagentLaunchSlotReloadRequired && activeConfigTab
-            ? "Saved · reload this tab"
+            ? "Saved · reload this thread"
             : config
               ? `${roleCount} roles · ${subagentLaunchSlotScope === "project" ? "project scope" : "user defaults"}`
-              : "Select a running Pi tab";
+              : "Select a running Pi thread";
   }
   if (elements.subagentLaunchSlots && (subagentLaunchSlotError || (subagentLaunchSlotReloadRequired && activeConfigTab))) {
     elements.subagentLaunchSlots.open = true;
@@ -27608,7 +27623,7 @@ function renderSubagentLaunchSlots() {
           ? `This project (${config.projectLabel || "current project"}) inherits your user defaults.`
           : `This project (${config.projectLabel || "current project"}) has its own launch-slot defaults.`
         : "User defaults apply to new projects unless that project has its own defaults."
-      : "Select a running Pi tab to load its available models.";
+      : "Select a running Pi thread to load its available models.";
   }
   if (elements.subagentLaunchSlotsInherit) {
     elements.subagentLaunchSlotsInherit.hidden = !(config && subagentLaunchSlotScope === "project" && !config.inherited);
@@ -27619,7 +27634,7 @@ function renderSubagentLaunchSlots() {
       ? "Loading agent models…"
       : config
         ? !activeConfigTab
-          ? "This unsaved draft belongs to a different tab. Switch back to save or reload it."
+          ? "This unsaved draft belongs to a different thread. Switch back to save or reload it."
           : subagentLaunchSlotScope === "project" && config.inherited
             ? "This project currently inherits user-default launch slots."
             : "Model assignments are saved separately from the live monitor."
@@ -27725,7 +27740,7 @@ function applySavedSubagentLaunchSlotConfig(data) {
 
 async function saveSubagentLaunchSlotConfig({ inherit = false } = {}) {
   if (!subagentLaunchSlotConfig || !subagentLaunchSlotConfigTabId || subagentLaunchSlotConfigTabId !== activeTabId) {
-    subagentLaunchSlotError = "Return to the tab that owns this launch-slot draft before saving.";
+    subagentLaunchSlotError = "Return to the thread that owns this launch-slot draft before saving.";
     renderSubagentLaunchSlots();
     return;
   }
@@ -27767,10 +27782,10 @@ async function reloadActiveTabForSubagentLaunchSlots() {
     await sendPrompt("prompt", "/reload", { targetTabId: activeTabId, throwOnError: true });
     subagentLaunchSlotReloadTabs.delete(activeTabId);
     subagentLaunchSlotReloadRequired = false;
-    setSubagentLaunchSlotAnnouncement("Active tab reloaded. Agent model guidance now applies to future launches.");
+    setSubagentLaunchSlotAnnouncement("Active thread reloaded. Agent model guidance now applies to future launches.");
     await loadSubagentLaunchSlotConfig();
   } catch (error) {
-    subagentLaunchSlotError = `Could not reload the active tab: ${error.message || String(error)}`;
+    subagentLaunchSlotError = `Could not reload the active thread: ${error.message || String(error)}`;
   } finally {
     subagentLaunchSlotSaving = false;
     renderSubagentLaunchSlots();
@@ -27914,7 +27929,7 @@ function samplingParametersSectionActive() {
 function samplingParametersSupportText() {
   const state = samplingParametersStateTabId === activeTabId ? samplingParametersState : null;
   const support = state?.support;
-  if (!support) return samplingParametersLoading ? "Loading sampling support…" : "Select a running Pi tab to load sampling parameters.";
+  if (!support) return samplingParametersLoading ? "Loading sampling support…" : "Select a running Pi thread to load sampling parameters.";
   const modelLabel = support.model?.provider && support.model?.id ? `(${support.model.provider}) ${support.model.id}` : "unknown model";
   const apiLabel = support.api || "unknown API";
   if (support.supported) return `${modelLabel} · ${apiLabel} · ${support.message || "Sampling parameters apply to subsequent provider requests."}`;
@@ -27941,9 +27956,9 @@ function samplingParametersStatusText({ dirty, unsupported, validation, loadedFo
   if (samplingParametersError && feedbackCurrent) return samplingParametersError;
   if (samplingParametersBusy) return "Applying sampling parameters…";
   if (samplingParametersLoading) return "Loading session sampling parameters…";
-  if (!activeTabId) return "Select a running Pi tab to edit sampling parameters.";
+  if (!activeTabId) return "Select a running Pi thread to edit sampling parameters.";
   if (samplingParametersNotice && feedbackCurrent) return samplingParametersNotice;
-  if (!loadedForActiveTab) return "Sampling parameters are not loaded for this tab.";
+  if (!loadedForActiveTab) return "Sampling parameters are not loaded for this thread.";
   if (!validation.valid) return Object.values(validation.errors)[0] || "Correct invalid sampling values before applying.";
   if (unsupported) return "This model has no verified sampling parameters, so applying them is disabled.";
   if (dirty) return "Unsaved controls · Apply stores enabled values for this session only.";
@@ -28153,7 +28168,7 @@ function renderSamplingParameters() {
   if (elements.samplingParametersPreserved) {
     elements.samplingParametersPreserved.textContent = loadedForActiveTab
       ? summarizePreservedSamplingParameters(editableDraft.preservedUnknown).text
-      : samplingParametersLoading ? "Loading additional parameter state…" : "Additional parameter state is not loaded for this tab.";
+      : samplingParametersLoading ? "Loading additional parameter state…" : "Additional parameter state is not loaded for this thread.";
   }
   if (elements.applySamplingParametersButton) {
     elements.applySamplingParametersButton.disabled = samplingParametersBusy
@@ -28260,7 +28275,7 @@ async function writeSamplingParameters(samplingParams, { successNotice }) {
 async function applySamplingParameters() {
   if (!activeTabId || samplingParametersBusy) return;
   if (!samplingParametersState || samplingParametersStateTabId !== activeTabId) {
-    setSamplingParametersFeedback({ error: "Wait for this tab's sampling parameters to load before applying changes." });
+    setSamplingParametersFeedback({ error: "Wait for this thread's sampling parameters to load before applying changes." });
     renderSamplingParameters();
     return;
   }
@@ -28288,7 +28303,7 @@ async function applySamplingParameters() {
 async function resetSamplingParameters() {
   if (!activeTabId || samplingParametersBusy) return;
   if (!samplingParametersState || samplingParametersStateTabId !== activeTabId) {
-    setSamplingParametersFeedback({ error: "Wait for this tab's sampling parameters to load before resetting them." });
+    setSamplingParametersFeedback({ error: "Wait for this thread's sampling parameters to load before resetting them." });
     renderSamplingParameters();
     return;
   }
@@ -29722,7 +29737,7 @@ const APP_RUNNER_SUPPORTED_ITEMS = [
   "Deno, make, just, and plain Node entry files",
 ];
 const APP_RUNNER_SUPPORTED_TOOLTIP = [
-  "No app runner detected for this tab cwd.",
+  "No app runner detected for this thread cwd.",
   "",
   "Currently supported:",
   ...APP_RUNNER_SUPPORTED_ITEMS.map((item) => `• ${item}`),
@@ -30326,8 +30341,8 @@ function renderAppRunnerControls() {
     ? `App runner already running: ${activeRun.displayCommand || activeRun.label || "runner"}`
     : runners.length
       ? "Run a detected app runner"
-      : "No app runners detected in this tab working directory";
-  button.dataset.tooltip = runners.length ? "App runners: run detected project commands in this tab's working directory." : APP_RUNNER_SUPPORTED_TOOLTIP;
+      : "No app runners detected in this thread working directory";
+  button.dataset.tooltip = runners.length ? "App runners: run detected project commands in this thread's working directory." : APP_RUNNER_SUPPORTED_TOOLTIP;
   button.setAttribute("aria-label", button.title);
   // Refreshing data must not cancel the click that requested this discovery.
   if (!runners.length || running) setAppRunnerMenuOpen(false, { preserveOpeningIntent: true });
@@ -30387,7 +30402,7 @@ function renderAppRunnerInfoDialog() {
   body.replaceChildren();
 
   const current = make("section", "app-runner-info-section");
-  current.append(make("h3", "", "Detected in this tab"));
+  current.append(make("h3", "", "Detected in this thread"));
   if (runners.length) {
     const list = make("ul", "app-runner-info-list app-runner-info-detected-list");
     for (const runner of runners) {
@@ -30404,18 +30419,18 @@ function renderAppRunnerInfoDialog() {
     }
     current.append(list);
   } else {
-    current.append(make("p", "muted", "No runners are currently detected for this tab working directory."));
+    current.append(make("p", "muted", "No runners are currently detected for this thread working directory."));
   }
 
   const how = make("section", "app-runner-info-section");
   how.append(make("h3", "", "How it works"));
   const howList = make("ul", "app-runner-info-list");
   for (const line of [
-    "Detection is scoped to the active terminal tab's current working directory.",
+    "Detection is scoped to the active thread's current working directory.",
     "Only commands/files that exist and runner binaries available on this system are shown.",
     "Starting a runner keeps live output pinned above the chat/terminal area.",
     "While a runner is active, the widget can send line-oriented stdin to interactive scripts.",
-    "Only one app runner can be active per tab; Close/Stop terminates the process/server.",
+    "Only one app runner can be active per thread; Close/Stop terminates the process/server.",
     "Project discovery paths are project-local, relative to the project root, and scanned one level deep only.",
   ]) howList.append(make("li", "", line));
   how.append(howList);
@@ -31716,7 +31731,7 @@ async function runStatsCalibration(mode) {
   if (!tabContext.tabId) return;
   const commandName = resolveAvailableCommandName("calibrate", { rpcOnly: true });
   if (!commandName) {
-    statsOverlayError = "Calibration command unavailable: /calibrate is not loaded in this Pi tab.";
+    statsOverlayError = "Calibration command unavailable: /calibrate is not loaded in this Pi thread.";
     renderStatsOverlay();
     return;
   }
@@ -33204,13 +33219,13 @@ function gitWorkflowHint() {
     case "add": return (gitWorkflow.preferences || gitWorkflowPreferences)?.stagingPolicy === "all"
       ? "Step 1: explicitly stage all changes with git add ."
       : "Step 1: review changes, stage only intended files, then accept the current staged set.";
-    case "reviewRequesting": return "Step 2: requesting a staged manual repository review in this tab. Cancel will request Pi abort.";
+    case "reviewRequesting": return "Step 2: requesting a staged manual repository review in this thread. Cancel will request Pi abort.";
     case "review": return "Step 2: inspect the staged Git diff and use the manual review card to approve or decline. Approval alone advances to commit-message generation.";
     case "generate": return "Step 3: run /git-staged-msg, or type a commit message and use Commit input.";
     case "generating": return "Pi is generating dev/COMMIT/staged-commit-short.txt and staged-commit-long.txt.";
     case "message": return gitWorkflow.prMode ? `Worktree branch ${gitWorkflow.prBranch || "created"}: choose short, long, or typed input before opening a PR.` : "Step 3/4: preview the native g-msg output, type a commit message if needed, commit here, or create a PR branch worktree first.";
     case "branchNaming": return "Pi is generating dev/COMMIT/staged-branch-name.txt for a PR branch worktree. Cancel will request Pi abort.";
-    case "branching": return "Creating or opening a branch worktree, copying staged changes, and switching to that tab before committing.";
+    case "branching": return "Creating or opening a branch worktree, copying staged changes, and switching to that thread before committing.";
     case "committing": return "Running native git commit with the selected message.";
     case "push": return gitWorkflow.prMode ? "Push the PR worktree branch, generate /pr, review the description, then create the pull request." : "Step 5: push the new commit to the configured remote.";
     case "pushing": return "Running git push. Cancel will request process termination.";
@@ -33484,7 +33499,7 @@ function guidedGitReviewAvailable(tabId = activeTabId) {
 }
 
 function guidedGitReviewUnavailableMessage() {
-  return "Manual staged review is still required, but aur-review is unavailable or disabled. Re-enable/install @firstpick/pi-extension-aur-review and reload this Pi/WebUI tab, then request a new review. No message, commit, worktree, or push action was performed.";
+  return "Manual staged review is still required, but aur-review is unavailable or disabled. Re-enable/install @firstpick/pi-extension-aur-review and reload this Pi/WebUI thread, then request a new review. No message, commit, worktree, or push action was performed.";
 }
 
 function guidedGitReviewCommand() {
@@ -33587,7 +33602,7 @@ async function requestGuidedGitReview(tabId = gitWorkflowActionTabId(), { output
     guidedReviewStatus: "requesting",
     guidedReviewRequestedAt: requestedAt,
     ...gitWorkflowActionDonePatch(workflow, "stage"),
-    output: `${output}\n\nRequesting a staged manual repository review in this tab…`,
+    output: `${output}\n\nRequesting a staged manual repository review in this thread…`,
   }, { tabId });
   try {
     await api("/api/prompt", { method: "POST", body: { message: resolveRpcSlashCommandMessage(guidedGitReviewCommand(), { tabId }) }, tabId, signal: AbortSignal.timeout(12_000) });
@@ -33682,7 +33697,7 @@ function reconcileGuidedGitReviewWidgetRemoval(tabId) {
 }
 
 function guidedGitNativeCommandUnavailable(commandName) {
-  return `Guided Git browser generation requires the /${commandName} extension command from @firstpick/pi-extension-git-guided-workflow in the originating tab. Same-named prompt templates are not used.`;
+  return `Guided Git browser generation requires the /${commandName} extension command from @firstpick/pi-extension-git-guided-workflow in the originating thread. Same-named prompt templates are not used.`;
 }
 
 function hasLoadedGuidedGitNativeCommand(commandName, tabId) {
@@ -33734,9 +33749,9 @@ function reportGuidedGitLaunchRefused(reason) {
     : reason === "streaming"
       ? "Pi is running"
       : reason === "pending"
-        ? "the tab has pending messages"
-        : "the tab state is not ready";
-  addEvent(`Guided Git was not started because ${detail}. Wait until the originating tab is idle with no pending messages, then start it again.`, "warn");
+        ? "the thread has pending messages"
+        : "the thread state is not ready";
+  addEvent(`Guided Git was not started because ${detail}. Wait until the originating thread is idle with no pending messages, then start it again.`, "warn");
 }
 
 function guidedGitLaunchAdmitted(tabId) {
@@ -33752,7 +33767,7 @@ async function launchGuidedGitWorkflow(tabId = activeTabId) {
   if (launchMode !== "extension") {
     addEvent(launchMode === "disabled"
       ? optionalFeatureUnavailableMessage("gitWorkflow")
-      : "Guided Git is unavailable: install @firstpick/pi-extension-git-guided-workflow and reload the Pi tab.", "warn");
+      : "Guided Git is unavailable: install @firstpick/pi-extension-git-guided-workflow and reload the Pi thread.", "warn");
     return;
   }
   const commandName = resolveAvailableCommandName("git-guided-workflow", { tabId, rpcOnly: true });
@@ -33805,7 +33820,7 @@ async function startGitWorkflow(tabId = activeTabId, { skipSetup = false, activa
     step: "add",
     process: "stage",
     busy: false,
-    output: `${gitWorkflowStagingReadyMessage(preferences)}\n\n${gitWorkflowConfiguredGenerationText(preferences)} The active tab model and effort are restored after generation.`,
+    output: `${gitWorkflowStagingReadyMessage(preferences)}\n\n${gitWorkflowConfiguredGenerationText(preferences)} The active thread model and effort are restored after generation.`,
     error: "",
     githubUsername: "",
     repoName: "",
@@ -34521,7 +34536,7 @@ function gitWorkflowWorktreeOutput(result, branch) {
     : result?.openedExisting || result?.openedExistingTab
       ? "Existing worktree opened; review its current changes before committing."
       : "Source index was clean; no staged changes were copied.";
-  return `${formatGitCommandResult(result)}\n\nOpened PR branch worktree ${prBranch || branch} at ${normalizeDisplayPath(worktreePath)}. ${copied}\n\nChoose Commit short, Commit long, or Commit input to commit in this worktree tab.`;
+  return `${formatGitCommandResult(result)}\n\nOpened PR branch worktree ${prBranch || branch} at ${normalizeDisplayPath(worktreePath)}. ${copied}\n\nChoose Commit short, Commit long, or Commit input to commit in this worktree thread.`;
 }
 
 async function createGitPrBranchWithSuggestion(suggestion, tabId = gitWorkflowActionTabId(), expectedRunId) {
@@ -34608,11 +34623,11 @@ async function createGitPrBranchWithSuggestion(suggestion, tabId = gitWorkflowAc
       verificationConfirmed: false,
     };
     if (targetTabId !== tabId) {
-      setGitWorkflow({ step: "message", prMode: false, prBranch: "", branchName: prBranch || branch, busy: false, output: `${formatCommitMessagePreview(sourceWorkflow.message)}\n\nOpened PR branch worktree ${prBranch || branch} in ${result.tab?.title || "a new tab"}. Continue the commit and PR flow there; this checkout stayed on its current branch.` }, { tabId });
+      setGitWorkflow({ step: "message", prMode: false, prBranch: "", branchName: prBranch || branch, busy: false, output: `${formatCommitMessagePreview(sourceWorkflow.message)}\n\nOpened PR branch worktree ${prBranch || branch} in ${threadDisplayTitle(result.tab?.title) || "a new thread"}. Continue the commit and PR flow there; this checkout stayed on its current branch.` }, { tabId });
     }
     setGitWorkflow(nextState, { tabId: targetTabId });
     if (targetTabId !== tabId) await switchTab(targetTabId);
-    addEvent(`Opened PR branch worktree ${prBranch || branch}. Continue the guided Git workflow in its tab.`, "success");
+    addEvent(`Opened PR branch worktree ${prBranch || branch}. Continue the guided Git workflow in its thread.`, "success");
   } catch (error) {
     if (isCurrentGitWorkflowRun(runId, tabId)) {
       setGitWorkflow({ prMode: false, prBranch: "" }, { tabId });
@@ -35289,8 +35304,8 @@ async function runPromptList(prompts, { name = "Prompt list" } = {}) {
   }
   const targetTabId = activeTabId;
   if (!targetTabId) {
-    addEvent("cannot run prompt list without an active tab", "error");
-    setPromptListStatus("No active tab available.", "error");
+    addEvent("cannot run prompt list without an active thread", "error");
+    setPromptListStatus("No active thread available.", "error");
     return;
   }
   if (promptListRunning) return;
@@ -35427,7 +35442,7 @@ function configureMarkdownLink(link, href) {
     const basePath = link.closest?.(".file-viewer-preview") && projectFiles.viewer ? fileParentPath(projectFiles.viewer.path) : "";
     const workspacePath = markdownWorkspaceFilePath(href, cwd, basePath);
     if (!workspacePath) {
-      addEvent(`Cannot open Markdown link outside this tab's working directory: ${filePath}`, "error");
+      addEvent(`Cannot open Markdown link outside this thread's working directory: ${filePath}`, "error");
       return;
     }
     setSidePanelCollapsed(false);
@@ -37152,7 +37167,7 @@ function renderEmptyStartState() {
     })] : []),
     emptyStartAction({
       title: "Open workspace",
-      description: tab ? "Choose a folder for a new Pi tab" : "Choose a folder for your first message",
+      description: tab ? "Choose a folder for a new Pi thread" : "Choose a folder for your first message",
       symbol: "+",
       className: "primary",
       onClick: (button) => tab
@@ -37161,7 +37176,7 @@ function renderEmptyStartState() {
     }),
     emptyStartAction({
       title: "Load workspace",
-      description: "Restore a saved tab constellation",
+      description: "Restore a saved thread constellation",
       symbol: "⇱",
       onClick: (button) => openWorkspaceLoadPicker({ triggerButton: button }),
     }),
@@ -39438,7 +39453,7 @@ function assistantFailureActions(tabId = activeTabId) {
       run: () => sendPrompt("prompt", entry.text, { targetTabId: tabId }),
     });
   }
-  actions.push({ label: "Change model…", title: "Choose another model for this tab (Ctrl/Cmd+L)", run: () => openNativeModelSelector() });
+  actions.push({ label: "Change model…", title: "Choose another model for this thread (Ctrl/Cmd+L)", run: () => openNativeModelSelector() });
   return actions;
 }
 
@@ -39494,7 +39509,7 @@ function addAbortTranscriptNotice({ activeRun = false, errorMessage = "" } = {})
     title: activeRun ? "Agent aborted" : "Abort requested",
     content: activeRun
       ? "⛔ Agent run aborted by user from the Web UI. Pi was told to stop; this transcript marks the run as aborted."
-      : "⛔ Abort requested from the Web UI, but no active agent run was visible in this tab.",
+      : "⛔ Abort requested from the Web UI, but no active agent run was visible in this thread.",
     level: activeRun ? "warn" : "info",
   });
 }
@@ -40546,7 +40561,7 @@ async function restartOptionalFeatureTab() {
     optionalFeatureRestartNotice = null;
     renderOptionalFeatureMigrationSurface();
   } catch (error) {
-    addEvent(`optional feature tab restart failed: ${error.message || String(error)}`, "error");
+    addEvent(`optional feature thread restart failed: ${error.message || String(error)}`, "error");
   }
 }
 
@@ -40661,11 +40676,11 @@ function renderOptionalFeatureMigrationSurface() {
   if (optionalFeatureRestartNotice) {
     const notice = make("div", "optional-feature-restart-notice");
     const noticeText = optionalFeatureRestartNotice.restartDeferred
-      ? "New optional features are ready. Restart is deferred because the affected tab was busy."
-      : "Restarted tab to load new features.";
+      ? "New optional features are ready. Restart is deferred because the affected thread was busy."
+      : "Restarted thread to load new features.";
     notice.append(make("span", undefined, noticeText));
     if (optionalFeatureRestartNotice.restartDeferred) {
-      notice.append(optionalFeatureMigrationAction("Restart tab", () => restartOptionalFeatureTab(), "primary"));
+      notice.append(optionalFeatureMigrationAction("Restart thread", () => restartOptionalFeatureTab(), "primary"));
     } else {
       notice.append(optionalFeatureMigrationAction("Dismiss", dismissOptionalFeatureMigrationCompletion));
     }
@@ -41016,8 +41031,8 @@ function optionalFeatureStatus(featureId) {
   if (detected && managedWithTools) return { label: "Enabled", className: "enabled", detail: doneDetail || `Tool access is enabled for the active Pi session${versionSuffix}`, command: installState?.command || "" };
   if (detected && !disabled) return { label: "Enabled", className: "enabled", detail: doneDetail || `Detected and enabled in Web UI${versionSuffix}`, command: installState?.command || "" };
   if (detected && disabled) return { label: "Disabled", className: "disabled", detail: `Detected, but disabled in Web UI${versionSuffix}` };
-  if (packageStatus?.locallyConfigured) return { label: "Available locally", className: "installed", detail: doneDetail || `Enabled as a top-level Pi resource; reload this tab if the capability is not detected yet${versionSuffix}` };
-  if (packageStatus?.installed && packageStatus?.configured) return { label: "Installed", className: "installed", detail: doneDetail || `Registered with Pi but not loaded in the active tab${versionSuffix}`, command: installState?.command || "" };
+  if (packageStatus?.locallyConfigured) return { label: "Available locally", className: "installed", detail: doneDetail || `Enabled as a top-level Pi resource; reload this thread if the capability is not detected yet${versionSuffix}` };
+  if (packageStatus?.installed && packageStatus?.configured) return { label: "Installed", className: "installed", detail: doneDetail || `Registered with Pi but not loaded in the active thread${versionSuffix}`, command: installState?.command || "" };
   if (packageStatus?.installed && !packageStatus?.configured) return {
     label: "Registration needed",
     className: "missing",
@@ -41234,7 +41249,7 @@ async function setToolManagedOptionalFeatureEnabled(feature, enabled) {
     const current = await api("/api/tools?scope=session", { tabId: tabContext.tabId });
     if (!isCurrentTabContext(tabContext)) return;
     const tools = Array.isArray(current.data?.tools) ? current.data.tools : [];
-    if (!tools.some((tool) => tool?.name === toolName)) throw new Error(`${toolName} is not available in this Pi tab`);
+    if (!tools.some((tool) => tool?.name === toolName)) throw new Error(`${toolName} is not available in this Pi thread`);
     const enabledTools = new Set(tools.filter((tool) => tool?.enabled !== false).map((tool) => tool.name));
     if (enabled) enabledTools.add(toolName);
     else enabledTools.delete(toolName);
@@ -41524,7 +41539,7 @@ function syncRemoteWebuiControlVisibility(hasRemoteWebuiCommand = isOptionalFeat
 function commandUnavailableMessage(commandName) {
   const featureId = optionalFeatureIdForCommand(commandName);
   if (featureId) return optionalFeatureUnavailableMessage(featureId);
-  return `Command unavailable: /${commandName} is not loaded in the active Pi tab.`;
+  return `Command unavailable: /${commandName} is not loaded in the active Pi thread.`;
 }
 
 async function installOptionalFeature(featureId, { update = false } = {}) {
@@ -41582,7 +41597,7 @@ async function installOptionalFeature(featureId, { update = false } = {}) {
       actionLabel,
       startedAt,
       detail: "Pi finished; checking installation and registration status…",
-      hint: "Reload the active Pi tab to load newly registered resources.",
+      hint: "Reload the active Pi thread to load newly registered resources.",
       command,
       outputTail: "",
     });
@@ -41594,11 +41609,11 @@ async function installOptionalFeature(featureId, { update = false } = {}) {
       phase: "done",
       actionLabel,
       endedAt: Date.now(),
-      detail: response.data?.message || `${actionLabel} finished. Reload the active Pi tab to load newly registered resources.`,
+      detail: response.data?.message || `${actionLabel} finished. Reload the active Pi thread to load newly registered resources.`,
       hint: "Use Reload if this row still says Installed instead of Enabled.",
       command,
     });
-    if (await appConfirmText(`${feature.label} ${actionLabel.toLowerCase()} finished. Reload the active Pi tab now to load its resources?`, { affected: "The active Pi tab", confirmLabel: "Reload tab", danger: false })) {
+    if (await appConfirmText(`${feature.label} ${actionLabel.toLowerCase()} finished. Reload the active Pi thread now to load its resources?`, { affected: "The active Pi thread", confirmLabel: "Reload thread", danger: false })) {
       sendPrompt("prompt", "/reload");
     } else {
       const tabContext = activeTabContext();
@@ -41642,7 +41657,7 @@ async function installOptionalFeatureBatch(features, { scopeLabel = "optional fe
     "",
     "Pi can download code from npm and update its user package registration and package storage.",
     "The batch continues after individual failures and reports every result.",
-    "The affected tab restarts automatically only when idle; busy work is never interrupted.",
+    "The affected thread restarts automatically only when idle; busy work is never interrupted.",
     "",
     "Continue?",
   ].join("\n");
@@ -41744,7 +41759,7 @@ async function runOptionalFeatureBatch(candidates, {
           startedAt,
           endedAt: Date.now(),
           detail: data.message || "Installed and verified with Pi.",
-          hint: response.data?.restart?.autoRestarted ? "The affected tab restarted automatically." : "The server verified this package registration.",
+          hint: response.data?.restart?.autoRestarted ? "The affected thread restarted automatically." : "The server verified this package registration.",
           command,
           outputTail: "",
         });
@@ -41774,7 +41789,7 @@ async function runOptionalFeatureBatch(candidates, {
     const restart = response.data?.restart || {};
     if (restart.autoRestarted || restart.restartDeferred) {
       optionalFeatureRestartNotice = { ...restart, tabId: activeTabId };
-      addEvent(restart.autoRestarted ? "restarted tab to load new optional features" : "optional feature restart deferred because the tab is busy", restart.restartDeferred ? "warn" : "info");
+      addEvent(restart.autoRestarted ? "restarted thread to load new optional features" : "optional feature restart deferred because the thread is busy", restart.restartDeferred ? "warn" : "info");
     }
     await refreshOptionalFeaturePackageStatuses({ announce: true });
     addEvent(`optional feature batch finished: ${succeeded} succeeded, ${failed} failed`, failed ? "warn" : "info");
@@ -41935,7 +41950,7 @@ function createTerminalTabSplitButton(tab) {
   button.disabled = embeddedSplitMode || isSidePanelOverlayView();
   button.setAttribute("aria-pressed", isOpenSplit ? "true" : "false");
   button.dataset.splitState = isOpenSplit ? "unsplit" : "split";
-  const label = isOpenSplit ? `Close split view for ${tab.title || "Pi terminal"}` : `Split ${tab.title || "Pi terminal"} to the right`;
+  const label = isOpenSplit ? `Close split view for ${threadDisplayTitle(tab.title) || "Pi thread"}` : `Split ${threadDisplayTitle(tab.title) || "Pi thread"} to the right`;
   applyStyledTooltip(button, label, { ariaLabel: label, targetKey: `terminal-tab:${tab.id}:split` });
   const ns = "http://www.w3.org/2000/svg";
   const icon = document.createElementNS(ns, "svg");
@@ -41971,7 +41986,7 @@ function createTerminalTabSplitButton(tab) {
 function createTerminalTabActions(tab) {
   const actions = make("div", "terminal-tab-actions");
   actions.setAttribute("role", "group");
-  actions.setAttribute("aria-label", `Actions for ${tab.title || "Pi terminal"}`);
+  actions.setAttribute("aria-label", `Actions for ${threadDisplayTitle(tab.title) || "Pi thread"}`);
   actions.append(createTerminalTabSplitButton(tab));
   const summary = createTerminalTabSessionSummaryButton(tab);
   if (summary) actions.append(summary);
@@ -41989,7 +42004,7 @@ function createTerminalTabSessionSummaryButton(tab) {
   button.disabled = state?.status === "generating";
   button.setAttribute("aria-busy", state?.status === "generating" ? "true" : "false");
   button.setAttribute("aria-controls", "sessionSummaryOverlay");
-  const label = `${status} for ${tab.title || "Pi terminal"}`;
+  const label = `${status} for ${threadDisplayTitle(tab.title) || "Pi thread"}`;
   applyStyledTooltip(button, status, { ariaLabel: label, targetKey: `terminal-tab:${tab.id}:summary` });
   const ns = "http://www.w3.org/2000/svg";
   const icon = document.createElementNS(ns, "svg");
@@ -42061,7 +42076,7 @@ function renderSessionSummaryOverlay() {
   const tab = tabs.find((item) => item.id === sessionSummaryOverlayTabId);
   const state = sessionSummaryStateForTab(sessionSummaryOverlayTabId);
   elements.sessionSummaryOverlayTitle.textContent = state?.title || "Session summary";
-  elements.sessionSummaryOverlayMeta.textContent = `${tab?.title || "Pi terminal"}${state?.durable === false ? " · in-memory session" : ""}`;
+  elements.sessionSummaryOverlayMeta.textContent = `${threadDisplayTitle(tab?.title) || "Pi thread"}${state?.durable === false ? " · in-memory session" : ""}`;
   const generating = state?.status === "generating";
   const failed = state?.status === "failure";
   elements.sessionSummaryOverlayStatus.textContent = generating
@@ -42601,7 +42616,7 @@ const APPEND_SYSTEM_DEFAULT_CHOICE_ID = "__pi-default-discovery__";
 async function openNativeAppendSystemSelector() {
   const dialogGeneration = openNativeCommandDialog({
     title: "/append-system",
-    message: "Choose one global APPEND_SYSTEM.md append prompt for WebUI-managed Pi tabs. The bounded scan uses the active tab folder and ~/.pi up to depth 10, follows file and folder links even outside those roots, and never shows file contents. New tabs and reloaded tabs use this choice.",
+    message: "Choose one global APPEND_SYSTEM.md append prompt for WebUI-managed Pi threads. The bounded scan uses the active thread folder and ~/.pi up to depth 10, follows file and folder links even outside those roots, and never shows file contents. New threads and reloaded threads use this choice.",
     searchPlaceholder: "Filter APPEND_SYSTEM.md files…",
   });
   const ownsNativeCommandDialog = () => dialogGeneration === nativeCommandDialogGeneration && elements.nativeCommandDialog.open;
@@ -42705,14 +42720,14 @@ async function openNativeAppendSystemSelector() {
 
 async function confirmAppendSystemRestart(tabId) {
   const confirmed = await appConfirmText(
-    "Restart the active Pi tab now to load the new append-system prompt?\n\nThe saved choice is global for WebUI tabs and already persists. Cancel keeps it for the next manual reload or new tab without restarting.",
-    { affected: "The active Pi tab", confirmLabel: "Restart tab", danger: false },
+    "Restart the active Pi thread now to load the new append-system prompt?\n\nThe saved choice is global for WebUI threads and already persists. Cancel keeps it for the next manual reload or new thread without restarting.",
+    { affected: "The active Pi thread", confirmLabel: "Restart thread", danger: false },
   );
   if (!confirmed) return;
   try {
     await sendPrompt("prompt", "/reload", { targetTabId: tabId, throwOnError: true });
   } catch (error) {
-    addEvent(`Append-system tab restart failed: ${error.message || String(error)}`, "error");
+    addEvent(`Append-system thread restart failed: ${error.message || String(error)}`, "error");
   }
 }
 
@@ -42724,7 +42739,7 @@ function normalizedSettingsBadge(badge) {
   if (!badge) return null;
   const normalized = typeof badge === "string" ? { label: badge, tone: "" } : { ...badge };
   const scopeLabels = {
-    now: "This tab",
+    now: "This thread",
     browser: "This browser",
     reload: "Global · reload",
     TUI: "Native TUI",
@@ -42939,14 +42954,14 @@ function collectNativeSettingsPayload(controls) {
 function nativeSettingsChangedMessage(response, reloadRequested) {
   const changed = response.data?.changed || [];
   const reloadRecommended = response.data?.reloadRecommended || [];
-  if (response.data?.reloaded) return `Settings updated and tab reloaded (${changed.length || 0} changed).`;
-  if (reloadRecommended.length) return `Settings updated. Reload tab to apply: ${reloadRecommended.join(", ")}.`;
+  if (response.data?.reloaded) return `Settings updated and thread reloaded (${changed.length || 0} changed).`;
+  if (reloadRecommended.length) return `Settings updated. Reload thread to apply: ${reloadRecommended.join(", ")}.`;
   if (reloadRequested) return `Settings updated. No reload-needed changes were detected.`;
   return `Settings updated${changed.length ? ` (${changed.length} changed)` : ""}.`;
 }
 
 async function openNativeSettingsDialog() {
-  openNativeCommandDialog({ title: "/settings", message: "Settings show their scope in plain language. Apply reloads the active tab only when a changed global field requires it." });
+  openNativeCommandDialog({ title: "/settings", message: "Settings show their scope in plain language. Apply reloads the active thread only when a changed global field requires it." });
   renderNativeLoading("Loading settings…");
   let settingsData;
   try {
@@ -42987,13 +43002,13 @@ async function openNativeSettingsDialog() {
     busyBehavior: nativeSettingSelect("Busy prompt behavior", busyPromptBehavior, [
       { value: "followUp", label: "follow-up" },
       { value: "steer", label: "steer" },
-    ], "When you submit a normal prompt while a tab is already busy.", { label: "browser", tone: "browser" }),
+    ], "When you submit a normal prompt while a thread is already busy.", { label: "browser", tone: "browser" }),
     density: nativeSettingSelect("Interface density", interfaceDensity, [
       { value: "comfortable", label: "Comfortable" },
       { value: "compact", label: "Compact" },
     ], "Compact reduces spacing while preserving the 12 px text floor.", { label: "browser", tone: "browser" }),
     thinkingOutput: nativeSettingToggle("Show thinking output", settings.hideThinkingBlock !== true, "Browser transcript visibility; also writes Pi's hide-thinking setting.", { label: "browser", tone: "browser" }),
-    doneNotifications: nativeSettingToggle("Agent done notifications", agentDoneNotificationsEnabled, "Active-client-only browser notification after background tab work completes or fails. Activity remains the fallback; this is not Web Push after every client closes.", { label: "browser", tone: "browser" }),
+    doneNotifications: nativeSettingToggle("Agent done notifications", agentDoneNotificationsEnabled, "Active-client-only browser notification after background thread work completes or fails. Activity remains the fallback; this is not Web Push after every client closes.", { label: "browser", tone: "browser" }),
     autocompleteMax: nativeSettingSelect("Autocomplete max items", settings.autocompleteMaxVisible ?? autocompleteMaxVisible, SETTINGS_AUTOCOMPLETE_OPTIONS, "Maximum visible slash/path suggestions.", { label: "browser", tone: "browser" }),
     doubleEscape: nativeSettingSelect("Double-escape action", settings.doubleEscapeAction || doubleEscapeAction, SETTINGS_DOUBLE_ESCAPE_OPTIONS, "Action when pressing Escape twice with an empty composer.", { label: "browser", tone: "browser" }),
     treeFilter: nativeSettingSelect("Tree filter mode", settings.treeFilterMode || treeFilterMode, SETTINGS_TREE_FILTER_OPTIONS, "Default filter when opening /tree.", { label: "browser", tone: "browser" }),
@@ -43058,7 +43073,7 @@ async function openNativeSettingsDialog() {
 
   const body = make("div", "native-settings-panel");
   body.append(
-    nativeSettingsNote("Scopes", "Each field says whether it affects this tab, this browser, global Pi settings, or the native TUI."),
+    nativeSettingsNote("Scopes", "Each field says whether it affects this thread, this browser, global Pi settings, or the native TUI."),
     remoteAccessSection,
     nativeSettingsSection("Runtime", "Model behavior and request transport.", [controls.thinking, controls.autoCompact, controls.steering, controls.followUp, controls.transport, controls.httpIdleTimeout], { open: true }),
     nativeSettingsSection("Browser workflow", "Local Web UI behavior, shared composer defaults, and server output processing.", [controls.busyBehavior, controls.density, controls.thinkingOutput, controls.doneNotifications, controls.autocompleteMax, controls.doubleEscape, controls.treeFilter, controls.outputMode], { open: true }),
@@ -43289,7 +43304,7 @@ async function openNativeSafetyGuardSetupDialog() {
       : !models.length
         ? "Unavailable: no authenticated Pi models are available. Run /login or configure a provider before enabling auto-review."
         : !selectedAvailable
-          ? "Unavailable: select one of the authenticated models from this active tab."
+          ? "Unavailable: select one of the authenticated models from this active thread."
           : `Ready: ${selectedModelKey} supports ${levels.join(", ")} thinking.`;
   };
   controls.autoReview.input.addEventListener("change", () => syncAutoReviewControls());
@@ -43363,7 +43378,7 @@ async function openNativeSafetyGuardSetupDialog() {
       const selectedModelKey = controls.autoReviewModel.select.value;
       const supportedLevels = thinkingLevelsForModel(selectedModelKey);
       if (submitted.autoReview.enabled && !models.some((model) => modelKey(model) === selectedModelKey)) {
-        throw new Error("Select an authenticated auto-review model from this active tab.");
+        throw new Error("Select an authenticated auto-review model from this active thread.");
       }
       if (submitted.autoReview.enabled && !supportedLevels.includes(submitted.autoReview.model.thinkingLevel)) {
         throw new Error(`${selectedModelKey} does not support thinking level ${submitted.autoReview.model.thinkingLevel}.`);
@@ -43440,7 +43455,7 @@ async function openNativeSessionSummarySetupDialog({ initialData = null, onSaved
     model: nativeSettingSelect("Summary model", initialModelKey, modelOptions, "Dedicated authenticated provider/model. No fallback is used.", { label: "required", tone: "safety" }),
     thinking: nativeSettingSelect("Reasoning effort", preferences.model?.thinkingLevel || "low", SETTINGS_THINKING_OPTIONS, "Only levels supported by the selected model are offered.", { label: "required", tone: "safety" }),
     automatic: nativeSettingToggle("Generate automatically", preferences.enabled === true, "After eligible settled turns; automatic updates remain silent.", { label: "cost", tone: "safety" }),
-    titleEnabled: nativeSettingToggle("Update generated titles", preferences.title?.enabled !== false, "Only default/automatic tab titles are eligible. Explicit names always win.", { label: "safe", tone: "safety" }),
+    titleEnabled: nativeSettingToggle("Update generated titles", preferences.title?.enabled !== false, "Only default/automatic thread titles are eligible. Explicit names always win.", { label: "safe", tone: "safety" }),
     cadence: nativeSettingSelect("Title update cadence", preferences.title?.minSettledTurns || 3, [1, 2, 3, 5, 10, 20].map((value) => ({ value: String(value), label: `${value} settled user turn${value === 1 ? "" : "s"}` })), "Minimum turns between changed generated titles after the first title.", { label: "saved", tone: "browser" }),
     injectLatest: nativeSettingToggle("Inject latest summary into main-agent context", preferences.context?.injectLatest === true, "Off by default. When enabled, exactly one latest active-branch summary is injected as reference-only data.", { label: "privacy", tone: "safety" }),
     titlePrompt: nativeSettingTextarea("Editable title prompt", preferences.prompts?.title, "Maximum 8 KiB. This text is untrusted data, not system authority.", { rows: 4, badge: { label: "prompt", tone: "browser" } }),
@@ -43504,7 +43519,7 @@ async function openNativeSessionSummarySetupDialog({ initialData = null, onSaved
       const reviewed = await appConfirm({
         title: "Save session summary setup?",
         summary: `${disclosure.scope || "Selected active-branch text and tool names will be sent to the configured model."}\n\n${disclosure.cost || "Generation may incur provider usage."}`,
-        affected: "Global session-summary preferences and the selected tab's first generated summary",
+        affected: "Global session-summary preferences and the selected thread's first generated summary",
         undoable: false,
         confirmLabel: "Save and generate",
         danger: false,
@@ -44145,7 +44160,7 @@ async function openNativeForkSelector() {
 
 function openNativeCloneDialog() {
   openNativeCommandDialog({ title: "/clone", message: "Duplicate the current session at the current position." });
-  elements.nativeCommandBody.append(make("p", "native-command-note", "This creates a new forked session and switches this Web UI tab to it."));
+  elements.nativeCommandBody.append(make("p", "native-command-note", "This creates a new forked session and switches this Web UI thread to it."));
   elements.nativeCommandActions.replaceChildren();
   addNativeCommandAction("Cancel", closeNativeCommandDialog);
   const clone = addNativeCommandAction("Clone session", async () => {
@@ -44165,7 +44180,7 @@ function openNativeCloneDialog() {
 }
 
 function openNativeNameDialog() {
-  openNativeCommandDialog({ title: "/name", message: "Set the session and browser tab name." });
+  openNativeCommandDialog({ title: "/name", message: "Set the session and thread name." });
   const field = make("label", "native-settings-field");
   field.append(make("span", "native-settings-label", "Session name"));
   const input = make("input", "dialog-input");
@@ -44218,7 +44233,7 @@ async function openNativeResumeSelector(scope = "current", { query = "" } = {}) 
         closeNativeCommandDialog();
         if (resumedTab?.id) await switchTab(resumedTab.id);
         else await refreshAll();
-        addTransientMessage({ role: "native", title: "/resume", content: result.data?.message || "Resumed selected session in a new terminal tab.", level: "info" });
+        addTransientMessage({ role: "native", title: "/resume", content: result.data?.message || "Resumed selected session in a new thread.", level: "info" });
       } catch (error) {
         setNativeCommandError(error.message || String(error));
       }
@@ -46699,15 +46714,15 @@ async function refreshCommands(tabContext = activeTabContext()) {
 
 function commandPaletteCoreItems() {
   const items = [
-    { id: "session:new-tab", scope: activeTabId ? "project" : "server", destination: "conversation", kind: "Action", label: "New tab", description: "Start an isolated Pi terminal in the current directory", keywords: "workspace session", run: () => createTerminalTab() },
-    { id: "session:new-tab-directory", scope: "server", destination: "conversation", kind: "Action", label: "Choose directory for new tab", description: "Pick a cwd before starting a tab", keywords: "cwd folder workspace", run: ({ triggerButton = elements.commandPaletteButton } = {}) => createTerminalTabFromChosenDirectory({ triggerButton }) },
-    { id: "project:branch-worktree", scope: "project", destination: "project", kind: "Git", label: "Branch worktree", description: "Create or open a Git worktree tab for parallel branch work", keywords: "git branch worktree parallel checkout", run: () => openBranchWorktreePicker() },
-    { id: "session:new", scope: "session", destination: "conversation", kind: "Action", label: "New session", description: "Start a fresh session in the active tab", keywords: "/new clear", run: () => elements.newSessionButton.click() },
+    { id: "session:new-tab", scope: activeTabId ? "project" : "server", destination: "conversation", kind: "Action", label: "New thread", description: "Start an isolated Pi thread in the current directory", keywords: "workspace session", run: () => createTerminalTab() },
+    { id: "session:new-tab-directory", scope: "server", destination: "conversation", kind: "Action", label: "Choose directory for new thread", description: "Pick a cwd before starting a thread", keywords: "cwd folder workspace", run: ({ triggerButton = elements.commandPaletteButton } = {}) => createTerminalTabFromChosenDirectory({ triggerButton }) },
+    { id: "project:branch-worktree", scope: "project", destination: "project", kind: "Git", label: "Branch worktree", description: "Create or open a Git worktree thread for parallel branch work", keywords: "git branch worktree parallel checkout", run: () => openBranchWorktreePicker() },
+    { id: "session:new", scope: "session", destination: "conversation", kind: "Action", label: "New session", description: "Start a fresh session in the active thread", keywords: "/new clear", run: () => elements.newSessionButton.click() },
     { id: "session:compact", scope: "session", destination: "conversation", available: !currentState?.isCompacting && !composerStore.isCompactionPending(activeTabId), unavailableReason: "Context compaction is already running. Wait for it to finish.", kind: "Action", label: "Compact context", description: contextUsageDetail(), keywords: "/compact context window tokens", run: () => requestManualCompaction() },
     { id: "session:auto-compaction", scope: "session", destination: "conversation", kind: "Action", label: footerAutoCompactionEnabled() ? "Disable auto-compaction" : "Enable auto-compaction", description: footerAutoCompactionToggleAction(), keywords: "context automatic", run: () => toggleFooterAutoCompaction() },
     { id: "home:toggle", scope: "browser", destination: "home", kind: "Action", label: workspaceDashboardCollapsed ? "Show workspace dashboard" : "Hide workspace dashboard", description: "Toggle the launch/workspace overview", keywords: "home overview", run: () => setWorkspaceDashboardCollapsed(!workspaceDashboardCollapsed) },
     { id: "layout:control-deck", scope: "browser", destination: "settings", kind: "Action", label: document.body.classList.contains("side-panel-collapsed") ? "Show side panel" : "Hide side panel", description: "Toggle the Control Deck", keywords: "controls settings", run: () => setSidePanelCollapsed(!document.body.classList.contains("side-panel-collapsed"), { focusPanel: true }) },
-    { id: "session:cwd", scope: "session", destination: "conversation", kind: "Action", label: "Change working directory", description: "Restart active tab in another cwd", keywords: "cwd folder workspace", run: () => changeActiveTabCwd() },
+    { id: "session:cwd", scope: "session", destination: "conversation", kind: "Action", label: "Change working directory", description: "Restart active thread in another cwd", keywords: "cwd folder workspace", run: () => changeActiveTabCwd() },
     { id: "conversation:search", scope: "session", destination: "conversation", kind: "Action", label: "Search transcript", description: "Open transcript search", keywords: "find", run: () => openChatSearch() },
     { id: "native:model", scope: "session", destination: "conversation", kind: "Pi", label: "/model", description: "Select the active model", keywords: "provider llm", run: () => runNativeCommandMenu("/model") },
     { id: "native:effort", scope: "session", destination: "conversation", kind: "Pi", label: "Thinking effort", description: "Choose effort for this session; busy changes apply to the next prompt", keywords: "reasoning thinking level", run: () => openNativeEffortSelector() },
@@ -46744,9 +46759,9 @@ function commandPaletteCoreItems() {
     { id: "settings:reset-controls", scope: "server", destination: "settings", kind: "Action", label: "Reset control visibility", description: "Return hidden/visible controls to the defaults", keywords: "visibility defaults controls buttons", run: () => resetControlVisibilityDefaults() },
   ];
   if (tabs.length) {
-    items.push({ id: "workspace:save", scope: "server", destination: "home", kind: "Workspace", label: "Workspace: Save", description: "Capture all open tabs, sessions, groups, and the active tab", keywords: "workspace snapshot save sessions groups", run: () => saveWebuiWorkspace({ triggerButton: elements.commandPaletteButton }) });
+    items.push({ id: "workspace:save", scope: "server", destination: "home", kind: "Workspace", label: "Workspace: Save", description: "Capture all open threads, sessions, groups, and the active thread", keywords: "workspace snapshot save sessions groups", run: () => saveWebuiWorkspace({ triggerButton: elements.commandPaletteButton }) });
   }
-  items.push({ id: "workspace:load", scope: "server", destination: "home", kind: "Workspace", label: "Workspace: Load…", description: tabs.length ? "Choose a saved workspace and decide whether to save current tabs" : "Show saved workspaces to restore", keywords: "workspace restore saved sessions groups", run: () => openWorkspaceLoadPicker({ triggerButton: elements.commandPaletteButton }) });
+  items.push({ id: "workspace:load", scope: "server", destination: "home", kind: "Workspace", label: "Workspace: Load…", description: tabs.length ? "Choose a saved workspace and decide whether to save current threads" : "Show saved workspaces to restore", keywords: "workspace restore saved sessions groups", run: () => openWorkspaceLoadPicker({ triggerButton: elements.commandPaletteButton }) });
   if (isOptionalFeatureEnabled("statsCommand")) items.push({ id: "native:stats", scope: "session", destination: "activity", kind: "Pi", label: "/stats-webui", description: "Open usage dashboard", keywords: "tokens cost budget", run: () => openStatsOverlay({ refresh: true }) });
   return items;
 }
@@ -46760,8 +46775,8 @@ function commandPaletteTabItems() {
       scope: "tab",
       target: { tabId: tab.id },
       destination: "conversation",
-      kind: "Tab",
-      label: tab.id === activeTabId ? `Current tab: ${tab.title}` : `Switch to tab: ${tab.title}`,
+      kind: "Thread",
+      label: tab.id === activeTabId ? `Current thread: ${threadDisplayTitle(tab.title)}` : `Switch to thread: ${threadDisplayTitle(tab.title)}`,
       description: `${indicator.label} · ${normalizeDisplayPath(tab.cwd || "")}`,
       keywords: `${tab.id} ${tab.cwd || ""}`,
       run: () => switchTab(tab.id),
@@ -47174,7 +47189,7 @@ async function restartServer() {
   if (!(await appConfirm({
     title: "Restart Pi Web UI server?",
     summary: "Browser clients disconnect briefly while the server restarts.",
-    affected: "All connected browser clients and Pi tabs managed by this Web UI",
+    affected: "All connected browser clients and Pi threads managed by this Web UI",
     undoable: false,
     confirmLabel: "Restart server",
   }))) return;
@@ -47221,7 +47236,7 @@ async function stopServer() {
   if (!(await appConfirm({
     title: "Stop Pi Web UI server?",
     summary: "The Web UI becomes unavailable until the server is started again.",
-    affected: "All connected browser clients and Pi tabs managed by this Web UI",
+    affected: "All connected browser clients and Pi threads managed by this Web UI",
     undoable: false,
     confirmLabel: "Stop server",
   }))) return;
@@ -47602,7 +47617,7 @@ async function sendEmptyStartPrompt(inputMessage) {
     // command in its own draft instead of opening it for another session.
     if (opensSelector && (!isCurrentTabContext(tabContext) || focusedShellState !== sourceNavigation)) {
       retainSubmittedText();
-      addEvent(`Select ${tab.title || "the new conversation"} to finish ${inputMessage.trim()}. Its command is saved in that conversation's draft.`, "info");
+      addEvent(`Select ${threadDisplayTitle(tab.title) || "the new conversation"} to finish ${inputMessage.trim()}. Its command is saved in that conversation's draft.`, "info");
       return;
     }
     try {
@@ -47657,7 +47672,7 @@ async function sendPrompt(kind = "prompt", explicitMessage, { targetTabId = acti
     if (!guidedGitLaunchAdmitted(targetTabId)) return;
     guidedGitLaunchId = createBrowserGuidedGitLaunchId();
     if (!guidedGitLaunchPermits.grant(targetTabId, guidedGitLaunchId)) {
-      addEvent("Guided Git activation is already pending for this tab.", "warn");
+      addEvent("Guided Git activation is already pending for this thread.", "warn");
       return;
     }
     guidedGitPermitGranted = true;
@@ -48350,7 +48365,7 @@ function scheduleSupervisorContinuityRefresh(event, { gap = false } = {}) {
 
   if (gap && !supervisorGapWarnings.has(key)) {
     supervisorGapWarnings.add(key);
-    addEvent("Buffered live output may be incomplete; refreshing tabs, state, and transcript from Pi.", "info");
+    addEvent("Buffered live output may be incomplete; refreshing threads, state, and transcript from Pi.", "info");
   }
   if (supervisorContinuityRefreshes.has(key)) return;
 
@@ -48469,12 +48484,12 @@ function handleEvent(event) {
   if (["webui_optional_feature_restart_completed", "webui_optional_feature_restart_deferred"].includes(event?.type)) {
     optionalFeatureRestartNotice = {
       tabId: event.tabId || activeTabId,
-      tabTitle: event.tabTitle || "terminal",
+      tabTitle: threadDisplayTitle(event.tabTitle) || "thread",
       autoRestarted: event.autoRestarted === true,
       restartDeferred: event.restartDeferred === true,
       reason: event.reason || "",
     };
-    addEvent(event.autoRestarted ? "restarted tab to load new optional features" : "optional feature restart deferred because the tab is busy", event.restartDeferred ? "warn" : "info");
+    addEvent(event.autoRestarted ? "restarted thread to load new optional features" : "optional feature restart deferred because the thread is busy", event.restartDeferred ? "warn" : "info");
     renderOptionalFeatureMigrationSurface();
     return;
   }
@@ -48509,7 +48524,7 @@ function handleEvent(event) {
         renderAppRunnerControls();
         renderWidgets();
       }
-      addEvent(`connected to ${event.tabTitle || "terminal"} for ${event.cwd}`);
+      addEvent(`connected to ${threadDisplayTitle(event.tabTitle) || "thread"} for ${event.cwd}`);
       if (event.supervisorReplayGap === true && !resumedWithFreshSnapshot) scheduleSupervisorContinuityRefresh(event, { gap: true });
       if (!resumedWithFreshSnapshot) scheduleForegroundReconcile("event stream reconnect", 0);
       break;
@@ -48526,7 +48541,7 @@ function handleEvent(event) {
       break;
     case "webui_tab_renamed":
       applyTabMetadata(event.tab || { id: event.tabId, title: event.tabTitle, activity: event.tabActivity });
-      addEvent(`${event.previousTabTitle || "terminal"} renamed to ${event.tabTitle || "terminal"}`);
+      addEvent(`${threadDisplayTitle(event.previousTabTitle) || "thread"} renamed to ${threadDisplayTitle(event.tabTitle) || "thread"}`);
       break;
     case "webui_recovery_opened":
       addEvent(`opened ${event.recoveryTabTitle || "recovery plan"}`);
@@ -48539,15 +48554,15 @@ function handleEvent(event) {
       refreshTabs().catch((error) => addEvent(error.message, "error"));
       break;
     case "webui_tab_restarting":
-      addEvent(`restarting ${event.tabTitle || "terminal"} in ${event.cwd}`);
+      addEvent(`restarting ${threadDisplayTitle(event.tabTitle) || "thread"} in ${event.cwd}`);
       break;
     case "webui_tab_reloading":
-      addEvent(`reloading ${event.tabTitle || "terminal"} native Pi resources`);
-      addTransientMessage({ role: "native", title: "/reload", content: `Reloading ${event.tabTitle || "terminal"} native Pi resources…`, level: "info" });
+      addEvent(`reloading ${threadDisplayTitle(event.tabTitle) || "thread"} native Pi resources`);
+      addTransientMessage({ role: "native", title: "/reload", content: `Reloading ${threadDisplayTitle(event.tabTitle) || "thread"} native Pi resources…`, level: "info" });
       break;
     case "webui_tab_reloaded":
-      addEvent(`${event.tabTitle || "terminal"} reloaded`);
-      addTransientMessage({ role: "native", title: "/reload", content: `${event.tabTitle || "terminal"} reloaded. Keybindings, extensions, skills, prompts, and themes were refreshed by restarting the RPC tab${event.sessionFile ? ` and resuming ${event.sessionFile}` : ""}.`, level: "info" });
+      addEvent(`${threadDisplayTitle(event.tabTitle) || "thread"} reloaded`);
+      addTransientMessage({ role: "native", title: "/reload", content: `${threadDisplayTitle(event.tabTitle) || "thread"} reloaded. Keybindings, extensions, skills, prompts, and themes were refreshed by restarting its Pi RPC process${event.sessionFile ? ` and resuming ${event.sessionFile}` : ""}.`, level: "info" });
       clearContextUsageUnknownAfterCompaction(event.tabId || activeTabId);
       statusEntries.clear();
       clearWidgetsForTab(event.tabId || activeTabId);
@@ -48598,7 +48613,7 @@ function handleEvent(event) {
       refreshFileTreeLive(tabContext).catch((error) => addEvent(error.message || String(error), "error"));
       break;
     case "webui_cwd_changed":
-      addEvent(`${event.tabTitle || "terminal"} cwd changed to ${event.cwd}`);
+      addEvent(`${threadDisplayTitle(event.tabTitle) || "thread"} cwd changed to ${event.cwd}`);
       setAppRunnerData(event.tabId || activeTabId, { cwd: event.cwd, activeRun: null, runners: [] });
       closeFileViewer();
       resetFileTreeState();
@@ -49768,8 +49783,8 @@ elements.newSessionButton.addEventListener("click", async () => {
   const noProject = activeTab()?.workspaceKind === "no-project";
   if (!(await appConfirm({
     title: "Start a new Pi session?",
-    summary: noProject ? "Open a fresh No Project conversation in a new tab and folder." : "The active tab switches to a fresh conversation.",
-    affected: noProject ? "The current conversation and its files stay in the existing tab." : "The active tab; the previous session remains resumable.",
+    summary: noProject ? "Open a fresh No Project conversation in a new thread and folder." : "The active thread switches to a fresh conversation.",
+    affected: noProject ? "The current conversation and its files stay in the existing thread." : "The active thread; the previous session remains resumable.",
     undoable: false,
     confirmLabel: "Start new session",
   }))) return;
@@ -50035,7 +50050,7 @@ elements.subagentLaunchSlotsReload?.addEventListener("click", () => {
 });
 elements.subagentLaunchSlotsLater?.addEventListener("click", () => {
   subagentLaunchSlotReloadRequired = false;
-  setSubagentLaunchSlotAnnouncement("Agent models are saved. Reload this tab later before relying on them for future launches.");
+  setSubagentLaunchSlotAnnouncement("Agent models are saved. Reload this thread later before relying on them for future launches.");
   renderSubagentLaunchSlots();
 });
 elements.applySamplingParametersButton?.addEventListener("click", () => {

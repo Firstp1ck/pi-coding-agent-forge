@@ -30,7 +30,7 @@ async function openPicker(page, { waitForLoad = true } = {}) {
     await page.locator("#promptInput").focus();
     await page.keyboard.press("Control+k");
     await expect(page.locator("#commandPaletteInput")).toBeVisible();
-    await page.locator("#commandPaletteInput").fill("Choose directory for new tab");
+    await page.locator("#commandPaletteInput").fill("Choose directory for new thread");
     await page.keyboard.press("Enter");
   }
   await expect(page.locator("#pathPickerDialog")).toBeVisible();

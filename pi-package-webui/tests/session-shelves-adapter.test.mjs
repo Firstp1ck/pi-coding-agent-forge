@@ -6,7 +6,7 @@ import { createSessionContext } from '../public/session-context.mjs';
 import { createSessionShelfState } from '../public/session-shelf-state.mjs';
 
 const source = readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');
-const functions = ['sessionShelfRecord', 'reconcileSessionShelves', 'reportSessionShelfResult', 'createTerminalTabSettlementButton'].map(name => {
+const functions = ['threadDisplayTitle', 'sessionShelfRecord', 'reconcileSessionShelves', 'reportSessionShelfResult', 'createTerminalTabSettlementButton'].map(name => {
   const start = source.indexOf(`function ${name}(`);
   assert.ok(start >= 0, name);
   return source.slice(start, source.indexOf('\n}', start) + 2);

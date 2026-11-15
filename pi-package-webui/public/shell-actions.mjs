@@ -56,11 +56,11 @@ export function checkActionTarget(action, currentTarget) {
   }
 
   const target = action.target;
-  if (!nonemptyString(target?.tabId)) return { ok: false, reason: "This action is missing its target tab." };
+  if (!nonemptyString(target?.tabId)) return { ok: false, reason: "This action is missing its target thread." };
 
   if (scope === "tab") {
     if (!Array.isArray(currentTarget?.liveTabIds) || !currentTarget.liveTabIds.includes(target.tabId)) {
-      return { ok: false, reason: "The target tab is no longer available." };
+      return { ok: false, reason: "The target thread is no longer available." };
     }
     return { ok: true, reason: "" };
   }
@@ -69,7 +69,7 @@ export function checkActionTarget(action, currentTarget) {
     return { ok: false, reason: "This action is missing a valid session generation." };
   }
   if (target.tabId !== currentTarget?.tabId) {
-    return { ok: false, reason: "The active tab has changed. Choose the action again." };
+    return { ok: false, reason: "The active thread has changed. Choose the action again." };
   }
   if (target.generation !== currentTarget?.generation) {
     return { ok: false, reason: "The session has changed. Choose the action again." };

@@ -48,7 +48,7 @@ assert.match(app, /function closeTerminalTabs[\s\S]*?if \(!tabs\.length\) setWor
 assert.match(app, /async function initializeTabs\(\)[\s\S]*?if \(!loadedTabs\.length\)[\s\S]*?refreshSavedWorkspaces\(\)/, "Empty startup must retain saved workspace discovery without requiring a folder choice");
 
 const emptyStart = app.slice(app.indexOf("function renderEmptyStartState"), app.indexOf("function userPromptTargets"));
-assert.match(emptyStart, /title: "Load workspace"[\s\S]*?description: "Restore a saved tab constellation"[\s\S]*?openWorkspaceLoadPicker/, "The empty-start card must offer a labelled saved-workspace picker action");
+assert.match(emptyStart, /title: "Load workspace"[\s\S]*?description: "Restore a saved thread constellation"[\s\S]*?openWorkspaceLoadPicker/, "The empty-start card must offer a labelled saved-workspace picker action");
 assert.match(html, /id="workspaceLoadDialog"[\s\S]*?aria-labelledby="workspaceLoadDialogTitle"/, "The saved-workspace picker must use a labelled dialog");
 assert.match(html, /id="workspaceReplaceDialog"[\s\S]*?workspaceReplaceCurrentTabsList[\s\S]*?workspaceReplaceSaveName[\s\S]*?Load without saving[\s\S]*?Save &amp; load/, "The replacement dialog must expose current tabs, a save name, and explicit discard/save choices");
 assert.match(app, /function renderWorkspaceLoadDialog[\s\S]*?Loading saved workspaces…[\s\S]*?workspace-load-dialog-retry[\s\S]*?No saved workspaces yet[\s\S]*?loadWebuiWorkspace[\s\S]*?workspace-load-dialog-item-delete danger[\s\S]*?deleteWebuiWorkspace[\s\S]*?workspaceLoadDialogCloseButton\?\.focus/, "The dialog picker must render loading, retry/error, empty, load, and destructive delete states while preserving focus after deletion");

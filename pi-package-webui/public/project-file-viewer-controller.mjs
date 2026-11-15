@@ -77,7 +77,7 @@ export function createProjectFileViewerController({
     selection = tabs.get(activeTabId)?.selection || null;
     onChange("activate");
     if (viewer?.dirty) onStatus("Unsaved file edits.", "warn");
-    else if (viewer) onStatus("Restored for this terminal.", "success");
+    else if (viewer) onStatus("Restored for this thread.", "success");
   }
 
   function resetActive() {

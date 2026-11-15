@@ -36,7 +36,7 @@ assert.match(setup, /Guided Git setup saved\. Primary:[\s\S]*Fallback:/, "save c
 
 const acceptedText = sourceBetween(app, "function gitWorkflowGenerationAcceptedText", "function gitWorkflowFallbackEventMatches", "immediate fallback copy");
 assert.match(acceptedText, /fallbackUsed === true[\s\S]*primaryGeneration[\s\S]*continued with the fallback/, "immediate fallback responses should explain that primary failed and fallback continued");
-assert.match(app, /gitWorkflowConfiguredGenerationText\(preferences\)[\s\S]*active tab model and effort are restored/, "workflow startup should identify configured generation profiles and restoration");
+assert.match(app, /gitWorkflowConfiguredGenerationText\(preferences\)[\s\S]*active thread model and effort are restored/, "workflow startup should identify configured generation profiles and restoration");
 
 const lifecycle = sourceBetween(app, "function gitWorkflowFallbackEventMatchesPendingRequest", "function formatGitCommandResult", "fallback lifecycle handler");
 assert.match(lifecycle, /webui_git_workflow_generation_fallback_started/, "the browser should observe fallback start events");

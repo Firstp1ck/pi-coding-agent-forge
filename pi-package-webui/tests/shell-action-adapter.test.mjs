@@ -7,7 +7,7 @@ import { createSessionComposerStore } from '../public/session-composer-store.mjs
 import { checkActionTarget } from '../public/shell-actions.mjs';
 
 const source = readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');
-const names = ['activeTabContext', 'isCurrentTabContext', 'invalidateShellSessionActions', 'shellActionTarget',
+const names = ['threadDisplayTitle', 'activeTabContext', 'isCurrentTabContext', 'invalidateShellSessionActions', 'shellActionTarget',
   'commandPaletteCoreItems', 'commandPaletteTabItems', 'commandPaletteModelItems',
   'commandPaletteSlashItems', 'buildCommandPaletteItems', 'closeCommandPalette',
   'executeCommandPaletteItem', 'refreshState', 'requestManualCompaction'];

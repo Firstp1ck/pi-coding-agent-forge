@@ -66,7 +66,7 @@ function harness({ confirm = true, eligible = true, enabledFeature = true } = {}
   const h = harness();
   assert.equal(h.context.applyCodexFastModeStatus("ultrafast"), true);
   assert.equal(h.select.value, "ultrafast");
-  assert.equal(h.context.codexFastModeStatusText(), "Ultrafast · This tab");
+  assert.equal(h.context.codexFastModeStatusText(), "Ultrafast · This thread");
   assert.equal(h.context.applyCodexFastModeStatus("ultrafast now"), false);
   assert.equal(h.select.value, "ultrafast");
   assert.equal(h.context.codexFastModeConfirmedOff({ statusKnown: true, mode: "ultrafast", enabled: false }), false);

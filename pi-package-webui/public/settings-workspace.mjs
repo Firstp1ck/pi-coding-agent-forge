@@ -8,7 +8,7 @@ export const SETTINGS_CATEGORIES = Object.freeze([
 const CONTROLS = [
   ['desktop-layout', 'appearance', 'Desktop layout', '#desktopShellSelect', 'This browser', 'compact classic preview'],
   ['navigation', 'appearance', 'Session navigation', '#focusedNavigationSelect', 'This browser', 'sidebar top bar'],
-  ['tab-placement', 'appearance', 'Classic tab placement', '#terminalTabsLayoutSelect', 'Shared WebUI layout', 'tabs sidebar'],
+  ['tab-placement', 'appearance', 'Classic thread placement', '#terminalTabsLayoutSelect', 'Shared WebUI layout', 'threads tabs sidebar'],
   ['deck-placement', 'appearance', 'Control Deck placement', '#controlDeckPlacementSelect', 'Shared WebUI layout', 'left right'],
   ['theme-mode', 'appearance', 'Theme mode', '#themeSchemeToggle button', 'This browser', 'light dark auto'],
   ['theme', 'appearance', 'Theme', '#themeSelect', 'This browser', 'colour color appearance'],
@@ -30,7 +30,7 @@ const ACTIONS = [
   ['tools', 'resources', 'Tools', 'settings:tools-setup', 'Session / Global / exact Model', 'capabilities allowlist'],
   ['skills', 'resources', 'Skills', 'settings:skills-setup', 'Session / Global / exact Model', 'instructions resources'],
   ['models', 'resources', 'Model cycling', 'native:scoped-models', 'Pi settings', 'scoped models'],
-  ['append-system', 'resources', 'Append system prompt', 'native:append-system', 'Global; new or reloaded tabs', 'append_system instructions'],
+  ['append-system', 'resources', 'Append system prompt', 'native:append-system', 'Global; new or reloaded threads', 'append_system instructions'],
   ['runtime', 'resources', 'Runtime settings', 'native:settings', 'Scope shown beside each setting', 'thinking compaction auto-compaction auto-compact images startup safety transport busy prompt steering follow-up density autocomplete double escape tree filter'],
   ['summary-setup', 'resources', 'Summary Setup', 'native:summary-setup', 'Global preferences; selected session generation', 'summary model effort cadence prompts privacy context injection automatic titles'],
   ['runner-configuration', 'system', 'Runner configuration', 'settings:runner-configuration', 'Current project', 'runners discovery paths custom command args'],

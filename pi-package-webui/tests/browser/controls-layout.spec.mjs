@@ -80,7 +80,7 @@ test("Controls use aligned name and parameter columns with viewport-safe tooltip
     "Thinking output",
     "Desktop layout",
     "Compact session navigation",
-    "Tab placement",
+    "Thread placement",
     "Control Deck placement",
     "Theme mode",
     "Theme",

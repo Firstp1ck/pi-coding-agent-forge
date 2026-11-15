@@ -24,6 +24,7 @@ function appFunctionToMarker(name, marker) {
 const promptSource = appFunctionSource("terminalTabPromptTooltip", "terminalTabGroupRepresentedTab");
 const representedTabSource = appFunctionSource("terminalTabGroupRepresentedTab", "terminalTabTooltip");
 const tabTooltipSource = appFunctionSource("terminalTabTooltip", "terminalTabGroupStatusTooltip");
+const threadDisplayTitleSource = appFunctionSource("threadDisplayTitle", "tabIndicator");
 const groupTooltipSource = appFunctionSource("terminalTabGroupTooltip", "appendTerminalTabContent");
 const regularRendererSource = appFunctionSource("renderTerminalTab", "renderTerminalTabGroupItem");
 const groupedItemRendererSource = appFunctionSource("renderTerminalTabGroupItem", "shouldRenderTerminalTabGroup");
@@ -59,6 +60,7 @@ for (const [name, result] of Object.entries(promptResults).filter(([name]) => ![
 
 const tooltipResults = vm.runInNewContext(`
   ${promptSource}
+  ${threadDisplayTitleSource}
   ${representedTabSource}
   ${tabTooltipSource}
   ${groupTooltipSource}

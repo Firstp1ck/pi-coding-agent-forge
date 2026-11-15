@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import { checkActionTarget } from '../public/shell-actions.mjs';
 
 const source = readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');
-const functions = ['focusedOverviewSnapshot', 'invokeOverviewAction'].map(name => {
+const functions = ['threadDisplayTitle', 'focusedOverviewSnapshot', 'invokeOverviewAction'].map(name => {
   const start = source.indexOf(`function ${name}(`);
   assert.ok(start >= 0);
   return source.slice(start, source.indexOf('\n}', start) + 2);

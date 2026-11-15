@@ -84,7 +84,7 @@ test('running session can be aborted from Settings and All tools without changin
   await expect(page.locator('#shellToolsLauncher')).toBeHidden();
   await expect(page.locator('.focused-run-controls #abortButton')).toBeVisible();
   await rail.getByRole('button', { name: 'All tools', exact: true }).click();
-  await page.locator('#shellToolsLauncher').getByRole('button', { name: 'Choose directory for new tab', exact: true }).click();
+  await page.locator('#shellToolsLauncher').getByRole('button', { name: 'Choose directory for new thread', exact: true }).click();
   await expect(page.locator('dialog:modal #abortButton')).toBeVisible();
   const response = page.waitForResponse(response => new URL(response.url()).pathname === '/api/abort' && response.request().method() === 'POST');
   await page.locator('#abortButton').hover();

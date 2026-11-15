@@ -144,7 +144,7 @@ test('directory dialog reached from launcher is named trapped and restores its i
   await open(page, ownership);
   await enterByTab(page, destination(page, 'All tools'));
   await page.keyboard.press('Enter');
-  await page.getByRole('searchbox', { name: 'Search all tools' }).fill('Choose directory for new tab');
+  await page.getByRole('searchbox', { name: 'Search all tools' }).fill('Choose directory for new thread');
   await page.keyboard.press('Enter');
   const dialog = page.locator('dialog:modal');
   await expect(dialog).toHaveCount(1);

@@ -107,7 +107,7 @@ test("session actions require the captured tab and numeric nonnegative integer g
   assert.deepEqual(checkActionTarget({ scope: "session", target: sessionTarget }, currentTarget), { ok: true, reason: "" });
   assert.deepEqual(checkActionTarget({ scope: "session", target: { tabId: "tab-a", generation: 0, sessionIdentity: "session-a" } }, { tabId: "tab-a", generation: 0, sessionIdentity: "session-a" }), { ok: true, reason: "" });
   assertRejected({ scope: "session", target: sessionTarget }, { ...currentTarget, generation: 5 }, /session/i);
-  assertRejected({ scope: "session", target: sessionTarget }, { ...currentTarget, tabId: "tab-b" }, /tab/i);
+  assertRejected({ scope: "session", target: sessionTarget }, { ...currentTarget, tabId: "tab-b" }, /thread/i);
   for (const generation of [undefined, null, "4", -1, 1.5, NaN, Infinity, -Infinity, false]) {
     assertRejected({ scope: "session", target: { tabId: "tab-a", generation } }, { ...currentTarget, generation }, /generation/i);
   }
@@ -126,7 +126,7 @@ test("project actions additionally require the exact captured working directory"
     assertRejected(action, { ...currentTarget, cwd }, /directory/i);
   }
   assertRejected(action, { ...currentTarget, generation: 5 }, /session/i);
-  assertRejected(action, { ...currentTarget, tabId: "tab-b" }, /tab/i);
+  assertRejected(action, { ...currentTarget, tabId: "tab-b" }, /thread/i);
   assert.deepEqual(checkActionTarget({ scope: "session", target: sessionTarget }, { ...currentTarget, cwd: "/other" }), { ok: true, reason: "" });
 });
 
@@ -136,7 +136,7 @@ test("missing or unknown scopes and incomplete target identities fail closed", (
   }
   for (const scope of ["session", "project", "tab"]) {
     for (const target of [undefined, null, {}, { generation: 4 }, { tabId: "" }, { tabId: " " }, { tabId: 42 }]) {
-      assertRejected({ scope, target }, currentTarget, /tab/i);
+      assertRejected({ scope, target }, currentTarget, /thread/i);
     }
   }
 });
@@ -157,7 +157,7 @@ test("explicit tab selection checks live membership independently of the active 
   const action = { scope: "tab", target: { tabId: "tab-b" } };
   assert.deepEqual(checkActionTarget(action, currentTarget), { ok: true, reason: "" });
   assert.deepEqual(checkActionTarget(action, { liveTabIds: ["tab-b"] }), { ok: true, reason: "" });
-  assertRejected(action, { ...currentTarget, liveTabIds: ["tab-a"] }, /tab/i);
+  assertRejected(action, { ...currentTarget, liveTabIds: ["tab-a"] }, /thread/i);
   for (const current of [undefined, {}, { liveTabIds: "tab-b" }, { liveTabIds: new Set(["tab-b"]) }]) {
     assertRejected(action, current);
   }

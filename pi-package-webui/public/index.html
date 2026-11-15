@@ -221,32 +221,32 @@
       </aside>
       <div class="workspace-column">
       <section class="chat-panel">
-        <header class="terminal-tabs-shell" aria-label="Terminal navigation">
-          <div id="terminalTabsResizeHandle" class="terminal-tabs-resize-handle" role="separator" aria-orientation="vertical" aria-label="Resize terminal sidebar width" tabindex="0" title="Drag to resize terminal sidebar" hidden></div>
-          <button id="terminalTabsToggleButton" class="terminal-tabs-toggle-button" type="button" aria-controls="terminalTabsDrawerContent" aria-expanded="false">Tabs</button>
-          <div id="terminalTabsDrawerContent" class="terminal-tabs-drawer-content" role="region" aria-label="Terminal navigation">
-          <div id="tabBar" class="terminal-tabs" role="group" aria-label="Pi terminal tabs">
+        <header class="terminal-tabs-shell" aria-label="Thread navigation">
+          <div id="terminalTabsResizeHandle" class="terminal-tabs-resize-handle" role="separator" aria-orientation="vertical" aria-label="Resize thread sidebar width" tabindex="0" title="Drag to resize thread sidebar" hidden></div>
+          <button id="terminalTabsToggleButton" class="terminal-tabs-toggle-button" type="button" aria-controls="terminalTabsDrawerContent" aria-expanded="false">Threads</button>
+          <div id="terminalTabsDrawerContent" class="terminal-tabs-drawer-content" role="region" aria-label="Thread navigation">
+          <div id="tabBar" class="terminal-tabs" role="group" aria-label="Pi threads">
             <div id="newTabMenu" class="terminal-new-tab-menu composer-publish-menu">
-              <button id="newTabButton" class="terminal-new-tab-button" type="button" aria-label="Start a separate isolated Pi terminal" aria-haspopup="menu" aria-expanded="false" aria-controls="newTabMenuPanel">+ Tab ▾</button>
+              <button id="newTabButton" class="terminal-new-tab-button" type="button" aria-label="Start a separate isolated Pi thread" aria-haspopup="menu" aria-expanded="false" aria-controls="newTabMenuPanel">+ Thread ▾</button>
               <div id="newTabMenuPanel" class="terminal-new-tab-menu-panel composer-publish-menu-panel" role="menu" aria-labelledby="newTabButton">
                 <button id="newTabNoProjectButton" class="terminal-new-tab-menu-item composer-publish-menu-item" type="button" role="menuitem"><span>No Project</span></button>
                 <button id="newTabCurrentDirectoryButton" class="terminal-new-tab-menu-item composer-publish-menu-item" type="button" role="menuitem"><span>Current Directory</span></button>
                 <button id="newTabChooseDirectoryButton" class="terminal-new-tab-menu-item composer-publish-menu-item" type="button" role="menuitem"><span>Choose Directory</span></button>
-                <button id="newTabWorktreeButton" class="terminal-new-tab-menu-item composer-publish-menu-item" type="button" role="menuitem" aria-label="Open branch worktree picker: create or open a separate Git checkout in a new Pi tab. Keeps this tab on its current branch; does not commit, push, delete files, or copy ignored dependencies such as node_modules or .venv." data-tooltip="Branch worktree:&#10;• Create or open a separate Git checkout in a new Pi tab.&#10;• Keeps this tab on its current branch.&#10;• Does not commit, push, delete files, or copy ignored deps like node_modules/.venv."><span>Branch Worktree…</span></button>
+                <button id="newTabWorktreeButton" class="terminal-new-tab-menu-item composer-publish-menu-item" type="button" role="menuitem" aria-label="Open branch worktree picker: create or open a separate Git checkout in a new Pi thread. Keeps this thread on its current branch; does not commit, push, delete files, or copy ignored dependencies such as node_modules or .venv." data-tooltip="Branch worktree:&#10;• Create or open a separate Git checkout in a new Pi thread.&#10;• Keeps this thread on its current branch.&#10;• Does not commit, push, delete files, or copy ignored deps like node_modules/.venv."><span>Branch Worktree…</span></button>
               </div>
             </div>
           </div>
-          <div class="terminal-sidebar-actions" aria-label="Tab and workspace actions" data-visibility-region="workspace">
-            <button id="workspaceSaveButton" class="terminal-workspace-save-button" data-visibility-key="workspace.save" type="button" aria-label="Save workspace" data-tooltip="Save workspace:&#10;• Captures all open tabs, sessions, order, custom groups, and the active tab.&#10;• Available when at least one tab is open."><svg class="terminal-workspace-save-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 4h11l3 3v13H5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M8 4v6h7V4M8 19v-5h8v5" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg></button>
-            <button id="commandPaletteButton" class="terminal-command-palette-button" data-visibility-key="workspace.command-palette" type="button" aria-label="Open command palette" data-tooltip="Command palette:&#10;• Search and run actions, slash commands, models, and tabs.&#10;• Shortcut: Ctrl/Cmd+K."><svg class="composer-icon command-palette-launcher-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 7.5h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M5 12h9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M5 16.5h5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M17 14.5 19.5 17 17 19.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
-            <button id="workspaceDashboardToggleButton" class="terminal-dashboard-button" data-visibility-key="workspace.overview" type="button" aria-controls="workspaceDashboard" aria-expanded="false" aria-label="Show workspace overview" data-tooltip="Workspace overview:&#10;• Shows current tab, cwd, model, context, session, and queue.&#10;• Opens common workspace/session actions from one place."><svg class="composer-icon workspace-overview-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 11.4 12 4l8 7.4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M6.5 10.5V20h11v-9.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M10 20v-5h4v5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+          <div class="terminal-sidebar-actions" aria-label="Thread and workspace actions" data-visibility-region="workspace">
+            <button id="workspaceSaveButton" class="terminal-workspace-save-button" data-visibility-key="workspace.save" type="button" aria-label="Save workspace" data-tooltip="Save workspace:&#10;• Captures all open threads, sessions, order, custom groups, and the active thread.&#10;• Available when at least one thread is open."><svg class="terminal-workspace-save-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 4h11l3 3v13H5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M8 4v6h7V4M8 19v-5h8v5" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg></button>
+            <button id="commandPaletteButton" class="terminal-command-palette-button" data-visibility-key="workspace.command-palette" type="button" aria-label="Open command palette" data-tooltip="Command palette:&#10;• Search and run actions, slash commands, models, and threads.&#10;• Shortcut: Ctrl/Cmd+K."><svg class="composer-icon command-palette-launcher-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 7.5h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M5 12h9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M5 16.5h5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M17 14.5 19.5 17 17 19.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+            <button id="workspaceDashboardToggleButton" class="terminal-dashboard-button" data-visibility-key="workspace.overview" type="button" aria-controls="workspaceDashboard" aria-expanded="false" aria-label="Show workspace overview" data-tooltip="Workspace overview:&#10;• Shows current thread, cwd, model, context, session, and queue.&#10;• Opens common workspace/session actions from one place."><svg class="composer-icon workspace-overview-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 11.4 12 4l8 7.4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M6.5 10.5V20h11v-9.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M10 20v-5h4v5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
             <button id="sidebarUpdateButton" class="terminal-update-button" type="button" aria-label="Updates" title="Updates"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7v5h-5M4 17v-5h5M6.1 6.1A8 8 0 0 1 20 12M4 12a8 8 0 0 0 13.9 5.9"/></svg></button>
           </div>
           <div id="remoteAccessIndicator" class="remote-access-indicator" role="status" aria-live="polite" hidden>Remote access open</div>
-          <button id="closeAllTabsButton" class="terminal-close-all-button" data-visibility-key="workspace.close-all-tabs" type="button" aria-label="Close all terminal tabs">Close all Tabs</button>
+          <button id="closeAllTabsButton" class="terminal-close-all-button" data-visibility-key="workspace.close-all-tabs" type="button" aria-label="Close all threads">Close all Threads</button>
           </div>
         </header>
-        <button id="terminalTabsBackdrop" class="terminal-tabs-backdrop" type="button" aria-label="Close terminal navigation" tabindex="-1" hidden></button>
+        <button id="terminalTabsBackdrop" class="terminal-tabs-backdrop" type="button" aria-label="Close thread navigation" tabindex="-1" hidden></button>
         <section id="workspaceDashboard" class="workspace-dashboard" aria-label="Workspace dashboard"></section>
         <div id="widgetArea" class="widget-area"></div>
         <section id="subagentTerminalView" class="subagent-terminal-view" aria-labelledby="subagentTerminalTitle" hidden>
@@ -299,9 +299,9 @@
             </dl>
           </footer>
           <div class="subagent-terminal-composer" aria-label="Subagent input unavailable">
-            <textarea id="subagentTerminalInput" rows="1" placeholder="View only — send messages from the parent terminal" aria-describedby="subagentTerminalInputHint" disabled></textarea>
+            <textarea id="subagentTerminalInput" rows="1" placeholder="View only — send messages from the parent thread" aria-describedby="subagentTerminalInputHint" disabled></textarea>
             <button type="button" disabled>View only</button>
-            <small id="subagentTerminalInputHint">This tab mirrors the child session. Use its parent terminal to interact with the run.</small>
+            <small id="subagentTerminalInputHint">This view mirrors the child session. Use its parent thread to interact with the run.</small>
           </div>
         </section>
         <div id="chatSearchBar" class="chat-search-bar" role="search" hidden>
@@ -439,7 +439,7 @@
                 hidden
                 title="Guided Git workflow"
                 aria-label="Start guided Git workflow: stage all changes, generate and preview staged commit messages, optionally open a PR branch worktree, commit short or long there, then push or create a pull request. Cancel is available at each step."
-                data-tooltip="Guided Git workflow:&#10;1. Stage all changes with git add .&#10;2. Generate and preview staged commit messages.&#10;3. Optional: create or type a PR branch worktree before committing.&#10;4. Commit with the short or long message in the worktree tab.&#10;5. Push normally, or push the PR worktree branch, generate/review /pr, and create the PR.&#10;Cancel is available at each step."
+                data-tooltip="Guided Git workflow:&#10;1. Stage all changes with git add .&#10;2. Generate and preview staged commit messages.&#10;3. Optional: create or type a PR branch worktree before committing.&#10;4. Commit with the short or long message in the worktree thread.&#10;5. Push normally, or push the PR worktree branch, generate/review /pr, and create the PR.&#10;Cancel is available at each step."
               ><svg class="composer-icon composer-icon-github" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg></button>
               <h2 class="composer-actions-heading composer-actions-heading-tools">Tools &amp; commands</h2>
               <div class="composer-publish-menu" data-visibility-key="composer.publish" data-composer-action-id="publish" data-composer-action-span="1" hidden>
@@ -623,7 +623,7 @@
                   aria-haspopup="menu"
                   aria-expanded="false"
                   aria-controls="appRunnerMenuPanel"
-                  data-tooltip="App runners: run detected project commands in this tab's working directory."
+                  data-tooltip="App runners: run detected project commands in this thread's working directory."
                 ><svg class="composer-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M8 5v14l11-7z" fill="currentColor"/></svg></button>
                 <div id="appRunnerMenuPanel" class="composer-publish-menu-panel composer-app-runner-menu-panel composer-auto-height-menu-panel" role="menu" aria-label="Detected app runners"></div>
               </div>
@@ -654,7 +654,7 @@
               <button id="conversationVoiceButton" class="composer-publish-button composer-conversation-voice-button" type="button" title="Switch the spoken Piper voice. Voices marked with a size are downloaded when selected; progress shows on the voice chip." aria-label="Conversation voice" aria-haspopup="menu" aria-expanded="false" aria-controls="conversationVoiceMenuPanel"><span id="conversationVoiceButtonLabel">Voice</span></button>
               <div id="conversationVoiceMenuPanel" class="composer-publish-menu-panel composer-conversation-voice-menu-panel" role="menu" aria-label="Conversation voices"></div>
             </div>
-            <button id="conversationModeEndButton" class="composer-conversation-end-button" type="button" title="End Natural Conversation Mode for this Pi tab" aria-label="End Natural Conversation Mode" data-composer-action-id="end-conversation" data-composer-action-span="1" hidden>End conversation</button>
+            <button id="conversationModeEndButton" class="composer-conversation-end-button" type="button" title="End Natural Conversation Mode for this Pi thread" aria-label="End Natural Conversation Mode" data-composer-action-id="end-conversation" data-composer-action-span="1" hidden>End conversation</button>
             <button id="abortButton" class="composer-abort-button danger" type="button" title="Hold Esc or the Abort button for 3 seconds to abort the active Pi run" aria-label="Hold Esc or the Abort button for 3 seconds to abort the active Pi run" data-composer-action-id="abort" data-composer-action-span="2" hidden disabled>Abort</button>
             <button
               id="btwButton"
@@ -679,16 +679,16 @@
         </div>
       </section>
 
-      <section id="terminalSplitShell" class="terminal-split-shell" aria-label="Split terminal" hidden>
+      <section id="terminalSplitShell" class="terminal-split-shell" aria-label="Split thread" hidden>
         <header class="terminal-split-toolbar">
           <div class="terminal-split-heading">
-            <span class="terminal-split-kicker">Split terminal</span>
-            <strong id="terminalSplitTitle">Independent terminal</strong>
+            <span class="terminal-split-kicker">Split thread</span>
+            <strong id="terminalSplitTitle">Independent thread</strong>
             <span id="terminalSplitMeta" class="terminal-split-meta muted"></span>
           </div>
-          <button id="terminalSplitCloseButton" class="terminal-split-close-button" type="button" aria-label="Close split terminal view">Close split</button>
+          <button id="terminalSplitCloseButton" class="terminal-split-close-button" type="button" aria-label="Close split thread view">Close split</button>
         </header>
-        <iframe id="terminalSplitFrame" class="terminal-split-frame" title="Independent split terminal"></iframe>
+        <iframe id="terminalSplitFrame" class="terminal-split-frame" title="Independent split thread"></iframe>
       </section>
 
       <section id="fileViewerPane" class="file-viewer-pane" aria-label="File viewer and editor" hidden>
@@ -780,18 +780,18 @@
             </h2>
             <div id="sidePanelSectionControls" class="side-panel-section-content" hidden>
               <div class="side-panel-controls">
-                <p class="controls-intro">Settings apply to this tab, this browser, or the server. Point to or focus a setting name for help.</p>
+                <p class="controls-intro">Settings apply to this thread, this browser, or the server. Point to or focus a setting name for help.</p>
 
                 <section class="control-group" aria-labelledby="sessionControlsTitle">
                   <div class="control-group-header">
                     <div class="control-group-heading">
                       <h3 id="sessionControlsTitle">Active session</h3>
                     </div>
-                    <span class="control-scope-badge">This tab</span>
+                    <span class="control-scope-badge">This thread</span>
                   </div>
 
                   <div class="control-row">
-                    <span class="control-row-label" data-tooltip="Which AI model this tab uses for new messages. Click Model to search every available model, pick one, then press Apply." aria-label="Model. Which AI model this tab uses for new messages. Click Model to search every available model, pick one, then press Apply." role="button" tabindex="0">
+                    <span class="control-row-label" data-tooltip="Which AI model this thread uses for new messages. Click Model to search every available model, pick one, then press Apply." aria-label="Model. Which AI model this thread uses for new messages. Click Model to search every available model, pick one, then press Apply." role="button" tabindex="0">
                       <label id="modelControlLabel" for="modelSelect">Model</label>
                     </span>
                     <div class="control-action-row">
@@ -851,10 +851,10 @@
                     <select id="focusedNavigationSelect"><option value="left">Sidebar</option><option value="top">Top bar</option></select>
                   </div>
                   <div class="control-row terminal-tabs-layout-control-field">
-                    <span class="control-row-label" data-tooltip="Where your open terminal tabs are listed: in a bar above the chat or in a Sidebar on the right." aria-label="Tab placement. Where your open terminal tabs are listed: in a bar above the chat or in a Sidebar on the right." role="button" tabindex="0">
-                      <label for="terminalTabsLayoutSelect">Tab placement</label>
+                    <span class="control-row-label" data-tooltip="Where your open threads are listed: in a bar above the chat or in a Sidebar on the right." aria-label="Thread placement. Where your open threads are listed: in a bar above the chat or in a Sidebar on the right." role="button" tabindex="0">
+                      <label for="terminalTabsLayoutSelect">Thread placement</label>
                     </span>
-                    <select id="terminalTabsLayoutSelect" title="Terminal tabs layout" aria-describedby="terminalTabsLayoutStatus">
+                    <select id="terminalTabsLayoutSelect" title="Thread list layout" aria-describedby="terminalTabsLayoutStatus">
                       <option value="top">Top bar</option>
                       <option value="left">Sidebar</option>
                     </select>
@@ -862,7 +862,7 @@
                   </div>
 
                   <div class="control-row control-deck-placement-control-field">
-                    <span class="control-row-label" data-tooltip="Choose which desktop side hosts the Control Deck. With Sidebar tabs, Right and Left swap the Control Deck and terminal/tabs rails." aria-label="Control Deck placement. Choose which desktop side hosts the Control Deck." role="button" tabindex="0">
+                    <span class="control-row-label" data-tooltip="Choose which desktop side hosts the Control Deck. With Sidebar threads, Right and Left swap the Control Deck and thread rails." aria-label="Control Deck placement. Choose which desktop side hosts the Control Deck." role="button" tabindex="0">
                       <label for="controlDeckPlacementSelect">Control Deck placement</label>
                     </span>
                     <select id="controlDeckPlacementSelect" title="Control Deck placement" aria-describedby="controlDeckPlacementStatus">
@@ -1075,7 +1075,7 @@
               <div id="codexUsageBox" class="codex-usage-box muted">Checking Codex usage…</div>
               <div class="control-field codex-fast-mode-control" aria-labelledby="codexFastModeLabel">
                 <div class="codex-fast-mode-row">
-                  <label id="codexFastModeLabel" for="codexFastModeSelect" title="Normal, Fast, or Ultrafast for subscription-backed Codex requests on this tab">Speed mode</label>
+                  <label id="codexFastModeLabel" for="codexFastModeSelect" title="Normal, Fast, or Ultrafast for subscription-backed Codex requests on this thread">Speed mode</label>
                   <select id="codexFastModeSelect" title="Ultrafast requires GPT-6 Astra and eligible plan access; it uses 8x included usage or 6x purchased credits" aria-describedby="codexFastModeStatus" disabled>
                     <option value="normal">Normal</option>
                     <option value="fast">Fast</option>
@@ -1145,7 +1145,7 @@
               </button>
             </h2>
             <div id="sidePanelSectionSubagents" class="side-panel-section-content" hidden>
-              <p class="subagents-help"><strong>How it works:</strong> Managed and registered Pi agent runs appear here. Runs linked to an open terminal stay with that terminal; other registered SDK, process, or attached sessions appear under <strong>External agents</strong>.</p>
+              <p class="subagents-help"><strong>How it works:</strong> Managed and registered Pi agent runs appear here. Runs linked to an open thread stay with that thread; other registered SDK, process, or attached sessions appear under <strong>External agents</strong>.</p>
               <details id="subagentLaunchSlots" class="subagent-launch-slots">
                 <summary class="subagent-launch-slots-summary">
                   <span class="subagent-launch-slots-summary-heading">
@@ -1172,11 +1172,11 @@
                   <div id="subagentLaunchSlotRoles" class="subagent-launch-slot-roles" aria-busy="true"></div>
                   <div class="subagent-launch-slots-actions">
                     <button id="subagentLaunchSlotsSave" class="primary" type="button" aria-describedby="subagentLaunchSlotsDirty" disabled>Save agent models</button>
-                    <span id="subagentLaunchSlotsDirty" class="muted" role="status" aria-live="polite">Agent model configuration is not available for this tab.</span>
+                    <span id="subagentLaunchSlotsDirty" class="muted" role="status" aria-live="polite">Agent model configuration is not available for this thread.</span>
                   </div>
                   <div id="subagentLaunchSlotsReloadActions" class="subagent-launch-slots-reload-actions" hidden>
-                    <span>Saved changes apply to future launches after this tab reloads.</span>
-                    <button id="subagentLaunchSlotsReload" class="primary" type="button">Reload active tab</button>
+                    <span>Saved changes apply to future launches after this thread reloads.</span>
+                    <button id="subagentLaunchSlotsReload" class="primary" type="button">Reload active thread</button>
                     <button id="subagentLaunchSlotsLater" type="button">Not now</button>
                   </div>
                   <p id="subagentLaunchSlotsAnnouncer" class="sr-only" aria-live="polite" aria-atomic="true"></p>
@@ -1186,7 +1186,7 @@
                 <label for="subagentOpenModeSelect">Open subagents in</label>
                 <select id="subagentOpenModeSelect" aria-describedby="subagentOpenModeStatus">
                   <option value="overlay">Overlay</option>
-                  <option value="tab">Tab / terminal</option>
+                  <option value="tab">Thread view</option>
                 </select>
                 <span id="subagentOpenModeStatus" class="muted">Overlay · saved in this browser</span>
               </div>
@@ -1527,7 +1527,7 @@
           </div>
           <button id="workspaceLoadDialogCloseButton" type="button" aria-label="Close saved workspace picker">Close</button>
         </header>
-        <p id="workspaceLoadDialogDescription" class="muted">Choose a saved tab constellation to restore.</p>
+        <p id="workspaceLoadDialogDescription" class="muted">Choose a saved thread constellation to restore.</p>
         <p id="workspaceLoadDialogStatus" class="workspace-load-dialog-status muted" role="status" aria-live="polite"></p>
         <div id="workspaceLoadDialogList" class="workspace-load-dialog-list" aria-label="Saved workspaces"></div>
       </form>
@@ -1535,12 +1535,12 @@
 
     <dialog id="workspaceReplaceDialog" class="extension-dialog workspace-replace-dialog" aria-labelledby="workspaceReplaceDialogTitle" aria-describedby="workspaceReplaceDialogDescription">
       <form method="dialog">
-        <span class="workspace-replace-dialog-kicker">Replace open tabs</span>
+        <span class="workspace-replace-dialog-kicker">Replace open threads</span>
         <h2 id="workspaceReplaceDialogTitle">Load saved workspace</h2>
-        <p id="workspaceReplaceDialogDescription">Loading <strong id="workspaceReplaceTargetName"></strong> will terminate the current Pi processes. Choose whether to save the open tabs first.</p>
+        <p id="workspaceReplaceDialogDescription">Loading <strong id="workspaceReplaceTargetName"></strong> will terminate the current Pi processes. Choose whether to save the open threads first.</p>
         <section class="workspace-replace-current-tabs" aria-labelledby="workspaceReplaceCurrentTabsTitle">
           <div class="workspace-replace-current-tabs-heading">
-            <strong id="workspaceReplaceCurrentTabsTitle">Current tabs</strong>
+            <strong id="workspaceReplaceCurrentTabsTitle">Current threads</strong>
             <span id="workspaceReplaceCurrentTabsCount" class="muted"></span>
           </div>
           <ul id="workspaceReplaceCurrentTabsList" class="workspace-replace-current-tabs-list"></ul>
@@ -1549,7 +1549,7 @@
           <span>Save current workspace as</span>
           <input id="workspaceReplaceSaveName" class="dialog-input" type="text" maxlength="160" autocomplete="off" />
         </label>
-        <p id="workspaceReplaceDialogStatus" class="workspace-replace-dialog-status muted" role="status" aria-live="polite">Cancel leaves every current tab unchanged.</p>
+        <p id="workspaceReplaceDialogStatus" class="workspace-replace-dialog-status muted" role="status" aria-live="polite">Cancel leaves every current thread unchanged.</p>
         <menu>
           <button id="workspaceReplaceCancelButton" type="button">Cancel</button>
           <button id="workspaceReplaceDiscardButton" class="danger" type="button">Load without saving</button>
@@ -1570,7 +1570,7 @@
           </label>
           <label class="git-worktree-base-option" for="gitWorktreeBaseCurrentHead">
             <input id="gitWorktreeBaseCurrentHead" type="radio" name="gitWorktreeBase" value="HEAD" />
-            <span><strong>Current workspace HEAD</strong><small>Start from the commit currently checked out in this Pi tab. Uncommitted files are not part of the branch base.</small></span>
+            <span><strong>Current workspace HEAD</strong><small>Start from the commit currently checked out in this Pi thread. Uncommitted files are not part of the branch base.</small></span>
           </label>
         </fieldset>
         <menu>
@@ -1659,7 +1659,7 @@
           <div>
             <span class="git-changes-kicker">Git diff</span>
             <h2 id="gitChangesTitle">Uncommitted Changes</h2>
-            <p id="gitChangesSubtitle" class="muted">Current tab git diff</p>
+            <p id="gitChangesSubtitle" class="muted">Current thread git diff</p>
           </div>
           <div class="git-changes-actions">
             <button id="gitChangesRefreshButton" type="button">Refresh</button>
@@ -1764,7 +1764,7 @@
             <button id="commandPaletteCloseButton" class="command-palette-close-button" type="button" aria-label="Close command palette" title="Close command palette">Close</button>
           </div>
         </div>
-        <input id="commandPaletteInput" class="dialog-input command-palette-input" type="search" autocomplete="off" spellcheck="false" placeholder="Search actions, tabs, models, commands…" role="combobox" aria-autocomplete="list" aria-controls="commandPaletteList" aria-expanded="true" aria-label="Search command palette" />
+        <input id="commandPaletteInput" class="dialog-input command-palette-input" type="search" autocomplete="off" spellcheck="false" placeholder="Search actions, threads, models, commands…" role="combobox" aria-autocomplete="list" aria-controls="commandPaletteList" aria-expanded="true" aria-label="Search command palette" />
         <div id="commandPaletteList" class="command-palette-list" role="listbox" aria-label="Command palette results"></div>
         <p id="commandPaletteHint" class="command-palette-hint muted">Use ↑/↓ then Enter. Escape closes.</p>
       </form>
@@ -1817,7 +1817,7 @@
     <dialog id="appRunnerInfoDialog" class="extension-dialog app-runner-info-dialog" aria-labelledby="appRunnerInfoDialogTitle">
       <form method="dialog">
         <h2 id="appRunnerInfoDialogTitle">App runners</h2>
-        <p class="muted">Run detected project entrypoints directly from the active tab’s working directory, with live output pinned above the chat.</p>
+        <p class="muted">Run detected project entrypoints directly from the active thread’s working directory, with live output pinned above the chat.</p>
         <div id="appRunnerInfoBody" class="app-runner-info-body"></div>
         <menu>
           <button id="appRunnerInfoCloseButton" type="submit" value="close">Close</button>
@@ -2195,7 +2195,7 @@
             failingAssetCommand,
             "4. For an imported-module 404, synchronize the WebUI static allowlist and PWA app shell with app.js imports.",
             "5. For a JavaScript syntax/evaluation error during development, finish or revert the incomplete edit and run the package syntax check before reloading.",
-            "6. After correcting files, run /webui-start again to restart the server and restore tabs.",
+            "6. After correcting files, run /webui-start again to restart the server and restore threads.",
             "7. Share this complete report with your troubleshooting assistant.",
           ].join("\n");
           return { text, summary: assessment.summary };

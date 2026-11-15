@@ -114,7 +114,7 @@ test('saved draft promotes once to its real No Project session and disappears fr
   await capture(page, info, 'first-prompt-promotion');
 });
 
-test('Home and + Tab leave existing sessions intact while selecting fresh blank client state', async ({ page, emptyStartup }) => {
+test('Home and + Thread leave existing sessions intact while selecting fresh blank client state', async ({ page, emptyStartup }) => {
   await ready(page, emptyStartup);
   const source = await promote(page, emptyStartup, 'Existing conversation');
   await page.locator('#promptInput').fill('Existing session composer');

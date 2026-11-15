@@ -204,7 +204,7 @@ test("legacy phone keeps terminal navigation and secondary composer actions coll
     drawer: Number.parseInt(getComputedStyle(document.querySelector(".terminal-tabs-shell")).zIndex, 10),
     backdrop: Number.parseInt(getComputedStyle(document.querySelector("#terminalTabsBackdrop")).zIndex, 10),
   }));
-  assert.ok(drawerLayers.drawer > drawerLayers.backdrop, `open + Tab options must remain above the blurred backdrop, got ${JSON.stringify(drawerLayers)}`);
+  assert.ok(drawerLayers.drawer > drawerLayers.backdrop, `open + Thread options must remain above the blurred backdrop, got ${JSON.stringify(drawerLayers)}`);
 
   await page.evaluate(() => {
     const fixture = document.createElement("div");
@@ -236,7 +236,7 @@ test("legacy phone keeps terminal navigation and secondary composer actions coll
     const overallNewTab = document.createElement("div");
     overallNewTab.id = "mobileOverallNewTabFixture";
     overallNewTab.className = "terminal-new-tab-menu composer-publish-menu";
-    overallNewTab.textContent = "+ Tab";
+    overallNewTab.textContent = "+ Thread";
     visibilityFixture.append(overallNewTab);
 
     document.querySelector("#terminalTabsDrawerContent").append(fixture, visibilityFixture);

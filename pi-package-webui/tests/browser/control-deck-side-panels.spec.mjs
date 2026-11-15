@@ -331,7 +331,7 @@ test("Right, Left, Both, Sidebar rail, independent state, overlay, singleton ARI
   await expect(page.locator("#sidePanelLeft")).toBeHidden();
   const rightPlacementChatBox = await page.locator(".chat").boundingBox();
   const leftRailBox = await page.locator(".terminal-tabs-shell").boundingBox();
-  assert.ok(rightPlacementChatBox && leftRailBox && leftRailBox.x < rightPlacementChatBox.x, "Right Control Deck placement should switch the terminal/tabs rail to the left of chat");
+  assert.ok(rightPlacementChatBox && leftRailBox && leftRailBox.x < rightPlacementChatBox.x, "Right Control Deck placement should switch the thread rail to the left of chat");
 
   await page.locator("#controlDeckPlacementSelect").selectOption("left");
   await expect(page.locator("body")).not.toHaveClass(/terminal-tabs-sidebar-start/);
@@ -339,8 +339,8 @@ test("Right, Left, Both, Sidebar rail, independent state, overlay, singleton ARI
   await expect(page.locator("#sidePanel")).toBeHidden();
   const chatBox = await page.locator(".chat").boundingBox();
   const railBox = await page.locator(".terminal-tabs-shell").boundingBox();
-  assert.ok(chatBox && railBox && railBox.x > chatBox.x, "Left Control Deck placement should switch the terminal/tabs rail to the right of chat");
-  await expect(page.locator("#controlDeckPlacementStatus")).toContainText("Control Deck left, terminal/tabs right");
+  assert.ok(chatBox && railBox && railBox.x > chatBox.x, "Left Control Deck placement should switch the thread rail to the right of chat");
+  await expect(page.locator("#controlDeckPlacementStatus")).toContainText("Control Deck left, threads right");
   const newTabButton = page.locator("#newTabButton");
   await newTabButton.hover();
   await expect(page.locator("#newTabMenuPanel")).toBeVisible();

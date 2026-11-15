@@ -34,8 +34,8 @@ assert.match(surfaceSource, /started safely without optional companions[\s\S]*Re
 assert.match(surfaceSource, /noticeDismissKey[\s\S]*optionalFeatureMigrationDismissedNoticeKey === noticeDismissKey[\s\S]*surface\.hidden = true/, "a dismissed degraded snapshot should stay hidden for the current page lifetime");
 assert.match(surfaceSource, /optional-feature-migration-dismiss[\s\S]*aria-label", "Close optional feature startup notice"/, "degraded startup should expose an accessible dismiss button");
 assert.match(app, /function dismissOptionalFeatureMigrationNotice\(\)[\s\S]*optionalFeatureMigrationDismissedNoticeKey = key[\s\S]*renderOptionalFeatureMigrationSurface\(\)/, "the degraded dismiss action should hide the current snapshot through the existing renderer");
-assert.match(surfaceSource, /Migrating optional features[\s\S]*Retry failed[\s\S]*Copy commands[\s\S]*Restart tab/, "progress and recovery should expose the required sequential/retry/copy/deferred-restart actions");
-assert.match(surfaceSource, /if \(optionalFeatureRestartNotice\.restartDeferred\)[\s\S]*Restart tab[\s\S]*else[\s\S]*Dismiss/, "a deferred restart action must remain persistent until restart succeeds");
+assert.match(surfaceSource, /Migrating optional features[\s\S]*Retry failed[\s\S]*Copy commands[\s\S]*Restart thread/, "progress and recovery should expose the required sequential/retry/copy/deferred-restart actions");
+assert.match(surfaceSource, /if \(optionalFeatureRestartNotice\.restartDeferred\)[\s\S]*Restart thread[\s\S]*else[\s\S]*Dismiss/, "a deferred restart action must remain persistent until restart succeeds");
 assert.match(surfaceSource, /optionalFeatureMigrationCompletionIsDismissed\(snapshot\)[\s\S]*surface\.hidden = true[\s\S]*phase === "complete"[\s\S]*dismissOptionalFeatureMigrationCompletion/, "dismissing a completed migration should hide the complete surface, not only its restart notice");
 assert.match(surfaceSource, /setAttribute\("role", "alert"\)/, "only conflict/partial terminal feedback should add alert semantics");
 assert.match(surfaceSource, /optional-feature-migration-completion-summary[\s\S]*card\.focus/, "completion summary should receive focus once");
@@ -53,7 +53,7 @@ assert.match(batchSource, /error\.optionalFeatureCandidatesChanged \|\| error\.o
 assert.match(batchSource, /for \(const feature of candidates\)[\s\S]*result\?\.ok === true[\s\S]*optionalFeatureInstallFailureFromBatchResult/, "partial batches should preserve and settle every per-feature terminal result");
 assert.match(batchSource, /output\.slice\(-4000\)|slice\(-4000\)/, "localhost response output should remain bounded before entering activity/row feedback");
 assert.match(batchSource, /restart\.autoRestarted \|\| restart\.restartDeferred[\s\S]*optionalFeatureRestartNotice/, "batch response restart fields should drive visible restart feedback");
-assert.doesNotMatch(batchSource, /const reloadMessage|await appConfirmText\([^)]*Reload the active Pi tab/, "successful migration must not add a separate restart confirmation");
+assert.doesNotMatch(batchSource, /const reloadMessage|await appConfirmText\([^)]*Reload the active Pi (?:tab|thread)/, "successful migration must not add a separate restart confirmation");
 
 const eventSource = sourceBetween("function handleEvent(event)", "function connectEvents");
 assert.match(eventSource, /webui_optional_feature_migration[\s\S]*applyOptionalFeatureMigrationSnapshot\(event\.snapshot\)/, "SSE migration snapshots should update reconnect-safe state");

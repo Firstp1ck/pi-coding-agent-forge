@@ -84,14 +84,14 @@ test('overview follows the active session without ending background work', async
   await page.goto(ownership.baseURL);
   await expect(page.locator('#chat')).toContainText('fake answer');
   const overview = page.getByRole('region', { name: 'Conversation overview', exact: true });
-  await expect(overview.locator('.conversation-overview-title')).toHaveText('Terminal 1');
+  await expect(overview.locator('.conversation-overview-title')).toHaveText('Thread 1');
   await page.locator('#promptInput').fill('First session draft');
   await ownership.api(`/api/prompt?tab=${ownership.tabs[0].id}`, {
     message: 'fixture continuity held stream', requestId: 'overview-stream-continuity',
   });
   await expect(page.locator('.focused-run-controls #abortButton')).toBeVisible();
   await page.locator(`#tabBar [data-tab-id="${ownership.tabs[1].id}"] .terminal-tab-button`).click();
-  await expect(overview.locator('.conversation-overview-title')).toHaveText('Terminal 2');
+  await expect(overview.locator('.conversation-overview-title')).toHaveText('Thread 2');
   await overview.getByRole('button', { name: 'Open Folder', exact: true }).click();
   await expect(page.locator('#fileTreeSearchInput')).toBeVisible();
   expect((await ownership.api(`/api/state?tab=${ownership.tabs[0].id}`)).isStreaming).toBe(true);

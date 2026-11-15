@@ -10,7 +10,7 @@ const css = fs.readFileSync(path.join(root, "public/styles.css"), "utf8");
 const app = fs.readFileSync(path.join(root, "public/app.js"), "utf8");
 
 test("active desktop terminal rail exposes an accessible resize separator", () => {
-  assert.match(html, /id="terminalTabsResizeHandle"[^>]*role="separator"[^>]*aria-orientation="vertical"[^>]*aria-label="Resize terminal sidebar width"[^>]*tabindex="0"/);
+  assert.match(html, /id="terminalTabsResizeHandle"[^>]*role="separator"[^>]*aria-orientation="vertical"[^>]*aria-label="Resize thread sidebar width"[^>]*tabindex="0"/);
   assert.match(css, /--terminal-tabs-sidebar-width:\s*clamp\(13rem, 18vw, 19rem\)/);
   assert.match(css, /body\.terminal-tabs-left \.chat-panel \{[\s\S]*grid-template-columns:\s*minmax\(0, 1fr\) minmax\(13rem, var\(--terminal-tabs-sidebar-width\)\)/);
   assert.match(css, /\.terminal-tabs-resize-handle \{[\s\S]*left:\s*-0\.78rem/);

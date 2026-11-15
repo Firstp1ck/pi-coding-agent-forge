@@ -56,7 +56,7 @@ assert.equal(targets[4], null, "Git files outside every available tab cwd should
 
 assert.match(openSource, /gitFileViewerTarget\(repoRelPath, root, candidates\)/, "Git file opening should use the shared repo-to-workspace path resolver");
 assert.match(openSource, /target\.tabId !== activeTabId[\s\S]*await switchTab\(target\.tabId\)[\s\S]*openFileInViewer\(target\.path/, "Git file opening should activate the owning tab before using the standard WebUI viewer");
-assert.match(openSource, /its terminal tab is no longer available/, "a stale Git-card tab should produce visible failure feedback");
+assert.match(openSource, /its thread is no longer available/, "a stale Git-card tab should produce visible failure feedback");
 assert.match(renderSource, /row\.setAttribute\("role", "button"\)/, "Git file rows should expose button semantics");
 assert.match(renderSource, /row\.addEventListener\("click", open\)/, "clicking a Git file row should open its preview");
 assert.match(renderSource, /event\.repeat \|\| \(event\.key !== "Enter" && event\.key !== " "\)/, "Git file rows should support keyboard activation without key-repeat request bursts");
