@@ -66,6 +66,8 @@ Fresh installations start with the compact desktop layout when the Web UI can co
 
 Press **Pi** at the top left, or choose **+ Tab → No Project**, to open an empty conversation. Its terminal and folder are created when you send the first message. If you type and switch away, your text appears as a **Draft** in Inbox. Reopen it to continue, or close it to discard the text. Drafts cannot be settled. Existing sessions stay open; resuming one reuses its folder.
 
+In the folder picker, **Pinned folders** appears above **Current location**, and **Create a folder** appears above the folder list. Both sections start expanded and can be collapsed.
+
 The compact left sidebar keeps idle, finished, and input-waiting sessions in **Inbox**, with active work in **Working**. Choose **Settle** (✓) on a finished session to move it into **Settled**, collapsed by default. Expand it and choose **Restore** (↥) to bring a session back. New work or a request for input brings it back automatically. Settling does not close the session.
 
 In the compact layout, **Ctrl/Cmd+K** opens the same **All tools** search. Session and Project menus offer a short list of actions; **More actions** opens the full catalog. The **Attention** button separates decisions waiting for you, running sessions, and finished work. Select a decision to open its session's response dialog.

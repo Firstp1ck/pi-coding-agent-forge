@@ -549,8 +549,8 @@
     },
     {
       "file": "pi-package-webui/public/index.html",
-      "bytes": 173957,
-      "sha256": "d942322e43e322a1faae9ffde8658e5a6bbf0564191457096efc77d7f1a87e90"
+      "bytes": 173967,
+      "sha256": "dc66e4a20977591529447efac05c2ce62a8babc4c5dd6b61840d838a4c46ac18"
     },
     {
       "file": "pi-package-webui/public/issue-bot-client.mjs",
@@ -610,7 +610,7 @@
     {
       "file": "pi-package-webui/public/service-worker.js",
       "bytes": 6670,
-      "sha256": "f0e63f8c4ed8122322b335f01b2bea8c2acf861771ab9d391cc7dd2663bf8d44"
+      "sha256": "d1df02aaade18af5590c793b83e54759e3cbb96f4ae9d355a7ff6230ac891dca"
     },
     {
       "file": "pi-package-webui/public/session-attention-scheduler.mjs",
@@ -20163,7 +20163,7 @@
       "anchor": {
         "file": "pi-package-webui/public/index.html",
         "symbol": "#pathPickerAddFastPickButton",
-        "line": 1735
+        "line": 1716
       },
       "ancestors": [
         "pathPickerDialog"
@@ -20180,7 +20180,7 @@
       "anchor": {
         "file": "pi-package-webui/public/index.html",
         "symbol": "#pathPickerBrowseLabel",
-        "line": 1724
+        "line": 1738
       },
       "ancestors": [
         "pathPickerDialog"
@@ -20231,7 +20231,7 @@
       "anchor": {
         "file": "pi-package-webui/public/index.html",
         "symbol": "#pathPickerClearSearchButton",
-        "line": 1727
+        "line": 1741
       },
       "ancestors": [
         "pathPickerDialog"
@@ -20248,7 +20248,7 @@
       "anchor": {
         "file": "pi-package-webui/public/index.html",
         "symbol": "#pathPickerCreateButton",
-        "line": 1743
+        "line": 1734
       },
       "ancestors": [
         "pathPickerDialog"
@@ -20265,7 +20265,7 @@
       "anchor": {
         "file": "pi-package-webui/public/index.html",
         "symbol": "#pathPickerCreateNameInput",
-        "line": 1742
+        "line": 1733
       },
       "ancestors": [
         "pathPickerDialog"
@@ -20282,7 +20282,7 @@
       "anchor": {
         "file": "pi-package-webui/public/index.html",
         "symbol": "#pathPickerCurrent",
-        "line": 1715
+        "line": 1720
       },
       "ancestors": [
         "pathPickerDialog"
@@ -20331,7 +20331,7 @@
       "anchor": {
         "file": "pi-package-webui/public/index.html",
         "symbol": "#pathPickerFastPicks",
-        "line": 1734
+        "line": 1715
       },
       "ancestors": [
         "pathPickerDialog"
@@ -20348,7 +20348,7 @@
       "anchor": {
         "file": "pi-package-webui/public/index.html",
         "symbol": "#pathPickerList",
-        "line": 1730
+        "line": 1744
       },
       "ancestors": [
         "pathPickerDialog"
@@ -20365,7 +20365,7 @@
       "anchor": {
         "file": "pi-package-webui/public/index.html",
         "symbol": "#pathPickerLocationLabel",
-        "line": 1714
+        "line": 1719
       },
       "ancestors": [
         "pathPickerDialog"
@@ -20382,7 +20382,7 @@
       "anchor": {
         "file": "pi-package-webui/public/index.html",
         "symbol": "#pathPickerPathButton",
-        "line": 1719
+        "line": 1724
       },
       "ancestors": [
         "pathPickerDialog"
@@ -20399,7 +20399,7 @@
       "anchor": {
         "file": "pi-package-webui/public/index.html",
         "symbol": "#pathPickerPathInput",
-        "line": 1718
+        "line": 1723
       },
       "ancestors": [
         "pathPickerDialog"
@@ -20416,7 +20416,7 @@
       "anchor": {
         "file": "pi-package-webui/public/index.html",
         "symbol": "#pathPickerRoots",
-        "line": 1721
+        "line": 1726
       },
       "ancestors": [
         "pathPickerDialog"
@@ -20433,7 +20433,7 @@
       "anchor": {
         "file": "pi-package-webui/public/index.html",
         "symbol": "#pathPickerSearchInput",
-        "line": 1726
+        "line": 1740
       },
       "ancestors": [
         "pathPickerDialog"
@@ -20450,7 +20450,7 @@
       "anchor": {
         "file": "pi-package-webui/public/index.html",
         "symbol": "#pathPickerSearchStatus",
-        "line": 1729
+        "line": 1743
       },
       "ancestors": [
         "pathPickerDialog"
@@ -26330,7 +26330,7 @@
       "anchor": {
         "file": "pi-package-webui/public/index.html",
         "symbol": "#pathPickerDialog",
-        "line": 1733
+        "line": 1714
       },
       "ancestors": [
         "pathPickerDialog"
@@ -26347,7 +26347,7 @@
       "anchor": {
         "file": "pi-package-webui/public/index.html",
         "symbol": "#pathPickerDialog",
-        "line": 1738
+        "line": 1729
       },
       "ancestors": [
         "pathPickerDialog"

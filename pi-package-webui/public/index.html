@@ -12,7 +12,7 @@
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-    <link rel="stylesheet" href="/styles.css?v=166" />
+    <link rel="stylesheet" href="/styles.css?v=167" />
     <link rel="stylesheet" href="/shell-workspace.css?v=7" />
     <link rel="stylesheet" href="/shell-tools-launcher.css?v=2" />
     <link rel="stylesheet" href="/focused-shell-adapter.css?v=13" />
@@ -1710,6 +1710,11 @@
           <p class="path-picker-hint muted">Open a folder below, then choose it to continue.</p>
         </header>
         <div class="path-picker-body">
+          <details class="path-picker-secondary path-picker-pinned" open>
+            <summary>Pinned folders</summary>
+            <div id="pathPickerFastPicks" class="path-picker-fast-picks" aria-label="Pinned folders"></div>
+            <button id="pathPickerAddFastPickButton" type="button" class="path-picker-add-fast-pick">Pin this folder</button>
+          </details>
           <section class="path-picker-location" aria-labelledby="pathPickerLocationLabel">
             <h3 id="pathPickerLocationLabel" class="path-picker-label">Current location</h3>
             <p id="pathPickerCurrent" class="path-picker-current"></p>
@@ -1720,6 +1725,15 @@
             </div>
             <nav id="pathPickerRoots" class="path-picker-roots" aria-label="Folder shortcuts"></nav>
           </section>
+          <details class="path-picker-secondary path-picker-create" open>
+            <summary>Create a folder</summary>
+            <p class="path-picker-hint muted">The new folder will be created in the current location.</p>
+            <label for="pathPickerCreateNameInput" class="path-picker-label">New folder name</label>
+            <div class="path-picker-create-row">
+              <input id="pathPickerCreateNameInput" class="path-picker-create-input" type="text" placeholder="Folder name" autocomplete="off" spellcheck="false" maxlength="255" />
+              <button id="pathPickerCreateButton" type="button" class="path-picker-create-button">Create folder</button>
+            </div>
+          </details>
           <section class="path-picker-browser" aria-labelledby="pathPickerBrowseLabel">
             <label id="pathPickerBrowseLabel" for="pathPickerSearchInput" class="path-picker-label">Folders in this location</label>
             <div class="path-picker-search-row">
@@ -1729,20 +1743,6 @@
             <p id="pathPickerSearchStatus" class="path-picker-search-status muted" role="status" aria-live="polite"></p>
             <div id="pathPickerList" class="path-picker-list" role="listbox" aria-label="Folders in this location"></div>
           </section>
-          <details class="path-picker-secondary path-picker-pinned">
-            <summary>Pinned folders</summary>
-            <div id="pathPickerFastPicks" class="path-picker-fast-picks" aria-label="Pinned folders"></div>
-            <button id="pathPickerAddFastPickButton" type="button" class="path-picker-add-fast-pick">Pin this folder</button>
-          </details>
-          <details class="path-picker-secondary path-picker-create">
-            <summary>Create a folder</summary>
-            <p class="path-picker-hint muted">The new folder will be created in the current location.</p>
-            <label for="pathPickerCreateNameInput" class="path-picker-label">New folder name</label>
-            <div class="path-picker-create-row">
-              <input id="pathPickerCreateNameInput" class="path-picker-create-input" type="text" placeholder="Folder name" autocomplete="off" spellcheck="false" maxlength="255" />
-              <button id="pathPickerCreateButton" type="button" class="path-picker-create-button">Create folder</button>
-            </div>
-          </details>
         </div>
         <p id="pathPickerError" class="path-picker-error" role="alert" hidden></p>
         <menu class="path-picker-footer">

@@ -66,7 +66,7 @@ function makeEnvironment({
     classic: new FakeElement(),
     copyStatus: new FakeElement(),
   };
-  const styleLink = new FakeElement({ href: "http://127.0.0.1:31415/styles.css?v=166", sheet: stylesheetLoaded ? {} : null });
+  const styleLink = new FakeElement({ href: "http://127.0.0.1:31415/styles.css?v=167", sheet: stylesheetLoaded ? {} : null });
   const listeners = new Map();
   const timers = new Map();
   let timerId = 0;

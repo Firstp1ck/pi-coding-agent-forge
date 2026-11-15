@@ -214,6 +214,10 @@ The local preview helper now clones the user-owned npm prefix and mounts it at t
 
 Captures: [minimal unchanged feedback](screenshots/update-feedback/minimal-unchanged.png) and [job details and return](screenshots/update-feedback/running-details-back.png).
 
+### Folder picker section order
+
+Pinned folders now precedes Current location, and Create a folder precedes Folders in this location. Both disclosures start expanded. Panel padding and consistent section gaps keep labels, fields and buttons clear of borders. The dialog retains its fixed action footer and scrollable body on short screens. Styles use revision 167 and PWA195. All nine folder-picker browser scenarios and 42 static/inventory checks pass. Desktop dark and narrow light screenshots were inspected; folder creation, pinning, cancellation, keyboard access and short-screen footer reachability remain verified.
+
 ### Platform limits
 
 Linux Chromium is the verified browser environment. Physical Android/iOS keyboards, IME, microphones, Windows/macOS behavior, WebKit and installed live-provider/companion combinations remain unmeasured. Existing platform-specific behavior is preserved in code and focused contracts, not claimed as device-tested.

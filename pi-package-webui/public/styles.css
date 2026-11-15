@@ -14790,10 +14790,17 @@ body.subagent-terminal-active .composer-remote-mic-consent {
   font-size: 0.85rem;
 }
 .path-picker-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
   min-height: 0;
   overflow: auto;
   overscroll-behavior: contain;
   padding: 1rem 1.2rem;
+}
+.path-picker-body > * {
+  flex: 0 0 auto;
+  min-width: 0;
 }
 .path-picker-label {
   display: block;
@@ -14816,13 +14823,17 @@ body.subagent-terminal-active .composer-remote-mic-consent {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
   font-size: 0.85rem;
 }
-.path-picker-secondary {
-  margin-top: 0.65rem;
-  padding: 0.15rem 0;
-  border-top: 1px solid var(--border);
+.path-picker-dialog .path-picker-secondary {
+  margin: 0;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 0.65rem;
+}
+.path-picker-secondary[open] > summary {
+  margin-bottom: 0.65rem;
 }
 .path-picker-secondary summary {
-  padding: 0.65rem 0.1rem;
+  padding: 0.15rem 0;
   color: var(--text);
   cursor: pointer;
   font-size: 0.9rem;

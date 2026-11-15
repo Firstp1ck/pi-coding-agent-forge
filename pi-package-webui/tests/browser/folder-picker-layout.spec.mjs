@@ -86,17 +86,23 @@ for (const view of [
     await expect(page.locator("#pathPickerRoots")).toContainText("Default folder");
     await expect(page.locator("#pathPickerCurrent")).toHaveAttribute("title", folderPicker.project);
     await expect(page.locator("#pathPickerList .path-picker-directory")).toHaveCount(folderPicker.folders.length);
-    await expect(page.locator(".path-picker-pinned")).not.toHaveAttribute("open", "");
-    await expect(page.locator(".path-picker-create")).not.toHaveAttribute("open", "");
-    await expect(page.locator("#pathPickerSearchInput")).toBeInViewport();
-    await expect(page.locator("#pathPickerList")).toBeInViewport();
+    await expect(page.locator(".path-picker-pinned")).toHaveAttribute("open", "");
+    await expect(page.locator(".path-picker-create")).toHaveAttribute("open", "");
+    const sections = await page.locator(".path-picker-body > *").evaluateAll(nodes => nodes.map(node => node.className));
+    expect(sections).toEqual([
+      "path-picker-secondary path-picker-pinned", "path-picker-location",
+      "path-picker-secondary path-picker-create", "path-picker-browser",
+    ]);
+    const padding = await page.locator(".path-picker-pinned").evaluate(node => parseFloat(getComputedStyle(node).paddingLeft));
+    expect(padding).toBeGreaterThanOrEqual(12);
     await expectFits(page);
     await capture(page, info, `${view.name}-source-populated`);
     const accessibility = await new AxeBuilder({ page }).include("#pathPickerDialog").analyze();
     expect(accessibility.violations.filter(({ impact }) => ["serious", "critical"].includes(impact))).toEqual([]);
     await page.locator(".path-picker-pinned summary").click();
+    await expect(page.locator("#pathPickerAddFastPickButton")).toBeHidden();
+    await page.locator(".path-picker-pinned summary").click();
     await expect(page.locator("#pathPickerAddFastPickButton")).toBeVisible();
-    await page.locator(".path-picker-create summary").click();
     await expect(page.locator("#pathPickerCreateNameInput")).toBeEditable();
     await expectFits(page);
     await capture(page, info, `${view.name}-source-expanded`);
@@ -126,7 +132,6 @@ test("direct paths, search, empty folders and creation preserve canonical action
   await directPath(page, join(folderPicker.project, "empty"));
   await capture(page, info, "desktop-source-empty");
   await page.locator(".path-picker-create summary").focus();
-  await page.keyboard.press("Enter");
   await page.keyboard.press("Tab");
   await expect(page.locator("#pathPickerCreateNameInput")).toBeFocused();
   await page.locator("#pathPickerCreateNameInput").fill("../invalid");
@@ -149,8 +154,7 @@ test("direct paths, search, empty folders and creation preserve canonical action
 test("pin, reopen, jump and unpin use the persisted folder", async ({ page, folderPicker }) => {
   await ready(page, folderPicker);
   await openPicker(page);
-  await page.locator(".path-picker-pinned summary").focus();
-  await page.keyboard.press("Enter");
+  await expect(page.locator(".path-picker-pinned")).toHaveAttribute("open", "");
   await page.locator("#pathPickerAddFastPickButton").click();
   await expect(page.locator("#pathPickerAddFastPickButton")).toHaveText("Pinned");
   await expect.poll(async () => (await folderPicker.api("/api/path-fast-picks")).picks.map(pick => pick.cwd)).toContain(folderPicker.project);
@@ -170,8 +174,8 @@ test("short narrow viewport keeps footer reachable with both disclosures open", 
   await page.setViewportSize({ width: 320, height: 568 });
   await ready(page, folderPicker, "light");
   await openPicker(page);
-  await page.locator(".path-picker-pinned summary").click();
-  await page.locator(".path-picker-create summary").click();
+  await expect(page.locator(".path-picker-pinned")).toHaveAttribute("open", "");
+  await expect(page.locator(".path-picker-create")).toHaveAttribute("open", "");
   await page.locator("#pathPickerCreateNameInput").fill("new-folder");
   await expectFits(page);
   await capture(page, info, "short-narrow-source-expanded");
