@@ -17549,18 +17549,16 @@ function renderTerminalTab(tab, { showCwdAdd = false } = {}) {
   wrapper.append(button, createTerminalTabActions(tab));
   if (showCwdAdd) wrapper.append(createTerminalTabCwdAddMenu(tab));
 
-  if (tabs.length > 1) {
-    const close = make("button", "terminal-tab-close", "×");
-    close.type = "button";
-    close.draggable = false;
-    const closeTooltip = `Close ${tab.title}`;
-    applyStyledTooltip(close, closeTooltip, { ariaLabel: closeTooltip, targetKey: `terminal-tab:${tab.id}:close` });
-    close.addEventListener("click", (event) => {
-      event.stopPropagation();
-      closeTerminalTab(tab.id);
-    });
-    wrapper.append(close);
-  }
+  const close = make("button", "terminal-tab-close", "×");
+  close.type = "button";
+  close.draggable = false;
+  const closeTooltip = `Close ${tab.title}`;
+  applyStyledTooltip(close, closeTooltip, { ariaLabel: closeTooltip, targetKey: `terminal-tab:${tab.id}:close` });
+  close.addEventListener("click", (event) => {
+    event.stopPropagation();
+    closeTerminalTab(tab.id);
+  });
+  wrapper.append(close);
 
   return wrapper;
 }
@@ -17591,18 +17589,16 @@ function renderTerminalTabGroupItem(tab, group) {
   });
   item.append(button, createTerminalTabActions(tab));
 
-  if (tabs.length > 1) {
-    const close = make("button", "terminal-tab-close terminal-tab-group-item-close", "×");
-    close.type = "button";
-    close.draggable = false;
-    const closeTooltip = `Close ${tab.title}`;
-    applyStyledTooltip(close, closeTooltip, { ariaLabel: closeTooltip, targetKey: `terminal-tab:${tab.id}:close` });
-    close.addEventListener("click", (event) => {
-      event.stopPropagation();
-      closeTerminalTab(tab.id);
-    });
-    item.append(close);
-  }
+  const close = make("button", "terminal-tab-close terminal-tab-group-item-close", "×");
+  close.type = "button";
+  close.draggable = false;
+  const closeTooltip = `Close ${tab.title}`;
+  applyStyledTooltip(close, closeTooltip, { ariaLabel: closeTooltip, targetKey: `terminal-tab:${tab.id}:close` });
+  close.addEventListener("click", (event) => {
+    event.stopPropagation();
+    closeTerminalTab(tab.id);
+  });
+  item.append(close);
 
   return item;
 }
@@ -18510,13 +18506,13 @@ async function reopenClosedTerminalTab(tabId) {
   if (reopened) await switchTab(reopened);
 }
 
-async function closeTerminalTabs(tabIds, { label = "selected terminal tabs", allowEmpty = false } = {}) {
+async function closeTerminalTabs(tabIds, { label = "selected terminal tabs", allowEmpty = false, allowQuickClose = !allowEmpty } = {}) {
   const targetIds = [...new Set(tabIds.filter(Boolean))];
   const targetTabs = targetIds.map((id) => tabs.find((item) => item.id === id)).filter(Boolean);
   if (!targetTabs.length) return;
   // Closing one idle tab is routine and reversible (its session stays resumable), so it closes at
   // once with an Undo instead of a confirmation. Anything with running work still asks first.
-  const quickClose = targetTabs.length === 1 && !tabHasActiveAgent(targetTabs[0]) && !allowEmpty;
+  const quickClose = targetTabs.length === 1 && !tabHasActiveAgent(targetTabs[0]) && allowQuickClose;
   if (!quickClose && !(await confirmCloseTerminalTabs(targetTabs, label))) return;
 
   const closedActiveTab = targetTabs.some((tab) => tab.id === activeTabId);
@@ -18554,7 +18550,9 @@ async function closeTerminalTabs(tabIds, { label = "selected terminal tabs", all
       });
     }
 
-    const activeTabNeedsFallback = closedIds.includes(activeTabId) || !tabs.some((item) => item.id === activeTabId);
+    const activeTabNeedsFallback = activeTabId
+      ? !tabs.some((item) => item.id === activeTabId)
+      : !draftConversations.activeId;
     if (activeTabNeedsFallback) {
       const sameCwdFallbackTabId = closedActiveCwd
         ? tabs.find((item) => !closedIds.includes(item.id) && item.cwd === closedActiveCwd)?.id || null
@@ -18564,6 +18562,7 @@ async function closeTerminalTabs(tabIds, { label = "selected terminal tabs", all
         : response.data?.activeTabId && tabs.some((item) => item.id === response.data.activeTabId)
           ? response.data.activeTabId
           : (fallbackTabId && tabs.some((item) => item.id === fallbackTabId) ? fallbackTabId : tabs[0]?.id)) || null, { remember: true });
+      if (!activeTabId && !draftConversations.activeId) draftConversations.select(draftConversations.create());
       resetActiveTabUi();
       renderTabs();
       restoreActiveDraft();
@@ -18578,6 +18577,7 @@ async function closeTerminalTabs(tabIds, { label = "selected terminal tabs", all
     }
     addEvent(`closed ${closedIds.length || targetTabs.length} terminal ${closedIds.length === 1 ? "tab" : "tabs"}`, "info");
   } catch (error) {
+    if (closedActiveTab && targetIds.includes(activeTabId)) connectEvents(activeTabContext());
     addEvent(error.message, "error");
   } finally {
     for (const id of targetIds) closingTerminalTabIds.delete(id);
@@ -18587,7 +18587,7 @@ async function closeTerminalTabs(tabIds, { label = "selected terminal tabs", all
 async function closeTerminalTab(tabId) {
   const tab = tabs.find((item) => item.id === tabId);
   if (!tab) return;
-  await closeTerminalTabs([tabId], { label: tab.title });
+  await closeTerminalTabs([tabId], { label: tab.title, allowEmpty: true, allowQuickClose: true });
 }
 
 async function closeTerminalTabGroup(group) {
