@@ -29,7 +29,15 @@ html[data-desktop-shell="focused"] #focusedWorkspace { height: var(--visual-view
 #focusedWorkspace .terminal-sidebar-actions { display: flex; gap: 4px; }
 #focusedWorkspace .terminal-tabs button { min-height: 30px; padding-block: 4px; box-shadow: none; }
 #focusedWorkspace .terminal-new-tab-menu { width: 100%; }
-#focusedWorkspace .terminal-new-tab-menu .composer-publish-menu-panel { inset: auto 0 100%; width: 100%; min-width: 0; }
+#focusedWorkspace .terminal-new-tab-menu .composer-publish-menu-panel {
+  position: fixed;
+  inset: var(--new-tab-menu-top, 0) auto auto var(--new-tab-menu-left, 0);
+  width: var(--new-tab-menu-width, 100%);
+  min-width: 0;
+  max-height: calc(100dvh - 8px);
+  padding: 0;
+  overflow-y: auto;
+}
 #focusedWorkspace .terminal-close-all-button { font-size: 11px; min-height: 28px; }
 #focusedWorkspace[data-navigation="top"] .terminal-tabs-shell,
 #focusedWorkspace[data-navigation="top"] .terminal-tabs-drawer-content,

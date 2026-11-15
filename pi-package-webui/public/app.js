@@ -17454,12 +17454,43 @@ function clearOpenTerminalTabGroup(groupKey, { force = false, preserveFocus = fa
   syncTabPolling();
 }
 
+function positionFocusedNewTabMenu() {
+  const menu = elements.newTabMenu;
+  const panel = elements.newTabMenuPanel;
+  if (!menu?.closest("#focusedWorkspace") || !panel || !elements.newTabButton) return;
+  const trigger = elements.newTabButton.getBoundingClientRect();
+  const menuRect = menu.getBoundingClientRect();
+  const viewportWidth = document.documentElement.clientWidth;
+  const viewportHeight = document.documentElement.clientHeight;
+  const height = panel.getBoundingClientRect().height;
+  const width = Math.min(Math.max(menuRect.width, panel.scrollWidth), viewportWidth - 8);
+  const top = trigger.bottom + height <= viewportHeight - 4
+    ? trigger.bottom
+    : Math.max(4, Math.min(trigger.top - height, viewportHeight - height - 4));
+  panel.style.setProperty("--new-tab-menu-top", `${top}px`);
+  panel.style.setProperty("--new-tab-menu-left", `${Math.max(4, Math.min(menuRect.left, viewportWidth - width - 4))}px`);
+  panel.style.setProperty("--new-tab-menu-width", `${width}px`);
+}
+
 function setNewTabMenuOpen(open) {
+  const focusedMenu = elements.newTabMenu?.closest("#focusedWorkspace");
+  if (focusedMenu && !open && newTabMenuOpen) {
+    setNewTabMenuOpen.suppressFocusReopen = true;
+    queueMicrotask(() => { setNewTabMenuOpen.suppressFocusReopen = false; });
+  }
+  if (focusedMenu) elements.newTabMenu.classList.toggle("menu-dismissed", !open);
   if (open && activityQueue.isOpen()) setFollowUpQueueOpen(false);
   newTabMenuOpen = !!open;
   elements.newTabButton?.setAttribute("aria-expanded", newTabMenuOpen ? "true" : "false");
   elements.newTabButton?.classList.toggle("menu-open", newTabMenuOpen);
   elements.newTabMenu?.classList.toggle("open", newTabMenuOpen);
+  if (newTabMenuOpen) positionFocusedNewTabMenu();
+  window.removeEventListener("resize", positionFocusedNewTabMenu);
+  window.removeEventListener("scroll", positionFocusedNewTabMenu, true);
+  if (newTabMenuOpen) {
+    window.addEventListener("resize", positionFocusedNewTabMenu);
+    window.addEventListener("scroll", positionFocusedNewTabMenu, true);
+  }
   if (!newTabMenuOpen) scheduleDeferredUiFlushAfterDropdownClose();
 }
 
@@ -17492,6 +17523,7 @@ function initializeControlSettingTooltips() {
 }
 
 function openNewTabMenu() {
+  if (setNewTabMenuOpen.suppressFocusReopen) return;
   setPublishMenuOpen(false);
   setNativeCommandMenuOpen(false);
   setAppRunnerMenuOpen(false);
