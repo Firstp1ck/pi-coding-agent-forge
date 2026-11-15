@@ -18,6 +18,22 @@ export function createFocusedShellAdapter({ document, viewHost, nodes, sections,
   const composerControls = composer.element;
   composerControls.hidden = true;
   nodes.composer.append(composerControls);
+  const sidebarSettings = document.createElement('button');
+  sidebarSettings.type = 'button';
+  sidebarSettings.className = 'terminal-settings-button';
+  sidebarSettings.setAttribute('aria-label', 'Settings');
+  sidebarSettings.title = 'Settings';
+  sidebarSettings.hidden = true;
+  const settingsIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  settingsIcon.setAttribute('viewBox', '0 0 24 24');
+  settingsIcon.setAttribute('aria-hidden', 'true');
+  settingsIcon.setAttribute('focusable', 'false');
+  const settingsPath = document.createElementNS(settingsIcon.namespaceURI, 'path');
+  settingsPath.setAttribute('d', 'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2');
+  settingsIcon.append(settingsPath);
+  sidebarSettings.append(settingsIcon);
+  sidebarSettings.addEventListener('click', () => { if (mounted) onNavigate('settings', 'settings:appearance'); });
+  nodes.navigation.querySelector('.terminal-sidebar-actions')?.append(sidebarSettings);
   const tools = createToolsLauncher({ document, onInvoke,
     onPinsChange: pinnedActions => {
       if (!onPreferences({ pinnedActions })) tools.update({ pinnedIds: getTools().pinnedIds });
@@ -138,6 +154,9 @@ export function createFocusedShellAdapter({ document, viewHost, nodes, sections,
 
   function update(next) {
     snapshot = next;
+    sidebarSettings.hidden = !next.enabled || next.navigation === 'top';
+    if (next.destination === 'settings') sidebarSettings.setAttribute('aria-current', 'page');
+    else sidebarSettings.removeAttribute('aria-current');
     if (!next.enabled) {
       if (!mounted) return;
       closeTools();

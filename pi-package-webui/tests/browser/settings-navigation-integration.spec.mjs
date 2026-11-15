@@ -312,3 +312,36 @@ test('Back and Forward replace stale Settings anchors without adding history or 
   expect(await preferenceSnapshot(page)).toEqual(before);
   expect(writes).toEqual([]);
 });
+
+for (const width of [1100, 1440]) {
+  test(`sidebar Settings gear opens the canonical page at ${width}px`, async ({ page, ownership }, info) => {
+    await page.setViewportSize({ width, height: 900 });
+    await openFocused(page, ownership);
+    await page.locator('#promptInput').fill('Keep my settings draft');
+    const actions = page.locator('#focusedWorkspace .terminal-sidebar-actions');
+    const gear = actions.getByRole('button', { name: 'Settings', exact: true });
+    await expect(gear).toBeVisible();
+    const home = await actions.locator('#workspaceDashboardToggleButton').boundingBox();
+    const bounds = await gear.boundingBox();
+    expect(bounds.x).toBeGreaterThanOrEqual(home.x + home.width);
+    expect(Math.abs(bounds.y - home.y)).toBeLessThan(2);
+    await gear.focus();
+    await gear.press('Enter');
+    await expect(search(page)).toBeVisible();
+    await expectLocation(page, 'appearance');
+    await expect(gear).toHaveAttribute('aria-current', 'page');
+    await expect(page.locator('#desktopShellSelect')).toHaveCount(1);
+    await page.screenshot({ path: info.outputPath('settings-sidebar-gear.png') });
+    await page.goBack();
+    await expect(page.locator('#promptInput')).toBeVisible();
+    await expect(page.locator('#promptInput')).toHaveValue('Keep my settings draft');
+    await gear.click();
+    await page.locator('#focusedNavigationSelect').selectOption('top');
+    await expect(gear).toBeHidden();
+    await page.locator('#focusedNavigationSelect').selectOption('left');
+    await expect(gear).toBeVisible();
+    await page.locator('#desktopShellSelect').selectOption('classic');
+    await expect(page.locator('.terminal-settings-button')).toBeHidden();
+    await expect(page.locator('#promptInput')).toHaveValue('Keep my settings draft');
+  });
+}
