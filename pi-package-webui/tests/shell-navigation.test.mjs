@@ -313,3 +313,36 @@ test("malformed focused state and queries fail atomically before push or replace
   assert.equal(window.location.href, entries[0].href);
   history.dispose();
 });
+
+
+test("Settings anchors share the existing writer and restore with unrelated history and URL fields", () => {
+  const { window } = fakeWindow();
+  const received = [];
+  const history = createShellHistory({ window, onPopState: event => received.push(event.state) });
+  const initial = { destination: "settings", inspector: "settings:appearance", setting: "theme" };
+  const url = new URL(window.location.href);
+  url.searchParams.set("view", "settings");
+  url.searchParams.set("inspector", initial.inspector);
+  url.searchParams.set("setting", initial.setting);
+  history.write({ state: { focusedShellState: initial }, replace: true, url });
+  history.write({ state: { focusedShellState: { destination: "settings", inspector: "settings:resources", setting: "tools" } } });
+  history.back();
+  assert.deepEqual(received[0].focusedShellState, initial);
+  assert.deepEqual(received[0].otherFeature, { selected: 3 });
+  assert.equal(new URL(window.location.href).searchParams.get("embed"), "split");
+  assert.equal(new URL(window.location.href).searchParams.get("setting"), "theme");
+  assert.equal(new URL(window.location.href).hash, "#chat");
+});
+
+test("Settings anchors reject malformed identifiers and non-Settings state before writing", () => {
+  const { window, calls } = fakeWindow();
+  const history = createShellHistory({ window, onPopState() {} });
+  for (const setting of ["", " bad", "a/b", "a".repeat(121), 1, {}, undefined]) {
+    assert.throws(() => history.write({ state: { focusedShellState: { destination: "settings", inspector: "settings:appearance", setting } } }), TypeError);
+  }
+  assert.throws(() => history.write({ state: { focusedShellState: { destination: "conversation", inspector: null, setting: "theme" } } }), TypeError);
+  assert.throws(() => history.write({ state: { focusedShellState: { destination: "settings", inspector: null } }, url: "?view=settings&setting=theme&setting=a%2Fb" }), TypeError);
+  assert.equal(calls.length, 0);
+  history.write({ state: { focusedShellState: { destination: "settings", inspector: "settings:appearance", setting: null } } });
+  assert.equal(calls.length, 1);
+});

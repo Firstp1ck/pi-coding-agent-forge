@@ -20,13 +20,16 @@ function navigationPatch(state) {
   const patch = {};
   if (Object.hasOwn(state, "focusedShellState")) {
     const focused = state.focusedShellState;
-    if (!isRecord(focused) || Reflect.ownKeys(focused).length !== 2 ||
+    if (!isRecord(focused) || Reflect.ownKeys(focused).some(key => !["destination", "inspector", "setting"].includes(key)) ||
         !Object.hasOwn(focused, "destination") || !Object.hasOwn(focused, "inspector") ||
         !FOCUSED_DESTINATIONS.has(focused.destination) ||
-        (focused.inspector !== null && !isStableId(focused.inspector))) {
+        (focused.inspector !== null && !isStableId(focused.inspector)) ||
+        (Object.hasOwn(focused, "setting") && (focused.destination !== "settings" ||
+          (focused.setting !== null && !isStableId(focused.setting))))) {
       throw new TypeError("Invalid serialized focused shell navigation state");
     }
     patch.focusedShellState = { destination: focused.destination, inspector: focused.inspector };
+    if (Object.hasOwn(focused, "setting")) patch.focusedShellState.setting = focused.setting;
   }
   if (Object.hasOwn(state, "piMobileShellV2")) {
     if (state.piMobileShellV2 !== true) throw new TypeError("piMobileShellV2 must be true");
@@ -70,8 +73,10 @@ function navigationUrl(url, currentHref) {
   if (next.searchParams.getAll("view").some((destination) => !FOCUSED_DESTINATIONS.has(destination))) {
     throw new TypeError("Invalid view");
   }
-  if (next.searchParams.getAll("inspector").some((inspector) => !isStableId(inspector))) {
-    throw new TypeError("Invalid inspector");
+  for (const key of ["inspector", "setting"]) {
+    if (next.searchParams.getAll(key).some(value => !isStableId(value))) {
+      throw new TypeError(`Invalid ${key}`);
+    }
   }
   return next.href;
 }

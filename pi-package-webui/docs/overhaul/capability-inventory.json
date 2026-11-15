@@ -524,8 +524,8 @@
     },
     {
       "file": "pi-package-webui/public/shell-navigation.mjs",
-      "bytes": 5495,
-      "sha256": "fce39fc6f3fb3d9c7ed7a6e00e0a10d522b4e59c6dd9926a29589eaafbdb366c"
+      "bytes": 5840,
+      "sha256": "1152c8694950aa39cd77cfac8d42c0432745844fe064c180597affc05f881a75"
     },
     {
       "file": "pi-package-webui/public/shell-preferences.mjs",
@@ -619,8 +619,8 @@
     },
     {
       "file": "plans/planned/webui-design-architecture-overhaul.md",
-      "bytes": 200557,
-      "sha256": "3aba19ecf5dbb492f4334d5ccabd60f92afcfc1cff99659065d42ba15facdc23"
+      "bytes": 201167,
+      "sha256": "56775a8894e2f535122cfe743eb3d34edcf31ecd31ef71c7274f3202b475d8a5"
     }
   ],
   "reconciliation": {
