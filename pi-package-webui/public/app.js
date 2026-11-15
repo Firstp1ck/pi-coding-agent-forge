@@ -40250,6 +40250,30 @@ function renderOptionalFeaturePromptImpactBadge(feature) {
   return badge;
 }
 
+function optionalFeatureBatchDisplay(features, candidates) {
+  if (optionalFeaturePackageStatusError) return "Package status check failed. Retry and review individual features.";
+  if (!optionalFeaturePackageStatusesLoaded || optionalFeatureMigrationSnapshot.phase === "checking") return "Checking optional features…";
+  if (optionalFeatureBatchIsActive() || optionalFeatureInstallInProgress.size > 0) return "An installation is in progress.";
+
+  const candidateIds = new Set(candidates.map((feature) => feature.id));
+  const reasons = new Set();
+  for (const feature of features) {
+    const status = optionalFeaturePackageStatus(feature.id);
+    const install = optionalFeatureInstallState(feature.id);
+    if (install?.phase === "failed") reasons.add("failed installs");
+    if (isOptionalFeatureDisabled(feature.id) || status?.state === "disabled") reasons.add("disabled features");
+    else if (!status) reasons.add("unknown status");
+    else if (status.resourceConflict || status.state === "conflict") reasons.add("conflicts");
+    else if (status.updateAvailable || status.state === "update-available") reasons.add("updates");
+    else if (!candidateIds.has(feature.id) && status.installed && !status.configured && !status.locallyConfigured) reasons.add("registration needed");
+    else if (!candidateIds.has(feature.id) && !["registered", "local-resource"].includes(status.state)) reasons.add("unknown status");
+  }
+  const parts = [];
+  if (candidates.length) parts.push(`${candidates.length} eligible for bulk install`);
+  if (reasons.size) parts.push(`Review individual features: ${[...reasons].join(", ")}. Use Install on a card where available.`);
+  return parts.length ? parts.join(". ") : "All features are registered or available locally.";
+}
+
 function renderOptionalFeatureBatchToolbar() {
   const candidates = optionalFeatureBatchCandidates();
   const migratable = optionalFeatureMigrationCandidates();
@@ -40258,9 +40282,9 @@ function renderOptionalFeatureBatchToolbar() {
   const action = make("button", "optional-feature-batch-action", busy ? "Installing…" : "Install all");
   action.type = "button";
   action.disabled = busy || optionalFeatureInstallInProgress.size > 0 || !optionalFeaturePackageStatusesLoaded || candidates.length === 0 || !!optionalFeaturePackageStatusError;
-  action.setAttribute("aria-label", candidates.length
-    ? `Install all ${candidates.length} missing or unregistered optional features`
-    : "All optional features are installed and registered");
+  const availability = optionalFeatureBatchDisplay(OPTIONAL_FEATURES, candidates);
+  action.setAttribute("aria-label", `Install all optional features. ${availability}`);
+  action.title = availability;
   if (busy) action.setAttribute("aria-busy", "true");
   action.addEventListener("click", () => installOptionalFeatureBatch(OPTIONAL_FEATURES, { scopeLabel: "all optional features" }));
 
@@ -40275,14 +40299,11 @@ function renderOptionalFeatureBatchToolbar() {
   }
   actionGroup.append(action);
 
-  let summary = !optionalFeaturePackageStatusesLoaded
-    ? optionalFeaturePackageStatusError ? "Install availability unknown" : "Checking Pi package status…"
-    : candidates.length ? `${candidates.length} missing or unregistered` : "All installed and registered";
-  if (optionalFeatureMigrationSnapshot.phase === "checking") summary = "Checking optional features…";
+  let summary = availability;
   if (optionalFeatureBatchState?.phase === "running") {
     summary = optionalFeatureMigrationProgressText() || `Installing ${optionalFeatureBatchState.total} sequentially with Pi…`;
   } else if (["done", "failed"].includes(optionalFeatureBatchState?.phase)) {
-    summary = `Batch finished: ${optionalFeatureBatchState.succeeded} succeeded, ${optionalFeatureBatchState.failed} failed.`;
+    summary = `Batch finished: ${optionalFeatureBatchState.succeeded} succeeded, ${optionalFeatureBatchState.failed} failed. ${availability}`;
   }
   const status = make("div", `optional-feature-batch-status${optionalFeatureBatchState?.failed ? " warning" : ""}`, summary);
   status.setAttribute("role", "status");
@@ -40341,9 +40362,9 @@ function renderOptionalFeatureSection(section, features) {
   const installMissing = make("button", "optional-feature-section-install", optionalFeatureBatchIsActive() ? "Installing…" : "Install missing");
   installMissing.type = "button";
   installMissing.disabled = optionalFeatureBatchIsActive() || optionalFeatureInstallInProgress.size > 0 || !optionalFeaturePackageStatusesLoaded || candidates.length === 0 || !!optionalFeaturePackageStatusError;
-  installMissing.setAttribute("aria-label", candidates.length
-    ? `Install ${candidates.length} missing or unregistered features in ${section.label}`
-    : `All features in ${section.label} are installed and registered`);
+  const availability = optionalFeatureBatchDisplay(features, candidates);
+  installMissing.setAttribute("aria-label", `Install missing features in ${section.label}. ${availability}`);
+  installMissing.title = availability;
   if (optionalFeatureBatchIsActive()) installMissing.setAttribute("aria-busy", "true");
   installMissing.addEventListener("click", () => installOptionalFeatureBatch(features, { scopeLabel: section.label }));
   headerActions.append(make("span", "optional-feature-section-count", String(features.length)), installMissing);
