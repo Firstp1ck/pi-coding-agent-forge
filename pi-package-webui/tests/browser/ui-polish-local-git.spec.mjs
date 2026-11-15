@@ -84,7 +84,8 @@ test('create annotated tag and report duplicate error', async ({ page, ownership
     await expect(page.locator('#textPromptTitle')).toContainText('Tag message');
     await page.locator('#textPromptInput').fill('fixture tag message');
     await page.locator('#textPromptConfirmButton').click();
-    await expect.soft(page.locator('#confirmationDialog')).toContainText(repo.cwd, { timeout: 1000 });
+    await expect(page.locator('#confirmationDialog')).toContainText(repo.cwd);
+    await page.screenshot({ path: info.outputPath('tag-confirmation.png') });
     await confirm(page);
   }
   await tag();
