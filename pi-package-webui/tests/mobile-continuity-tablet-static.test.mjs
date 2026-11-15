@@ -49,7 +49,7 @@ assert.match(css, /html\[data-tablet-shell="v2"\] \.file-viewer-pane[\s\S]*?posi
 assert.match(css, /and \(pointer: coarse\)[\s\S]*?min-height: 44px/, "coarse tablet pointers must retain the 44px target floor");
 assert.match(serviceWorker, /const CACHE_NAME = "pi-webui-pwa-v179"/, "continuity/tablet assets need a coherent cache identity");
 assert.match(html, /styles\.css\?v=161/, "tablet CSS must have a coherent HTML revision");
-assert.match(html, /app\.js\?v=203/, "continuity app logic must have a coherent HTML revision");
+assert.match(html, /app\.js\?v=204/, "continuity app logic must have a coherent HTML revision");
 assert.match(technical, /tabletShell=v2[\s\S]*tabletShell=legacy/, "technical reference should document tablet preview and rollback");
 
 console.log("mobile-continuity-tablet-static.test.mjs passed");

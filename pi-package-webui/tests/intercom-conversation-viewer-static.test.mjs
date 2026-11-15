@@ -109,7 +109,7 @@ assert.match(css, /\.extension-dialog\.intercom-conversation-dialog \{[\s\S]*wid
 assert.match(css, /@media \(max-width: 720px\)[\s\S]*\.composer-intercom-tag \{ min-height: 44px;[\s\S]*\.extension-dialog\.intercom-conversation-dialog[\s\S]*width: calc\(100vw - 0\.7rem\)/, "tags and the dialog should remain reachable on narrow and coarse-pointer layouts");
 
 assert.match(html, /\/styles\.css\?v=161/, "the stylesheet URL should advance for the bounded conversation tags");
-assert.match(html, /data-app-src="\/app\.js\?v=203"/, "the guarded app URL should advance for current browser wiring");
+assert.match(html, /data-app-src="\/app\.js\?v=204"/, "the guarded app URL should advance for current browser wiring");
 assert.match(serviceWorker, /const CACHE_NAME = "pi-webui-pwa-v179"/, "the PWA cache identity should advance with browser assets");
 
 assert.match(readme, /one compact tag per conversation appears beneath the composer/i, "the README should explain the user-visible entry point");
