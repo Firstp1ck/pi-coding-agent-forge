@@ -1216,7 +1216,6 @@ let sessionSummaryControlsRenderSignature = "";
 const sessionSummaryByTab = new Map();
 const sessionSummaryGenerationByTab = new Map();
 let pathPickerState = null;
-let firstTerminalCwdPromptShown = false;
 let pathFastPicks = [];
 let pathFastPicksReady = false;
 let pathFastPicksLoadPromise = null;
@@ -2430,8 +2429,8 @@ function renderFocusedShell() {
     inspectorOpen: !!record && !["home", "settings"].includes(focusedShellState.destination),
     inspectorTitle: record?.label || record?.button?.querySelector(".side-panel-section-label")?.textContent || "",
     inspectorTopics: record && focusedShellState.destination !== "settings" ? focusedInspectorTopics(focusedShellState.destination) : [],
-    title: active?.title || "Choose a session",
-    context: active?.workspaceKind === "no-project" ? "No Project" : active?.cwd || "",
+    title: active?.title || "Start a conversation",
+    context: !active || active.workspaceKind === "no-project" ? "No Project" : active.cwd || "",
     attentionCount: focusedAttentionSnapshot().items.filter(item => item.state === "blocked").reduce((sum, item) => sum + item.decisionCount, 0),
     finishedCount: focusedAttentionSnapshot().items.filter(item => item.state === "done").length,
     homeCollapsed: workspaceDashboardCollapsed,
@@ -10011,8 +10010,13 @@ function clearAttachments(tabId = activeTabId) {
 function addAttachmentFiles(fileList, source = "picker") {
   const files = Array.from(fileList || []).filter(Boolean);
   if (!files.length) return { added: 0, skipped: [] };
+  if (!activeTabId) {
+    const message = "Start a conversation before adding attachments. You can paste text directly into the composer.";
+    addEvent(message, "warn");
+    addTransientMessage({ role: "error", title: "attachments", content: message, level: "warn" });
+    return { added: 0, skipped: [message] };
+  }
   const attachments = ensureAttachmentsForTab();
-  if (!attachments.length && !activeTabId) return { added: 0, skipped: ["no active tab"] };
   if (attachments.some((attachment) => attachment.requiresReselect)) {
     attachments.splice(0, attachments.length, ...attachments.filter((attachment) => !attachment.requiresReselect));
   }
@@ -16290,15 +16294,19 @@ function updateDocumentTitle() {
   document.title = tab ? `Pi Web UI · ${tab.title}` : "Pi Web UI";
 }
 
+let emptyStartDraft = "";
+let emptyStartDraftRevision = 0;
+
 function saveActiveDraft() {
   if (activeTabId) composerStore.setDraft(activeTabId, elements.promptInput.value || "");
+  else emptyStartDraft = elements.promptInput.value || "";
   persistMobileContinuityState();
   persistDesktopDrafts();
 }
 
 function restoreActiveDraft() {
   resetPromptHistoryNavigation();
-  elements.promptInput.value = activeTabId ? composerStore.getDraft(activeTabId) || "" : "";
+  elements.promptInput.value = activeTabId ? composerStore.getDraft(activeTabId) || "" : emptyStartDraft;
   resizePromptInput();
   renderCommandSuggestions();
   renderAttachmentTray();
@@ -16504,7 +16512,7 @@ function resetActiveTabUi({ preserveFileTree = false } = {}) {
   renderGitWorkflow();
   // renderMessages() is transcript-only, so tab-level chrome is rendered here
   // explicitly whether or not a cached transcript was restored.
-  restoreCachedMessagesForActiveTab();
+  if (!restoreCachedMessagesForActiveTab() && !activeTabId) renderMessages([]);
   renderFooter();
   renderFeedbackTray();
   restoreComposerActionSlotLayout();
@@ -18308,7 +18316,7 @@ async function openNoProjectConversation({ triggerButton = document.querySelecto
   }
 }
 
-async function createTerminalTab(cwd, { triggerButton = elements.newTabButton, customGroupId = null, workspaceKind = cwd === undefined && activeTab()?.workspaceKind === "no-project" ? "no-project" : "project" } = {}) {
+async function createTerminalTab(cwd, { triggerButton = elements.newTabButton, customGroupId = null, workspaceKind = cwd === undefined && activeTab()?.workspaceKind === "no-project" ? "no-project" : "project", activate = true } = {}) {
   const sourceContext = activeTabContext();
   setMobileTabsExpanded(false);
   setNewTabMenuOpen(false);
@@ -18321,13 +18329,17 @@ async function createTerminalTab(cwd, { triggerButton = elements.newTabButton, c
   for (const button of disabledButtons) button.disabled = true;
   try {
     const response = await api("/api/tabs", { method: "POST", body: workspaceKind === "no-project" ? { workspaceKind } : { cwd: resolvedCwd }, scoped: false });
-    applyAuthoritativeTabSnapshot(response.data?.tabs || tabs);
-    syncTabMetadata(tabs);
     const tab = response.data?.tab;
+    // A background first submission can finish after another creation. Its
+    // older snapshot must not retire the session or draft now being edited.
+    applyAuthoritativeTabSnapshot(!activate && tab?.id
+      ? [...tabs.filter(item => item.id !== tab.id), tab]
+      : response.data?.tabs || tabs);
+    syncTabMetadata(tabs);
     if (tab?.id && customGroupId && terminalCustomGroups.has(customGroupId)) addTabsToTerminalCustomGroup(customGroupId, [tab.id]);
     renderTabs();
     if (tab?.id) {
-      if (workspaceKind !== "no-project" || isCurrentTabContext(sourceContext)) await switchTab(tab.id);
+      if (activate && (workspaceKind !== "no-project" || isCurrentTabContext(sourceContext))) await switchTab(tab.id);
       addEvent(`created isolated terminal ${tab.title}`, "info");
     }
     return tab;
@@ -18347,17 +18359,6 @@ async function createTerminalTabFromChosenDirectory({ triggerButton = elements.n
   const cwd = await pickCwd(sourceTab || { id: "new-tab", title: "new tab" }, initialCwd, { title: "Choose CWD for new tab", returnFocus });
   if (!cwd) return;
   await createTerminalTab(cwd, { triggerButton });
-}
-
-async function createFirstTerminalTabFromChosenDirectory() {
-  if (firstTerminalCwdPromptShown || tabs.length > 0) return;
-  firstTerminalCwdPromptShown = true;
-  const cwd = await pickCwd({ id: "first-terminal", title: "first terminal" }, "", { title: "Choose CWD for first terminal" });
-  if (!cwd) {
-    addEvent("choose a CWD to start the first terminal", "warn");
-    return;
-  }
-  await createTerminalTab(cwd, { triggerButton: null });
 }
 
 function tabHasActiveAgent(tab) {
@@ -18513,12 +18514,10 @@ async function initializeTabs() {
   renderTabs();
   restoreActiveDraft();
   if (!loadedTabs.length) {
-    setWorkspaceDashboardCollapsed(false, { persist: false });
-    const saved = await refreshSavedWorkspaces().catch((error) => {
+    refreshSavedWorkspaces().catch((error) => {
       addEvent(`Could not list saved workspaces: ${error.message || String(error)}`, "error");
-      return [];
     });
-    if (!saved.length) await createFirstTerminalTabFromChosenDirectory();
+    focusPromptInput({ defer: true });
     await refreshThemeCatalog(activeTabContext()).catch((error) => addEvent(`Custom theme catalog refresh failed: ${error.message || String(error)}`, "warn"));
     return;
   }
@@ -23072,9 +23071,9 @@ function gitFooterFallbackMessage() {
 function renderMinimalFooter() {
   invalidateGitFooterRenderCache();
   const tab = activeTab();
-  const workspaceLabel = latestWorkspace?.displayCwd || (tab?.cwd ? normalizeDisplayPath(tab.cwd) : "loading…");
-  const modelLine = footerModelLine();
-  const footerMessage = gitFooterFallbackMessage();
+  const workspaceLabel = latestWorkspace?.displayCwd || (tab?.cwd ? normalizeDisplayPath(tab.cwd) : "No Project");
+  const modelLine = tab ? footerModelLine() : "";
+  const footerMessage = tab ? gitFooterFallbackMessage() : "Ready for your first message";
 
   elements.statusBar.replaceChildren();
   elements.statusBar.classList.remove("statusbar-git-footer");
@@ -36908,7 +36907,7 @@ function emptyStartAction({ title, description, symbol, className = "", onClick 
 function renderEmptyStartState() {
   if (elements.chat.querySelector(".empty-start-state")) return;
   const tab = activeTab();
-  const noProject = tab?.workspaceKind === "no-project";
+  const noProject = !tab || tab.workspaceKind === "no-project";
   const workspace = noProject ? "No Project" : latestWorkspace?.displayCwd || (tab?.cwd ? normalizeDisplayPath(tab.cwd) : "");
   const workspaceInfo = normalizeGitWorkspaceInfo(tab?.gitWorkspace);
   const branch = workspaceInfo?.branch || "";
@@ -36923,7 +36922,12 @@ function renderEmptyStartState() {
   const heading = make("div", "empty-start-heading");
   const title = make("h1", undefined, noProject ? "Start a conversation" : "Choose where to work");
   title.id = "emptyStartTitle";
-  heading.append(title, make("p", undefined, noProject ? "No Project. Start typing below; this conversation has its own folder for files and tools." : "Open a workspace, return to a session, or isolate branch work. To start here, just type below."));
+  const description = !tab
+    ? "No Project. Start typing below; your first message starts a conversation in its own folder for files and tools."
+    : noProject
+      ? "No Project. Start typing below; this conversation has its own folder for files and tools."
+      : "Open a workspace, return to a session, or isolate branch work. To start here, just type below.";
+  heading.append(title, make("p", undefined, description));
   intro.append(mark, heading);
 
   const actions = make("div", "empty-start-actions");
@@ -36983,7 +36987,7 @@ function renderEmptyStartState() {
   if (workspace) contextItems.push(["Workspace", workspace]);
   if (branch) contextItems.push(["Branch", branch]);
   if (model) contextItems.push(["Model", model]);
-  if (usage && !/^0(?:\.0+)?%/.test(usage)) contextItems.push(["Context", usage]);
+  if (tab && usage && !/^0(?:\.0+)?%/.test(usage)) contextItems.push(["Context", usage]);
   const context = contextItems.length ? make("footer", "empty-start-context") : null;
   if (context) {
     context.append(make("span", "empty-start-context-label", "Current"));
@@ -47324,12 +47328,47 @@ function discardMobileFailedSend() {
   recordMobileDiagnostic("failed send discarded");
 }
 
+let emptyStartSubmissionPending = false;
+
+async function sendEmptyStartPrompt(inputMessage) {
+  const sourceContext = activeTabContext();
+  const sourceNavigation = focusedShellState;
+  const sourceDraftRevision = emptyStartDraftRevision;
+  emptyStartSubmissionPending = true;
+  saveActiveDraft();
+  try {
+    // Creation must not switch away from a destination chosen while it was pending.
+    const tab = await createTerminalTab(undefined, { workspaceKind: "no-project", triggerButton: null, activate: false });
+    if (!tab?.id) return;
+    if (isCurrentTabContext(sourceContext) && focusedShellState === sourceNavigation) {
+      const draft = elements.promptInput.value;
+      const unchanged = draft === inputMessage && emptyStartDraftRevision === sourceDraftRevision;
+      composerStore.setDraft(tab.id, unchanged ? "" : draft);
+      await switchTab(tab.id);
+    }
+    const tabContext = activeTabContext(tab.id);
+    try {
+      await sendPrompt("prompt", inputMessage, { targetTabId: tab.id, throwOnError: true });
+      if (emptyStartDraft === inputMessage && emptyStartDraftRevision === sourceDraftRevision) emptyStartDraft = "";
+    } catch (error) {
+      restorePromptInputAfterRoutingError(inputMessage, { usesPromptInput: true, targetTabId: tab.id, tabContext });
+      if (!isCurrentTabContext(tabContext)) addEvent(error.message || String(error), "error");
+    }
+  } finally {
+    emptyStartSubmissionPending = false;
+  }
+}
+
 async function sendPrompt(kind = "prompt", explicitMessage, { targetTabId = activeTabId, throwOnError = false, streamingBehavior } = {}) {
   const usesPromptInput = explicitMessage === undefined;
+  if (usesPromptInput && emptyStartSubmissionPending) return;
   const rawMessage = usesPromptInput ? elements.promptInput.value : explicitMessage;
   const inputMessage = String(rawMessage || "");
   const originalMessage = inputMessage.trim();
-  if (!targetTabId) return;
+  if (!targetTabId) {
+    if (usesPromptInput && kind === "prompt" && originalMessage && tabs.length === 0) await sendEmptyStartPrompt(inputMessage);
+    return;
+  }
   if (voiceConversationActiveFor(targetTabId)) voiceConversation.handleUserActivity();
   const tabContext = activeTabContext(targetTabId);
   const lifetime = sessionContext.captureLifetime(targetTabId);
@@ -50820,6 +50859,7 @@ elements.promptInput.addEventListener("keydown", (event) => {
 });
 
 elements.promptInput.addEventListener("input", () => {
+  if (!activeTabId) emptyStartDraftRevision += 1;
   resetPromptHistoryNavigation();
   // Typed text always stays editable in the composer; only large pastes become attachments
   // (handleAttachmentPaste). Ripping a prompt out mid-typing was surprising and lossy.
