@@ -18,7 +18,7 @@ The compact composer has one submission button. **More** opens a single-row floa
 
 **Attention** in the lower-left rail shows waiting decisions separately from running sessions and work finished since it was last viewed. Opening the inbox does not mark finished output as read. Selecting an item opens its originating session, and pending decisions replay through the existing session connection. The urgent count includes only decisions. Metadata can identify a session and decision count before the full prompt is available.
 
-Tools and Skills Setup keep Session, Global, and exact Model defaults separate. Changing the model in Setup does not change the session’s active model. An explicit empty selection differs from inheriting defaults. Disabled companions retain their existing Setup actions. Voice selection may download a voice. It saves the shared Pi voice configuration for future sessions and applies it to the active audio session. Opening Voice alone does not start the microphone. Provider login opens terminal sign-in guidance, while logout retains its confirmation. Restart, stop, and updates remain under System with their existing confirmations and access restrictions.
+Tools and Skills Setup keep Session, Global, and exact Model defaults separate. Changing the model in Setup does not change the session’s active model. An explicit empty selection differs from inheriting defaults. Disabled companions retain their existing Setup actions. Voice selection may download a voice. It saves the shared Pi voice configuration for future sessions and applies it to the active audio session. Opening Voice alone does not start the microphone. Provider login opens terminal sign-in guidance, while logout retains its confirmation. Restart, stop, and updates remain under System with their access restrictions. Restart and stop retain confirmation; selecting an update scope starts it immediately.
 
 Open **Inspector** in the conversation header, then choose the **Project** or **Activity** tab at the top of the right panel. Its header is also the section picker, so every section is reachable without scrolling a row of tabs. Activity groups its sections by Work, Conversations, and Usage & diagnostics. Keyboard selection follows your platform’s standard select control. Files retain separate unsaved buffers per session; changing views does not save them or stop app runners. Agent output and conversation viewers remain read-only; stopping a run requires its explicit cancel action. The composer queue and Activity Queues operate on the same session queue, including edits, reordering, and removal. Provider usage remains account-wide.
 
@@ -126,7 +126,7 @@ Private runtime and recovery files should not be edited or removed while Web UI 
 
 ## Pi and Web UI updates
 
-Open **Updates** beside Settings. Choose a scope, review the commands and installation paths, then confirm:
+Open **Updates** beside Settings. Choose a scope to start immediately:
 
 - **Pi only** runs `pi update` using Pi on your PATH.
 - **WebUI only** checks the global npm installation and the Pi agent's npm installation. It runs `npm update -g @firstpick/pi-package-webui` for the global copy and `pi update --extension npm:@firstpick/pi-package-webui` for the Pi-managed copy. Missing copies are reported and are not installed.
@@ -134,13 +134,13 @@ Open **Updates** beside Settings. Choose a scope, review the commands and instal
 
 The update commands use your existing Pi and npm configuration. WebUI does not require a specific Pi version or perform ownership, idle-session or post-update health checks. Command failures are shown directly, without retrying with alternative commands. Only one update job runs at a time in this WebUI server. The result reports command exit status, not an independent verification of the new installation.
 
-A progress card stays visible after you confirm. It shows the current command step, elapsed time and recent output. The percentage is a time-based estimate, not a download measurement; slow commands can remain near completion until they exit. Failures and lost connections are shown without claiming completion. Use **Details** to inspect command results. You can dismiss a finished result card and reopen Updates to read it again.
+A progress card stays visible after you select an update. It shows the current command step, elapsed time and recent output. The percentage is a time-based estimate, not a download measurement; slow commands can remain near completion until they exit. Failures and lost connections are shown without claiming completion. Use **Details** to inspect the job’s commands, individual results and output. **Back to progress** returns to its compact card. Opening Updates shows the scope choices and a route back to the current job. You can dismiss a finished result card and reopen Updates to read it again.
 
-When every command explicitly reports that its target is already up to date, the result says **Already up to date** and no restart is needed. Successful output that does not identify whether anything changed is reported as commands completed.
+When every command explicitly reports that its target is already up to date, the compact result shows only **Already up to date**, the component name, and Details/Dismiss controls. No restart is needed; output and timing remain available in Details. Successful output that does not identify whether anything changed is reported as commands completed.
 
 The server stays running during the commands. Restart WebUI after successful updates to load changed code. Progress and command results remain available while that server process runs; they are not a durable update history after a server restart. If a connection or process is lost during an update, inspect the host before rerunning the commands.
 
-Only localhost can start updates. Package lifecycle scripts run with your existing configuration and are not sandboxed. The updater does not elevate permissions, and native package updates cannot be automatically rolled back. Review command output for private information before sharing it.
+Only localhost can start updates. Package lifecycle scripts run with your existing configuration and are not sandboxed. The updater does not elevate permissions, and native package updates cannot be automatically rolled back. Review command output for private information before sharing it. If a command reports `EROFS`, its installation is on a read-only filesystem. Use a writable installation or run outside the read-only sandbox; the updater does not change mounts or permissions.
 
 ## Session continuity
 
