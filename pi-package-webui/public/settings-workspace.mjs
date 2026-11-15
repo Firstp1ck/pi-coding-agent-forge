@@ -15,6 +15,8 @@ const CONTROLS = [
   ['background', 'appearance', 'Background', '#backgroundChooseButton', 'This browser', 'image wallpaper'],
   ['notifications', 'appearance', 'Notifications', '#agentDoneNotificationsToggle', 'This browser', 'permission completion blockers'],
   ['thinking-output', 'appearance', 'Thinking output', '#thinkingVisibilityToggle', 'This browser', 'reasoning transcript'],
+  ['sampling', 'resources', 'Sampling parameters', '.sampling-parameters', 'Current Pi session', 'temperature top-p top-k min-p sampling defaults overrides'],
+  ['codex-speed', 'resources', 'Codex speed', '#codexFastModeSelect', 'Current session branch', 'normal fast ultrafast service tier'],
   ['output-processing', 'system', 'Output processing', '#fastOutputModeSelect', 'Server', 'normal compact-v1 performance'],
   ['remote-access', 'connection', 'Remote access', '#openNetworkButton', 'Server network', 'lan qr connection'],
   ['remote-pin', 'connection', 'PIN protection', '#remoteAuthToggle', 'Server network', 'security authentication'],
@@ -29,7 +31,11 @@ const ACTIONS = [
   ['skills', 'resources', 'Skills', 'settings:skills-setup', 'Session / Global / exact Model', 'instructions resources'],
   ['models', 'resources', 'Model cycling', 'native:scoped-models', 'Pi settings', 'scoped models'],
   ['append-system', 'resources', 'Append system prompt', 'native:append-system', 'Global; new or reloaded tabs', 'append_system instructions'],
-  ['runtime', 'resources', 'Runtime settings', 'native:settings', 'Scope shown beside each setting', 'thinking compaction images startup safety transport'],
+  ['runtime', 'resources', 'Runtime settings', 'native:settings', 'Scope shown beside each setting', 'thinking compaction auto-compaction auto-compact images startup safety transport busy prompt steering follow-up density autocomplete double escape tree filter'],
+  ['summary-setup', 'resources', 'Summary Setup', 'native:summary-setup', 'Global preferences; selected session generation', 'summary model effort cadence prompts privacy context injection automatic titles'],
+  ['runner-configuration', 'system', 'Runner configuration', 'settings:runner-configuration', 'Current project', 'runners discovery paths custom command args'],
+  ['git-footer-visibility', 'appearance', 'Git-footer Visibility', 'settings:git-footer-visibility', 'Global; commands run in the selected session', 'git footer hidden show hide webui'],
+  ['tool-output', 'appearance', 'Tool output expansion', 'conversation:tool-output', 'This browser', 'expand collapse bash results output'],
   ['visibility', 'appearance', 'Control visibility', 'settings:visibility', 'Shared WebUI layout', 'hidden controls recovery'],
   ['show-controls', 'appearance', 'Show all controls', 'settings:show-controls', 'Shared WebUI layout', 'restore buttons'],
   ['reset-controls', 'appearance', 'Reset control visibility', 'settings:reset-controls', 'Shared WebUI layout', 'defaults'],
@@ -56,6 +62,8 @@ export function createSettingsWorkspace({ document, viewHost, onNavigate, onInvo
   const groups = [
     ['appearance', 'section[aria-labelledby="interfaceControlsTitle"]'],
     ['appearance', '.thinking-visibility-control-field'],
+    ['resources', '.sampling-parameters'],
+    ['resources', '.codex-fast-mode-control'],
     ['features', '#sidePanelSectionOptionalFeatures', true],
     ['connection', '#networkControlField'],
     ['system', '.output-processing-control-group'],
@@ -66,6 +74,8 @@ export function createSettingsWorkspace({ document, viewHost, onNavigate, onInvo
   ].map(([category, selector, expand]) => ({ category, node: document.querySelector(selector), expand, hidden: null })).filter(record => record.node);
   const voicePanel = document.getElementById('conversationVoiceMenuPanel');
   for (const [category, text] of [
+    ['resources', 'Sampling parameters apply to the current Pi session. Codex speed overrides apply to the current session branch. Summary Setup saves global preferences and asks before generating for the selected session.'],
+    ['system', 'Runner configuration saves discovery paths and custom commands for the current project. Running and stopping runners remain in Project.'],
     ['voice', 'Voice selection is saved in the shared Pi voice configuration for future sessions and applied immediately to the current voice conversation. Starting a voice conversation and microphone consent remain explicit actions in Conversation. Voice installation may require /talk setup in Pi.'],
     ['connection', 'Network and PIN controls follow this server’s access policy. Unavailable controls remain unavailable here.'],
     ['accounts', 'Provider login uses Pi’s terminal sign-in flow. Logout asks before removing stored credentials.'],
@@ -84,7 +94,9 @@ export function createSettingsWorkspace({ document, viewHost, onNavigate, onInvo
       const userHidden = !!node?.closest('.webui-user-hidden');
       return { id, category, label, scopeLabel, aliases: [aliases], description: '', node,
         available: !!node && !hidden && !userHidden && !node.disabled,
-        reason: userHidden ? 'Hidden by control visibility preferences.' : 'Unavailable for the current server or session.',
+        reason: userHidden ? 'Hidden by control visibility preferences.' : id === 'codex-speed'
+          ? document.getElementById('codexFastModeStatus')?.textContent || 'Unavailable for this session.'
+          : 'Unavailable for the current server or session.',
         setupActionId: userHidden ? 'settings:visibility' : undefined };
     });
     const actions = ACTIONS.map(([id, category, label, actionId, scopeLabel, aliases]) => {

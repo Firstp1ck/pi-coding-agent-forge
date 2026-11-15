@@ -1237,6 +1237,9 @@ let nativeCommandMenuOpen = false;
 let appRunnerMenuOpen = false;
 let busyPromptBehaviorMenuOpen = false;
 const skillUsageByTab = new Map();
+let appRunnerInfoTarget = null;
+let appRunnerInfoLoading = false;
+let appRunnerInfoError = "";
 let appRunnerCustomDraft = { id: "", label: "", command: "./", path: "", args: "" };
 let appRunnerCustomFeedback = { type: "", message: "" };
 let appRunnerFileBrowserState = { open: false, loading: false, path: "", data: null, error: "" };
@@ -1756,6 +1759,7 @@ let renderedSessionShelves = false;
 let settledSessionIds = new Set();
 let focusedShell = null;
 let settingsWorkspace = null;
+let settingsResourcesTarget = null;
 let pendingSettingsReveal = null;
 let settingsVoiceTarget = null;
 const focusedFeatureRecords = [];
@@ -2370,6 +2374,18 @@ function renderFocusedShell() {
     actions: focusedToolsActions(),
     features: OPTIONAL_FEATURES.map(feature => ({ ...feature, description: `${feature.description} ${optionalFeatureStatus(feature.id).detail || ""}` })),
   });
+  const resourcesVisible = focusedShell.active && focusedShellState.destination === "settings" && settingsCategory(focusedShellState.inspector) === "resources";
+  if (resourcesVisible && (!settingsResourcesTarget || !isCurrentSettingsTarget(settingsResourcesTarget))) {
+    const target = shellActionTarget();
+    settingsResourcesTarget = target;
+    ensureSamplingParametersLoaded();
+    void refreshCodexFastMode(activeTabContext(), { readOnly: true }).then(() => {
+      if (settingsResourcesTarget === target && isCurrentSettingsTarget(target)) renderFocusedShell();
+    }).catch(error => {
+      if (isCurrentSettingsTarget(target)) addEvent(error.message || String(error), "error");
+    });
+  } else if (!resourcesVisible) settingsResourcesTarget = null;
+  if (elements.appRunnerInfoDialog?.open && !isCurrentAppRunnerInfoTarget(appRunnerInfoTarget)) renderAppRunnerInfoDialog();
   if (renderedSessionShelves !== usesSessionShelves()) scheduleTabsRender();
   syncConversationVoicePanelSemantics();
   const voiceTarget = focusedShell.active && focusedShellState.destination === "settings" && settingsCategory(focusedShellState.inspector) === "voice" ? shellActionTarget() : null;
@@ -4213,6 +4229,7 @@ const gitFooterSyncInFlightByTab = new Set();
 let gitPullErrorText = "";
 let gitPullErrorContext = { code: "", tabId: null, syncValue: "", busy: false, requestId: 0 };
 const gitFooterPiCalibrationInFlightByTab = new Set();
+let gitFooterVisibilityTarget = null;
 let gitFooterVisibilityApplyInFlight = false;
 let gitFooterVisibilityDirty = false;
 
@@ -12537,6 +12554,11 @@ function setActiveTabId(tabId, { remember = false } = {}) {
   renderIntercomActivityLinks();
   renderFeatureCategoryTag(nextTabId);
   renderSessionSummaryControls();
+  renderAppRunnerInfoDialog();
+  if (elements.gitFooterVisibilityDialog?.open) {
+    setGitFooterVisibilityBusy(gitFooterVisibilityApplyInFlight);
+    if (!isCurrentGitFooterVisibilityTarget(gitFooterVisibilityTarget)) setGitFooterVisibilityStatus("The session changed. Reopen Git-footer Visibility before applying changes.", "warn");
+  }
   if (remember) rememberActiveTab();
   return activeTabContext(nextTabId);
 }
@@ -12568,6 +12590,13 @@ function reconcileReplacedSession(context) {
   activityQueue.activate();
   renderIntercomActivityLinks();
   retireSessionDialogs(context.tabId);
+  samplingParametersRequestSerial += 1;
+  samplingParametersLoading = false;
+  samplingParametersState = null;
+  samplingParametersStateTabId = null;
+  setSamplingParametersDraft(null, context.tabId);
+  renderSamplingParameters();
+  renderAppRunnerInfoDialog();
   promptRoutingTabs.delete(context.tabId);
   guidedGitLaunchPermits.clearTab(context.tabId);
   clearRefreshTimers();
@@ -20002,7 +20031,7 @@ function setGitFooterVisibilityStatus(message = "", level = "muted") {
 
 function setGitFooterVisibilityBusy(busy) {
   gitFooterVisibilityApplyInFlight = !!busy;
-  const commandAvailable = gitFooterVisibilityCommandAvailable();
+  const commandAvailable = gitFooterVisibilityCommandAvailable() && isCurrentGitFooterVisibilityTarget(gitFooterVisibilityTarget);
   for (const button of [elements.gitFooterVisibilityApplyButton, elements.gitFooterVisibilityResetButton]) {
     if (button) button.disabled = gitFooterVisibilityApplyInFlight || !commandAvailable;
   }
@@ -20068,15 +20097,21 @@ function readGitFooterVisibilitySelection() {
   return next;
 }
 
-async function runGitFooterVisibilityCommand(action, keys = []) {
-  const commandName = gitFooterVisibilityCommandName();
+function isCurrentGitFooterVisibilityTarget(target) {
+  return !!target && gitFooterVisibilityTarget === target && elements.gitFooterVisibilityDialog?.open && isCurrentProjectTarget(target);
+}
+
+async function runGitFooterVisibilityCommand(action, keys = [], target = gitFooterVisibilityTarget) {
+  if (!isCurrentGitFooterVisibilityTarget(target)) throw new Error("The session changed. Reopen Git-footer Visibility before applying changes.");
+  const commandName = target.commandName;
   if (!commandName) throw new Error(commandUnavailableMessage("git-footer-visibility"));
   const suffix = keys.length > 0 ? ` ${keys.join(" ")}` : "";
-  await sendPrompt("prompt", `/${commandName} ${action} webui${suffix}`, { targetTabId: activeTabId, throwOnError: true });
+  await sendPrompt("prompt", `/${commandName} ${action} webui${suffix}`, { targetTabId: target.tabId, throwOnError: true });
 }
 
 async function applyGitFooterVisibilityDialog() {
-  if (gitFooterVisibilityApplyInFlight) return;
+  const target = gitFooterVisibilityTarget;
+  if (gitFooterVisibilityApplyInFlight || !isCurrentGitFooterVisibilityTarget(target)) return;
   const current = currentGitFooterVisibilityState();
   const next = readGitFooterVisibilitySelection();
   const show = [];
@@ -20095,32 +20130,37 @@ async function applyGitFooterVisibilityDialog() {
   setGitFooterVisibilityBusy(true);
   setGitFooterVisibilityStatus("Applying WebUI footer visibility…", "muted");
   try {
-    if (hide.length) await runGitFooterVisibilityCommand("hide", hide);
-    if (show.length) await runGitFooterVisibilityCommand("show", show);
+    if (hide.length) await runGitFooterVisibilityCommand("hide", hide, target);
+    if (show.length) await runGitFooterVisibilityCommand("show", show, target);
+    if (!isCurrentGitFooterVisibilityTarget(target)) return;
     gitFooterVisibilityDirty = false;
     setGitFooterVisibilityStatus(`Saved ${hide.length + show.length} global WebUI footer visibility change${hide.length + show.length === 1 ? "" : "s"}.`, "success");
-    requestGitFooterWebuiPayload(activeTabContext(), { force: true, allowDuringRun: true });
+    requestGitFooterWebuiPayload(target, { force: true, allowDuringRun: true });
     renderFooter();
   } catch (error) {
+    if (!isCurrentGitFooterVisibilityTarget(target)) return;
     setGitFooterVisibilityStatus(error.message || String(error), "error");
   } finally {
-    setGitFooterVisibilityBusy(false);
+    if (gitFooterVisibilityTarget === target) setGitFooterVisibilityBusy(false);
   }
 }
 
 async function resetGitFooterVisibilityDialog() {
-  if (gitFooterVisibilityApplyInFlight) return;
+  const target = gitFooterVisibilityTarget;
+  if (gitFooterVisibilityApplyInFlight || !isCurrentGitFooterVisibilityTarget(target)) return;
   setGitFooterVisibilityBusy(true);
   setGitFooterVisibilityStatus("Resetting WebUI footer visibility…", "muted");
   try {
-    await runGitFooterVisibilityCommand("reset");
+    await runGitFooterVisibilityCommand("reset", [], target);
+    if (!isCurrentGitFooterVisibilityTarget(target)) return;
     gitFooterVisibilityDirty = false;
     setGitFooterVisibilityStatus("Removed the saved global WebUI footer visibility overrides.", "success");
-    requestGitFooterWebuiPayload(activeTabContext(), { force: true, allowDuringRun: true });
+    requestGitFooterWebuiPayload(target, { force: true, allowDuringRun: true });
   } catch (error) {
+    if (!isCurrentGitFooterVisibilityTarget(target)) return;
     setGitFooterVisibilityStatus(error.message || String(error), "error");
   } finally {
-    setGitFooterVisibilityBusy(false);
+    if (gitFooterVisibilityTarget === target) setGitFooterVisibilityBusy(false);
   }
 }
 
@@ -20136,13 +20176,16 @@ function openGitFooterVisibilityDialog() {
   setOptionsMenuOpen(false);
   closeGitFooterContextMenu({ returnFocus: false });
   hideFooterTooltip();
+  gitFooterVisibilityTarget = { ...projectTargetFromContext(), commandName: gitFooterVisibilityCommandName() };
+  gitFooterVisibilityApplyInFlight = false;
   gitFooterVisibilityDirty = false;
-  renderGitFooterVisibilityDialog();
   if (!elements.gitFooterVisibilityDialog.open) elements.gitFooterVisibilityDialog.showModal();
+  renderGitFooterVisibilityDialog();
   queueMicrotask(() => elements.gitFooterVisibilityBody?.querySelector("input")?.focus());
 }
 
 function closeGitFooterVisibilityDialog() {
+  gitFooterVisibilityTarget = null;
   gitFooterVisibilityDirty = false;
   gitFooterVisibilityApplyInFlight = false;
   if (elements.gitFooterVisibilityDialog?.open) elements.gitFooterVisibilityDialog.close();
@@ -25411,7 +25454,7 @@ function applyCodexFastModeStatus(statusText) {
   return true;
 }
 
-async function refreshCodexFastMode(tabContext = activeTabContext()) {
+async function refreshCodexFastMode(tabContext = activeTabContext(), { readOnly = false } = {}) {
   if (!elements.codexFastModeSelect || !tabContext.tabId) return codexFastModeState;
   const featureEnabled = isOptionalFeatureEnabled("codexFastMode");
   try {
@@ -25419,7 +25462,7 @@ async function refreshCodexFastMode(tabContext = activeTabContext()) {
     let data = response.data || {};
     // Browser disable is global while extension state is session/branch local. Keep querying even
     // when hidden and disarm a restored branch before it can silently remain on.
-    if (!featureEnabled && data.available && !codexFastModeConfirmedOff(data)) {
+    if (!readOnly && !featureEnabled && data.available && !codexFastModeConfirmedOff(data)) {
       if (data.busy) throw new Error("this tab is busy; Fast mode will be disarmed when it becomes idle");
       response = await api("/api/codex-fast-mode", { method: "PUT", body: { enabled: false }, tabId: tabContext.tabId });
       data = response.data || {};
@@ -25474,7 +25517,8 @@ async function applyCodexFastMode() {
     addEvent(codexFastModeNotice, "error");
   } finally {
     codexFastModeBusy = false;
-    if (isCurrentTabContext(tabContext)) renderCodexFastModeControl();
+    renderCodexFastModeControl();
+    scheduleFocusedShellRender();
   }
 }
 
@@ -27478,6 +27522,7 @@ function samplingParametersSectionRecord() {
 }
 
 function samplingParametersSectionActive() {
+  if (focusedShell?.active) return focusedShellState.destination === "settings" && settingsCategory(focusedShellState.inspector) === "resources";
   const record = samplingParametersSectionRecord();
   return !!record && !record.section.hidden && !record.section.classList.contains("collapsed");
 }
@@ -27773,16 +27818,17 @@ async function loadSamplingParameters({ tabId = activeTabId, force = false } = {
   // Structured drafts are stored separately from loaded state, so a background
   // refresh can update support/default/hidden-key context without discarding edits.
   if (force) setSamplingParametersDraft(null, tabId);
+  const tabContext = activeTabContext(tabId);
   const requestSerial = ++samplingParametersRequestSerial;
   samplingParametersLoading = true;
   setSamplingParametersFeedback();
   renderSamplingParameters();
   try {
-    const response = await api(samplingParametersPath(tabId), { scoped: false });
-    if (requestSerial !== samplingParametersRequestSerial || tabId !== activeTabId) return;
+    const response = await api(samplingParametersPath(tabId), { scoped: false, signal: AbortSignal.timeout(15_000) });
+    if (requestSerial !== samplingParametersRequestSerial || !isCurrentTabContext(tabContext)) return;
     applySamplingParametersResponse(response.data, tabId);
   } catch (error) {
-    if (requestSerial !== samplingParametersRequestSerial || tabId !== activeTabId) return;
+    if (requestSerial !== samplingParametersRequestSerial || !isCurrentTabContext(tabContext)) return;
     setSamplingParametersFeedback({ error: `Could not load sampling parameters: ${error.message || String(error)}` });
   } finally {
     if (requestSerial === samplingParametersRequestSerial) {
@@ -27803,18 +27849,21 @@ function refreshSamplingParametersForTabContext(tabContext = activeTabContext())
 async function writeSamplingParameters(samplingParams, { successNotice }) {
   const tabId = activeTabId;
   if (!tabId) return;
+  const tabContext = activeTabContext(tabId);
+  const lifetime = sessionContext.captureLifetime(tabId);
   const requestSerial = ++samplingParametersRequestSerial;
   samplingParametersBusy = true;
   setSamplingParametersFeedback();
   renderSamplingParameters();
   try {
     const response = await api(samplingParametersPath(tabId), { method: "PUT", body: samplingParams, scoped: false });
+    if (!sessionContext.isLifetimeCurrent(lifetime)) return;
     setSamplingParametersDraft(null, tabId);
-    if (requestSerial !== samplingParametersRequestSerial || tabId !== activeTabId) return;
+    if (requestSerial !== samplingParametersRequestSerial || !isCurrentTabContext(tabContext)) return;
     applySamplingParametersResponse(response.data, tabId);
     setSamplingParametersFeedback({ notice: successNotice });
   } catch (error) {
-    if (requestSerial !== samplingParametersRequestSerial || tabId !== activeTabId) return;
+    if (requestSerial !== samplingParametersRequestSerial || !isCurrentTabContext(tabContext)) return;
     setSamplingParametersFeedback({ error: `Could not save sampling parameters: ${error.message || String(error)}` });
   } finally {
     // Writes are serialized by the busy guard. A tab/model refresh may supersede
@@ -29370,8 +29419,8 @@ function appRunnerInputField({ id, label, value, placeholder = "", hint = "" }) 
   input.spellcheck = false;
   field.append(input);
   if (hint) field.append(make("small", "muted", hint));
-  input.addEventListener("input", () => updateAppRunnerCustomDraftFrom(field.closest(".app-runner-custom-form")));
-  input.addEventListener("keydown", (event) => {
+  addAppRunnerInfoListener(input, "input", () => updateAppRunnerCustomDraftFrom(field.closest(".app-runner-custom-form")));
+  addAppRunnerInfoListener(input, "keydown", (event) => {
     if (event.key !== "Enter") return;
     event.preventDefault();
     saveAppRunnerCustomRunner(field.closest(".app-runner-custom-form"));
@@ -29380,6 +29429,7 @@ function appRunnerInputField({ id, label, value, placeholder = "", hint = "" }) 
 }
 
 async function saveAppRunnerCustomRunner(form) {
+  if (!isCurrentAppRunnerInfoTarget(appRunnerInfoTarget) || !form?.isConnected) return;
   updateAppRunnerCustomDraftFrom(form);
   const payload = appRunnerCustomDraftPayload();
   if (!payload.path) {
@@ -29389,10 +29439,11 @@ async function saveAppRunnerCustomRunner(form) {
     addEvent("custom app runner path is required", "warn");
     return;
   }
-  const tabContext = activeTabContext();
+  const tabContext = appRunnerInfoTarget;
+  if (!isCurrentAppRunnerInfoTarget(tabContext)) return;
   try {
     const response = await api("/api/app-runner-config", { method: "POST", body: { runner: payload }, tabId: tabContext.tabId });
-    if (!isCurrentTabContext(tabContext)) return;
+    if (!isCurrentAppRunnerInfoTarget(tabContext)) return;
     setAppRunnerData(tabContext.tabId, response.data || {});
     resetAppRunnerCustomDraft({ clearFeedback: false });
     setAppRunnerCustomFeedback("success", "Saved custom app runner. It should now appear in the Run menu when available.");
@@ -29401,7 +29452,7 @@ async function saveAppRunnerCustomRunner(form) {
     renderAppRunnerInfoDialog();
     addEvent("saved custom app runner", "info");
   } catch (error) {
-    if (!isCurrentTabContext(tabContext)) return;
+    if (!isCurrentAppRunnerInfoTarget(tabContext)) return;
     const message = error.message || String(error);
     setAppRunnerCustomFeedback("error", `Custom app runner was not saved: ${message}`);
     renderAppRunnerInfoDialog();
@@ -29419,10 +29470,11 @@ async function deleteAppRunnerCustomRunner(runner = {}) {
     path: runner.path || "",
     args: appRunnerCustomArgsText(runner.args),
   };
-  const tabContext = activeTabContext();
+  const tabContext = appRunnerInfoTarget;
+  if (!isCurrentAppRunnerInfoTarget(tabContext)) return;
   try {
     const response = await api("/api/app-runner-config", { method: "DELETE", body: { id }, tabId: tabContext.tabId });
-    if (!isCurrentTabContext(tabContext)) return;
+    if (!isCurrentAppRunnerInfoTarget(tabContext)) return;
     setAppRunnerData(tabContext.tabId, response.data || {});
     if (appRunnerCustomDraft.id === id) resetAppRunnerCustomDraft({ clearFeedback: false });
     setAppRunnerCustomFeedback("success", "Deleted custom app runner.");
@@ -29433,8 +29485,9 @@ async function deleteAppRunnerCustomRunner(runner = {}) {
     offerUndo({
       message: `Deleted custom app runner “${runner.label || runner.path || id}”.`,
       undo: async () => {
+        if (!isAliveProjectTarget(tabContext)) return;
         const restored = await api("/api/app-runner-config", { method: "POST", body: { runner: restoreRunner }, tabId: tabContext.tabId });
-        if (isCurrentTabContext(tabContext)) {
+        if (isCurrentAppRunnerInfoTarget(tabContext)) {
           setAppRunnerData(tabContext.tabId, restored.data || {});
           setAppRunnerCustomFeedback("success", "Restored custom app runner.");
           renderAppRunnerControls();
@@ -29445,7 +29498,7 @@ async function deleteAppRunnerCustomRunner(runner = {}) {
       successMessage: `Restored custom app runner “${runner.label || runner.path || id}”.`,
     });
   } catch (error) {
-    if (!isCurrentTabContext(tabContext)) return;
+    if (!isCurrentAppRunnerInfoTarget(tabContext)) return;
     const message = error.message || String(error);
     setAppRunnerCustomFeedback("error", `Custom app runner was not deleted: ${message}`);
     renderAppRunnerInfoDialog();
@@ -29470,10 +29523,11 @@ function appRunnerSearchPathLabel(searchPath) {
 }
 
 async function saveAppRunnerSearchPaths(searchPaths, { successMessage = "Saved project discovery paths.", eventMessage = "saved app runner discovery paths", onSuccess = null } = {}) {
-  const tabContext = activeTabContext();
+  const tabContext = appRunnerInfoTarget;
+  if (!isCurrentAppRunnerInfoTarget(tabContext)) return;
   try {
     const response = await api("/api/app-runner-config", { method: "POST", body: { searchPaths }, tabId: tabContext.tabId });
-    if (!isCurrentTabContext(tabContext)) return false;
+    if (!isCurrentAppRunnerInfoTarget(tabContext)) return false;
     setAppRunnerData(tabContext.tabId, response.data || {});
     setAppRunnerSearchPathFeedback("success", successMessage);
     onSuccess?.(tabContext);
@@ -29483,7 +29537,7 @@ async function saveAppRunnerSearchPaths(searchPaths, { successMessage = "Saved p
     addEvent(eventMessage, "info");
     return true;
   } catch (error) {
-    if (!isCurrentTabContext(tabContext)) return false;
+    if (!isCurrentAppRunnerInfoTarget(tabContext)) return false;
     const message = error.message || String(error);
     setAppRunnerSearchPathFeedback("error", `Project discovery paths were not saved: ${message}`);
     renderAppRunnerInfoDialog();
@@ -29493,6 +29547,7 @@ async function saveAppRunnerSearchPaths(searchPaths, { successMessage = "Saved p
 }
 
 async function addAppRunnerSearchPath(container) {
+  if (!isCurrentAppRunnerInfoTarget(appRunnerInfoTarget) || !container?.isConnected) return;
   const input = container?.querySelector("#appRunnerSearchPathInput");
   if (input) appRunnerSearchPathDraft = input.value || "";
   const searchPath = normalizeAppRunnerSearchPathInput(appRunnerSearchPathDraft);
@@ -29529,7 +29584,8 @@ async function addAppRunnerSearchPath(container) {
 async function removeAppRunnerSearchPath(searchPath) {
   const current = activeAppRunnerSearchPaths();
   if (!current.includes(searchPath)) return;
-  const tabContext = activeTabContext();
+  const tabContext = appRunnerInfoTarget;
+  if (!isCurrentAppRunnerInfoTarget(tabContext)) return;
   const saved = await saveAppRunnerSearchPaths(current.filter((item) => item !== searchPath), {
     successMessage: `Removed ${appRunnerSearchPathLabel(searchPath)}.`,
     eventMessage: `removed app runner discovery path ${searchPath}`,
@@ -29538,8 +29594,9 @@ async function removeAppRunnerSearchPath(searchPath) {
   offerUndo({
     message: `Removed project discovery path “${appRunnerSearchPathLabel(searchPath)}”.`,
     undo: async () => {
+      if (!isAliveProjectTarget(tabContext)) return;
       const restored = await api("/api/app-runner-config", { method: "POST", body: { searchPaths: current }, tabId: tabContext.tabId });
-      if (!isCurrentTabContext(tabContext)) return;
+      if (!isCurrentAppRunnerInfoTarget(tabContext)) return;
       setAppRunnerData(tabContext.tabId, restored.data || {});
       setAppRunnerSearchPathFeedback("success", `Restored ${appRunnerSearchPathLabel(searchPath)}.`);
       renderAppRunnerControls();
@@ -29551,17 +29608,18 @@ async function removeAppRunnerSearchPath(searchPath) {
 }
 
 async function loadAppRunnerDirectoryBrowser(relativePath = "") {
-  const tabContext = activeTabContext();
+  const tabContext = appRunnerInfoTarget;
+  if (!isCurrentAppRunnerInfoTarget(tabContext)) return;
   const path = String(relativePath || "").replace(/^\.\/+/, "").replace(/\/+$/g, "");
   appRunnerDirectoryBrowserState = { open: true, loading: true, path, data: null, error: "" };
   renderAppRunnerInfoDialog();
   try {
     const response = await api(`/api/app-runner-files?path=${encodeURIComponent(path)}`, { tabId: tabContext.tabId });
-    if (!isCurrentTabContext(tabContext)) return;
+    if (!isCurrentAppRunnerInfoTarget(tabContext)) return;
     appRunnerDirectoryBrowserState = { open: true, loading: false, path, data: response.data || {}, error: "" };
     renderAppRunnerInfoDialog();
   } catch (error) {
-    if (!isCurrentTabContext(tabContext)) return;
+    if (!isCurrentAppRunnerInfoTarget(tabContext)) return;
     appRunnerDirectoryBrowserState = { open: true, loading: false, path, data: null, error: error.message || String(error) };
     renderAppRunnerInfoDialog();
   }
@@ -29595,10 +29653,10 @@ function renderAppRunnerDirectoryBrowser() {
   const use = make("button", "app-runner-directory-use", "Use this directory");
   use.type = "button";
   use.title = `Use ${appRunnerSearchPathLabel(currentDir)} as a project discovery path`;
-  use.addEventListener("click", () => chooseAppRunnerSearchPath(currentDir));
+  addAppRunnerInfoListener(use, "click", () => chooseAppRunnerSearchPath(currentDir));
   const close = make("button", "app-runner-file-browser-close", "Hide browser");
   close.type = "button";
-  close.addEventListener("click", () => {
+  addAppRunnerInfoListener(close, "click", () => {
     appRunnerDirectoryBrowserState = { open: false, loading: false, path: "", data: null, error: "" };
     renderAppRunnerInfoDialog();
   });
@@ -29607,20 +29665,20 @@ function renderAppRunnerDirectoryBrowser() {
   browser.append(header);
 
   const roots = make("div", "path-picker-roots app-runner-file-browser-roots");
-  if (data.parent !== null && data.parent !== undefined) roots.append(pathPickerButton("↑ Parent", data.parent || ".", () => loadAppRunnerDirectoryBrowser(data.parent || ""), "path-picker-root-button"));
-  roots.append(pathPickerButton("Project root", data.displayProjectRoot || "Project root", () => loadAppRunnerDirectoryBrowser(""), "path-picker-root-button"));
+  if (data.parent !== null && data.parent !== undefined) roots.append(appRunnerInfoPathButton("↑ Parent", data.parent || ".", () => loadAppRunnerDirectoryBrowser(data.parent || ""), "path-picker-root-button"));
+  roots.append(appRunnerInfoPathButton("Project root", data.displayProjectRoot || "Project root", () => loadAppRunnerDirectoryBrowser(""), "path-picker-root-button"));
   browser.append(roots);
 
   const list = make("div", "path-picker-list app-runner-file-browser-list");
   const directories = Array.isArray(data.directories) ? data.directories : [];
   for (const directory of directories) {
     const row = make("div", "app-runner-directory-row");
-    row.append(pathPickerButton(`${directory.name}/`, directory.path, () => loadAppRunnerDirectoryBrowser(directory.path), `path-picker-directory${directory.hidden ? " hidden-directory" : ""}`));
+    row.append(appRunnerInfoPathButton(`${directory.name}/`, directory.path, () => loadAppRunnerDirectoryBrowser(directory.path), `path-picker-directory${directory.hidden ? " hidden-directory" : ""}`));
     const choose = make("button", "app-runner-directory-choose", "Use");
     choose.type = "button";
     choose.title = `Use ${directory.path} as a project discovery path`;
     choose.setAttribute("aria-label", `Use ${directory.path} as a project discovery path`);
-    choose.addEventListener("click", () => chooseAppRunnerSearchPath(directory.path));
+    addAppRunnerInfoListener(choose, "click", () => chooseAppRunnerSearchPath(directory.path));
     row.append(choose);
     list.append(row);
   }
@@ -29658,7 +29716,7 @@ function renderAppRunnerSearchPathSection() {
       remove.type = "button";
       remove.title = `Stop scanning ${appRunnerSearchPathLabel(searchPath)}`;
       remove.setAttribute("aria-label", `Remove project discovery path ${appRunnerSearchPathLabel(searchPath)}`);
-      remove.addEventListener("click", () => removeAppRunnerSearchPath(searchPath));
+      addAppRunnerInfoListener(remove, "click", () => removeAppRunnerSearchPath(searchPath));
       actions.append(remove);
       row.append(details, actions);
       list.append(row);
@@ -29680,8 +29738,8 @@ function renderAppRunnerSearchPathSection() {
   input.setAttribute("aria-label", "Project-relative directory to scan for shell and Python scripts");
   field.append(input);
   field.append(make("small", "muted", `Use . for the project root. Up to ${APP_RUNNER_SEARCH_PATH_LIMIT} paths; absolute paths and .. segments are rejected.`));
-  input.addEventListener("input", () => { appRunnerSearchPathDraft = input.value; });
-  input.addEventListener("keydown", (event) => {
+  addAppRunnerInfoListener(input, "input", () => { appRunnerSearchPathDraft = input.value; });
+  addAppRunnerInfoListener(input, "keydown", (event) => {
     if (event.key !== "Enter") return;
     event.preventDefault();
     addAppRunnerSearchPath(form);
@@ -29691,7 +29749,7 @@ function renderAppRunnerSearchPathSection() {
   const browse = make("button", "app-runner-custom-browse", "Browse…");
   browse.type = "button";
   browse.title = "Browse project directories";
-  browse.addEventListener("click", () => loadAppRunnerDirectoryBrowser(normalizeAppRunnerSearchPathInput(appRunnerSearchPathDraft) === "." ? "" : normalizeAppRunnerSearchPathInput(appRunnerSearchPathDraft)));
+  addAppRunnerInfoListener(browse, "click", () => loadAppRunnerDirectoryBrowser(normalizeAppRunnerSearchPathInput(appRunnerSearchPathDraft) === "." ? "" : normalizeAppRunnerSearchPathInput(appRunnerSearchPathDraft)));
   pathRow.append(browse);
   form.append(pathRow);
 
@@ -29699,10 +29757,10 @@ function renderAppRunnerSearchPathSection() {
   const add = make("button", "primary", "Add path");
   add.id = "appRunnerSearchPathAddButton";
   add.type = "button";
-  add.addEventListener("click", () => addAppRunnerSearchPath(form));
+  addAppRunnerInfoListener(add, "click", () => addAppRunnerSearchPath(form));
   const clear = make("button", "", "Reset");
   clear.type = "button";
-  clear.addEventListener("click", () => {
+  addAppRunnerInfoListener(clear, "click", () => {
     appRunnerSearchPathDraft = "";
     appRunnerDirectoryBrowserState = { open: false, loading: false, path: "", data: null, error: "" };
     setAppRunnerSearchPathFeedback("", "");
@@ -29718,17 +29776,18 @@ function renderAppRunnerSearchPathSection() {
 }
 
 async function loadAppRunnerFileBrowser(relativePath = "") {
-  const tabContext = activeTabContext();
+  const tabContext = appRunnerInfoTarget;
+  if (!isCurrentAppRunnerInfoTarget(tabContext)) return;
   const path = String(relativePath || "").replace(/^\.\/+/, "").replace(/\/+$/g, "");
   appRunnerFileBrowserState = { open: true, loading: true, path, data: null, error: "" };
   renderAppRunnerInfoDialog();
   try {
     const response = await api(`/api/app-runner-files?path=${encodeURIComponent(path)}`, { tabId: tabContext.tabId });
-    if (!isCurrentTabContext(tabContext)) return;
+    if (!isCurrentAppRunnerInfoTarget(tabContext)) return;
     appRunnerFileBrowserState = { open: true, loading: false, path, data: response.data || {}, error: "" };
     renderAppRunnerInfoDialog();
   } catch (error) {
-    if (!isCurrentTabContext(tabContext)) return;
+    if (!isCurrentAppRunnerInfoTarget(tabContext)) return;
     appRunnerFileBrowserState = { open: true, loading: false, path, data: null, error: error.message || String(error) };
     renderAppRunnerInfoDialog();
   }
@@ -29750,7 +29809,7 @@ function renderAppRunnerFileBrowser() {
   header.append(make("strong", "", data.displayRelativeDir || "."));
   const close = make("button", "app-runner-file-browser-close", "Hide browser");
   close.type = "button";
-  close.addEventListener("click", () => {
+  addAppRunnerInfoListener(close, "click", () => {
     appRunnerFileBrowserState = { open: false, loading: false, path: "", data: null, error: "" };
     renderAppRunnerInfoDialog();
   });
@@ -29758,19 +29817,19 @@ function renderAppRunnerFileBrowser() {
   browser.append(header);
 
   const roots = make("div", "path-picker-roots app-runner-file-browser-roots");
-  if (data.parent !== null && data.parent !== undefined) roots.append(pathPickerButton("↑ Parent", data.parent || ".", () => loadAppRunnerFileBrowser(data.parent || ""), "path-picker-root-button"));
-  roots.append(pathPickerButton("Project root", data.displayProjectRoot || "Project root", () => loadAppRunnerFileBrowser(""), "path-picker-root-button"));
+  if (data.parent !== null && data.parent !== undefined) roots.append(appRunnerInfoPathButton("↑ Parent", data.parent || ".", () => loadAppRunnerFileBrowser(data.parent || ""), "path-picker-root-button"));
+  roots.append(appRunnerInfoPathButton("Project root", data.displayProjectRoot || "Project root", () => loadAppRunnerFileBrowser(""), "path-picker-root-button"));
   browser.append(roots);
 
   const list = make("div", "path-picker-list app-runner-file-browser-list");
   const directories = Array.isArray(data.directories) ? data.directories : [];
   const files = Array.isArray(data.files) ? data.files : [];
   for (const directory of directories) {
-    const button = pathPickerButton(`${directory.name}/`, directory.path, () => loadAppRunnerFileBrowser(directory.path), `path-picker-directory${directory.hidden ? " hidden-directory" : ""}`);
+    const button = appRunnerInfoPathButton(`${directory.name}/`, directory.path, () => loadAppRunnerFileBrowser(directory.path), `path-picker-directory${directory.hidden ? " hidden-directory" : ""}`);
     list.append(button);
   }
   for (const file of files) {
-    const button = pathPickerButton(file.name, file.path, () => {
+    const button = appRunnerInfoPathButton(file.name, file.path, () => {
       appRunnerCustomDraft.path = file.path;
       appRunnerFileBrowserState = { open: false, loading: false, path: "", data: null, error: "" };
       renderAppRunnerInfoDialog();
@@ -29805,14 +29864,14 @@ function renderAppRunnerCustomSection() {
       const actions = make("div", "app-runner-custom-item-actions");
       const edit = make("button", "", "Edit");
       edit.type = "button";
-      edit.addEventListener("click", () => {
+      addAppRunnerInfoListener(edit, "click", () => {
         appRunnerCustomDraft = { id: runner.id || "", label: runner.label || "", command: runner.command || "./", path: runner.path || "", args: appRunnerCustomArgsText(runner.args) };
         appRunnerFileBrowserState = { open: false, loading: false, path: "", data: null, error: "" };
         renderAppRunnerInfoDialog();
       });
       const remove = make("button", "danger", "Delete");
       remove.type = "button";
-      remove.addEventListener("click", () => deleteAppRunnerCustomRunner(runner));
+      addAppRunnerInfoListener(remove, "click", () => deleteAppRunnerCustomRunner(runner));
       actions.append(edit, remove);
       row.append(details, actions);
       existing.append(row);
@@ -29835,7 +29894,7 @@ function renderAppRunnerCustomSection() {
   pathRow.append(pathField.field);
   const browse = make("button", "app-runner-custom-browse", "Browse…");
   browse.type = "button";
-  browse.addEventListener("click", () => {
+  addAppRunnerInfoListener(browse, "click", () => {
     updateAppRunnerCustomDraftFrom(form);
     loadAppRunnerFileBrowser(appRunnerRelativeDir(appRunnerCustomDraft.path));
   });
@@ -29845,10 +29904,10 @@ function renderAppRunnerCustomSection() {
   const formActions = make("div", "app-runner-custom-form-actions");
   const save = make("button", "primary", appRunnerCustomDraft.id ? "Save changes" : "Add runner");
   save.type = "button";
-  save.addEventListener("click", () => saveAppRunnerCustomRunner(form));
+  addAppRunnerInfoListener(save, "click", () => saveAppRunnerCustomRunner(form));
   const reset = make("button", "", "Reset");
   reset.type = "button";
-  reset.addEventListener("click", () => { resetAppRunnerCustomDraft(); renderAppRunnerInfoDialog(); });
+  addAppRunnerInfoListener(reset, "click", () => { resetAppRunnerCustomDraft(); renderAppRunnerInfoDialog(); });
   formActions.append(save, reset);
   form.append(formActions);
   if (appRunnerCustomFeedback.message) form.append(make("div", `app-runner-custom-feedback ${appRunnerCustomFeedback.type || "info"}`, appRunnerCustomFeedback.message));
@@ -29907,9 +29966,37 @@ function renderAppRunnerControls() {
   scheduleComposerActionSlotLayoutRestore();
 }
 
+function isCurrentAppRunnerInfoTarget(target) {
+  return !!target && appRunnerInfoTarget === target && elements.appRunnerInfoDialog?.open && isCurrentProjectTarget(target);
+}
+
+function addAppRunnerInfoListener(node, type, handler) {
+  const target = appRunnerInfoTarget;
+  node.addEventListener(type, event => {
+    if (!isCurrentAppRunnerInfoTarget(target) || !node.isConnected || !elements.appRunnerInfoBody.contains(node)) return;
+    handler(event);
+  });
+}
+
+function appRunnerInfoPathButton(label, title, handler, className) {
+  const target = appRunnerInfoTarget;
+  const button = pathPickerButton(label, title, event => {
+    if (isCurrentAppRunnerInfoTarget(target) && button.isConnected && elements.appRunnerInfoBody.contains(button)) handler(event);
+  }, className);
+  return button;
+}
+
 function renderAppRunnerInfoDialog() {
   const body = elements.appRunnerInfoBody;
-  if (!body) return;
+  if (!body || !elements.appRunnerInfoDialog?.open) return;
+  if (!isCurrentAppRunnerInfoTarget(appRunnerInfoTarget)) {
+    body.replaceChildren(make("p", "muted", "The session or project changed. Close and reopen Runner configuration for the current project."));
+    return;
+  }
+  if (appRunnerInfoLoading || appRunnerInfoError) {
+    body.replaceChildren(make("p", "muted", appRunnerInfoError || "Loading project runner configuration…"));
+    return;
+  }
   const data = activeAppRunnerData();
   const runners = Array.isArray(data.runners) ? data.runners : [];
   body.replaceChildren();
@@ -29957,11 +30044,34 @@ function renderAppRunnerInfoDialog() {
   body.append(current, renderAppRunnerSearchPathSection(), renderAppRunnerCustomSection(), how, supported);
 }
 
-function openAppRunnerInfoDialog() {
-  if (!elements.appRunnerInfoDialog) return;
-  renderAppRunnerInfoDialog();
+async function openAppRunnerInfoDialog() {
+  if (!elements.appRunnerInfoDialog || !activeTabId) return;
+  if (!appRunnerInfoTarget || !isCurrentProjectTarget(appRunnerInfoTarget)) {
+    resetAppRunnerCustomDraft();
+    appRunnerSearchPathDraft = "";
+    setAppRunnerSearchPathFeedback("", "");
+    appRunnerDirectoryBrowserState = { open: false, loading: false, path: "", data: null, error: "" };
+  }
+  const target = projectTargetFromContext();
+  appRunnerInfoTarget = target;
+  appRunnerInfoLoading = true;
+  appRunnerInfoError = "";
   setAppRunnerMenuOpen(false);
   if (!elements.appRunnerInfoDialog.open) elements.appRunnerInfoDialog.showModal();
+  renderAppRunnerInfoDialog();
+  try {
+    const response = await api("/api/app-runners", { tabId: target.tabId, signal: AbortSignal.timeout(15_000) });
+    if (!isCurrentAppRunnerInfoTarget(target)) return;
+    setAppRunnerData(target.tabId, response.data || {});
+  } catch (error) {
+    if (!isCurrentAppRunnerInfoTarget(target)) return;
+    appRunnerInfoError = error.message || String(error);
+  } finally {
+    if (isCurrentAppRunnerInfoTarget(target)) {
+      appRunnerInfoLoading = false;
+      renderAppRunnerInfoDialog();
+    }
+  }
 }
 
 function closeAppRunnerInfoDialog() {
@@ -41692,6 +41802,7 @@ function openNativeCommandDialog({ title, message = "", searchPlaceholder = "" }
 
 function closeNativeCommandDialog({ force = false } = {}) {
   if (nativeSettingsDirty && !force) {
+    const dialogGeneration = nativeCommandDialogGeneration;
     appConfirm({
       title: "Discard unsaved settings?",
       summary: "Your changes have not been applied.",
@@ -41699,7 +41810,7 @@ function closeNativeCommandDialog({ force = false } = {}) {
       undoable: false,
       confirmLabel: "Discard changes",
     }).then((confirmed) => {
-      if (!confirmed) return;
+      if (!confirmed || dialogGeneration !== nativeCommandDialogGeneration || !elements.nativeCommandDialog.open) return;
       nativeSettingsDirty = false;
       closeNativeCommandDialog({ force: true });
     });
@@ -42860,25 +42971,30 @@ function gitWorkflowSetupModelKey(model) {
 }
 
 async function openNativeSessionSummarySetupDialog({ initialData = null, onSaved, tabId = activeTabId, focusReturnKey = "" } = {}) {
+  const target = projectTargetFromContext(activeTabContext(tabId));
+  if (!isCurrentProjectTarget(target)) return;
   nativeCommandTabId = tabId;
-  openNativeCommandDialog({
+  const dialogGeneration = openNativeCommandDialog({
     title: "/summary-setup",
     message: "Configure persistent background titles and Markdown summaries. Saving confirms the disclosure below, then immediately generates and opens the first summary.",
   });
+  const isCurrentSetup = () => isCurrentProjectTarget(target) && elements.nativeCommandDialog.open && nativeCommandDialogGeneration === dialogGeneration;
   renderNativeLoading("Loading session summary preferences and available models…");
 
   let data = initialData;
   if (!data) {
     try {
-      const response = await nativeCommandApi("/api/session-summary/preferences");
+      const response = await nativeCommandApi("/api/session-summary/preferences", { tabId, signal: AbortSignal.timeout(15_000) });
       data = response.data || {};
     } catch (error) {
+      if (!isCurrentSetup()) return;
       setNativeCommandError(error.message || String(error));
       elements.nativeCommandBody.replaceChildren();
       return;
     }
   }
 
+  if (!isCurrentSetup()) return;
   const preferences = data.preferences || {};
   const models = Array.isArray(data.models) ? data.models : [];
   if (!models.length) {
@@ -42941,13 +43057,14 @@ async function openNativeSessionSummarySetupDialog({ initialData = null, onSaved
     summaryPrompt: controls.summaryPrompt.textarea.value,
   });
   const initialSignature = signature();
-  const updateDirty = () => { nativeSettingsDirty = signature() !== initialSignature; };
+  const updateDirty = () => { if (isCurrentSetup()) nativeSettingsDirty = signature() !== initialSignature; };
   for (const control of [controls.model.select, controls.thinking.select, controls.automatic.input, controls.titleEnabled.input, controls.cadence.select, controls.injectLatest.input, controls.titlePrompt.textarea, controls.summaryPrompt.textarea]) {
     control.addEventListener("input", updateDirty);
     control.addEventListener("change", updateDirty);
   }
 
   const save = addNativeCommandAction("Save and generate", async () => {
+    if (!isCurrentSetup() || !save.isConnected || save.disabled) return;
     setNativeActionBusy(save, true, "Saving…");
     setNativeCommandError("");
     try {
@@ -42957,7 +43074,7 @@ async function openNativeSessionSummarySetupDialog({ initialData = null, onSaved
       const summaryPrompt = controls.summaryPrompt.textarea.value.trim();
       if (!titlePrompt || !summaryPrompt) throw new Error("Both editable prompts are required.");
       if (titlePrompt.length > SESSION_SUMMARY_PROMPT_MAX_CHARS || summaryPrompt.length > SESSION_SUMMARY_PROMPT_MAX_CHARS) throw new Error("Each editable prompt must not exceed 8 KiB.");
-      const targetTabId = nativeCommandTabId || tabId || activeTabId;
+      const targetTabId = tabId;
       const reviewed = await appConfirm({
         title: "Save session summary setup?",
         summary: `${disclosure.scope || "Selected active-branch text and tool names will be sent to the configured model."}\n\n${disclosure.cost || "Generation may incur provider usage."}`,
@@ -42966,7 +43083,7 @@ async function openNativeSessionSummarySetupDialog({ initialData = null, onSaved
         confirmLabel: "Save and generate",
         danger: false,
       });
-      if (!reviewed) return;
+      if (!reviewed || !isCurrentSetup()) return;
       const response = await nativeCommandApi("/api/session-summary/preferences", {
         method: "PUT",
         tabId: targetTabId,
@@ -42982,6 +43099,7 @@ async function openNativeSessionSummarySetupDialog({ initialData = null, onSaved
           },
         },
       });
+      if (!isCurrentSetup()) return;
       updateSessionSummaryForTab(targetTabId, response.data?.summary || {
         version: SESSION_SUMMARY_PROTOCOL_VERSION,
         status: "idle",
@@ -42994,11 +43112,13 @@ async function openNativeSessionSummarySetupDialog({ initialData = null, onSaved
       closeNativeCommandDialog({ force: true });
       openSessionSummaryOverlay(targetTabId, { loading: true, focusReturnKey });
       await requestSessionSummaryGeneration(targetTabId, { refresh: true }).catch(() => {});
+      if (!isCurrentProjectTarget(target)) return;
       if (typeof onSaved === "function") await onSaved(response.data?.preferences);
     } catch (error) {
+      if (!isCurrentSetup()) return;
       setNativeCommandError(error.message || String(error));
     } finally {
-      setNativeActionBusy(save, false);
+      if (isCurrentSetup()) setNativeActionBusy(save, false);
     }
   }, "primary");
 }
@@ -46168,6 +46288,9 @@ function commandPaletteCoreItems() {
     { id: "native:resume", scope: "project", destination: "conversation", kind: "Pi", label: "/resume", description: "Resume a previous session", keywords: "sessions history", run: () => runNativeCommandMenu("/resume") },
     { id: "native:fork", scope: "session", destination: "conversation", kind: "Pi", label: "/fork", description: "Fork from a previous user message", keywords: "branch edit retry", run: () => runNativeCommandMenu("/fork") },
     { id: "native:tree", scope: "session", destination: "conversation", kind: "Pi", label: "/tree", description: "Navigate the session tree", keywords: "branch history", run: () => runNativeCommandMenu("/tree") },
+    { id: "native:summary-setup", scope: "session", destination: "settings", kind: "Setup", label: "/summary-setup", description: "Configure summary models, prompts, titles and privacy; saving asks before generation", keywords: "summary preferences configuration", available: hasLoadedRpcCommand("summary-setup"), unavailableReason: commandUnavailableMessage("summary-setup"), run: () => runNativeCommandMenu("/summary-setup") },
+    { id: "settings:runner-configuration", scope: "project", destination: "settings", kind: "Setup", label: "Runner configuration", description: "Configure project discovery paths and custom runners", keywords: "project runners paths command args", run: () => openAppRunnerInfoDialog() },
+    { id: "settings:git-footer-visibility", scope: "session", destination: "settings", kind: "Setup", label: "Git-footer Visibility", description: "Choose the globally saved Git-footer fields", keywords: "footer visibility show hide", available: isOptionalFeatureEnabled("gitFooterStatus") && gitFooterVisibilityCommandAvailable(), unavailableReason: commandUnavailableMessage("git-footer-visibility"), run: () => openGitFooterVisibilityDialog() },
     { id: "native:settings", scope: "session", destination: "settings", kind: "Pi", label: "/settings", description: "Open settings", keywords: "configuration", run: () => runNativeCommandMenu("/settings") },
     { id: "native:scoped-models", scope: "session", destination: "settings", kind: "Pi", label: "/scoped-models", description: "Manage model cycling scope", keywords: "models cycle ctrl p", run: () => runNativeCommandMenu("/scoped-models") },
     ...[["tools", "tuiToolsCommand"], ["skills", "tuiSkillsCommand"]].map(([kind, featureId]) => ({
@@ -46187,7 +46310,7 @@ function commandPaletteCoreItems() {
     { id: "project:git", scope: "project", destination: "project", kind: "Action", label: "Git panel", description: "Open the Git section of the Control Deck", keywords: "repository status history", run: () => revealSidePanelSectionById("git") },
     { id: "activity:events", scope: "browser", destination: "activity", kind: "Action", label: "Events log", description: "Open the Events section of the Control Deck", keywords: "errors warnings log diagnostics", run: () => revealEventsSection() },
     { id: "conversation:thinking-visibility", scope: "browser", destination: "conversation", kind: "Action", label: thinkingOutputVisible ? "Hide thinking output" : "Show thinking output", description: "Toggle thinking cards in the transcript (Ctrl/Cmd+T in the composer)", keywords: "reasoning thinking toggle", run: () => setThinkingOutputVisible(!thinkingOutputVisible, { announce: true }) },
-    { id: "conversation:tool-output", scope: "browser", destination: "conversation", kind: "Action", label: toolOutputGloballyExpanded ? "Collapse tool output" : "Expand tool output", description: "Toggle tool result cards (Ctrl/Cmd+O in the composer)", keywords: "tools results collapse expand", run: () => setToolOutputGloballyExpanded(!toolOutputGloballyExpanded, { announce: true }) },
+    { id: "conversation:tool-output", scope: "browser", destination: "conversation", kind: "Action", label: toolOutputGloballyExpanded ? "Collapse tool output" : "Expand tool output", description: `${toolOutputGloballyExpanded ? "Expanded" : "Collapsed"}. Toggle tool result cards (Ctrl/Cmd+O in the composer)`, keywords: "tools results collapse expand", run: () => setToolOutputGloballyExpanded(!toolOutputGloballyExpanded, { announce: true }) },
     { id: "native:login", scope: "session", destination: "settings", kind: "Pi", label: "Provider login", description: "Open provider sign-in guidance", keywords: "account authentication credentials", run: () => runNativeCommandMenu("/login") },
     { id: "native:logout", scope: "session", destination: "settings", kind: "Pi", label: "Provider logout", description: "Review stored provider credentials before removal", keywords: "account authentication credentials", run: () => runNativeCommandMenu("/logout") },
     { id: "settings:visibility", scope: "server", destination: "settings", kind: "Action", label: "Control visibility", description: "Choose which controls are shown", keywords: "hidden buttons recovery", run: () => openControlVisibilitySetupDialog() },
@@ -48716,6 +48839,8 @@ elements.gitFooterVisibilityResetButton?.addEventListener("click", () => resetGi
 elements.gitFooterVisibilityApplyButton?.addEventListener("click", () => applyGitFooterVisibilityDialog());
 elements.gitFooterVisibilityDialog?.querySelector("form")?.addEventListener("submit", (event) => event.preventDefault());
 elements.gitFooterVisibilityDialog?.addEventListener("close", () => {
+  if (elements.gitFooterVisibilityDialog.open) return;
+  gitFooterVisibilityTarget = null;
   gitFooterVisibilityDirty = false;
   gitFooterVisibilityApplyInFlight = false;
 });
