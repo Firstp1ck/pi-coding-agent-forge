@@ -2464,7 +2464,29 @@ function focusedToolsActions() {
       run: () => navigateFocusedShell(destination, destination === "settings" ? `settings:${record.id === "optional-features" ? "features" : "appearance"}` : record.id),
     };
   });
-  return [...sectionActions, ...buildCommandPaletteItems().map(action => ({
+  const modelShortcuts = {
+    id: "view:model-shortcuts", scope: "session", target: context, category: "Models",
+    label: "Model shortcuts", description: "Open scoped models, advanced layout and model ordering",
+    keywords: "model picker scoped advanced reorder", available: !!context.tabId,
+    unavailableReason: "Choose a session first.",
+    run: () => {
+      if (!navigateFocusedShell("conversation", null)) return;
+      setFooterModelPickerOpen(true);
+      focusFooterModelPickerInitialOption();
+    },
+  };
+  const modelShortcutsLayout = {
+    ...modelShortcuts, id: "view:model-shortcuts-layout",
+    label: footerScopedModelLayout === "advanced" ? "Use simple model shortcuts" : "Use advanced model shortcuts",
+    description: "Switch between a flat list and provider columns; keep the saved model order",
+    run: () => {
+      if (!navigateFocusedShell("conversation", null)) return;
+      toggleFooterScopedModelLayout();
+      setFooterModelPickerOpen(true);
+      focusFooterModelPickerInitialOption();
+    },
+  };
+  return [...sectionActions, modelShortcuts, modelShortcutsLayout, ...buildCommandPaletteItems().map(action => ({
     ...action,
     category: action.kind === "Model" ? "Models" : action.kind === "Tab" ? "Sessions" : action.destination === "project" ? "Project" : action.destination === "settings" ? "Settings" : action.destination === "activity" ? "Activity" : "Session",
     available: checkActionTarget(action, context).ok,
@@ -7852,7 +7874,7 @@ function isFooterPickerOpen() {
 function footerActivePickerTarget() {
   if (footerBranchPickerOpen) return elements.statusBar.querySelector(".footer-branch.footer-meta-action");
   if (footerThinkingPickerOpen) return elements.statusBar.querySelector(".footer-thinking.footer-meta-action");
-  if (footerModelPickerOpen) return elements.statusBar.querySelector(".footer-model.footer-meta-action, .footer-tui-model");
+  if (footerModelPickerOpen) return focusedShell?.active ? elements.modelSelect : elements.statusBar.querySelector(".footer-model.footer-meta-action, .footer-tui-model");
   return null;
 }
 
@@ -24135,7 +24157,7 @@ async function applyFooterModel(model) {
 
 function focusFooterModelTrigger() {
   queueMicrotask(() => {
-    const trigger = elements.statusBar.querySelector(".footer-model.footer-meta-action, .footer-tui-model");
+    const trigger = focusedShell?.active ? elements.modelSelect : elements.statusBar.querySelector(".footer-model.footer-meta-action, .footer-tui-model");
     trigger?.focus({ preventScroll: true });
   });
 }

@@ -81,3 +81,6 @@ html[data-desktop-shell="focused"] #focusedWorkspace { height: var(--visual-view
 #focusedWorkspace .focused-feature-widgets .btw-widget .release-npm-meta { min-width: 0; max-width: 100%; }
 #focusedWorkspace .focused-feature-widgets .btw-widget .release-npm-actions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; min-width: 0; }
 #focusedWorkspace .focused-feature-widgets .btw-widget .release-npm-actions button { max-width: 100%; white-space: normal; }
+
+html[data-desktop-shell="focused"] #statusBar .footer-model,
+html[data-desktop-shell="focused"] #statusBar .footer-tui-model { display: none; }
