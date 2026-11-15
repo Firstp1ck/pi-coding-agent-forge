@@ -1385,7 +1385,7 @@ let componentUpdatePollTimer = null;
 let componentUpdateStartInProgress = false;
 let sidebarUpdateMenu = null;
 let sidebarUpdateError = "";
-let sidebarUpdateTarget = "all";
+let sidebarUpdateTarget = null;
 const observedNativeJobs = { all: null, pi: null, webui: null };
 const uncertainApplyJobs = { all: null, pi: null, webui: null };
 let nativeJobPollError = "";
@@ -9694,10 +9694,13 @@ function renderComponentUpdatePanel(target, statusElement, buttonElement) {
 
 function renderSidebarUpdateMenu() {
   if (!sidebarUpdateMenu) return;
-  const target = COMPONENT_UPDATE_TARGETS.find((key) => ["unknown", "partial"].includes(nativeUpdateJob(key)?.phase))
+  const mostRecent = [...COMPONENT_UPDATE_TARGETS].filter((key) => nativeUpdateJob(key))
+    .sort((a, b) => Date.parse(nativeUpdateJob(b).finishedAt || nativeUpdateJob(b).plan?.createdAt || 0)
+      - Date.parse(nativeUpdateJob(a).finishedAt || nativeUpdateJob(a).plan?.createdAt || 0))[0];
+  const target = COMPONENT_UPDATE_TARGETS.find((key) => nativeUpdateJob(key)?.phase === "unknown")
     || COMPONENT_UPDATE_TARGETS.find((key) => nativeUpdateUnsettled(nativeUpdateJob(key)))
-    || (nativeUpdateJob(sidebarUpdateTarget) ? sidebarUpdateTarget : COMPONENT_UPDATE_TARGETS.find((key) => nativeUpdateJob(key)))
-    || sidebarUpdateTarget;
+    || (sidebarUpdateTarget && nativeUpdateJob(sidebarUpdateTarget) ? sidebarUpdateTarget : mostRecent)
+    || sidebarUpdateTarget || "all";
   const job = nativeUpdateJob(target);
   const status = componentUpdateStatusText(target);
   const receipts = (job?.receipts || []).map((receipt) => [
@@ -9783,12 +9786,13 @@ function syncComponentUpdatePolling() {
 function componentUpdateConfirmationText(plan) {
   const commands = (plan.targets || []).map((item) => [
     `${item.id}${item.installedRoot ? ` at ${item.installedRoot}` : ""}`,
+    ...(item.coveredInstallations || []).map((covered) => `Includes ${covered.id} at ${covered.installedRoot}`),
     [item.command.command, ...item.command.args].map((part) => JSON.stringify(part)).join(" "),
   ].join("\n")).join("\n\n");
   return [
     `Update ${componentUpdateLabel(plan.requested)}?`,
     commands,
-    plan.refusals?.length ? `Not installed: ${plan.refusals.join(" · ")}` : "",
+    plan.refusals?.length ? `Installation notes: ${plan.refusals.join(" · ")}` : "",
     "Restart Web UI after the update to load the updated code.",
   ].filter(Boolean).join("\n\n");
 }

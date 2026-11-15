@@ -130,7 +130,7 @@ Open **Updates** beside Settings. Choose a scope, review the commands and instal
 
 - **Pi only** runs `pi update` using Pi on your PATH.
 - **WebUI only** checks the global npm installation and the Pi agent's npm installation. It runs `npm update -g @firstpick/pi-package-webui` for the global copy and `pi update --extension npm:@firstpick/pi-package-webui` for the Pi-managed copy. Missing copies are reported and are not installed.
-- **Pi and extensions + WebUI** runs `pi update --all` and updates a separate global npm WebUI copy if present. Pi-managed WebUI is already included in the all-extensions command.
+- **Pi and extensions + WebUI** runs `pi update --all` and updates a separate global npm WebUI copy if present. Pi-managed WebUI is already included in the all-extensions command. Pi handles its configured packages normally; `--all` can restore a configured package whose files are missing.
 
 The update commands use your existing Pi and npm configuration. WebUI does not require a specific Pi version or perform ownership, idle-session or post-update health checks. Command failures are shown directly, without retrying with alternative commands. Only one update job runs at a time in this WebUI server. The result reports command exit status, not an independent verification of the new installation.
 
