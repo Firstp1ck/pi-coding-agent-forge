@@ -9590,6 +9590,7 @@ function componentUpdateTagState(target) {
   if (job?.phase === "unknown" || latestUpdateStatus?.nativeJobDiscoveryError || nativeJobPollError) return "unknown";
   if (job?.phase === "partial") return "partial";
   if (job?.phase === "failed") return "failed";
+  if (job?.phase === "unchanged") return "unchanged";
   if (job?.phase === "success") return "succeeded";
   if (nativeUpdateUnsettled(job)) return "running";
   if (latestUpdateStatus?.[target]?.updateAvailable) return "available";
@@ -9603,6 +9604,7 @@ function componentUpdateTagStateText(state) {
     case "partial": return "update partially succeeded";
     case "unknown": return "update status unknown";
     case "succeeded": return "update succeeded";
+    case "unchanged": return "already up to date";
     case "available": return "update available";
     default: return "";
   }
@@ -9632,14 +9634,20 @@ function componentUpdateStatusText(target) {
     const error = job.error ? ` ${String(job.error).slice(0, 600)}` : "";
     switch (job.phase) {
       case "unknown": return { text: `${id}: completion is unknown.${error} Check the command output on the host before retrying.`, level: "error" };
-      case "partial": return { text: `${id}: partial result. Some commands failed.${error} Review the command results. Restart Web UI to load any completed updates.`, level: "warn" };
+      case "partial": return { text: `${id}: partial result. Some commands failed.${error} Review the command results.${job.restartRequired === false ? "" : " Restart Web UI to load any completed updates."}`, level: "warn" };
       case "failed": return { text: `${id}: update failed.${error} Review the command results before retrying.`, level: "error" };
-      case "unchanged": return { text: `${id}: commands finished but no installation changed. No automatic restart was needed.`, level: "info" };
+      case "unchanged": return { text: `${label}: Already up to date. No restart is needed.`, level: "success" };
       case "success": return { text: `${id}: update commands completed. Restart Web UI to load the updated code.`, level: "success" };
       case "restart-authorized": return { text: `${id}: commands completed and healthy changed active components are waiting for idle before automatic restart.`, level: "warn" };
       case "restart-in-progress": return { text: `${id}: automatic restart is in progress; reconnecting to the same job.`, level: "warn" };
       case "restart-pending": return { text: `${id}: successor health and session restoration are not yet confirmed. Do not infer restart success.`, level: "warn" };
-      default: return { text: `${id}: ${job.phase || "status pending"}. Waiting for command completion and verification.`, level: "warn" };
+      case "launching": return { text: `Starting ${label} update…`, level: "info" };
+      case "running": {
+        const progress = job.progress;
+        const step = progress ? `Step ${Math.min(progress.completedSteps + 1, progress.totalSteps)} of ${progress.totalSteps}` : "Running update command";
+        return { text: `${label}: ${step}${progress?.currentTargetId ? ` · ${progress.currentTargetId}` : ""}.`, level: "info" };
+      }
+      default: return { text: `${id}: ${job.phase || "status pending"}. Waiting for command completion.`, level: "warn" };
     }
   }
   const current = formatWebuiVersion((target === "pi" ? pkg.pathInstallationVersion : pkg.currentVersion) || (target === "pi" ? piVersion : webuiVersion) || "");
@@ -9684,7 +9692,8 @@ function renderComponentUpdatePanel(target, statusElement, buttonElement) {
       receipt.error ? `error: ${String(receipt.error).slice(0, 600)}` : "",
     ].filter(Boolean).join("\n"));
     const verification = (job?.verifiedTargets || []).map((item) => `${item.id}: verification ${item.status || "unproven"}`);
-    output.textContent = [...lines, ...verification].join("\n\n").slice(0, 8000);
+    const live = job?.phase === "running" ? [job.progress?.stdout, job.progress?.stderr].filter(Boolean) : [];
+    output.textContent = [...lines, ...verification, ...live].join("\n\n").slice(-8000);
     output.hidden = !output.textContent;
   }
   const buttonState = componentUpdateButtonState(target);
@@ -9719,6 +9728,16 @@ function renderSidebarUpdateMenu() {
     disabledReason,
     statusText: sidebarUpdateError || [status.text, ...receipts].filter(Boolean).join("\n"),
     statusTone: sidebarUpdateError ? "error" : status.level,
+    progress: job ? {
+      ...job.progress,
+      jobId: job.transactionId,
+      state: nativeJobPollError || latestUpdateStatus?.nativeJobDiscoveryError ? "unknown" : job.phase,
+      label: componentUpdateLabel(target),
+      totalSteps: job.progress?.totalSteps ?? job.plan?.targets?.length ?? 1,
+      completedSteps: job.progress?.completedSteps ?? job.receipts?.length ?? 0,
+      startedAt: job.progress?.startedAt || job.startedAt,
+      stepStartedAt: job.progress?.stepStartedAt || job.startedAt,
+    } : null,
   });
 }
 
@@ -9832,17 +9851,23 @@ async function startComponentUpdate(target) {
     renderComponentUpdateDialogs();
     return;
   }
+  const startedAt = new Date().toISOString();
+  uncertainApplyJobs[target] = plan.transactionId;
+  observedNativeJobs[target] = { transactionId: plan.transactionId, plan, phase: "launching", startedAt,
+    receipts: [], verifiedTargets: [], progress: { totalSteps: plan.targets.length, completedSteps: 0, startedAt, stepStartedAt: startedAt } };
+  nativeJobPollError = "";
+  renderComponentUpdateDialogs();
   try {
     const response = await api("/api/update/apply", { method: "POST", body: { transactionId: plan.transactionId, planDigest: plan.digest }, scoped: false });
     if (response?.data?.transactionId !== plan.transactionId) throw new Error("Accepted job identity did not match the confirmed plan.");
     uncertainApplyJobs[target] = null;
-    observedNativeJobs[target] = { transactionId: plan.transactionId, plan, phase: response.data.phase, receipts: [], verifiedTargets: [] };
+    observedNativeJobs[target] = { ...observedNativeJobs[target], phase: response.data.phase };
     latestUpdateStatus = { ...(latestUpdateStatus || {}), updateInProgress: true };
     addEvent(`${label} job ${plan.transactionId} launched; watching command progress`, "info");
   } catch (error) {
     nativeJobPollError = error.message || String(error);
     uncertainApplyJobs[target] = plan.transactionId;
-    observedNativeJobs[target] = { transactionId: plan.transactionId, plan, phase: "launching", receipts: [], verifiedTargets: [] };
+    observedNativeJobs[target] = { ...observedNativeJobs[target], phase: "launching" };
     latestUpdateStatus = { ...(latestUpdateStatus || {}), updateInProgress: true };
     addEvent(`${label} launch was not confirmed: ${nativeJobPollError}. Checking job ${plan.transactionId} before any retry.`, "error");
   } finally {

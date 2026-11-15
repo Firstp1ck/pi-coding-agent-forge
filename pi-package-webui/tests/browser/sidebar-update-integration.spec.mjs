@@ -8,7 +8,7 @@ const planFor = target => ({ requested: target, transactionId: `menu-${target}`,
   targets: [{ id: target, installedRoot: '/fixture/installed', command: { command: target === 'webui' ? 'npm' : 'pi',
     args: target === 'all' ? ['update', '--all'] : target === 'webui' ? ['update', '-g', '@firstpick/pi-package-webui'] : ['update'] } }], refusals: [] });
 
-async function setup(page, fixture, { layout = 'focused', canRunUpdate = true, error = '' } = {}) {
+async function setup(page, fixture, { layout = 'focused', canRunUpdate = true, error = '', applyGate = null } = {}) {
   const requests = [], jobs = { all: null, pi: null, webui: null };
   const respond = (route, data, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify({ ok: true, data }) });
   await page.route('**/api/update-status*', route => respond(route, {
@@ -20,10 +20,11 @@ async function setup(page, fixture, { layout = 'focused', canRunUpdate = true, e
     if (error) return route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ ok: false, error }) });
     return respond(route, { plan: planFor(body.targets[0]) }, 201);
   });
-  await page.route('**/api/update/apply', route => {
+  await page.route('**/api/update/apply', async route => {
     const body = route.request().postDataJSON(); requests.push({ kind: 'apply', body });
     const target = body.transactionId.replace('menu-', '');
     jobs[target] = { transactionId: body.transactionId, plan: planFor(target), phase: 'running', receipts: [] };
+    if (applyGate) await applyGate;
     return respond(route, { transactionId: body.transactionId, phase: 'running' }, 202);
   });
   await page.route('**/api/update/transactions/*', route => respond(route,
@@ -116,4 +117,39 @@ for (const target of ['pi', 'all']) test(`${target} feedback replaces an older p
   jobs[target] = { ...jobs[target], phase: 'failed', receipts: [{ id: target, status: 'failed', stderr: 'new command error' }] };
   await expect(status).toContainText('new command error', { timeout: 10_000 });
   await expect(status).not.toContainText('old WebUI output');
+});
+
+for (const outcome of ['unchanged', 'failed']) test(`persistent progress starts before apply responds and reports ${outcome}`, async ({ page, emptyStartup }, info) => {
+  let releaseApply;
+  const applyGate = new Promise(resolve => { releaseApply = resolve; });
+  const { requests, jobs } = await setup(page, emptyStartup, { applyGate });
+  await page.getByRole('menuitem').filter({ hasText: names.webui }).click();
+  await page.locator('#confirmationConfirmButton').click();
+  try {
+    await expect(page.getByRole('progressbar')).toBeVisible();
+    await expect(page.getByRole('menu', { name: 'Updates', exact: true })).toBeHidden();
+    await expect(page.locator('#sidebarUpdateButton')).toHaveAttribute('aria-busy', 'true');
+    expect(requests.filter(item => item.kind === 'apply')).toHaveLength(1);
+  } finally {
+    releaseApply();
+  }
+  const startedAt = new Date(Date.now() - 15_000).toISOString();
+  jobs.webui = { ...jobs.webui, progress: { totalSteps: 2, completedSteps: 0,
+    currentTargetId: 'webui:pi-user', startedAt, stepStartedAt: startedAt, stdout: 'Fetching package metadata', stderr: '' } };
+  await expect.poll(() => page.locator('body').innerText()).toContain('Fetching package metadata');
+  const progress = page.getByRole('progressbar');
+  await expect(progress).toBeVisible();
+  await expect.poll(async () => Number(await progress.getAttribute('aria-valuenow'))).toBeGreaterThan(0);
+  expect(Number(await progress.getAttribute('aria-valuenow'))).toBeLessThan(100);
+  await expect.poll(() => page.locator('body').innerText()).toMatch(/estimat/i);
+  jobs.webui.progress = { ...jobs.webui.progress, completedSteps: 1, currentTargetId: 'webui:npm-global', stepStartedAt: new Date().toISOString(), stdout: 'Checking global WebUI' };
+  await expect.poll(() => page.locator('body').innerText()).toContain('Checking global WebUI');
+  await page.screenshot({ path: info.outputPath('update-progress-running.png') });
+  jobs.webui = { ...jobs.webui, phase: outcome, restartRequired: false,
+    progress: { ...jobs.webui.progress, completedSteps: 2, currentTargetId: null },
+    receipts: [{ id: 'webui', status: outcome, stdout: outcome === 'unchanged' ? 'up to date in 1s' : '', stderr: outcome === 'failed' ? 'fixture download failed' : '' }] };
+  await expect.poll(() => page.locator('body').innerText()).toMatch(outcome === 'unchanged' ? /already up to date/i : /fixture download failed/);
+  await expect(page.locator('#sidebarUpdateButton')).toHaveAttribute('aria-busy', 'false');
+  expect(requests.filter(item => item.kind === 'apply')).toHaveLength(1);
+  await page.screenshot({ path: info.outputPath(`update-progress-${outcome}.png`) });
 });

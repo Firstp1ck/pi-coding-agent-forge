@@ -134,7 +134,11 @@ Open **Updates** beside Settings. Choose a scope, review the commands and instal
 
 The update commands use your existing Pi and npm configuration. WebUI does not require a specific Pi version or perform ownership, idle-session or post-update health checks. Command failures are shown directly, without retrying with alternative commands. Only one update job runs at a time in this WebUI server. The result reports command exit status, not an independent verification of the new installation.
 
-The server stays running during the commands. Restart WebUI afterward to load updated code. Progress and command results remain available while that server process runs; they are not a durable update history after a server restart. If a connection or process is lost during an update, inspect the host before rerunning the commands.
+A progress card stays visible after you confirm. It shows the current command step, elapsed time and recent output. The percentage is a time-based estimate, not a download measurement; slow commands can remain near completion until they exit. Failures and lost connections are shown without claiming completion.
+
+When every command explicitly reports that its target is already up to date, the result says **Already up to date** and no restart is needed. Successful output that does not identify whether anything changed is reported as commands completed.
+
+The server stays running during the commands. Restart WebUI after successful updates to load changed code. Progress and command results remain available while that server process runs; they are not a durable update history after a server restart. If a connection or process is lost during an update, inspect the host before rerunning the commands.
 
 Only localhost can start updates. Package lifecycle scripts run with your existing configuration and are not sandboxed. The updater does not elevate permissions, and native package updates cannot be automatically rolled back. Review command output for private information before sharing it.
 

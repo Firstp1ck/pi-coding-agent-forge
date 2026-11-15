@@ -326,7 +326,7 @@ Use the optional Remote Web UI package when you need trusted-LAN access and PIN 
 
 ## Technical details
 
-Use the **Updates** button beside Settings to update **Pi and extensions + WebUI**, **WebUI only**, or **Pi only**. WebUI checks its Pi-managed and global npm installation locations and uses the matching update command. Review the commands, confirm, and read the result in the menu. Restart WebUI afterward to load the updated code. Updates can only be started from localhost. Package scripts run under your existing configuration, and package updates cannot be automatically rolled back.
+Use the **Updates** button beside Settings to update **Pi and extensions + WebUI**, **WebUI only**, or **Pi only**. WebUI checks its Pi-managed and global npm installation locations and uses the matching update command. Review the commands and confirm. A progress card shows the current step, elapsed time, and an estimated percentage while commands run. It says **Already up to date** when the commands explicitly report no changes. Otherwise, restart WebUI after a successful update to load the updated code. Updates can only be started from localhost. Package scripts run under your existing configuration, and package updates cannot be automatically rolled back.
 
 > **Before downgrading:** stop the Web UI and back up `~/.pi/webui/settings.json`. Older releases do not understand the two-sided Control Deck layout and can overwrite it. Re-upgrade before restoring the backup.
 
