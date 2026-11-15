@@ -223,3 +223,11 @@ Pinned folders now precedes Current location, and Create a folder precedes Folde
 Linux Chromium is the verified browser environment. Physical Android/iOS keyboards, IME, microphones, Windows/macOS behavior, WebKit and installed live-provider/companion combinations remain unmeasured. Existing platform-specific behavior is preserved in code and focused contracts, not claimed as device-tested.
 
 No production installation, package publication, deployment or merge is part of this implementation. The implementation is submitted through PR #38. Use the user documents for layout selection and recovery. Runtime ownership/protocol downgrades retain their documented drain and explicit shutdown requirements.
+
+### Workspace selection before first prompt
+
+Open workspace and recent-workspace choices on an empty conversation now select a folder in the browser draft. They create no terminal or Pi process. The first prompt creates the project terminal in the captured folder. Saved Drafts retain their text and folder across navigation and reload. Folder-only selections remain local to the current page until text is saved or submitted. Pinning and creating folders also work when no real terminal exists; explicit invalid terminal IDs and existing authorization checks remain enforced.
+
+One Sol/high worker and one fresh Sol/high reviewer handled the repair. Review found no scoped defects and independently passed 54 unit cases, 43 Chromium/API cases, cache checks, inventory and the No Project HTTP lifecycle harness. The parent package run passed 260 of 261 files; the unchanged SSE harness timed out before server health and passed on isolated rerun. The timeout cause remains unclassified. All package files have passing evidence across those runs, but no uninterrupted green full-package run is claimed. A new browser fixture now waits for Choose to become enabled before testing same-task navigation, preserving its ownership assertions.
+
+Assets use app216 and PWA196. No dependencies changed. Real providers, other browser engines, remote PIN login and installed deployment were not exercised. Captures: [selected workspace before first send](screenshots/workspace-drafts/selected-workspace-before-send.png) and [saved Draft after reload](screenshots/workspace-drafts/saved-workspace-draft.png).
