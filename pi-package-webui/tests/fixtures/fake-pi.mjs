@@ -602,6 +602,19 @@ function handleMobileBlockerPrompt(command, base) {
   return true;
 }
 
+function handleActivityDecisionPrompt(command, base) {
+  if (String(command.message || "").trim() !== "fixture activity model decision") return false;
+  respond({ ...base, data: { output: "activity decision fixture accepted" } });
+  emitEvent({
+    type: "extension_ui_request",
+    id: "fixture-workflow-model-exception",
+    method: "select",
+    title: "Workflow model exception for fixture run",
+    options: ["Approve fixture model", "Reject fixture model"],
+  });
+  return true;
+}
+
 function handleContinuityPrompt(command, base) {
   if (!continuityModeEnabled) return false;
   const message = String(command.message || "").trim();
@@ -1667,6 +1680,7 @@ rl.on("line", (line) => {
       if (handleCodexFastModePrompt(command, base)) return;
       if (handleTalkPrompt(command, base)) return;
       if (handleMobileBlockerPrompt(command, base)) return;
+      if (handleActivityDecisionPrompt(command, base)) return;
       if (handleTranscriptContinuityPrompt(command, base)) return;
       if (handleContinuityPrompt(command, base)) return;
       if (handleLargePayloadPrompt(command, base)) return;
