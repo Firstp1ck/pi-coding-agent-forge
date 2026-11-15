@@ -150,9 +150,11 @@ async function checkMore(page, info, name) {
   const compact = await page.locator('#compactButton').boundingBox();
   const options = await page.locator('#optionsMenuButton').boundingBox();
   const newSession = await page.locator('#newSessionButton').boundingBox();
-  const precedes = (a, b) => a.y < b.y - 1 || (Math.abs(a.y - b.y) <= 1 && a.x < b.x);
-  expect(precedes(newSession, compact)).toBe(true);
-  expect(precedes(compact, options)).toBe(true);
+  expect(compact.x + compact.width).toBeLessThanOrEqual(options.x);
+  expect(options.x + options.width).toBeLessThanOrEqual(newSession.x);
+  for (const button of [compact, options, newSession]) {
+    expect(button.y + button.height / 2).toBeCloseTo(compact.y + compact.height / 2, 0);
+  }
   await expectToolbar(page);
   const relocatedControls = page.locator('#composerActionsPanel .composer-workflow-mode-dock button, #composerActionsPanel .composer-context-tags button');
   for (const button of await relocatedControls.all()) {

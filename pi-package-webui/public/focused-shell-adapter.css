@@ -237,6 +237,7 @@ html[data-desktop-shell="focused"] .side-panel-expand-button { display: none !im
 /* These controls move out of the input frame when More opens. */
 html[data-desktop-shell="focused"] #composerActionsPanel > .composer-workflow-mode-dock,
 html[data-desktop-shell="focused"] #composerActionsPanel > .composer-context-tags {
+  flex: 0 0 auto;
   position: relative;
   inset: auto;
   width: auto;
