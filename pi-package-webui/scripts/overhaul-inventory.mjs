@@ -304,7 +304,7 @@ const NATIVE_FAMILY = {
   "/git-workflow-setup": "git", "/hotkeys": "appearance", "/import": "session-actions", "/model": "model-runtime",
   "/name": "session-actions", "/new": "session-actions", "/quit": "sessions", "/resume": "sessions",
   "/safety-guard-setup": "companions", "/session": "session-actions", "/settings": "appearance", "/share": "session-actions",
-  "/tools": "resources", "/tree": "session-actions", "adapter.native-command-response": "extensions",
+  "/summary-setup": "session-actions", "/tools": "resources", "/tree": "session-actions", "adapter.native-command-response": "extensions",
   "bash.exclude-context": "composer", "bash.include-context": "composer", "editor.external-expanded-modal": "composer",
   "editor.path-suggestions": "composer", "editor.slash-autocomplete": "composer", "security.trust-boundaries": "connection",
   "session.resume.delete": "sessions", "session.resume.switch": "sessions", "extension-ui.header-footer": "extensions",

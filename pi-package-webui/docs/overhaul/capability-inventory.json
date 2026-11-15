@@ -771,9 +771,7 @@
     ],
     "unresolvedControls": [],
     "unassignedNativeDefinitions": [],
-    "unassignedPaletteDefinitions": [
-      "palette:commandPaletteCoreItems/98338960dc72be27"
-    ],
+    "unassignedPaletteDefinitions": [],
     "companionIdentityDifferences": []
   },
   "families": [
@@ -30932,7 +30930,7 @@
       "kind": "Setup",
       "labelExpression": "\"/summary-setup\"",
       "handlerExpression": "() => runNativeCommandMenu(\"/summary-setup\") },",
-      "family": null,
+      "family": "session-actions",
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "commandPaletteCoreItems",

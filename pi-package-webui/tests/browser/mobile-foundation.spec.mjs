@@ -760,10 +760,10 @@ test("desktop remains equivalent at required viewport fixtures", async ({ page }
 
 test("desktop left-sidebar actions are compact accessible icon buttons", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto(baseURL);
+  await page.goto(`${baseURL}/?shell=classic`);
   await page.locator("body").evaluate((body) => body.classList.add("terminal-tabs-left"));
 
-  const actions = page.locator(".terminal-sidebar-actions > button");
+  const actions = page.locator(".terminal-sidebar-actions > button:visible");
   await expect(actions).toHaveCount(3);
   const snapshots = await actions.evaluateAll((buttons) => buttons.map((button) => ({
     text: button.textContent.trim(),
