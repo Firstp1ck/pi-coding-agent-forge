@@ -11,3 +11,7 @@ User asks to resize the compact left session sidebar by dragging. Lightweight ca
 ## Verification so far
 
 Four actual-app Chromium cases pass (drag/release persistence/reload, cancellation, keyboard limits, constrained host width, narrow viewport fallback, top/Classic restoration, denied-storage rollback). Thirty-three shell, Activity and focus cases pass after adding the new module to their static fixture asset maps. Initial component run stopped because those fixture maps did not serve the new import; assertions retained. Twenty combined preference/model-order Node cases pass. Resized screenshot captured and inspected. Review and final cache/package checks remain pending.
+
+## Round-one disposition
+
+Accepted BUG-001 (no-op pointer click overwrote a temporarily clamped preference) and BUG-002 (Escape missed an active drag after Tab moved focus). Parent now commits only changed displayed widths and captures Escape on the owner document only for the active drag, removing that listener on finish/disposal. Added both actual-app regressions. Six sidebar cases pass, exit0 (/tmp/sidebar-review-fixes.log). Final second review is limited to these fixes and direct regressions.

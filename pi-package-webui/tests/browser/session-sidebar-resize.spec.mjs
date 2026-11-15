@@ -109,3 +109,29 @@ test('top navigation and Classic restore the saved sidebar width', async ({ page
   await expect(handle).toBeVisible();
   await expect.poll(() => actualWidth(page)).toBe(252);
 });
+
+
+test('a separator click preserves the saved width while the workspace is constrained', async ({ page, ownership }) => {
+  await ready(page, ownership);
+  const handle = page.getByRole('separator', { name: 'Resize session sidebar' });
+  await handle.press('End');
+  await page.locator('#focusedWorkspace').evaluate(node => { node.style.width = '900px'; });
+  await expect.poll(() => actualWidth(page)).toBe(374);
+  await handle.click();
+  expect(await savedWidth(page)).toBe(420);
+  await page.locator('#focusedWorkspace').evaluate(node => node.style.removeProperty('width'));
+  await expect.poll(() => actualWidth(page)).toBe(420);
+});
+
+test('Escape cancels pointer dragging after keyboard focus leaves the separator', async ({ page, ownership }) => {
+  await ready(page, ownership);
+  const handle = page.getByRole('separator', { name: 'Resize session sidebar' });
+  await handle.press('Shift+ArrowRight');
+  await dragStart(page, handle, 80);
+  await page.keyboard.press('Tab');
+  await expect(handle).not.toBeFocused();
+  await page.keyboard.press('Escape');
+  await page.mouse.up();
+  await expect.poll(() => actualWidth(page)).toBe(252);
+  expect(await savedWidth(page)).toBe(252);
+});

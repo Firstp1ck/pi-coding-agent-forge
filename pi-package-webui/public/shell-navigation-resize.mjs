@@ -28,9 +28,10 @@ export function createNavigationResize({ element, handle, onCommit }) {
     if (!drag) return;
     const current = drag;
     drag = null;
+    element.ownerDocument.removeEventListener('keydown', cancelDragOnEscape, true);
     element.classList.remove('focused-navigation-resizing');
     if (handle.hasPointerCapture(current.pointerId)) handle.releasePointerCapture(current.pointerId);
-    if (commit) save(clamp(current.width));
+    if (commit && clamp(current.width) !== current.start) save(clamp(current.width));
     else render();
   }
   function save(value) {
@@ -39,12 +40,19 @@ export function createNavigationResize({ element, handle, onCommit }) {
     if (onCommit?.(value) === false) preferred = previous;
     render();
   }
+  function cancelDragOnEscape(event) {
+    if (!drag || event.key !== 'Escape') return;
+    event.preventDefault();
+    event.stopPropagation();
+    finish(false);
+  }
   listen('pointerdown', event => {
     if (!enabled || event.button !== 0 || drag) return;
     event.preventDefault();
     handle.focus({ preventScroll: true });
     drag = { pointerId: event.pointerId, x: event.clientX, start: width(), width: width() };
     handle.setPointerCapture(event.pointerId);
+    element.ownerDocument.addEventListener('keydown', cancelDragOnEscape, true);
     element.classList.add('focused-navigation-resizing');
   });
   listen('pointermove', event => {
@@ -67,12 +75,6 @@ export function createNavigationResize({ element, handle, onCommit }) {
   });
   listen('keydown', event => {
     if (!enabled) return;
-    if (event.key === 'Escape' && drag) {
-      event.preventDefault();
-      event.stopPropagation();
-      finish(false);
-      return;
-    }
     if (drag || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
     event.preventDefault();
     const step = event.shiftKey ? 50 : 10;
