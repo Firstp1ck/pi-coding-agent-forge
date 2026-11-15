@@ -29,6 +29,6 @@ assert.match(app, /function clearRemovedSidePanelSectionHeightState\(\)[\s\S]*lo
 assert.match(app, /clearRemovedSidePanelSectionHeightState\(\);\s*restoreDurableUiLayoutPendingJournal\(\);/, "retired height state should be cleared before pending layout restoration");
 assert.match(html, /styles\.css\?v=166/, "removing section resize styles should advance the stylesheet revision");
 assert.match(html, /app\.js\?v=215/, "removing section resize behavior should advance the app revision");
-assert.match(serviceWorker, /const CACHE_NAME = "pi-webui-pwa-v193"/, "removing browser assets should advance the PWA cache identity");
+assert.match(serviceWorker, /const CACHE_NAME = "pi-webui-pwa-v194"/, "removing browser assets should advance the PWA cache identity");
 
 console.log("side-panel-section-height-removal-static.test.mjs passed");

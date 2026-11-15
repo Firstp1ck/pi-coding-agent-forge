@@ -213,7 +213,11 @@ export function createSidebarUpdateMenu({ button, onSelect }) {
     timer = null;
     const running = Boolean(isRunning());
     button.classList.toggle('sidebar-update-trigger-running', running);
-    returnToProgress.hidden = !progress;
+    if (!running && opened && document.activeElement === returnToProgress) {
+      choices[0].focus({ preventScroll: true });
+      choices[0].scrollIntoView({ block: 'nearest' });
+    }
+    returnToProgress.hidden = !running;
     if (!progress) {
       showingDetails = false;
       refreshCardVisibility();
@@ -280,7 +284,7 @@ export function createSidebarUpdateMenu({ button, onSelect }) {
     output.hidden = (stdout.hidden && stderr.hidden) || (!isRunning() && !showingDetails)
       || (showingDetails && !isRunning() && progress?.steps?.some((item) => item.receipt));
     dismiss.hidden = Boolean(isRunning()) || showingDetails;
-    returnToProgress.hidden = !progress;
+    setText(back, isRunning() ? 'Back to progress' : 'Back to result');
     positionCard();
   }
 
@@ -393,7 +397,7 @@ export function createSidebarUpdateMenu({ button, onSelect }) {
   });
   listen(back, 'click', showProgress);
   listen(returnToProgress, 'click', () => {
-    if (!progress) return;
+    if (!isRunning()) return;
     dismissedJobId = null;
     close({ restoreFocus: false });
     showProgress();

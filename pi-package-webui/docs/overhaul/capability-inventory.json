@@ -610,7 +610,7 @@
     {
       "file": "pi-package-webui/public/service-worker.js",
       "bytes": 6670,
-      "sha256": "1f1088889003ae279ac45aed8d1300e5cbae8c7f6e15d964f331a86ad89f141b"
+      "sha256": "f0e63f8c4ed8122322b335f01b2bea8c2acf861771ab9d391cc7dd2663bf8d44"
     },
     {
       "file": "pi-package-webui/public/session-attention-scheduler.mjs",
@@ -714,8 +714,8 @@
     },
     {
       "file": "pi-package-webui/public/sidebar-update-menu.mjs",
-      "bytes": 23135,
-      "sha256": "1730a8b68a8344d4b16ef371885ef19d1e90d829bc48e6a3bfb0194b65b30612"
+      "bytes": 23355,
+      "sha256": "189896916696677eb21e83555d0d37e8d60427e509b9d4382adae55ff82536ed"
     },
     {
       "file": "pi-package-webui/public/stream-derived-output.mjs",
@@ -27149,7 +27149,7 @@
       "anchor": {
         "file": "pi-package-webui/public/sidebar-update-menu.mjs",
         "symbol": "createSidebarUpdateMenu",
-        "line": 270
+        "line": 274
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -27165,7 +27165,7 @@
       "anchor": {
         "file": "pi-package-webui/public/sidebar-update-menu.mjs",
         "symbol": "createSidebarUpdateMenu",
-        "line": 222
+        "line": 226
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -27197,7 +27197,7 @@
       "anchor": {
         "file": "pi-package-webui/public/sidebar-update-menu.mjs",
         "symbol": "createSidebarUpdateMenu",
-        "line": 376
+        "line": 380
       },
       "ancestors": [],
       "classification": "dynamic-template",

@@ -177,6 +177,9 @@ for (const [state, title, resultText] of [
     await expect(timing(page)).toHaveText('Elapsed 35s');
     expect(await fill(page).getAttribute('style')).toBe(previousWidth);
     await capture(page, info, `progress-${state}`);
+    await page.locator('#updates').click();
+    await expect(page.getByRole('button', { name: 'Back to progress' })).toBeHidden();
+    await capture(page, info, `finished-menu-${state}`);
   });
 }
 
@@ -193,6 +196,7 @@ test('terminal dismissal survives repeated snapshots and missing progress; a new
   await expect(page.locator('.sidebar-update-progress')).toBeHidden();
   await page.locator('#updates').click();
   await expect(page.locator('.sidebar-update-menu-status')).toHaveText('All packages already up to date.');
+  await expect(page.getByRole('button', { name: 'Back to progress' })).toBeHidden();
   await page.keyboard.press('Escape');
   await expect(page.locator('.sidebar-update-progress')).toBeHidden();
   await page.evaluate(() => { window.controller.update(); window.publish(); });
@@ -429,7 +433,7 @@ test('Details preserves view across polls and menu close; later jobs replace rec
   await expect(page.getByLabel('Command results', { exact: true })).toContainText('"npm" "update" "-g"');
 });
 
-test('unchanged retains bounded escaped receipts only in Details and can be restored after dismissal', async ({ page }, info) => {
+test('unchanged retains bounded escaped receipts only in Details', async ({ page }, info) => {
   await mount(page);
   await page.evaluate(() => window.publish({ state: 'unchanged', completedSteps: 3,
     steps: [{ id: 'webui', command: { command: 'npm', args: ['update', '-g'] },
@@ -438,10 +442,8 @@ test('unchanged retains bounded escaped receipts only in Details and can be rest
   expect((await card(page).innerText()).split(/\n+/)).toEqual(['Already up to date', 'Pi and extensions + WebUI', 'Details', 'Dismiss']);
   const accessibility = await new AxeBuilder({ page }).include('.sidebar-update-progress').analyze();
   expect(accessibility.violations).toEqual([]);
-  await page.getByRole('button', { name: 'Dismiss update result' }).click();
-  await page.locator('#updates').click();
-  await page.getByRole('button', { name: 'Back to progress' }).click();
   await page.getByRole('button', { name: 'Details', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Back to result' })).toBeFocused();
   await expect(page.getByLabel('Command results', { exact: true })).toContainText('webui: unchanged · exit 0');
   await expect(page.getByLabel('Command results', { exact: true })).toContainText('<script>bad()</script>');
   await expect(card(page).locator('script')).toHaveCount(0);
@@ -450,4 +452,21 @@ test('unchanged retains bounded escaped receipts only in Details and can be rest
   await expect(page.locator('.sidebar-update-progress-result')).toHaveText('No changes.');
   await page.keyboard.press('Escape');
   await expect(page.getByRole('button', { name: 'Details', exact: true })).toBeFocused();
+});
+
+test('completion removes the focused running return action without losing menu focus', async ({ page }) => {
+  await mount(page);
+  await page.evaluate(() => window.publish());
+  await page.locator('#updates').click();
+  await page.keyboard.press('Tab');
+  await expect(page.getByRole('button', { name: 'Back to progress' })).toBeFocused();
+  await page.evaluate(() => window.publish({ state: 'unchanged', completedSteps: 3 }, 'Already up to date.'));
+  await expect(page.getByRole('button', { name: 'Back to progress' })).toBeHidden();
+  await expect(page.getByRole('menuitem').first()).toBeFocused();
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: 'Dismiss update result' }).click();
+  await page.locator('#updates').click();
+  await expect(page.getByRole('button', { name: 'Back to progress' })).toBeHidden();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.sidebar-update-progress')).toBeHidden();
 });

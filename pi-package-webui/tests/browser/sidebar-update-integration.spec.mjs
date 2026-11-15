@@ -57,7 +57,8 @@ for (const target of Object.keys(names)) test(`${target} starts its discovered p
   await expect(page.locator('.sidebar-update-menu-status').filter({ hasText: 'Update commands completed' })).toBeVisible();
   await expect(page.locator('.sidebar-update-menu-status').filter({ hasText: 'Update commands completed' })).not.toContainText(`menu-${target}`);
   if (target === 'all') {
-    await page.getByRole('button', { name: 'Back to progress', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Back to progress', exact: true })).toBeHidden();
+    await page.keyboard.press('Escape');
     await page.getByRole('button', { name: 'Details', exact: true }).click();
     await expect(page.getByLabel('Command results', { exact: true })).not.toContainText('menu-all');
     const path = info.outputPath('sidebar-updates-completed.png');
@@ -114,7 +115,8 @@ for (const target of ['pi', 'all']) test(`${target} feedback replaces an older p
   await expect(status).not.toContainText('old WebUI output');
   jobs[target] = { ...jobs[target], phase: 'failed', receipts: [{ id: target, status: 'failed', stderr: 'new command error' }] };
   await expect(status).toContainText('The update command failed.', { timeout: 10_000 });
-  await page.getByRole('button', { name: 'Back to progress' }).click();
+  await expect(page.getByRole('button', { name: 'Back to progress' })).toBeHidden();
+  await page.keyboard.press('Escape');
   await page.getByRole('button', { name: 'Details', exact: true }).click();
   await expect(page.getByLabel('Command results', { exact: true })).toContainText('new command error');
   await expect(status).not.toContainText('old WebUI output');
@@ -258,8 +260,9 @@ test('partial EROFS is concise; Details follows the running job and preserves ou
   await expect(compact.locator('.sidebar-update-progress-output')).toBeHidden();
   await page.screenshot({ path: info.outputPath('partial-erofs-compact.png') });
   await page.locator('#sidebarUpdateButton').click();
-  await page.getByRole('button', { name: 'Back to progress' }).click();
-  await expect(page.getByRole('button', { name: 'Details', exact: true })).toBeFocused();
+  await expect(page.getByRole('button', { name: 'Back to progress' })).toBeHidden();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('button', { name: 'Details', exact: true })).toBeVisible();
   expect(requests.filter(item => item.kind === 'apply')).toHaveLength(1);
 });
 
