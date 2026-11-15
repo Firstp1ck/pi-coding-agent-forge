@@ -1121,7 +1121,7 @@ assert.match(app, /window\.visualViewport/, "app should listen to VisualViewport
 assert.match(html, /<textarea id="promptInput"[^>]*autofocus/, "prompt composer should autofocus for new Web UI/app launches");
 assert.match(app, /function syncMobileChatToBottomForInput\(\)/, "mobile input focus should force the output view to the latest message");
 assert.match(app, /function updateMobileDropdownScrollBounds\(\)[\s\S]*--mobile-dropdown-max-height/, "mobile dropdowns should compute a viewport-bounded scroll height when opened");
-assert.match(app, /function setAppRunnerMenuOpen\(open\)[\s\S]*scheduleMobileDropdownScrollBoundsUpdate\(\)/, "app-runner dropdown opening should refresh mobile scroll bounds");
+assert.match(app, /function setAppRunnerMenuOpen\(open, \{ preserveOpeningIntent = false \} = \{\}\)[\s\S]*scheduleMobileDropdownScrollBoundsUpdate\(\)/, "app-runner dropdown opening should refresh mobile scroll bounds");
 assert.match(app, /function setOptionsMenuOpen\(open\)[\s\S]*scheduleMobileDropdownScrollBoundsUpdate\(\)/, "Options dropdown opening should refresh mobile scroll bounds");
 assert.match(app, /function focusPromptInput\(\{ defer = false \} = \{\}\)/, "frontend should focus the prompt composer programmatically after tab/app startup");
 assert.match(app, /async function switchTab\(tabId\)[\s\S]*?restoreActiveDraft\(\);\n\s+focusPromptInput\(\{ defer: true \}\);/, "switching to a newly opened tab should focus the prompt input immediately");
