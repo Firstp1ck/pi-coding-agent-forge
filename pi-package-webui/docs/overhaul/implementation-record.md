@@ -160,6 +160,18 @@ Round-one Sol reviews found three issues, all repaired by the parent: external-a
 
 Captures: [Overview and inspector tabs](screenshots/inspector-overview/overview.png), [themed header picker](screenshots/inspector-overview/section-menu.png), [More actions beside the button](screenshots/inspector-overview/more-actions.png). Final browser assets are app207, adapter CSS10 and PWA184. No dependency exports or ranges changed.
 
+### No Project conversations and stable compact controls
+
+The Pi brand and **+ Tab → No Project** open a fresh empty conversation in a unique durable directory. New-session actions in those conversations create another tab and directory, preserving the source conversation and its files. Resume and restore keep the original directory. Explicit project folders retain their previous behavior. Owned directories live under the resolved agent directory and are never automatically deleted; this separates working files rather than restricting shell access.
+
+The overview now grows naturally with its contents. At normal desktop height all rows fit without internal scrolling. Short windows use two columns where possible, then allow whole-card scrolling when the physical viewport cannot fit the content. More is a floating tray that leaves the composer, footer and transcript stationary; Options anchors to its actual button. Attention moves to the lower rail, the redundant header All tools button is removed, and the right inspector gains drag/keyboard resizing. Model, scoped models and effort remain in the footer; the duplicate idle composer row is removed while the busy delivery choice remains.
+
+Scoped verification passed 71 combined layout/mobile/PWA/reconnect browser cases, three No Project actual-app cases, and 22 distinct footer/model/toolbar cases (the final five-case footer rerun supersedes its earlier selected-focus failure). Direct, supervised and no-session HTTP lifecycle checks cover uniqueness, source preservation, restore/resume, missing directories, launch failure and compaction admission. Inventory and package payload checks pass. The exact-candidate package check passed all 258 files. Final Sol round two independently passed all 22 footer/model/toolbar cases and the corrected startup static check, with no reportable findings. Parent acceptance passed at e2648c05; subsequent changes record evidence only. The 96 affected browser cases have passing evidence across combined runs, not a complete browser-suite run.
+
+R1 UI found one selected-effort focus issue. The parent fixed selection preference and focus after deferred pointer rendering. R1 lifecycle found no actionable defects. Integration also repaired metadata loss in private restart handoffs, footer focus loss during refresh and invisible tooltip overflow inside More. No dependency exports or ranges changed. Assets use app208, workspace CSS7, adapter CSS11, overview CSS3 and PWA186.
+
+Captures use disposable fake-Pi sessions: [No Project welcome](screenshots/no-project/no-project.png), [floating More tray](screenshots/no-project/more.png), and [natural-height overview](screenshots/no-project/overview.png).
+
 ### Platform limits
 
 Linux Chromium is the verified browser environment. Physical Android/iOS keyboards, IME, microphones, Windows/macOS behavior, WebKit and installed live-provider/companion combinations remain unmeasured. Existing platform-specific behavior is preserved in code and focused contracts, not claimed as device-tested.
