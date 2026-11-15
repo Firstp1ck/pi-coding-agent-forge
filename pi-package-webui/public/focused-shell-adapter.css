@@ -1,5 +1,7 @@
 html[data-desktop-shell="focused"] .layout[hidden] { display: none !important; }
 .focused-composer-controls[hidden] { display: none; }
+/* Composer flyouts must clear both the sticky prompt and the floating overview. */
+html[data-desktop-shell="focused"] #focusedWorkspace .composer { z-index: 15; }
 html[data-desktop-shell="focused"] .control-row:has(#modelSelect),
 html[data-desktop-shell="focused"] .control-row:has(#thinkingSelect),
 html[data-desktop-shell="focused"] #busyPromptBehaviorTag,

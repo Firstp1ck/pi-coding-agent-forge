@@ -506,6 +506,6 @@ assert.match(css, /@media \(prefers-reduced-motion: reduce\)\s*\{[\s\S]*?\*, \*:
 
 assert.match(html, /styles\.css\?v=164/, "questionnaire CSS needs the current stylesheet revision");
 assert.match(html, /app\.js\?v=207/, "questionnaire behavior needs the current app revision");
-assert.match(serviceWorker, /const CACHE_NAME = "pi-webui-pwa-v183"/, "questionnaire public assets need a coherent PWA cache revision");
+assert.match(serviceWorker, /const CACHE_NAME = "pi-webui-pwa-v184"/, "questionnaire public assets need a coherent PWA cache revision");
 
 console.log("questionnaire-dialog.test.mjs passed");

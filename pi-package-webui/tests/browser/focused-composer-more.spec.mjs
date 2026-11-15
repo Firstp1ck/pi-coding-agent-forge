@@ -12,7 +12,7 @@ for (const [width, height] of [[1100, 900], [1440, 900], [1440, 500]]) {
     await expect(page.locator('#chat')).toContainText('fake answer');
     if (width === 1100) {
       await page.getByRole('button', { name: 'Inspector', exact: true }).click();
-    await page.getByRole('tab', { name: 'Project', exact: true }).click();
+      await page.getByRole('tab', { name: 'Project', exact: true }).click();
       await expect(page.locator('#fileTreeSearchInput')).toBeVisible();
     }
     const prompt = page.locator('#promptInput');
@@ -50,5 +50,34 @@ for (const [width, height] of [[1100, 900], [1440, 900], [1440, 500]]) {
     await expect(panel).toBeHidden();
     await expect(prompt).toHaveValue('Keep this draft while browsing actions');
     await expect(send).toBeVisible();
+  });
+}
+
+
+for (const [width, height] of [[1100, 500], [1440, 900]]) {
+  test(`Options stays above the open overview at ${width}x${height}`, async ({ page, ownership }, info) => {
+    await page.setViewportSize({ width, height });
+    await page.addInitScript(() => localStorage.setItem('pi-webui-shell-preferences-v1', JSON.stringify({ v: 1, desktopLayout: 'focused', overviewOpen: true })));
+    await page.goto(ownership.baseURL);
+    await expect(page.locator('#chat')).toContainText('fake answer');
+    await page.getByRole('button', { name: 'Inspector', exact: true }).click();
+    await page.locator('#promptInput').fill('Keep the draft under the menu');
+    await page.locator('#composerActionsButton').click();
+    await page.locator('#optionsMenuButton').click();
+    const palette = page.locator('#optionsCommandPaletteButton');
+    await expect(palette).toBeVisible();
+    expect(await palette.evaluate(node => {
+      const rect = node.getBoundingClientRect();
+      return node.contains(document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2));
+    })).toBe(true);
+    await page.screenshot({ path: info.outputPath('options-above-overview.png') });
+    const rect = await palette.boundingBox();
+    await palette.click({ position: { x: rect.width / 2, y: rect.height / 2 } });
+    await expect(page.getByRole('dialog', { name: 'All tools', exact: true })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#promptInput')).toHaveValue('Keep the draft under the menu');
+    await page.getByRole('button', { name: 'Close conversation overview' }).click();
+    await expect(page.getByRole('region', { name: 'Conversation overview', exact: true })).toBeHidden();
+    await page.locator('#sendButton').click({ trial: true });
   });
 }
