@@ -10,6 +10,10 @@ The compact shell separates session navigation, conversation, a single contextua
 
 Fresh installations use compact desktop only when the server can prove no previous WebUI state exists. Established, custom or unknown installations retain Classic. Explicit browser choices take precedence. Classic recovery preserves saved layout data; phone and tablet choices remain independent.
 
+## Screenshots
+
+Verified captures use disposable test sessions and the existing Pi theme. Open the [desktop workspace](screenshots/desktop.png), [All tools](screenshots/all-tools.png), [Settings](screenshots/settings.png), or [mobile conversation](screenshots/mobile.png) at full size.
+
 ## Implementation boundaries
 
 | Area | Owners and preserved behavior |
