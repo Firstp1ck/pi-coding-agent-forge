@@ -15331,14 +15331,22 @@ button.git-workflow-step { min-height: 1.9rem; }
   .file-selection-bar {
     grid-template-columns: 1fr;
   }
+  .file-viewer-header {
+    display: grid;
+  }
+  body.side-panel-collapsed .file-viewer-title-block {
+    padding-inline-end: calc(var(--mobile-control-size, 44px) + 0.5rem);
+  }
   .file-viewer-header,
   .file-viewer-actions,
   .file-selection-bar {
     align-items: stretch;
   }
-  .file-viewer-actions,
   .file-selection-bar {
     display: grid;
+  }
+  .file-viewer-actions {
+    justify-content: flex-start;
   }
   .terminal-tabs-shell {
     position: relative;
