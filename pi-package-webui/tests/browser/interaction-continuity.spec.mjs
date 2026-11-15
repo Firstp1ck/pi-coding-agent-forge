@@ -571,6 +571,9 @@ test("main output text selection survives streaming-tail and settlement rerender
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto(baseURL);
   const tabId = await activeTabId(page) || (await tabIds(page))[0];
+  const priorMessages = (await api(page, `/api/messages?tab=${encodeURIComponent(tabId)}`)).data?.messages;
+  assert.ok(Array.isArray(priorMessages), "selection identity needs the authoritative transcript before this run");
+  const expectedMessageKey = `m:${priorMessages.length + 1}`;
   await api(page, `/api/prompt?tab=${encodeURIComponent(tabId)}`, {
     method: "POST",
     data: { message: "fixture continuity delayed stream", requestId: `selection-${Date.now()}` },
@@ -587,7 +590,7 @@ test("main output text selection survives streaming-tail and settlement rerender
   await expect.poll(() => page.evaluate(() => window.getSelection()?.toString() || "")).toBe(selectedText);
   await expect(page.locator(".message.assistant:not(.streaming)").last()).toContainText("continuity stream complete");
   await expect.poll(() => originalSurface.evaluate((node) => node.isConnected), { timeout: 8_000 }).toBe(true);
-  await expect.poll(() => originalBubble.evaluate((node) => ({ connected: node.isConnected, streaming: node.classList.contains("streaming"), itemKey: node.dataset.itemKey, messageKey: node.dataset.transcriptMessageKey })), { timeout: 8_000 }).toEqual({ connected: true, streaming: false, itemKey: "m:4", messageKey: "m:4" });
+  await expect.poll(() => originalBubble.evaluate((node) => ({ connected: node.isConnected, streaming: node.classList.contains("streaming"), itemKey: node.dataset.itemKey, messageKey: node.dataset.transcriptMessageKey })), { timeout: 8_000 }).toEqual({ connected: true, streaming: false, itemKey: expectedMessageKey, messageKey: expectedMessageKey });
   await expect.poll(() => page.evaluate(() => window.getSelection()?.toString() || ""), { timeout: 8_000 }).toBe(selectedText);
   await waitForFixtureSettlement(page, tabId);
   await delay(4_000);

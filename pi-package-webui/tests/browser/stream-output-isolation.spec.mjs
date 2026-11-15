@@ -179,7 +179,9 @@ async function installIsolationInstrumentation(page, { pauseChat = false } = {})
     };
     const underTranscript = (node) => (node?.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement)?.closest?.("#chat") !== null;
     const allowedFollowMutation = (record) => record.type === "attributes" && record.attributeName === "hidden" && record.target === document.querySelector("#jumpToLatestButton");
-    const allowedElapsedMetadataMutation = (record) => record.type === "childList" && record.target?.matches?.("span.run-indicator-meta") === true;
+    const allowedElapsedMetadataMutation = (record) => record.type === "childList"
+      && record.target?.matches?.("span.run-indicator-meta, span.run-indicator-elapsed[aria-hidden='true']") === true
+      && [...record.addedNodes, ...record.removedNodes].every((node) => node.nodeType === Node.TEXT_NODE);
     const scrollNodes = [...document.querySelectorAll("*")].filter((node) => {
       if (node.closest?.("#chat")) return false;
       return node === document.scrollingElement || node.scrollHeight > node.clientHeight || node.scrollWidth > node.clientWidth || node.scrollTop !== 0 || node.scrollLeft !== 0;

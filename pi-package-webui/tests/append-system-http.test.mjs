@@ -17,18 +17,19 @@ const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "
 const serverScript = path.join(packageRoot, "bin", "pi-webui.mjs");
 const fakePiFixture = path.join(packageRoot, "tests", "fixtures", "fake-pi.mjs");
 const serverSource = await readFile(serverScript, "utf8");
+const rpcTransportSource = await readFile(new URL("../lib/server/rpc-transports.mjs", import.meta.url), "utf8");
 
-function sourceBetween(startMarker, endMarker) {
-  const start = serverSource.indexOf(startMarker);
-  const end = serverSource.indexOf(endMarker, start);
+function sourceBetween(startMarker, endMarker, source = serverSource) {
+  const start = source.indexOf(startMarker);
+  const end = source.indexOf(endMarker, start);
   assert.ok(start >= 0 && end > start, `${startMarker} should remain extractable for lifecycle regression coverage`);
-  return serverSource.slice(start, end);
+  return source.slice(start, end);
 }
 
 async function assertDirectProcessLifecycle() {
   const children = [];
   const PiRpcProcess = vm.runInNewContext(`
-    ${sourceBetween("class PiRpcProcess {", "\n// JSON responses are compact")}
+    ${sourceBetween("  class PiRpcProcess {", "\n\n  return { PiRpcProcess, SupervisorPiRpcProcess };", rpcTransportSource)}
     PiRpcProcess;
   `, {
     Buffer,
@@ -39,7 +40,7 @@ async function assertDirectProcessLifecycle() {
     PI_RPC_JSONL_LINE_MAX_BYTES: 1024,
     process: { env: {} },
     randomUUID: () => "rpc-id",
-    REQUEST_TIMEOUT_MS: 1000,
+    requestTimeoutMs: 1000,
     sanitizeError: (error) => error?.message || String(error),
     setTimeout,
     spawn: () => children.shift(),
