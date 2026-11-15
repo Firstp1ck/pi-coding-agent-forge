@@ -32676,28 +32676,29 @@ function gitInitFilesStatusSummary(status) {
 
 function configureGitFooterStatusSetup({ force = true } = {}) {
   const current = readGitFooterStatusSetup();
-  if (current.githubUsername && !force) return current;
+  if (current.githubUsername && !force) return { status: "configured", setup: current };
   const value = window.prompt("git-footer-status-setup: GitHub username for origin remotes", current.githubUsername || "");
-  if (value === null) return null;
+  if (value === null) return { status: "cancelled" };
   try {
     const setup = { githubUsername: cleanGitHubUsernameInput(value) };
     writeGitFooterStatusSetup(setup);
     addEvent(`git-footer-status-setup saved GitHub username ${setup.githubUsername}`, "success");
-    return setup;
+    return { status: "configured", setup };
   } catch (error) {
     addEvent(error.message || String(error), "error");
-    return null;
+    return { status: "invalid" };
   }
 }
 
 function ensureGitFooterStatusSetup() {
   const setup = readGitFooterStatusSetup();
   if (setup.githubUsername) return setup;
-  return configureGitFooterStatusSetup({ force: true });
+  return configureGitFooterStatusSetup({ force: true }).setup || null;
 }
 
 function defaultGitInitRepoName(tab = activeTab()) {
-  const cwd = latestWorkspace?.cwd || tab?.cwd || latestWorkspace?.displayCwd || "";
+  const workspace = tab?.id === activeTabId ? latestWorkspace : null;
+  const cwd = workspace?.cwd || tab?.cwd || workspace?.displayCwd || "";
   const lastPart = String(cwd).split(/[\\/]+/).filter(Boolean).pop() || "new-repo";
   try {
     return cleanGitHubRepoNameInput(lastPart);
@@ -33126,7 +33127,7 @@ function gitWorkflowHint() {
 function renderGitInitWorkflowActions() {
   if (gitWorkflow.step === "initSetup") {
     addGitWorkflowAction("git-footer-status-setup", () => {
-      const setup = configureGitFooterStatusSetup({ force: true });
+      const { setup } = configureGitFooterStatusSetup({ force: true });
       if (!setup?.githubUsername) return;
       const repoName = gitWorkflow.repoName || defaultGitInitRepoName();
       const stack = gitWorkflow.stack || readStoredGitInitStack();
@@ -33162,7 +33163,7 @@ function renderGitInitWorkflowActions() {
   } else if (gitWorkflow.step === "remote") {
     addGitWorkflowAction("Add origin remote", () => addGitInitRemote(), "primary", false, GIT_INIT_REMOTE_TOOLTIP);
     addGitWorkflowAction("git-footer-status-setup", () => {
-      const setup = configureGitFooterStatusSetup({ force: true });
+      const { setup } = configureGitFooterStatusSetup({ force: true });
       if (!setup?.githubUsername) return;
       const repoName = gitWorkflow.repoName || defaultGitInitRepoName();
       const stack = gitWorkflow.stack || readStoredGitInitStack();
@@ -33742,11 +33743,16 @@ async function startGitWorkflow(tabId = activeTabId, { skipSetup = false, activa
 
 async function startGitInitWorkflow(tabId = activeTabId) {
   if (!tabId) return;
+  const target = projectTargetFromContext(activeTabContext(tabId));
+  if (!isAliveProjectTarget(target)) return;
+  const repoName = defaultGitInitRepoName(tabs.find((tab) => tab.id === tabId));
   const workflow = gitWorkflowForTab(tabId);
+  const runId = workflow.runId;
   if (workflow.active && !["done", "cancelled", "error"].includes(workflow.step) && !(await appConfirmText("Restart the active git repository setup workflow?", { affected: "The active Git repository setup workflow", confirmLabel: "Restart setup" }))) return;
-  const setup = readGitFooterStatusSetup().githubUsername ? readGitFooterStatusSetup() : configureGitFooterStatusSetup({ force: true });
-  const githubUsername = setup?.githubUsername || "";
-  const repoName = defaultGitInitRepoName(tabs.find((tab) => tab.id === tabId) || activeTab());
+  if (!isAliveProjectTarget(target) || gitWorkflowForTab(tabId, { create: false }) !== workflow || workflow.runId !== runId) return;
+  const result = configureGitFooterStatusSetup({ force: false });
+  if (result.status === "cancelled") return;
+  const githubUsername = result.setup?.githubUsername || "";
   const stack = readStoredGitInitStack();
   workflow.runId += 1;
   setGitWorkflow({
