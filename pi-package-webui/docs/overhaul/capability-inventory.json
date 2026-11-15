@@ -540,7 +540,7 @@
     {
       "file": "pi-package-webui/public/index.html",
       "bytes": 172344,
-      "sha256": "72702b6a354c00f8e917e051a981effd9818611673ff4c47d18056e80f4d0d42"
+      "sha256": "ab52e81698d85a4564ebf0f2f8896630bc21f2f7a2684422a98c35bbdbb54916"
     },
     {
       "file": "pi-package-webui/public/issue-bot-client.mjs",
@@ -600,7 +600,7 @@
     {
       "file": "pi-package-webui/public/service-worker.js",
       "bytes": 6580,
-      "sha256": "b5356a1b77d8db78312efdb807508c796a87d0445f6356718ac62671dcf29b6b"
+      "sha256": "7109b113f1c778f9835d9cd79e1ee263cd504d7142e10b03b0cf3255583860f2"
     },
     {
       "file": "pi-package-webui/public/session-attention-scheduler.mjs",
@@ -24945,7 +24945,7 @@
       "tag": "script",
       "actionable": false,
       "data": {
-        "data-app-src": "/app.js?v=209"
+        "data-app-src": "/app.js?v=210"
       },
       "anchor": {
         "file": "pi-package-webui/public/index.html",
