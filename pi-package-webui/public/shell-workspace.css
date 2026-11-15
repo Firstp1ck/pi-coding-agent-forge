@@ -161,6 +161,9 @@
 #focusedWorkspace .focused-inspector-topics[hidden] { display: none; }
 #focusedWorkspace .focused-inspector-topics button { flex: 0 0 auto; min-height: 30px; padding: 4px 8px; border-color: transparent; background: transparent; font-size: var(--text-xs, 0.75rem); }
 #focusedWorkspace .focused-inspector-topics button[aria-selected="true"] { color: var(--accent); border-color: var(--border); background: var(--panel); }
+#focusedWorkspace .focused-activity-picker { display: grid; flex: 0 0 auto; gap: 6px; min-width: 0; margin: 0; padding: 10px 12px; border-bottom: 1px solid var(--border); color: var(--muted); font-size: var(--text-xs, 0.75rem); }
+#focusedWorkspace .focused-activity-picker[hidden] { display: none; }
+#focusedWorkspace .focused-activity-picker select { box-sizing: border-box; width: 100%; min-width: 0; max-width: 100%; margin: 0; color: var(--text); background-color: var(--panel); border: 1px solid var(--border); border-radius: 6px; font: inherit; }
 
 #focusedWorkspace[data-nav-collapsed="true"],
 #focusedWorkspace[data-navigation="top"] { grid-template-columns: 46px minmax(0, 1fr); }
