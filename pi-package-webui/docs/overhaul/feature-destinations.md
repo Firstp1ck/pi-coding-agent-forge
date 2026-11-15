@@ -4,6 +4,8 @@ This is the maintained capability contract for the compact Web UI. Existing feat
 
 This contract was established by the approved overhaul plan. It lives with the contributor documentation so inventory checks remain reproducible after the completed execution plan is archived.
 
+The conversation header’s Overview card summarizes existing workspace, Git, runner, agents, queue and usage owners. Its links open the primary destinations below; closing the card never stops work.
+
 ### Feature destination map
 
 This map incorporates the UI scout's inventory and the design review corrections. A destination is the primary home; existing commands and keyboard shortcuts continue to invoke the same behavior.
@@ -13,7 +15,6 @@ This map incorporates the UI scout's inventory and the design review corrections
 | New, close, resume and switch sessions; tab groups; saved workspaces | Session navigation and Home | Preserve top/left presentation, drafts per tab, close confirmations and restore behavior |
 | Settle / Restore and activity shelves | Compact left session sidebar | Browser-local, explicit organization; new work/input or a newer completed run wakes a settled session; never close or abort; preserve group membership |
 | New session within a tab, rename, clone, fork, tree, export and summary | Conversation session menu and Session details | Keep tab identity distinct from the durable Pi session it hosts; preserve inline message actions |
-| Floating conversation overview | Conversation header → Overview | Read current workspace, Git, runner, agents, queue and usage owners; guarded links to canonical controls; closing never stops work |
 | Split conversations | Conversation layout action | Preserve independent session ownership, embed links and return on sufficient width |
 | CWD picker, recent/saved directories, create directory, branch worktrees | Session context and Project | Browsing files must not implicitly change CWD; show target before mutation |
 | Transcript, thinking, tools, Markdown, code, images and search | Conversation | Keep output modes, follow/history scroll and context-sensitive find |

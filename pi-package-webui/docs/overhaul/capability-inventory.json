@@ -54,8 +54,8 @@
     },
     {
       "file": "pi-package-webui/docs/overhaul/feature-destinations.md",
-      "bytes": 8365,
-      "sha256": "6c7c96d07e03717411d284a6f6d09f28b12b00e9fb627da78f7e7028475de99a"
+      "bytes": 8575,
+      "sha256": "3d4a32d46496a9f7aeb234b704ad58cbbaca964bc2351ad6ce7206dab5228b4e"
     },
     {
       "file": "pi-package-webui/index.ts",
@@ -1521,7 +1521,7 @@
     {
       "id": "model-runtime",
       "capability": "Model, effort, speed, plan/operating mode and per-session sampling",
-      "destination": "Composer/context controls and Session inspector",
+      "destination": "Composer/context controls and Activity: Session/Sampling",
       "preservation": "Compact model/effort pickers apply to the captured session and show effective or pending-next-prompt values; persistent defaults belong in Settings",
       "scope": "active tab; explicit defaults separately",
       "currentOwners": [
