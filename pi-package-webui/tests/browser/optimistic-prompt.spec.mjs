@@ -62,6 +62,7 @@ test.afterAll(async () => {
 test("submitted prompt remains visible during transcript reconciliation", async ({ page }) => {
   const prompt = "optimistic prompt survives reconciliation";
   await page.goto(baseURL);
+  await expect(page.locator("#chat")).toContainText("fake answer");
   await page.locator("#promptInput").fill(prompt);
   await page.locator("#sendButton").click();
 
@@ -81,6 +82,7 @@ test("run indicator remains visible and stable on mobile until delayed agent sta
   const prompt = "fixture continuity delayed start";
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(baseURL);
+  await expect(page.locator("#chat")).toContainText("fake answer");
   await page.locator("#promptInput").fill(prompt);
   await page.locator("#sendButton").click();
 
@@ -156,6 +158,7 @@ test("confirmed streaming replaces routing status before delayed activity events
 test("persisted user message replaces its optimistic bubble without duplication", async ({ page }) => {
   const prompt = "fixture continuity delayed stream";
   await page.goto(baseURL);
+  await expect(page.locator("#chat")).toContainText("fake answer");
   await page.locator("#promptInput").fill(prompt);
   await page.locator("#sendButton").click();
 

@@ -358,7 +358,7 @@ test("focus returns to a regenerated per-tab summary action after tab controls r
   await expect(summaryButton).toBeFocused();
 });
 
-test("each terminal tab stacks Split and Summary across one horizontally divided action slot", async ({ page }) => {
+test("each desktop terminal tab keeps adjacent accessible Split and Summary actions at tab height", async ({ page }) => {
   const requests = { get: 0, put: [], generate: [] };
   await installSummaryRoutes(page, requests, { configured: true });
   await page.goto(baseURL);
@@ -382,11 +382,13 @@ test("each terminal tab stacks Split and Summary across one horizontally divided
     splitHeight: slot.querySelector(".terminal-tab-split-button")?.getBoundingClientRect().height || 0,
     summaryHeight: slot.querySelector(".terminal-tab-summary-button")?.getBoundingClientRect().height || 0,
   }));
-  expect(Math.abs(actionGeometry.splitWidth - actionGeometry.slotWidth)).toBeLessThanOrEqual(1);
-  expect(Math.abs(actionGeometry.summaryWidth - actionGeometry.slotWidth)).toBeLessThanOrEqual(1);
+  expect(actionGeometry.splitWidth).toBeGreaterThanOrEqual(24);
+  expect(actionGeometry.summaryWidth).toBeGreaterThanOrEqual(24);
+  expect(Math.abs(actionGeometry.splitWidth + actionGeometry.summaryWidth - actionGeometry.slotWidth)).toBeLessThanOrEqual(2);
   expect(Math.abs(actionGeometry.slotHeight - actionGeometry.tabHeight)).toBeLessThan(1);
   expect(Math.abs(actionGeometry.splitHeight - actionGeometry.summaryHeight)).toBeLessThan(1);
-  expect(Math.abs((actionGeometry.splitHeight + actionGeometry.summaryHeight) - actionGeometry.slotHeight)).toBeLessThan(2);
+  expect(Math.abs(actionGeometry.splitHeight - actionGeometry.slotHeight)).toBeLessThan(1);
+  expect(Math.abs(actionGeometry.summaryHeight - actionGeometry.slotHeight)).toBeLessThan(1);
 
   await activeActions.locator(":scope > .terminal-tab-split-button").click();
   await expect(page.locator("[data-tab-id] > .terminal-tab-actions")).toHaveCount(initialTabCount + 1);

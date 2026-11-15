@@ -3212,7 +3212,7 @@ function installMobilePhoneExperience() {
   mobileSurface?.addEventListener("pointerdown", noteMobileSurfaceFocusIntent, { capture: true });
   mobileSurface?.addEventListener("keydown", noteMobileSurfaceFocusIntent, { capture: true });
   mobileSurface?.addEventListener("focusin", () => {
-    if (Date.now() <= mobileSurfaceUserFocusIntentUntil) captureMobileSurfaceRenderFocus(mobileSurface);
+    captureMobileSurfaceRenderFocus(mobileSurface);
   });
   mobileSurface?.addEventListener("focusout", () => requestAnimationFrame(() => {
     if (mobileShellState.surface === "none" || Date.now() <= mobileSurfaceUserFocusIntentUntil || document.querySelector("dialog[open]") || document.body.classList.contains("file-viewer-open") || document.activeElement === mobileSurfaceRenderFocus?.element) return;

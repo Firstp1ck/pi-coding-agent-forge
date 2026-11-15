@@ -46,4 +46,3 @@ This map incorporates the UI scout's inventory and the design review corrections
 | Release notes, sponsorship and help | Settings: About and Help | Maintain visible Help access outside Settings and preserve existing destinations |
 
 Use the existing catalog's twenty companion identities as a reconciliation checklist: shell completion/shell choice, BTW, Guided Git, npm/AUR release, manual review, workflows, classification, safety, skills/tools, todo, remote, questionnaires, voice, footer, stats, speed and themes. This is a family summary, not a replacement package registry. Installation, enablement, capability availability, hidden-by-preference and failure are separate states. Include a stable Show hidden controls/Reset visibility action in Settings and the palette; hiding a control must not make recovery undiscoverable.
-
