@@ -23,6 +23,7 @@ async function directPath(page, cwd) {
   await page.locator('#pathPickerPathInput').fill(cwd);
   await page.locator('#pathPickerPathInput').press('Enter');
   await expect(page.locator('#pathPickerCurrent')).toHaveAttribute('title', cwd);
+  await expect(page.locator('#pathPickerChooseButton')).toBeEnabled();
 }
 
 async function choose(page, cwd) {
@@ -92,6 +93,7 @@ test('zero-tab picker pins, unpins and creates a folder; selection retains text 
   await page.locator('#pathPickerCreateNameInput').press('Enter');
   const cwd = join(emptyStartup.root, 'selected-workspace');
   await expect(page.locator('#pathPickerCurrent')).toHaveAttribute('title', cwd);
+  await expect(page.locator('#pathPickerChooseButton')).toBeEnabled();
   expect((await stat(cwd)).isDirectory()).toBe(true);
   await page.locator('#pathPickerChooseButton').click();
   await expectWorkspace(page, cwd);
