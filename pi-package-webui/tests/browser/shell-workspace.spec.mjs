@@ -39,6 +39,7 @@ body { height: 100vh; }
 <div id="original">
 <nav class="fixture-roster" id="roster" aria-label="Fixture sessions">
 <h2>npm-packages</h2><input id="sessionSearch" aria-label="Search sessions" placeholder="Search sessions">
+<button id="fixtureSettings" type="button">Settings</button>
 <button aria-pressed="true">Compact workspace</button><button>Review architecture</button><button>Prepare release</button>
 </nav>
 <div id="canonicalConversation" class="workspace-column"><section class="chat-panel">
@@ -85,6 +86,10 @@ for (const [slot, id] of Object.entries({ navigation: 'roster', conversation: 'c
   host.move(document.getElementById(id), shell.slots[slot]);
 }
 shell.update({ title: 'Compact workspace', context: 'npm-packages / design', attentionCount: 2 });
+document.getElementById('fixtureSettings').addEventListener('click', () => {
+  events.push(['navigate', 'settings']);
+  shell.update({ destination: 'settings' });
+});
 window.actionClicks = 0;
 document.getElementById('canonicalAction').addEventListener('click', () => window.actionClicks++);
 window.ready = true;
@@ -144,8 +149,10 @@ test('keyboard controls route only their callback and show the selected destinat
   await page.getByRole('button', { name: 'Attention, 2 decisions waiting, 0 finished', exact: true }).press('Enter');
   await openDestination(page, 'Activity');
   await expect(page.locator('#focusedWorkspaceInspectorTitle')).toHaveText('Activity');
-  await rail.getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.locator('#fixtureSettings').click();
   await expect(page.locator('#settingsView')).toBeVisible();
+  await expect(rail.getByRole('button', { name: 'Settings', exact: true })).toHaveCount(0);
+  await expect(rail.locator('[aria-current]')).toHaveCount(0);
   await expect(page.locator('.focused-inspector')).toBeHidden();
   await page.getByRole('button', { name: 'Stop fixture run' }).click();
   await page.getByRole('button', { name: 'Back to conversation', exact: true }).click();
@@ -267,7 +274,7 @@ test('Pi brand uses onHome when supplied and keeps navigation fallback for exist
   expect(await page.evaluate(() => events)).toEqual([['navigate', 'home']]);
 });
 
-test('Attention and both badges live at the rail bottom before All tools and Settings', async ({ page }) => {
+test('Attention and both badges live at the rail bottom before All tools', async ({ page }) => {
   await page.evaluate(() => shell.update({ attentionCount: 2, finishedCount: 3 }));
   const rail = page.getByRole('navigation', { name: 'Workspace destinations' });
   const inbox = rail.getByRole('button', { name: 'Attention, 2 decisions waiting, 3 finished' });
@@ -275,17 +282,27 @@ test('Attention and both badges live at the rail bottom before All tools and Set
   await expect(inbox.locator('.focused-attention')).toHaveText('2');
   await expect(inbox.locator('.focused-finished')).toHaveText('+3');
   expect(await inbox.evaluate(node => [node.previousElementSibling.className,
-    node.nextElementSibling.getAttribute('aria-label'), node.nextElementSibling.nextElementSibling.getAttribute('aria-label')]))
-    .toEqual(['focused-rail-spacer', 'All tools', 'Settings']);
+    node.nextElementSibling.getAttribute('aria-label'), node.nextElementSibling.nextElementSibling]))
+    .toEqual(['focused-rail-spacer', 'All tools', null]);
   await expect(page.locator('.focused-header .focused-inbox-button')).toHaveCount(0);
   await inbox.click();
   expect(await page.evaluate(() => events)).toEqual([['attention']]);
 });
 
+test('Tab leaves All tools for caller-owned navigation without a removed Settings stop', async ({ page }) => {
+  const rail = page.getByRole('navigation', { name: 'Workspace destinations' });
+  await rail.getByRole('button', { name: 'All tools', exact: true }).focus();
+  await page.keyboard.press('Tab');
+  await expect(page.locator('#sessionSearch')).toBeFocused();
+  await page.keyboard.press('Shift+Tab');
+  await expect(rail.getByRole('button', { name: 'All tools', exact: true })).toBeFocused();
+  await expect(rail.getByRole('button', { name: 'Settings', exact: true })).toHaveCount(0);
+});
+
 test('real navigation clicks restore the latest field focus and selection on return', async ({ page }) => {
   await page.locator('#draft').fill('An unfinished prompt for the same session');
   await page.locator('#draft').evaluate((draft) => draft.setSelectionRange(3, 18, 'backward'));
-  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.locator('#fixtureSettings').click();
   await expect(page.locator('#settingsView')).toBeVisible();
   await page.getByRole('button', { name: 'Back to conversation', exact: true }).click();
   await expect(page.locator('#draft')).toBeFocused();
@@ -293,7 +310,7 @@ test('real navigation clicks restore the latest field focus and selection on ret
   await openDestination(page, 'Project');
   await page.locator('#editor').fill('Unsaved work in the project inspector');
   await page.locator('#editor').evaluate((editor) => editor.setSelectionRange(1, 12, 'forward'));
-  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.locator('#fixtureSettings').click();
   await page.getByRole('button', { name: 'Inspector', exact: true }).click();
   await expect(page.locator('#editor')).toBeFocused();
   expect(await page.locator('#editor').evaluate((editor) => [editor.selectionStart, editor.selectionEnd, editor.selectionDirection])).toEqual([1, 12, 'forward']);

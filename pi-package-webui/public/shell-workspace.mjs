@@ -7,7 +7,6 @@ const ICONS = {
   sessions: 'M4 5h16M4 12h16M4 19h10',
   project: 'M3 7V4h6l2 3h10v13H3V7Z',
   activity: 'M3 12h4l3-8 4 16 3-8h4',
-  settings: 'M9.5 3h5l.6 2.4 1.8 1 2.4-.7 2.5 4.3-1.8 1.7v2.1l1.8 1.7-2.5 4.3-2.4-.7-1.8 1-.6 2.4h-5l-.6-2.4-1.8-1-2.4.7-2.5-4.3L4 13.8v-2.1L2.2 10l2.5-4.3 2.4.7 1.8-1 .6-2.4Z M15 12.75a3 3 0 1 0-6 0 3 3 0 0 0 6 0Z',
   overview: 'M4 4h16v16H4zM4 10h16M10 10v10',
   inspector: 'M4 4h16v16H4zM15 4v16',
   tools: 'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z',
@@ -83,9 +82,6 @@ export function createFocusedWorkspace({
   finished.setAttribute('aria-hidden', 'true');
   inboxButton.append(attention, finished);
   rail.append(node('div', 'focused-rail-spacer'), inboxButton, button('All tools', 'tools', onTools));
-  const settingsButton = button('Settings', 'settings', () => onNavigate?.('settings'));
-  destinationButtons.set('settings', settingsButton);
-  rail.append(settingsButton);
 
   const navigation = node('aside', 'focused-navigation');
   navigation.id = 'focusedWorkspaceNavigation';
