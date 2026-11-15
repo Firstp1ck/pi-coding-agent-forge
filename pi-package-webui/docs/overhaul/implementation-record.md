@@ -182,6 +182,20 @@ Two independent Sol/high R1 reviews found the missing VM fixture guard and a fir
 
 Captures: [empty startup with zero sessions](screenshots/empty-startup/empty-no-project.png) and [first message creates its conversation](screenshots/empty-startup/first-message.png). The local isolated preview helper now omits its former implicit `--cwd`, so a fresh preview demonstrates the default.
 
+### Draft conversations and control repairs
+
+Accepted source candidate `a5e9e55` implements the seven requested changes. Pi/Home and No Project now open a client blank without creating a terminal or directory. Leaving typed text creates a persistent browser-only Draft in Inbox; drafts can reopen or close but cannot settle. First submission promotes its own draft to a real No Project session. Closing the last real terminal returns to a blank conversation, and closing a background terminal preserves selected draft text.
+
+More keeps actions in one horizontal row with working anchored menus and stable composer geometry. The duplicate rail Settings icon is removed while the sidebar gear remains. Git username Cancel ends setup without opening the repository workflow. The folder picker separates location, folder navigation and optional pin/create controls. The new-tab menu opens only from its visible trigger and sizes to its contents; Classic hover keeps each full button visible.
+
+One Sol/high worker and one fresh Sol/high reviewer handled each task. Accepted findings covered delayed runner-menu reopening, draft preservation during unrelated closes, and Classic hover clipping. Parent repairs passed their reproductions. Central integration also fixed minimized-workflow flex shrinking and migrated stale footer/toolbar test assumptions while preserving target, order, reachability and geometry assertions. All review slots are closed; no extra rounds ran.
+
+Verification: all 260 package Node/static/harness files pass. All 175 distinct affected Chromium cases have passing evidence across the combined run and targeted repair runs, with no retries or waived assertions. This is not a complete browser-suite rerun. Ten inventory tests, current inventory, payload assertions and whitespace checks pass. The final production edits after the package run are CSS-only; affected browser and CSS static checks pass afterward. Assets use app211, styles165, adapter CSS12, shelf CSS2 and PWA189. No dependency exports or ranges changed.
+
+Drafts persist only in the current browser origin. Storage failures retain memory and display a warning. A lost creation acknowledgment followed by browser termination or reload remains ambiguous because the existing creation endpoint lacks durable idempotency; no automatic retry was added. The review also reproduced existing short-Classic pointer instability at 1440×300; keyboard opening works. Real providers, physical devices and other engines remain outside the measured scope.
+
+Captures: [saved Draft](screenshots/drafts-controls/saved-draft.png), [single-row More](screenshots/drafts-controls/more-row.png), [folder picker](screenshots/drafts-controls/folder-picker.png), and [button-anchored new-tab menu](screenshots/drafts-controls/new-tab.png).
+
 ### Platform limits
 
 Linux Chromium is the verified browser environment. Physical Android/iOS keyboards, IME, microphones, Windows/macOS behavior, WebKit and installed live-provider/companion combinations remain unmeasured. Existing platform-specific behavior is preserved in code and focused contracts, not claimed as device-tested.
