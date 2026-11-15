@@ -31,3 +31,13 @@ Settings BUG-001 accepted. Source verification confirms that unregistered packag
 NAV BUG-001 accepted after inspecting the forced upward dropdown rule. Terra NAV-FIX owns only the new-tab placement CSS/functions and new navigation tests, disjoint from SETTINGS-FIX display functions. Its live follow-up covers the initial navigation audit gaps and diagnoses two repeated but unconfirmed continuity test failures. No existing assertion may be weakened to hide them.
 
 TOOLS initial discovery has no confirmed defect and remains partial. Terra TOOLS-DEEP owns only the ten Project/Activity controller modules and new domain tests. It exercises the initial audit's unchecked workflows using disposable repositories and mocked external services, fixes only locally reproduced controller defects, and reports shared app/CSS problems to the parent. No child owns backend code or existing test files. The three initial audits are evidence, not acceptance or a full-coverage claim.
+
+### Integrated fixes and verification in progress
+
+- SETTINGS BUG-001 integrated from Terra commit c9090fdd as 3575eca8. Parent checked the exact display-only diff; all 16 new and adjacent browser cases pass. Installation classification, guards and confirmation remain unchanged.
+- NAV BUG-001 integrated from Terra commit 761b74f0 as 748d2083. Parent checked exact new-tab placement symbols and CSS, with integration retest pending.
+- TOOLS mobile observation accepted as POLISH-003 after screenshot inspection and actual pointer hit-test failures at 320px and 390px. Parent fixed the phone file header layout in ba1a792; both hit-test/action/dismissal cases pass. The header now places wrapping actions below the title, preserving room for the floating Control Deck button.
+- Browser asset tuple advanced coherently in a322b11, including pinned asset assertions and installed-PWA expectation.
+- The two continuity failures remain unconfirmed as product defects. Parent reran the unchanged original six-line and live-edge cases three times each with isolated outer HOME/XDG; all six pass. No assertions or production behavior were changed to hide them. Combined acceptance will rerun the complete suite.
+- Initial TOOLS-DEEP test isolation exception is recorded in its handoff; two legacy test fixtures inherited HOME/XDG. Subsequent parent and child commands explicitly isolate the outer environment as well as per-test state. No evidence establishes an actual production configuration mutation; do not claim hashes that were not measured.
+- Remaining live controls now have narrow Terra test-only assignments for session/message actions, local Git/worktrees, and runners/queues/gates/notification targets. Each owns one unique new spec; parent retains production ownership.
