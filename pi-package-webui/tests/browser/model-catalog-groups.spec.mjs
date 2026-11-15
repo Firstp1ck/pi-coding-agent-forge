@@ -42,6 +42,7 @@ for (const width of [1440, 1100]) {
     const heading = await firstGroup.locator('.native-selector-group').boundingBox();
     const firstTitle = await firstGroup.locator('.native-selector-title').first().boundingBox();
     expect(firstTitle.y).toBeGreaterThanOrEqual(heading.y + heading.height);
+    await page.locator('#nativeCommandBody').evaluate(node => node.scrollTo({ top: 0 }));
     await page.screenshot({ path: info.outputPath('provider-model-hierarchy.png') });
     const search = page.locator('#nativeCommandSearch');
     await search.fill('zulu');
