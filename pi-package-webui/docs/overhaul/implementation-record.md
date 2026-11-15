@@ -204,6 +204,16 @@ One Sol/high worker and one fresh reviewer handled each of the backend and UI ta
 
 Production candidate `72099e23` passed all 261 package test files in the final guarded run. A prior run interrupted by SIGTERM is superseded by that complete exit-0 result. Affected Chromium cases pass across integrated and targeted runs, including running, unchanged, failed and reload-recovery paths. Syntax, deterministic inventory, package payload and whitespace checks pass. Screenshots were captured, inspected and displayed. No full browser-suite rerun, real installed updates or Windows/macOS execution is claimed. Assets use app213, sidebar update CSS2 and PWA191. No dependency changes or additional update eligibility checks were introduced.
 
+### Direct updates and job details
+
+Selecting an update scope now starts it immediately. Details shows that job's commands, per-step outcomes and bounded output, with Back to progress. Already up to date shows only its heading, component and Details/Dismiss actions. Failed command receipts can explain a read-only installation without adding preflight checks or automatic retries. Keyboard navigation reveals return controls even in a short menu.
+
+One Sol/high worker and one fresh Sol/high reviewer handled each of UI feedback and the isolated preview helper. All supported findings were fixed and rechecked. Package evidence covers all 261 test files across a full run and the corrected stale static assertion. The integrated 58 Chromium cases and subsequent 40 menu/progress cases pass. These are affected checks, not a full browser-suite rerun. Assets use app214, sidebar update CSS3 and PWA192. Dependencies are unchanged.
+
+The local preview helper now clones the user-owned npm prefix and mounts it at the same absolute path inside Bubblewrap. It preserves global npm configuration across the working-directory change and removes generated state when sandbox startup fails. Five original isolation scenarios and six added regressions pass; a real-prefix clone check confirms writable preview copies and unchanged original package/config hashes. No real update ran. Existing previews must restart with the same launch command. Installed-copy updates do not replace the checkout served by the preview. The helper and tests remain ignored local development artifacts.
+
+Captures: [minimal unchanged feedback](screenshots/update-feedback/minimal-unchanged.png) and [job details and return](screenshots/update-feedback/running-details-back.png).
+
 ### Platform limits
 
 Linux Chromium is the verified browser environment. Physical Android/iOS keyboards, IME, microphones, Windows/macOS behavior, WebKit and installed live-provider/companion combinations remain unmeasured. Existing platform-specific behavior is preserved in code and focused contracts, not claimed as device-tested.
