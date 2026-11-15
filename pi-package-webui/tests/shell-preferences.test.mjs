@@ -340,3 +340,15 @@ test("effective cohort defaults leave independent compact modes and recovery pre
   }
   assert.deepEqual(record, { status: "absent", value: fallback });
 });
+
+test('sidebar width roundtrips within bounds without changing other preferences', () => {
+  for (const navigationWidth of [180, 202, 320, 420]) {
+    const storage = fakeStorage();
+    const value = { v: 1, desktopLayout: 'focused', navigation: 'left', navigationWidth, inspectorWidth: 320 };
+    assert.equal(writeShellPreferences(storage, value).ok, true);
+    assert.deepEqual(readShellPreferences(storage).value, value);
+  }
+  for (const navigationWidth of [179, 421, 202.5, '202', null]) {
+    assert.equal(writeShellPreferences(fakeStorage(), { v: 1, desktopLayout: 'focused', navigationWidth }).reason, 'invalid');
+  }
+});

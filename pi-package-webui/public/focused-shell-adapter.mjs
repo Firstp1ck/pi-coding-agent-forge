@@ -59,6 +59,7 @@ export function createFocusedShellAdapter({ document, viewHost, nodes, sections,
       if (mounted) moveRunControls(inbox.slots.runControls);
     },
     onToggleNavigation: () => onPreferences({ navCollapsed: !snapshot.navCollapsed }),
+    onNavigationResize: navigationWidth => onPreferences({ navigationWidth }),
     onSessionMenu: () => openContextActions('Session'),
     onProjectMenu: () => openContextActions('Project'),
     onInspectorClose: () => onNavigate('conversation', null),
@@ -158,6 +159,7 @@ export function createFocusedShellAdapter({ document, viewHost, nodes, sections,
     if (next.destination === 'settings') sidebarSettings.setAttribute('aria-current', 'page');
     else sidebarSettings.removeAttribute('aria-current');
     if (!next.enabled) {
+      workspace.cancelNavigationResize();
       if (!mounted) return;
       closeTools();
       inbox.close();

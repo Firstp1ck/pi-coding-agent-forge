@@ -7,7 +7,7 @@ if (process.env.PI_WEBUI_TEST_CHROMIUM) {
 }
 
 const sources = new Map(await Promise.all([
-  'shell-workspace.mjs', 'shell-workspace.css', 'shell-view-host.mjs', 'styles.css',
+  'shell-workspace.mjs', 'shell-navigation-resize.mjs', 'shell-workspace.css', 'shell-view-host.mjs', 'styles.css',
 ].map(async (name) => [`/${name}`, await readFile(new URL(`../../public/${name}`, import.meta.url), 'utf8')])));
 
 const fixture = `<!doctype html><html lang="en"><head><title>Focused workspace component fixture</title>

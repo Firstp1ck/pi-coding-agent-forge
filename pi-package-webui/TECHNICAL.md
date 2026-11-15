@@ -24,6 +24,8 @@ The compact layout is verified in Linux Chromium, including keyboard navigation 
 
 ### Session sidebar organization
 
+Drag the compact sidebar’s right edge to resize it. Your width is saved in this browser. Focus the edge and use Left/Right arrows to adjust it, Shift for larger steps, or Home/End for the limits. Double-click the edge to reset its width; Escape cancels an active drag. Narrow windows temporarily limit the width to keep the conversation usable.
+
 The compact left sidebar has Inbox, Working, and Settled sections. Settle and Restore affect only this browser and origin; other browsers, saved workspaces, Classic, and top-tab navigation retain their own presentation. Section expansion is remembered locally. Clearing browser storage removes these organization choices.
 
 Settle is unavailable while a session is working or awaiting input. A new run, pending input, replaced conversation, or a newer completed run brings a settled session back automatically. Selecting a settled session alone does not restore it. App runners and known workflow runs count as active work. Read-only subagent views appear in Inbox or Working and retain their existing close behavior.

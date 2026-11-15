@@ -4,7 +4,7 @@ import { test } from './session-fixture.mjs';
 
 test.use({ viewport: { width: 1440, height: 900 }, serviceWorkers: 'block', video: 'off', reducedMotion: 'reduce' });
 
-const sources = new Map(await Promise.all(['shell-workspace.mjs', 'shell-workspace.css', 'styles.css'].map(async name => [
+const sources = new Map(await Promise.all(['shell-workspace.mjs', 'shell-navigation-resize.mjs', 'shell-workspace.css', 'styles.css'].map(async name => [
   `/${name}`, await readFile(new URL(`../../public/${name}`, import.meta.url), 'utf8'),
 ])));
 

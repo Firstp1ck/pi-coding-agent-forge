@@ -1,3 +1,5 @@
+import { createNavigationResize } from './shell-navigation-resize.mjs';
+
 const DESTINATIONS = new Set(['conversation', 'home', 'project', 'activity', 'settings']);
 const ICONS = {
   conversation: 'M4 4h16v11H9l-5 4V4Z',
@@ -13,7 +15,7 @@ const ICONS = {
 /** Creates presentation chrome. The caller owns mounting, slot contents and state. */
 export function createFocusedWorkspace({
   document, onNavigate, onTools, onToggleNavigation, onSessionMenu,
-  onProjectMenu, onInspectorClose, onConversation, onInspectorSelect, onAttention,
+  onProjectMenu, onInspectorClose, onConversation, onInspectorSelect, onAttention, onNavigationResize,
 }) {
   const listeners = [];
   const rememberedFocus = new Map();
@@ -179,7 +181,15 @@ export function createFocusedWorkspace({
   listeners.push(() => inspectorTopics.removeEventListener('click', selectTopic), () => inspectorTopics.removeEventListener('keydown', focusTopic));
   inspector.append(inspectorHeader, inspectorTopics, activityPicker, inspectorContent);
   body.append(conversation, centralPages.home.page, centralPages.settings.page, inspector);
-  element.append(rail, navigation, header, body);
+  const navigationResize = node('div', 'focused-navigation-resize');
+  navigationResize.tabIndex = 0;
+  navigationResize.setAttribute('role', 'separator');
+  navigationResize.setAttribute('aria-orientation', 'vertical');
+  navigationResize.setAttribute('aria-label', 'Resize session sidebar');
+  navigationResize.setAttribute('aria-controls', navigation.id);
+  navigationResize.title = 'Drag to resize sessions. Arrow keys adjust width; double-click resets.';
+  element.append(rail, navigation, navigationResize, header, body);
+  const resizer = createNavigationResize({ element, handle: navigationResize, onCommit: onNavigationResize });
 
   const slots = Object.freeze({
     navigation, conversation, home: centralPages.home.content,
@@ -318,6 +328,7 @@ export function createFocusedWorkspace({
     const width = Number.isFinite(state.inspectorWidth) ? Math.round(state.inspectorWidth) : 320;
     element.style.setProperty('--focused-inspector-width', `${Math.max(240, Math.min(640, width))}px`);
     navigation.hidden = Boolean(state.navCollapsed);
+    resizer.update({ navigationWidth: state.navigationWidth, active: state.enabled !== false && state.navigation === 'left' && !state.navCollapsed });
     navigationToggle.setAttribute('aria-expanded', String(!navigation.hidden));
     const toggleLabel = navigation.hidden ? 'Expand sessions' : 'Collapse sessions';
     navigationToggle.setAttribute('aria-label', toggleLabel);
@@ -370,6 +381,7 @@ export function createFocusedWorkspace({
   function dispose() {
     if (disposed) return;
     disposed = true;
+    resizer.dispose();
     for (const removeListener of listeners) removeListener();
     listeners.length = 0;
     rememberedFocus.clear();
@@ -380,5 +392,7 @@ export function createFocusedWorkspace({
   }
 
   update();
-  return { element, slots, update, dispose };
+  return { element, slots, update, dispose,
+    cancelNavigationResize: () => resizer.update({ navigationWidth: state.navigationWidth, active: false }),
+  };
 }

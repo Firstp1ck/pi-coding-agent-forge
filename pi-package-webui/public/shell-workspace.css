@@ -1,7 +1,7 @@
 #focusedWorkspace {
   --focused-inspector-width: 320px;
   display: grid;
-  grid-template-columns: 46px 202px minmax(0, 1fr);
+  grid-template-columns: 46px var(--focused-navigation-width, 202px) minmax(0, 1fr);
   grid-template-rows: 47px minmax(0, 1fr);
   width: 100%;
   height: 100%;
@@ -205,3 +205,25 @@
 #focusedWorkspace .composer-input-row { gap: 6px; }
 #focusedWorkspace .message { padding: 12px; margin-bottom: 12px; border-radius: 8px; box-shadow: none; }
 #focusedWorkspace .message.assistant { border-color: transparent; background: transparent; }
+
+#focusedWorkspace .focused-navigation-resize {
+  grid-column: 2;
+  grid-row: 1 / -1;
+  justify-self: end;
+  width: 8px;
+  margin-right: -4px;
+  z-index: 4;
+  cursor: col-resize;
+  touch-action: none;
+  border-radius: 3px;
+  background: transparent;
+}
+#focusedWorkspace .focused-navigation-resize[hidden] { display: none; }
+#focusedWorkspace .focused-navigation-resize:hover,
+#focusedWorkspace .focused-navigation-resize:focus-visible,
+#focusedWorkspace.focused-navigation-resizing .focused-navigation-resize {
+  background: linear-gradient(to right, transparent 3px, var(--accent) 3px, var(--accent) 5px, transparent 5px);
+  outline: none;
+}
+#focusedWorkspace.focused-navigation-resizing,
+#focusedWorkspace.focused-navigation-resizing * { cursor: col-resize !important; user-select: none !important; }

@@ -1,5 +1,7 @@
 import { isMobileShellV2Enabled } from "./mobile-shell-state.mjs";
 
+import { NAVIGATION_WIDTH_MIN, NAVIGATION_WIDTH_MAX } from "./shell-navigation-resize.mjs";
+
 export const SHELL_PREFERENCES_STORAGE_KEY = "pi-webui-shell-preferences-v1";
 
 function defaultPreferences() {
@@ -27,6 +29,10 @@ function normalizePreferences(value) {
       if (pins.size > 20) return null;
     }
     normalized.pinnedActions = [...pins];
+  }
+  if (Object.hasOwn(value, "navigationWidth")) {
+    if (!Number.isInteger(value.navigationWidth) || value.navigationWidth < NAVIGATION_WIDTH_MIN || value.navigationWidth > NAVIGATION_WIDTH_MAX) return null;
+    normalized.navigationWidth = value.navigationWidth;
   }
   if (Object.hasOwn(value, "inspectorWidth")) {
     if (!Number.isInteger(value.inspectorWidth) || value.inspectorWidth < 240 || value.inspectorWidth > 640) return null;

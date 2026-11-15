@@ -36,6 +36,8 @@ const APP_SHELL = [
   "/focused-shell-adapter.mjs",
   "/focused-shell-adapter.css",
   "/shell-navigation.mjs",
+  "/shell-navigation-resize.mjs",
+  "/model-catalog-order.mjs",
   "/shell-preferences.mjs",
   "/shell-view-host.mjs",
   "/shell-surfaces.mjs",
