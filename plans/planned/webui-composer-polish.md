@@ -12,3 +12,7 @@ User requests visual improvement of More/Send and the model/effort row. Keep Pi 
 ## Validation and review
 
 Real disposable app at1440 and1100withProject inspector, short500px window, dark/light, idle and running, More closed/open/nested menus, model/scoped/effort clickability and draft preservation. Capture/inspect screenshots. Existing focused-composer-more and interaction-composer-controls suites retain assertions. Parent handles central integration, asset revisions, docs and at most two Sol review rounds. No provider or installed config mutation.
+
+## Integration evidence
+
+Worker4f8e005 integrated as4a420ed3;25 worker browser cases passed. Parent combined run reported22 browser cases passed, but its wrapper ended143, so it is not a clean command exit. Screenshot inspection exposed Workflow Mode overlapping Send because the control moved into More retained absolute input-frame positioning. Parent reset placement for moved workflow/context controls and strengthened bounds assertions. All11 composer cases then passed with exit0; corrected narrow light screenshot inspected. Sol review and final combined cache/package verification remain pending.

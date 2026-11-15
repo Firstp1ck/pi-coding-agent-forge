@@ -109,6 +109,15 @@ async function checkMore(page, info, name) {
   expect(compact.x).toBeLessThan(options.x);
   expect(options.x).toBeLessThan(newSession.x);
   await expectToolbar(page);
+  const relocatedControls = page.locator('#composerActionsPanel .composer-workflow-mode-dock button, #composerActionsPanel .composer-context-tags button');
+  for (const button of await relocatedControls.all()) {
+    if (!await button.isVisible()) continue;
+    const bounds = await button.boundingBox();
+    expect(bounds.y).toBeGreaterThanOrEqual(actions.y - 1);
+    expect(bounds.x).toBeGreaterThanOrEqual(actions.x - 1);
+    expect(bounds.x + bounds.width).toBeLessThanOrEqual(actions.x + actions.width + 1);
+    expect(bounds.y).toBeGreaterThanOrEqual(send.y + send.height);
+  }
   await screenshot(page, info, `${name}-more`);
   for (const selector of ['#newSessionButton', '#compactButton', '#optionsMenuButton', '#sendButton']) {
     await page.locator(selector).click({ trial: true });
