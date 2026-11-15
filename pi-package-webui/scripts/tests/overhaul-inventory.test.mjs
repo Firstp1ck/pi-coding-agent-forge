@@ -164,7 +164,7 @@ test("malformed HTML, missing owner symbols and unsafe source traversal fail exp
 
 test("canonical family reordering requires explicit reconciliation", async () => {
   await withSourceFixture(async (fixture) => {
-    const file = path.join(fixture, "plans/planned/webui-design-architecture-overhaul.md");
+    const file = path.join(fixture, "pi-package-webui/docs/overhaul/feature-destinations.md");
     const source = await readFile(file, "utf8");
     const rows = source.split("\n");
     const first = rows.findIndex((row) => row.startsWith("| New, close, resume and switch sessions;"));

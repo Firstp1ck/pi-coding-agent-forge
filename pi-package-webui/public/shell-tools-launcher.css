@@ -80,3 +80,18 @@
   #shellToolsLauncher .tools-launcher-context { padding-inline: 12px; }
   #shellToolsLauncher .tools-launcher-footer { padding: 8px 12px; }
 }
+
+@media (forced-colors: active) {
+  #shellToolsLauncher {
+    --bg: Canvas;
+    --panel: Canvas;
+    --panel-2: Canvas;
+    --text: CanvasText;
+    --muted: CanvasText;
+    --accent: LinkText;
+    --accent-2: LinkText;
+    --warning: CanvasText;
+    --border: CanvasText;
+  }
+  #shellToolsLauncher [aria-pressed="true"] { outline: 2px solid Highlight; outline-offset: -2px; }
+}

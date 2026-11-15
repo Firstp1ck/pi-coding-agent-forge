@@ -8,7 +8,7 @@ Capability evidence for the approved compact workspace overhaul. Every legacy fe
 
 Production source baseline: `06351edae0d87829dfa8c747d31a061825568b0e`. Integration seed: `cff3432ee63131ebb6150a906d9c06594ca2c401`. These revisions identify the requested starting point. Each scanned file also has a SHA-256 digest in `sources`, so regeneration identifies the content actually read without relying on the current branch name or commit time.
 
-The scanner reads regular source files in this package’s `public`, `lib` and `bin` directories, the three package entry sources, the native parity JSON and the canonical plan. It reads no user settings, dependency tree or app/server code at runtime. Starting test paths are checked for existence, not executed by the scanner. Tests, CSS, images, sibling companion implementations, upstream Pi internals, vendor code and runtime catalogs are outside the scanner’s source walk.
+The scanner reads regular source files in this package’s `public`, `lib` and `bin` directories, the three package entry sources, the native parity JSON and the maintained [feature destination contract](feature-destinations.md). It reads no user settings, dependency tree or app/server code at runtime. Starting test paths are checked for existence, not executed by the scanner. Tests, CSS, images, sibling companion implementations, upstream Pi internals, vendor code and runtime catalogs are outside the scanner’s source walk.
 
 ## Reproduce and inspect
 

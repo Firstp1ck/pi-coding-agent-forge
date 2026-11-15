@@ -4,7 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const PACKAGE = "pi-package-webui";
-const PLAN = "plans/planned/webui-design-architecture-overhaul.md";
+const DESTINATIONS = "pi-package-webui/docs/overhaul/feature-destinations.md";
 const DEFAULT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const DEFAULT_OUTPUT = `${PACKAGE}/docs/overhaul/capability-inventory.json`;
 const MAX_FILES = 256;
@@ -431,13 +431,13 @@ async function readBounded(root) {
     if (info.isSymbolicLink()) throw new Error(`Source symlink is not allowed: ${relative}`);
     if (info.isDirectory()) {
       for (const name of (await readdir(absolute)).sort()) await walk(`${relative}/${name}`);
-    } else if (/\.(?:mjs|js|html|ts)$/.test(relative) || relative.endsWith("WEBUI_TUI_NATIVE_PARITY.json") || relative === PLAN) {
+    } else if (/\.(?:mjs|js|html|ts)$/.test(relative) || relative.endsWith("WEBUI_TUI_NATIVE_PARITY.json") || relative === DESTINATIONS) {
       if (!info.isFile() || info.size > MAX_FILE_BYTES) throw new Error(`Source exceeds file bound or is not regular: ${relative}`);
       files.push(relative);
       if (files.length > MAX_FILES) throw new Error(`Source exceeds ${MAX_FILES} files`);
     }
   }
-  for (const relative of [`${PACKAGE}/public`, `${PACKAGE}/lib`, `${PACKAGE}/bin`, `${PACKAGE}/index.ts`, `${PACKAGE}/session-summary.ts`, `${PACKAGE}/webui-rpc-helper.mjs`, PLAN]) await walk(relative);
+  for (const relative of [`${PACKAGE}/public`, `${PACKAGE}/lib`, `${PACKAGE}/bin`, `${PACKAGE}/index.ts`, `${PACKAGE}/session-summary.ts`, `${PACKAGE}/webui-rpc-helper.mjs`, DESTINATIONS]) await walk(relative);
   const sources = new Map();
   let totalBytes = 0;
   for (const file of files.sort()) {
@@ -470,7 +470,7 @@ export async function buildInventory(root = DEFAULT_ROOT) {
   const app = sources.get(appFile);
   const html = sources.get(`${PACKAGE}/public/index.html`);
   if (!app || !html || !/<html\b/i.test(html) || !/<\/html>/.test(html)) throw new Error("Missing or malformed app.js / index.html source");
-  const plan = sources.get(PLAN);
+  const plan = sources.get(DESTINATIONS);
   const table = plan.split("### Feature destination map\n")[1]?.split("\n## ")[0];
   const rows = [...(table || "").matchAll(/^\| ([^|]+) \| ([^|]+) \| ([^|]+) \|$/gm)].filter((row) => row[1] !== "Capability" && !/^[- ]+$/.test(row[1]));
   if (rows.length !== CONTRACTS.length) throw new Error(`Canonical feature map has ${rows.length} rows; expected ${CONTRACTS.length}. Reconcile before regenerating.`);
@@ -533,7 +533,7 @@ export async function buildInventory(root = DEFAULT_ROOT) {
     schemaVersion: 1,
     purpose: "Static capability inventory and accepted ownership mapping; not an executable action registry or proof of runtime parity",
     reference: { productionBaseline: "06351edae0d87829dfa8c747d31a061825568b0e", integrationSeed: "cff3432ee63131ebb6150a906d9c06594ca2c401", provenance: "Reference revisions supplied by integration owner; scanned content is identified by source hashes below" },
-    method: { bounds: { maxFiles: MAX_FILES, maxFileBytes: MAX_FILE_BYTES, maxTotalBytes: MAX_TOTAL_BYTES }, sourceScope: "Recursive regular source files in public/lib/bin, three package entry sources, native parity JSON and canonical plan; no dependencies, tests, app execution or settings reads", limits: ["Quoted HTML attributes and literal markup candidates only; JS-created controls are represented by source functions/dynamic families, not complete DOM instances.", "JavaScript scanning is lexical, not an AST or call graph. Nearest preceding named function is a locator only; anonymous callbacks inherit that locator.", "Source IDs and symbol/data anchors identify records; line numbers are navigation hints. Anonymous tag hashes can change when markup changes; duplicate instances use occurrence suffixes.", "Browser key declarations and access expressions are enumerated. Dynamic keys remain expressions. Server settings contracts are linked in capability-ledger.md; schema references do not prove writes or runtime availability.", "Family matching is a deterministic lexical annotation. Unresolved entries require human reconciliation; zero unresolved would not establish runtime parity."] },
+    method: { bounds: { maxFiles: MAX_FILES, maxFileBytes: MAX_FILE_BYTES, maxTotalBytes: MAX_TOTAL_BYTES }, sourceScope: "Recursive regular source files in public/lib/bin, three package entry sources, native parity JSON and feature destination contract; no dependencies, tests, app execution or settings reads", limits: ["Quoted HTML attributes and literal markup candidates only; JS-created controls are represented by source functions/dynamic families, not complete DOM instances.", "JavaScript scanning is lexical, not an AST or call graph. Nearest preceding named function is a locator only; anonymous callbacks inherit that locator.", "Source IDs and symbol/data anchors identify records; line numbers are navigation hints. Anonymous tag hashes can change when markup changes; duplicate instances use occurrence suffixes.", "Browser key declarations and access expressions are enumerated. Dynamic keys remain expressions. Server settings contracts are linked in capability-ledger.md; schema references do not prove writes or runtime availability.", "Family matching is a deterministic lexical annotation. Unresolved entries require human reconciliation; zero unresolved would not establish runtime parity."] },
     sources: [...sources].map(([file, text]) => ({ file, bytes: Buffer.byteLength(text), sha256: digest(text) })),
     reconciliation: { records: controls.length, classifications: Object.fromEntries(categories.map((category) => [category, controls.filter((item) => item.classification === category).length])), staticDialogs: controls.filter((item) => item.tag === "dialog" && item.anchor.file.endsWith("index.html")).length, actionableRecords: controls.filter((item) => item.actionable).length, unassignedPersistence: persistence.filter((item) => !item.family).map((item) => item.id), unresolvedControls: controls.filter((item) => item.classification === "unresolved").map((item) => item.id), unassignedNativeDefinitions: nativeDefinitions.filter((item) => !item.family).map((item) => item.id), unassignedPaletteDefinitions: paletteDefinitions.filter((item) => !item.family).map((item) => item.id), companionIdentityDifferences },
     families, controls, persistence, serverPersistence: sorted(serverPersistence), companions: sorted(companions), uiCompanionDefinitions: sorted(uiCompanionDefinitions), nativeDefinitions, paletteDefinitions: sorted(paletteDefinitions), commandDefinitions: sorted(commandDefinitions), commandRegistrations, dynamicFamilies: sorted(dynamicFamilies),

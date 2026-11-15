@@ -3291,8 +3291,11 @@ function restoreResponsiveFieldFocus() {
 }
 
 function applyMobileShellViewport() {
+  const viewport = mobileShellViewport();
+  const next = createMobileShellState({ viewport });
+  if (next.viewportMode === mobileShellState.viewportMode && next.posture === mobileShellState.posture) return;
   const wasActive = isMobileShellV2Active();
-  applyMobileShellEvent({ type: "viewport", viewport: mobileShellViewport() });
+  applyMobileShellEvent({ type: "viewport", viewport });
   if (wasActive !== isMobileShellV2Active() && isMobileShellV2Active()) {
     mobileFooterExpanded = false;
     elements.statusBar.removeAttribute("aria-label");
@@ -8499,7 +8502,11 @@ function updateVisualViewportVars() {
 
 function installViewportHandlers() {
   updateVisualViewportVars();
-  const update = () => updateVisualViewportVars();
+  const update = () => {
+    // Coarse-pointer media queries can stay matched through phone/tablet rotation.
+    applyMobileShellViewport();
+    updateVisualViewportVars();
+  };
   window.visualViewport?.addEventListener("resize", update, { passive: true });
   window.visualViewport?.addEventListener("scroll", update, { passive: true });
   window.addEventListener("resize", update, { passive: true });
