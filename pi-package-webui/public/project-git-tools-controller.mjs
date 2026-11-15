@@ -125,7 +125,7 @@ export function createProjectGitToolsController({
 
   /** Returns false for declined, duplicate, failed or stale work; refresh errors remain visible. */
   async function run(sectionKey, {
-    url, method = "POST", body, confirm: confirmation, success, successMessage, refreshChanges = false,
+    url, method = "POST", body, confirm: confirmation, confirmLabel, success, successMessage, refreshChanges = false,
   }, token = capture()) {
     requireSection(sectionKey);
     if (!isCurrent(token) || state.busy.has(sectionKey) || owner.pendingActions.has(sectionKey)) return false;
@@ -136,7 +136,7 @@ export function createProjectGitToolsController({
     try {
       if (confirmation) {
         const accepted = await confirm(confirmation, {
-          affected: state.cache[sectionKey]?.root || target.root || "the current repository", confirmLabel: success || "Continue",
+          affected: state.cache[sectionKey]?.root || target.root || "the current repository", confirmLabel: confirmLabel || success || "Continue",
         });
         if (!isCurrent(token) || !accepted) return false;
       }

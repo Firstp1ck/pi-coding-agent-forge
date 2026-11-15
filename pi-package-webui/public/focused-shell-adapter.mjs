@@ -5,6 +5,7 @@ import { createToolsLauncher } from './shell-tools-launcher.mjs';
 export function createFocusedShellAdapter({ document, viewHost, nodes, sections, onNavigate, onPreferences, onInvoke, getTools }) {
   let mounted = false;
   let inspector = null;
+  let toolsTrigger = null;
   const modalHosts = new WeakMap();
   let modalStack = [];
   const contentHidden = new Map();
@@ -87,6 +88,7 @@ export function createFocusedShellAdapter({ document, viewHost, nodes, sections,
   }
 
   function openTools(category) {
+    if (!tools.element.open) toolsTrigger = document.activeElement;
     const data = getTools();
     // Context menus use the same authoritative records and dispatch checks.
     if (category) data.actions = data.actions.filter(action => action.category === category);
@@ -94,7 +96,12 @@ export function createFocusedShellAdapter({ document, viewHost, nodes, sections,
     if (mounted) moveRunControls(tools.slots.runControls);
   }
 
-  function closeTools() { tools.close(); }
+  function closeTools() {
+    const trigger = tools.element.open ? toolsTrigger : undefined;
+    tools.close();
+    toolsTrigger = null;
+    return trigger;
+  }
 
   function update(next) {
     snapshot = next;

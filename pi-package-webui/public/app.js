@@ -2511,8 +2511,8 @@ async function invokeFocusedTool(captured) {
     if (!current) throw new Error("This action is no longer available. Reopen All tools.");
     const availability = checkActionTarget({ ...current, target: captured.target }, shellActionTarget());
     if (!availability.ok) throw new Error(availability.reason);
-    focusedShell.closeTools();
-    await current.run();
+    const triggerButton = focusedShell.closeTools();
+    await current.run({ triggerButton });
   } catch (error) { addEvent(error.message || String(error), "error"); }
 }
 
@@ -22515,6 +22515,7 @@ function renderGitTagTools(body, data, busy) {
     runAction("tags", {
       url: "/api/git-tags/create",
       body: { confirmed: true, name: name.trim(), message: (message || name).trim() },
+      confirmLabel: "Create tag",
       confirm: `Create annotated tag ${name.trim()} at HEAD?\n\nTags are not pushed automatically; push explicitly with: git push origin ${name.trim()}`,
       success: `Created tag ${name.trim()}.`,
     });
@@ -45840,7 +45841,7 @@ async function refreshCommands(tabContext = activeTabContext()) {
 function commandPaletteCoreItems() {
   const items = [
     { id: "session:new-tab", scope: activeTabId ? "project" : "server", destination: "conversation", kind: "Action", label: "New tab", description: "Start an isolated Pi terminal in the current directory", keywords: "workspace session", run: () => createTerminalTab() },
-    { id: "session:new-tab-directory", scope: "server", destination: "conversation", kind: "Action", label: "Choose directory for new tab", description: "Pick a cwd before starting a tab", keywords: "cwd folder workspace", run: () => createTerminalTabFromChosenDirectory({ triggerButton: elements.commandPaletteButton }) },
+    { id: "session:new-tab-directory", scope: "server", destination: "conversation", kind: "Action", label: "Choose directory for new tab", description: "Pick a cwd before starting a tab", keywords: "cwd folder workspace", run: ({ triggerButton = elements.commandPaletteButton } = {}) => createTerminalTabFromChosenDirectory({ triggerButton }) },
     { id: "project:branch-worktree", scope: "project", destination: "project", kind: "Git", label: "Branch worktree", description: "Create or open a Git worktree tab for parallel branch work", keywords: "git branch worktree parallel checkout", run: () => openBranchWorktreePicker() },
     { id: "session:new", scope: "session", destination: "conversation", kind: "Action", label: "New session", description: "Start a fresh session in the active tab", keywords: "/new clear", run: () => elements.newSessionButton.click() },
     { id: "session:compact", scope: "session", destination: "conversation", available: !currentState?.isCompacting && !composerStore.isCompactionPending(activeTabId), unavailableReason: "Context compaction is already running. Wait for it to finish.", kind: "Action", label: "Compact context", description: contextUsageDetail(), keywords: "/compact context window tokens", run: () => requestManualCompaction() },

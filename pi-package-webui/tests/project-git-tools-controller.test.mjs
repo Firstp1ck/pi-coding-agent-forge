@@ -242,8 +242,9 @@ test("confirmation names the loaded repository without replacing its captured ta
   });
   const token = h.controller.capture();
   await h.controller.load("tags");
-  await h.controller.run("tags", { url: "/unused", confirm: "Create tag?" }, token);
+  await h.controller.run("tags", { url: "/unused", confirm: "Create tag?", confirmLabel: "Create tag" }, token);
   assert.equal(h.confirmations[0].affected, "/repo/resolved");
+  assert.equal(h.confirmations[0].confirmLabel, "Create tag");
   assert.equal(h.controller.capture(), token);
   assert.equal(h.target.root, "/repo/origin");
   assert.equal(h.calls.length, 1);
