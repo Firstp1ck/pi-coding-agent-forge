@@ -7,7 +7,7 @@ if (process.env.PI_WEBUI_TEST_CHROMIUM) {
 }
 
 const sources = new Map(await Promise.all([
-  'shell-workspace.mjs', 'shell-navigation-resize.mjs', 'shell-workspace.css', 'shell-view-host.mjs', 'styles.css',
+  'shell-workspace.mjs', 'shell-navigation-resize.mjs', 'shell-inspector-resize.mjs', 'shell-workspace.css', 'shell-view-host.mjs', 'styles.css',
 ].map(async (name) => [`/${name}`, await readFile(new URL(`../../public/${name}`, import.meta.url), 'utf8')])));
 
 const fixture = `<!doctype html><html lang="en"><head><title>Focused workspace component fixture</title>
@@ -150,7 +150,8 @@ test('keyboard controls route only their callback and show the selected destinat
   await page.getByRole('button', { name: 'Stop fixture run' }).click();
   await page.getByRole('button', { name: 'Back to conversation', exact: true }).click();
   await rail.getByRole('button', { name: 'Conversation', exact: true }).click();
-  await page.locator('.focused-header').getByRole('button', { name: 'All tools', exact: true }).click();
+  await expect(page.locator('.focused-header').getByRole('button', { name: 'All tools', exact: true })).toHaveCount(0);
+  await rail.getByRole('button', { name: 'All tools', exact: true }).click();
   await page.getByRole('button', { name: 'Session actions', exact: true }).click();
   await page.getByRole('button', { name: 'Project actions', exact: true }).click();
   expect(await page.evaluate(() => events)).toEqual([
@@ -227,6 +228,7 @@ test('destination and inspector switches retain dirty fields, selection, listene
 });
 
 test('inspector bounds, safe labels and disposal preserve parent-owned views', async ({ page }) => {
+  await page.setViewportSize({ width: 1920, height: 900 });
   const result = await page.evaluate(() => {
     const label = '<img src=x onerror="window.injected=true">';
     shell.update({ destination: 'project', title: label, context: label, inspectorTitle: label, inspectorWidth: 900, attentionCount: 123 });
@@ -248,6 +250,36 @@ test('inspector bounds, safe labels and disposal preserve parent-owned views', a
     return { maximum, minimum, fallback, safe, title, badge, callbackCount: events.length - eventsBefore, destination: shell.element.dataset.destination, restored: children.every((child) => child.parentElement.id === 'original'), connected: shell.element.isConnected };
   });
   expect(result).toEqual({ maximum: '640px', minimum: '240px', fallback: '320px', safe: true, title: '<img src=x onerror="window.injected=true">', badge: '99+', callbackCount: 0, destination: 'project', restored: true, connected: true });
+});
+
+test('Pi brand uses onHome when supplied and keeps navigation fallback for existing callers', async ({ page }) => {
+  const result = await page.evaluate(() => {
+    const calls = [];
+    const workspace = createFocusedWorkspace({ document, onHome: () => calls.push('home'),
+      onNavigate: destination => calls.push(destination) });
+    workspace.element.querySelector('.focused-brand').click();
+    workspace.dispose();
+    workspace.element.querySelector('.focused-brand').click();
+    return calls;
+  });
+  expect(result).toEqual(['home']);
+  await page.getByRole('button', { name: 'Home', exact: true }).click();
+  expect(await page.evaluate(() => events)).toEqual([['navigate', 'home']]);
+});
+
+test('Attention and both badges live at the rail bottom before All tools and Settings', async ({ page }) => {
+  await page.evaluate(() => shell.update({ attentionCount: 2, finishedCount: 3 }));
+  const rail = page.getByRole('navigation', { name: 'Workspace destinations' });
+  const inbox = rail.getByRole('button', { name: 'Attention, 2 decisions waiting, 3 finished' });
+  await expect(inbox).toBeVisible();
+  await expect(inbox.locator('.focused-attention')).toHaveText('2');
+  await expect(inbox.locator('.focused-finished')).toHaveText('+3');
+  expect(await inbox.evaluate(node => [node.previousElementSibling.className,
+    node.nextElementSibling.getAttribute('aria-label'), node.nextElementSibling.nextElementSibling.getAttribute('aria-label')]))
+    .toEqual(['focused-rail-spacer', 'All tools', 'Settings']);
+  await expect(page.locator('.focused-header .focused-inbox-button')).toHaveCount(0);
+  await inbox.click();
+  expect(await page.evaluate(() => events)).toEqual([['attention']]);
 });
 
 test('real navigation clicks restore the latest field focus and selection on return', async ({ page }) => {

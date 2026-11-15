@@ -1,4 +1,5 @@
 import { createNavigationResize } from './shell-navigation-resize.mjs';
+import { createInspectorResize } from './shell-inspector-resize.mjs';
 
 const DESTINATIONS = new Set(['conversation', 'home', 'project', 'activity', 'settings']);
 const ICONS = {
@@ -16,9 +17,9 @@ const ICONS = {
 
 /** Creates presentation chrome. The caller owns mounting, slot contents and state. */
 export function createFocusedWorkspace({
-  document, onNavigate, onTools, onToggleNavigation, onSessionMenu,
+  document, onNavigate, onHome, onTools, onToggleNavigation, onSessionMenu,
   onProjectMenu, onInspectorClose, onConversation, onInspectorSelect, onAttention, onNavigationResize,
-  onToggleOverview, onToggleInspector,
+  onToggleOverview, onToggleInspector, onInspectorResize,
 }) {
   const listeners = [];
   const rememberedFocus = new Map();
@@ -64,7 +65,7 @@ export function createFocusedWorkspace({
   element.id = 'focusedWorkspace';
   const rail = node('nav', 'focused-rail');
   rail.setAttribute('aria-label', 'Workspace destinations');
-  const homeButton = button('Home', null, () => onNavigate?.('home'));
+  const homeButton = button('Home', null, () => onHome ? onHome() : onNavigate?.('home'));
   homeButton.classList.add('focused-brand');
   homeButton.append(node('span', '', 'π'));
   const destinationButtons = new Map([['home', homeButton]]);
@@ -81,7 +82,7 @@ export function createFocusedWorkspace({
   const finished = node('span', 'focused-finished');
   finished.setAttribute('aria-hidden', 'true');
   inboxButton.append(attention, finished);
-  rail.append(node('div', 'focused-rail-spacer'), button('All tools', 'tools', onTools));
+  rail.append(node('div', 'focused-rail-spacer'), inboxButton, button('All tools', 'tools', onTools));
   const settingsButton = button('Settings', 'settings', () => onNavigate?.('settings'));
   destinationButtons.set('settings', settingsButton);
   rail.append(settingsButton);
@@ -99,9 +100,6 @@ export function createFocusedWorkspace({
   contextButton.classList.add('focused-context');
   const context = node('span');
   contextButton.append(context);
-  const toolsButton = button('All tools', 'tools', onTools);
-  toolsButton.classList.add('focused-tools');
-  toolsButton.append(node('span', '', 'All tools'));
   const runControls = node('div', 'focused-run-controls');
   runControls.setAttribute('role', 'group');
   runControls.setAttribute('aria-label', 'Active run controls');
@@ -109,7 +107,7 @@ export function createFocusedWorkspace({
   overviewToggle.setAttribute('aria-controls', 'focusedWorkspaceOverview');
   const inspectorToggle = button('Inspector', 'inspector', onToggleInspector);
   inspectorToggle.setAttribute('aria-controls', 'focusedWorkspaceInspector');
-  header.append(heading, sessionMenu, contextButton, inboxButton, toolsButton, overviewToggle, inspectorToggle, runControls);
+  header.append(heading, sessionMenu, contextButton, overviewToggle, inspectorToggle, runControls);
 
   const body = node('div', 'focused-body');
   const conversation = node('section', 'focused-conversation');
@@ -188,7 +186,14 @@ export function createFocusedWorkspace({
   sectionSelect.addEventListener('change', selectSection);
   listeners.push(() => sectionSelect.removeEventListener('change', selectSection));
   inspectorPanel.append(inspectorHeader, inspectorContent);
-  inspector.append(inspectorNavigation, inspectorPanel);
+  const inspectorResize = node('div', 'focused-inspector-resize');
+  inspectorResize.tabIndex = 0;
+  inspectorResize.setAttribute('role', 'separator');
+  inspectorResize.setAttribute('aria-orientation', 'vertical');
+  inspectorResize.setAttribute('aria-label', 'Resize inspector');
+  inspectorResize.setAttribute('aria-controls', inspector.id);
+  inspectorResize.title = 'Drag to resize inspector. Arrow keys adjust width; double-click resets.';
+  inspector.append(inspectorResize, inspectorNavigation, inspectorPanel);
   body.append(conversation, centralPages.home.page, centralPages.settings.page, inspector);
   const navigationResize = node('div', 'focused-navigation-resize');
   navigationResize.tabIndex = 0;
@@ -199,6 +204,7 @@ export function createFocusedWorkspace({
   navigationResize.title = 'Drag to resize sessions. Arrow keys adjust width; double-click resets.';
   element.append(rail, navigation, navigationResize, header, body);
   const resizer = createNavigationResize({ element, handle: navigationResize, onCommit: onNavigationResize });
+  const inspectorResizer = createInspectorResize({ element, body, handle: inspectorResize, onCommit: onInspectorResize });
 
   const slots = Object.freeze({
     navigation, conversation, home: centralPages.home.content,
@@ -323,8 +329,6 @@ export function createFocusedWorkspace({
     element.dataset.destination = state.destination;
     element.dataset.navigation = state.navigation;
     element.dataset.navCollapsed = String(Boolean(state.navCollapsed));
-    const width = Number.isFinite(state.inspectorWidth) ? Math.round(state.inspectorWidth) : 320;
-    element.style.setProperty('--focused-inspector-width', `${Math.max(240, Math.min(640, width))}px`);
     navigation.hidden = Boolean(state.navCollapsed);
     resizer.update({ navigationWidth: state.navigationWidth, active: state.enabled !== false && state.navigation === 'left' && !state.navCollapsed });
     navigationToggle.setAttribute('aria-expanded', String(!navigation.hidden));
@@ -336,6 +340,7 @@ export function createFocusedWorkspace({
     centralPages.home.page.hidden = state.destination !== 'home';
     centralPages.settings.page.hidden = state.destination !== 'settings';
     inspector.hidden = central || !(state.inspectorOpen || state.destination === 'project' || state.destination === 'activity');
+    inspectorResizer.update({ inspectorWidth: state.inspectorWidth, active: state.enabled !== false && !inspector.hidden });
     inspectorToggle.setAttribute('aria-expanded', String(!inspector.hidden));
     if (overview.hidden !== !state.overviewOpen) overview.hidden = !state.overviewOpen;
     overviewToggle.setAttribute('aria-expanded', String(!central && !overview.hidden));
@@ -383,6 +388,7 @@ export function createFocusedWorkspace({
     if (disposed) return;
     disposed = true;
     resizer.dispose();
+    inspectorResizer.dispose();
     for (const removeListener of listeners) removeListener();
     listeners.length = 0;
     rememberedFocus.clear();
@@ -394,5 +400,6 @@ export function createFocusedWorkspace({
   update();
   return { element, slots, update, dispose,
     cancelNavigationResize: () => resizer.update({ navigationWidth: state.navigationWidth, active: false }),
+    cancelInspectorResize: () => inspectorResizer.update({ inspectorWidth: state.inspectorWidth, active: false }),
   };
 }

@@ -7,7 +7,7 @@ if (process.env.PI_WEBUI_TEST_CHROMIUM) {
 }
 
 const sources = new Map(await Promise.all([
-  'shell-workspace.mjs', 'shell-navigation-resize.mjs', 'shell-workspace.css', 'shell-view-host.mjs', 'styles.css',
+  'shell-workspace.mjs', 'shell-navigation-resize.mjs', 'shell-inspector-resize.mjs', 'shell-workspace.css', 'shell-view-host.mjs', 'styles.css',
 ].map(async name => [`/${name}`, await readFile(new URL(`../../public/${name}`, import.meta.url), 'utf8')])));
 
 const fixture = `<!doctype html><html lang="en"><head><title>Inspector header component fixture</title>
@@ -211,7 +211,7 @@ for (const [width, inspectorWidth, textScale] of [[1440, 320, 1], [1100, 240, 1]
         }) };
     });
     expect(geometry).toEqual({ pageOverflow: false, inspectorOverflow: false, tabsOverflow: false, headerOverflow: false,
-      selectorInside: true, overviewInside: true, controls: Array(8).fill(true) });
+      selectorInside: true, overviewInside: true, controls: Array(6).fill(true) });
     await expect(page.getByRole('button', { name: 'Abort', exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: 'End', exact: true })).toBeVisible();
     const screenshot = testInfo.outputPath(`inspector-header-${width}-${inspectorWidth}-${textScale}x.png`);
