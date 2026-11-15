@@ -17725,27 +17725,42 @@ function clearOpenTerminalTabGroup(groupKey, { force = false, preserveFocus = fa
   syncTabPolling();
 }
 
-function positionFocusedNewTabMenu() {
+function positionFocusedNewTabMenu(event) {
   const menu = elements.newTabMenu;
   const panel = elements.newTabMenuPanel;
-  if (!menu?.closest("#focusedWorkspace") || !panel || !elements.newTabButton) return;
+  if (!menu || !panel || !elements.newTabButton) return;
+  if (event?.type === "scroll" && panel.contains(event.target)) return;
   const trigger = elements.newTabButton.getBoundingClientRect();
-  const menuRect = menu.getBoundingClientRect();
   const viewportWidth = document.documentElement.clientWidth;
   const viewportHeight = document.documentElement.clientHeight;
-  const height = panel.getBoundingClientRect().height;
-  const width = Math.min(Math.max(menuRect.width, panel.scrollWidth), viewportWidth - 8);
-  const top = trigger.bottom + height <= viewportHeight - 4
-    ? trigger.bottom
-    : Math.max(4, Math.min(trigger.top - height, viewportHeight - height - 4));
-  panel.style.setProperty("--new-tab-menu-top", `${top}px`);
-  panel.style.setProperty("--new-tab-menu-left", `${Math.max(4, Math.min(menuRect.left, viewportWidth - width - 4))}px`);
+  // Remeasure intrinsic content on resize instead of retaining the previous row width.
+  panel.style.setProperty("--new-tab-menu-width", "max-content");
+  panel.style.setProperty("--new-tab-menu-max-height", `${viewportHeight - 8}px`);
+  const width = Math.min(Math.max(trigger.width, panel.getBoundingClientRect().width), viewportWidth - 8);
   panel.style.setProperty("--new-tab-menu-width", `${width}px`);
+  const height = panel.getBoundingClientRect().height;
+  const below = Math.max(0, viewportHeight - trigger.bottom - 4);
+  const above = Math.max(0, trigger.top - 4);
+  const openBelow = height <= below || below >= above;
+  let availableHeight = openBelow ? below : above;
+  let top = openBelow ? trigger.bottom : trigger.top - Math.min(height, availableHeight);
+  let left = Math.max(4, Math.min(trigger.left, viewportWidth - width - 4));
+  if (!menu.closest("#focusedWorkspace") && viewportWidth >= 721 && document.body.classList.contains("terminal-tabs-left")) {
+    const sideLeft = document.body.classList.contains("terminal-tabs-sidebar-start") ? trigger.right : trigger.left - width;
+    if (sideLeft >= 4 && sideLeft + width <= viewportWidth - 4) {
+      left = sideLeft;
+      top = Math.max(4, Math.min(trigger.top, viewportHeight - height - 4));
+      availableHeight = viewportHeight - top - 4;
+    }
+  }
+  panel.style.setProperty("--new-tab-menu-max-height", `${availableHeight}px`);
+  panel.style.setProperty("--new-tab-menu-top", `${top}px`);
+  panel.style.setProperty("--new-tab-menu-left", `${left}px`);
 }
 
 function setNewTabMenuOpen(open) {
   const focusedMenu = elements.newTabMenu?.closest("#focusedWorkspace");
-  if (focusedMenu && !open && newTabMenuOpen) {
+  if (!open) {
     setNewTabMenuOpen.suppressFocusReopen = true;
     queueMicrotask(() => { setNewTabMenuOpen.suppressFocusReopen = false; });
   }
@@ -17809,7 +17824,7 @@ function newTabMenuItems() {
 function focusNewTabMenuItem(direction = "first") {
   const items = newTabMenuItems();
   const item = direction === "last" ? items.at(-1) : items[0];
-  item?.focus({ preventScroll: true });
+  item?.focus({ preventScroll: false });
 }
 
 function moveNewTabMenuFocus(delta) {
@@ -17817,7 +17832,7 @@ function moveNewTabMenuFocus(delta) {
   if (!items.length) return;
   const currentIndex = Math.max(0, items.indexOf(document.activeElement));
   const nextIndex = (currentIndex + delta + items.length) % items.length;
-  items[nextIndex].focus({ preventScroll: true });
+  items[nextIndex].focus({ preventScroll: false });
 }
 
 function scheduleTabsRender() {
@@ -48984,12 +48999,16 @@ elements.newTabButton.addEventListener("keydown", (event) => {
   openNewTabMenu();
   focusNewTabMenuItem(event.key === "ArrowUp" ? "last" : "first");
 });
+// Handle the menu before the containing mobile drawer consumes Escape in capture.
+window.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape" || event.defaultPrevented || !newTabMenuOpen || !elements.newTabMenu?.contains(event.target) || document.querySelector("dialog:modal")) return;
+  event.preventDefault();
+  event.stopPropagation();
+  setNewTabMenuOpen(false);
+  elements.newTabButton.focus({ preventScroll: true });
+}, { capture: true });
 elements.newTabMenuPanel?.addEventListener("keydown", (event) => {
-  if (event.key === "Escape") {
-    event.preventDefault();
-    setNewTabMenuOpen(false);
-    elements.newTabButton.focus({ preventScroll: true });
-  } else if (event.key === "ArrowDown") {
+  if (event.key === "ArrowDown") {
     event.preventDefault();
     moveNewTabMenuFocus(1);
   } else if (event.key === "ArrowUp") {
@@ -49003,11 +49022,13 @@ elements.newTabMenuPanel?.addEventListener("keydown", (event) => {
     focusNewTabMenuItem("last");
   }
 });
-elements.newTabMenu?.addEventListener("pointerenter", () => openNewTabMenu());
+elements.newTabButton.addEventListener("pointerenter", () => openNewTabMenu());
 elements.newTabMenu?.addEventListener("pointerleave", () => {
   if (!elements.newTabMenu?.contains(document.activeElement)) setNewTabMenuOpen(false);
 });
-elements.newTabMenu?.addEventListener("focusin", () => openNewTabMenu());
+elements.newTabMenu?.addEventListener("focusin", () => {
+  if (!newTabMenuOpen) openNewTabMenu();
+});
 elements.newTabMenu?.addEventListener("focusout", () => {
   setTimeout(() => {
     if (!elements.newTabMenu?.contains(document.activeElement)) setNewTabMenuOpen(false);

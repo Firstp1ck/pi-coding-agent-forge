@@ -5433,6 +5433,37 @@ button.subagent-gate-attempt:focus-visible {
 .terminal-tabs > .terminal-new-tab-menu:only-child .composer-publish-menu-panel {
   inset: 100% auto auto 0;
 }
+/* Keep the hit target equal to the visible button in sidebar and top navigation. */
+#newTabMenu.terminal-new-tab-menu,
+#focusedWorkspace #newTabMenu.terminal-new-tab-menu {
+  width: max-content;
+  max-width: 100%;
+  align-self: flex-start;
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+}
+#newTabMenu .terminal-new-tab-button {
+  width: auto;
+}
+#newTabMenu:not(.open) .composer-publish-menu-panel {
+  display: none;
+}
+#newTabMenu.terminal-new-tab-menu .composer-publish-menu-panel {
+  position: fixed;
+  inset: var(--new-tab-menu-top, 0) auto auto var(--new-tab-menu-left, 0);
+  width: var(--new-tab-menu-width, max-content);
+  min-width: 0;
+  max-width: calc(100vw - 8px);
+  max-height: var(--new-tab-menu-max-height, calc(100dvh - 8px));
+  margin: 0;
+  padding: 0 0 1px;
+  gap: 6px;
+  overflow: auto;
+}
+#focusedWorkspace #newTabMenu .composer-publish-menu-panel {
+  max-height: var(--new-tab-menu-max-height, calc(100dvh - 8px));
+  padding-bottom: 1px;
+}
 .terminal-new-tab-menu .composer-publish-menu-item {
   color: var(--ctp-pink);
   border-color: rgba(245, 194, 231, 0.32);
