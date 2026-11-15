@@ -21,6 +21,6 @@ assert.match(resizePromptInput, /input\.style\.height = "auto";[\s\S]*borderTopW
 assert.doesNotMatch(resizePromptInput, /input\.style\.overflowY = "auto";/, "auto-resizing must not force a scrollbar below the six-line cap");
 assert.match(html, /styles\.css\?v=161/, "the page should request the six-line prompt stylesheet revision");
 assert.match(html, /app\.js\?v=202/, "the page should request the current app revision");
-assert.match(serviceWorker, /const CACHE_NAME = "pi-webui-pwa-v174"/, "the PWA cache identity should advance with the prompt scroll assets");
+assert.match(serviceWorker, /const CACHE_NAME = "pi-webui-pwa-v175"/, "the PWA cache identity should advance with the prompt scroll assets");
 
 console.log("prompt-input-vertical-scroll-static.test.mjs passed");

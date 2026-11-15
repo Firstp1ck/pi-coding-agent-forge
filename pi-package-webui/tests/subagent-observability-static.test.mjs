@@ -29,6 +29,6 @@ assert.match(app, /for \(const \[key, value\] of widgets\)[\s\S]*if \(key === SU
 assert.match(css, /\.subagent-source-badge[\s\S]*text-overflow: ellipsis[\s\S]*@media \(max-width: 720px\)/, "source badges should remain compact and responsive");
 assert.match(html, /Managed and registered Pi agent runs[\s\S]*External agents/, "help should explain managed, registered, and external groups");
 assert.match(html, /styles\.css\?v=161[\s\S]*app\.js\?v=202/, "browser assets should use the current subagent-observability revisions");
-assert.match(worker, /pi-webui-pwa-v174/, "PWA cache identity should advance with subagent widget suppression");
+assert.match(worker, /pi-webui-pwa-v175/, "PWA cache identity should advance with subagent widget suppression");
 
 console.log("subagent-observability-static.test.mjs passed");

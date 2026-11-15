@@ -868,7 +868,7 @@ test("shell modules survive the service-worker offline cache and online refresh"
     const cache = await caches.open(active);
     return { active, modules: await Promise.all(names.map(async name => !!await cache.match(`/${name}.mjs`))), api: (await cache.keys()).some(request => new URL(request.url).pathname.startsWith('/api/')) };
   }, modules);
-  assert.equal(cacheState.active, 'pi-webui-pwa-v174');
+  assert.equal(cacheState.active, 'pi-webui-pwa-v175');
   assert.deepEqual(cacheState.modules, modules.map(() => true));
   assert.equal(cacheState.api, false);
   try {

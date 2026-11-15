@@ -110,6 +110,12 @@ Inventory, package/cache coherence, documentation links and whitespace checks pa
 
 Current fixture screenshots show the [busy composer](screenshots/interaction/busy-composer.png), [attention inbox](screenshots/interaction/attention-inbox.png) and [model picker](screenshots/interaction/model-picker.png).
 
+### Composer More layout repair
+
+The compact More disclosure inherited the customizable action grid, so its entire panel occupied one narrow cell and stretched More and Send from 34px to about 227px tall. The expanded actions now span a separate grid row and retain their existing action order. Visible overflow lets nested menus remain clickable above the composer. No JavaScript behavior or saved layout changed.
+
+The regression reproduced at 1100px and 1440px before the fix. Three browser cases now cover an open Project inspector, a normal desktop and a 500px-high window, including nested action access, compact primary-button geometry and draft preservation. The combined regression/composer suite passed 15 cases; 25 affected static test files passed. The cache identity advances to PWA175 with adapter CSS5 so existing previews receive the stylesheet. See the [expanded More screenshot](screenshots/interaction/more-expanded.png).
+
 ### Platform limits
 
 Linux Chromium is the verified browser environment. Physical Android/iOS keyboards, IME, microphones, Windows/macOS behavior, WebKit and installed live-provider/companion combinations remain unmeasured. Existing platform-specific behavior is preserved in code and focused contracts, not claimed as device-tested.

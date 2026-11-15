@@ -18,7 +18,7 @@ assert.match(app, /event\?\.type === "middle-drag"\) return event\.deltaY > 0;/,
 assert.match(css, /body\.middle-button-auto-scrolling,[\s\S]*cursor: all-scroll !important;[\s\S]*user-select: none !important;/, "active automatic scrolling should expose a directional-scroll affordance and suppress accidental selection");
 assert.match(html, /styles\.css\?v=161/, "changed drag-scroll styles should advance the stylesheet revision");
 assert.match(html, /app\.js\?v=202/, "changed drag-scroll wiring should advance the app revision");
-assert.match(serviceWorker, /const CACHE_NAME = "pi-webui-pwa-v174";[\s\S]*"\/middle-button-drag-scroll\.mjs"/, "offline PWA installs should refresh and cache the new controller module");
+assert.match(serviceWorker, /const CACHE_NAME = "pi-webui-pwa-v175";[\s\S]*"\/middle-button-drag-scroll\.mjs"/, "offline PWA installs should refresh and cache the new controller module");
 assert.match(JSON.parse(packageJson).scripts.check, /node --check public\/middle-button-drag-scroll\.mjs/, "the package check should parse the startup-critical controller module");
 
 console.log("middle-button-drag-scroll-static.test.mjs passed");

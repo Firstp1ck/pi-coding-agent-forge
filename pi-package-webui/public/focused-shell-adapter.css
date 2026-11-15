@@ -7,7 +7,17 @@ html[data-desktop-shell="focused"] #busyPromptBehaviorMenu { display: none !impo
 html[data-desktop-shell="focused"] #composerActionsButton { display: inline-flex; }
 html[data-desktop-shell="focused"] #composerActionsPanel { display: none; }
 html[data-desktop-shell="focused"] body.composer-actions-open #composerActionsPanel {
-  display: flex; flex-wrap: wrap; max-height: 35vh; overflow: auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, var(--composer-action-cell-min-width, 3.2rem));
+  grid-auto-flow: dense;
+  grid-column: 1 / -1;
+  /* Keep the disclosure below actions with a user-defined grid order. */
+  order: 2147483647;
+  flex: 0 0 100%;
+  width: 100%;
+  gap: .5rem;
+  align-items: start;
+  overflow: visible;
 }
 html[data-desktop-shell="focused"] .side-panel-section-content { min-width: 0; }
 html[data-desktop-shell="focused"] .side-panel-controls { display: grid; gap: 16px; }

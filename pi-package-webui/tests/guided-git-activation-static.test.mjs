@@ -94,7 +94,7 @@ test("fixture, cache revisions, and layered docs expose the migration contract",
   assert.match(fakePi, /git-guided-workflow:webui-start/u);
   assert.match(html, /styles\.css\?v=161/u);
   assert.match(html, /app\.js\?v=202/u);
-  assert.match(serviceWorker, /pi-webui-pwa-v174/u);
+  assert.match(serviceWorker, /pi-webui-pwa-v175/u);
   assert.match(serviceWorker, /"\/guided-git-command-state\.mjs"/u);
   assert.match(readme, /pi-extension-git-guided-workflow/u);
   assert.match(technical, /\/git-guided-workflow/u);
