@@ -6,7 +6,7 @@ import { createAttentionInbox } from './shell-attention-inbox.mjs';
 import { createConversationOverview } from './conversation-overview.mjs';
 
 /** Places existing application views. The caller retains feature state and navigation. */
-export function createFocusedShellAdapter({ document, viewHost, nodes, sections, onNavigate, onPreferences, onInvoke, getTools, getContextActions, onBehaviorChange, onModel, onEffort, onScopedModels, getAttention, onAttentionSelect, onOverviewAction }) {
+export function createFocusedShellAdapter({ document, viewHost, nodes, sections, onNavigate, onPreferences, onInvoke, getTools, getContextActions, onBehaviorChange, onModel, onEffort, onScopedModels, getAttention, onAttentionSelect, onOverviewAction, onHome }) {
   let mounted = false;
   let inspector = null;
   let toolsTrigger = null;
@@ -15,7 +15,7 @@ export function createFocusedShellAdapter({ document, viewHost, nodes, sections,
   const contentHidden = new Map();
   const settingsIds = ['controls', 'optional-features'];
   const byId = new Map(sections.map(record => [record.id, record]));
-  const composer = createFocusedComposerControls({ document, onBehaviorChange, onModel, onEffort, onScopedModels });
+  const composer = createFocusedComposerControls({ document, onBehaviorChange, onModel, onEffort, onScopedModels, showSettings: false });
   const composerControls = composer.element;
   composerControls.hidden = true;
   nodes.composer.append(composerControls);
@@ -60,7 +60,7 @@ export function createFocusedShellAdapter({ document, viewHost, nodes, sections,
     },
   });
   let lastInspector = { destination: 'project', inspector: 'files' };
-  const workspace = createFocusedWorkspace({ document, onNavigate,
+  const workspace = createFocusedWorkspace({ document, onNavigate, onHome,
     onToggleOverview: () => {
       const open = !snapshot.overviewOpen;
       if (open && ['home', 'settings'].includes(snapshot.destination) && onNavigate('conversation', null) === false) return;
@@ -76,6 +76,7 @@ export function createFocusedShellAdapter({ document, viewHost, nodes, sections,
     },
     onToggleNavigation: () => onPreferences({ navCollapsed: !snapshot.navCollapsed }),
     onNavigationResize: navigationWidth => onPreferences({ navigationWidth }),
+    onInspectorResize: inspectorWidth => onPreferences({ inspectorWidth }),
     onSessionMenu: () => openContextActions('Session'),
     onProjectMenu: () => openContextActions('Project'),
     onInspectorClose: () => onNavigate('conversation', null),
@@ -89,6 +90,14 @@ export function createFocusedShellAdapter({ document, viewHost, nodes, sections,
     const transcript = nodes.chat?.getBoundingClientRect();
     const available = transcript ? transcript.bottom - host.getBoundingClientRect().top - 8 : workspace.slots.conversation.clientHeight - 24;
     host.style.height = `${Math.max(0, available)}px`;
+    const card = overview.element;
+    card.style.setProperty('--overview-width', '288px');
+    card.classList.remove('conversation-overview-wide');
+    const width = Math.min(560, Math.max(0, workspace.slots.conversation.clientWidth - 24));
+    if (card.scrollHeight > available && width >= 480) {
+      card.style.setProperty('--overview-width', `${width}px`);
+      card.classList.add('conversation-overview-wide');
+    }
   }
   const overviewResize = new document.defaultView.ResizeObserver(sizeOverview);
   for (const node of [workspace.slots.conversation, nodes.composer, nodes.chat]) if (node) overviewResize.observe(node);
@@ -188,6 +197,7 @@ export function createFocusedShellAdapter({ document, viewHost, nodes, sections,
     else sidebarSettings.removeAttribute('aria-current');
     if (!next.enabled) {
       workspace.cancelNavigationResize();
+      workspace.cancelInspectorResize?.();
       if (!mounted) return;
       closeTools();
       inbox.close();
@@ -209,6 +219,7 @@ export function createFocusedShellAdapter({ document, viewHost, nodes, sections,
     document.documentElement.dataset.desktopShell = 'focused';
     workspace.update(next);
     composer.update(next.composer || {});
+    composerControls.hidden = !next.composer?.runActive;
     if (inbox.element.open) inbox.update(getAttention());
     if (contextActions.element.open) {
       const data = contextSnapshot(contextCategory);
@@ -225,7 +236,6 @@ export function createFocusedShellAdapter({ document, viewHost, nodes, sections,
         for (const id of settingsIds) mountContent(id, workspace.slots.settings);
         for (const node of [nodes.footer, nodes.versions]) if (node) viewHost.move(node, workspace.slots.settings);
       }
-      composerControls.hidden = false;
       moveRunControls(workspace.slots.runControls);
       mounted = true;
       modalStack = [...document.querySelectorAll("dialog:modal")];
@@ -242,5 +252,5 @@ export function createFocusedShellAdapter({ document, viewHost, nodes, sections,
     sizeOverview();
   }
 
-  return { update, openTools, closeTools, closeAttention: () => inbox.close(), get modelTrigger() { return composerControls.querySelector('.focused-composer-scoped-models:not([hidden])') || composerControls.querySelector('.focused-composer-model-value').parentElement; }, get active() { return mounted; }, get inspector() { return mounted ? inspector : null; } };
+  return { update, openTools, closeTools, closeAttention: () => inbox.close(), get modelTrigger() { return nodes.statusBar?.querySelector('.footer-model.footer-meta-action, .footer-tui-model'); }, get active() { return mounted; }, get inspector() { return mounted ? inspector : null; } };
 }

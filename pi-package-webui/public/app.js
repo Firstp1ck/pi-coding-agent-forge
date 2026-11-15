@@ -74,6 +74,7 @@ const elements = {
   newTabMenuPanel: $("#newTabMenuPanel"),
   newTabCurrentDirectoryButton: $("#newTabCurrentDirectoryButton"),
   newTabChooseDirectoryButton: $("#newTabChooseDirectoryButton"),
+  newTabNoProjectButton: $("#newTabNoProjectButton"),
   newTabWorktreeButton: $("#newTabWorktreeButton"),
   closeAllTabsButton: $("#closeAllTabsButton"),
   terminalSplitShell: $("#terminalSplitShell"),
@@ -2427,7 +2428,7 @@ function renderFocusedShell() {
     inspectorTitle: record?.label || record?.button?.querySelector(".side-panel-section-label")?.textContent || "",
     inspectorTopics: record && focusedShellState.destination !== "settings" ? focusedInspectorTopics(focusedShellState.destination) : [],
     title: active?.title || "Choose a session",
-    context: active?.cwd || "",
+    context: active?.workspaceKind === "no-project" ? "No Project" : active?.cwd || "",
     attentionCount: focusedAttentionSnapshot().items.filter(item => item.state === "blocked").reduce((sum, item) => sum + item.decisionCount, 0),
     finishedCount: focusedAttentionSnapshot().items.filter(item => item.state === "done").length,
     homeCollapsed: workspaceDashboardCollapsed,
@@ -2695,6 +2696,7 @@ function initializeFocusedShell() {
     document, viewHost: canonicalViewHost,
     nodes: { ...elements, settingsRoot: settingsWorkspace.element, layout: $(".layout"), conversation: $(".workspace-column"), navigation: elements.terminalTabsShell, home: elements.workspaceDashboard, footer: $("[data-control-deck-shared-footer]"), versions: $(".side-panel-version-row") },
     sections: focusedInspectorRecords(), onNavigate: navigateFocusedShell,
+    onHome: () => openNoProjectConversation(),
     onPreferences: saveFocusedShellPreferences, onInvoke: invokeFocusedTool,
     getTools: focusedToolsSnapshot, getContextActions: focusedContextActions,
     getAttention: focusedAttentionSnapshot, onAttentionSelect: openFocusedAttentionItem,
@@ -17727,7 +17729,7 @@ function openNewTabMenu() {
 }
 
 function newTabMenuItems() {
-  return [elements.newTabCurrentDirectoryButton, elements.newTabChooseDirectoryButton, elements.newTabWorktreeButton].filter(Boolean);
+  return [elements.newTabNoProjectButton, elements.newTabCurrentDirectoryButton, elements.newTabChooseDirectoryButton, elements.newTabWorktreeButton].filter(Boolean);
 }
 
 function focusNewTabMenuItem(direction = "first") {
@@ -18238,7 +18240,7 @@ async function splitTerminalTab(tabId, { triggerButton = null } = {}) {
   }
   if (triggerButton) triggerButton.disabled = true;
   try {
-    const response = await api("/api/tabs", { method: "POST", body: { cwd: resolvedCwd }, scoped: false });
+    const response = await api("/api/tabs", { method: "POST", body: sourceTab.workspaceKind === "no-project" ? { workspaceKind: "no-project" } : { cwd: resolvedCwd }, scoped: false });
     applyAuthoritativeTabSnapshot(response.data?.tabs || tabs);
     syncTabMetadata(tabs);
     const tab = response.data?.tab;
@@ -18255,18 +18257,34 @@ async function splitTerminalTab(tabId, { triggerButton = null } = {}) {
   }
 }
 
-async function createTerminalTab(cwd = currentDirectoryForNewTab(), { triggerButton = elements.newTabButton, customGroupId = null } = {}) {
+let noProjectCreationPending = false;
+
+async function openNoProjectConversation({ triggerButton = document.querySelector(".focused-brand") } = {}) {
+  if (noProjectCreationPending) return;
+  noProjectCreationPending = true;
+  try {
+    const tab = await createTerminalTab(undefined, { triggerButton, workspaceKind: "no-project" });
+    if (tab?.id === activeTabId) {
+      navigateFocusedShell("conversation", null);
+      focusPromptInput({ defer: true });
+    }
+  } finally {
+    noProjectCreationPending = false;
+  }
+}
+
+async function createTerminalTab(cwd, { triggerButton = elements.newTabButton, customGroupId = null, workspaceKind = cwd === undefined && activeTab()?.workspaceKind === "no-project" ? "no-project" : "project" } = {}) {
   setMobileTabsExpanded(false);
   setNewTabMenuOpen(false);
   const resolvedCwd = cwd || currentDirectoryForNewTab();
-  if (!resolvedCwd && tabs.length === 0) {
+  if (workspaceKind !== "no-project" && !resolvedCwd && tabs.length === 0) {
     await createTerminalTabFromChosenDirectory({ triggerButton });
     return;
   }
   const disabledButtons = new Set([elements.newTabButton, triggerButton].filter(Boolean));
   for (const button of disabledButtons) button.disabled = true;
   try {
-    const response = await api("/api/tabs", { method: "POST", body: { cwd: resolvedCwd }, scoped: false });
+    const response = await api("/api/tabs", { method: "POST", body: workspaceKind === "no-project" ? { workspaceKind } : { cwd: resolvedCwd }, scoped: false });
     applyAuthoritativeTabSnapshot(response.data?.tabs || tabs);
     syncTabMetadata(tabs);
     const tab = response.data?.tab;
@@ -18276,6 +18294,7 @@ async function createTerminalTab(cwd = currentDirectoryForNewTab(), { triggerBut
       await switchTab(tab.id);
       addEvent(`created isolated terminal ${tab.title}`, "info");
     }
+    return tab;
   } catch (error) {
     addEvent(error.message, "error");
   } finally {
@@ -20686,10 +20705,23 @@ function renderTuiFooterLine({ cwd, cwdTitle, message = "", stats = [], model = 
   for (const stat of stats.filter(Boolean)) line.append(footerTuiItem(stat, "footer-tui-stat"));
   if (model) {
     line.append(make("span", "footer-tui-spacer"));
-    line.append(footerTuiItem(model, "footer-tui-model", {
+    const modelButton = footerTuiItem(model, "footer-tui-model", {
       onClick: () => setFooterModelPickerOpen(!footerModelPickerOpen),
       title: `Change scoped model: ${model}`,
-    }));
+    });
+    modelButton.setAttribute("aria-haspopup", "listbox");
+    modelButton.setAttribute("aria-expanded", String(footerModelPickerOpen));
+    line.append(modelButton);
+    if (focusedShell?.active) {
+      const level = currentState?.pendingThinkingLevel || currentState?.thinkingLevel || "off";
+      const effort = footerTuiItem(`Effort: ${level}`, "footer-thinking footer-meta-action", {
+        onClick: () => setFooterThinkingPickerOpen(!footerThinkingPickerOpen),
+        title: "Change thinking effort for this session",
+      });
+      effort.setAttribute("aria-haspopup", "listbox");
+      effort.setAttribute("aria-expanded", String(footerThinkingPickerOpen));
+      line.append(effort);
+    }
   }
   return line;
 }
@@ -20768,6 +20800,10 @@ function renderGitFooterPayloadMetric(chip, payload) {
   const action = piAction || contextAction;
   options.title = gitFooterPayloadTooltip(chip, { action });
   const node = footerMetric(chip.icon || "•", chip.label, chip.value, chip.tone ? `tone-${chip.tone}` : "", options);
+  if (["model", "thinking"].includes(chip.key) && options.onClick) {
+    node.setAttribute("aria-haspopup", "listbox");
+    node.setAttribute("aria-expanded", String(chip.key === "model" ? footerModelPickerOpen : footerThinkingPickerOpen));
+  }
   if (chip.contextUsage) applyFooterContextUsage(node, chip.contextUsage);
   if (chip.usageWindows) applyFooterUsageWindows(node, chip.usageWindows);
   return bindGitFooterContextMenu(node, chip);
@@ -23464,7 +23500,7 @@ function setFooterModelPickerOpen(open, { restoreFocus = false } = {}) {
   }
 }
 
-function setFooterThinkingPickerOpen(open) {
+function setFooterThinkingPickerOpen(open, { restoreFocus = false } = {}) {
   const wasOpen = footerThinkingPickerOpen;
   footerThinkingPickerOpen = !!open;
   if (footerThinkingPickerOpen) {
@@ -23481,7 +23517,13 @@ function setFooterThinkingPickerOpen(open) {
   document.body.classList.toggle("footer-model-picker-open", isFooterPickerOpen());
   renderFooter();
   updateFooterModelPickerPosition();
-  if (wasOpen && !footerThinkingPickerOpen) scheduleDeferredUiFlushAfterDropdownClose();
+  if (footerThinkingPickerOpen) queueMicrotask(() => {
+    elements.statusBar.querySelector('.footer-thinking-picker [aria-selected="true"]:not(:disabled), .footer-thinking-picker button:not(:disabled)')?.focus({ preventScroll: true });
+  });
+  if (wasOpen && !footerThinkingPickerOpen) {
+    scheduleDeferredUiFlushAfterDropdownClose();
+    if (restoreFocus) queueMicrotask(() => elements.statusBar.querySelector(".footer-thinking.footer-meta-action")?.focus({ preventScroll: true }));
+  }
 }
 
 function footerGitBranchKey(item = {}) {
@@ -36820,7 +36862,8 @@ function emptyStartAction({ title, description, symbol, className = "", onClick 
 function renderEmptyStartState() {
   if (elements.chat.querySelector(".empty-start-state")) return;
   const tab = activeTab();
-  const workspace = latestWorkspace?.displayCwd || (tab?.cwd ? normalizeDisplayPath(tab.cwd) : "");
+  const noProject = tab?.workspaceKind === "no-project";
+  const workspace = noProject ? "No Project" : latestWorkspace?.displayCwd || (tab?.cwd ? normalizeDisplayPath(tab.cwd) : "");
   const workspaceInfo = normalizeGitWorkspaceInfo(tab?.gitWorkspace);
   const branch = workspaceInfo?.branch || "";
   const model = currentState?.model ? shortModelLabel(currentState.model) : "";
@@ -36832,13 +36875,19 @@ function renderEmptyStartState() {
   const mark = make("span", "empty-start-mark", "π");
   mark.setAttribute("aria-hidden", "true");
   const heading = make("div", "empty-start-heading");
-  const title = make("h1", undefined, "Choose where to work");
+  const title = make("h1", undefined, noProject ? "Start a conversation" : "Choose where to work");
   title.id = "emptyStartTitle";
-  heading.append(title, make("p", undefined, "Open a workspace, return to a session, or isolate branch work. To start here, just type below."));
+  heading.append(title, make("p", undefined, noProject ? "No Project. Start typing below; this conversation has its own folder for files and tools." : "Open a workspace, return to a session, or isolate branch work. To start here, just type below."));
   intro.append(mark, heading);
 
   const actions = make("div", "empty-start-actions");
   actions.append(
+    ...(!noProject ? [emptyStartAction({
+      title: "No Project",
+      description: "Start a conversation in its own folder",
+      symbol: "π",
+      onClick: (button) => openNoProjectConversation({ triggerButton: button }),
+    })] : []),
     emptyStartAction({
       title: "Open workspace",
       description: "Choose a folder for a new Pi tab",
@@ -48719,7 +48768,8 @@ elements.newTabMenu?.addEventListener("focusout", () => {
     if (!elements.newTabMenu?.contains(document.activeElement)) setNewTabMenuOpen(false);
   }, 0);
 });
-elements.newTabCurrentDirectoryButton?.addEventListener("click", () => createTerminalTab(currentDirectoryForNewTab(), { triggerButton: elements.newTabCurrentDirectoryButton }));
+elements.newTabCurrentDirectoryButton?.addEventListener("click", () => createTerminalTab(undefined, { triggerButton: elements.newTabCurrentDirectoryButton }));
+elements.newTabNoProjectButton?.addEventListener("click", () => openNoProjectConversation({ triggerButton: elements.newTabNoProjectButton }));
 elements.newTabChooseDirectoryButton?.addEventListener("click", () => createTerminalTabFromChosenDirectory({ triggerButton: elements.newTabChooseDirectoryButton }));
 elements.newTabWorktreeButton?.addEventListener("click", () => openBranchWorktreePicker());
 elements.workspaceSaveButton?.addEventListener("click", () => saveWebuiWorkspace());
@@ -50170,8 +50220,9 @@ window.addEventListener("keydown", (event) => {
     return;
   }
   if (isFooterPickerOpen()) {
+    const restoreThinkingFocus = footerThinkingPickerOpen;
     setFooterModelPickerOpen(false, { restoreFocus: footerModelPickerOpen });
-    setFooterThinkingPickerOpen(false);
+    setFooterThinkingPickerOpen(false, { restoreFocus: restoreThinkingFocus });
     setFooterBranchPickerOpen(false);
     return;
   }

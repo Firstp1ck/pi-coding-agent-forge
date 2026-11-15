@@ -2,13 +2,13 @@
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  width: 288px;
+  width: var(--overview-width, 288px);
   max-width: 100%;
-  max-height: min(100%, 32rem);
+  max-height: none;
   min-width: 0;
   min-height: 0;
   pointer-events: auto;
-  overflow: hidden;
+  overflow: visible;
   color: var(--text);
   background: var(--panel-3);
   border: 1px solid var(--border);
@@ -60,8 +60,13 @@
 .conversation-overview button:hover:not(:disabled) { background: var(--panel-2); color: var(--text); border-color: var(--border); }
 .conversation-overview button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .conversation-overview button:disabled { cursor: default; opacity: 0.55; }
-.conversation-overview-content { min-height: 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; scrollbar-width: none; }
-.conversation-overview-content::-webkit-scrollbar { display: none; }
+.conversation-overview-content { min-height: 0; overflow: visible; }
+.conversation-overview-wide .conversation-overview-content { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.conversation-overview-wide .conversation-overview-section { border-top: 0; }
+.conversation-overview-wide .conversation-overview-section:nth-child(even) { border-left: 1px solid var(--border); }
+/* Only screen constraints may scroll the whole card; its rows have no height cap. */
+html[data-desktop-shell="focused"] #focusedWorkspace .focused-overview-host { overflow-y: auto; overflow-x: hidden; scrollbar-width: none; }
+html[data-desktop-shell="focused"] #focusedWorkspace .focused-overview-host::-webkit-scrollbar { display: none; }
 .conversation-overview-section { padding: 10px 12px; }
 .conversation-overview-section + .conversation-overview-section { border-top: 1px solid var(--border); }
 .conversation-overview-section-title { margin: 0 0 6px; color: var(--muted); font-size: inherit; font-weight: 600; }

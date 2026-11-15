@@ -16,7 +16,7 @@ const fixture = `<!doctype html><html lang="en"><head><title>Conversation overvi
 body { background: var(--bg); background-image: none; }
 body::before, body::after { display: none; }
 #conversation { position: relative; width: 100%; height: 100dvh; padding: 18px; }
-#host { position: absolute; inset: 12px 12px 90px; pointer-events: none; display: flex; justify-content: flex-end; align-items: flex-start; }
+#host { position: absolute; inset: 12px 12px 90px; pointer-events: none; display: flex; justify-content: flex-end; align-items: flex-start; overflow-y: auto; overflow-x: hidden; scrollbar-width: none; }
 #draft { position: absolute; bottom: 12px; left: 12px; width: calc(100% - 24px); height: 60px;
   min-height: 0; background: var(--panel-3); color: var(--text); }
 html[data-fixture-theme="light"] { --bg: #eff1f5; --text: #4c4f69; --muted: #5c5f77;
@@ -206,7 +206,7 @@ for (const theme of ['dark', 'light']) {
     { name: 'narrow-host', width: 320, height: 400, text: 100, hostWidth: 196 },
     { name: 'double-text', width: 320, height: 500, text: 200 },
   ]) {
-    test(`${theme} ${scenario.name} stays bounded, scrolls content only as needed, and keeps controls usable`, async ({ page }, testInfo) => {
+    test(`${theme} ${scenario.name} grows with content and retains access in constrained windows`, async ({ page }, testInfo) => {
       await page.setViewportSize({ width: scenario.width, height: scenario.height });
       await page.evaluate(({ theme, text, hostWidth }) => {
         document.documentElement.dataset.fixtureTheme = theme;
@@ -222,11 +222,12 @@ for (const theme of ['dark', 'light']) {
         const host = card.parentElement;
         const rect = card.getBoundingClientRect();
         const bounds = host.getBoundingClientRect();
-        return { width: rect.width, aboveDraft: rect.bottom <= document.getElementById('draft').getBoundingClientRect().top,
+        return { width: rect.width, aboveDraft: bounds.bottom <= document.getElementById('draft').getBoundingClientRect().top,
         bounded: rect.left >= bounds.left && rect.right <= bounds.right
-          && rect.top >= bounds.top && rect.bottom <= bounds.bottom + 1,
+          && rect.top >= bounds.top,
         cardScrolls: card.scrollHeight > card.clientHeight + 1,
         contentScrolls: content.scrollHeight > content.clientHeight + 1,
+        hostScrolls: host.scrollHeight > host.clientHeight + 1,
         horizontal: card.scrollWidth > card.clientWidth + 1 || content.scrollWidth > content.clientWidth + 1,
         pointer: getComputedStyle(card).pointerEvents };
       });
@@ -235,11 +236,12 @@ for (const theme of ['dark', 'light']) {
       expect(geometry.width).toBeLessThanOrEqual(288);
       expect(geometry.horizontal).toBe(false);
       expect(geometry.cardScrolls).toBe(false);
-      expect(geometry.contentScrolls).toBe(scenario.name !== 'desktop');
+      expect(geometry.contentScrolls).toBe(false);
+      expect(geometry.hostScrolls).toBe(scenario.name !== 'desktop');
       expect(geometry.pointer).toBe('auto');
       await page.getByRole('button', { name: 'Open Agents', exact: true }).click();
       expect(await page.evaluate(() => events.at(-1).actionId)).toBe('agents');
-      await page.locator('.conversation-overview-content').evaluate(node => { node.scrollTop = 0; });
+      await page.locator('#host').evaluate(node => { node.scrollTop = 0; });
       await page.getByRole('textbox').focus();
       await page.screenshot({ path: testInfo.outputPath(`overview-${theme}-${scenario.name}.png`) });
       await page.getByRole('button', { name: 'Close conversation overview' }).click();

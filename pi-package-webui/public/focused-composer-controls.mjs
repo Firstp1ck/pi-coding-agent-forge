@@ -10,7 +10,7 @@ export function composerSubmissionPresentation({ runActive = false, behavior = '
 }
 
 /** Display caller-owned effective settings. Picker callbacks receive their stable trigger button. */
-export function createFocusedComposerControls({ document, onBehaviorChange, onModel, onEffort, onScopedModels }) {
+export function createFocusedComposerControls({ document, onBehaviorChange, onModel, onEffort, onScopedModels, showSettings = true }) {
   const id = `focusedComposerControls${++nextControlId}`;
   const node = (tag, className, text) => {
     const element = document.createElement(tag);
@@ -41,7 +41,10 @@ export function createFocusedComposerControls({ document, onBehaviorChange, onMo
   const effort = setting('effort', 'Effort');
   const scopedModels = node('button', 'focused-composer-setting-button focused-composer-scoped-models', 'Scoped models');
   scopedModels.type = 'button';
-  scopedModels.hidden = typeof onScopedModels !== 'function';
+  scopedModels.hidden = !showSettings || typeof onScopedModels !== 'function';
+  scope.hidden = !showSettings;
+  model.group.hidden = !showSettings;
+  effort.group.hidden = !showSettings;
   scopedModels.setAttribute('aria-haspopup', 'listbox');
   scopedModels.setAttribute('aria-expanded', 'false');
   scopedModels.title = 'Choose from your saved model scope';
@@ -101,7 +104,7 @@ export function createFocusedComposerControls({ document, onBehaviorChange, onMo
       || (focused === model.button && model.button.disabled)
       || (focused === scopedModels && scopedModels.disabled)
       || (focused === effort.button && effort.button.disabled)) {
-      const target = [model.button, effort.button, select].find((control) => !control.disabled) || element;
+      const target = [...(showSettings ? [model.button, effort.button] : []), select].find((control) => !control.disabled) || element;
       target.focus({ preventScroll: true });
     }
   }

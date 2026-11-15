@@ -24,7 +24,10 @@ for (const [width, height] of [[1440, 900], [1100, 500]]) {
       const bounds = await overview.boundingBox();
       const chat = await page.locator('#chat').boundingBox();
       expect(bounds.y).toBeGreaterThanOrEqual(chat.y);
-      expect(bounds.y + bounds.height).toBeLessThanOrEqual(chat.y + chat.height);
+      if (height === 900) expect(bounds.y + bounds.height).toBeLessThanOrEqual(chat.y + chat.height);
+      const host = await page.locator('#focusedWorkspaceOverview').boundingBox();
+      expect(host.y + host.height).toBeLessThanOrEqual(chat.y + chat.height);
+      expect(await overview.locator('.conversation-overview-content').evaluate(node => node.scrollHeight <= node.clientHeight + 1)).toBe(true);
       await overview.getByRole('button', { name: 'Open Folder', exact: true }).click();
       const inspector = page.locator('#focusedWorkspaceInspector');
       await expect(inspector).toBeVisible();
