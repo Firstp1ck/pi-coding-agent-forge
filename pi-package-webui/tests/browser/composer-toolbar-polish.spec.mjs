@@ -151,8 +151,8 @@ async function checkMore(page, info, name) {
   const options = await page.locator('#optionsMenuButton').boundingBox();
   const newSession = await page.locator('#newSessionButton').boundingBox();
   const precedes = (a, b) => a.y < b.y - 1 || (Math.abs(a.y - b.y) <= 1 && a.x < b.x);
+  expect(precedes(newSession, compact)).toBe(true);
   expect(precedes(compact, options)).toBe(true);
-  expect(precedes(options, newSession)).toBe(true);
   await expectToolbar(page);
   const relocatedControls = page.locator('#composerActionsPanel .composer-workflow-mode-dock button, #composerActionsPanel .composer-context-tags button');
   for (const button of await relocatedControls.all()) {
