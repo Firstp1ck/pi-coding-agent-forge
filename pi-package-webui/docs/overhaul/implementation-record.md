@@ -132,7 +132,7 @@ Activity replaces its horizontal topic strip with a full-width View selector. Op
 
 A Scoped models button beside Model opens the existing saved-scope picker directly. It retains provider columns, simple layout, ordering and keyboard selection; Model still opens the full catalog. Escape returns to Scoped models. Alt+Up inside a model option reorders it without also invoking global queue restoration.
 
-The affected browser run passed 74 cases; the final shortcut correction passed all four scoped-model cases. PWA179 offline recovery passed. Independent review passed 40 browser cases and found 24 stale app-revision assertions. Those were corrected; all 28 affected static cases pass. The final combined package gate remains pending. See [Activity picker](screenshots/navigation/activity-picker.png) and [scoped models](screenshots/navigation/scoped-models.png).
+The affected browser run passed 74 cases; the final shortcut correction passed all four scoped-model cases. PWA179 offline recovery passed. Independent review passed 40 browser cases and found 24 stale app-revision assertions. Those were corrected; all 28 affected static cases pass. The final combined package check passed all 254 test files with exit 0. PWA180 offline/online recovery also passed. See [Activity picker](screenshots/navigation/activity-picker.png) and [scoped models](screenshots/navigation/scoped-models.png).
 
 ### Settings, model catalog, composer and sidebar controls
 
@@ -142,7 +142,7 @@ The full model picker groups models by provider. Valid explicit release dates so
 
 The composer has a compact primary row and a separate More action grid. Short windows permit vertical focus recovery without horizontal conversation scrolling. Minimized workflow controls occupy two cells. The session sidebar supports pointer dragging, keyboard resizing, cancellation and browser-local width persistence; viewport clamping does not overwrite the saved width.
 
-Candidate `04dc31f` passed 60 combined Chromium cases, 27 composer cases and the service-worker offline/online case. Model hierarchy also passed three focused cases. Inventory and package payload checks passed. The full 254-file package run and independent Settings/model reviews are pending. Composer round two is checking the two accepted reachability/overlap fixes; sidebar round two already resolved both findings. Earlier failed runs exposed missing test-fixture dependencies and composer overflow, which were corrected without removing assertions.
+Candidate `04dc31f` passed 60 combined Chromium cases, 27 composer cases and the service-worker offline/online case. Model hierarchy also passed three focused cases. Inventory and package payload checks passed. The full package check passed all 254 test files with exit 0. Independent Settings/model reviews are pending. Composer round two is checking the two accepted reachability/overlap fixes; sidebar round two already resolved both findings. Earlier failed runs exposed missing test-fixture dependencies and composer overflow, which were corrected without removing assertions.
 
 Inspected captures: [compact composer](screenshots/controls/composer.png), [provider-grouped models](screenshots/controls/model-providers.png), and [canonical Sampling controls in Settings](screenshots/controls/settings-sampling.png). These use disposable fake-Pi fixtures and do not demonstrate installed provider behavior.
 

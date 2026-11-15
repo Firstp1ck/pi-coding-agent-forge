@@ -18,4 +18,4 @@ Accepted BUG-001 (no-op pointer click overwrote a temporarily clamped preference
 
 ## Final review disposition
 
-Sol round two reviewed9579ee4. Both accepted findings are resolved, with no direct regressions. Independent checks passed19 Chromium cases (six retained actual-app cases and13 lifecycle/bounds probes), exit0. Parent accepts the bounded resize implementation. No further review round. Final asset/cache and combined package verification remain pending with the other active UI units, so this plan stays active until those gates finish.
+Sol round two reviewed9579ee4. Both accepted findings are resolved, with no direct regressions. Independent checks passed19 Chromium cases (six retained actual-app cases and13 lifecycle/bounds probes), exit0. Parent accepts the bounded resize implementation. No further review round. Final checks passed: all 254 package test files, 60 combined browser cases including the six sidebar cases, and PWA180 offline/online recovery. Package dry-run includes the resize module. The sidebar unit has passed its acceptance gates.
