@@ -5391,6 +5391,12 @@ button.subagent-gate-attempt:focus-visible {
   color: #11111b;
   background: linear-gradient(120deg, var(--ctp-red), var(--ctp-peach));
 }
+/* Desktop actions share a row to provide 24px targets without taller tabs. */
+@media (min-width: 1051px) {
+  .terminal-tab-actions { flex-basis: 53px; min-width: 53px; flex-direction: row; }
+  .terminal-tab-actions > button { min-width: 26px; }
+  .terminal-tab-split-button:not(:only-child) { border-bottom: 0; border-right: 1px solid rgba(137, 180, 250, 0.16); }
+}
 .terminal-tab-group-close {
   border-left-color: rgba(243, 139, 168, 0.18);
 }
@@ -9686,7 +9692,7 @@ summary { cursor: pointer; color: var(--warning); }
   max-width: min(12rem, 100%);
   overflow: hidden;
   min-width: 0;
-  min-height: 0;
+  min-height: 26px;
   margin: 0;
   padding: 0.14rem 0.52rem;
   border: 1px solid rgba(137, 180, 250, 0.34);
@@ -19787,7 +19793,31 @@ body:has(#undoToast:not([hidden])) .notice-toast-stack { bottom: calc(max(1rem, 
 @media (min-width: 721px) and (max-width: 1050px) {
   html[data-tablet-shell="v2"] .file-viewer-pane { visibility: visible; pointer-events: auto; }
 }
+@media (max-width: 950px) and (max-height: 500px) and (pointer: coarse) and (hover: none) {
+  /* The short legacy transcript needs complete action targets below its pinned prompt. */
+  html:not([data-mobile-shell="v2"]):not([data-tablet-shell="v2"]) .message-copy-button,
+  html:not([data-mobile-shell="v2"]):not([data-tablet-shell="v2"]) .message-edit-retry-button {
+    top: 1.15rem;
+    width: var(--mobile-control-size);
+    min-width: var(--mobile-control-size);
+    height: var(--mobile-control-size);
+    min-height: var(--mobile-control-size);
+  }
+  html:not([data-mobile-shell="v2"]):not([data-tablet-shell="v2"]) .message-edit-retry-button { right: calc(var(--mobile-control-size) + 0.5rem); }
+  html:not([data-mobile-shell="v2"]):not([data-tablet-shell="v2"]) .message.has-copy-action { min-height: calc(var(--mobile-control-size) + 1.65rem); }
+  html:not([data-mobile-shell="v2"]):not([data-tablet-shell="v2"]) .message.has-copy-action > .message-header,
+  html:not([data-mobile-shell="v2"]):not([data-tablet-shell="v2"]) .message.has-copy-action > .message-body { padding-right: calc(var(--mobile-control-size) + 0.75rem); }
+  html:not([data-mobile-shell="v2"]):not([data-tablet-shell="v2"]) .message.has-edit-retry-action > .message-header,
+  html:not([data-mobile-shell="v2"]):not([data-tablet-shell="v2"]) .message.has-edit-retry-action > .message-body { padding-right: calc(2 * var(--mobile-control-size) + 0.75rem); }
+}
 @media (max-width: 950px) and (max-height: 300px) and (pointer: coarse) and (hover: none) {
+  /* Reserve the fixed app bar before laying out the composer. The legacy
+     max-height otherwise leaves another 32px unavailable at keyboard heights. */
+  html[data-mobile-shell="v2"] body.mobile-keyboard-open .chat-panel {
+    height: var(--visual-viewport-height, 100dvh);
+    max-height: var(--visual-viewport-height, 100dvh);
+    padding-top: 44px;
+  }
   html[data-mobile-shell="v2"] body.mobile-keyboard-open .mobile-shell-appbar {
     grid-template-columns: minmax(0, 1fr) minmax(0, auto) auto auto;
     min-height: 44px;
@@ -19795,7 +19825,16 @@ body:has(#undoToast:not([hidden])) .notice-toast-stack { bottom: calc(max(1rem, 
   }
   html[data-mobile-shell="v2"] body.mobile-keyboard-open .mobile-shell-indicators { grid-column: 2; grid-row: 1; max-width: 30vw; }
   html[data-mobile-shell="v2"] body.mobile-keyboard-open .footer-status-host { display: none; }
-  html[data-mobile-shell="v2"] body.mobile-keyboard-open .chat { padding-top: 44px; }
+  html[data-mobile-shell="v2"] body.mobile-keyboard-open .chat { padding-block: 0; }
+  html[data-mobile-shell="v2"] body.mobile-keyboard-open .composer { padding-block: 4px; }
+  html[data-mobile-shell="v2"] body.mobile-keyboard-open .composer-row { display: flex; flex-wrap: nowrap; }
+  html[data-mobile-shell="v2"] body.mobile-keyboard-open .composer-row > button { flex: 1 1 0; min-width: 0; }
+  html[data-mobile-shell="v2"] body.mobile-keyboard-open .attachment-tray {
+    flex-wrap: nowrap;
+    overflow: auto;
+    margin-top: 4px;
+  }
+  html[data-mobile-shell="v2"] body.mobile-keyboard-open .attachment-pill { flex: 0 0 auto; padding-block: 2px; }
 }
 
 @media (max-width: 950px) and (max-height: 300px) and (pointer: coarse) and (hover: none) {

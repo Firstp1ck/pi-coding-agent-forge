@@ -184,6 +184,19 @@
 #focusedWorkspace .chat-panel { border: 0; border-radius: 0; box-shadow: none; background: transparent; }
 #focusedWorkspace .chat-panel::before { background: none; }
 #focusedWorkspace .terminal-tabs-shell { padding: 5px 8px; gap: 6px; box-shadow: none; }
+/* The two adjacent actions need separate 24px targets inside their border. */
+#focusedWorkspace #tabBar .terminal-tab-actions { flex-basis: 53px; min-width: 53px; }
+#focusedWorkspace #tabBar .terminal-tab-actions > button { min-width: 26px; }
+#focusedWorkspace #tabBar .terminal-tab-close { flex-basis: 28px; min-width: 28px; }
+
+/* Expanded menus must escape the roster clip and stay above the sticky prompt. */
+#focusedWorkspace[data-navigation="top"] > .focused-navigation {
+  position: relative;
+  z-index: 21;
+}
+#focusedWorkspace[data-navigation="top"] > .focused-navigation:has(.terminal-tab-group:is(:hover, :focus-within, .menu-open)) { overflow: visible; }
+#focusedWorkspace[data-navigation="top"] .terminal-tabs:has(.terminal-tab-group:is(:hover, :focus-within, .menu-open)),
+#focusedWorkspace[data-navigation="top"] .terminal-tab-group:is(:hover, :focus-within, .menu-open) .terminal-tab-group-menu { overflow: visible; }
 #focusedWorkspace .composer { padding: 8px 12px; gap: 6px; border-radius: 10px; box-shadow: none; }
 #focusedWorkspace .composer-input-row { gap: 6px; }
 #focusedWorkspace .message { padding: 12px; margin-bottom: 12px; border-radius: 8px; box-shadow: none; }
