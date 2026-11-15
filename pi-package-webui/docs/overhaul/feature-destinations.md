@@ -17,8 +17,8 @@ This map incorporates the UI scout's inventory and the design review corrections
 | Transcript, thinking, tools, Markdown, code, images and search | Conversation | Keep output modes, follow/history scroll and context-sensitive find |
 | Mobile Essential/Detailed presentation | More: Presentation and Settings: Appearance | Retain the existing browser-local preference; this changes process chrome, never transcript content or server `compact-v1` output processing |
 | Prompt editor, uploads, paste, text attachments, slash/path/bash suggestions | Composer | Preserve attachment lifetime, queue intent and suggestion-versus-send precedence |
-| Model, effort, speed, plan/operating mode and per-session sampling | Composer/context controls and Session inspector | Keep effective value visible; persistent defaults belong in Settings |
-| Steering, follow-ups, bash queue and prompt lists | Activity inspector | Compact pending-count access beside composer; same queues and ownership |
+| Model, effort, speed, plan/operating mode and per-session sampling | Composer/context controls and Session inspector | Compact model/effort pickers apply to the captured session and show effective or pending-next-prompt values; persistent defaults belong in Settings |
+| Steering, follow-ups, bash queue and prompt lists | Composer and Activity inspector | One compact submission button follows the visible During this run choice; Activity retains queue editing and ownership |
 | Todo/workflow progress, subagent runs, launch/cancel/details, relationships | Activity inspector | Session attention counts and exact-item navigation; policy setup in Settings |
 | Intercom conversations and `/btw` | Activity inspector plus compact conversation entry | Keep separate read-only agent messages and side-question semantics |
 | Files, search, text editing, Markdown/image preview, file actions | Project inspector | Preserve dirty buffers, filesystem bounds, ignored-file visibility and remote restrictions |
@@ -38,7 +38,7 @@ This map incorporates the UI scout's inventory and the design review corrections
 | Network access, PIN controls and remote status | Settings: Connection | Show remote/local status globally; keep administration guarded server-side |
 | Pi/WebUI updates, restart, shutdown and recovery | Settings: System | Running update/recovery status remains visible across navigation and reconnect |
 | Events, errors, diagnostics and issue reporting | Activity: Events and Settings: Help | Notices link to retained details; redact support data and preserve issue wizard behavior |
-| Extension notifications, status, widgets, blocking dialogs, custom messages | Semantic host in conversation/activity | Keep request identity, response, timeout and reconnect semantics; never make approvals optional |
+| Extension notifications, status, widgets, blocking dialogs, custom messages | Semantic host in conversation/activity | Attention links background decisions to their originating conversation and authoritative dialog replay; preserve request identity, response, timeout and reconnect semantics |
 | Native questionnaires, Other answers, edit/retry, per-action feedback and LEARNING creation | Conversation and its response dialogs | Preserve input and feedback association, explicit submission and retry semantics |
 | Workflow Mode, minimized inspector, subprocess widgets, classifier details and gates | Conversation mode/status entry and Activity | Keep exact pending gate/model-exception target and originating run; controls obey existing capabilities |
 | Read-only subagent terminal projections, retained runs, Auto-Clear/detach and cancellation | Activity: Agents | Closing/detaching a projection is distinct from cancelling the real agent; preserve telemetry and external-agent identity |

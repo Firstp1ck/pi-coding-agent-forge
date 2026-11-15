@@ -94,6 +94,22 @@ Inventory regeneration, required packaged assets, local documentation links and 
 
 Screenshots from the follow-up pass show [mobile file actions](screenshots/polish/mobile-file-actions.png) and the [repository-specific tag confirmation](screenshots/polish/git-confirmation.png).
 
+### Interaction improvements
+
+The compact composer now has one submission action, labeled Send, Steer run or Queue message according to the visible behavior choice. Model and effort controls show the effective session value and open immediate-apply pickers. Busy effort changes remain labeled for the next prompt. Picker failures stay inline, and late responses cannot repaint a replacement session or dialog.
+
+All tools and Ctrl/Cmd+K share the same catalog, search and pins. Session and Project menus present six relevant actions, with More actions opening the full catalog. The separate Attention button opens decisions, running work and unseen completions. Selecting a decision switches to its originating conversation and uses authoritative dialog replay; merely opening the inbox does not mark finished work seen.
+
+Three isolated Sol/high workers implemented the components. Two independent Sol/high reviewers examined the combined implementation at `eb1c84ea` and reported no actionable findings. Their checks passed 41 unit/adapter cases and 71 browser cases across the two reviews. No second review round was needed. Parent fixes after review changed only obsolete browser selectors and evidence documents.
+
+Central validation passed all 251 package Node/static/harness files and all 51 new browser cases. The full Chromium run completed 580 cases with 572 passes and eight failures. Seven cases still targeted the deliberately hidden Classic model/effort controls; after retargeting them to the compact pickers, all seven passed with their original geometry, request-target, effective-state and navigation-budget assertions retained. The unchanged Classic deck-overlay case passed the isolated rerun and three further repetitions. Its initial failure remains unexplained and is retained as intermittent-test evidence, not claimed fixed. No test was skipped or given automatic retries.
+
+The corrected responsive/Classic suite passed 44 cases, model/effort reachability passed two, and the session-effort case passed one. Together with the unchanged cases in the full run, every browser case has passing evidence on the final production code. This is combined full-run and targeted-recheck evidence, not a claim that one full run was green. Genuine browser zoom, mobile modes, draft/attachment ownership and offline cache checks remain covered. Provider-side steering timing, installed companions, hardware and non-Chromium platforms were not newly verified.
+
+Inventory, package/cache coherence, documentation links and whitespace checks pass. No dependencies, backend contracts, settings schemas or installed configuration changed. The original crowding/performance figures above were not recaptured for this interaction pass.
+
+Current fixture screenshots show the [busy composer](screenshots/interaction/busy-composer.png), [attention inbox](screenshots/interaction/attention-inbox.png) and [model picker](screenshots/interaction/model-picker.png).
+
 ### Platform limits
 
 Linux Chromium is the verified browser environment. Physical Android/iOS keyboards, IME, microphones, Windows/macOS behavior, WebKit and installed live-provider/companion combinations remain unmeasured. Existing platform-specific behavior is preserved in code and focused contracts, not claimed as device-tested.

@@ -91,10 +91,12 @@ for (const [width, height] of viewports) {
           const controls = page.locator('[data-side-panel-section-toggle="controls"]');
           if (await controls.getAttribute('aria-expanded') !== 'true') await controls.click();
         }
-        await page.locator('#modelSelect').scrollIntoViewIfNeeded();
-        await hitChecks(page, ['#modelSelect'], info, 'model');
-        await page.locator('#thinkingSelect').scrollIntoViewIfNeeded();
-        await hitChecks(page, ['#thinkingSelect'], info, 'effort');
+        const modelControl = desktop && mode !== 'classic' ? '.focused-composer-setting-button:has(.focused-composer-model-value)' : '#modelSelect';
+        const effortControl = desktop && mode !== 'classic' ? '.focused-composer-setting-button:has(.focused-composer-effort-value)' : '#thinkingSelect';
+        await page.locator(modelControl).scrollIntoViewIfNeeded();
+        await hitChecks(page, [modelControl], info, 'model');
+        await page.locator(effortControl).scrollIntoViewIfNeeded();
+        await hitChecks(page, [effortControl], info, 'effort');
         await screenshot(page, info, 'model-effort-controls');
         await expect(page.locator('#promptInput')).toHaveValue(`Retained ${mode} draft ${width}x${height}`);
       } finally { await context.close(); }

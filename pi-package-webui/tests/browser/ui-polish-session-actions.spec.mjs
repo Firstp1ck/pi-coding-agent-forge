@@ -68,9 +68,9 @@ test('tree cancel and selection target the original tab', async ({ page, ownersh
 
 test('effort applies to source session', async ({ page, ownership }) => {
   await ready(page, ownership);
-  await page.locator('#thinkingSelect').selectOption('high');
+  await page.locator('.focused-composer-setting-button:has(.focused-composer-effort-value)').click();
   const response = page.waitForResponse(r => new URL(r.url()).pathname === '/api/thinking' && r.request().method() === 'POST');
-  await page.locator('#setThinkingButton').click();
+  await page.locator('#nativeCommandDialog').getByRole('option', { name: /^high/ }).click();
   const req = (await response).request();
   expect(new URL(req.url()).searchParams.get('tab')).toBe(ownership.tabs[0].id);
   expect(req.postDataJSON()).toMatchObject({ level: 'high' });

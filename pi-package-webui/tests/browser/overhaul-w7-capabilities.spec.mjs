@@ -33,19 +33,16 @@ const reachability = [
     await act('select original peer tab', () => tab(page, ownership.tabs[1].id).click());
     await expect(tab(page, ownership.tabs[1].id)).toHaveAttribute('aria-selected', 'true');
   }],
-  ['change model', 2, async (page, ownership) => {
-    const choice = page.locator('#modelSelect');
-    await expect(choice).toBeVisible();
-    await choice.selectOption(JSON.stringify({ provider: 'fake', modelId: 'fake-model-alt' }));
+  ['change model', 2, async (page, ownership, act) => {
+    await act('open model picker', () => page.locator('.focused-composer-setting-button:has(.focused-composer-model-value)').click());
     const response = page.waitForResponse(r => new URL(r.url()).pathname === '/api/model' && r.request().method() === 'POST');
-    await page.locator('#setModelButton').click();
+    await page.locator('#nativeCommandDialog').getByRole('option', { name: /fake\/fake-model-alt/ }).click();
     expect(new URL((await response).url()).searchParams.get('tab')).toBe(ownership.tabs[0].id);
     expect((await ownership.api(`/api/state?tab=${ownership.tabs[0].id}`)).model.id).toBe('fake-model-alt');
   }],
-  ['change effort', 2, async (page, ownership) => {
-    await expect(page.locator('#thinkingSelect')).toBeVisible();
-    await page.locator('#thinkingSelect').selectOption('high');
-    await page.locator('#setThinkingButton').click();
+  ['change effort', 2, async (page, ownership, act) => {
+    await act('open effort picker', () => page.locator('.focused-composer-setting-button:has(.focused-composer-effort-value)').click());
+    await page.locator('#nativeCommandDialog').getByRole('option', { name: /^high/ }).click();
     await expect.poll(async () => (await ownership.api(`/api/state?tab=${ownership.tabs[0].id}`)).thinkingLevel).toBe('high');
   }],
   ['attach file', 2, async (page, _ownership, act) => {

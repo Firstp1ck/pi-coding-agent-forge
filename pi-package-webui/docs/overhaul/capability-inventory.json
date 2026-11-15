@@ -54,8 +54,8 @@
     },
     {
       "file": "pi-package-webui/docs/overhaul/feature-destinations.md",
-      "bytes": 7923,
-      "sha256": "28264aae92e2c90ba7704841223b07d5e290580ee37d2a9dd9228cca8dc818a0"
+      "bytes": 8139,
+      "sha256": "eccaeb9550059f92a07846a6f279b8646becca01a186bafaddec49b4d083354d"
     },
     {
       "file": "pi-package-webui/index.ts",
@@ -1425,7 +1425,7 @@
       "id": "model-runtime",
       "capability": "Model, effort, speed, plan/operating mode and per-session sampling",
       "destination": "Composer/context controls and Session inspector",
-      "preservation": "Keep effective value visible; persistent defaults belong in Settings",
+      "preservation": "Compact model/effort pickers apply to the captured session and show effective or pending-next-prompt values; persistent defaults belong in Settings",
       "scope": "active tab; explicit defaults separately",
       "currentOwners": [
         {
@@ -1524,8 +1524,8 @@
     {
       "id": "queues",
       "capability": "Steering, follow-ups, bash queue and prompt lists",
-      "destination": "Activity inspector",
-      "preservation": "Compact pending-count access beside composer; same queues and ownership",
+      "destination": "Composer and Activity inspector",
+      "preservation": "One compact submission button follows the visible During this run choice; Activity retains queue editing and ownership",
       "scope": "originating tab",
       "currentOwners": [
         {
@@ -3432,7 +3432,7 @@
       "id": "extensions",
       "capability": "Extension notifications, status, widgets, blocking dialogs, custom messages",
       "destination": "Semantic host in conversation/activity",
-      "preservation": "Keep request identity, response, timeout and reconnect semantics; never make approvals optional",
+      "preservation": "Attention links background decisions to their originating conversation and authoritative dialog replay; preserve request identity, response, timeout and reconnect semantics",
       "scope": "originating tab/request; replay and timeout",
       "currentOwners": [
         {
