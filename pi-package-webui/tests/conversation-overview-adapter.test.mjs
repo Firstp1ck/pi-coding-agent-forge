@@ -54,7 +54,7 @@ test('overview distinguishes unknown data and scopes agent counts to the selecte
   const run = fixture();
   assert.equal(run("focusedOverviewSnapshot().sections[1].items.find(row=>row.id==='agents').value"), 'Not loaded');
   assert.equal(run("focusedOverviewSnapshot().sections[2].items.find(row=>row.id==='usage-unknown').value"), 'Not loaded');
-  run("agentState.data={groups:[{tabId:'tab-a',runningAgents:1,agentCount:3},{tabId:'tab-b',runningAgents:9,agentCount:20}]}");
+  run("agentState.data={groups:[{groupKind:'tab',tabId:'tab-a',runningAgents:1,agentCount:3},{groupKind:'tab',tabId:'tab-b',runningAgents:9,agentCount:20}]}");
   assert.equal(run("focusedOverviewSnapshot().sections[1].items.find(row=>row.id==='agents').value"), '1 running · 3 total');
   run("payload={meta:[{key:'git',value:'main'},{key:'changes',value:'+3 -1'}],providerUsage:{provider:'anthropic',capturedAt:1700000000000,secondary:{label:'Weekly',usedPercent:42}}}; usageContext={percent:25}");
   assert.equal(run("focusedOverviewSnapshot().sections[0].items.find(row=>row.id==='branch').value"), 'main');
@@ -81,4 +81,20 @@ test('current overview actions use the canonical catalog; no-session actions are
   assert.equal(run('invoked.length'), 1);
   run("tab=null;target={tabId:null,generation:2,sessionIdentity:'',cwd:''}");
   assert.equal(run('focusedOverviewSnapshot().sections.flatMap(section=>section.items).filter(row=>row.actionId).every(row=>row.disabled)'), true);
+});
+
+
+test('overview separates external agents, capability absence and stale observations', () => {
+  const run = fixture();
+  const value = () => run("focusedOverviewSnapshot().sections[1].items.find(row=>row.id==='agents').value");
+  run("agentState.data={tabs:[{tabId:'tab-a',available:true},{tabId:'tab-b',available:false}],groups:[{groupKind:'external',tabId:'tab-a',runningAgents:4,agentCount:4}]}");
+  assert.equal(value(), '0 running · 0 total');
+  run("tab={id:'tab-b'}");
+  assert.equal(value(), 'Reporting unavailable');
+  run("tab={id:'unknown'}");
+  assert.equal(value(), 'Not loaded');
+  run("tab={id:'tab-b'};agentState.data.groups.push({groupKind:'tab',tabId:'tab-b',runningAgents:1,agentCount:2})");
+  assert.equal(value(), '1 running · 2 total');
+  run("agentState.error='offline'");
+  assert.match(run("focusedOverviewSnapshot().sections[1].items.find(row=>row.id==='agents').detail"), /previous snapshot/);
 });

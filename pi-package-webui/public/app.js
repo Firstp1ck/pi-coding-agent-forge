@@ -2354,7 +2354,16 @@ function focusedOverviewSnapshot() {
   const changes = payload?.meta?.find(chip => chip.key === "changes");
   const runner = tabAppRunnerRun(tab);
   const agents = activityAgents.getSnapshot();
-  const groups = agents.data ? subagentOverviewGroups(agents.data).filter(group => group.tabId === tab?.id) : null;
+  const groups = agents.data ? subagentOverviewGroups(agents.data).filter(group => group.groupKind === "tab" && group.tabId === tab?.id) : [];
+  const agentCount = groups.reduce((sum, group) => sum + group.agentCount, 0);
+  const runningAgents = groups.reduce((sum, group) => sum + group.runningAgents, 0);
+  const agentCapability = agents.data?.tabs?.find(entry => entry.tabId === tab?.id)?.available;
+  const agentValue = agentCount > 0 || agentCapability === true
+    ? `${runningAgents} running · ${agentCount} total`
+    : agentCapability === false ? "Reporting unavailable" : "Not loaded";
+  const agentDetail = agents.error
+    ? "Latest refresh failed; any displayed counts are from the previous snapshot. Open Agents to retry."
+    : agentCapability === false && agentCount === 0 ? "Agent reporting is unavailable for this session." : "";
   const context = contextUsageSnapshot();
   const usage = payload?.providerUsage;
   const usageAction = usage?.provider === "anthropic" ? "view:claude-usage" : "view:codex-usage";
@@ -2388,7 +2397,7 @@ function focusedOverviewSnapshot() {
       { id: "work", label: "Work", items: [
         item("session", "Session", tab ? tabIndicator(tab).label : "No active session", "view:session"),
         item("runner", "Runner", runner ? cleanStatusText(runner.label || runner.displayCommand || runner.command || "App runner") : "No active runner", "view:runners", { detail: runner?.status || "" }),
-        item("agents", "Agents", groups ? `${groups.reduce((sum, group) => sum + group.runningAgents, 0)} running · ${groups.reduce((sum, group) => sum + group.agentCount, 0)} total` : "Not loaded", "view:subagents", { detail: agents.error ? "Latest refresh failed; open Agents to retry." : "" }),
+        item("agents", "Agents", agentValue, "view:subagents", { detail: agentDetail }),
         item("queue", "Queue", `${Number(currentState?.pendingMessageCount || 0) || 0} pending`, "view:queue"),
       ] },
       { id: "usage", label: "Usage", items: usageItems },

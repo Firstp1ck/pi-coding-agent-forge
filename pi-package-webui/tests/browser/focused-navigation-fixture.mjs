@@ -8,7 +8,10 @@ export async function navigateFocused(page, destination, act = async (_label, ac
     }
     const tab = page.getByRole('tablist', { name: 'Inspector destinations', exact: true })
       .getByRole('tab', { name: destination, exact: true });
-    await act(`open ${destination}`, () => tab.click());
+    await expect(tab).toBeVisible();
+    if (await tab.getAttribute('aria-selected') !== 'true') {
+      await act(`open ${destination}`, () => tab.click());
+    }
     await expect(tab).toHaveAttribute('aria-selected', 'true');
     return;
   }
