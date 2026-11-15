@@ -1,3 +1,5 @@
+import { createSessionShelfState } from "./session-shelf-state.mjs";
+import { createSessionShelves } from "./session-shelves.mjs";
 import { composerSubmissionPresentation } from "./focused-composer-controls.mjs";
 import { createSettingsResourceController } from "./settings-resource-controller.mjs";
 import { createActivityQueueController, normalizeQueuedMessages, queueMessageCount } from "./activity-queue-controller.mjs";
@@ -1746,6 +1748,12 @@ let shellPreferenceRecord = (() => {
 })();
 let shellRolloutCohort = null;
 let shellPreferenceState = { ...shellPreferenceRecord, value: effectiveShellPreferences(shellPreferenceRecord) };
+const sessionShelfState = createSessionShelfState({ storage: (() => {
+  try { return window.localStorage; } catch { return null; }
+})() });
+let sessionShelves = null;
+let renderedSessionShelves = false;
+let settledSessionIds = new Set();
 let focusedShell = null;
 let settingsWorkspace = null;
 let pendingSettingsReveal = null;
@@ -2362,6 +2370,7 @@ function renderFocusedShell() {
     actions: focusedToolsActions(),
     features: OPTIONAL_FEATURES.map(feature => ({ ...feature, description: `${feature.description} ${optionalFeatureStatus(feature.id).detail || ""}` })),
   });
+  if (renderedSessionShelves !== usesSessionShelves()) scheduleTabsRender();
   syncConversationVoicePanelSemantics();
   const voiceTarget = focusedShell.active && focusedShellState.destination === "settings" && settingsCategory(focusedShellState.inspector) === "voice" ? shellActionTarget() : null;
   if (voiceTarget && (!settingsVoiceTarget || !isCurrentSettingsTarget(settingsVoiceTarget))) {
@@ -12547,6 +12556,8 @@ function isCurrentTabContext(context) {
 
 function reconcileReplacedSession(context) {
   activeTabGeneration = context.generation;
+  sessionShelfState.restore(context.tabId);
+  scheduleTabsRender();
   activityIntercom.prune(tabs.filter(tab => tab.id !== context.tabId).map(tab => tab.id));
   activityIntercom.activate(projectTargetFromContext(context));
   latestQueuedMessagesByTab.delete(context.tabId);
@@ -15882,6 +15893,7 @@ function syncTabMetadata(nextTabs = []) {
     if (!liveIds.has(tabId)) tabMessagesCache.delete(tabId);
   }
   pruneSkillUsageForKnownTabs(liveIds);
+  reconcileSessionShelves(nextTabs, { pruneMissing: true });
 }
 
 function applyAuthoritativeTabSnapshot(nextTabs) {
@@ -17468,7 +17480,7 @@ function renderTerminalTabGroup(group, groupCount = 1) {
     const close = make("button", "terminal-tab-close terminal-tab-group-close", "×");
     close.type = "button";
     close.draggable = false;
-    const closeTooltip = `Close ${groupTitle} group`;
+    const closeTooltip = `Close ${groupTitle} group${group.shelfLabel ? ` sessions in ${group.shelfLabel}` : ""}`;
     applyStyledTooltip(close, closeTooltip, { ariaLabel: closeTooltip, targetKey: `terminal-group:${group.key}:close` });
     close.addEventListener("click", (event) => {
       event.stopPropagation();
@@ -17631,10 +17643,127 @@ function scheduleTabsRender() {
   else tabsRenderFrame = setTimeout(flush, 0);
 }
 
+function usesSessionShelves() {
+  return Boolean(focusedShell?.active && (shellPreferenceState.value.navigation || "left") === "left");
+}
+
+function sessionShelfRecord(tab) {
+  const indicator = tabIndicator(tab);
+  return {
+    id: tab.id,
+    identity: JSON.stringify([tab.createdAt || "", tab.sessionFile || ""]),
+    state: tabPendingBlockerCount(tab) > 0 ? "input"
+      : indicator.state === "working" || tabAppRunnerRunningRun(tab) || workflowRunningCountForTab(tab.id) > 0 ? "working"
+      : indicator.state === "done" ? "done" : "idle",
+    completionSerial: activityForTab(tab).completionSerial,
+  };
+}
+
+function reconcileSessionShelves(catalog = tabs, options) {
+  const projection = sessionShelfState.reconcile(catalog.map(sessionShelfRecord), options);
+  settledSessionIds = new Set(projection.settled.map(record => record.id));
+  return projection;
+}
+
+function sessionShelfHeader(section) {
+  return sessionShelves?.element.querySelector(`[data-session-shelf-toggle="${section}"]`);
+}
+
+function reportSessionShelfResult(result) {
+  if (result.ok) return;
+  const messages = {
+    working: "Finish the current work before settling this session.",
+    input: "Respond to the pending input before settling this session.",
+    limit: "The Settled section is full. Restore a session before settling another.",
+    unavailable: "Sidebar changes apply for this page, but browser storage could not save them.",
+    "invalid-storage": "Saved sidebar preferences could not be read. Changes apply for this page only.",
+    "future-storage": "Saved sidebar preferences belong to a newer version. Changes apply for this page only.",
+  };
+  addEvent(messages[result.reason] || "The session changed. Choose the sidebar action again.", "error");
+}
+
+function createTerminalTabSettlementButton(tab) {
+  const settled = settledSessionIds.has(tab.id);
+  const record = sessionShelfRecord(tab);
+  const lifetime = sessionContext.captureLifetime(tab.id);
+  const button = make("button", "terminal-tab-settlement-button", settled ? "↥" : "✓");
+  button.type = "button";
+  button.draggable = false;
+  button.dataset.settlementAction = settled ? "restore" : "settle";
+  const unavailable = !settled && ["input", "working"].includes(record.state);
+  button.disabled = unavailable;
+  const label = `${settled ? "Restore" : "Settle"} ${tab.title || "session"}`;
+  applyStyledTooltip(button, unavailable
+    ? `Finish the current work or respond to pending input before settling ${tab.title || "this session"}.`
+    : `${label}. ${settled ? "Return to Inbox." : "Move to Settled without closing or stopping it."}`,
+    { ariaLabel: label, targetKey: `terminal-tab:${tab.id}:settlement` });
+  button.addEventListener("click", event => {
+    event.stopPropagation();
+    const current = tabs.find(item => item.id === tab.id);
+    const latest = current ? sessionShelfRecord(current) : null;
+    if (!latest || !sessionContext.isLifetimeCurrent(lifetime) || latest.identity !== record.identity
+      || (!settled && latest.completionSerial !== record.completionSerial)) {
+      addEvent("This session changed. Choose Settle or Restore again.", "error");
+      return;
+    }
+    // Reconcile first: an old Restore control must never settle a newly woken session.
+    reconcileSessionShelves();
+    const result = settled ? sessionShelfState.restore(tab.id) : sessionShelfState.settle(sessionShelfRecord(current));
+    reportSessionShelfResult(result);
+    renderTabs();
+    sessionShelfHeader(settled ? "inbox" : "settled")?.focus();
+  });
+  return button;
+}
+
+function renderSessionShelves(groups, subagentGroups, projection) {
+  if (!sessionShelves) sessionShelves = createSessionShelves({ document, onToggle(section, expanded) {
+    const result = sessionShelfState.setExpanded(section, expanded);
+    reportSessionShelfResult(result);
+    renderTabs();
+    sessionShelfHeader(section)?.focus();
+  } });
+  const counts = {};
+  const groupKeys = new Set();
+  for (const section of ["inbox", "working", "settled"]) {
+    const slot = sessionShelves.slots[section];
+    const ids = new Set(projection[section].map(record => record.id));
+    slot.replaceChildren();
+    counts[section] = ids.size;
+    for (const group of groups) {
+      const members = group.tabs.filter(tab => ids.has(tab.id));
+      if (!members.length) continue;
+      const fragment = { ...group, key: `${section}:${group.key}`, tabs: members, shelfLabel: section === "inbox" ? "Inbox" : section === "working" ? "Working" : "Settled" };
+      if (shouldRenderTerminalTabGroup(group, groups.length)) {
+        groupKeys.add(fragment.key);
+        slot.append(renderTerminalTabGroup(fragment, groups.length));
+      } else {
+        for (const tab of members) slot.append(renderTerminalTab(tab, { showCwdAdd: groups.length > 1 && Boolean(group.cwd) }));
+      }
+    }
+    for (const group of subagentGroups) {
+      const views = group.views.filter(view => section === (subagentTerminalViewIsRunning(view) ? "working" : "inbox"));
+      counts[section] += views.length;
+      if (views.length > 1) {
+        const fragment = { ...group, key: `${section}:${group.key}`, views };
+        groupKeys.add(fragment.key);
+        slot.append(renderSubagentTerminalTabGroup(fragment));
+      } else if (views.length) slot.append(renderSubagentTerminalTab(views[0]));
+    }
+  }
+  sessionShelves.update({ counts, expanded: projection.expanded });
+  elements.tabBar.append(elements.newTabMenu, sessionShelves.element);
+  return groupKeys;
+}
+
 function terminalTabControlKey(node) {
+  if (node?.dataset?.sessionShelfToggle) return `session-shelf:${node.dataset.sessionShelfToggle}`;
+  const viewId = node?.closest?.("[data-subagent-view-id]")?.dataset?.subagentViewId;
+  if (viewId) return `subagent-view:${viewId}:${node.classList.contains("terminal-tab-close") ? "close" : "switch"}`;
   if (node?.id && elements.newTabMenu?.contains(node)) return `terminal-new-tab:${node.id}`;
   const tabId = node?.closest?.("[data-tab-id]")?.dataset?.tabId;
   if (tabId) {
+    if (node.classList.contains("terminal-tab-settlement-button")) return `terminal-tab:${tabId}:settlement`;
     if (node.classList.contains("terminal-tab-close")) return `terminal-tab:${tabId}:close`;
     if (node.classList.contains("terminal-tab-split-button")) return `terminal-tab:${tabId}:split`;
     if (node.classList.contains("terminal-tab-summary-button")) return `terminal-tab:${tabId}:summary`;
@@ -17664,29 +17793,39 @@ function renderTabs() {
   const toggleTooltip = active ? `Show terminal tabs · active: ${activeTitle} · ${activeIndicator.label}` : "Show terminal tabs";
   applyStyledTooltip(elements.terminalTabsToggleButton, toggleTooltip, { ariaLabel: toggleTooltip, targetKey: "terminal-tabs-toggle" });
   if (footerTooltipTarget && elements.tabBar.contains(footerTooltipTarget) && !tooltipSnapshot) hideFooterTooltip();
+  const previousScrollTop = elements.tabBar.scrollTop;
+  const previousShelfScrollTop = sessionShelves?.element.scrollTop || 0;
   elements.tabBar.replaceChildren();
+  const shelfProjection = reconcileSessionShelves();
+  renderedSessionShelves = usesSessionShelves();
+  elements.tabBar.classList.toggle("has-session-shelves", renderedSessionShelves);
   elements.tabBar.dataset.tabCount = String(totalTabCount);
   elements.tabBar.classList.toggle("terminal-tabs-dense", totalTabCount >= 10);
   const groups = tabCwdGroups();
   const subagentGroups = subagentTerminalViewGroups();
-  const renderedGroupKeys = new Set([
-    ...groups.filter((group) => shouldRenderTerminalTabGroup(group, groups.length)).map((group) => group.key),
-    ...subagentGroups.filter((group) => group.views.length > 1).map((group) => group.key),
-  ]);
-  if (openTerminalTabGroupKey && !renderedGroupKeys.has(openTerminalTabGroupKey)) openTerminalTabGroupKey = null;
-  for (const group of groups) {
-    if (shouldRenderTerminalTabGroup(group, groups.length)) {
-      elements.tabBar.append(renderTerminalTabGroup(group, groups.length));
-    } else {
-      const showCwdAdd = groups.length > 1 && group.tabs.length === 1 && Boolean(group.cwd);
-      for (const tab of group.tabs) elements.tabBar.append(renderTerminalTab(tab, { showCwdAdd }));
+  let renderedGroupKeys;
+  if (renderedSessionShelves) {
+    renderedGroupKeys = renderSessionShelves(groups, subagentGroups, shelfProjection);
+  } else {
+    renderedGroupKeys = new Set([
+      ...groups.filter((group) => shouldRenderTerminalTabGroup(group, groups.length)).map((group) => group.key),
+      ...subagentGroups.filter((group) => group.views.length > 1).map((group) => group.key),
+    ]);
+    for (const group of groups) {
+      if (shouldRenderTerminalTabGroup(group, groups.length)) {
+        elements.tabBar.append(renderTerminalTabGroup(group, groups.length));
+      } else {
+        const showCwdAdd = groups.length > 1 && group.tabs.length === 1 && Boolean(group.cwd);
+        for (const tab of group.tabs) elements.tabBar.append(renderTerminalTab(tab, { showCwdAdd }));
+      }
     }
+    for (const group of subagentGroups) {
+      if (group.views.length > 1) elements.tabBar.append(renderSubagentTerminalTabGroup(group));
+      else elements.tabBar.append(renderSubagentTerminalTab(group.views[0]));
+    }
+    elements.tabBar.append(elements.newTabMenu);
   }
-  for (const group of subagentGroups) {
-    if (group.views.length > 1) elements.tabBar.append(renderSubagentTerminalTabGroup(group));
-    else elements.tabBar.append(renderSubagentTerminalTab(group.views[0]));
-  }
-  elements.tabBar.append(elements.newTabMenu);
+  if (openTerminalTabGroupKey && !renderedGroupKeys.has(openTerminalTabGroupKey)) openTerminalTabGroupKey = null;
   // Rows combine selection with separate actions. Own only their selection
   // controls in the tablist so assistive technology does not treat actions as tabs.
   const tabList = make("div");
@@ -17699,6 +17838,8 @@ function renderTabs() {
   tabList.hidden = tabControls.length === 0;
   elements.tabBar.prepend(tabList);
   restoreScopedControlContinuity(elements.tabBar, continuityContextKey, focusSnapshot, (key) => [...elements.tabBar.querySelectorAll("button")].find((node) => terminalTabControlKey(node) === key));
+  elements.tabBar.scrollTop = previousScrollTop;
+  if (sessionShelves && renderedSessionShelves) sessionShelves.element.scrollTop = previousShelfScrollTop;
   restoreTooltipContinuity(elements.tabBar, tooltipSnapshot);
   elements.closeAllTabsButton.disabled = tabs.length === 0;
   if (elements.workspaceSaveButton) {
@@ -17757,6 +17898,8 @@ function tabsRenderSnapshotSignature(tabList = []) {
           : tab?.running ? "idle" : "stopped";
     return {
       id: tab?.id || "",
+      createdAt: tab?.createdAt || "",
+      sessionFile: tab?.sessionFile || "",
       index: Number(tab?.index) || 0,
       title: tab?.title || "",
       titleSource: tab?.titleSource || "",
@@ -18165,7 +18308,7 @@ async function closeTerminalTab(tabId) {
 
 async function closeTerminalTabGroup(group) {
   const title = terminalDisplayGroupTitle(group, group.tabs[0]?.title || "group");
-  await closeTerminalTabs(group.tabs.map((tab) => tab.id), { label: `${title} group` });
+  await closeTerminalTabs(group.tabs.map((tab) => tab.id), { label: `${title} group${group.shelfLabel ? ` sessions in ${group.shelfLabel}` : ""}` });
 }
 
 async function closeAllTerminalTabs() {
@@ -41282,6 +41425,7 @@ function createTerminalTabActions(tab) {
   actions.append(createTerminalTabSplitButton(tab));
   const summary = createTerminalTabSessionSummaryButton(tab);
   if (summary) actions.append(summary);
+  if (usesSessionShelves()) actions.append(createTerminalTabSettlementButton(tab));
   return actions;
 }
 

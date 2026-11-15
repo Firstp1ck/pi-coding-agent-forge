@@ -17,6 +17,7 @@ const sorted = (items) => items.sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 
 // evidence annotations, never handlers or a replacement companion registry.
 const CONTRACTS = [
   ["sessions", "tab/workspace", "createTerminalTab openNativeResumeSelector saveWebuiWorkspace", "terminal-tab-workspace-static workspace-save-load-static tab-close-continuity-static", /mobileSession|terminal|workspace|newtab|closetab|resumesession|tab_storage|custom.groups/i],
+  ["session-shelves", "origin browser / stable session identity", "session-shelf-state.mjs#createSessionShelfState session-shelves.mjs#createSessionShelves createTerminalTabSettlementButton", "session-shelf-state session-shelves-adapter", /session.shel|sessionShel|settlement/i],
   ["session-actions", "active tab / durable session", "openNativeForkSelector openNativeCloneDialog openNativeNameDialog openNativeTreeSelector openSessionSummaryForTab", "native-parity session-summary-core session-tree-event-targets", /newsession|session.summary|sessionSummary|native.*(?:fork|clone|name|tree|resume)|export|rename/i],
   ["split", "two independent tabs", "setTerminalSplitTab createTerminalTabSplitButton", "terminal-tab-workspace-static", /split|embed/i],
   ["directories", "new tab or explicitly selected active tab", "changeActiveTabCwd openBranchWorktreePicker", "cwd-footer-reliability-static windows-drive-cwd-picker-static", /pathpicker|path.fast|cwd|directory|branchworktree|fastpick/i],
@@ -54,6 +55,7 @@ const CONTRACTS = [
 
 // Accepted W1-W6 owners and relevant scenarios; paths do not imply a measured pass.
 const MIGRATION = {
+  "session-shelves": ["", "Complete tab metadata and live activity wake browser-local settlement; no backend mutation.", "session-shelves session-shelves-integration"],
   "sessions": [
     "session-context.mjs#createSessionContext session-attention-scheduler.mjs#createAttentionScheduler",
     "Tab mutations and bounded metadata reconciliation; source tab survives resume.",
@@ -227,6 +229,7 @@ const MIGRATION = {
 };
 
 const PLAN_ANCHORS = {
+  "session-shelves": "Settle / Restore and activity shelves",
   "sessions": "New, close, resume and switch sessions",
   "session-actions": "New session within a tab",
   "split": "Split conversations",
@@ -264,7 +267,7 @@ const PLAN_ANCHORS = {
 };
 
 // Specific families win before broad words such as Git, footer or composer.
-const MATCH_ORDER = ["artifacts", "annotations", "split", "compaction", "presentation", "releases", "workflow", "projections", "agent-work", "intercom-btw", "voice", "responses", "queues", "runners", "companions", "resources", "accounts", "connection", "system", "help", "diagnostics", "directories", "git-tools", "git", "files", "model-runtime", "appearance", "session-actions", "sessions", "transcript", "composer", "usage", "extensions", "recovery"];
+const MATCH_ORDER = ["session-shelves", "artifacts", "annotations", "split", "compaction", "presentation", "releases", "workflow", "projections", "agent-work", "intercom-btw", "voice", "responses", "queues", "runners", "companions", "resources", "accounts", "connection", "system", "help", "diagnostics", "directories", "git-tools", "git", "files", "model-runtime", "appearance", "session-actions", "sessions", "transcript", "composer", "usage", "extensions", "recovery"];
 const DYNAMIC = [
   ["palette-tabs", "sessions", "commandPaletteTabItems", "tabs", "Runtime tab identities; no static session instances."],
   ["palette-models", "model-runtime", "commandPaletteModelItems", "availableModels", "Provider/model availability is tab catalog data."],

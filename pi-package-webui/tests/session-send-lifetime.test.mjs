@@ -9,7 +9,7 @@ const source=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
 const names=['activeTabContext','isCurrentTabContext','reconcileReplacedSession','observeSessionState','invalidateActiveSession','sendDialogResponse','createDialogResponder','sendPrompt','clearPromptInputForRouting','clearAttachments','attachmentsForTab','removeAttachment','retireSessionDialogs','restorePromptInputAfterRoutingError'];
 const functions=names.map(name=>{const start=source.search(new RegExp(`^(?:async )?function ${name}\\(`,'m'));assert.ok(start>=0,name);return source.slice(start,source.indexOf('\n}',start)+2)}).join('\n');
 function fixture() {
-const context=vm.createContext({assert,createSessionContext,createSessionComposerStore,createExtensionRequestStore,console,Blob});
+const context=vm.createContext({ sessionShelfState: { restore() {} }, scheduleTabsRender() {},assert,createSessionContext,createSessionComposerStore,createExtensionRequestStore,console,Blob});
 vm.runInContext(`
 const sessionContext=createSessionContext(), composerStore=createSessionComposerStore(), extensionRequests=createExtensionRequestStore();
 let activeTabId='tab-a';sessionContext.activate(activeTabId);let activeTabGeneration=sessionContext.generation;

@@ -11,6 +11,7 @@ This map incorporates the UI scout's inventory and the design review corrections
 | Capability | Primary destination | Immediate access and preservation |
 | --- | --- | --- |
 | New, close, resume and switch sessions; tab groups; saved workspaces | Session navigation and Home | Preserve top/left presentation, drafts per tab, close confirmations and restore behavior |
+| Settle / Restore and activity shelves | Compact left session sidebar | Browser-local, explicit organization; new work/input or a newer completed run wakes a settled session; never close or abort; preserve group membership |
 | New session within a tab, rename, clone, fork, tree, export and summary | Conversation session menu and Session details | Keep tab identity distinct from the durable Pi session it hosts; preserve inline message actions |
 | Split conversations | Conversation layout action | Preserve independent session ownership, embed links and return on sufficient width |
 | CWD picker, recent/saved directories, create directory, branch worktrees | Session context and Project | Browsing files must not implicitly change CWD; show target before mutation |

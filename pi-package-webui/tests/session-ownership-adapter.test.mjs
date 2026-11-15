@@ -38,6 +38,7 @@ const fileViews=new Map([[activeTabId,{dirty:true,text:'unsaved file'}]]);
 const queued=[], connected=[], refreshed=[], errors=[], network=[];
 const queueMicrotask=fn=>queued.push(fn);
 const noop=()=>{};
+const restoredShelves=[], sessionShelfState={restore:id=>restoredShelves.push(id)}, scheduleTabsRender=noop;
 const activityQueue={activate(){}}, latestQueuedMessagesByTab=new Map();
 const activityIntercom={prune:noop,activate:noop}, projectTargetFromContext=ctx=>ctx,renderIntercomActivityLinks=noop,tabs=[{id:"tab-a"}];
 const clearRefreshTimers=noop, cancelNormalStreamRenders=noop, resetStreamBubble=noop, resetChatOutput=noop;
@@ -66,6 +67,7 @@ test('authoritative replacement discards session projections and schedules only 
     assert.equal(isCurrentTabContext(before),false);
     assert.equal(isCurrentTabContext(replaced),true);
     assert.equal(latestMessages.length,0);
+    assert.deepEqual(restoredShelves,[activeTabId]);
     assert.equal(tabMessagesCache.has(activeTabId),false);
     assert.equal(latestStats,null);
     assert.equal(fileViews.get(activeTabId).text,'unsaved file');

@@ -8,9 +8,12 @@
   max-width: 100%;
   overflow: auto;
   overscroll-behavior: contain;
-  scrollbar-width: thin;
+  scrollbar-width: none;
+  scrollbar-gutter: auto;
   color: var(--text);
 }
+
+.session-shelves::-webkit-scrollbar { display: none; }
 
 .session-shelves .session-shelf {
   flex: 0 0 auto;
@@ -103,12 +106,34 @@
   max-width: 100%;
 }
 
-/* The compact shell's 40px action host cannot fit both canonical 26px buttons. */
-#focusedWorkspace .session-shelves .terminal-tab-actions {
-  flex-basis: 53px;
-  min-width: 53px;
+/* Reserve each action independently, including the optional Settle/Restore control. */
+#focusedWorkspace .session-shelves .terminal-tab-actions,
+#focusedWorkspace #tabBar .session-shelves .terminal-tab-actions {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 26px;
+  flex: 0 0 auto;
+  min-width: max-content;
 }
+
+#focusedWorkspace .session-shelves .terminal-tab-actions > button { flex: 0 0 26px; min-width: 26px; }
 
 @media (forced-colors: active) {
   .session-shelves .session-shelf-header:focus-visible { outline-color: Highlight; }
+}
+
+#focusedWorkspace #tabBar .session-shelves :is(.terminal-tab:not(.terminal-tab-group):not(.terminal-tab-subagent), .terminal-tab-group-item:not(.terminal-tab-subagent)) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 28px;
+}
+#focusedWorkspace #tabBar .session-shelves :is(.terminal-tab:not(.terminal-tab-group):not(.terminal-tab-subagent), .terminal-tab-group-item:not(.terminal-tab-subagent)) > .terminal-tab-button { grid-column: 1 / -1; }
+#focusedWorkspace #tabBar .session-shelves .terminal-tab-actions {
+  grid-column: 1;
+  justify-self: end;
+  border-left: 0;
+}
+#focusedWorkspace #tabBar .session-shelves :is(.terminal-tab:not(.terminal-tab-group):not(.terminal-tab-subagent), .terminal-tab-group-item:not(.terminal-tab-subagent)) > .terminal-tab-close {
+  grid-column: 2;
+  grid-row: 2;
+  min-height: 28px;
 }

@@ -22,6 +22,14 @@ A saved browser choice takes precedence over the server default. With no saved c
 
 The compact layout is verified in Linux Chromium, including keyboard navigation and genuine 200% browser zoom. Physical mobile keyboards and IME, other browser engines, Windows/macOS devices, and live installed-companion combinations remain unverified.
 
+### Session sidebar organization
+
+The compact left sidebar has Inbox, Working, and Settled sections. Settle and Restore affect only this browser and origin; other browsers, saved workspaces, Classic, and top-tab navigation retain their own presentation. Section expansion is remembered locally. Clearing browser storage removes these organization choices.
+
+Settle is unavailable while a session is working or awaiting input. A new run, pending input, replaced conversation, or a newer completed run brings a settled session back automatically. Selecting a settled session alone does not restore it. App runners and known workflow runs count as active work. Read-only subagent views appear in Inbox or Working and retain their existing close behavior.
+
+A group can appear in more than one section. Its membership is unchanged; closing a group fragment closes only the sessions listed in that section. Settle never stops work or closes a session. If browser storage is unavailable, changes last for the current page and the app reports that they could not be saved.
+
 ## Requirements
 
 - Node.js 22.19 or newer

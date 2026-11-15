@@ -1,4 +1,4 @@
-const CACHE_NAME = "pi-webui-pwa-v175";
+const CACHE_NAME = "pi-webui-pwa-v176";
 const APP_SHELL = [
   "/",
   "/index.html",
@@ -40,6 +40,9 @@ const APP_SHELL = [
   "/shell-view-host.mjs",
   "/shell-surfaces.mjs",
   "/session-context.mjs",
+  "/session-shelf-state.mjs",
+  "/session-shelves.mjs",
+  "/session-shelves.css",
   "/session-composer-store.mjs",
   "/session-attention-scheduler.mjs",
   "/platform-event-stream.mjs",

@@ -27,6 +27,8 @@ The walk fails on source symlinks, missing required files or owner functions, un
 
 JSON key order and sorted record order are deterministic. There are no generation timestamps, machine paths or Git HEAD fields. A line shift changes navigation hints and source hashes but preserves named ID/symbol identities. Anonymous tag hashes and duplicate occurrence suffixes are weaker identities and require a human check when markup changes. Preserve every existing `sourceId` when adapting views.
 
+The current contract also includes browser-local session shelves. Its state, DOM host, guarded actions and persistence key are traced under `session-shelves` in the generated inventory. Actual-app coverage is in [session-shelves-integration.spec.mjs](../../tests/browser/session-shelves-integration.spec.mjs); current counts come from the JSON, while the following table retains the original baseline.
+
 ## Reconciliation at the baseline
 
 | Evidence | Count | Meaning |

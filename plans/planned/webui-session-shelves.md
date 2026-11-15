@@ -8,7 +8,7 @@ User requested T3-style sidebar organization: idle/done/input at the top, Workin
 
 This is complex because local lifecycle/persistence and accessible DOM rendering are independent slices, with integration into existing tab/group ownership. Use two isolated Sol/high workers and two fresh Sol/high reviewers. At most two review rounds; parent verifies and fixes findings. No Anthropic, new dependencies, backend changes or production configuration writes.
 
-Apply shelves to the compact left session sidebar. Classic, mobile navigation and optional top-tab presentation retain their existing layouts. Keep Pi theme tokens and controls; borrow T3's thin section headers, counts, disclosure arrows and bottom collapsed shelf. Top label is Inbox, with idle/done/input rows; middle Working; bottom Settled. Inbox and Working start expanded. All three headers are keyboard-accessible; expansion is remembered in this browser. No snooze/pinning feature is added.
+Apply shelves to the compact left session sidebar. Classic, mobile navigation and optional top-tab presentation retain their existing layouts. Keep Pi theme tokens and controls; borrow T3's thin section headers, counts, disclosure arrows and bottom collapsed shelf. User additionally requested no visible vertical sidebar scrollbar; retain wheel, touch and keyboard scrolling for overflow. Top label is Inbox, with idle/done/input rows; middle Working; bottom Settled. Inbox and Working start expanded. All three headers are keyboard-accessible; expansion is remembered in this browser. No snooze/pinning feature is added.
 
 Settlement is a browser-local organization choice, not process shutdown, tab close, cancellation or a backend session mutation. It survives reload on the same origin. Only idle/done/stopped real Pi tabs can be settled. Working or input-waiting tabs explain why Settle is unavailable. Restore removes the choice. Selecting an already settled conversation does not silently restore it. A new run, blocker, changed session identity or newer completion serial clears settlement, including a run completed while this browser was away. This does not consume unseen-completion state.
 
@@ -66,3 +66,10 @@ All fixtures use parent `bash handoffs/run-ui-polish-command.sh`, isolated HOME/
 - User confirmed explicit Settle / Restore and automatic wake for work/input.
 - Current tab metadata already exposes sessionFile, creation identity, activity completionSerial and pending input count. Existing supervisor/HTTP/SSE contracts need no change.
 - Sol/Codex availability established in this thread; retain user-selected high reasoning. Parent owns group-fragment integration and scope checks.
+
+- Slice A integrated from `1c800861` as `7cfe292d`: 17 state contracts passed. Parent adapter adds eight checks for runner/workflow precedence and stale settle/restore actions; all passed.
+- Parent app wiring, docs and actual-app scenarios are prepared. Slice B and combined browser verification remain pending.
+
+- Slice B integrated from `83417c0f` as `cf2fe3a3`. Its ten component cases passed. Parent added hidden scrollbar tracks, three-action sizing, readable full-width row titles and inner-scroll continuity.
+- Initial actual-app checks exposed Settle/Close overlap (fixed by explicit action-grid sizing and correct selector specificity), replacement wake latency (fixed at confirmed session invalidation and metadata render identity), and one tablet-mode fixture expectation (fixture now verifies top desktop at desktop width). The 253-file package check passed before the final replacement hook; its eleven affected ownership checks passed afterward.
+- Combined candidate browser checks and independent round-one reviews remain pending.

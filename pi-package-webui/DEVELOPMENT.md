@@ -36,6 +36,14 @@ The modules ship with the package and participate in the service-worker cache. K
 
 `tests/browser/focused-shell-integration.spec.mjs` uses the shared disposable `session-fixture.mjs` to exercise actual drafts, controls, history, rollback, responsive mode transitions and Abort inside the launcher. Worker component fixtures cover layout and keyboard contracts; they do not establish whole-app parity. New files ship as flat assets and participate in the PWA cache.
 
+### Session shelves
+
+`session-shelf-state.mjs` owns bounded browser-local settlement and expansion under `pi-webui-session-shelves-v1`. The app supplies stable creation/session-file identity, completion serial, and activity with input taking priority over work. Complete metadata snapshots may prune closed IDs; rendering alone never prunes missing IDs. Reconciliation also runs outside the mounted sidebar. Settlement does not mark completion as seen or call any mutation route.
+
+`session-shelves.mjs` owns stable headers and body slots. The app owns the rows and renders shelf-qualified group fragments while preserving canonical custom group IDs. Settle/Restore callbacks revalidate session lifetime and identity; group close uses only the fragment's tab IDs. The canonical tablist owns selection controls, separate from action buttons. Classic, top navigation, and mobile use the original list.
+
+Run `node --test tests/session-shelf-state.test.mjs` and the Chromium `session-shelves.spec.mjs` and `session-shelves-integration.spec.mjs` scenarios for storage, activity wake, keyboard focus, draft continuity, grouped membership and layout fallback. All actual-app fixtures use fake Pi and isolated settings.
+
 ## Settings ownership
 
 `settings-workspace.mjs` places the original settings groups in categorized pages through `shell-view-host.mjs`. `settings-navigation-controller.mjs` owns only search, result presentation and keyboard navigation. The app remains the sole history writer and action dispatcher. Settings URLs use the existing `view=settings` and `inspector=settings:<category>` fields plus an optional stable `setting` anchor; invalid entries are dropped and unknown categories recover to Appearance without applying preferences. Existing Theme focus opens its searchable picker. Classic restores original groups and disclosure state.

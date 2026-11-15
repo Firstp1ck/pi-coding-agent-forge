@@ -100,3 +100,16 @@ html[data-desktop-shell="focused"] #statusBar .footer-tui-model { display: none;
 .focused-inbox-button .focused-attention { position: static; }
 .focused-finished { color: var(--muted); font-size: 11px; }
 .focused-inbox-button [hidden] { display: none; }
+
+#focusedWorkspace .terminal-tab-settlement-button { color: var(--ctp-teal); padding-inline: 2px; border: 0; border-radius: 3px; background: transparent; }
+#focusedWorkspace .terminal-tab-settlement-button:disabled { color: var(--muted); opacity: .5; cursor: not-allowed; }
+#focusedWorkspace .terminal-tab-settlement-button:not(:disabled):hover { background: var(--hover-bg, rgba(148, 226, 213, .15)); }
+#focusedWorkspace .terminal-tab-settlement-button:focus-visible { outline: 2px solid var(--ctp-teal); outline-offset: -2px; }
+#focusedWorkspace .has-session-shelves .terminal-tab-group-menu[hidden] { display: none; }
+#focusedWorkspace[data-navigation="left"] .focused-navigation,
+#focusedWorkspace[data-navigation="left"] .terminal-tabs {
+  scrollbar-width: none;
+  scrollbar-gutter: auto;
+}
+#focusedWorkspace[data-navigation="left"] .focused-navigation::-webkit-scrollbar,
+#focusedWorkspace[data-navigation="left"] .terminal-tabs::-webkit-scrollbar { display: none; }
