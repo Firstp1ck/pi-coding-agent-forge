@@ -184,8 +184,8 @@
     },
     {
       "file": "pi-package-webui/lib/package-updates.mjs",
-      "bytes": 14060,
-      "sha256": "86c1b527950bda294b497f716edc055d1a3653d2d62c4d4fb416fe89ada92eb9"
+      "bytes": 14341,
+      "sha256": "494eccf406d2ba3b1e58a0e144a8355f786a7ece7cd84930f2f7ac6769476b51"
     },
     {
       "file": "pi-package-webui/lib/process-tree.mjs",

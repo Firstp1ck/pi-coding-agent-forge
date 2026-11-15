@@ -395,6 +395,7 @@ async function classificationFlow(globalModules, userAgent) {
 }
 
 async function streamedOutputFlow(script) {
+  await multilineSecretFlow(script);
   const snapshots = [];
   let releaseObserved;
   const observed = new Promise((resolve) => { releaseObserved = resolve; });
@@ -468,6 +469,46 @@ setTimeout(() => { for (let i = 0; i < 2000; i++) console.log('bounded output ' 
     assert.equal(cancelled.exitCode, null);
     assert.equal(cancelled.timedOut, false);
     assert.match(cancelled.stdout, /before cancellation/);
+  }
+}
+
+async function multilineSecretFlow(script) {
+  for (const newline of ["\n", "\r\n"]) {
+    const fragments = ["fixture-private-first", "", "xy", "fixture-private-last"];
+    const env = { ...environment, FIXTURE_API_TOKEN: fragments.join(newline) };
+    await writeFile(script, `const lines = process.env.FIXTURE_API_TOKEN.split(/\\r?\\n/);
+lines.forEach((line, index) => setTimeout(() => {
+  process.stdout.write(line + '\\n'); process.stderr.write(line + '\\n');
+}, index * 75));
+setTimeout(() => {}, 400);`);
+    const rawSnapshots = [], jobSnapshots = [];
+    let result, firstOutput;
+    const observed = new Promise(resolve => { firstOutput = resolve; });
+    const service = createPackageUpdates({ agentDir: path.join(root, "multiline-agent"), env,
+      runCommand: async (_command, _args, options) => {
+        result = await runPackageCommand(process.execPath, [script], { ...options, cwd: root, timeoutMs: 2_000,
+          onOutput: snapshot => {
+            rawSnapshots.push(snapshot);
+            options.onOutput(snapshot);
+            jobSnapshots.push(service.getJob(plan.transactionId));
+            if (snapshot.stdout.trim()) firstOutput();
+          } });
+        return result;
+      } });
+    const plan = await service.plan("pi");
+    service.apply(plan.transactionId, plan.digest);
+    await Promise.race([observed, delay(1_500).then(() => { throw new Error("No live multiline output"); })]);
+    assert.equal(service.getJob(plan.transactionId).phase, "running");
+    const terminal = await finished(service, plan.transactionId);
+    assert.equal(result.exitCode, 0);
+    assert.match(result.stdout, /redacted/);
+    assert.match(result.stderr, /redacted/);
+    for (const snapshot of [...rawSnapshots, ...jobSnapshots, result, terminal]) {
+      for (const fragment of fragments.filter(Boolean)) {
+        assert.ok(!JSON.stringify(snapshot).includes(fragment), "secret fragments must never reach raw or job output");
+      }
+    }
+    assert.deepEqual(rawSnapshots.at(-1), { stdout: result.stdout, stderr: result.stderr });
   }
 }
 

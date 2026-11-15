@@ -22,7 +22,10 @@ function boundedOutput(value, env) {
     .replace(/\b((?:_?auth[_-]?token|api[_-]?key|password|secret|token)\s*[=:]\s*)[^\s,;]+/gi, "$1[redacted]")
     .replace(/\b([a-z][a-z0-9+.-]*:\/\/)[^\s/@:]+:[^\s/@]+@/gi, "$1[redacted]@");
   for (const [key, secret] of Object.entries(env)) {
-    if (/(?:auth|token|password|secret|api[_-]?key)/i.test(key) && secret?.length >= 6) text = text.replaceAll(secret, "[redacted]");
+    if (!/(?:auth|token|password|secret|api[_-]?key)/i.test(key) || secret?.length < 6 || !secret) continue;
+    // Live output publishes complete lines before the rest of a multiline secret arrives.
+    const fragments = [...new Set([secret, ...secret.split(/\r\n|\r|\n/)])].filter(Boolean).sort((a, b) => b.length - a.length);
+    for (const fragment of fragments) text = text.replaceAll(fragment, "[redacted]");
   }
   return text.length > OUTPUT_LIMIT ? TRUNCATED_OUTPUT + text.slice(-(OUTPUT_LIMIT - TRUNCATED_OUTPUT.length)) : text;
 }
