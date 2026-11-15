@@ -17943,7 +17943,8 @@ async function createTerminalTabFromChosenDirectory({ triggerButton = elements.n
   const initialCwd = currentDirectoryForNewTab();
   setMobileTabsExpanded(false);
   setNewTabMenuOpen(false);
-  const cwd = await pickCwd(sourceTab || { id: "new-tab", title: "new tab" }, initialCwd, { title: "Choose CWD for new tab" });
+  const returnFocus = triggerButton === elements.newTabChooseDirectoryButton ? elements.newTabButton : triggerButton;
+  const cwd = await pickCwd(sourceTab || { id: "new-tab", title: "new tab" }, initialCwd, { title: "Choose CWD for new tab", returnFocus });
   if (!cwd) return;
   await createTerminalTab(cwd, { triggerButton });
 }
@@ -24751,8 +24752,9 @@ function renderPathPicker(data) {
 }
 
 async function loadPathPickerDirectory(cwd, { focusAfterLoad = false } = {}) {
-  if (!pathPickerState) return;
-  const requestId = ++pathPickerState.requestId;
+  const state = pathPickerState;
+  if (!state) return;
+  const requestId = ++state.requestId;
   pathPickerState.loading = true;
   elements.pathPickerAddFastPickButton.disabled = true;
   elements.pathPickerChooseButton.disabled = true;
@@ -24765,12 +24767,13 @@ async function loadPathPickerDirectory(cwd, { focusAfterLoad = false } = {}) {
 
   try {
     const query = cwd ? `?path=${encodeURIComponent(cwd)}` : "";
-    const response = await api(`/api/directories${query}`);
-    if (!pathPickerState || pathPickerState.requestId !== requestId) return;
+    // A reopened picker must not share an in-flight response from its predecessor.
+    const response = await api(`/api/directories${query}`, { signal: state.requestSignal });
+    if (pathPickerState !== state || state.requestId !== requestId) return;
     renderPathPicker(response.data || {});
     if (focusAfterLoad) elements.pathPickerSearchInput.focus({ preventScroll: true });
   } catch (error) {
-    if (!pathPickerState || pathPickerState.requestId !== requestId) return;
+    if (pathPickerState !== state || state.requestId !== requestId) return;
     pathPickerState.loading = false;
     elements.pathPickerChooseButton.disabled = !pathPickerState.selectable || !pathPickerState.cwd;
     elements.pathPickerCurrent.textContent = pathPickerState.displayCwd || pathPickerState.cwd || "Unable to load directory";
@@ -24820,10 +24823,19 @@ function closePathPicker(cwd) {
   if (!state) return;
   pathPickerState = null;
   if (elements.pathPickerDialog.open) elements.pathPickerDialog.close();
+  // Native dialog cancellation can restore its previous focus after close().
+  if (!cwd) setTimeout(() => {
+    const focused = document.activeElement;
+    if (pathPickerState || activeTabId !== state.activeTabId || activeTabGeneration !== state.activeTabGeneration || location.href !== state.location || focusedShellState.destination !== state.destination || mobileShellState.route !== state.mobileRoute || document.querySelector(":modal")) return;
+    if (focused !== document.body && focused !== state.previousFocus && focused !== state.returnFocus) return;
+    if (!state.returnFocus?.isConnected || !state.returnFocus.getClientRects().length || state.returnFocus.disabled) return;
+    if (state.returnFocus === elements.newTabButton) setNewTabMenuOpen(false);
+    state.returnFocus.focus({ preventScroll: true });
+  }, 0);
   state.resolve(cwd || null);
 }
 
-function pickCwd(tab, initialCwd, { title } = {}) {
+function pickCwd(tab, initialCwd, { title, returnFocus = document.activeElement } = {}) {
   if (pathPickerState) {
     addEvent("working-directory picker is already open", "warn");
     elements.pathPickerDialog.focus();
@@ -24833,7 +24845,7 @@ function pickCwd(tab, initialCwd, { title } = {}) {
 
   return new Promise((resolve) => {
     const pickerTab = tab || { id: "path-picker", title: "tab" };
-    pathPickerState = { tabId: pickerTab.id, cwd: initialCwd, displayCwd: initialCwd, selectable: true, requestId: 0, loading: false, creatingDirectory: false, directories: [], filteredDirectories: [], resolve };
+    pathPickerState = { tabId: pickerTab.id, activeTabId, activeTabGeneration, returnFocus, previousFocus: document.activeElement, location: location.href, destination: focusedShellState.destination, mobileRoute: mobileShellState.route, requestSignal: new AbortController().signal, cwd: initialCwd, displayCwd: initialCwd, selectable: true, requestId: 0, loading: false, creatingDirectory: false, directories: [], filteredDirectories: [], resolve };
     elements.pathPickerTitle.textContent = title || `Choose CWD for ${pickerTab.title}`;
     elements.pathPickerCurrent.textContent = "Loading…";
     elements.pathPickerPathInput.value = "";
@@ -24852,6 +24864,7 @@ function pickCwd(tab, initialCwd, { title } = {}) {
     initializeFastPicks().catch((error) => addEvent(`failed to initialize path fast picks: ${error.message}`, "error"));
     elements.pathPickerDialog.showModal();
     loadPathPickerDirectory(initialCwd);
+    elements.pathPickerCancelButton.focus({ preventScroll: true });
   });
 }
 
@@ -50023,7 +50036,7 @@ elements.pathPickerDialog.addEventListener("cancel", (event) => {
   closePathPicker(null);
 });
 elements.pathPickerDialog.addEventListener("close", () => {
-  if (pathPickerState) closePathPicker(null);
+  if (pathPickerState && !elements.pathPickerDialog.open) closePathPicker(null);
 });
 
 if (elements.attachButton && elements.attachmentInput) {
