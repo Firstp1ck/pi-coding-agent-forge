@@ -1383,6 +1383,7 @@ let updateStatusRefreshTimer = null;
 let updateNotificationHideTimer = null;
 let componentUpdatePollTimer = null;
 let componentUpdateStartInProgress = false;
+let componentUpdateStatusEpoch = 0;
 let sidebarUpdateMenu = null;
 let sidebarUpdateError = "";
 let sidebarUpdateTarget = null;
@@ -9541,11 +9542,15 @@ function renderUpdateNotification(status = latestUpdateStatus, { force = false }
 
 async function refreshUpdateStatus({ force = false, notify = true } = {}) {
   const path = force ? "/api/update-status?refresh=1" : "/api/update-status";
+  const epoch = componentUpdateStatusEpoch;
   const response = await api(path, { scoped: false });
+  if (epoch !== componentUpdateStatusEpoch) return latestUpdateStatus;
   latestUpdateStatus = response.data || null;
   for (const target of COMPONENT_UPDATE_TARGETS) {
     if (latestUpdateStatus?.nativeJobs && Object.hasOwn(latestUpdateStatus.nativeJobs, target)) {
-      if (latestUpdateStatus.nativeJobs[target] || !uncertainApplyJobs[target]) observedNativeJobs[target] = latestUpdateStatus.nativeJobs[target];
+      const incoming = latestUpdateStatus.nativeJobs[target];
+      const confirmedId = uncertainApplyJobs[target];
+      if (!confirmedId || incoming?.transactionId === confirmedId) observedNativeJobs[target] = incoming;
     }
   }
   if (latestUpdateStatus?.nativeJobs && !latestUpdateStatus.nativeJobDiscoveryError) nativeJobPollError = "";
@@ -9775,7 +9780,10 @@ function syncComponentUpdatePolling() {
           for (const target of COMPONENT_UPDATE_TARGETS) {
             const job = nativeUpdateJob(target);
             if (nativeUpdateUnsettled(job) && job.transactionId) {
-              observedNativeJobs[target] = (await api(`/api/update/transactions/${encodeURIComponent(job.transactionId)}`, { scoped: false })).data;
+              const incoming = (await api(`/api/update/transactions/${encodeURIComponent(job.transactionId)}`, { scoped: false })).data;
+              if (observedNativeJobs[target]?.transactionId === job.transactionId && incoming?.transactionId === job.transactionId) {
+                observedNativeJobs[target] = incoming;
+              }
             }
           }
           await refreshUpdateStatus({ notify: false });
@@ -9852,24 +9860,31 @@ async function startComponentUpdate(target) {
     return;
   }
   const startedAt = new Date().toISOString();
+  componentUpdateStatusEpoch++;
   uncertainApplyJobs[target] = plan.transactionId;
-  observedNativeJobs[target] = { transactionId: plan.transactionId, plan, phase: "launching", startedAt,
+  const confirmedJob = { transactionId: plan.transactionId, plan, phase: "launching", startedAt,
     receipts: [], verifiedTargets: [], progress: { totalSteps: plan.targets.length, completedSteps: 0, startedAt, stepStartedAt: startedAt } };
+  observedNativeJobs[target] = confirmedJob;
   nativeJobPollError = "";
   renderComponentUpdateDialogs();
   try {
     const response = await api("/api/update/apply", { method: "POST", body: { transactionId: plan.transactionId, planDigest: plan.digest }, scoped: false });
     if (response?.data?.transactionId !== plan.transactionId) throw new Error("Accepted job identity did not match the confirmed plan.");
+    componentUpdateStatusEpoch++;
     uncertainApplyJobs[target] = null;
-    observedNativeJobs[target] = { ...observedNativeJobs[target], phase: response.data.phase };
-    latestUpdateStatus = { ...(latestUpdateStatus || {}), updateInProgress: true };
+    const current = observedNativeJobs[target]?.transactionId === plan.transactionId ? observedNativeJobs[target] : confirmedJob;
+    observedNativeJobs[target] = ["launching", "planned"].includes(current.phase) ? { ...current, phase: response.data.phase } : current;
+    latestUpdateStatus = { ...(latestUpdateStatus || {}), updateInProgress: Boolean(nativeUpdateUnsettled(observedNativeJobs[target])) };
     addEvent(`${label} job ${plan.transactionId} launched; watching command progress`, "info");
   } catch (error) {
-    nativeJobPollError = error.message || String(error);
-    uncertainApplyJobs[target] = plan.transactionId;
-    observedNativeJobs[target] = { ...observedNativeJobs[target], phase: "launching" };
-    latestUpdateStatus = { ...(latestUpdateStatus || {}), updateInProgress: true };
-    addEvent(`${label} launch was not confirmed: ${nativeJobPollError}. Checking job ${plan.transactionId} before any retry.`, "error");
+    componentUpdateStatusEpoch++;
+    const current = observedNativeJobs[target]?.transactionId === plan.transactionId ? observedNativeJobs[target] : confirmedJob;
+    const hasAuthoritativeResult = !["launching", "planned"].includes(current.phase);
+    nativeJobPollError = hasAuthoritativeResult ? "" : error.message || String(error);
+    uncertainApplyJobs[target] = hasAuthoritativeResult ? null : plan.transactionId;
+    observedNativeJobs[target] = hasAuthoritativeResult ? current : { ...confirmedJob, phase: "launching" };
+    latestUpdateStatus = { ...(latestUpdateStatus || {}), updateInProgress: Boolean(nativeUpdateUnsettled(observedNativeJobs[target])) };
+    addEvent(`${label} launch response failed: ${error.message || String(error)}. Checking job ${plan.transactionId} before any retry.`, "error");
   } finally {
     componentUpdateStartInProgress = false;
     renderComponentUpdateIndicators();

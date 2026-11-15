@@ -27,3 +27,9 @@ Parent verifies command snapshots through real fake-command HTTP where feasible,
 ## Integration decisions
 
 Backend A integrated as 8f3fbd44 from worker 5404f649, owned pair confirmed. Parent inspected installed output source and allowed Pi-only's exact extension-skip informational note plus npm funding/zero-vulnerability informational lines alongside a required exact no-change summary. These do not mean the selected target was skipped. All-mode still requires both Pi and package evidence; warnings, missing summary and contradictory changes remain ordinary success/failure. Guarded regression matrix covers the clarification.
+
+## UI review disposition and verification
+
+Task B reviewer accepted two findings on 9dbe5f2. P2: a status refresh could replace the confirmed launching transaction with an older unchanged result. Parent now retains confirmed identity, rejects status responses crossing apply transitions, and ignores transaction polls for superseded jobs. Apply completion preserves an authoritative result already observed for the same job. Three actual-app regressions pass for status before acceptance, status after acceptance, and a failed launch reply. P3: the viewport test sampled geometry before resize positioning settled. Its original containment, overlap and hit-testing assertions now retry after animation frames; five repeated runs pass.
+
+Post-fix affected browser run: 34 passed with one obsolete test-text expectation, corrected from Running update command to the existing Step 1 of 1 status. All three identity regressions then passed on rerun. Two focused static/state test files pass. Screenshot of the delayed-status case captured, inspected and displayed. Pre-fix full package gate passed all 261 files. Backend review remains pending; no final acceptance or push yet.

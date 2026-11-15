@@ -158,3 +158,58 @@ for (const outcome of ['unchanged', 'failed']) test(`persistent progress starts 
   expect(requests.filter(item => item.kind === 'apply')).toHaveLength(1);
   await page.screenshot({ path: info.outputPath(`update-progress-${outcome}.png`) });
 });
+
+for (const responseOrder of ['status-before-apply', 'status-after-apply', 'apply-error']) test(`confirmed job survives older status: ${responseOrder}`, async ({ page, emptyStartup }, info) => {
+  const { jobs, requests } = await setup(page, emptyStartup);
+  const oldJob = { transactionId: 'previous-webui', plan: { ...planFor('webui'), transactionId: 'previous-webui' },
+    phase: 'unchanged', receipts: [{ id: 'webui', status: 'unchanged', stdout: 'Previous run was up to date' }] };
+  jobs.webui = oldJob;
+  let releaseApply, releaseStatus;
+  const applyGate = new Promise(resolve => { releaseApply = resolve; });
+  const statusGate = new Promise(resolve => { releaseStatus = resolve; });
+  await page.route('**/api/update/apply', async route => {
+    const body = route.request().postDataJSON();
+    requests.push({ kind: 'apply', body });
+    await applyGate;
+    if (responseOrder === 'apply-error') return route.fulfill({ status: 503, json: { ok: false, error: 'Launch reply unavailable' } });
+    const startedAt = new Date().toISOString();
+    jobs.webui = { transactionId: body.transactionId, plan: planFor('webui'), phase: 'running', receipts: [],
+      progress: { startedAt, stepStartedAt: startedAt, totalSteps: 1, completedSteps: 0, currentTargetId: 'webui:npm-global', stdout: 'New command running', stderr: '' } };
+    return route.fulfill({ status: 202, json: { ok: true, data: { transactionId: body.transactionId, phase: 'running' } } });
+  });
+  await page.getByRole('menuitem').filter({ hasText: names.webui }).click();
+  await page.locator('#confirmationConfirmButton').click();
+  const card = page.locator('.sidebar-update-progress');
+  await expect(card).toHaveAttribute('data-state', 'launching');
+  let statusRequested = false;
+  await page.route('**/api/update-status*', async route => {
+    statusRequested = true;
+    await statusGate;
+    return route.fulfill({ json: { ok: true, data: { canRunUpdate: true, updateInProgress: false,
+      nativeJobs: { all: null, pi: null, webui: oldJob }, nativeJobDiscoveryError: '', pi: {}, webui: {} } } });
+  }, { times: 1 });
+  try {
+    const statusResponse = page.waitForResponse(response => new URL(response.url()).pathname === '/api/update-status');
+    await page.locator('#sidebarUpdateButton').click();
+    await expect.poll(() => statusRequested).toBe(true);
+    if (responseOrder === 'status-after-apply') {
+      releaseApply();
+      await expect(page.locator('.sidebar-update-menu-status')).toContainText('Step 1 of 1');
+    }
+    releaseStatus();
+    await statusResponse;
+    await page.keyboard.press('Escape');
+    await expect(card).toHaveAttribute('data-state', responseOrder === 'status-after-apply' ? 'running' : 'launching');
+    await expect(card).not.toContainText('Previous run was up to date');
+    releaseApply();
+    if (responseOrder === 'apply-error') {
+      await expect(card).toHaveAttribute('data-state', 'unknown');
+      await expect(card).toContainText('Launch reply unavailable');
+    } else {
+      await expect(card).toHaveAttribute('data-state', 'running');
+      await expect(card).toContainText('New command running', { timeout: 10_000 });
+    }
+    expect(requests.filter(item => item.kind === 'apply')).toEqual([{ kind: 'apply', body: { transactionId: 'menu-webui', planDigest: 'fixture-preview-token' } }]);
+    await page.screenshot({ path: info.outputPath(`${responseOrder}.png`) });
+  } finally { releaseApply(); releaseStatus(); }
+});

@@ -53,20 +53,23 @@ const fill = (page) => page.locator('.sidebar-update-progress-fill');
 async function expectGeometry(page) {
   const element = page.locator('.sidebar-update-progress');
   await expect(element).toBeVisible();
-  const bounds = await element.boundingBox();
-  const trigger = await page.locator('#updates').boundingBox();
-  const viewport = page.viewportSize();
-  expect(bounds.x).toBeGreaterThanOrEqual(7);
-  expect(bounds.y).toBeGreaterThanOrEqual(7);
-  expect(bounds.x + bounds.width).toBeLessThanOrEqual(viewport.width - 7);
-  expect(bounds.y + bounds.height).toBeLessThanOrEqual(viewport.height - 7);
-  expect(bounds.x + bounds.width <= trigger.x || bounds.x >= trigger.x + trigger.width
-    || bounds.y + bounds.height <= trigger.y || bounds.y >= trigger.y + trigger.height).toBe(true);
-  expect(await element.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
-  expect(await page.locator('#updates').evaluate((node) => {
-    const bounds = node.getBoundingClientRect();
-    return node.contains(document.elementFromPoint(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2));
-  })).toBe(true);
+  await expect(async () => {
+    await page.clock.runFor(50);
+    const bounds = await element.boundingBox();
+    const trigger = await page.locator('#updates').boundingBox();
+    const viewport = page.viewportSize();
+    expect(bounds.x).toBeGreaterThanOrEqual(7);
+    expect(bounds.y).toBeGreaterThanOrEqual(7);
+    expect(bounds.x + bounds.width).toBeLessThanOrEqual(viewport.width - 7);
+    expect(bounds.y + bounds.height).toBeLessThanOrEqual(viewport.height - 7);
+    expect(bounds.x + bounds.width <= trigger.x || bounds.x >= trigger.x + trigger.width
+      || bounds.y + bounds.height <= trigger.y || bounds.y >= trigger.y + trigger.height).toBe(true);
+    expect(await element.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
+    expect(await page.locator('#updates').evaluate((node) => {
+      const bounds = node.getBoundingClientRect();
+      return node.contains(document.elementFromPoint(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2));
+    })).toBe(true);
+  }).toPass();
 }
 async function capture(page, info, name) {
   const path = info.outputPath(`${name}.png`);
