@@ -17,7 +17,7 @@ Pi Web UI keeps the normal Pi agent experience while giving you more room to man
 
 | Area | Highlights |
 | --- | --- |
-| **Sessions and workspaces** | Run several isolated Pi sessions, resume prior work in a new terminal without replacing the current one, switch projects, preserve per-tab drafts, add another tab directly from the tab strip, and create branch worktrees. Organize the compact sidebar into Inbox, Working, and Settled. |
+| **Sessions and workspaces** | Start a No Project conversation in its own folder, run several isolated Pi sessions, resume prior work in a new terminal without replacing the current one, switch projects, preserve per-tab drafts, add another tab directly from the tab strip, and create branch worktrees. Organize the compact sidebar into Inbox, Working, and Settled. |
 | **Live agent work** | Follow streaming Markdown with syntax highlighting for code blocks, grouped consecutive thinking, tool output, queues, todo progress, managed agent runs, and direct agent-to-agent conversations without leaving the browser. |
 | **Models and controls** | Change models and thinking effort, check Codex CLI subscription usage, manage scoped models, configure tools and skills, and use the command palette. |
 | **Files and prompts** | Upload or paste files and images, edit text attachments, use slash-command suggestions, browse project files, and reference project paths with `@`. |
@@ -60,17 +60,19 @@ Check the server at any time with:
 
 ### Choose your desktop layout
 
-Fresh installations start with the compact desktop layout when the Web UI can confirm there is no earlier Web UI state. Existing installations keep Classic until you choose **Controls → Interface → Desktop layout → Compact preview**. The narrow rail opens Conversation, Project, Activity, and Settings. **All tools** searches the real commands and panels; pin frequent actions there. Model and effort controls stay beside your draft, and **More** opens secondary composer actions. Choose **Scoped models** beside the composer’s Model button for your saved model scope, including provider groups and model ordering. **Model** still opens the full model catalog; **All tools → Model shortcuts** remains available. In **Settings**, search for a setting or choose a category such as Appearance, Models and resources, or Features. Search opens the original control or Setup dialog.
+Fresh installations start with the compact desktop layout when the Web UI can confirm there is no earlier Web UI state. Existing installations keep Classic until you choose **Controls → Interface → Desktop layout → Compact preview**. Use **Inspector** in the header for Project and Activity, and the lower-left rail for **Attention**, **All tools**, and **Settings**. All tools searches commands and panels; pin frequent actions there. The footer's **Model** and **Effort** controls open their pickers. **All tools → /model** opens the full model catalog; **Model shortcuts** opens your saved scoped models. In Settings, search or choose a category to open the original control or Setup dialog.
+
+Press **Pi** at the top left, or choose **+ Tab → No Project**, to start an empty conversation with its own folder. Type to begin, or choose a project from the welcome screen. Existing sessions and their drafts stay open. Starting another No Project conversation creates a different folder; resuming one reuses its folder.
 
 The compact left sidebar keeps idle, finished, and input-waiting sessions in **Inbox**, with active work in **Working**. Choose **Settle** (✓) on a finished session to move it into **Settled**, collapsed by default. Expand it and choose **Restore** (↥) to bring a session back. New work or a request for input brings it back automatically. Settling does not close the session.
 
 In the compact layout, **Ctrl/Cmd+K** opens the same **All tools** search. Session and Project menus offer a short list of actions; **More actions** opens the full catalog. The **Attention** button separates decisions waiting for you, running sessions, and finished work. Select a decision to open its session's response dialog.
 
-Drag the right edge of the compact session sidebar to resize it. Open Settings with the gear beside Home at the bottom left.
+Drag the right edge of the compact session sidebar or the left edge of the inspector to resize it. Open Settings with the gear beside Home at the bottom left.
 
-Select the model or effort beside your draft to open its picker. The full model catalog groups models by provider, then sorts dated models newest first and undated models alphabetically. A choice applies to that session without a separate Apply button. While Pi is working, **During this run** chooses whether the single submission button steers the run or queues your message afterward. Enter follows that choice; Abort remains separate.
+Select the model or effort in the footer to open its picker. The full model catalog groups models by provider, then sorts dated models newest first and undated models alphabetically. A choice applies to that session without a separate Apply button. While Pi is working, **During this run** chooses whether the single submission button steers the run or queues your message afterward. Enter follows that choice; Abort remains separate.
 
-**Project** groups Files, Changes, Runners, Releases, and Documents. **Activity** groups Agents, Queues, Progress, Conversations, Events, and provider usage. Use its **View** picker to choose a section without scrolling sideways. Open a section when you need it; changing views keeps running work and unsaved drafts. A queue count beside the draft opens pending follow-ups for editing and reordering.
+**Project** groups Files, Changes, Runners, Releases, and Documents. **Activity** groups Agents, Queues, Progress, Conversations, Events, and provider usage. Use the inspector header to choose a section without scrolling sideways. Open a section when you need it; changing views keeps running work and unsaved drafts. A queue count beside the draft opens pending follow-ups for editing and reordering.
 
 Choose **Classic** in Settings to return. Your open sessions, drafts, and saved Classic arrangement remain available. Phone and tablet modes have separate preferences.
 

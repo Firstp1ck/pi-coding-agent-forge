@@ -59,7 +59,7 @@ assert.match(server, /platform\(\) === "win32" && isWindowsDriveRoot\(cwd\)[\s\S
 assert.match(server, /platform\(\) === "win32" && viewPath === WINDOWS_DRIVES_PICKER_PATH[\s\S]*getWindowsDrivesPickerData\(activeCwd\)/, "the virtual Parent destination should be intercepted only on Windows");
 
 const splitFlow = sourceBetween(app, "async function splitTerminalTab", "async function createTerminalTabFromChosenDirectory");
-assert.match(splitFlow, /pickCwd\([\s\S]*body: \{ cwd: resolvedCwd \}/, "split terminals without a cwd should use the shared drive-aware picker");
+assert.match(splitFlow, /pickCwd\([\s\S]*body: sourceTab\.workspaceKind === "no-project" \? \{ workspaceKind: "no-project" \} : \{ cwd: resolvedCwd \}/, "split terminals without a cwd should use the shared drive-aware picker");
 const newTabFlow = sourceBetween(app, "async function createTerminalTabFromChosenDirectory", "async function createFirstTerminalTabFromChosenDirectory");
 assert.match(newTabFlow, /pickCwd\([\s\S]*createTerminalTab\(cwd/, "new terminal tabs should use the shared drive-aware picker");
 const firstTabFlow = sourceBetween(app, "async function createFirstTerminalTabFromChosenDirectory", "function tabHasActiveAgent");

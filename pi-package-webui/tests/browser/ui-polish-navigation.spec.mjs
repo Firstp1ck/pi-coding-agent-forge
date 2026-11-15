@@ -7,13 +7,15 @@ async function checkMenu(page) {
   const trigger = page.locator('#newTabButton');
   await trigger.scrollIntoViewIfNeeded();
   await trigger.hover();
-  for (const id of ['newTabCurrentDirectoryButton', 'newTabChooseDirectoryButton', 'newTabWorktreeButton']) {
+  for (const id of ['newTabNoProjectButton', 'newTabCurrentDirectoryButton', 'newTabChooseDirectoryButton', 'newTabWorktreeButton']) {
     const item = page.locator(`#${id}`);
     await expect(item).toBeInViewport({ ratio: 1 });
     await item.click({ trial: true });
   }
   await trigger.focus();
   await trigger.press('ArrowDown');
+  await expect(page.locator('#newTabNoProjectButton')).toBeFocused();
+  await page.keyboard.press('ArrowDown');
   await expect(page.locator('#newTabCurrentDirectoryButton')).toBeFocused();
   await page.keyboard.press('ArrowDown');
   await expect(page.locator('#newTabChooseDirectoryButton')).toBeFocused();

@@ -65,7 +65,7 @@ export function createFocusedWorkspace({
   element.id = 'focusedWorkspace';
   const rail = node('nav', 'focused-rail');
   rail.setAttribute('aria-label', 'Workspace destinations');
-  const homeButton = button('Home', null, () => onHome ? onHome() : onNavigate?.('home'));
+  const homeButton = button(onHome ? 'New No Project conversation' : 'Home', null, () => onHome ? onHome() : onNavigate?.('home'));
   homeButton.classList.add('focused-brand');
   homeButton.append(node('span', '', 'π'));
   const destinationButtons = new Map([['home', homeButton]]);

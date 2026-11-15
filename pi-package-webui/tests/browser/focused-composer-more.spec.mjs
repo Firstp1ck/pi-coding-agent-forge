@@ -22,6 +22,8 @@ for (const [width, height] of [[1100, 900], [1440, 900], [1440, 500]]) {
     await prompt.fill('Keep this draft while browsing actions');
     const closedSend = await send.boundingBox();
     const closedMore = await more.boundingBox();
+    const stableSelectors = ['#promptInput', '#chat', '#statusBar', '.composer-row'];
+    const closedLayout = await Promise.all(stableSelectors.map(selector => page.locator(selector).boundingBox()));
     await page.screenshot({ path: info.outputPath('more-closed.png') });
     await more.click();
     await expect(more).toHaveAttribute('aria-expanded', 'true');
@@ -30,13 +32,17 @@ for (const [width, height] of [[1100, 900], [1440, 900], [1440, 500]]) {
     const openSend = await send.boundingBox();
     const openMore = await more.boundingBox();
     const actions = await panel.boundingBox();
-    const row = await page.locator('.composer-row').boundingBox();
+    const openLayout = await Promise.all(stableSelectors.map(selector => page.locator(selector).boundingBox()));
+    expect(openLayout).toEqual(closedLayout);
+    expect(openSend).toEqual(closedSend);
+    expect(openMore).toEqual(closedMore);
     expect(openSend.height).toBeLessThanOrEqual(closedSend.height + 2);
     expect(openMore.height).toBeLessThanOrEqual(closedMore.height + 2);
     expect(actions.x).toBeGreaterThanOrEqual(openMore.x + openMore.width);
     expect(actions.x + actions.width).toBeLessThanOrEqual(openSend.x);
-    await expect(panel).toHaveCSS('grid-column-start', '2');
-    expect(actions.y).toBeCloseTo(openMore.y, 0);
+    await expect(panel).toHaveCSS('position', 'fixed');
+    expect(actions.y + actions.height).toBeCloseTo(openMore.y + openMore.height, 0);
+    await expect(more).toHaveText('More');
     for (const selector of ['#newSessionButton', '#compactButton', '#optionsMenuButton', '#sendButton', '#composerActionsButton']) {
       await page.locator(selector).click({ trial: true });
     }
@@ -64,6 +70,9 @@ for (const [width, height] of [[1100, 500], [1440, 900]]) {
     await page.locator('#promptInput').fill('Keep the draft under the menu');
     await page.locator('#composerActionsButton').click();
     await page.locator('#optionsMenuButton').click();
+    const optionTrigger = await page.locator('#optionsMenuButton').boundingBox();
+    const options = await page.locator('#optionsMenu').boundingBox();
+    expect(Math.abs(options.x - optionTrigger.x)).toBeLessThan(2);
     const palette = page.locator('#optionsCommandPaletteButton');
     await expect(palette).toBeVisible();
     expect(await palette.evaluate(node => {

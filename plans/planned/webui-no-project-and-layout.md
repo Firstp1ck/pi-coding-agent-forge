@@ -33,3 +33,10 @@ Acceptance includes dark/light at 1440×900 and 1100×500, narrow inspector, ret
 ## Rollback and open risks
 
 Classic remains a layout fallback; additive inspector preference already validated. No Project data is retained and has no automatic deletion. Backend contract is settled above from the lifecycle scout; source-tab preservation avoids nontransactional supervisor replacement. New directory creation must be race-safe and must not allow client-controlled arbitrary allocation roots. Overflow on a physically smaller viewport needs accessible recovery; normal content must not be clipped behind a fixed card cap. Model/effort footer availability must be checked before removing duplicate strip. No implementation acceptance yet.
+
+## Integration progress
+
+- A integrated as 802218cb, B as 4d50a831. Parent wired inspector preference persistence, natural overview sizing, footer-only settings and the disclosure coordinator. Actual-app resize/rail checks passed 2 cases; More/Options passed 5 cases after removing a 1px hover transform. Overview earlier passed 20 component/app cases. These are scoped results, not final acceptance.
+- C backend lifecycle remains in its isolated worker. Frontend No Project intent, welcome labels and guarded nextTabId adoption are staged for integration; failure preservation passed one browser case and response navigation passed four unit cases. Creation/reset lifecycle remains unverified until C lands.
+- D fixture migration owns only focused-model-shortcuts.spec.mjs, interaction-composer-integration.spec.mjs and composer-toolbar-polish.spec.mjs. It follows the requested footer-only settings; parent retains More overlay integration assertions.
+- Preintegration package check ran 255 files and found two stale source-shape assertions for split creation. Both now include the explicit No Project branch while retaining project-cwd checks, and both files pass. A final combined package run is still required.

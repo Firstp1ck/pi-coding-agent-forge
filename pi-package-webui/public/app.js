@@ -1,6 +1,7 @@
 import { groupModelCatalog, modelReleaseDate } from "./model-catalog-order.mjs";
 import { createSessionShelfState } from "./session-shelf-state.mjs";
 import { createSessionShelves } from "./session-shelves.mjs";
+import { createFocusedComposerDisclosure } from "./focused-composer-disclosure.mjs";
 import { composerSubmissionPresentation } from "./focused-composer-controls.mjs";
 import { createSettingsResourceController } from "./settings-resource-controller.mjs";
 import { createActivityQueueController, normalizeQueuedMessages, queueMessageCount } from "./activity-queue-controller.mjs";
@@ -1761,6 +1762,7 @@ let sessionShelves = null;
 let renderedSessionShelves = false;
 let settledSessionIds = new Set();
 let focusedShell = null;
+let focusedComposerDisclosure = null;
 let settingsWorkspace = null;
 let settingsResourcesTarget = null;
 let pendingSettingsReveal = null;
@@ -2440,6 +2442,7 @@ function renderFocusedShell() {
       modelReason: "Start a session to choose a model.", effortReason: "Wait for the session model to load.",
     },
   });
+  syncFocusedComposerDisclosure();
   settingsWorkspace?.update({
     enabled: focusedShell.active, destination: focusedShellState.destination,
     category: settingsCategory(focusedShellState.inspector), target: shellActionTarget(),
@@ -2680,7 +2683,19 @@ async function invokeFocusedTool(captured) {
   } catch (error) { addEvent(error.message || String(error), "error"); }
 }
 
+function syncFocusedComposerDisclosure() {
+  focusedComposerDisclosure?.update({
+    enabled: focusedShell?.active === true,
+    open: document.body.classList.contains("composer-actions-open"),
+    optionsOpen: optionsMenuOpen,
+  });
+}
+
 function initializeFocusedShell() {
+  focusedComposerDisclosure = createFocusedComposerDisclosure({
+    document, trigger: elements.composerActionsButton, panel: elements.composerActionsPanel,
+    optionsTrigger: elements.optionsMenuButton, optionsPanel: elements.optionsMenu,
+  });
   initializeFocusedFeatureRecords();
   settingsWorkspace = createSettingsWorkspace({ document, viewHost: canonicalViewHost, onNavigate: navigateSettings, onInvoke: invokeSettingsAction });
   $("#focusedFeatureParking").append(settingsWorkspace.element);
@@ -7944,6 +7959,7 @@ function setComposerActionsOpen(open, { restoreFocus = false } = {}) {
     composerActionsFocusReturn = null;
     if (focusReturn?.isConnected) requestAnimationFrame(() => focusReturn.focus({ preventScroll: true }));
   }
+  syncFocusedComposerDisclosure();
   scheduleMobileDropdownScrollBoundsUpdate();
   if (!shouldOpen) scheduleDeferredUiFlushAfterDropdownClose();
 }
@@ -16046,6 +16062,21 @@ function syncResponseTabs(response) {
   return tab;
 }
 
+async function followFreshConversationResponse(response, sourceContext) {
+  const nextTabId = response?.nextTabId || response?.data?.nextTabId;
+  if (!nextTabId) return false;
+  syncResponseTabs(response);
+  if (!tabs.some(tab => tab.id === nextTabId)) await refreshTabs();
+  if (isCurrentTabContext(sourceContext) && tabs.some(tab => tab.id === nextTabId)) {
+    await switchTab(nextTabId);
+    if (activeTabId === nextTabId) {
+      navigateFocusedShell("conversation", null);
+      focusPromptInput({ defer: true });
+    }
+  }
+  return true;
+}
+
 async function switchToResponseTab(response) {
   const tab = syncResponseTabs(response);
   if (tab?.id) await switchTab(tab.id);
@@ -17304,7 +17335,7 @@ function tabWorkflowModeActive(tab) {
 }
 
 function terminalTabWorkspaceName(tab) {
-  return tabGroupTitle(tab?.cwd, "workspace");
+  return tab?.workspaceKind === "no-project" ? "No Project" : tabGroupTitle(tab?.cwd, "workspace");
 }
 
 function terminalTabMeta(tab, indicator) {
@@ -17442,7 +17473,7 @@ function createTerminalTabCwdAddMenu(tab) {
   applyStyledTooltip(add, addTooltip, { ariaLabel: addTooltip, targetKey: `terminal-tab:${tab.id}:add` });
   add.addEventListener("click", (event) => {
     event.stopPropagation();
-    void createTerminalTab(tab.cwd || currentDirectoryForNewTab(), { triggerButton: add });
+    void createTerminalTab(tab.cwd || currentDirectoryForNewTab(), { triggerButton: add, workspaceKind: tab.workspaceKind || "project" });
   });
   menu.append(add);
   return menu;
@@ -17616,7 +17647,7 @@ function renderTerminalTabGroup(group, groupCount = 1) {
   applyStyledTooltip(add, addTooltip, { ariaLabel: addTooltip, targetKey: `terminal-group:${group.key}:add` });
   add.addEventListener("click", (event) => {
     event.stopPropagation();
-    createTerminalTab(activeGroupTab?.cwd || group.cwd || currentDirectoryForNewTab(), { triggerButton: add, customGroupId: group.customGroupId || null });
+    createTerminalTab(activeGroupTab?.cwd || group.cwd || currentDirectoryForNewTab(), { triggerButton: add, customGroupId: group.customGroupId || null, workspaceKind: activeGroupTab?.workspaceKind || "project" });
   });
   menu.append(add);
   wrapper.append(menu);
@@ -18274,6 +18305,7 @@ async function openNoProjectConversation({ triggerButton = document.querySelecto
 }
 
 async function createTerminalTab(cwd, { triggerButton = elements.newTabButton, customGroupId = null, workspaceKind = cwd === undefined && activeTab()?.workspaceKind === "no-project" ? "no-project" : "project" } = {}) {
+  const sourceContext = activeTabContext();
   setMobileTabsExpanded(false);
   setNewTabMenuOpen(false);
   const resolvedCwd = cwd || currentDirectoryForNewTab();
@@ -18291,7 +18323,7 @@ async function createTerminalTab(cwd, { triggerButton = elements.newTabButton, c
     if (tab?.id && customGroupId && terminalCustomGroups.has(customGroupId)) addTabsToTerminalCustomGroup(customGroupId, [tab.id]);
     renderTabs();
     if (tab?.id) {
-      await switchTab(tab.id);
+      if (workspaceKind !== "no-project" || isCurrentTabContext(sourceContext)) await switchTab(tab.id);
       addEvent(`created isolated terminal ${tab.title}`, "info");
     }
     return tab;
@@ -39492,6 +39524,7 @@ function setOptionsMenuOpen(open) {
   if (optionsMenuOpen) syncOptionsSubmenuAvailability();
   else closeOptionsSubmenus();
   if (optionsMenuOpen) scheduleOptionsMenuLabelFit();
+  syncFocusedComposerDisclosure();
   scheduleMobileDropdownScrollBoundsUpdate();
   if (!optionsMenuOpen) scheduleDeferredUiFlushAfterDropdownClose();
 }
@@ -47371,6 +47404,14 @@ async function sendPrompt(kind = "prompt", explicitMessage, { targetTabId = acti
       response = await api("/api/prompt", { method: "POST", body, tabId: targetTabId });
     }
     if (!sessionContext.isLifetimeCurrent(lifetime)) return;
+    if (response?.nextTabId || response?.data?.nextTabId) {
+      promptRoutingTabs.delete(targetTabId);
+      discardOptimisticUserPrompt(optimisticPromptId);
+      markTabIdleLocally(targetTabId);
+      if (isCurrentTabContext(tabContext)) clearRunIndicatorActivity();
+      await followFreshConversationResponse(response, tabContext);
+      return;
+    }
     applyResponseTab(response);
     // A successful RPC response ends prompt-routing ownership even when an
     // extension command handled the input without starting an agent turn.
@@ -49399,15 +49440,17 @@ elements.abortButton.addEventListener("click", (event) => {
 elements.newSessionButton.addEventListener("click", async () => {
   setComposerActionsOpen(false);
   const tabContext = activeTabContext();
+  const noProject = activeTab()?.workspaceKind === "no-project";
   if (!(await appConfirm({
     title: "Start a new Pi session?",
-    summary: "The active tab switches to a fresh conversation.",
-    affected: "The active tab; the previous session remains resumable.",
+    summary: noProject ? "Open a fresh No Project conversation in a new tab and folder." : "The active tab switches to a fresh conversation.",
+    affected: noProject ? "The current conversation and its files stay in the existing tab." : "The active tab; the previous session remains resumable.",
     undoable: false,
     confirmLabel: "Start new session",
   }))) return;
   try {
     const response = await api("/api/new-session", { method: "POST", body: {}, tabId: tabContext.tabId });
+    if (await followFreshConversationResponse(response, tabContext)) return;
     invalidateShellSessionActions(tabContext.tabId);
     applyResponseTab(response);
     forgetLastUserPrompt(tabContext.tabId);

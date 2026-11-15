@@ -35,6 +35,7 @@ const APP_SHELL = [
   "/shell-context-actions.mjs",
   "/shell-context-actions.css",
   "/focused-composer-controls.mjs",
+  "/focused-composer-disclosure.mjs",
   "/focused-composer-controls.css",
   "/focused-shell-adapter.mjs",
   "/focused-shell-adapter.css",

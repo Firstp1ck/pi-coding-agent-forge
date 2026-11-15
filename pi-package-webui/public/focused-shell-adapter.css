@@ -23,6 +23,7 @@ html[data-desktop-shell="focused"] #focusedWorkspace #composerActionsButton,
 html[data-desktop-shell="focused"] #focusedWorkspace #sendButton {
   grid-row: 1;
   order: 0;
+  transform: none;
   width: auto;
   min-height: 34px;
   padding: 5px 14px;
