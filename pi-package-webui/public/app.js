@@ -1442,6 +1442,7 @@ let footerScopedModelPointerDrag = null;
 let footerScopedModelSuppressClickUntil = 0;
 let publishMenuOpen = false;
 let maxVisualViewportHeight = 0;
+let visualViewportPixelRatio = window.devicePixelRatio || 1;
 let abortRequestInFlight = false;
 let userBashByTab = new Map();
 let userBashQueuesByTab = new Map();
@@ -3000,12 +3001,12 @@ function syncMobileShellInteractivity() {
     else destination.removeAttribute("aria-hidden");
   }
   if (surface) {
-    if (surfaceOpen) {
-      surface.setAttribute("role", "dialog");
-      surface.setAttribute("aria-modal", "true");
+    if (surfaceOpen && !fileViewerOpen) {
+      activateDrawerModal(surface, mobileSurfaceFocusReturn, { close: mobileBack });
     } else {
-      surface.removeAttribute("role");
-      surface.removeAttribute("aria-modal");
+      // History owns the return target; viewport/file-viewer suspension must not
+      // focus the obscured More trigger or close its retained page.
+      deactivateDrawerModal(surface, { restoreFocus: false });
     }
   }
   if (elements.chat) {
@@ -8467,6 +8468,13 @@ function updateVisualViewportVars() {
   const viewportHeight = viewport?.height || window.innerHeight || document.documentElement.clientHeight;
   const offsetTop = viewport?.offsetTop || 0;
   const layoutHeight = window.innerHeight || viewportHeight;
+  const pixelRatio = window.devicePixelRatio || 1;
+  // Native browser zoom changes CSS units without opening a software keyboard.
+  // Keep the retained height in the current units; keyboard-only shrink keeps DPR.
+  if (pixelRatio !== visualViewportPixelRatio) {
+    maxVisualViewportHeight *= visualViewportPixelRatio / pixelRatio;
+    visualViewportPixelRatio = pixelRatio;
+  }
   if (viewportHeight > maxVisualViewportHeight) maxVisualViewportHeight = viewportHeight;
   const keyboardInset = viewport ? Math.max(0, Math.round(layoutHeight - viewportHeight - offsetTop)) : 0;
   const promptFocused = document.activeElement === elements.promptInput;

@@ -1,5 +1,7 @@
 # W7 capability access evidence
 
+Parent integration checkpoint: all 25 capability/companion cases pass after the three accepted repairs, including all nine reachability paths. Project Changes opens its active root once; Runners refreshes on inspector entry; feedback sits clear of Copy, reveals on message hover/focus, and stays visible for touch. Hidden feedback retains pointer exclusion on hover devices. This supersedes the worker failure status below; broader W7 acceptance is pending.
+
 W7-CAP adds browser checks for remaining access gaps. It does not accept W7. The parent owns production fixes, shared fixtures, the ledger, the canonical plan and the final acceptance run.
 
 [Capability ledger](capability-ledger.md) · [Source inventory](capability-inventory.json) · [Canonical plan](../../../plans/planned/webui-design-architecture-overhaul.md)

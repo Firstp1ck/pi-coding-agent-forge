@@ -362,13 +362,15 @@ test("each terminal tab stacks Split and Summary across one horizontally divided
   const requests = { get: 0, put: [], generate: [] };
   await installSummaryRoutes(page, requests, { configured: true });
   await page.goto(baseURL);
+  await expect(page.locator("#tabBar .terminal-tab-button").first()).toBeVisible();
 
   await expect(page.locator("#splitTabButton")).toHaveCount(0);
-  const initialTabCount = await page.locator("[data-tab-id] > .terminal-tab-actions").count();
   const activeGroup = page.locator(".terminal-tab-group.active");
   if (await activeGroup.count()) await activeGroup.hover();
   const activeActions = page.locator(".terminal-tab.active[data-tab-id] > .terminal-tab-actions, .terminal-tab-group.active .terminal-tab-group-item.active > .terminal-tab-actions");
   await expect(activeActions).toHaveCount(1);
+  const initialTabCount = await page.locator("[data-tab-id] > .terminal-tab-actions").count();
+  expect(initialTabCount).toBeGreaterThan(0);
   await expect(activeActions.locator(":scope > .terminal-tab-split-button")).toHaveCount(1);
   await expect(activeActions.locator(":scope > .terminal-tab-summary-button")).toHaveCount(1);
   const actionGeometry = await activeActions.evaluate((slot) => ({

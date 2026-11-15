@@ -189,7 +189,7 @@ assert.match(owner, /owner\.selection = selection/, "caching a terminal should r
 assert.match(owner, /function activate\(tabId\)[\s\S]*viewer = tabs\.get\(activeTabId\)\?\.viewer \|\| null;\s*selection = tabs\.get\(activeTabId\)\?\.selection \|\| null;/, "activating a terminal should restore its own viewer and selection");
 assert.match(owner, /function close\(\) \{\s*if \(activeTabId\) tabs.delete\(activeTabId\)/, "explicitly closing a viewer should remove only the active terminal's cached state");
 assert.match(switchTabSource, /cacheActiveFileViewerForTab\(activeTabId\);[\s\S]*?const tabContext = setActiveTabId\(tabId, \{ remember: true \}\);/, "switching terminals should cache the outgoing viewer before changing the active tab identity");
-assert.match(resetActiveTabUiSource, /resetFileViewerUi\(\);\s*resetFileTreeState\(\);\s*restoreFileViewerForActiveTab\(\);/, "resetting tab UI should restore the incoming terminal's viewer instead of closing it");
+assert.match(resetActiveTabUiSource, /resetFileViewerUi\(\);\s*if \(!preserveFileTree\) resetFileTreeState\(\);\s*restoreFileViewerForActiveTab\(\);/, "resetting tab UI should restore the incoming terminal's viewer instead of closing it");
 assert.match(closeTabsSource, /projectFiles\.forgetTab\(id\)/, "closing terminal tabs should discard their cached viewers and selections");
 
 // --- Changes rendering contracts ---

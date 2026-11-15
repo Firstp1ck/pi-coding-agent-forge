@@ -28,7 +28,7 @@ export function createSurfaceCoordinator({ document, getFocusableElements, onEsc
     if (event.key !== 'Tab') return;
     const { surface } = active;
     const focusable = [...(getFocusableElements ? getFocusableElements(surface) : surface.querySelectorAll(FOCUSABLE_SELECTOR))]
-      .filter(canFocus);
+      .filter(element => canFocus(element) && element.tabIndex >= 0);
     if (!focusable.length) {
       event.preventDefault();
       surface.focus({ preventScroll: true });
@@ -37,7 +37,7 @@ export function createSurfaceCoordinator({ document, getFocusableElements, onEsc
     const first = focusable[0];
     const last = focusable[focusable.length - 1];
     const focused = document.activeElement;
-    if (!surface.contains(focused) || focused === surface) {
+    if (!focusable.includes(focused)) {
       event.preventDefault();
       (event.shiftKey ? last : first).focus({ preventScroll: true });
     } else if (event.shiftKey && focused === first) {

@@ -1036,7 +1036,7 @@ Keep this browser configuration disabled until the gateway's exact-origin CORS p
 
 ## Native update workflow
 
-This diagram describes the new native-command updater in the current working tree, not a released or fully accepted implementation. The [implementation plan](plans/planned/simplify-updates.md) still lists integrated validation, independent reviews, and the completion report as pending. The UI handoff reports browser tests blocked by missing Playwright. Durable job discovery and the separate PATH Pi preview fields are now present in the server, superseding the handoff's earlier integration-gap notes.
+This diagram describes the native-command update flow. Durable job discovery keeps the original target and receipts through reconnects; confirmed PATH Pi details remain separate from the active session runtime. The [compact workspace execution plan](../plans/planned/webui-design-architecture-overhaul.md) records the current integration checks. Browser coverage includes target confirmation, partial/unknown outcomes, PWA recovery and reconnect continuity; it uses disposable state and simulated updates rather than installing packages.
 
 ```mermaid
 flowchart TD

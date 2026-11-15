@@ -81,6 +81,8 @@ test("Pi and Web UI actions confirm independent native targets and show durable 
   await expect(page.locator("#piComponentUpdateStatus")).toContainText("No automatic restart", { timeout: 8_000 });
   await expect(page.locator("#piComponentUpdateOutput")).toContainText("Already current");
   await page.locator("#piReleaseNotesCloseButton").click();
+  await page.locator("#updateNotificationDismissButton").click();
+  await expect(page.locator("#updateNotification")).toBeHidden();
   await page.locator("#webuiVersionButton").click();
   await page.locator("#webuiComponentUpdateButton").click();
   await expect(page.locator("#confirmationSummary")).toContainText("/safe/npm/webui");
