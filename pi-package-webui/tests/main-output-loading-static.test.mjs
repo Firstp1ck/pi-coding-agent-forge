@@ -59,8 +59,8 @@ assert.match(css, /body\.terminal-tabs-left \.main-output-surface \{ grid-row: 4
 assert.match(css, /body\.subagent-terminal-active \.main-output-surface,[\s\S]*body\.subagent-terminal-active \.main-output-loading,/, "dedicated subagent output should hide the main transcript and its loading status");
 
 assert.match(html, /styles\.css\?v=156/, "the stylesheet cache query should advance");
-assert.match(html, /app\.js\?v=192/, "the app cache query should advance");
-assert.match(serviceWorker, /const CACHE_NAME = "pi-webui-pwa-v163"/, "the PWA cache identity should advance with browser assets");
+assert.match(html, /app\.js\?v=193/, "the app cache query should advance");
+assert.match(serviceWorker, /const CACHE_NAME = "pi-webui-pwa-v164"/, "the PWA cache identity should advance with browser assets");
 assert.match(readme, /Loading conversation history/, "user documentation should describe the plain-language loading feedback");
 assert.match(development, /main output loading/i, "developer documentation should preserve the request-ownership contract");
 

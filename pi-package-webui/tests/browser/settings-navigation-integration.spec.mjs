@@ -273,3 +273,42 @@ test('Settings search and canonical controls retain the composer draft through C
     .toEqual([5, 14, 'backward']);
   expect((await ownership.api(`/api/state?tab=${encodeURIComponent(ownership.tabs[0].id)}`)).sessionId).toBe(initialSession.sessionId);
 });
+
+test('Back and Forward replace stale Settings anchors without adding history or applying settings', async ({ page, ownership }) => {
+  await openFocused(page, ownership, 'external=keep');
+  await openSettings(page);
+  const before = await preferenceSnapshot(page);
+  const writes = observePreferenceWrites(page);
+  for (const [inspector, setting, expectedCategory] of [
+    ['settings:resources', 'removed-setting', 'resources'],
+    ['settings:removed-category', 'theme', 'appearance'],
+  ]) {
+    await page.evaluate(({ inspector, setting }) => {
+      const url = new URL(location.href);
+      url.searchParams.set('view', 'settings');
+      url.searchParams.set('inspector', inspector);
+      url.searchParams.set('setting', setting);
+      url.hash = 'preserved-fragment';
+      history.replaceState({ ...history.state, externalKeep: 'yes', focusedShellState: { destination: 'settings', inspector, setting } }, '', url);
+    }, { inspector, setting });
+    await destinations(page).getByRole('button', { name: 'Conversation', exact: true }).click();
+    const length = await page.evaluate(() => history.length);
+    await page.goBack();
+    await expectLocation(page, expectedCategory);
+    expect(await page.evaluate(() => history.state.focusedShellState)).toEqual({ destination: 'settings', inspector: `settings:${expectedCategory}` });
+    expect(await page.evaluate(() => history.state.externalKeep)).toBe('yes');
+    expect(await page.evaluate(() => history.length)).toBe(length);
+    expect(new URL(page.url()).searchParams.get('external')).toBe('keep');
+    expect(new URL(page.url()).searchParams.get('tab')).toBe(ownership.tabs[0].id);
+    expect(new URL(page.url()).hash).toBe('#preserved-fragment');
+    await expect(page.locator('#nativeCommandDialog')).toBeHidden();
+    await page.goForward();
+    await expect(page.locator('#focusedWorkspace')).toHaveAttribute('data-destination', 'conversation');
+    await page.goBack();
+    await expectLocation(page, expectedCategory);
+    expect(await page.evaluate(() => history.state.focusedShellState)).toEqual({ destination: 'settings', inspector: `settings:${expectedCategory}` });
+    expect(await page.evaluate(() => history.length)).toBe(length);
+  }
+  expect(await preferenceSnapshot(page)).toEqual(before);
+  expect(writes).toEqual([]);
+});

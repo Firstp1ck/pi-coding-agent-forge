@@ -2369,8 +2369,9 @@ function normalizeFocusedNavigation(state) {
   if (!["conversation", "home", "project", "activity", "settings"].includes(destination)) return { destination: "conversation", inspector: null };
   if (destination === "settings") {
     const category = settingsCategory(inspector);
-    const entry = settingsWorkspace?.getEntries().find(entry => entry.id === state.setting && entry.category === category)
-      || (category === "features" && OPTIONAL_FEATURES.some(feature => `feature:${feature.id}` === state.setting) ? { id: state.setting } : null);
+    const categoryKnown = inspector === `settings:${category}`;
+    const entry = categoryKnown && (settingsWorkspace?.getEntries().find(entry => entry.id === state.setting && entry.category === category)
+      || (category === "features" && OPTIONAL_FEATURES.some(feature => `feature:${feature.id}` === state.setting) ? { id: state.setting } : null));
     return { destination, inspector: `settings:${category}`, ...(entry ? { setting: entry.id } : {}) };
   }
   return { destination, inspector: focusedInspectorRecords().some(({ id }) => id === inspector) ? inspector : destination === "project" ? "files" : destination === "activity" ? "subagents" : null };
@@ -2407,6 +2408,14 @@ function restoreShellNavigation(event) {
   focusedShellState = event.state?.focusedShellState
     ? normalizeFocusedNavigation(event.state.focusedShellState)
     : focusedNavigationFromSearch(window.location.search);
+  if (focusedShellState.destination === "settings") {
+    const url = focusedNavigationUrl(focusedShellState);
+    const stateChanged = JSON.stringify(event.state?.focusedShellState) !== JSON.stringify(focusedShellState);
+    if (stateChanged || url !== window.location.href) {
+      try { shellHistory.write({ state: { focusedShellState }, url, replace: true }); }
+      catch (error) { addEvent(`Recovered Settings navigation could not be saved. ${error.message || error}`, "error"); }
+    }
+  }
   pendingSettingsReveal = focusedShellState.setting || null;
   if (focusedShellState.setting) settingsWorkspace?.clearSearch();
   renderFocusedShell();

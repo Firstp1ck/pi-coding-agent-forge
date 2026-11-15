@@ -66,7 +66,7 @@ export function createSettingsWorkspace({ document, viewHost, onNavigate, onInvo
   ].map(([category, selector, expand]) => ({ category, node: document.querySelector(selector), expand, hidden: null })).filter(record => record.node);
   const voicePanel = document.getElementById('conversationVoiceMenuPanel');
   for (const [category, text] of [
-    ['voice', 'Voice selection is saved in the shared Pi voice configuration for future sessions and applied immediately to this session’s active audio loop. Starting a voice conversation and microphone consent remain explicit actions in Conversation. Voice installation may require /talk setup in Pi.'],
+    ['voice', 'Voice selection is saved in the shared Pi voice configuration for future sessions and applied immediately to the current voice conversation. Starting a voice conversation and microphone consent remain explicit actions in Conversation. Voice installation may require /talk setup in Pi.'],
     ['connection', 'Network and PIN controls follow this server’s access policy. Unavailable controls remain unavailable here.'],
     ['accounts', 'Provider login uses Pi’s terminal sign-in flow. Logout asks before removing stored credentials.'],
     ['help', 'Review an issue before submitting it. No support data is sent by opening Settings.'],
