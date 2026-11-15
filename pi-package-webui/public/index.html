@@ -12,16 +12,17 @@
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-    <link rel="stylesheet" href="/styles.css?v=165" />
+    <link rel="stylesheet" href="/styles.css?v=166" />
     <link rel="stylesheet" href="/shell-workspace.css?v=7" />
     <link rel="stylesheet" href="/shell-tools-launcher.css?v=2" />
-    <link rel="stylesheet" href="/focused-shell-adapter.css?v=12" />
+    <link rel="stylesheet" href="/focused-shell-adapter.css?v=13" />
     <link rel="stylesheet" href="/session-shelves.css?v=2" />
     <link rel="stylesheet" href="/focused-composer-controls.css?v=2" />
     <link rel="stylesheet" href="/shell-context-actions.css?v=1" />
     <link rel="stylesheet" href="/shell-attention-inbox.css?v=1" />
     <link rel="stylesheet" href="/settings-navigation.css?v=1" />
     <link rel="stylesheet" href="/settings-workspace.css?v=1" />
+    <link rel="stylesheet" href="/sidebar-update-menu.css?v=1" />
     <link rel="stylesheet" href="/conversation-overview.css?v=3" />
     <link rel="stylesheet" href="/themed-selects.css?v=1" />
     <script>
@@ -239,6 +240,7 @@
             <button id="workspaceSaveButton" class="terminal-workspace-save-button" data-visibility-key="workspace.save" type="button" aria-label="Save workspace" data-tooltip="Save workspace:&#10;• Captures all open tabs, sessions, order, custom groups, and the active tab.&#10;• Available when at least one tab is open."><svg class="terminal-workspace-save-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 4h11l3 3v13H5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M8 4v6h7V4M8 19v-5h8v5" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg></button>
             <button id="commandPaletteButton" class="terminal-command-palette-button" data-visibility-key="workspace.command-palette" type="button" aria-label="Open command palette" data-tooltip="Command palette:&#10;• Search and run actions, slash commands, models, and tabs.&#10;• Shortcut: Ctrl/Cmd+K."><svg class="composer-icon command-palette-launcher-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 7.5h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M5 12h9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M5 16.5h5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M17 14.5 19.5 17 17 19.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
             <button id="workspaceDashboardToggleButton" class="terminal-dashboard-button" data-visibility-key="workspace.overview" type="button" aria-controls="workspaceDashboard" aria-expanded="false" aria-label="Show workspace overview" data-tooltip="Workspace overview:&#10;• Shows current tab, cwd, model, context, session, and queue.&#10;• Opens common workspace/session actions from one place."><svg class="composer-icon workspace-overview-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 11.4 12 4l8 7.4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M6.5 10.5V20h11v-9.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M10 20v-5h4v5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+            <button id="sidebarUpdateButton" class="terminal-update-button" type="button" aria-label="Updates" title="Updates"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7v5h-5M4 17v-5h5M6.1 6.1A8 8 0 0 1 20 12M4 12a8 8 0 0 0 13.9 5.9"/></svg></button>
           </div>
           <div id="remoteAccessIndicator" class="remote-access-indicator" role="status" aria-live="polite" hidden>Remote access open</div>
           <button id="closeAllTabsButton" class="terminal-close-all-button" data-visibility-key="workspace.close-all-tabs" type="button" aria-label="Close all terminal tabs">Close all Tabs</button>
@@ -1938,7 +1940,7 @@
       </form>
     </dialog>
 
-    <script id="webuiBootLoader" data-app-src="/app.js?v=211">
+    <script id="webuiBootLoader" data-app-src="/app.js?v=212">
       (() => {
         "use strict";
 

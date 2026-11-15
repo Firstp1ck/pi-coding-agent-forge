@@ -70,10 +70,8 @@ test("Pi and Web UI actions confirm independent native targets and show durable 
   await page.locator("#piVersionButton").click();
   await page.locator("#piComponentUpdateButton").click();
   await expect(page.locator("#confirmationSummary")).toContainText("/safe/path-pi/cli.js");
-  await expect(page.locator("#confirmationSummary")).toContainText("0.80.10");
-  await expect(page.locator("#confirmationSummary")).toContainText("Confirmed PATH Pi: 0.87.1 at /safe/path-pi");
-  await expect(page.locator("#confirmationSummary")).toContainText("/safe/agent");
-  await expect(page.locator("#confirmationSummary")).toContainText("Native lifecycle scripts");
+  await expect(page.locator("#confirmationSummary")).toContainText("/safe/path-pi/cli.js");
+  await expect(page.locator("#confirmationSummary")).toContainText("Restart Web UI after the update");
   await page.locator("#confirmationConfirmButton").click();
   await expect(page.locator("#piComponentUpdateStatus")).toContainText("fixture-pi");
   await expect(page.locator("#piComponentUpdateStatus")).toHaveAttribute("data-update-running");
@@ -87,7 +85,7 @@ test("Pi and Web UI actions confirm independent native targets and show durable 
   await page.locator("#webuiComponentUpdateButton").click();
   await expect(page.locator("#confirmationSummary")).toContainText("/safe/npm/webui");
   await expect(page.locator("#confirmationSummary")).toContainText("/safe/agent/npm/webui");
-  await expect(page.locator("#confirmationSummary")).toContainText("Confirmed PATH Pi: 0.87.1 at /safe/path-pi");
+  await expect(page.locator("#confirmationSummary")).toContainText("/safe/path-pi/cli.js");
   await expect(page.locator("#confirmationSummary")).toContainText("Project installation needs manual update");
   await page.locator("#confirmationConfirmButton").click();
   jobs.webui = { ...jobs.webui, phase: "partial", outcome: "partial", receipts: [{ id: "webui:npm-global", status: "changed", stdout: "updated" }, { id: "webui:pi-user", status: "failed", stderr: "fixture failure" }], verifiedTargets: [{ id: "webui:npm-global", status: "healthy" }] };

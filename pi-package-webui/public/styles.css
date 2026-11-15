@@ -19988,3 +19988,6 @@ body:has(#undoToast:not([hidden])) .notice-toast-stack { bottom: calc(max(1rem, 
 [data-tooltip-floating="true"]::before,
 [data-tooltip-floating="true"]::after { display: none !important; }
 .footer-floating-tooltip[popover] { margin: 0; inset: auto; overflow: auto; }
+
+.terminal-update-button { display: inline-grid; place-items: center; flex: 0 0 38px; width: 38px; min-height: 38px; padding: 8px; }
+.terminal-update-button svg { width: 18px; height: 18px; }

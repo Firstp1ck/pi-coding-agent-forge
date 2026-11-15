@@ -1,3 +1,4 @@
+import { createSidebarUpdateMenu } from "./sidebar-update-menu.mjs";
 import { groupModelCatalog, modelReleaseDate } from "./model-catalog-order.mjs";
 import { createSessionShelfState } from "./session-shelf-state.mjs";
 import { createSessionShelves } from "./session-shelves.mjs";
@@ -71,6 +72,7 @@ const elements = {
   terminalTabsDrawerContent: $("#terminalTabsDrawerContent"),
   terminalTabsBackdrop: $("#terminalTabsBackdrop"),
   workspaceSaveButton: $("#workspaceSaveButton"),
+  sidebarUpdateButton: $("#sidebarUpdateButton"),
   newTabMenu: $("#newTabMenu"),
   newTabButton: $("#newTabButton"),
   newTabMenuPanel: $("#newTabMenuPanel"),
@@ -1381,8 +1383,11 @@ let updateStatusRefreshTimer = null;
 let updateNotificationHideTimer = null;
 let componentUpdatePollTimer = null;
 let componentUpdateStartInProgress = false;
-const observedNativeJobs = { pi: null, webui: null };
-const uncertainApplyJobs = { pi: null, webui: null };
+let sidebarUpdateMenu = null;
+let sidebarUpdateError = "";
+let sidebarUpdateTarget = "all";
+const observedNativeJobs = { all: null, pi: null, webui: null };
+const uncertainApplyJobs = { all: null, pi: null, webui: null };
 let nativeJobPollError = "";
 let backendOfflineNoticeShown = false;
 let latestMessages = [];
@@ -9561,10 +9566,10 @@ function scheduleUpdateStatusRefresh() {
   }, UPDATE_STATUS_REFRESH_MS);
 }
 
-const COMPONENT_UPDATE_TARGETS = ["pi", "webui"];
+const COMPONENT_UPDATE_TARGETS = ["all", "pi", "webui"];
 
 function componentUpdateLabel(target) {
-  return target === "pi" ? "Pi" : "Web UI";
+  return target === "all" ? "Pi, extensions and Web UI" : target === "pi" ? "Pi" : "Web UI";
 }
 
 function componentUpdateJob(target) {
@@ -9617,7 +9622,7 @@ function componentUpdateStatusText(target) {
   const job = nativeUpdateJob(target);
   const pkg = latestUpdateStatus?.[target] || {};
   if (latestUpdateStatus?.nativeJobDiscoveryError || nativeJobPollError) {
-    return { text: `Update status cannot be verified: ${latestUpdateStatus?.nativeJobDiscoveryError || nativeJobPollError}. Do not retry until the host is checked.`, level: "error" };
+    return { text: `Update status cannot be verified: ${latestUpdateStatus?.nativeJobDiscoveryError || nativeJobPollError}. Refresh the status before starting another update.`, level: "error" };
   }
   if (!job && latestUpdateStatus?.updateInProgress) {
     return { text: "An update is in progress, but its job ID is not available. Do not retry until its status is known.", level: "warn" };
@@ -9626,11 +9631,11 @@ function componentUpdateStatusText(target) {
     const id = `Job ${job.transactionId || "unknown"}`;
     const error = job.error ? ` ${String(job.error).slice(0, 600)}` : "";
     switch (job.phase) {
-      case "unknown": return { text: `${id}: completion is unknown.${error} Do not retry or restart; check the host and recover manually.`, level: "error" };
-      case "partial": return { text: `${id}: partial result. Some installations failed or were unverified.${error} Verified healthy active changes may have restarted; inspect each receipt before any retry.`, level: "warn" };
-      case "failed": return { text: `${id}: update failed or could not be verified.${error} Inspect receipts and installation health before retrying.`, level: "error" };
+      case "unknown": return { text: `${id}: completion is unknown.${error} Check the command output on the host before retrying.`, level: "error" };
+      case "partial": return { text: `${id}: partial result. Some commands failed.${error} Review the command results. Restart Web UI to load any completed updates.`, level: "warn" };
+      case "failed": return { text: `${id}: update failed.${error} Review the command results before retrying.`, level: "error" };
       case "unchanged": return { text: `${id}: commands finished but no installation changed. No automatic restart was needed.`, level: "info" };
-      case "success": return { text: `${id}: changed installations verified. Any healthy changed active component was automatically restarted after idle; unchanged or separate PATH installations were not.`, level: "success" };
+      case "success": return { text: `${id}: update commands completed. Restart Web UI to load the updated code.`, level: "success" };
       case "restart-authorized": return { text: `${id}: commands completed and healthy changed active components are waiting for idle before automatic restart.`, level: "warn" };
       case "restart-in-progress": return { text: `${id}: automatic restart is in progress; reconnecting to the same job.`, level: "warn" };
       case "restart-pending": return { text: `${id}: successor health and session restoration are not yet confirmed. Do not infer restart success.`, level: "warn" };
@@ -9640,8 +9645,8 @@ function componentUpdateStatusText(target) {
   const current = formatWebuiVersion((target === "pi" ? pkg.pathInstallationVersion : pkg.currentVersion) || (target === "pi" ? piVersion : webuiVersion) || "");
   const latest = formatWebuiVersion(pkg.latestVersion || "");
   const availability = pkg.updateAvailable ? `${label} ${current || "current"} → ${latest || "new version"} is available.` : "";
-  const guidance = target === "pi" ? pkg.pathGuidance : (latestUpdateStatus?.webuiDev ? "Active source checkout stays unchanged; separately proven installations may be eligible." : "");
-  if (guidance) return { text: [availability, guidance].filter(Boolean).join(" "), level: "warn" };
+  const guidance = target === "webui" && latestUpdateStatus?.webuiDev ? "The source checkout stays unchanged. Installed npm copies can be updated." : "";
+  if (target === "webui" && guidance) return { text: [availability, guidance].filter(Boolean).join(" "), level: "info" };
   if (availability) return { text: availability, level: "info" };
   if (pkg.checked && latest) return { text: `${label} is up to date.`, level: "info" };
   if (pkg.skippedReason) return { text: `Update check skipped: ${pkg.skippedReason}.`, level: "info" };
@@ -9652,9 +9657,10 @@ function componentUpdateButtonState(target) {
   const label = componentUpdateLabel(target);
   const job = nativeUpdateJob(target);
   if (componentUpdateStartInProgress) return { disabled: true, label: "Starting…" };
+  const needsRecovery = COMPONENT_UPDATE_TARGETS.some((key) => nativeUpdateJob(key)?.phase === "unknown");
   if (nativeJobPollError || latestUpdateStatus?.nativeJobDiscoveryError || latestUpdateStatus?.canRunUpdate === false ||
-      latestUpdateStatus?.updateInProgress || anyComponentUpdateRunning() || job?.phase === "unknown" || job?.phase === "partial" ||
-      updateRequestInProgress) {
+      latestUpdateStatus?.updateInProgress || anyComponentUpdateRunning() || job?.phase === "unknown" ||
+      updateRequestInProgress || needsRecovery) {
     return { disabled: true, label: `Update ${label}` };
   }
   return { disabled: false, label: `Update ${label}` };
@@ -9686,7 +9692,47 @@ function renderComponentUpdatePanel(target, statusElement, buttonElement) {
   buttonElement.textContent = buttonState.label;
 }
 
+function renderSidebarUpdateMenu() {
+  if (!sidebarUpdateMenu) return;
+  const target = COMPONENT_UPDATE_TARGETS.find((key) => ["unknown", "partial"].includes(nativeUpdateJob(key)?.phase))
+    || COMPONENT_UPDATE_TARGETS.find((key) => nativeUpdateUnsettled(nativeUpdateJob(key)))
+    || (nativeUpdateJob(sidebarUpdateTarget) ? sidebarUpdateTarget : COMPONENT_UPDATE_TARGETS.find((key) => nativeUpdateJob(key)))
+    || sidebarUpdateTarget;
+  const job = nativeUpdateJob(target);
+  const status = componentUpdateStatusText(target);
+  const receipts = (job?.receipts || []).map((receipt) => [
+    `${receipt.id}: ${receipt.status || "unknown"}`,
+    ...[receipt.stdout, receipt.stderr, receipt.error].filter(Boolean).map((text) => String(text).slice(-600)),
+  ].join("\n"));
+  let disabledReason = "";
+  if (componentUpdateButtonState(target).disabled) {
+    disabledReason = latestUpdateStatus?.canRunUpdate === false && !latestUpdateStatus?.updateInProgress && !job
+      ? "Updates can only be started from localhost."
+      : componentUpdateStartInProgress ? "Preparing or confirming an update."
+      : "Wait for the current update or resolve its reported status before starting another.";
+  }
+  sidebarUpdateMenu.update({
+    busy: componentUpdateStartInProgress || anyComponentUpdateRunning() || Boolean(latestUpdateStatus?.updateInProgress),
+    disabledReason,
+    statusText: sidebarUpdateError || [status.text, ...receipts].filter(Boolean).join("\n"),
+    statusTone: sidebarUpdateError ? "error" : status.level,
+  });
+}
+
+function initializeSidebarUpdateMenu() {
+  if (!elements.sidebarUpdateButton) return;
+  sidebarUpdateMenu = createSidebarUpdateMenu({ button: elements.sidebarUpdateButton, onSelect: startComponentUpdate });
+  elements.sidebarUpdateButton.addEventListener("click", () => {
+    refreshUpdateStatus({ notify: false }).catch((error) => {
+      nativeJobPollError = error.message || String(error);
+      renderSidebarUpdateMenu();
+    });
+  });
+  renderSidebarUpdateMenu();
+}
+
 function renderComponentUpdateDialogs() {
+  renderSidebarUpdateMenu();
   renderComponentUpdatePanel("pi", elements.piComponentUpdateStatus, elements.piComponentUpdateButton);
   const pkg = latestUpdateStatus?.webui || {};
   if (elements.webuiPackageCurrentVersion) {
@@ -9735,27 +9781,15 @@ function syncComponentUpdatePolling() {
 }
 
 function componentUpdateConfirmationText(plan) {
-  const context = plan.context || {};
-  const active = plan.active || {};
-  const installations = (plan.targets || []).map((item) => [
-    `${item.id}: ${item.packageName} ${item.beforeVersion} at ${item.installedRoot}`,
-    `Affected root: ${item.effectRoot}`,
-    `Executable: ${item.command.command}`,
-    `Command argv: ${JSON.stringify(item.command.args)}`,
+  const commands = (plan.targets || []).map((item) => [
+    `${item.id}${item.installedRoot ? ` at ${item.installedRoot}` : ""}`,
+    [item.command.command, ...item.command.args].map((part) => JSON.stringify(part)).join(" "),
   ].join("\n")).join("\n\n");
   return [
-    `Update ${componentUpdateLabel(plan.requested)} with this exact plan?`,
-    `Active Pi: ${active.pi || "unknown"} at ${active.piRoot || "unknown"}.`,
-    plan.pathPi?.eligible
-      ? `Confirmed PATH Pi: ${plan.pathPi.version} at ${plan.pathPi.packageRoot}; executable ${plan.pathPi.executable}; CLI ${plan.pathPi.cli}. It may differ from active Pi.`
-      : `PATH Pi unproven: ${plan.pathPi?.guidance || "No verified PATH Pi version/root was returned; only confirmed commands below are eligible."}`,
-    `Active Web UI: ${active.webui || "unknown"} at ${active.webuiRoot || "unknown"}.`,
-    `Shell: ${context.shell || "unknown"}\nWorking directory: ${context.cwd || "unknown"}\nAgent directory: ${context.agentDir || "unknown"}\nNpm prefix: ${context.npmPrefix || "not applicable"}`,
-    installations,
-    plan.refusals?.length ? `Skipped/manual: ${plan.refusals.join(" · ")}` : "",
-    plan.warning || "Native package lifecycle scripts may run under your existing configuration; no automatic elevation or sandbox is provided.",
-    "Known affected work must be idle. Only changed, verified healthy active components restart automatically after all commands finish and work is idle. Native updates cannot be rolled back automatically.",
-    `Plan digest: ${plan.digest}`,
+    `Update ${componentUpdateLabel(plan.requested)}?`,
+    commands,
+    plan.refusals?.length ? `Not installed: ${plan.refusals.join(" · ")}` : "",
+    "Restart Web UI after the update to load the updated code.",
   ].filter(Boolean).join("\n\n");
 }
 
@@ -9763,25 +9797,29 @@ async function startComponentUpdate(target) {
   if (componentUpdateStartInProgress) return;
   const label = componentUpdateLabel(target);
   if (componentUpdateButtonState(target).disabled) return;
+  sidebarUpdateTarget = target;
+  sidebarUpdateError = "";
   componentUpdateStartInProgress = true;
   renderComponentUpdateDialogs();
   let plan;
   try {
     plan = (await api("/api/update/plan", { method: "POST", body: { targets: [target] }, scoped: false }))?.data?.plan;
   } catch (error) {
-    addEvent(error.message || String(error), "error");
+    sidebarUpdateError = error.message || String(error);
+    addEvent(sidebarUpdateError, "error");
     componentUpdateStartInProgress = false;
     renderComponentUpdateDialogs();
     return;
   }
   if (plan?.requested !== target || !plan.transactionId || !plan.digest || !Array.isArray(plan.targets) || !plan.targets.length) {
-    addEvent("Update preview is incomplete; no command was launched.", "error");
+    sidebarUpdateError = "Update preview is incomplete; no command was launched.";
+    addEvent(sidebarUpdateError, "error");
     componentUpdateStartInProgress = false;
     renderComponentUpdateDialogs();
     return;
   }
   const confirmed = await appConfirmText(componentUpdateConfirmationText(plan), {
-    affected: plan.targets.map((item) => `${item.id}: ${item.installedRoot}`).join(" · "),
+    affected: plan.targets.map((item) => item.installedRoot ? `${item.id}: ${item.installedRoot}` : item.id).join(" · "),
     confirmLabel: `Run ${label} update`,
     danger: false,
   });
@@ -9796,7 +9834,7 @@ async function startComponentUpdate(target) {
     uncertainApplyJobs[target] = null;
     observedNativeJobs[target] = { transactionId: plan.transactionId, plan, phase: response.data.phase, receipts: [], verifiedTargets: [] };
     latestUpdateStatus = { ...(latestUpdateStatus || {}), updateInProgress: true };
-    addEvent(`${label} job ${plan.transactionId} launched; watching its durable status`, "info");
+    addEvent(`${label} job ${plan.transactionId} launched; watching command progress`, "info");
   } catch (error) {
     nativeJobPollError = error.message || String(error);
     uncertainApplyJobs[target] = plan.transactionId;
@@ -51137,6 +51175,7 @@ syncUsageVisibility();
 initializeSubagents();
 initializeSubagentLaunchSlots();
 initializeSamplingParameters();
+initializeSidebarUpdateMenu();
 initializeUpdateNotifications();
 bindMobileViewChanges();
 bindSidePanelOverlayViewChanges();

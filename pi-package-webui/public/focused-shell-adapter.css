@@ -145,7 +145,8 @@ html[data-desktop-shell="focused"] #focusedWorkspace { height: var(--visual-view
 #focusedWorkspace .terminal-tab-group-menu { position: static; display: flex; width: 100%; min-width: 0; max-width: 100%; max-height: none; padding: 4px 0 0; overflow: visible; }
 #focusedWorkspace .terminal-tab-group { display: flex; flex-direction: column; }
 #focusedWorkspace .terminal-tab-group-item { border-radius: 5px; box-shadow: none; }
-#focusedWorkspace .terminal-sidebar-actions { display: flex; gap: 4px; }
+#focusedWorkspace .terminal-sidebar-actions { display: flex; flex-wrap: wrap; gap: 4px; }
+#focusedWorkspace .terminal-sidebar-actions > button { flex: 1 1 32px; min-width: 32px; max-width: 38px; width: 32px; padding-inline: 6px; }
 #focusedWorkspace .terminal-tabs button { min-height: 30px; padding-block: 4px; box-shadow: none; }
 #focusedWorkspace .terminal-new-tab-menu { width: 100%; }
 #focusedWorkspace .terminal-new-tab-menu .composer-publish-menu-panel {

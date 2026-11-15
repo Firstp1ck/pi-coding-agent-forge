@@ -34,7 +34,8 @@ export function createFocusedShellAdapter({ document, viewHost, nodes, sections,
   settingsIcon.append(settingsPath);
   sidebarSettings.append(settingsIcon);
   sidebarSettings.addEventListener('click', () => { if (mounted) onNavigate('settings', 'settings:appearance'); });
-  nodes.navigation.querySelector('.terminal-sidebar-actions')?.append(sidebarSettings);
+  const sidebarActions = nodes.navigation.querySelector('.terminal-sidebar-actions');
+  sidebarActions?.insertBefore(sidebarSettings, sidebarActions.querySelector('#sidebarUpdateButton'));
   const tools = createToolsLauncher({ document, onInvoke,
     onPinsChange: pinnedActions => {
       if (!onPreferences({ pinnedActions })) tools.update({ pinnedIds: getTools().pinnedIds });

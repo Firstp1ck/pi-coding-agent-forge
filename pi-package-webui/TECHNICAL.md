@@ -126,13 +126,17 @@ Private runtime and recovery files should not be edited or removed while Web UI 
 
 ## Pi and Web UI updates
 
-Use **Update Pi** and **Update Web UI** separately from localhost. Each action previews the exact executable, command, affected installation roots, working directory, Pi agent directory, npm prefix where relevant, and skipped installations. Confirm only after reviewing that list. If an executable, owner, or installation changes before launch, request a new preview. A small spinner means the job is still being checked, not a percentage estimate. Its ID, bounded command output and per-installation result remain visible after reconnect.
+Open **Updates** beside Settings. Choose a scope, review the commands and installation paths, then confirm:
 
-**Update Pi** runs `pi update` with the verified PATH Pi, not necessarily the Pi currently running your tabs. Initial automatic support is proven only for PATH Pi 0.87.1; other versions get manual or unproven guidance. The separately selected, bundled, or explicit Pi runtime is not silently replaced. **Update Web UI** runs `npm -g update @firstpick/pi-package-webui` for a proven npm-global installation and `pi update --extension npm:@firstpick/pi-package-webui --no-approve` for a proven Pi user installation, using its configured npm range or tag. Eligible installations run in sequence. Project copies, exact pins, Git/local sources and unproven ownership need manual attention. No optional companion packages are included.
+- **Pi only** runs `pi update` using Pi on your PATH.
+- **WebUI only** checks the global npm installation and the Pi agent's npm installation. It runs `npm update -g @firstpick/pi-package-webui` for the global copy and `pi update --extension npm:@firstpick/pi-package-webui` for the Pi-managed copy. Missing copies are reported and are not installed.
+- **Pi and extensions + WebUI** runs `pi update --all` and updates a separate global npm WebUI copy if present. Pi-managed WebUI is already included in the all-extensions command.
 
-Finish known affected Pi work before updating. PowerShell or Bash runs in the background; a desktop terminal is not needed. Native package lifecycle scripts run with your existing configuration and are not sandboxed. The updater does not elevate permissions. Native package updates may change dependencies and cannot be automatically rolled back. The displayed output is bounded and masks common credential patterns, but arbitrary script output may still expose secrets. Do not paste it into a public issue without checking it.
+The update commands use your existing Pi and npm configuration. WebUI does not require a specific Pi version or perform ownership, idle-session or post-update health checks. Command failures are shown directly, without retrying with alternative commands. Only one update job runs at a time in this WebUI server. The result reports command exit status, not an independent verification of the new installation.
 
-A changed, verified healthy active component restarts automatically once all commands finish and affected work is idle, even when another installation failed. Unchanged, failed or unverified active installations do not auto-restart. Partial and unknown results stay visible after reconnect; unknown completion blocks retry and restart until you verify and recover on the host. A short interruption is possible; zero downtime is not promised. The launcher can migrate old managed-runtime pointers only to a validated, compatible equal-or-newer installed Web UI. It retains pointer backups and old runtimes. A failed validation or downgrade keeps the old launch path with manual guidance; this is not rollback of a native update.
+The server stays running during the commands. Restart WebUI afterward to load updated code. Progress and command results remain available while that server process runs; they are not a durable update history after a server restart. If a connection or process is lost during an update, inspect the host before rerunning the commands.
+
+Only localhost can start updates. Package lifecycle scripts run with your existing configuration and are not sandboxed. The updater does not elevate permissions, and native package updates cannot be automatically rolled back. Review command output for private information before sharing it.
 
 ## Session continuity
 

@@ -30,7 +30,7 @@ async function connectMenu(page) {
     button.onclick = () => { window.triggerClicks += 1; };
     window.makeMenu = () => createSidebarUpdateMenu({ button, onSelect(mode) {
       window.selections.push({ mode, expanded: button.getAttribute('aria-expanded'),
-        visible: !document.querySelector('.sidebar-update-menu').hidden,
+        visible: !document.getElementById(button.getAttribute('aria-controls')).hidden,
         focus: document.activeElement.id });
     } });
     window.updateMenu = window.makeMenu();
@@ -56,7 +56,7 @@ async function mount(page) {
   return unexpected;
 }
 
-const popup = (page) => page.locator('.sidebar-update-menu');
+const popup = (page) => page.locator('.sidebar-update-menu').last();
 const items = (page) => page.getByRole('menuitem');
 
 async function expectWithinViewport(page) {
@@ -152,7 +152,7 @@ test('outside click, focus transfer, trigger toggle and Tab dismiss without choo
   expect(await page.evaluate(() => window.selections)).toEqual([]);
 });
 
-test('busy and unavailable states retain a focusable status trigger and prevent every selection path', async ({ page }, info) => {
+test('busy and unavailable states retain an enabled status trigger and prevent every selection path', async ({ page }, info) => {
   await mount(page);
   const button = page.locator('#updates');
   await page.evaluate(() => window.updateMenu.update({ busy: true, statusText: 'Checking installation receipts…' }));
@@ -163,6 +163,7 @@ test('busy and unavailable states retain a focusable status trigger and prevent 
   await page.keyboard.press('Enter');
   await expect(popup(page)).toContainText('An update is in progress.');
   for (const choice of await items(page).all()) {
+    await expect(button).toBeEnabled();
     await expect(choice).toHaveAttribute('aria-disabled', 'true');
     await choice.dispatchEvent('click');
     await choice.focus();

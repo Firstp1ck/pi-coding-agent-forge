@@ -146,7 +146,7 @@ export function createSidebarUpdateMenu({ button, onSelect }) {
     if (descriptions.length) button.setAttribute('aria-describedby', descriptions.join(' '));
     else button.removeAttribute('aria-describedby');
     button.disabled = false;
-    button.setAttribute('aria-disabled', String(blocked));
+    button.setAttribute('aria-disabled', 'false');
     button.setAttribute('aria-busy', String(Boolean(busy)));
     button.title = blocked ? `Updates unavailable: ${availability.textContent} Open for status.` : 'Updates';
     for (const item of choices) item.setAttribute('aria-disabled', String(blocked));

@@ -60,7 +60,7 @@ assert.match(css, /body\.subagent-terminal-active \.main-output-surface,[\s\S]*b
 
 assert.match(html, /styles\.css\?v=165/, "the stylesheet cache query should advance");
 assert.match(html, /app\.js\?v=211/, "the app cache query should advance");
-assert.match(serviceWorker, /const CACHE_NAME = "pi-webui-pwa-v189"/, "the PWA cache identity should advance with browser assets");
+assert.match(serviceWorker, /const CACHE_NAME = "pi-webui-pwa-v190"/, "the PWA cache identity should advance with browser assets");
 assert.match(readme, /Loading conversation history/, "user documentation should describe the plain-language loading feedback");
 assert.match(development, /main output loading/i, "developer documentation should preserve the request-ownership contract");
 

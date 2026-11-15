@@ -1,4 +1,4 @@
-const CACHE_NAME = "pi-webui-pwa-v189";
+const CACHE_NAME = "pi-webui-pwa-v190";
 const APP_SHELL = [
   "/",
   "/index.html",
@@ -22,6 +22,8 @@ const APP_SHELL = [
   "/settings-navigation.css",
   "/settings-workspace.mjs",
   "/settings-workspace.css",
+  "/sidebar-update-menu.mjs",
+  "/sidebar-update-menu.css",
   "/shell-actions.mjs",
   "/conversation-overview.mjs",
   "/conversation-overview.css",
