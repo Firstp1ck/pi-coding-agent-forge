@@ -12712,6 +12712,7 @@ function renderFileTree() {
   const focusSnapshot = captureScopedControlContinuity(root, continuityContextKey, fileTreeControlKey);
   const restoreFocus = () => restoreScopedControlContinuity(root, continuityContextKey, focusSnapshot, (key) => [...root.querySelectorAll(".file-tree-item[data-path]")].find((node) => fileTreeControlKey(node) === key));
   root.replaceChildren();
+  root.setAttribute("role", "group");
   updateFileTreeSearchControls();
   if (elements.fileTreeCwd) elements.fileTreeCwd.textContent = fileTreeState.root || latestWorkspace?.displayCwd || activeTab()?.cwd || "";
   const searchQuery = fileTreeState.searchQuery || fileTreeSearchQueryText();
@@ -12727,6 +12728,7 @@ function renderFileTree() {
       restoreFocus();
       return;
     }
+    root.setAttribute("role", "tree");
     const list = make("ul", "file-tree-list root search-results");
     list.setAttribute("role", "group");
     for (const entry of fileTreeState.searchEntries) appendFileSearchEntry(list, entry);
@@ -12741,6 +12743,7 @@ function renderFileTree() {
     restoreFocus();
     return;
   }
+  root.setAttribute("role", "tree");
   const list = make("ul", "file-tree-list root");
   list.setAttribute("role", "group");
   for (const entry of entries) appendFileTreeEntry(list, entry, 0);
@@ -14889,7 +14892,7 @@ function handleSidePanelResizeKeydown(event) {
   const side = event.currentTarget === elements.sidePanelResizeHandleLeft ? "left" : "right";
   if (!controlDeckSideResizeAvailable(side)) return;
   const step = event.shiftKey ? 80 : 24;
-  const current = currentSidePanelWidth(side);
+  const current = controlDeckLayout.panelWidths?.[side] || currentSidePanelWidth(side);
   let next = current;
   if (event.key === "ArrowLeft") next = side === "left" ? current - step : current + step;
   else if (event.key === "ArrowRight") next = side === "left" ? current + step : current - step;
@@ -17562,6 +17565,17 @@ function renderTabs() {
     else elements.tabBar.append(renderSubagentTerminalTab(group.views[0]));
   }
   elements.tabBar.append(elements.newTabMenu);
+  // Rows combine selection with separate actions. Own only their selection
+  // controls in the tablist so assistive technology does not treat actions as tabs.
+  const tabList = make("div");
+  tabList.setAttribute("role", "tablist");
+  tabList.setAttribute("aria-label", "Pi terminal tabs");
+  tabList.style.display = "contents";
+  const tabControls = [...elements.tabBar.querySelectorAll('[role="tab"]')];
+  tabControls.forEach((control, index) => { control.id = `terminalTabOption${index}`; });
+  tabList.setAttribute("aria-owns", tabControls.map((control) => control.id).join(" "));
+  tabList.hidden = tabControls.length === 0;
+  elements.tabBar.prepend(tabList);
   restoreScopedControlContinuity(elements.tabBar, continuityContextKey, focusSnapshot, (key) => [...elements.tabBar.querySelectorAll("button")].find((node) => terminalTabControlKey(node) === key));
   restoreTooltipContinuity(elements.tabBar, tooltipSnapshot);
   elements.closeAllTabsButton.disabled = tabs.length === 0;
@@ -24489,6 +24503,7 @@ function renderPathPickerDirectoryList() {
   pathPickerState.filteredDirectories = matches;
   updatePathPickerSearchControls();
   elements.pathPickerList.replaceChildren();
+  elements.pathPickerList.setAttribute("role", matches.length ? "listbox" : "group");
 
   if (query) {
     elements.pathPickerSearchStatus.textContent = matches.length === directories.length

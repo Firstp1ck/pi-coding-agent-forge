@@ -202,20 +202,22 @@ for (const placement of ['left', 'right', 'both']) {
     const controls = page.locator('[data-side-panel-section-toggle="controls"]');
     if (await controls.getAttribute('aria-expanded') !== 'true') await controls.click();
     await page.locator('#controlDeckPlacementSelect').selectOption(placement);
-    await page.locator('#terminalTabsLayoutSelect').selectOption('left');
+    // Sidebar explicitly excludes Both; exercise the supported combination.
+    const tabPlacement = placement === 'both' ? 'top' : 'left';
+    await page.locator('#terminalTabsLayoutSelect').selectOption(tabPlacement);
     const files = page.locator('[data-side-panel-section-toggle="files"]');
     await files.focus();
     await files.press('Alt+ArrowUp');
     if (placement === 'both') await files.press('Alt+ArrowLeft');
     const expectedDeck = await page.evaluate(() => JSON.parse(localStorage.getItem('pi-webui-control-deck-layout-v2')));
     await expect.poll(async () => (await ownership.api('/api/interface-preferences')).layout).toMatchObject({
-      terminalTabs: { layout: 'left' }, sidePanel: { placement, sectionLayout: expectedDeck.sectionLayout },
+      terminalTabs: { layout: tabPlacement }, sidePanel: { placement, sectionLayout: expectedDeck.sectionLayout },
     });
     const before = (await ownership.api('/api/interface-preferences')).layout;
     await page.reload();
     if (await controls.getAttribute('aria-expanded') !== 'true') await controls.click();
     await expect(page.locator('#controlDeckPlacementSelect')).toHaveValue(placement);
-    await expect(page.locator('#terminalTabsLayoutSelect')).toHaveValue('left');
+    await expect(page.locator('#terminalTabsLayoutSelect')).toHaveValue(tabPlacement);
     expect((await ownership.api('/api/interface-preferences')).layout.sidePanel.sectionLayout).toEqual(before.sidePanel.sectionLayout);
     if (await controls.getAttribute('aria-expanded') !== 'true') await controls.click();
     await expect(page.locator('#modelSelect')).toBeVisible();
@@ -328,7 +330,10 @@ test('200-message history selection find scroll and draft survive real streaming
     }
     throw new Error('selection text missing');
   }, selected);
-  await page.locator('#chat').evaluate(node => { node.scrollTop -= 80; node.dispatchEvent(new Event('scroll')); });
+  const targetScroll = await page.locator('#chat').evaluate(node => node.scrollTop - 80);
+  await page.locator('#chat').hover({ position: { x: 20, y: 100 } });
+  await page.mouse.wheel(0, -80);
+  await expect.poll(() => page.locator('#chat').evaluate(node => node.scrollTop)).toBe(targetScroll);
   const before = await page.locator('#chat').evaluate(node => node.scrollTop);
   expect(before).toBeGreaterThan(0);
   await ownership.api(`/api/prompt?tab=${ownership.tabs[0].id}`, { message: 'fixture continuity delayed stream', requestId: 'w7-reading-continuity-0001' });

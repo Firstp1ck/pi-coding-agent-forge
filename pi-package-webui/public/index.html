@@ -12,7 +12,7 @@
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-    <link rel="stylesheet" href="/styles.css?v=157" />
+    <link rel="stylesheet" href="/styles.css?v=158" />
     <link rel="stylesheet" href="/shell-workspace.css?v=1" />
     <link rel="stylesheet" href="/shell-tools-launcher.css?v=1" />
     <link rel="stylesheet" href="/focused-shell-adapter.css?v=2" />
@@ -218,7 +218,7 @@
           <div id="terminalTabsResizeHandle" class="terminal-tabs-resize-handle" role="separator" aria-orientation="vertical" aria-label="Resize terminal sidebar width" tabindex="0" title="Drag to resize terminal sidebar" hidden></div>
           <button id="terminalTabsToggleButton" class="terminal-tabs-toggle-button" type="button" aria-controls="terminalTabsDrawerContent" aria-expanded="false">Tabs</button>
           <div id="terminalTabsDrawerContent" class="terminal-tabs-drawer-content" role="region" aria-label="Terminal navigation">
-          <div id="tabBar" class="terminal-tabs" role="tablist" aria-label="Pi terminal tabs">
+          <div id="tabBar" class="terminal-tabs" role="group" aria-label="Pi terminal tabs">
             <div id="newTabMenu" class="terminal-new-tab-menu composer-publish-menu">
               <button id="newTabButton" class="terminal-new-tab-button" type="button" aria-label="Start a separate isolated Pi terminal" aria-haspopup="menu" aria-expanded="false" aria-controls="newTabMenuPanel">+ Tab ▾</button>
               <div id="newTabMenuPanel" class="terminal-new-tab-menu-panel composer-publish-menu-panel" role="menu" aria-labelledby="newTabButton">
@@ -1281,7 +1281,7 @@
       <div id="eventTreeContextMenuStatus" class="event-tree-context-menu-status info" role="status" aria-live="polite" hidden></div>
     </div>
 
-    <div id="noticeToastStack" class="notice-toast-stack" aria-label="Notifications"></div>
+    <div id="noticeToastStack" class="notice-toast-stack" role="group" aria-label="Notifications"></div>
     <aside id="undoToast" class="undo-toast" aria-live="polite" aria-atomic="true" hidden>
       <span id="undoToastMessage" class="undo-toast-message"></span>
       <span id="undoToastTime" class="undo-toast-time">Undo available for 10 seconds</span>
@@ -1913,7 +1913,7 @@
       </form>
     </dialog>
 
-    <script id="webuiBootLoader" data-app-src="/app.js?v=196">
+    <script id="webuiBootLoader" data-app-src="/app.js?v=197">
       (() => {
         "use strict";
 

@@ -45,7 +45,10 @@ async function containTab(page, dialog, count = 18) {
         activeTag: document.activeElement?.tagName, activeId: document.activeElement?.id,
       }));
       samples.push({ key, index, ...state });
-      expect.soft(state.contained, `${key} stays in modal: ${JSON.stringify(state)}`).toBe(true);
+      // Native dialogs may traverse browser chrome, never another app control.
+      const browserChrome = await dialog.evaluate(node => node.matches('dialog:modal'))
+        && !state.documentFocused && state.activeTag === 'BODY';
+      expect.soft(state.contained || browserChrome, `${key} stays in modal or native browser chrome: ${JSON.stringify(state)}`).toBe(true);
     }
   }
   await test.info().attach('modal-tab-samples', { body: JSON.stringify(samples, null, 2), contentType: 'application/json' });

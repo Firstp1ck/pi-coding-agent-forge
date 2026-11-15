@@ -479,8 +479,8 @@
     },
     {
       "file": "pi-package-webui/public/app.js",
-      "bytes": 2350879,
-      "sha256": "2a40e3dd0780332b0a4691d041f32b7c7011a3a672b566da46fbbe33bd6552fb"
+      "bytes": 2351788,
+      "sha256": "f1b06315162a0478a64f8492436da8488a0e7c63d7a2976ba02bb72d0c0f5380"
     },
     {
       "file": "pi-package-webui/public/aur-review-payload.mjs",
@@ -514,8 +514,8 @@
     },
     {
       "file": "pi-package-webui/public/index.html",
-      "bytes": 171757,
-      "sha256": "145a0c146e8692eeae2266676da4721f6bbbf907f803f9616179fbc490316ecf"
+      "bytes": 171768,
+      "sha256": "211e1bb6d9b0da022a7fb91784c6240fd9890a1e84894e08e901c9649994b2c9"
     },
     {
       "file": "pi-package-webui/public/issue-bot-client.mjs",
@@ -570,7 +570,7 @@
     {
       "file": "pi-package-webui/public/service-worker.js",
       "bytes": 6074,
-      "sha256": "e4d6a782562ce8dafd3f80352397ddfb0d2cddc9dccee36597e99d67e8c96791"
+      "sha256": "d97b92d7ef5e41bb58177dbdd3340dd799b7f996b419f321aa1f97197f70a2da"
     },
     {
       "file": "pi-package-webui/public/session-attention-scheduler.mjs",
@@ -709,17 +709,17 @@
     },
     {
       "file": "plans/planned/webui-design-architecture-overhaul.md",
-      "bytes": 291589,
-      "sha256": "b670a6201d6646bdf48b345bc25f665797c83ab861b077206eef2f48f69bd3f9"
+      "bytes": 293902,
+      "sha256": "b296035651213e5248515c50a29752056d9de98013bb2b3dfda37af9c10b8ff3"
     }
   ],
   "reconciliation": {
-    "records": 1314,
+    "records": 1315,
     "classifications": {
       "family": 726,
       "shared-chrome": 50,
       "non-action": 5,
-      "dynamic-template": 533,
+      "dynamic-template": 534,
       "unresolved": 0
     },
     "staticDialogs": 29,
@@ -745,12 +745,12 @@
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "createTerminalTab",
-          "line": 17849
+          "line": 17863
         },
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "openNativeResumeSelector",
-          "line": 43225
+          "line": 43240
         },
         {
           "file": "pi-package-webui/public/app.js",
@@ -772,12 +772,12 @@
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "createTerminalTab",
-          "line": 17849
+          "line": 17863
         },
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "openNativeResumeSelector",
-          "line": 43225
+          "line": 43240
         },
         {
           "file": "pi-package-webui/public/app.js",
@@ -801,6 +801,7 @@
         "pi-package-webui/public/app.js#renderSavedWorkspacePicker/construction:make:button:03b67dee6007334e",
         "pi-package-webui/public/app.js#renderSavedWorkspacePicker/construction:make:button:32d156866f4c47bf",
         "pi-package-webui/public/app.js#renderSavedWorkspacePicker/construction:make:button:43d188d9c7034fd7",
+        "pi-package-webui/public/app.js#renderTabs/id-assignment:control:`terminalTabOption${index}`",
         "pi-package-webui/public/app.js#renderTerminalTab/construction:make:button:b956591809702074",
         "pi-package-webui/public/app.js#renderTerminalTab/construction:make:button:eba41ac1e6f9a390",
         "pi-package-webui/public/app.js#renderTerminalTab/data-assignment:wrapper:tabId",
@@ -903,27 +904,27 @@
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "openNativeForkSelector",
-          "line": 43129
+          "line": 43144
         },
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "openNativeCloneDialog",
-          "line": 43169
+          "line": 43184
         },
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "openNativeNameDialog",
-          "line": 43190
+          "line": 43205
         },
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "openNativeTreeSelector",
-          "line": 43345
+          "line": 43360
         },
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "openSessionSummaryForTab",
-          "line": 41279
+          "line": 41294
         }
       ],
       "targetOwners": [
@@ -935,27 +936,27 @@
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "openNativeForkSelector",
-          "line": 43129
+          "line": 43144
         },
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "openNativeCloneDialog",
-          "line": 43169
+          "line": 43184
         },
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "openNativeNameDialog",
-          "line": 43190
+          "line": 43205
         },
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "openNativeTreeSelector",
-          "line": 43345
+          "line": 43360
         },
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "openSessionSummaryForTab",
-          "line": 41279
+          "line": 41294
         }
       ],
       "targetOwner": "pi-package-webui/public/session-context.mjs#createSessionContext; pi-package-webui/public/app.js#openNativeForkSelector; pi-package-webui/public/app.js#openNativeCloneDialog; pi-package-webui/public/app.js#openNativeNameDialog; pi-package-webui/public/app.js#openNativeTreeSelector; pi-package-webui/public/app.js#openSessionSummaryForTab",
@@ -1001,24 +1002,24 @@
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "setTerminalSplitTab",
-          "line": 17800
+          "line": 17814
         },
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "createTerminalTabSplitButton",
-          "line": 41052
+          "line": 41067
         }
       ],
       "targetOwners": [
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "setTerminalSplitTab",
-          "line": 17800
+          "line": 17814
         },
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "createTerminalTabSplitButton",
-          "line": 41052
+          "line": 41067
         }
       ],
       "targetOwner": "pi-package-webui/public/app.js#setTerminalSplitTab; pi-package-webui/public/app.js#createTerminalTabSplitButton",
@@ -1057,24 +1058,24 @@
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "changeActiveTabCwd",
-          "line": 24793
+          "line": 24808
         },
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "openBranchWorktreePicker",
-          "line": 23834
+          "line": 23848
         }
       ],
       "targetOwners": [
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "changeActiveTabCwd",
-          "line": 24793
+          "line": 24808
         },
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "openBranchWorktreePicker",
-          "line": 23834
+          "line": 23848
         }
       ],
       "targetOwner": "pi-package-webui/public/app.js#changeActiveTabCwd; pi-package-webui/public/app.js#openBranchWorktreePicker",
@@ -1137,7 +1138,7 @@
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "renderMessages",
-          "line": 43774
+          "line": 43789
         },
         {
           "file": "pi-package-webui/public/app.js",
@@ -1152,7 +1153,7 @@
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "openChatSearch",
-          "line": 49293
+          "line": 49308
         }
       ],
       "targetOwners": [
@@ -1174,7 +1175,7 @@
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "renderMessages",
-          "line": 43774
+          "line": 43789
         },
         {
           "file": "pi-package-webui/public/app.js",
@@ -1189,7 +1190,7 @@
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "openChatSearch",
-          "line": 49293
+          "line": 49308
         }
       ],
       "targetOwner": "pi-package-webui/public/transcript-renderer.mjs#createTranscriptRenderer; pi-package-webui/public/stream-output-controller.mjs#createStreamOutputController; pi-package-webui/public/platform-event-stream.mjs#createSessionEventStream; pi-package-webui/public/app.js#renderMessages; pi-package-webui/public/app.js#setThinkingOutputVisible; pi-package-webui/public/app.js#setToolOutputGloballyExpanded; pi-package-webui/public/app.js#openChatSearch",
@@ -1286,12 +1287,12 @@
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "sendPrompt",
-          "line": 46571
+          "line": 46586
         },
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "renderCommandSuggestions",
-          "line": 45555
+          "line": 45570
         }
       ],
       "targetOwners": [
@@ -1308,12 +1309,12 @@
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "sendPrompt",
-          "line": 46571
+          "line": 46586
         },
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "renderCommandSuggestions",
-          "line": 45555
+          "line": 45570
         }
       ],
       "targetOwner": "pi-package-webui/public/session-composer-store.mjs#createSessionComposerStore; pi-package-webui/public/session-context.mjs#createSessionContext; pi-package-webui/public/app.js#sendPrompt; pi-package-webui/public/app.js#renderCommandSuggestions",
@@ -1412,24 +1413,24 @@
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "openNativeModelSelector",
-          "line": 41548
+          "line": 41563
         },
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "renderSamplingParameters",
-          "line": 27335
+          "line": 27350
         }
       ],
       "targetOwners": [
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "openNativeModelSelector",
-          "line": 41548
+          "line": 41563
         },
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "renderSamplingParameters",
-          "line": 27335
+          "line": 27350
         }
       ],
       "targetOwner": "pi-package-webui/public/app.js#openNativeModelSelector; pi-package-webui/public/app.js#renderSamplingParameters",
@@ -1512,17 +1513,17 @@
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "renderQueue",
-          "line": 34125
+          "line": 34140
         },
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "renderFollowUpQueueOverlay",
-          "line": 34124
+          "line": 34139
         },
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "openPromptListDialog",
-          "line": 34363
+          "line": 34378
         }
       ],
       "targetOwners": [
@@ -1534,17 +1535,17 @@
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "renderQueue",
-          "line": 34125
+          "line": 34140
         },
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "renderFollowUpQueueOverlay",
-          "line": 34124
+          "line": 34139
         },
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "openPromptListDialog",
-          "line": 34363
+          "line": 34378
         }
       ],
       "targetOwner": "pi-package-webui/public/activity-queue-controller.mjs#createActivityQueueController; pi-package-webui/public/app.js#renderQueue; pi-package-webui/public/app.js#renderFollowUpQueueOverlay; pi-package-webui/public/app.js#openPromptListDialog",
@@ -1639,12 +1640,12 @@
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "renderSubagents",
-          "line": 26551
+          "line": 26566
         },
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "renderSubagentLaunchSlots",
-          "line": 26810
+          "line": 26825
         }
       ],
       "targetOwners": [
@@ -1661,12 +1662,12 @@
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "renderSubagents",
-          "line": 26551
+          "line": 26566
         },
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "renderSubagentLaunchSlots",
-          "line": 26810
+          "line": 26825
         }
       ],
       "targetOwner": "pi-package-webui/public/activity-agents-controller.mjs#createActivityAgentsController; pi-package-webui/public/activity-todo-view.mjs#createActivityTodoView; pi-package-webui/public/app.js#renderSubagents; pi-package-webui/public/app.js#renderSubagentLaunchSlots",
@@ -1715,7 +1716,7 @@
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "sendBtwQuestion",
-          "line": 38799
+          "line": 38814
         }
       ],
       "targetOwners": [
@@ -1727,7 +1728,7 @@
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "sendBtwQuestion",
-          "line": 38799
+          "line": 38814
         }
       ],
       "targetOwner": "pi-package-webui/public/activity-intercom-controller.mjs#createActivityIntercomController; pi-package-webui/public/app.js#sendBtwQuestion",
@@ -1785,7 +1786,7 @@
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "openFileTreeEntryInWebui",
-          "line": 15051
+          "line": 15054
         }
       ],
       "targetOwners": [
@@ -1802,7 +1803,7 @@
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "openFileTreeEntryInWebui",
-          "line": 15051
+          "line": 15054
         }
       ],
       "targetOwner": "pi-package-webui/public/project-file-viewer-controller.mjs#createProjectFileViewerController; pi-package-webui/public/app.js#renderFileTree; pi-package-webui/public/app.js#openFileTreeEntryInWebui",
@@ -1888,12 +1889,12 @@
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "sendFileSelectionToSession",
-          "line": 15559
+          "line": 15562
         },
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "openImageLightbox",
-          "line": 35334
+          "line": 35349
         }
       ],
       "targetOwners": [
@@ -1905,12 +1906,12 @@
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "sendFileSelectionToSession",
-          "line": 15559
+          "line": 15562
         },
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "openImageLightbox",
-          "line": 35334
+          "line": 35349
         }
       ],
       "targetOwner": "pi-package-webui/public/project-file-viewer-controller.mjs#createProjectFileViewerController; pi-package-webui/public/app.js#sendFileSelectionToSession; pi-package-webui/public/app.js#openImageLightbox",
@@ -1954,12 +1955,12 @@
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "ensureDocumentArtifactDialog",
-          "line": 36830
+          "line": 36845
         },
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "openDocumentArtifact",
-          "line": 36862
+          "line": 36877
         }
       ],
       "targetOwners": [
@@ -1971,12 +1972,12 @@
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "ensureDocumentArtifactDialog",
-          "line": 36830
+          "line": 36845
         },
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "openDocumentArtifact",
-          "line": 36862
+          "line": 36877
         }
       ],
       "targetOwner": "pi-package-webui/public/project-artifact-controller.mjs#createProjectArtifactController; pi-package-webui/public/app.js#ensureDocumentArtifactDialog; pi-package-webui/public/app.js#openDocumentArtifact",
@@ -2008,24 +2009,24 @@
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "openGitChangesDialog",
-          "line": 21684
+          "line": 21698
         },
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "launchGuidedGitWorkflow",
-          "line": 32922
+          "line": 32937
         }
       ],
       "targetOwners": [
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "openGitChangesDialog",
-          "line": 21684
+          "line": 21698
         },
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "launchGuidedGitWorkflow",
-          "line": 32922
+          "line": 32937
         }
       ],
       "targetOwner": "pi-package-webui/public/app.js#openGitChangesDialog; pi-package-webui/public/app.js#launchGuidedGitWorkflow",
@@ -2169,12 +2170,12 @@
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "openGitToolsFromFooter",
-          "line": 22546
+          "line": 22560
         },
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "renderGitToolsSection",
-          "line": 22506
+          "line": 22520
         }
       ],
       "targetOwners": [
@@ -2186,12 +2187,12 @@
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "openGitToolsFromFooter",
-          "line": 22546
+          "line": 22560
         },
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "renderGitToolsSection",
-          "line": 22506
+          "line": 22520
         }
       ],
       "targetOwner": "pi-package-webui/public/project-git-tools-controller.mjs#createProjectGitToolsController; pi-package-webui/public/app.js#openGitToolsFromFooter; pi-package-webui/public/app.js#renderGitToolsSection",
@@ -2233,12 +2234,12 @@
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "renderAppRunnerWidget",
-          "line": 29720
+          "line": 29735
         },
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "openAppRunnerInfoDialog",
-          "line": 29629
+          "line": 29644
         }
       ],
       "targetOwners": [
@@ -2250,12 +2251,12 @@
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "renderAppRunnerWidget",
-          "line": 29720
+          "line": 29735
         },
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "openAppRunnerInfoDialog",
-          "line": 29629
+          "line": 29644
         }
       ],
       "targetOwner": "pi-package-webui/public/project-runners-controller.mjs#createProjectRunnersController; pi-package-webui/public/app.js#renderAppRunnerWidget; pi-package-webui/public/app.js#openAppRunnerInfoDialog",
@@ -2322,12 +2323,12 @@
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "openStatsOverlay",
-          "line": 30961
+          "line": 30976
         },
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "renderFooter",
-          "line": 24860
+          "line": 24875
         }
       ],
       "targetOwners": [
@@ -2339,12 +2340,12 @@
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "openStatsOverlay",
-          "line": 30961
+          "line": 30976
         },
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "renderFooter",
-          "line": 24860
+          "line": 24875
         }
       ],
       "targetOwner": "pi-package-webui/public/activity-usage-controller.mjs#createActivityUsageController; pi-package-webui/public/app.js#openStatsOverlay; pi-package-webui/public/app.js#renderFooter",
@@ -2408,24 +2409,24 @@
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "requestManualCompaction",
-          "line": 22634
+          "line": 22648
         },
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "toggleFooterAutoCompaction",
-          "line": 19079
+          "line": 19093
         }
       ],
       "targetOwners": [
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "requestManualCompaction",
-          "line": 22634
+          "line": 22648
         },
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "toggleFooterAutoCompaction",
-          "line": 19079
+          "line": 19093
         }
       ],
       "targetOwner": "pi-package-webui/public/app.js#requestManualCompaction; pi-package-webui/public/app.js#toggleFooterAutoCompaction",
@@ -2461,17 +2462,17 @@
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "openNativeToolsSelector",
-          "line": 43603
+          "line": 43618
         },
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "openNativeSkillsSelector",
-          "line": 43604
+          "line": 43619
         },
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "openNativeAppendSystemSelector",
-          "line": 41633
+          "line": 41648
         }
       ],
       "targetOwners": [
@@ -2483,17 +2484,17 @@
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "openNativeToolsSelector",
-          "line": 43603
+          "line": 43618
         },
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "openNativeSkillsSelector",
-          "line": 43604
+          "line": 43619
         },
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "openNativeAppendSystemSelector",
-          "line": 41633
+          "line": 41648
         }
       ],
       "targetOwner": "pi-package-webui/public/settings-resource-controller.mjs#createSettingsResourceController; pi-package-webui/public/app.js#openNativeToolsSelector; pi-package-webui/public/app.js#openNativeSkillsSelector; pi-package-webui/public/app.js#openNativeAppendSystemSelector",
@@ -2561,12 +2562,12 @@
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "showAllControls",
-          "line": 13958
+          "line": 13961
         },
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "resetControlVisibilityDefaults",
-          "line": 13962
+          "line": 13965
         }
       ],
       "targetOwners": [
@@ -2588,12 +2589,12 @@
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "showAllControls",
-          "line": 13958
+          "line": 13961
         },
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "resetControlVisibilityDefaults",
-          "line": 13962
+          "line": 13965
         }
       ],
       "targetOwner": "pi-package-webui/public/settings-workspace.mjs#createSettingsWorkspace; pi-package-webui/public/shell-preferences.mjs#readShellPreferences; pi-package-webui/public/app.js#openThemeCustomizer; pi-package-webui/public/app.js#showAllControls; pi-package-webui/public/app.js#resetControlVisibilityDefaults",
@@ -2864,7 +2865,7 @@
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "renderOptionalFeaturePanel",
-          "line": 40261
+          "line": 40276
         }
       ],
       "targetOwners": [
@@ -2876,7 +2877,7 @@
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "renderOptionalFeaturePanel",
-          "line": 40261
+          "line": 40276
         }
       ],
       "targetOwner": "pi-package-webui/public/settings-workspace.mjs#createSettingsWorkspace; pi-package-webui/public/app.js#renderOptionalFeaturePanel",
@@ -2945,24 +2946,24 @@
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "renderReleaseNpmOutputWidget",
-          "line": 28164
+          "line": 28179
         },
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "renderReleaseAurOutputWidget",
-          "line": 28236
+          "line": 28251
         }
       ],
       "targetOwners": [
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "renderReleaseNpmOutputWidget",
-          "line": 28164
+          "line": 28179
         },
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "renderReleaseAurOutputWidget",
-          "line": 28236
+          "line": 28251
         }
       ],
       "targetOwner": "pi-package-webui/public/app.js#renderReleaseNpmOutputWidget; pi-package-webui/public/app.js#renderReleaseAurOutputWidget",
@@ -3012,14 +3013,14 @@
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "openNativeAuthSelector",
-          "line": 43606
+          "line": 43621
         }
       ],
       "targetOwners": [
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "openNativeAuthSelector",
-          "line": 43606
+          "line": 43621
         }
       ],
       "targetOwner": "pi-package-webui/public/app.js#openNativeAuthSelector",
@@ -3109,24 +3110,24 @@
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "toggleRemoteAuth",
-          "line": 44718
+          "line": 44733
         },
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "openRemoteWebuiQrPopup",
-          "line": 31547
+          "line": 31562
         }
       ],
       "targetOwners": [
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "toggleRemoteAuth",
-          "line": 44718
+          "line": 44733
         },
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "openRemoteWebuiQrPopup",
-          "line": 31547
+          "line": 31562
         }
       ],
       "targetOwner": "pi-package-webui/public/app.js#toggleRemoteAuth; pi-package-webui/public/app.js#openRemoteWebuiQrPopup",
@@ -3419,12 +3420,12 @@
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "showNextDialog",
-          "line": 47108
+          "line": 47123
         },
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "sendDialogResponse",
-          "line": 46881
+          "line": 46896
         }
       ],
       "targetOwners": [
@@ -3436,12 +3437,12 @@
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "showNextDialog",
-          "line": 47108
+          "line": 47123
         },
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "sendDialogResponse",
-          "line": 46881
+          "line": 46896
         }
       ],
       "targetOwner": "pi-package-webui/public/session-extension-requests.mjs#createExtensionRequestStore; pi-package-webui/public/app.js#showNextDialog; pi-package-webui/public/app.js#sendDialogResponse",
@@ -3477,24 +3478,24 @@
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "renderQuestionnaireOptionButton",
-          "line": 27860
+          "line": 27875
         },
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "renderActionFeedbackControls",
-          "line": 35548
+          "line": 35563
         }
       ],
       "targetOwners": [
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "renderQuestionnaireOptionButton",
-          "line": 27860
+          "line": 27875
         },
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "renderActionFeedbackControls",
-          "line": 35548
+          "line": 35563
         }
       ],
       "targetOwner": "pi-package-webui/public/app.js#renderQuestionnaireOptionButton; pi-package-webui/public/app.js#renderActionFeedbackControls",
@@ -3548,7 +3549,7 @@
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "renderSubagentGate",
-          "line": 26474
+          "line": 26489
         }
       ],
       "targetOwners": [
@@ -3560,7 +3561,7 @@
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "renderSubagentGate",
-          "line": 26474
+          "line": 26489
         }
       ],
       "targetOwner": "pi-package-webui/public/app.js#renderWorkflowModeControls; pi-package-webui/public/app.js#renderSubagentGate",
@@ -3652,17 +3653,17 @@
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "openSubagentTerminal",
-          "line": 26043
+          "line": 26058
         },
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "renderSubagentTerminalView",
-          "line": 25873
+          "line": 25888
         },
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "openSubagentCancelDialog",
-          "line": 25423
+          "line": 25438
         }
       ],
       "targetOwners": [
@@ -3674,17 +3675,17 @@
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "openSubagentTerminal",
-          "line": 26043
+          "line": 26058
         },
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "renderSubagentTerminalView",
-          "line": 25873
+          "line": 25888
         },
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "openSubagentCancelDialog",
-          "line": 25423
+          "line": 25438
         }
       ],
       "targetOwner": "pi-package-webui/public/activity-agents-controller.mjs#createActivityAgentsController; pi-package-webui/public/app.js#openSubagentTerminal; pi-package-webui/public/app.js#renderSubagentTerminalView; pi-package-webui/public/app.js#openSubagentCancelDialog",
@@ -4611,7 +4612,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "addDialogButton",
-        "line": 46927
+        "line": 46942
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -4627,7 +4628,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "addGitWorkflowAction",
-        "line": 32018
+        "line": 32033
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -4643,7 +4644,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "addGitWorkflowAction",
-        "line": 32023
+        "line": 32038
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -4659,7 +4660,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "addNativeCommandAction",
-        "line": 41366
+        "line": 41381
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -4675,7 +4676,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "adoptLiveAssistantBubble",
-        "line": 44128
+        "line": 44143
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -4707,7 +4708,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "appRunnerActionButton",
-        "line": 28792
+        "line": 28807
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -4723,7 +4724,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "appRunnerInputField",
-        "line": 29033
+        "line": 29048
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -4739,7 +4740,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "appRunnerInputField",
-        "line": 29034
+        "line": 29049
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -4755,7 +4756,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "appendFileSearchEntry",
-        "line": 12799
+        "line": 12802
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -4771,7 +4772,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "appendFileSearchEntry",
-        "line": 12801
+        "line": 12804
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -4787,7 +4788,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "appendFileSearchEntry",
-        "line": 12802
+        "line": 12805
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -4803,7 +4804,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "appendFileTreeEntry",
-        "line": 12879
+        "line": 12882
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -4819,7 +4820,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "appendFileTreeEntry",
-        "line": 12881
+        "line": 12884
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -4835,7 +4836,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "appendFileTreeEntry",
-        "line": 12882
+        "line": 12885
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -4851,7 +4852,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "appendImage",
-        "line": 35374
+        "line": 35389
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -4867,7 +4868,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "appendInlineMarkdown",
-        "line": 34635
+        "line": 34650
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -4883,7 +4884,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "appendInlineMarkdown",
-        "line": 34651
+        "line": 34666
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -4899,7 +4900,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "appendMarkdownList",
-        "line": 35105
+        "line": 35120
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -4915,7 +4916,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "appendMarkdownList",
-        "line": 35112
+        "line": 35127
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -4931,7 +4932,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "appendMarkdownListTree",
-        "line": 35075
+        "line": 35090
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -4947,7 +4948,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "appendMarkdownListTree",
-        "line": 35083
+        "line": 35098
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -4963,7 +4964,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "appendMarkdownMermaidBlock",
-        "line": 34940
+        "line": 34955
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -4979,7 +4980,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "appendMessage",
-        "line": 37498
+        "line": 37513
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -4995,7 +4996,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "appendToolOutput",
-        "line": 36592
+        "line": 36607
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -5011,7 +5012,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "appendToolRawDetails",
-        "line": 36698
+        "line": 36713
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -5027,7 +5028,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "applyChatEventMetadata",
-        "line": 36967
+        "line": 36982
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -5059,7 +5060,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "applyStyledTooltip",
-        "line": 19370
+        "line": 19384
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -5075,7 +5076,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "applyStyledTooltip",
-        "line": 19356
+        "line": 19370
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -5091,7 +5092,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "applyStyledTooltip",
-        "line": 19372
+        "line": 19386
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -5107,7 +5108,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "applyStyledTooltip",
-        "line": 19373
+        "line": 19387
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -5123,7 +5124,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "applyStyledTooltip",
-        "line": 19374
+        "line": 19388
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -5139,7 +5140,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "applyStyledTooltip",
-        "line": 19364
+        "line": 19378
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -5155,7 +5156,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "applyToolExecutionBubbleState",
-        "line": 36985
+        "line": 37000
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -5171,7 +5172,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "applyToolExecutionBubbleState",
-        "line": 36980
+        "line": 36995
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -5187,7 +5188,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "attachMarkdownCodeCopyButton",
-        "line": 34788
+        "line": 34803
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -5235,7 +5236,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "aurReviewActionButton",
-        "line": 28321
+        "line": 28336
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -5299,7 +5300,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "btwWidgetActionButton",
-        "line": 31174
+        "line": 31189
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -5315,7 +5316,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "configureMarkdownLink",
-        "line": 34590
+        "line": 34605
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -5331,7 +5332,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "controlVisibilityMenuAction",
-        "line": 14065
+        "line": 14068
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -5347,7 +5348,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "controlVisibilityMenuAction",
-        "line": 14068
+        "line": 14071
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -5379,7 +5380,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "createMessageBubble",
-        "line": 37403
+        "line": 37418
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -5395,7 +5396,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "createMessageBubble",
-        "line": 37467
+        "line": 37482
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -5411,7 +5412,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "createMessageBubble",
-        "line": 37397
+        "line": 37412
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -5427,7 +5428,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "createMessageBubble",
-        "line": 37394
+        "line": 37409
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -5443,7 +5444,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "createMessageBubble",
-        "line": 37395
+        "line": 37410
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -5459,7 +5460,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "createRunIndicatorBubble",
-        "line": 37699
+        "line": 37714
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -5475,7 +5476,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "createTerminalTabCwdAddMenu",
-        "line": 17221
+        "line": 17224
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -5491,7 +5492,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "createTerminalTabSessionSummaryButton",
-        "line": 41107
+        "line": 41122
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -5507,7 +5508,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "createTerminalTabSplitButton",
-        "line": 41053
+        "line": 41068
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -5523,7 +5524,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "createTerminalTabSplitButton",
-        "line": 41059
+        "line": 41074
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -5539,7 +5540,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "dashboardAction",
-        "line": 22795
+        "line": 22809
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -5555,7 +5556,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "deleteSelectedPromptList",
-        "line": 34345
+        "line": 34360
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -5571,7 +5572,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "emptyStartAction",
-        "line": 36271
+        "line": 36286
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -5587,7 +5588,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "ensureDocumentArtifactDialog",
-        "line": 36832
+        "line": 36847
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -5603,7 +5604,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "ensureFooterTooltipNode",
-        "line": 19238
+        "line": 19252
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -5619,7 +5620,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "ensureToolInteractionDelegation",
-        "line": 37105
+        "line": 37120
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -5635,7 +5636,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "fileTreeOverflowButton",
-        "line": 12772
+        "line": 12775
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -5651,7 +5652,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "fitOptionsMenuLabels",
-        "line": 39017
+        "line": 39032
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -5667,7 +5668,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "footerMeta",
-        "line": 19496
+        "line": 19510
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -5683,7 +5684,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "footerMetric",
-        "line": 19390
+        "line": 19404
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -5699,7 +5700,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "footerTuiItem",
-        "line": 20231
+        "line": 20245
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -5715,7 +5716,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "gitFileActionButtons",
-        "line": 21057
+        "line": 21071
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -5731,7 +5732,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "gitFileActionButtons",
-        "line": 21060
+        "line": 21074
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -5747,7 +5748,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "gitPanelOverflowButton",
-        "line": 16649
+        "line": 16652
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -5763,7 +5764,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "gitToolsButton",
-        "line": 22166
+        "line": 22180
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -5811,7 +5812,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "initializeSamplingParameterControls",
-        "line": 27251
+        "line": 27266
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -5827,7 +5828,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "initializeSamplingParameterControls",
-        "line": 27270
+        "line": 27285
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -5843,7 +5844,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "initializeSamplingParameterControls",
-        "line": 27280
+        "line": 27295
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -5859,7 +5860,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "initializeSamplingParameterControls",
-        "line": 27238
+        "line": 27253
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -5875,7 +5876,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "initializeSamplingParameterControls",
-        "line": 27227
+        "line": 27242
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -5891,7 +5892,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "initializeSamplingParameterControls",
-        "line": 27264
+        "line": 27279
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -5907,7 +5908,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "initializeSamplingParameterControls",
-        "line": 27252
+        "line": 27267
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -5923,7 +5924,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "initializeSamplingParameterControls",
-        "line": 27302
+        "line": 27317
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -5939,7 +5940,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "initializeSamplingParameterControls",
-        "line": 27255
+        "line": 27270
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -5955,7 +5956,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "initializeSamplingParameterControls",
-        "line": 27271
+        "line": 27286
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -5971,7 +5972,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "initializeSamplingParameterControls",
-        "line": 27281
+        "line": 27296
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -5987,7 +5988,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "initializeSamplingParameterControls",
-        "line": 27307
+        "line": 27322
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -6083,7 +6084,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "loadPromptListIntoEditor",
-        "line": 34314
+        "line": 34329
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -6211,7 +6212,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "nativeSettingSelect",
-        "line": 41789
+        "line": 41804
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -6227,7 +6228,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "nativeSettingTextarea",
-        "line": 41816
+        "line": 41831
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -6243,7 +6244,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "nativeSettingToggle",
-        "line": 41803
+        "line": 41818
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -6259,7 +6260,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "nativeSettingsSection",
-        "line": 41829
+        "line": 41844
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -6275,7 +6276,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "openImageLightbox",
-        "line": 35343
+        "line": 35358
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -6291,7 +6292,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "openImageLightbox",
-        "line": 35337
+        "line": 35352
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -6339,7 +6340,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "openNativeNameDialog",
-        "line": 43194
+        "line": 43209
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -6355,7 +6356,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "openNativeSettingsDialog",
-        "line": 42075
+        "line": 42090
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -6371,7 +6372,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "openNativeSettingsDialog",
-        "line": 42069
+        "line": 42084
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -6387,7 +6388,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "openNativeSettingsDialog",
-        "line": 42081
+        "line": 42096
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -6403,7 +6404,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "openNativeSettingsDialog",
-        "line": 42058
+        "line": 42073
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -6419,7 +6420,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "openNativeTreeSelector",
-        "line": 43356
+        "line": 43371
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -6435,7 +6436,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "openPromptListDialog",
-        "line": 34365
+        "line": 34380
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -6451,7 +6452,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "openRemoteWebuiQrPopup",
-        "line": 31569
+        "line": 31584
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -6467,7 +6468,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "openRemoteWebuiQrUrl",
-        "line": 31401
+        "line": 31416
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -6499,7 +6500,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "optionalFeatureMigrationAction",
-        "line": 39652
+        "line": 39667
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -6515,7 +6516,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "pathPickerButton",
-        "line": 24415
+        "line": 24429
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -6531,7 +6532,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "populateModelSelect",
-        "line": 44986
+        "line": 45001
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -6547,7 +6548,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "releaseNpmActionButton",
-        "line": 28125
+        "line": 28140
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -6563,7 +6564,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "rememberOptionalControlDefault",
-        "line": 39255
+        "line": 39270
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -6595,7 +6596,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderActionFeedbackControls",
-        "line": 35556
+        "line": 35571
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -6611,7 +6612,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderAllMessages",
-        "line": 38434
+        "line": 38449
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -6627,7 +6628,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderAllMessages",
-        "line": 38435
+        "line": 38450
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -6643,7 +6644,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderAppRunnerContextForm",
-        "line": 28885
+        "line": 28900
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -6659,7 +6660,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderAppRunnerContextForm",
-        "line": 28873
+        "line": 28888
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -6675,7 +6676,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderAppRunnerContextForm",
-        "line": 28870
+        "line": 28885
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -6691,7 +6692,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderAppRunnerControls",
-        "line": 29562
+        "line": 29577
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -6707,7 +6708,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderAppRunnerControls",
-        "line": 29556
+        "line": 29571
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -6723,7 +6724,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderAppRunnerCustomSection",
-        "line": 29482
+        "line": 29497
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -6739,7 +6740,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderAppRunnerCustomSection",
-        "line": 29475
+        "line": 29490
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -6755,7 +6756,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderAppRunnerCustomSection",
-        "line": 29518
+        "line": 29533
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -6771,7 +6772,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderAppRunnerCustomSection",
-        "line": 29505
+        "line": 29520
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -6787,7 +6788,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderAppRunnerCustomSection",
-        "line": 29515
+        "line": 29530
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -6803,7 +6804,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderAppRunnerDirectoryBrowser",
-        "line": 29264
+        "line": 29279
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -6819,7 +6820,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderAppRunnerDirectoryBrowser",
-        "line": 29268
+        "line": 29283
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -6835,7 +6836,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderAppRunnerDirectoryBrowser",
-        "line": 29288
+        "line": 29303
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -6851,7 +6852,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderAppRunnerFileBrowser",
-        "line": 29420
+        "line": 29435
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -6867,7 +6868,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderAppRunnerInputForm",
-        "line": 29661
+        "line": 29676
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -6883,7 +6884,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderAppRunnerInputForm",
-        "line": 29665
+        "line": 29680
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -6899,7 +6900,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderAppRunnerInputForm",
-        "line": 29647
+        "line": 29662
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -6915,7 +6916,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderAppRunnerInputForm",
-        "line": 29646
+        "line": 29661
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -6931,7 +6932,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderAppRunnerInputForm",
-        "line": 29652
+        "line": 29667
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -6947,7 +6948,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderAppRunnerSearchPathSection",
-        "line": 29326
+        "line": 29341
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -6963,7 +6964,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderAppRunnerSearchPathSection",
-        "line": 29368
+        "line": 29383
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -6979,7 +6980,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderAppRunnerSearchPathSection",
-        "line": 29372
+        "line": 29387
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -6995,7 +6996,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderAppRunnerSearchPathSection",
-        "line": 29360
+        "line": 29375
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -7011,7 +7012,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderAppRunnerSearchPathSection",
-        "line": 29342
+        "line": 29357
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -7027,7 +7028,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderAppRunnerSearchPathSection",
-        "line": 29369
+        "line": 29384
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -7043,7 +7044,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderAppRunnerSearchPathSection",
-        "line": 29343
+        "line": 29358
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -7123,7 +7124,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderAurReviewWidget",
-        "line": 28393
+        "line": 28408
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -7139,7 +7140,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderAurReviewWidget",
-        "line": 28382
+        "line": 28397
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -7155,7 +7156,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderBangSuggestionItems",
-        "line": 45493
+        "line": 45508
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -7171,7 +7172,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderBangSuggestionItems",
-        "line": 45495
+        "line": 45510
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -7187,7 +7188,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderBtwComposerForm",
-        "line": 31195
+        "line": 31210
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -7203,7 +7204,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderBtwComposerForm",
-        "line": 31182
+        "line": 31197
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -7219,7 +7220,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderChangedFileButton",
-        "line": 20289
+        "line": 20303
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -7235,7 +7236,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderCommandPaletteList",
-        "line": 45875
+        "line": 45890
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -7251,7 +7252,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderCommandPaletteList",
-        "line": 45878
+        "line": 45893
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -7267,7 +7268,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderCommandPaletteList",
-        "line": 45879
+        "line": 45894
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -7283,7 +7284,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderCommandPaletteList",
-        "line": 45877
+        "line": 45892
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -7299,7 +7300,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderCommandSuggestionItems",
-        "line": 45372
+        "line": 45387
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -7315,7 +7316,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderCommandSuggestionItems",
-        "line": 45374
+        "line": 45389
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -7331,7 +7332,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderCommands",
-        "line": 45686
+        "line": 45701
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -7347,7 +7348,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderCompactToolShell",
-        "line": 43869
+        "line": 43884
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -7395,7 +7396,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderContent",
-        "line": 35651
+        "line": 35666
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -7411,7 +7412,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderContent",
-        "line": 35657
+        "line": 35672
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -7427,7 +7428,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderContextMeter",
-        "line": 22715
+        "line": 22729
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -7443,7 +7444,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderContextMeter",
-        "line": 22720
+        "line": 22734
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -7459,7 +7460,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderControlVisibilitySetupDialog",
-        "line": 13982
+        "line": 13985
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -7475,7 +7476,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderControlVisibilitySetupDialog",
-        "line": 13985
+        "line": 13988
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -7491,7 +7492,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderControlVisibilitySetupDialog",
-        "line": 13984
+        "line": 13987
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -7571,7 +7572,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderEmptyStartState",
-        "line": 36341
+        "line": 36356
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -7587,7 +7588,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderEmptyStartState",
-        "line": 36300
+        "line": 36315
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -7603,7 +7604,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderFooterBranchCreateForm",
-        "line": 23586
+        "line": 23600
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -7619,7 +7620,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderFooterBranchCreateForm",
-        "line": 23558
+        "line": 23572
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -7635,7 +7636,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderFooterBranchCreateForm",
-        "line": 23576
+        "line": 23590
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -7651,7 +7652,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderFooterBranchCreateForm",
-        "line": 23539
+        "line": 23553
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -7667,7 +7668,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderFooterBranchCreateForm",
-        "line": 23597
+        "line": 23611
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -7683,7 +7684,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderFooterBranchCreateForm",
-        "line": 23577
+        "line": 23591
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -7699,7 +7700,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderFooterBranchCreateForm",
-        "line": 23540
+        "line": 23554
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -7715,7 +7716,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderFooterBranchOption",
-        "line": 23709
+        "line": 23723
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -7731,7 +7732,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderFooterBranchOption",
-        "line": 23726
+        "line": 23740
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -7747,7 +7748,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderFooterBranchOption",
-        "line": 23733
+        "line": 23747
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -7763,7 +7764,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderFooterModelOption",
-        "line": 24281
+        "line": 24295
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -7779,7 +7780,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderFooterModelOption",
-        "line": 24302
+        "line": 24316
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -7795,7 +7796,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderFooterModelOption",
-        "line": 24284
+        "line": 24298
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -7811,7 +7812,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderFooterModelOption",
-        "line": 24300
+        "line": 24314
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -7827,7 +7828,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderFooterModelOption",
-        "line": 24301
+        "line": 24315
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -7843,7 +7844,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderFooterModelPicker",
-        "line": 24349
+        "line": 24363
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -7859,7 +7860,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderFooterModelPicker",
-        "line": 24350
+        "line": 24364
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -7875,7 +7876,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderFooterModelPicker",
-        "line": 24347
+        "line": 24361
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -7891,7 +7892,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderFooterModelPicker",
-        "line": 24325
+        "line": 24339
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -7907,7 +7908,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderFooterThinkingPicker",
-        "line": 24401
+        "line": 24415
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -7923,7 +7924,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderFooterWorktreeList",
-        "line": 23824
+        "line": 23838
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -7939,7 +7940,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderFooterWorktreeList",
-        "line": 23799
+        "line": 23813
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -7955,7 +7956,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderFooterWorktreeList",
-        "line": 23814
+        "line": 23828
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -7971,7 +7972,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderGitChangesFileList",
-        "line": 21362
+        "line": 21376
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -7987,7 +7988,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderGitChangesFileList",
-        "line": 21364
+        "line": 21378
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -8003,7 +8004,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderGitCurrentFileHeader",
-        "line": 21373
+        "line": 21387
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -8019,7 +8020,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderGitDiffFile",
-        "line": 21180
+        "line": 21194
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -8035,7 +8036,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderGitDiffFile",
-        "line": 21179
+        "line": 21193
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -8051,7 +8052,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderGitDiffSection",
-        "line": 21210
+        "line": 21224
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -8067,7 +8068,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderGitDivergedBar",
-        "line": 22123
+        "line": 22137
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -8083,7 +8084,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderGitFooterPayload",
-        "line": 20844
+        "line": 20858
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -8099,7 +8100,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderGitFooterRefreshButton",
-        "line": 20779
+        "line": 20793
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -8115,7 +8116,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderGitFooterVisibilityToggle",
-        "line": 19716
+        "line": 19730
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -8131,7 +8132,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderGitFooterVisibilityToggle",
-        "line": 19719
+        "line": 19733
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -8147,7 +8148,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderGitInitStackInput",
-        "line": 32063
+        "line": 32078
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -8163,7 +8164,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderGitInitStackInput",
-        "line": 32054
+        "line": 32069
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -8179,7 +8180,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderGitInitStackInput",
-        "line": 32040
+        "line": 32055
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -8195,7 +8196,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderGitInitStackInput",
-        "line": 32066
+        "line": 32081
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -8211,7 +8212,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderGitInitStackInput",
-        "line": 32055
+        "line": 32070
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -8227,7 +8228,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderGitInitStackInput",
-        "line": 32041
+        "line": 32056
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -8243,7 +8244,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderGitOperationPanel",
-        "line": 22094
+        "line": 22108
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -8259,7 +8260,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderGitOperationPanel",
-        "line": 22075
+        "line": 22089
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -8275,7 +8276,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderGitOperationPanel",
-        "line": 22083
+        "line": 22097
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -8291,7 +8292,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderGitOperationPanel",
-        "line": 21999
+        "line": 22013
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -8307,7 +8308,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderGitOperationPanel",
-        "line": 22041
+        "line": 22055
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -8323,7 +8324,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderGitOperationPanel",
-        "line": 21992
+        "line": 22006
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -8339,7 +8340,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderGitOperationPanel",
-        "line": 22048
+        "line": 22062
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -8355,7 +8356,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderGitOperationPanel",
-        "line": 22017
+        "line": 22031
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -8371,7 +8372,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderGitPanelFile",
-        "line": 16776
+        "line": 16779
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -8387,7 +8388,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderGitPanelFolder",
-        "line": 16752
+        "line": 16755
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -8403,7 +8404,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderGitPanelFolder",
-        "line": 16753
+        "line": 16756
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -8419,7 +8420,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderGitPanelHistory",
-        "line": 16866
+        "line": 16869
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -8435,7 +8436,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderGitPanelHistory",
-        "line": 16868
+        "line": 16871
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -8451,7 +8452,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderGitPanelRepositoryCard",
-        "line": 16962
+        "line": 16965
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -8467,7 +8468,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderGitPanelRepositoryCard",
-        "line": 16964
+        "line": 16967
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -8483,7 +8484,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderGitPanelRepositoryCard",
-        "line": 16961
+        "line": 16964
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -8499,7 +8500,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderGitPanelRepositoryContent",
-        "line": 16900
+        "line": 16903
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -8515,7 +8516,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderGitPanelRepositoryContent",
-        "line": 16903
+        "line": 16906
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -8531,7 +8532,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderGitPanelRepositoryContent",
-        "line": 16901
+        "line": 16904
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -8547,7 +8548,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderGitPanelRepositoryContent",
-        "line": 16934
+        "line": 16937
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -8563,7 +8564,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderGitPanelRepositoryContent",
-        "line": 16939
+        "line": 16942
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -8579,7 +8580,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderGitPullResultPanel",
-        "line": 21544
+        "line": 21558
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -8595,7 +8596,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderGitPullResultPanel",
-        "line": 21549
+        "line": 21563
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -8611,7 +8612,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderGitStashTools",
-        "line": 22218
+        "line": 22232
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -8627,7 +8628,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderGitStashTools",
-        "line": 22248
+        "line": 22262
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -8643,7 +8644,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderGitToolsSection",
-        "line": 22513
+        "line": 22527
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -8659,7 +8660,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderGitToolsSection",
-        "line": 22511
+        "line": 22525
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -8675,7 +8676,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderGitUndoTools",
-        "line": 22313
+        "line": 22327
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -8691,7 +8692,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderGitUntrackedLoadingFile",
-        "line": 21284
+        "line": 21298
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -8707,7 +8708,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderGitUntrackedLoadingFile",
-        "line": 21283
+        "line": 21297
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -8723,7 +8724,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderGitUntrackedRawFile",
-        "line": 21271
+        "line": 21285
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -8739,7 +8740,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderGitUntrackedRawFile",
-        "line": 21270
+        "line": 21284
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -8755,7 +8756,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderGitWorkflow",
-        "line": 32519
+        "line": 32534
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -8771,7 +8772,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderGitWorkflow",
-        "line": 32499
+        "line": 32514
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -8787,7 +8788,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderGitWorkflow",
-        "line": 32521
+        "line": 32536
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -8803,7 +8804,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderGitWorkflowManualCommitInput",
-        "line": 32108
+        "line": 32123
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -8819,7 +8820,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderGitWorkflowManualCommitInput",
-        "line": 32100
+        "line": 32115
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -8835,7 +8836,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderGitWorkflowManualCommitInput",
-        "line": 32101
+        "line": 32116
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -9027,7 +9028,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderMarkdownInto",
-        "line": 35175
+        "line": 35190
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -9043,7 +9044,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderMermaidDiagram",
-        "line": 34893
+        "line": 34908
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -9091,7 +9092,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderModelSearchResults",
-        "line": 44958
+        "line": 44973
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -9107,7 +9108,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderNativeSelectorItems",
-        "line": 41496
+        "line": 41511
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -9123,7 +9124,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderNativeSelectorItems",
-        "line": 41509
+        "line": 41524
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -9139,7 +9140,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderNativeSelectorItems",
-        "line": 41498
+        "line": 41513
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -9155,7 +9156,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderNativeSelectorItems",
-        "line": 41487
+        "line": 41502
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -9171,7 +9172,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderNetworkStatus",
-        "line": 44628
+        "line": 44643
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -9187,7 +9188,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderOptionalFeatureBatchToolbar",
-        "line": 40236
+        "line": 40251
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -9203,7 +9204,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderOptionalFeatureBatchToolbar",
-        "line": 40225
+        "line": 40240
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -9219,7 +9220,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderOptionalFeatureMigrationDialog",
-        "line": 39887
+        "line": 39902
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -9235,7 +9236,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderOptionalFeatureMigrationDialog",
-        "line": 39903
+        "line": 39918
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -9251,7 +9252,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderOptionalFeaturePanel",
-        "line": 40274
+        "line": 40289
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -9267,7 +9268,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderOptionalFeatureRow",
-        "line": 40512
+        "line": 40527
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -9283,7 +9284,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderOptionalFeatureRow",
-        "line": 40501
+        "line": 40516
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -9299,7 +9300,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderOptionalFeatureRow",
-        "line": 40493
+        "line": 40508
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -9315,7 +9316,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderOptionalFeatureRow",
-        "line": 40428
+        "line": 40443
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -9331,7 +9332,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderOptionalFeatureRow",
-        "line": 40395
+        "line": 40410
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -9347,7 +9348,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderOptionalFeatureRow",
-        "line": 40396
+        "line": 40411
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -9363,7 +9364,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderOptionalFeatureSection",
-        "line": 40308
+        "line": 40323
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -9379,7 +9380,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderOptionalFeatureSection",
-        "line": 40303
+        "line": 40318
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -9395,7 +9396,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderPathSuggestionItems",
-        "line": 45417
+        "line": 45432
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -9411,7 +9412,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderPathSuggestionItems",
-        "line": 45419
+        "line": 45434
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -9443,7 +9444,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderPromptListEditor",
-        "line": 34266
+        "line": 34281
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -9459,7 +9460,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderPromptListEditor",
-        "line": 34254
+        "line": 34269
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -9475,7 +9476,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderPromptListEditor",
-        "line": 34255
+        "line": 34270
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -9491,7 +9492,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderQuestionnaireActionButton",
-        "line": 27886
+        "line": 27901
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -9507,7 +9508,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderQuestionnaireOptionButton",
-        "line": 27863
+        "line": 27878
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -9523,7 +9524,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderReleaseNpmOutputDetails",
-        "line": 28154
+        "line": 28169
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -9539,7 +9540,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderSavedWorkspacePicker",
-        "line": 22967
+        "line": 22981
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -9555,7 +9556,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderSavedWorkspacePicker",
-        "line": 22995
+        "line": 23009
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -9571,7 +9572,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderSavedWorkspacePicker",
-        "line": 22991
+        "line": 23005
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -9715,7 +9716,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderStatsOverlay",
-        "line": 30862
+        "line": 30877
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -9731,7 +9732,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderStatsOverlay",
-        "line": 30864
+        "line": 30879
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -9747,7 +9748,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderStatsPromptSnapshot",
-        "line": 30692
+        "line": 30707
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -9763,7 +9764,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderSubagentAgent",
-        "line": 26355
+        "line": 26370
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -9779,7 +9780,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderSubagentAgent",
-        "line": 26357
+        "line": 26372
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -9795,7 +9796,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderSubagentGate",
-        "line": 26485
+        "line": 26500
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -9811,7 +9812,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderSubagentGateAttempt",
-        "line": 26450
+        "line": 26465
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -9827,7 +9828,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderSubagentGateAttempt",
-        "line": 26454
+        "line": 26469
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -9843,7 +9844,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderSubagentLaunchSlotCard",
-        "line": 26709
+        "line": 26724
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -9859,7 +9860,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderSubagentLaunchSlotCard",
-        "line": 26737
+        "line": 26752
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -9875,7 +9876,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderSubagentLaunchSlotCard",
-        "line": 26761
+        "line": 26776
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -9891,7 +9892,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderSubagentLaunchSlotCard",
-        "line": 26780
+        "line": 26795
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -9907,7 +9908,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderSubagentLaunchSlotCard",
-        "line": 26713
+        "line": 26728
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -9923,7 +9924,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderSubagentLaunchSlotCard",
-        "line": 26712
+        "line": 26727
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -9939,7 +9940,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderSubagentLaunchSlotCard",
-        "line": 26711
+        "line": 26726
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -9955,7 +9956,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderSubagentLaunchSlotCard",
-        "line": 26741
+        "line": 26756
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -9971,7 +9972,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderSubagentLaunchSlotCard",
-        "line": 26740
+        "line": 26755
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -9987,7 +9988,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderSubagentLaunchSlotCard",
-        "line": 26739
+        "line": 26754
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -10003,7 +10004,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderSubagentLaunchSlotCard",
-        "line": 26690
+        "line": 26705
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -10019,7 +10020,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderSubagentLaunchSlotCard",
-        "line": 26710
+        "line": 26725
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -10035,7 +10036,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderSubagentLaunchSlotCard",
-        "line": 26738
+        "line": 26753
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -10051,7 +10052,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderSubagentRun",
-        "line": 26399
+        "line": 26414
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -10067,7 +10068,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderSubagentRun",
-        "line": 26406
+        "line": 26421
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -10083,7 +10084,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderSubagentRun",
-        "line": 26401
+        "line": 26416
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -10099,7 +10100,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderSubagentRun",
-        "line": 26408
+        "line": 26423
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -10115,7 +10116,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderSubagentTabGroup",
-        "line": 26511
+        "line": 26526
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -10131,7 +10132,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderSubagentTabGroup",
-        "line": 26513
+        "line": 26528
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -10147,7 +10148,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderSubagentTerminalTab",
-        "line": 26212
+        "line": 26227
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -10163,7 +10164,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderSubagentTerminalTab",
-        "line": 26227
+        "line": 26242
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -10179,7 +10180,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderSubagentTerminalTab",
-        "line": 26211
+        "line": 26226
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -10195,7 +10196,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderSubagentTerminalTabGroup",
-        "line": 26290
+        "line": 26305
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -10211,7 +10212,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderSubagentTerminalTabGroup",
-        "line": 26265
+        "line": 26280
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -10227,7 +10228,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderSubagentTerminalTabGroup",
-        "line": 26246
+        "line": 26261
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -10243,7 +10244,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderSubagentTerminalTabGroup",
-        "line": 26300
+        "line": 26315
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -10259,7 +10260,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderSubagentWorkflow",
-        "line": 26328
+        "line": 26343
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -10275,7 +10276,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderSubagentWorkflow",
-        "line": 26329
+        "line": 26344
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -10291,11 +10292,27 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderTabs",
-        "line": 17543
+        "line": 17546
       },
       "ancestors": [],
       "classification": "dynamic-template",
       "family": null
+    },
+    {
+      "id": "pi-package-webui/public/app.js#renderTabs/id-assignment:control:`terminalTabOption${index}`",
+      "sourceId": null,
+      "tag": null,
+      "actionable": false,
+      "data": {},
+      "expression": "control.id = `terminalTabOption${index}`;",
+      "anchor": {
+        "file": "pi-package-webui/public/app.js",
+        "symbol": "renderTabs",
+        "line": 17575
+      },
+      "ancestors": [],
+      "classification": "dynamic-template",
+      "family": "sessions"
     },
     {
       "id": "pi-package-webui/public/app.js#renderTerminalTab/construction:make:button:b956591809702074",
@@ -10307,7 +10324,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderTerminalTab",
-        "line": 17246
+        "line": 17249
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -10323,7 +10340,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderTerminalTab",
-        "line": 17259
+        "line": 17262
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -10339,7 +10356,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderTerminalTab",
-        "line": 17244
+        "line": 17247
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -10355,7 +10372,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderTerminalTabGroup",
-        "line": 17376
+        "line": 17379
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -10371,7 +10388,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderTerminalTabGroup",
-        "line": 17356
+        "line": 17359
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -10387,7 +10404,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderTerminalTabGroup",
-        "line": 17395
+        "line": 17398
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -10403,7 +10420,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderTerminalTabGroup",
-        "line": 17337
+        "line": 17340
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -10419,7 +10436,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderTerminalTabGroup",
-        "line": 17336
+        "line": 17339
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -10435,7 +10452,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderTerminalTabGroup",
-        "line": 17389
+        "line": 17392
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -10451,7 +10468,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderTerminalTabGroupItem",
-        "line": 17286
+        "line": 17289
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -10467,7 +10484,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderTerminalTabGroupItem",
-        "line": 17301
+        "line": 17304
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -10483,7 +10500,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderTerminalTabGroupItem",
-        "line": 17284
+        "line": 17287
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -10643,7 +10660,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderWorkflowInspectorAgent",
-        "line": 28498
+        "line": 28513
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -10659,7 +10676,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderWorkflowInspectorAgent",
-        "line": 28506
+        "line": 28521
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -10675,7 +10692,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderWorkflowInspectorAgent",
-        "line": 28510
+        "line": 28525
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -10691,7 +10708,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderWorkflowInspectorAgent",
-        "line": 28515
+        "line": 28530
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -10707,7 +10724,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderWorkflowInspectorWidget",
-        "line": 28591
+        "line": 28606
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -10723,7 +10740,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderWorkflowInspectorWidget",
-        "line": 28564
+        "line": 28579
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -10739,7 +10756,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderWorkflowInspectorWidget",
-        "line": 28548
+        "line": 28563
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -10755,7 +10772,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderWorkflowInspectorWidget",
-        "line": 28606
+        "line": 28621
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -10771,7 +10788,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderWorkflowInspectorWidget",
-        "line": 28539
+        "line": 28554
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -10787,7 +10804,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderWorkflowScriptPreview",
-        "line": 46980
+        "line": 46995
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -10803,7 +10820,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderWorkflowScriptPreview",
-        "line": 46998
+        "line": 47013
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -10819,7 +10836,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderWorkflowScriptPreview",
-        "line": 46986
+        "line": 47001
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -10835,7 +10852,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderWorkflowScriptPreview",
-        "line": 46992
+        "line": 47007
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -10851,7 +10868,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderWorkflowScriptPreview",
-        "line": 46975
+        "line": 46990
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -10867,7 +10884,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderWorkflowScriptPreview",
-        "line": 47020
+        "line": 47035
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -10883,7 +10900,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderWorkflowScriptPreview",
-        "line": 47012
+        "line": 47027
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -10899,7 +10916,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderWorkflowStatusStack",
-        "line": 36911
+        "line": 36926
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -10915,7 +10932,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderWorkflowSubprocessWidget",
-        "line": 28733
+        "line": 28748
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -10931,7 +10948,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderWorkflowSubprocessWidget",
-        "line": 28748
+        "line": 28763
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -10947,7 +10964,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderWorkflowSubprocessWidget",
-        "line": 28704
+        "line": 28719
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -10963,7 +10980,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderWorkspaceDashboard",
-        "line": 22930
+        "line": 22944
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -10979,7 +10996,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderWorkspaceDashboard",
-        "line": 22866
+        "line": 22880
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -11043,7 +11060,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "resetFileViewerDom",
-        "line": 15625
+        "line": 15628
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -11075,7 +11092,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "restoreToolDetailsInteractionState",
-        "line": 37062
+        "line": 37077
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -11091,7 +11108,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "reuseToolExecutionBubble",
-        "line": 37183
+        "line": 37198
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -11107,7 +11124,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "saveDisplayedPromptList",
-        "line": 34401
+        "line": 34416
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -11123,7 +11140,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "sessionCopyButton",
-        "line": 27549
+        "line": 27564
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -11171,7 +11188,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "setNativeActionBusy",
-        "line": 41539
+        "line": 41554
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -11187,7 +11204,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "setOptionalControlState",
-        "line": 39276
+        "line": 39291
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -11203,7 +11220,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "setOptionsSubmenuOpen",
-        "line": 39067
+        "line": 39082
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -11267,7 +11284,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "showControlVisibilityRegionMenu",
-        "line": 14121
+        "line": 14124
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -11283,7 +11300,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "showControlVisibilityRegionMenu",
-        "line": 14125
+        "line": 14128
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -11299,7 +11316,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "showFooterTooltip",
-        "line": 19302
+        "line": 19316
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -11315,7 +11332,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "showGitPanelContextMenu",
-        "line": 16627
+        "line": 16630
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -11331,7 +11348,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "showNextDialog",
-        "line": 47163
+        "line": 47178
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -11347,7 +11364,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "showNextDialog",
-        "line": 47182
+        "line": 47197
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -11363,7 +11380,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "showNextDialog",
-        "line": 47208
+        "line": 47223
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -11379,7 +11396,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "showNoticeToast",
-        "line": 18372
+        "line": 18386
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -11395,7 +11412,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "showNoticeToast",
-        "line": 18369
+        "line": 18383
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -11443,7 +11460,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "statsCalibrationButton",
-        "line": 30344
+        "line": 30359
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -11459,7 +11476,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "statsPromptCompositionTrack",
-        "line": 30595
+        "line": 30610
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -11475,7 +11492,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "statsPromptInventoryDetails",
-        "line": 30658
+        "line": 30673
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -11491,7 +11508,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "statsPromptTable",
-        "line": 30621
+        "line": 30636
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -11555,7 +11572,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "syncThinkingSelectSupport",
-        "line": 18980
+        "line": 18994
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -11587,7 +11604,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "updateFileViewerUi",
-        "line": 15139
+        "line": 15142
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -11603,7 +11620,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "updateFileViewerUi",
-        "line": 15165
+        "line": 15168
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -11619,7 +11636,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "updateGitChangesCurrentFileHeader",
-        "line": 21405
+        "line": 21419
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -11635,7 +11652,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "updateGitFooterChipNodeValue",
-        "line": 20747
+        "line": 20761
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -11651,7 +11668,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "updateStickyUserPromptButton",
-        "line": 36426
+        "line": 36441
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -11667,7 +11684,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "updateStickyUserPromptButton",
-        "line": 36427
+        "line": 36442
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -11683,7 +11700,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "updateStickyUserPromptButton",
-        "line": 36425
+        "line": 36440
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -11699,7 +11716,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "updateTerminalSplitControls",
-        "line": 17766
+        "line": 17780
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -11715,7 +11732,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "updateTerminalSplitUi",
-        "line": 17786
+        "line": 17800
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -11731,7 +11748,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "workflowInspectorActionButton",
-        "line": 28490
+        "line": 28505
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -11747,7 +11764,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "workflowOverlayCloseButton",
-        "line": 31611
+        "line": 31626
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -11763,7 +11780,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "workflowPolicySuggestionGroup",
-        "line": 42890
+        "line": 42905
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -11779,7 +11796,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "workflowPolicySuggestionGroup",
-        "line": 42885
+        "line": 42900
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -11795,7 +11812,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "workflowPolicyTextarea",
-        "line": 42911
+        "line": 42926
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -11811,7 +11828,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "workflowPolicyTextarea",
-        "line": 42918
+        "line": 42933
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -11827,7 +11844,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "workflowPolicyTextarea",
-        "line": 42912
+        "line": 42927
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -24616,7 +24633,7 @@
       "tag": "script",
       "actionable": false,
       "data": {
-        "data-app-src": "/app.js?v=196"
+        "data-app-src": "/app.js?v=197"
       },
       "anchor": {
         "file": "pi-package-webui/public/index.html",
@@ -26542,7 +26559,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "CONTROL_VISIBILITY_HIDDEN_IDS_STORAGE_KEY",
-        "line": 13870
+        "line": 13873
       }
     },
     {
@@ -26773,7 +26790,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "REMOVED_SIDE_PANEL_SECTION_HEIGHT_STORAGE_KEY",
-        "line": 13660
+        "line": 13663
       }
     },
     {
@@ -26993,7 +27010,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "UI_LAYOUT_LEGACY_PENDING_STORAGE_PREFIX",
-        "line": 13664
+        "line": 13667
       }
     },
     {
@@ -27004,7 +27021,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "UI_LAYOUT_PENDING_STORAGE_PREFIX",
-        "line": 13663
+        "line": 13666
       }
     },
     {
@@ -27038,7 +27055,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "cacheGitFooterWebuiPayload",
-        "line": 20127
+        "line": 20141
       },
       "resolvedKey": "pi-webui-git-footer-webui-payload-cache"
     },
@@ -27051,7 +27068,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "cacheSidePanelWidth",
-        "line": 14741
+        "line": 14744
       },
       "resolvedKey": "pi-webui-side-panel-width"
     },
@@ -27064,7 +27081,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "clearGitFooterWebuiPayloadCache",
-        "line": 20139
+        "line": 20153
       },
       "resolvedKey": "pi-webui-git-footer-webui-payload-cache"
     },
@@ -27077,7 +27094,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "clearLegacyFastPicks",
-        "line": 24543
+        "line": 24558
       },
       "resolvedKey": "pi-webui-path-fast-picks"
     },
@@ -27090,7 +27107,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "clearRemovedSidePanelSectionHeightState",
-        "line": 14331
+        "line": 14334
       },
       "resolvedKey": "pi-webui-side-panel-section-heights-v1"
     },
@@ -27103,7 +27120,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "closeChatSearch",
-        "line": 49389
+        "line": 49404
       },
       "resolvedKey": "pi-webui-control-deck-layout-v2"
     },
@@ -27116,7 +27133,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "durableUiLayoutPendingMutationRecords",
-        "line": 14265
+        "line": 14268
       },
       "resolvedKey": null
     },
@@ -27142,7 +27159,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "loadLastUserPromptCache",
-        "line": 36156
+        "line": 36171
       },
       "resolvedKey": "pi-webui-last-user-prompts"
     },
@@ -27155,7 +27172,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "loadLegacyFastPicks",
-        "line": 24535
+        "line": 24550
       },
       "resolvedKey": "pi-webui-path-fast-picks"
     },
@@ -27168,7 +27185,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "loadPromptHistoryCache",
-        "line": 36059
+        "line": 36074
       },
       "resolvedKey": "pi-webui-prompt-history"
     },
@@ -27298,7 +27315,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "persistFileViewerWidth",
-        "line": 14927
+        "line": 14930
       },
       "resolvedKey": "pi-webui-file-viewer-width"
     },
@@ -27311,7 +27328,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "persistLastUserPromptCache",
-        "line": 36165
+        "line": 36180
       },
       "resolvedKey": "pi-webui-last-user-prompts"
     },
@@ -27350,7 +27367,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "persistPromptHistoryCache",
-        "line": 36074
+        "line": 36089
       },
       "resolvedKey": "pi-webui-prompt-history"
     },
@@ -27506,7 +27523,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "readCachedGitFooterWebuiPayloadRaw",
-        "line": 20113
+        "line": 20127
       },
       "resolvedKey": "pi-webui-git-footer-webui-payload-cache"
     },
@@ -27545,7 +27562,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "readDurableLayoutCache",
-        "line": 13690
+        "line": 13693
       },
       "resolvedKey": null
     },
@@ -27558,7 +27575,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "readFooterScopedModelOrder",
-        "line": 23932
+        "line": 23946
       },
       "resolvedKey": "pi-webui-footer-scoped-model-order-v1"
     },
@@ -27571,7 +27588,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "readGitFooterStatusSetup",
-        "line": 31877
+        "line": 31892
       },
       "resolvedKey": "pi-webui-git-footer-status-setup"
     },
@@ -27688,7 +27705,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "readStoredControlDeckLayout",
-        "line": 13747
+        "line": 13750
       },
       "resolvedKey": "pi-webui-control-deck-layout-v2"
     },
@@ -27701,7 +27718,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "readStoredFileViewerWidth",
-        "line": 14918
+        "line": 14921
       },
       "resolvedKey": "pi-webui-file-viewer-width"
     },
@@ -27714,7 +27731,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "readStoredFooterScopedModelLayout",
-        "line": 23887
+        "line": 23901
       },
       "resolvedKey": "pi-webui-footer-scoped-model-layout-v1"
     },
@@ -27727,7 +27744,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "readStoredGitInitStack",
-        "line": 31921
+        "line": 31936
       },
       "resolvedKey": "pi-webui-git-init-stack"
     },
@@ -27740,7 +27757,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "readStoredPromptLists",
-        "line": 34183
+        "line": 34198
       },
       "resolvedKey": "pi-webui-prompt-lists"
     },
@@ -27818,7 +27835,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "readStoredSidePanelWidth",
-        "line": 14732
+        "line": 14735
       },
       "resolvedKey": "pi-webui-side-panel-width"
     },
@@ -27935,7 +27952,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "rememberActiveTab",
-        "line": 16008
+        "line": 16011
       },
       "resolvedKey": "pi-webui-active-tab"
     },
@@ -27948,7 +27965,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "rememberDismissedOptionalFeatureMigration",
-        "line": 39609
+        "line": 39624
       },
       "resolvedKey": "pi-webui-optional-feature-migration-dismissed"
     },
@@ -28026,7 +28043,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "removeDurableUiLayoutPendingMutation",
-        "line": 14323
+        "line": 14326
       },
       "resolvedKey": null
     },
@@ -28078,7 +28095,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "restoreStoredTabId",
-        "line": 16016
+        "line": 16019
       },
       "resolvedKey": "pi-webui-active-tab"
     },
@@ -28104,7 +28121,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "saveFastPicks",
-        "line": 24568
+        "line": 24583
       },
       "resolvedKey": "pi-webui-path-fast-picks"
     },
@@ -28117,7 +28134,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "setFooterScopedModelLayout",
-        "line": 23897
+        "line": 23911
       },
       "resolvedKey": "pi-webui-footer-scoped-model-layout-v1"
     },
@@ -28221,7 +28238,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "storedDismissedOptionalFeatureMigrationKey",
-        "line": 39594
+        "line": 39609
       },
       "resolvedKey": "pi-webui-optional-feature-migration-dismissed"
     },
@@ -28312,7 +28329,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "writeDurableLayoutCache",
-        "line": 13698
+        "line": 13701
       },
       "resolvedKey": null
     },
@@ -28325,7 +28342,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "writeDurableUiLayoutPendingMutation",
-        "line": 14307
+        "line": 14310
       },
       "resolvedKey": null
     },
@@ -28338,7 +28355,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "writeFooterScopedModelOrder",
-        "line": 23941
+        "line": 23955
       },
       "resolvedKey": "pi-webui-footer-scoped-model-order-v1"
     },
@@ -28351,7 +28368,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "writeGitFooterStatusSetup",
-        "line": 31909
+        "line": 31924
       },
       "resolvedKey": "pi-webui-git-footer-status-setup"
     },
@@ -28364,7 +28381,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "writeStoredGitInitStack",
-        "line": 31931
+        "line": 31946
       },
       "resolvedKey": "pi-webui-git-init-stack"
     },
@@ -28377,7 +28394,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "writeStoredGitInitStack",
-        "line": 31930
+        "line": 31945
       },
       "resolvedKey": "pi-webui-git-init-stack"
     },
@@ -28390,7 +28407,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "writeStoredPromptLists",
-        "line": 34195
+        "line": 34210
       },
       "resolvedKey": "pi-webui-prompt-lists"
     },
@@ -30119,7 +30136,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "commandPaletteCoreItems",
-        "line": 45754
+        "line": 45769
       },
       "availability": "Definition only; surrounding conditions and invocation guards apply"
     },
@@ -30132,7 +30149,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "commandPaletteCoreItems",
-        "line": 45761
+        "line": 45776
       },
       "availability": "Definition only; surrounding conditions and invocation guards apply"
     },
@@ -30145,7 +30162,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "commandPaletteCoreItems",
-        "line": 45736
+        "line": 45751
       },
       "availability": "Definition only; surrounding conditions and invocation guards apply"
     },
@@ -30158,7 +30175,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "commandPaletteCoreItems",
-        "line": 45740
+        "line": 45755
       },
       "availability": "Definition only; surrounding conditions and invocation guards apply"
     },
@@ -30171,7 +30188,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "commandPaletteCoreItems",
-        "line": 45760
+        "line": 45775
       },
       "availability": "Definition only; surrounding conditions and invocation guards apply"
     },
@@ -30184,7 +30201,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "commandPaletteCoreItems",
-        "line": 45751
+        "line": 45766
       },
       "availability": "Definition only; surrounding conditions and invocation guards apply"
     },
@@ -30197,7 +30214,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "commandPaletteCoreItems",
-        "line": 45733
+        "line": 45748
       },
       "availability": "Definition only; surrounding conditions and invocation guards apply"
     },
@@ -30210,7 +30227,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "commandPaletteCoreItems",
-        "line": 45748
+        "line": 45763
       },
       "availability": "Definition only; surrounding conditions and invocation guards apply"
     },
@@ -30223,7 +30240,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "commandPaletteCoreItems",
-        "line": 45734
+        "line": 45749
       },
       "availability": "Definition only; surrounding conditions and invocation guards apply"
     },
@@ -30236,7 +30253,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "commandPaletteCoreItems",
-        "line": 45725
+        "line": 45740
       },
       "availability": "Definition only; surrounding conditions and invocation guards apply"
     },
@@ -30249,7 +30266,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "commandPaletteCoreItems",
-        "line": 45731
+        "line": 45746
       },
       "availability": "Definition only; surrounding conditions and invocation guards apply"
     },
@@ -30262,7 +30279,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "commandPaletteCoreItems",
-        "line": 45768
+        "line": 45783
       },
       "availability": "Definition only; surrounding conditions and invocation guards apply"
     },
@@ -30275,7 +30292,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "commandPaletteCoreItems",
-        "line": 45755
+        "line": 45770
       },
       "availability": "Definition only; surrounding conditions and invocation guards apply"
     },
@@ -30288,7 +30305,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "commandPaletteCoreItems",
-        "line": 45762
+        "line": 45777
       },
       "availability": "Definition only; surrounding conditions and invocation guards apply"
     },
@@ -30301,7 +30318,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "commandPaletteCoreItems",
-        "line": 45735
+        "line": 45750
       },
       "availability": "Definition only; surrounding conditions and invocation guards apply"
     },
@@ -30314,7 +30331,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "commandPaletteCoreItems",
-        "line": 45729
+        "line": 45744
       },
       "availability": "Definition only; surrounding conditions and invocation guards apply"
     },
@@ -30327,7 +30344,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "commandPaletteCoreItems",
-        "line": 45750
+        "line": 45765
       },
       "availability": "Definition only; surrounding conditions and invocation guards apply"
     },
@@ -30340,7 +30357,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "commandPaletteCoreItems",
-        "line": 45739
+        "line": 45754
       },
       "availability": "Definition only; surrounding conditions and invocation guards apply"
     },
@@ -30353,7 +30370,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "commandPaletteCoreItems",
-        "line": 45738
+        "line": 45753
       },
       "availability": "Definition only; surrounding conditions and invocation guards apply"
     },
@@ -30366,7 +30383,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "commandPaletteCoreItems",
-        "line": 45758
+        "line": 45773
       },
       "availability": "Definition only; surrounding conditions and invocation guards apply"
     },
@@ -30379,7 +30396,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "commandPaletteCoreItems",
-        "line": 45730
+        "line": 45745
       },
       "availability": "Definition only; surrounding conditions and invocation guards apply"
     },
@@ -30392,7 +30409,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "commandPaletteCoreItems",
-        "line": 45759
+        "line": 45774
       },
       "availability": "Definition only; surrounding conditions and invocation guards apply"
     },
@@ -30405,7 +30422,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "commandPaletteCoreItems",
-        "line": 45728
+        "line": 45743
       },
       "availability": "Definition only; surrounding conditions and invocation guards apply"
     },
@@ -30418,7 +30435,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "commandPaletteCoreItems",
-        "line": 45769
+        "line": 45784
       },
       "availability": "Definition only; surrounding conditions and invocation guards apply"
     },
@@ -30431,7 +30448,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "commandPaletteCoreItems",
-        "line": 45756
+        "line": 45771
       },
       "availability": "Definition only; surrounding conditions and invocation guards apply"
     },
@@ -30444,7 +30461,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "commandPaletteCoreItems",
-        "line": 45766
+        "line": 45781
       },
       "availability": "Definition only; surrounding conditions and invocation guards apply"
     },
@@ -30457,7 +30474,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "commandPaletteCoreItems",
-        "line": 45749
+        "line": 45764
       },
       "availability": "Definition only; surrounding conditions and invocation guards apply"
     },
@@ -30470,7 +30487,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "commandPaletteCoreItems",
-        "line": 45753
+        "line": 45768
       },
       "availability": "Definition only; surrounding conditions and invocation guards apply"
     },
@@ -30483,7 +30500,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "commandPaletteCoreItems",
-        "line": 45726
+        "line": 45741
       },
       "availability": "Definition only; surrounding conditions and invocation guards apply"
     },
@@ -30496,7 +30513,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "commandPaletteCoreItems",
-        "line": 45763
+        "line": 45778
       },
       "availability": "Definition only; surrounding conditions and invocation guards apply"
     },
@@ -30509,7 +30526,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "commandPaletteCoreItems",
-        "line": 45757
+        "line": 45772
       },
       "availability": "Definition only; surrounding conditions and invocation guards apply"
     },
@@ -30522,7 +30539,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "commandPaletteCoreItems",
-        "line": 45737
+        "line": 45752
       },
       "availability": "Definition only; surrounding conditions and invocation guards apply"
     },
@@ -30535,7 +30552,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "commandPaletteCoreItems",
-        "line": 45727
+        "line": 45742
       },
       "availability": "Definition only; surrounding conditions and invocation guards apply"
     },
@@ -30548,7 +30565,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "commandPaletteCoreItems",
-        "line": 45732
+        "line": 45747
       },
       "availability": "Definition only; surrounding conditions and invocation guards apply"
     },
@@ -30561,7 +30578,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "commandPaletteCoreItems",
-        "line": 45752
+        "line": 45767
       },
       "availability": "Definition only; surrounding conditions and invocation guards apply"
     }
@@ -30778,12 +30795,12 @@
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "renderSubagentTerminalView",
-          "line": 25873
+          "line": 25888
         },
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "renderSubagentGate",
-          "line": 26474
+          "line": 26489
         }
       ],
       "stateSource": "tab/run/agent and pending gate projections",
@@ -30797,12 +30814,12 @@
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "ensureDocumentArtifactDialog",
-          "line": 36830
+          "line": 36845
         },
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "openDocumentArtifact",
-          "line": 36862
+          "line": 36877
         }
       ],
       "stateSource": "documentArtifactDialog",
@@ -30816,17 +30833,17 @@
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "footerMetric",
-          "line": 19388
+          "line": 19402
         },
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "footerMeta",
-          "line": 19494
+          "line": 19508
         },
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "footerTuiItem",
-          "line": 20228
+          "line": 20242
         }
       ],
       "stateSource": "options.onClick / footer payload",
@@ -30840,12 +30857,12 @@
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "showNextDialog",
-          "line": 47108
+          "line": 47123
         },
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "createDialogResponder",
-          "line": 46915
+          "line": 46930
         }
       ],
       "stateSource": "dialogQueue / activeDialog",
@@ -30859,7 +30876,7 @@
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "renderOptionalFeaturePanel",
-          "line": 40261
+          "line": 40276
         }
       ],
       "stateSource": "OPTIONAL_FEATURES / server availability",
@@ -30878,12 +30895,12 @@
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "renderGitPanel",
-          "line": 16985
+          "line": 16988
         },
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "renderGitToolsSection",
-          "line": 22506
+          "line": 22520
         }
       ],
       "stateSource": "workspace entries and repository snapshots",
@@ -30897,7 +30914,7 @@
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "openImageLightbox",
-          "line": 35334
+          "line": 35349
         }
       ],
       "stateSource": "imageLightbox",
@@ -30911,12 +30928,12 @@
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "createMessageBubble",
-          "line": 37385
+          "line": 37400
         },
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "renderActionFeedbackControls",
-          "line": 35548
+          "line": 35563
         }
       ],
       "stateSource": "message/action identity",
@@ -30930,12 +30947,12 @@
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "openNativeCommandDialog",
-          "line": 41310
+          "line": 41325
         },
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "renderNativeSelectorItems",
-          "line": 41475
+          "line": 41490
         }
       ],
       "stateSource": "nativeCommandDialogGeneration / nativeCommandDialog",
@@ -30949,7 +30966,7 @@
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "commandPaletteModelItems",
-          "line": 45791
+          "line": 45806
         }
       ],
       "stateSource": "availableModels",
@@ -30963,7 +30980,7 @@
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "commandPaletteTabItems",
-          "line": 45774
+          "line": 45789
         }
       ],
       "stateSource": "tabs",
@@ -30977,12 +30994,12 @@
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "renderQuestionnaireOptionButton",
-          "line": 27860
+          "line": 27875
         },
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "renderQuestionnaireActionButton",
-          "line": 27883
+          "line": 27898
         }
       ],
       "stateSource": "questionnaire widget rows",
@@ -31006,7 +31023,7 @@
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "addDialogButton",
-          "line": 46926
+          "line": 46941
         }
       ],
       "stateSource": "caller-provided tag/label/action",
@@ -31020,7 +31037,7 @@
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "openNativeSkillsSelector",
-          "line": 43604
+          "line": 43619
         },
         {
           "file": "pi-package-webui/public/app.js",
@@ -31039,17 +31056,17 @@
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "refreshCommands",
-          "line": 45700
+          "line": 45715
         },
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "visibleCommands",
-          "line": 39206
+          "line": 39221
         },
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "commandPaletteSlashItems",
-          "line": 45811
+          "line": 45826
         }
       ],
       "stateSource": "availableCommands / rawAvailableCommands",

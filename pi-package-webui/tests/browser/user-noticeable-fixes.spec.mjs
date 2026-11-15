@@ -112,6 +112,7 @@ test("model selector supports Enter-to-select and arrow-key navigation from the 
   await page.goto(baseURL);
   await expect(page.locator("#promptInput")).toBeFocused();
 
+  await expect(page.locator("#chat")).toContainText("fake answer");
   await page.keyboard.press("Control+l");
   const dialog = page.locator("#nativeCommandDialog");
   await expect(dialog).toBeVisible();
