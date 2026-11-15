@@ -191,6 +191,56 @@ test("navigation and another session draft cannot redirect the pending first pro
   await expect(page.locator("#promptInput")).toHaveValue("Other session draft");
 });
 
+test("first native selector opens normally when its new session stays selected", async ({ page, emptyStartup }) => {
+  await ready(page, emptyStartup);
+  await page.locator("#promptInput").fill("/name");
+  await page.locator("#sendButton").click();
+  await expect(page.locator("#nativeCommandDialog")).toBeVisible();
+  const tabs = (await emptyStartup.api("/api/tabs")).tabs;
+  expect(tabs).toHaveLength(1);
+  await page.locator("#nativeCommandBody input").fill("First conversation");
+  const dispatched = page.waitForRequest(request => new URL(request.url()).pathname === "/api/prompt" && request.method() === "POST");
+  await page.getByRole("button", { name: "Name session", exact: true }).click();
+  expect(new URL((await dispatched).url()).searchParams.get("tab")).toBe(tabs[0].id);
+});
+
+for (const destination of ["another session", "settings"]) test(`first native selector stays with its new session after navigation to ${destination}`, async ({ page, emptyStartup }) => {
+  const requests = trackMutations(page);
+  await ready(page, emptyStartup);
+  const hold = await holdFirstCreation(page);
+  await page.locator("#promptInput").fill("/name");
+  await page.locator("#sendButton").click();
+  const first = await hold.created;
+  let second;
+  if (destination === "another session") {
+    const created = page.waitForResponse(response => new URL(response.url()).pathname === "/api/tabs" && response.request().method() === "POST");
+    await page.locator(".focused-brand").click();
+    second = (await (await created).json()).data.tab;
+    await page.locator("#promptInput").fill("Other session draft");
+  } else {
+    await page.getByRole("navigation", { name: "Workspace destinations" }).getByRole("button", { name: "Settings", exact: true }).click();
+  }
+  hold.release();
+  await expect(page.getByText(/Its command is saved in that conversation's draft\./).first()).toBeAttached();
+  await expect(page.locator("#nativeCommandDialog")).not.toBeVisible();
+  expect(requests.filter(item => item.path === "/api/prompt")).toHaveLength(0);
+  if (second) {
+    await expect(page.locator("#promptInput")).toHaveValue("Other session draft");
+    await expect(page.locator(`#tabBar [data-tab-id="${second.id}"] .terminal-tab-button`)).toHaveAttribute("aria-selected", "true");
+  } else {
+    await expect(page).toHaveURL(/view=settings/);
+    await page.getByRole("button", { name: "Back to conversation", exact: true }).click();
+  }
+  await page.locator(`#tabBar [data-tab-id="${first.id}"] .terminal-tab-button`).click();
+  await expect(page.locator("#promptInput")).toHaveValue("/name");
+  await page.locator("#sendButton").click();
+  await expect(page.locator("#nativeCommandDialog")).toBeVisible();
+  await page.locator("#nativeCommandBody input").fill("Intended first session");
+  const dispatched = page.waitForRequest(request => new URL(request.url()).pathname === "/api/prompt" && request.method() === "POST");
+  await page.getByRole("button", { name: "Name session", exact: true }).click();
+  expect(new URL((await dispatched).url()).searchParams.get("tab")).toBe(first.id);
+});
+
 test("editing back to the captured text still preserves the newer draft", async ({ page, emptyStartup }) => {
   await ready(page, emptyStartup);
   const hold = await holdFirstCreation(page);

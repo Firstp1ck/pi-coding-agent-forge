@@ -47347,6 +47347,15 @@ async function sendEmptyStartPrompt(inputMessage) {
       await switchTab(tab.id);
     }
     const tabContext = activeTabContext(tab.id);
+    const opensSelector = NATIVE_SELECTOR_COMMANDS.has(slashCommandName(inputMessage))
+      || /^\/summary\s+refresh$/i.test(inputMessage.trim());
+    // Native selectors operate on the visible session. Keep a background
+    // command in its own draft instead of opening it for another session.
+    if (opensSelector && (!isCurrentTabContext(tabContext) || focusedShellState !== sourceNavigation)) {
+      restorePromptInputAfterRoutingError(inputMessage, { usesPromptInput: true, targetTabId: tab.id, tabContext });
+      addEvent(`Select ${tab.title || "the new conversation"} to finish ${inputMessage.trim()}. Its command is saved in that conversation's draft.`, "info");
+      return;
+    }
     try {
       await sendPrompt("prompt", inputMessage, { targetTabId: tab.id, throwOnError: true });
       if (emptyStartDraft === inputMessage && emptyStartDraftRevision === sourceDraftRevision) emptyStartDraft = "";

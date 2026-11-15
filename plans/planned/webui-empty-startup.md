@@ -18,4 +18,10 @@ Verify zero sessions on fresh startup/reload; first Enter/click sends original t
 
 ## Status
 
-Plan committed before delegation. Implementation pending. No acceptance claim.
+Plan committed before delegation. Both isolated worker changes are integrated at 23a0040, including shared assertions and offline cache updates. Parent verified 8 launcher cases, three shared static files and 17 actual-app browser cases. Empty-screen and first-message screenshots were inspected. The Settings symbols also use the requested gear outline; two actual-app Settings checks passed.
+
+Full package verification and two independent Sol R1 reviews are running. No acceptance claim yet. Browser evidence is retained under `handoffs/empty-startup-evidence/`; tests use fake Pi and disposable state, not real providers or user configuration.
+
+First package run failed 1/259 files: the send-lifetime VM fixture omitted the new `emptyStartSubmissionPending` variable. Parent supplied its normal false state in 569c8b9; all seven unchanged lifetime assertions now pass. The package rerun writes `/tmp/empty-startup-package-fixed.log` and its `.exit` file. Offline cache browser verification and ten inventory tests also pass.
+
+R1 angle A: accept BUG-001, a background first `/name` opened against the intervening active session. Parent now retains native selector commands in the created session's draft after navigation; ordinary prompts still dispatch to their captured session. Returning to that session and submitting opens its selector. Two actual-app reproductions pass, covering another-session and Settings navigation. Accept BUG-002, the missing VM guard already fixed in 569c8b9. The package rerun completed with all 259 files passing before the selector repair. Final repair checks and R1 angle B remain pending.

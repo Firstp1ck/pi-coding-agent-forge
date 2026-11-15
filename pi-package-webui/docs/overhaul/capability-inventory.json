@@ -489,8 +489,8 @@
     },
     {
       "file": "pi-package-webui/public/app.js",
-      "bytes": 2398551,
-      "sha256": "9a7381369c6bbe741e0ae87d08e59f7ce54c007b8f7033bf359261e6baa86945"
+      "bytes": 2399248,
+      "sha256": "5b024e1dcc82adf24714c623b6550a9b01769cf9fdc6ed756db12c29cdd9159e"
     },
     {
       "file": "pi-package-webui/public/aur-review-payload.mjs",
@@ -1279,7 +1279,7 @@
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "openChatSearch",
-          "line": 50102
+          "line": 50111
         }
       ],
       "targetOwners": [
@@ -1316,7 +1316,7 @@
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "openChatSearch",
-          "line": 50102
+          "line": 50111
         }
       ],
       "targetOwner": "pi-package-webui/public/transcript-renderer.mjs#createTranscriptRenderer; pi-package-webui/public/stream-output-controller.mjs#createStreamOutputController; pi-package-webui/public/platform-event-stream.mjs#createSessionEventStream; pi-package-webui/public/app.js#renderMessages; pi-package-webui/public/app.js#setThinkingOutputVisible; pi-package-webui/public/app.js#setToolOutputGloballyExpanded; pi-package-webui/public/app.js#openChatSearch",
@@ -1413,7 +1413,7 @@
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "sendPrompt",
-          "line": 47362
+          "line": 47371
         },
         {
           "file": "pi-package-webui/public/app.js",
@@ -1435,7 +1435,7 @@
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "sendPrompt",
-          "line": 47362
+          "line": 47371
         },
         {
           "file": "pi-package-webui/public/app.js",
@@ -3552,12 +3552,12 @@
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "showNextDialog",
-          "line": 47911
+          "line": 47920
         },
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "sendDialogResponse",
-          "line": 47684
+          "line": 47693
         }
       ],
       "targetOwners": [
@@ -3569,12 +3569,12 @@
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "showNextDialog",
-          "line": 47911
+          "line": 47920
         },
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "sendDialogResponse",
-          "line": 47684
+          "line": 47693
         }
       ],
       "targetOwner": "pi-package-webui/public/session-extension-requests.mjs#createExtensionRequestStore; pi-package-webui/public/app.js#showNextDialog; pi-package-webui/public/app.js#sendDialogResponse",
@@ -4744,7 +4744,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "addDialogButton",
-        "line": 47730
+        "line": 47739
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -11000,7 +11000,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderWorkflowScriptPreview",
-        "line": 47783
+        "line": 47792
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -11016,7 +11016,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderWorkflowScriptPreview",
-        "line": 47801
+        "line": 47810
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -11032,7 +11032,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderWorkflowScriptPreview",
-        "line": 47789
+        "line": 47798
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -11048,7 +11048,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderWorkflowScriptPreview",
-        "line": 47795
+        "line": 47804
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -11064,7 +11064,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderWorkflowScriptPreview",
-        "line": 47778
+        "line": 47787
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -11080,7 +11080,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderWorkflowScriptPreview",
-        "line": 47823
+        "line": 47832
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -11096,7 +11096,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "renderWorkflowScriptPreview",
-        "line": 47815
+        "line": 47824
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -11544,7 +11544,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "showNextDialog",
-        "line": 47966
+        "line": 47975
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -11560,7 +11560,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "showNextDialog",
-        "line": 47985
+        "line": 47994
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -11576,7 +11576,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "showNextDialog",
-        "line": 48011
+        "line": 48020
       },
       "ancestors": [],
       "classification": "dynamic-template",
@@ -27704,7 +27704,7 @@
       "anchor": {
         "file": "pi-package-webui/public/app.js",
         "symbol": "closeChatSearch",
-        "line": 50198
+        "line": 50207
       },
       "resolvedKey": "pi-webui-control-deck-layout-v2"
     },
@@ -31504,12 +31504,12 @@
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "showNextDialog",
-          "line": 47911
+          "line": 47920
         },
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "createDialogResponder",
-          "line": 47718
+          "line": 47727
         }
       ],
       "stateSource": "dialogQueue / activeDialog",
@@ -31670,7 +31670,7 @@
         {
           "file": "pi-package-webui/public/app.js",
           "symbol": "addDialogButton",
-          "line": 47729
+          "line": 47738
         }
       ],
       "stateSource": "caller-provided tag/label/action",
