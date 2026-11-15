@@ -196,6 +196,14 @@ Drafts persist only in the current browser origin. Storage failures retain memor
 
 Captures: [saved Draft](screenshots/drafts-controls/saved-draft.png), [single-row More](screenshots/drafts-controls/more-row.png), [folder picker](screenshots/drafts-controls/folder-picker.png), and [button-anchored new-tab menu](screenshots/drafts-controls/new-tab.png).
 
+### Persistent update progress
+
+Updates beside Settings offers Pi and extensions + WebUI, WebUI only, and Pi only. The installation-aware command flow remains simple. After confirmation, a persistent card shows command steps, elapsed time, bounded output and a labeled time-based percentage. It stays below 100 while running. Explicit successful no-change output produces Already up to date without a restart prompt. Failures and uncertain launch replies remain visible, and reload recovers the server's current job.
+
+One Sol/high worker and one fresh reviewer handled each of the backend and UI tasks. Parent fixes resolve all three findings: stale status replacing the confirmed launch, multiline environment values leaking through line-by-line redaction, and a viewport test sampling before positioning settled. Guarded child-process tests cover delayed LF/CRLF secret fragments on both streams, raw callbacks, live job snapshots and terminal results. Three actual-app race regressions and five repeated geometry cases pass.
+
+Production candidate `72099e23` passed all 261 package test files in the final guarded run. A prior run interrupted by SIGTERM is superseded by that complete exit-0 result. Affected Chromium cases pass across integrated and targeted runs, including running, unchanged, failed and reload-recovery paths. Syntax, deterministic inventory, package payload and whitespace checks pass. Screenshots were captured, inspected and displayed. No full browser-suite rerun, real installed updates or Windows/macOS execution is claimed. Assets use app213, sidebar update CSS2 and PWA191. No dependency changes or additional update eligibility checks were introduced.
+
 ### Platform limits
 
 Linux Chromium is the verified browser environment. Physical Android/iOS keyboards, IME, microphones, Windows/macOS behavior, WebKit and installed live-provider/companion combinations remain unmeasured. Existing platform-specific behavior is preserved in code and focused contracts, not claimed as device-tested.
