@@ -54,8 +54,12 @@ for (const target of Object.keys(names)) test(`${target} starts its discovered p
   await expect(choice()).toBeDisabled();
   jobs[target] = { ...jobs[target], phase: 'success', receipts: [{ id: target, status: 'success', stdout: 'fixture completed' }] };
   await expect(choice()).toBeEnabled({ timeout: 10_000 });
-  await expect(page.locator('.sidebar-update-menu-status').filter({ hasText: 'update commands completed' })).toBeVisible();
+  await expect(page.locator('.sidebar-update-menu-status').filter({ hasText: 'Update commands completed' })).toBeVisible();
+  await expect(page.locator('.sidebar-update-menu-status').filter({ hasText: 'Update commands completed' })).not.toContainText(`menu-${target}`);
   if (target === 'all') {
+    await page.getByRole('button', { name: 'Back to progress', exact: true }).click();
+    await page.getByRole('button', { name: 'Details', exact: true }).click();
+    await expect(page.getByLabel('Command results', { exact: true })).not.toContainText('menu-all');
     const path = info.outputPath('sidebar-updates-completed.png');
     await page.screenshot({ path });
     await info.attach('Update menu with completion feedback', { path, contentType: 'image/png' });
@@ -105,7 +109,8 @@ for (const target of ['pi', 'all']) test(`${target} feedback replaces an older p
   await page.getByRole('menuitem').filter({ hasText: names[target] }).click();
   await page.locator('#sidebarUpdateButton').click();
   const status = page.locator('.sidebar-update-menu-status');
-  await expect(status).toContainText(`menu-${target}`);
+  await expect(status).toContainText(target === 'all' ? 'Pi, extensions and Web UI:' : 'Pi:');
+  await expect(status).not.toContainText(`menu-${target}`);
   await expect(status).not.toContainText('old WebUI output');
   jobs[target] = { ...jobs[target], phase: 'failed', receipts: [{ id: target, status: 'failed', stderr: 'new command error' }] };
   await expect(status).toContainText('The update command failed.', { timeout: 10_000 });

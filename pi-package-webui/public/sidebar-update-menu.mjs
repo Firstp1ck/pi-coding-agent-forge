@@ -106,12 +106,11 @@ export function createSidebarUpdateMenu({ button, onSelect }) {
   commandResults.id = `${id}Results`;
   commandResults.hidden = true;
   const resultsTitle = node('h3', 'sidebar-update-results-title', 'Command results');
-  const jobIdentity = node('p', 'sidebar-update-job-identity');
   commandResults.setAttribute('role', 'group');
   commandResults.setAttribute('aria-label', 'Command results');
   const commands = node('pre', 'sidebar-update-receipts');
   const receipts = node('pre', 'sidebar-update-receipts');
-  commandResults.append(resultsTitle, jobIdentity, commands, receipts);
+  commandResults.append(resultsTitle, commands, receipts);
   card.append(summary, actions, step, timing, track, heuristic, commandResults, output);
   document.body.append(popup, card);
   button.classList.add('sidebar-update-trigger');
@@ -240,7 +239,6 @@ export function createSidebarUpdateMenu({ button, onSelect }) {
     stdout.hidden = !stdout.textContent;
     stderr.hidden = !stderr.textContent;
     output.hidden = stdout.hidden && stderr.hidden;
-    setText(jobIdentity, `Job ${progress.jobId}`);
     const steps = progress.steps || [];
     const commandLines = steps.map((item) => {
       const receipt = item.receipt;

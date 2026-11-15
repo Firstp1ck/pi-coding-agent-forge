@@ -9635,24 +9635,23 @@ function componentUpdateStatusText(target) {
     return { text: "An update is in progress, but its job ID is not available. Do not retry until its status is known.", level: "warn" };
   }
   if (job) {
-    const id = `Job ${job.transactionId || "unknown"}`;
     const error = job.error ? ` ${String(job.error).slice(0, 600)}` : "";
     switch (job.phase) {
-      case "unknown": return { text: `${id}: completion is unknown.${error} Check the command output on the host before retrying.`, level: "error" };
-      case "partial": return { text: `${id}: partial result. Some commands failed.${error} Review the command results.${job.restartRequired === false ? "" : " Restart Web UI to load any completed updates."}`, level: "warn" };
-      case "failed": return { text: `${id}: update failed.${error} Review the command results before retrying.`, level: "error" };
+      case "unknown": return { text: `Update completion is unknown.${error} Check the command output on the host before retrying.`, level: "error" };
+      case "partial": return { text: `Partial result. Some commands failed.${error} Review the command results.${job.restartRequired === false ? "" : " Restart Web UI to load any completed updates."}`, level: "warn" };
+      case "failed": return { text: `Update failed.${error} Review the command results before retrying.`, level: "error" };
       case "unchanged": return { text: `${label}: Already up to date. No restart is needed.`, level: "success" };
-      case "success": return { text: `${id}: update commands completed. Restart Web UI to load the updated code.`, level: "success" };
-      case "restart-authorized": return { text: `${id}: commands completed and healthy changed active components are waiting for idle before automatic restart.`, level: "warn" };
-      case "restart-in-progress": return { text: `${id}: automatic restart is in progress; reconnecting to the same job.`, level: "warn" };
-      case "restart-pending": return { text: `${id}: successor health and session restoration are not yet confirmed. Do not infer restart success.`, level: "warn" };
-      case "launching": return { text: `${id}: Starting ${label} update…`, level: "info" };
+      case "success": return { text: `Update commands completed. Restart Web UI to load the updated code.`, level: "success" };
+      case "restart-authorized": return { text: `Commands completed and healthy changed active components are waiting for idle before automatic restart.`, level: "warn" };
+      case "restart-in-progress": return { text: `Automatic restart is in progress; reconnecting to the same job.`, level: "warn" };
+      case "restart-pending": return { text: `Successor health and session restoration are not yet confirmed. Do not infer restart success.`, level: "warn" };
+      case "launching": return { text: `Starting ${label} update…`, level: "info" };
       case "running": {
         const progress = job.progress;
         const step = progress ? `Step ${Math.min(progress.completedSteps + 1, progress.totalSteps)} of ${progress.totalSteps}` : "Running update command";
-        return { text: `${id}: ${label}: ${step}${progress?.currentTargetId ? ` · ${progress.currentTargetId}` : ""}.`, level: "info" };
+        return { text: `${label}: ${step}${progress?.currentTargetId ? ` · ${progress.currentTargetId}` : ""}.`, level: "info" };
       }
-      default: return { text: `${id}: ${job.phase || "status pending"}. Waiting for command completion.`, level: "warn" };
+      default: return { text: `${job.phase || "status pending"}. Waiting for command completion.`, level: "warn" };
     }
   }
   const current = formatWebuiVersion((target === "pi" ? pkg.pathInstallationVersion : pkg.currentVersion) || (target === "pi" ? piVersion : webuiVersion) || "");

@@ -167,6 +167,6 @@ assert.match(app, /case "webui_connected":[\s\S]*clearFeatureDecisionStateForTab
 assert.match(app, /statusKey === FEATURE_DECISION_OUTPUT_STATUS_KEY[\s\S]*handleFeatureDecisionOutputStatus[\s\S]*return;[\s\S]*statusKey === FEATURE_CATEGORY_STATUS_KEY[\s\S]*return;[\s\S]*statusEntries\.set/, "both feature statuses should be intercepted before generic footer storage while preserving category handling");
 
 assert.match(html, /\/styles\.css\?v=166/, "integrated stylesheet changes should advance the cache query");
-assert.match(html, /\/app\.js\?v=214/, "integrated app changes should advance the cache query");
+assert.match(html, /\/app\.js\?v=215/, "integrated app changes should advance the cache query");
 
 console.log("feature decision-output popup static checks passed");
