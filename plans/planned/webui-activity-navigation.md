@@ -18,3 +18,11 @@ Sol worker owns only public/shell-workspace.mjs, public/shell-workspace.css and 
 Worker: component browser checks for all groups, selection/callback, disabled options, unknown topic, keyboard/focus and update continuity, Project switch and empty catalog, widths240/320 and light/dark screenshots. Parent: actual app section switching, retained queues/events/usage state, Back/Forward, Project rollback and drafts; relevant existing tests and package coherence. Use disposable fake Pi settings and existing system Chromium; no installation/live config changes.
 
 One fresh Sol/high read-only review after integration, optional second limited to accepted fixes. At most two rounds for this bounded repair. Shelf final review is separate and must not be restarted or expanded. Parent verifies and fixes findings. Archive after verified completion; update existing PR38 under prior authorization, no merge.
+
+## Additional reported access regression: scoped models
+
+User supplied the provider-grouped picker screenshot and reported its absence in compact UI. Parent repair adds a direct Scoped models button alongside Model, reusing the existing canonical picker. Full Model catalog remains accessible. Preserve saved flat/advanced layout, within-provider ordering, keyboard selection and Escape return to the actual opener, session-bound application and draft. Parent owns focused-composer-controls.mjs, focused-shell-adapter.mjs, app.js and focused-model-shortcuts.spec.mjs; no overlap with Activity worker. Combined review includes this bounded access repair; no backend or scope semantics change.
+
+## Integration evidence
+
+Sol worker `3866ef63` integrated as `2a7a1d93`, exactly three owned files, eleven component cases passed. Parent adapted existing Activity tab locators to select labels while retaining controller assertions; added two actual-app cases traversing every section, Back/Forward, no horizontal overflow, draft and Project rollback. Combined affected browser run: 74 passed, zero retries. The scoped picker initially exposed a capture-phase global Alt+Up collision with queue restore; parent excludes model options from that global branch. Four scoped actual-app cases passed after the correction, with draft/no-queue-warning assertions. Offline PWA179 passed. Whole-package check and round-one review remain pending.

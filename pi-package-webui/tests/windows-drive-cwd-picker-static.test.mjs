@@ -76,6 +76,6 @@ assert.ok(packageJson.files.includes("TECHNICAL.md"), "the published package sho
 assert.ok(packageJson.files.includes("DEVELOPMENT.md"), "the published package should include its contributor guide");
 assert.match(html, /styles\.css\?v=161/, "the existing picker layout should retain its stylesheet revision");
 assert.match(html, /app\.js\?v=203/, "the changed picker behavior should advance the app revision");
-assert.match(serviceWorker, /pi-webui-pwa-v178/, "the changed browser assets should advance the PWA cache identity");
+assert.match(serviceWorker, /pi-webui-pwa-v179/, "the changed browser assets should advance the PWA cache identity");
 
 console.log("windows-drive-cwd-picker-static.test.mjs passed");

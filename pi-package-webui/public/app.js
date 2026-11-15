@@ -2611,6 +2611,10 @@ function initializeFocusedShell() {
     getAttention: focusedAttentionSnapshot, onAttentionSelect: openFocusedAttentionItem,
     onBehaviorChange: setBusyPromptBehavior,
     onModel: () => openNativeModelSelector(), onEffort: () => openNativeEffortSelector(),
+    onScopedModels: () => {
+      setFooterModelPickerOpen(!footerModelPickerOpen);
+      if (footerModelPickerOpen) focusFooterModelPickerInitialOption();
+    },
   });
   $("#desktopShellSelect").value = shellPreferenceState.value.desktopLayout;
   $("#focusedNavigationSelect").value = shellPreferenceState.value.navigation || "left";
@@ -25193,6 +25197,7 @@ function renderFooter() {
   else renderMinimalFooter();
   if (!tooltipSnapshot && footerTooltipTarget && !footerTooltipTarget.isConnected) hideFooterTooltip();
   restoreScopedControlContinuity(elements.statusBar, continuityContextKey, focusSnapshot, (key) => [...elements.statusBar.querySelectorAll("input, textarea, select, button")].find((node) => footerControlKey(node) === key));
+  focusedShell?.modelTrigger?.setAttribute("aria-expanded", String(footerModelPickerOpen));
   syncAdvancedFooterModelRovingTabStop();
   restoreTooltipContinuity(elements.statusBar, tooltipSnapshot);
 }
@@ -49583,6 +49588,7 @@ function handleNativeAppShortcut(event) {
     return;
   }
   if (!ctrlOrMeta && event.altKey && key === "ArrowUp") {
+    if (event.target?.closest?.(".footer-model-option")) return;
     event.preventDefault();
     restoreQueuedMessagesToComposerFromShortcut();
     return;

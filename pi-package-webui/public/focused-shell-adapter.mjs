@@ -5,7 +5,7 @@ import { createContextActions } from './shell-context-actions.mjs';
 import { createAttentionInbox } from './shell-attention-inbox.mjs';
 
 /** Places existing application views. The caller retains feature state and navigation. */
-export function createFocusedShellAdapter({ document, viewHost, nodes, sections, onNavigate, onPreferences, onInvoke, getTools, getContextActions, onBehaviorChange, onModel, onEffort, getAttention, onAttentionSelect }) {
+export function createFocusedShellAdapter({ document, viewHost, nodes, sections, onNavigate, onPreferences, onInvoke, getTools, getContextActions, onBehaviorChange, onModel, onEffort, onScopedModels, getAttention, onAttentionSelect }) {
   let mounted = false;
   let inspector = null;
   let toolsTrigger = null;
@@ -14,7 +14,7 @@ export function createFocusedShellAdapter({ document, viewHost, nodes, sections,
   const contentHidden = new Map();
   const settingsIds = ['controls', 'optional-features'];
   const byId = new Map(sections.map(record => [record.id, record]));
-  const composer = createFocusedComposerControls({ document, onBehaviorChange, onModel, onEffort });
+  const composer = createFocusedComposerControls({ document, onBehaviorChange, onModel, onEffort, onScopedModels });
   const composerControls = composer.element;
   composerControls.hidden = true;
   nodes.composer.append(composerControls);
@@ -192,5 +192,5 @@ export function createFocusedShellAdapter({ document, viewHost, nodes, sections,
     }
   }
 
-  return { update, openTools, closeTools, closeAttention: () => inbox.close(), get modelTrigger() { return composerControls.querySelector('.focused-composer-model-value').parentElement; }, get active() { return mounted; }, get inspector() { return mounted ? inspector : null; } };
+  return { update, openTools, closeTools, closeAttention: () => inbox.close(), get modelTrigger() { return composerControls.querySelector('.focused-composer-scoped-models:not([hidden])') || composerControls.querySelector('.focused-composer-model-value').parentElement; }, get active() { return mounted; }, get inspector() { return mounted ? inspector : null; } };
 }

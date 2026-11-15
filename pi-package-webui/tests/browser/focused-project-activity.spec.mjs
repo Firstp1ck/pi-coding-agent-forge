@@ -34,14 +34,14 @@ test('Project topics reveal canonical Files and Changes without losing filters o
 test('Activity topics preserve queue controls and Events filter through navigation and Classic restore', async ({ page }, testInfo) => {
   const rail = page.getByRole('navigation', { name: 'Workspace destinations' });
   await rail.getByRole('button', { name: 'Activity', exact: true }).click();
-  await page.getByRole('tab', { name: 'Queues', exact: true }).click();
+  await page.getByRole('combobox', { name: 'Activity section', exact: true }).selectOption({ label: 'Queues' });
   await expect(page.locator('#createPromptListButton')).toBeVisible();
   await page.locator('#queueBox').evaluate(node => { window.originalQueue = node; });
-  await page.getByRole('tab', { name: 'Events', exact: true }).click();
+  await page.getByRole('combobox', { name: 'Activity section', exact: true }).selectOption({ label: 'Events' });
   await page.locator('#eventFilterSelect').selectOption('warnings');
-  await page.getByRole('tab', { name: 'Queues', exact: true }).click();
+  await page.getByRole('combobox', { name: 'Activity section', exact: true }).selectOption({ label: 'Queues' });
   expect(await page.locator('#queueBox').evaluate(node => node === window.originalQueue)).toBe(true);
-  await page.getByRole('tab', { name: 'Events', exact: true }).click();
+  await page.getByRole('combobox', { name: 'Activity section', exact: true }).selectOption({ label: 'Events' });
   await expect(page.locator('#eventFilterSelect')).toHaveValue('warnings');
   await page.screenshot({ path: testInfo.outputPath('activity-events.png') });
   await rail.getByRole('button', { name: 'Settings', exact: true }).click();

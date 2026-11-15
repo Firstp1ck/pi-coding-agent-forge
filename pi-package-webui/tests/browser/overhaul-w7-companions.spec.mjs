@@ -250,14 +250,14 @@ test('Activity Progress keeps the fake-Pi run alive and routes Pause to the same
   });
   await open(page, ownership);
   await destination(page, 'Activity').click();
-  await page.getByRole('tab', { name: 'Progress', exact: true }).click();
+  await page.getByRole('combobox', { name: 'Activity section', exact: true }).selectOption({ label: 'Progress' });
   const widget = page.locator('[data-feature-host="progress"] .workflow-inspector-widget');
   await expect(widget).toContainText('Fixture Workflow');
   await expect(widget).toContainText('Status: running');
   await destination(page, 'Settings').click();
   await page.locator(`#tabBar [data-tab-id="${ownership.tabs[1].id}"] .terminal-tab-button`).click();
   await destination(page, 'Activity').click();
-  await page.getByRole('tab', { name: 'Progress', exact: true }).click();
+  await page.getByRole('combobox', { name: 'Activity section', exact: true }).selectOption({ label: 'Progress' });
   await expect(widget).toHaveCount(0);
   await page.locator(`#tabBar [data-tab-id="${tabId}"] .terminal-tab-button`).click();
   await expect(widget).toContainText('Status: running');

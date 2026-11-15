@@ -17,7 +17,8 @@ async function open(page, ownership) {
 
 async function topic(page, destination, name) {
   await page.getByRole('navigation', { name: 'Workspace destinations' }).getByRole('button', { name: destination, exact: true }).click();
-  await page.getByRole('tab', { name, exact: true }).click();
+  if (destination === 'Activity') await page.getByRole('combobox', { name: 'Activity section', exact: true }).selectOption({ label: name });
+  else await page.getByRole('tab', { name, exact: true }).click();
 }
 
 test('custom runner configuration, discovery and process lifecycle', async ({ page, ownership }, info) => {

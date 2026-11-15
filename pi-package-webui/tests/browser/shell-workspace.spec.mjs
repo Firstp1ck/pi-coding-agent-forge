@@ -354,25 +354,26 @@ test('inspector topics retain canonical content and support manual keyboard sele
   await page.screenshot({ path: testInfo.outputPath('project-topics.png') });
 });
 
-test('inspector topic updates preserve buttons and remove obsolete keyboard targets', async ({ page }) => {
+test('Activity section updates preserve picker focus and remove obsolete options', async ({ page }) => {
   await page.evaluate(() => {
     shell.update({ destination: 'activity', inspector: 'queue', inspectorTopics: [
       { id: 'subagents', label: 'Agents' }, { id: 'queue', label: 'Queues' }, { id: 'events', label: 'Events' },
     ] });
   });
-  const queues = page.getByRole('tab', { name: 'Queues', exact: true });
-  await queues.evaluate(node => { window.originalQueueTab = node; });
-  await queues.focus();
+  const picker = page.getByRole('combobox', { name: 'Activity section', exact: true });
+  await picker.evaluate(node => { window.originalPicker = node; });
+  await picker.focus();
   await page.evaluate(() => shell.update({ title: 'New status', inspectorTopics: [
     { id: 'subagents', label: 'Agents (2)' }, { id: 'queue', label: 'Queues' },
   ] }));
-  await expect(queues).toBeFocused();
-  expect(await queues.evaluate(node => node === window.originalQueueTab)).toBe(true);
-  await expect(page.getByRole('tab', { name: 'Events', exact: true })).toHaveCount(0);
-  await page.keyboard.press('Home');
-  await expect(page.getByRole('tab', { name: 'Agents (2)', exact: true })).toBeFocused();
-  await page.keyboard.press('End');
-  await expect(queues).toBeFocused();
+  await expect(picker).toBeFocused();
+  expect(await picker.evaluate(node => node === window.originalPicker)).toBe(true);
+  await expect(picker).toHaveValue('queue');
+  await expect(picker.locator('option[value="events"]')).toHaveCount(0);
+  await picker.selectOption('subagents');
+  await expect(picker).toHaveValue('subagents');
+  await picker.selectOption('queue');
+  await expect(picker).toHaveValue('queue');
   await page.evaluate(() => shell.update({ inspectorTopics: [] }));
   await expect(page.getByRole('tablist', { name: 'Inspector topics' })).toBeHidden();
   await expect(page.locator('#editor')).toBeVisible();

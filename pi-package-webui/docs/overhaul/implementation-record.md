@@ -126,6 +126,14 @@ The combined candidate passed 54 Chromium cases and all 253 package test files. 
 
 Captures: [Working and collapsed Settled](screenshots/session-shelves/working-and-settled.png), [expanded Settled](screenshots/session-shelves/settled-expanded.png), [Light theme](screenshots/session-shelves/light.png), [scrolling without a track](screenshots/session-shelves/scrolling.png), and [inspector topics without a track](screenshots/session-shelves/inspector-tabs.png).
 
+### Activity navigation and scoped model access
+
+Activity replaces its horizontal topic strip with a full-width View selector. Options are grouped by Work, Conversations, and Usage & diagnostics. The selected section remains visible at narrow inspector widths. Project retains its shorter tab row. Native selection drives the existing navigation callback, preserving canonical content, filters, queues, drafts and browser history.
+
+A Scoped models button beside Model opens the existing saved-scope picker directly. It retains provider columns, simple layout, ordering and keyboard selection; Model still opens the full catalog. Escape returns to Scoped models. Alt+Up inside a model option reorders it without also invoking global queue restoration.
+
+The affected browser run passed 74 cases; the final shortcut correction passed all four scoped-model cases. PWA179 offline recovery passed. Independent review and the whole-package gate remain pending. See [Activity picker](screenshots/navigation/activity-picker.png) and [scoped models](screenshots/navigation/scoped-models.png).
+
 ### Platform limits
 
 Linux Chromium is the verified browser environment. Physical Android/iOS keyboards, IME, microphones, Windows/macOS behavior, WebKit and installed live-provider/companion combinations remain unmeasured. Existing platform-specific behavior is preserved in code and focused contracts, not claimed as device-tested.

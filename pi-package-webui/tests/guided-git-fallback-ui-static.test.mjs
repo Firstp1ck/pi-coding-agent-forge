@@ -58,6 +58,6 @@ assert.match(technical, /## Guided Git generation profiles[\s\S]*strict one-retr
 assert.match(development, /### Fallback browser\/runtime contract[\s\S]*fallbackUsed: true[\s\S]*webui_git_workflow_generation_fallback_started[\s\S]*never sends a retry/, "development guide should preserve the response/event and browser ownership contract");
 
 assert.match(html, /data-app-src="\/app\.js\?v=203"/, "the changed browser app should use the next query revision");
-assert.match(serviceWorker, /const CACHE_NAME = "pi-webui-pwa-v178";/, "the PWA cache identity should advance with browser behavior");
+assert.match(serviceWorker, /const CACHE_NAME = "pi-webui-pwa-v179";/, "the PWA cache identity should advance with browser behavior");
 
 console.log("guided-git-fallback-ui-static.test.mjs passed");

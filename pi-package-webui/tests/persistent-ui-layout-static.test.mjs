@@ -271,7 +271,7 @@ assert.match(
 
 // --- Coherent browser asset revisions --------------------------------------
 
-assert.match(serviceWorker, /const CACHE_NAME = "pi-webui-pwa-v178"/, "changed browser assets should advance the PWA cache identity");
+assert.match(serviceWorker, /const CACHE_NAME = "pi-webui-pwa-v179"/, "changed browser assets should advance the PWA cache identity");
 assert.match(html, /styles\.css\?v=161/, "the page should request the updated layout stylesheet revision");
 assert.match(html, /data-app-src="\/app\.js\?v=203"/, "the boot loader should request the updated app module revision");
 

@@ -103,7 +103,7 @@ test("dirty file survives Project, Activity and Settings until an explicit save"
     await destination(page, name).click();
     await expect(page.locator("#focusedWorkspace")).toHaveAttribute("data-destination", name.toLowerCase());
     if (name === "Activity") {
-      await page.getByRole("tab", { name: "Events", exact: true }).click();
+      await page.getByRole('combobox', { name: 'Activity section', exact: true }).selectOption({ label: 'Events' });
       await expect(page.locator("#eventFilterSelect")).toBeVisible();
     } else {
       await expect(page.locator("#desktopShellSelect")).toBeVisible();

@@ -58,7 +58,7 @@ Check the server at any time with:
 
 ### Choose your desktop layout
 
-Fresh installations start with the compact desktop layout when the Web UI can confirm there is no earlier Web UI state. Existing installations keep Classic until you choose **Controls → Interface → Desktop layout → Compact preview**. The narrow rail opens Conversation, Project, Activity, and Settings. **All tools** searches the real commands and panels; pin frequent actions there. Model and effort controls stay beside your draft, and **More** opens secondary composer actions. Search **All tools → Model shortcuts** for scoped model ordering and the simple or advanced picker. In **Settings**, search for a setting or choose a category such as Appearance, Models and resources, or Features. Search opens the original control or Setup dialog.
+Fresh installations start with the compact desktop layout when the Web UI can confirm there is no earlier Web UI state. Existing installations keep Classic until you choose **Controls → Interface → Desktop layout → Compact preview**. The narrow rail opens Conversation, Project, Activity, and Settings. **All tools** searches the real commands and panels; pin frequent actions there. Model and effort controls stay beside your draft, and **More** opens secondary composer actions. Choose **Scoped models** beside the composer’s Model button for your saved model scope, including provider groups and model ordering. **Model** still opens the full model catalog; **All tools → Model shortcuts** remains available. In **Settings**, search for a setting or choose a category such as Appearance, Models and resources, or Features. Search opens the original control or Setup dialog.
 
 The compact left sidebar keeps idle, finished, and input-waiting sessions in **Inbox**, with active work in **Working**. Choose **Settle** (✓) on a finished session to move it into **Settled**, collapsed by default. Expand it and choose **Restore** (↥) to bring a session back. New work or a request for input brings it back automatically. Settling does not close the session.
 
@@ -66,7 +66,7 @@ In the compact layout, **Ctrl/Cmd+K** opens the same **All tools** search. Sessi
 
 Select the model or effort beside your draft to open its picker. A choice applies to that session without a separate Apply button. While Pi is working, **During this run** chooses whether the single submission button steers the run or queues your message afterward. Enter follows that choice; Abort remains separate.
 
-**Project** groups Files, Changes, Runners, Releases, and Documents. **Activity** groups Agents, Queues, Progress, Conversations, Events, and provider usage. Open a topic when you need it; changing views keeps running work and unsaved drafts. A queue count beside the draft opens pending follow-ups for editing and reordering.
+**Project** groups Files, Changes, Runners, Releases, and Documents. **Activity** groups Agents, Queues, Progress, Conversations, Events, and provider usage. Use its **View** picker to choose a section without scrolling sideways. Open a section when you need it; changing views keeps running work and unsaved drafts. A queue count beside the draft opens pending follow-ups for editing and reordering.
 
 Choose **Classic** in Settings to return. Your open sessions, drafts, and saved Classic arrangement remain available. Phone and tablet modes have separate preferences.
 

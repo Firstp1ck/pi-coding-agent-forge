@@ -10,7 +10,7 @@ export function composerSubmissionPresentation({ runActive = false, behavior = '
 }
 
 /** Display caller-owned effective settings. Picker callbacks receive their stable trigger button. */
-export function createFocusedComposerControls({ document, onBehaviorChange, onModel, onEffort }) {
+export function createFocusedComposerControls({ document, onBehaviorChange, onModel, onEffort, onScopedModels }) {
   const id = `focusedComposerControls${++nextControlId}`;
   const node = (tag, className, text) => {
     const element = document.createElement(tag);
@@ -39,6 +39,12 @@ export function createFocusedComposerControls({ document, onBehaviorChange, onMo
 
   const model = setting('model', 'Model');
   const effort = setting('effort', 'Effort');
+  const scopedModels = node('button', 'focused-composer-setting-button focused-composer-scoped-models', 'Scoped models');
+  scopedModels.type = 'button';
+  scopedModels.hidden = typeof onScopedModels !== 'function';
+  scopedModels.setAttribute('aria-haspopup', 'listbox');
+  scopedModels.setAttribute('aria-expanded', 'false');
+  scopedModels.title = 'Choose from your saved model scope';
   const busy = node('div', 'focused-composer-busy');
   const behaviorLabel = node('label', 'focused-composer-behavior-label', 'During this run');
   const select = node('select', 'focused-composer-behavior');
@@ -52,7 +58,9 @@ export function createFocusedComposerControls({ document, onBehaviorChange, onMo
   select.setAttribute('aria-describedby', description.id);
   behaviorLabel.append(select);
   busy.append(behaviorLabel, description);
-  element.append(scope, model.group, effort.group, busy);
+  element.append(scope, model.group);
+  if (!scopedModels.hidden) element.append(scopedModels);
+  element.append(effort.group, busy);
 
   let disposed = false;
   let state = {
@@ -81,6 +89,9 @@ export function createFocusedComposerControls({ document, onBehaviorChange, onMo
       'Model selection is unavailable for this session.');
     renderSetting(effort, state.effortLabel, state.effortDisabled, state.effortReason,
       'Effort selection is unavailable for this session.');
+    scopedModels.disabled = Boolean(state.modelDisabled);
+    if (scopedModels.disabled) scopedModels.setAttribute('aria-describedby', model.reason.id);
+    else scopedModels.removeAttribute('aria-describedby');
     select.value = state.behavior;
     busy.hidden = !state.runActive;
     select.disabled = !state.runActive;
@@ -88,6 +99,7 @@ export function createFocusedComposerControls({ document, onBehaviorChange, onMo
     // Hidden or newly disabled controls cannot retain useful keyboard focus.
     if ((focused === select && !state.runActive)
       || (focused === model.button && model.button.disabled)
+      || (focused === scopedModels && scopedModels.disabled)
       || (focused === effort.button && effort.button.disabled)) {
       const target = [model.button, effort.button, select].find((control) => !control.disabled) || element;
       target.focus({ preventScroll: true });
@@ -103,6 +115,9 @@ export function createFocusedComposerControls({ document, onBehaviorChange, onMo
   function openModel() {
     if (!disposed && !model.button.disabled) onModel?.(model.button);
   }
+  function openScopedModels() {
+    if (!disposed && !scopedModels.disabled) onScopedModels?.(scopedModels);
+  }
   function openEffort() {
     if (!disposed && !effort.button.disabled) onEffort?.(effort.button);
   }
@@ -111,12 +126,14 @@ export function createFocusedComposerControls({ document, onBehaviorChange, onMo
     disposed = true;
     select.removeEventListener('change', changeBehavior);
     model.button.removeEventListener('click', openModel);
+    scopedModels.removeEventListener('click', openScopedModels);
     effort.button.removeEventListener('click', openEffort);
     element.remove();
   }
 
   select.addEventListener('change', changeBehavior);
   model.button.addEventListener('click', openModel);
+  scopedModels.addEventListener('click', openScopedModels);
   effort.button.addEventListener('click', openEffort);
   update();
   return { element, update, dispose };

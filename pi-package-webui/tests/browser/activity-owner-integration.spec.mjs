@@ -12,7 +12,7 @@ async function openActivity(page, ownership, topic) {
   await page.goto(`${ownership.baseURL}/?tab=${encodeURIComponent(ownership.tabs[0].id)}`);
   await expect(page.locator("#modelSelect")).not.toBeEmpty();
   await page.getByRole("navigation", { name: "Workspace destinations" }).getByRole("button", { name: "Activity", exact: true }).click();
-  await page.getByRole("tab", { name: topic, exact: true }).click();
+  await page.getByRole('combobox', { name: 'Activity section', exact: true }).selectOption({ label: topic });
 }
 
 test("Usage topics retain canonical provider data and explicit refresh through Classic restoration", async ({ page, ownership }, testInfo) => {
@@ -30,7 +30,7 @@ test("Usage topics retain canonical provider data and explicit refresh through C
   await page.locator("#refreshCodexUsageButton").click();
   await refresh;
   expect(requests.every(url => !url.searchParams.has("tab"))).toBe(true);
-  await page.getByRole("tab", { name: "Claude usage", exact: true }).click();
+  await page.getByRole('combobox', { name: 'Activity section', exact: true }).selectOption({ label: 'Claude usage' });
   await expect(page.locator("#claudeUsageBox")).toContainText("41%");
   await expect(page.locator("#claudeUsageBox")).toContainText("Fixture Claude account");
   await page.screenshot({ path: testInfo.outputPath("activity-usage.png") });
@@ -72,7 +72,7 @@ test("Activity and composer conversations share the exact dialog and originating
   await page.keyboard.press("Escape");
   await page.locator(`#tabBar [data-tab-id="${ownership.tabs[1].id}"] .terminal-tab-button`).click();
   await rail.getByRole("button", { name: "Activity", exact: true }).click();
-  await page.getByRole("tab", { name: "Conversations", exact: true }).click();
+  await page.getByRole('combobox', { name: 'Activity section', exact: true }).selectOption({ label: 'Conversations' });
   await expect(link).toHaveCount(0);
   expect(detailTargets.length).toBeGreaterThanOrEqual(2);
   expect(detailTargets.every(target => target.tab === ownership.tabs[0].id && target.id === id)).toBe(true);
@@ -97,7 +97,7 @@ test("Agents output navigation preserves runs and explicit cancel and dismiss us
   expect(before.groups.flatMap(group => group.runs).find(run => run.id === "fixture-run").status).toBe("running");
   expect(mutations).toEqual([]);
   await rail.getByRole("button", { name: "Activity", exact: true }).click();
-  await page.getByRole("tab", { name: "Agents", exact: true }).click();
+  await page.getByRole('combobox', { name: 'Activity section', exact: true }).selectOption({ label: 'Agents' });
   await page.locator("#subagentsBox .subagent-agent-row").first().click();
   await page.locator(".subagent-overlay-cancel-action").click();
   await expect(page.locator("#subagentCancelDialogSubtitle")).toContainText("all 2 agents");
@@ -144,7 +144,7 @@ test("Queues share authoritative edits, reorder, and removal across Activity and
   await page.screenshot({ path: testInfo.outputPath("activity-queue-edits.png") });
   await page.keyboard.press("Escape");
   await rail.getByRole("button", { name: "Activity", exact: true }).click();
-  await page.getByRole("tab", { name: "Queues", exact: true }).click();
+  await page.getByRole('combobox', { name: 'Activity section', exact: true }).selectOption({ label: 'Queues' });
   await expect(page.locator("#queueBox")).toContainText("edited first");
   await page.locator("#queueBox").getByRole("button", { name: "Remove queued follow-up #2", exact: true }).click();
   await expect(page.locator("#queueBox")).not.toContainText("edited first");
@@ -172,7 +172,7 @@ for (const question of ["", "Explain this separately"]) {
     await page.locator("#composerActionsButton").click();
     await page.locator("#btwButton").click();
     await expect(page.locator("#focusedWorkspace")).toHaveAttribute("data-destination", "activity");
-    await expect(page.getByRole("tab", { name: "Conversations", exact: true })).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByRole('combobox', { name: 'Activity section', exact: true })).toHaveValue('conversations');
     const input = page.locator('[data-feature-host="conversations"] .btw-widget-input');
     await expect(input).toBeVisible();
     await expect(input).toBeFocused();
