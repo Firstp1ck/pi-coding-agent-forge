@@ -177,7 +177,8 @@ async function checkMore(page, info, name) {
   expect(menuBounds.x + menuBounds.width).toBeLessThanOrEqual(viewport.width);
   expect(menuBounds.y).toBeGreaterThanOrEqual(0);
   expect(menuBounds.y + menuBounds.height).toBeLessThanOrEqual(viewport.height);
-  expect(menuBounds.x).toBeCloseTo(options.x, 0);
+  const openedOptions = await page.locator('#optionsMenuButton').boundingBox();
+  expect(menuBounds.x).toBeCloseTo(openedOptions.x, 0);
   await page.locator('#optionsSessionSubmenuButton').focus();
   await page.keyboard.press('ArrowRight');
   await page.locator('#optionsNameButton').click({ trial: true });
