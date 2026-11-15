@@ -68,7 +68,14 @@ Final self-contained report: [interaction acceptance](../../handoffs/webui-inter
 - Native model dialog currently has fewer generation guards than append-system; integration must cover close/reopen and same-tab session replacement.
 - Existing background metadata exposes counts rather than all request bodies; inbox must be honest about that limit.
 - Scope after first four improvements is deferred, not implicitly authorized architectural churn.
-- 2026-11-15: source seams verified; baseline clean; Sol/Codex availability confirmed. Workers and acceptance pending.
+- 2026-11-15: source seams verified; baseline clean; Sol/Codex availability confirmed.
+- Three isolated Sol/high outcomes inspected and integrated: A `b6f2f398` → `123e8db2` with 11 component cases; B `3a667a39` → `aaf3ea6b` with 21 component cases; C `676a7a63` → `c0edced0` with 10 new and 10 unchanged launcher cases. Handoffs remain in their tool-managed worktrees, under the unique paths specified above.
+- Parent model ownership and canonical alias/pin changes committed `6465b40`. Five ownership cases and seven existing action-adapter cases pass. Native model source supports session-local selection without restarting the active response; server effort changes explicitly return a pending-next-prompt value while busy.
+- Central integration: 51 new browser cases passed, zero retries, log `/tmp/webui-interaction-new-all.log`. Adjacent run passed 36/37; its sole stale Activity badge assertion was updated to verify the distinct Attention callback, then all 12 workspace cases passed in `/tmp/webui-interaction-workspace-final.log`. Existing model shortcut tests now verify the replacement effective-model trigger and focus return.
+- Initial package check passed 250/251 files; `mobile-static.test.mjs` had two stale source-shape assertions for focused hidden buttons and captured model requests. Both retargeted while preserving behavior, and the whole static file passes. Exact final package rerun pending.
+- Browser fixture corrections: explicit Focused preference, selector scoping to native dialog, opaque 16+ character fixture request IDs, correct `extensionDialog` ID. No approval product defect was established. Busy normal delivery uses `/api/prompt` plus `streamingBehavior`, rather than direct `/api/steer`; the integration test now verifies that actual contract, with bounded dispatch mocks because fake Pi lacks upstream busy delivery.
+- Parent inspected and displayed integrated busy-composer and background-decision screenshots from `test-results/interaction-new-all`. Header Attention is separate from Activity navigation; decisions are urgent, completion count is separate. No destination reorganization.
+- App202 / focused adapter CSS4 / PWA174, new component styles1. Inventory regenerated and current. Full browser suite, package rerun, packaging, independent reviews and final report remain pending.
 
 ## Review ledger
 

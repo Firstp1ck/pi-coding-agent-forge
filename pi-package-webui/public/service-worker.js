@@ -1,4 +1,4 @@
-const CACHE_NAME = "pi-webui-pwa-v173";
+const CACHE_NAME = "pi-webui-pwa-v174";
 const APP_SHELL = [
   "/",
   "/index.html",
@@ -27,6 +27,12 @@ const APP_SHELL = [
   "/shell-workspace.css",
   "/shell-tools-launcher.mjs",
   "/shell-tools-launcher.css",
+  "/shell-attention-inbox.mjs",
+  "/shell-attention-inbox.css",
+  "/shell-context-actions.mjs",
+  "/shell-context-actions.css",
+  "/focused-composer-controls.mjs",
+  "/focused-composer-controls.css",
   "/focused-shell-adapter.mjs",
   "/focused-shell-adapter.css",
   "/shell-navigation.mjs",

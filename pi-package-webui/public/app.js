@@ -1,3 +1,4 @@
+import { composerSubmissionPresentation } from "./focused-composer-controls.mjs";
 import { createSettingsResourceController } from "./settings-resource-controller.mjs";
 import { createActivityQueueController, normalizeQueuedMessages, queueMessageCount } from "./activity-queue-controller.mjs";
 import { createActivityAgentsController } from "./activity-agents-controller.mjs";
@@ -2291,6 +2292,45 @@ function focusedInspectorTopics(destination) {
 
 let renderedFeatureWidgetDestination = null;
 
+function focusedAttentionSnapshot() {
+  const items = tabs.flatMap(tab => {
+    const state = tabIndicator(tab).state;
+    if (!["blocked", "working", "done"].includes(state)) return [];
+    const decisionCount = tabPendingBlockerCount(tab);
+    return [{ id: `tab:${tab.id}`, tabId: tab.id, title: tab.title || "Untitled session", state, decisionCount,
+      detail: state === "blocked" ? `${decisionCount} decision${decisionCount === 1 ? "" : "s"} waiting · ${tab.cwd || ""}`
+        : state === "done" ? `Finished since last viewed · ${tab.cwd || ""}` : `Pi is running · ${tab.cwd || ""}`,
+      target: { lifetime: sessionContext.captureLifetime(tab.id), cwd: tab.cwd || "", completionSerial: activityForTab(tab).completionSerial },
+    }];
+  });
+  return { items };
+}
+
+async function openFocusedAttentionItem(item) {
+  const tab = tabs.find(tab => tab.id === item.tabId);
+  const targetValid = tab && sessionContext.isLifetimeCurrent(item.target?.lifetime) && (tab.cwd || "") === item.target.cwd;
+  const current = focusedAttentionSnapshot().items.find(candidate => candidate.id === item.id && candidate.state === item.state);
+  if (!targetValid || !current || (item.state === "done" && current.target.completionSerial !== item.target.completionSerial)) {
+    focusedShell.closeAttention();
+    addEvent("That activity changed. Open Attention again to see its current state.", "warn");
+    return;
+  }
+  focusedShell.closeAttention();
+  navigateFocusedShell("conversation", null);
+  try {
+    if (item.tabId !== activeTabId) await switchTab(item.tabId);
+    if (activeTabId !== item.tabId || !sessionContext.isLifetimeCurrent(item.target.lifetime)) return;
+    if (item.state === "blocked") {
+      // Switching tabs attaches its event stream; pending requests replay there.
+      // Do not synthesize a decision from metadata that contains only a count.
+      if (!extensionRequests.active) showNextDialog();
+      if (!elements.dialog.open && tabPendingBlockerCount(tabs.find(tab => tab.id === item.tabId)) === 0) {
+        addEvent("This session no longer needs a decision.", "info");
+      }
+    }
+  } catch (error) { addEvent(error.message || String(error), "error"); }
+}
+
 function renderFocusedShell() {
   if (!focusedShell) return;
   const wasActive = focusedShell.active;
@@ -2306,8 +2346,15 @@ function renderFocusedShell() {
     inspectorTopics: record && focusedShellState.destination !== "settings" ? focusedInspectorTopics(focusedShellState.destination) : [],
     title: active?.title || "Choose a session",
     context: active?.cwd || "",
-    attentionCount: tabs.filter(tab => mobileTabActivityState(tab) === "blocked").length,
+    attentionCount: focusedAttentionSnapshot().items.filter(item => item.state === "blocked").reduce((sum, item) => sum + item.decisionCount, 0),
+    finishedCount: focusedAttentionSnapshot().items.filter(item => item.state === "done").length,
     homeCollapsed: workspaceDashboardCollapsed,
+    composer: {
+      runActive: isRunActive(), behavior: busyPromptBehavior,
+      modelLabel: shortModelLabel(currentState?.model), effortLabel: footerThinkingDisplay(),
+      modelDisabled: !active?.running, effortDisabled: !active?.running || !currentState?.model,
+      modelReason: "Start a session to choose a model.", effortReason: "Wait for the session model to load.",
+    },
   });
   settingsWorkspace?.update({
     enabled: focusedShell.active, destination: focusedShellState.destination,
@@ -2506,6 +2553,13 @@ function focusedToolsActions() {
   }))];
 }
 
+function focusedContextActions(category, actions) {
+  const ids = category === "Project"
+    ? ["view:files", "project:changes", "project:guided-git", "view:runners", "project:branch-worktree", "view:artifacts"]
+    : ["session:new", "native:resume", "native:fork", "native:tree", "conversation:search", "session:compact"];
+  return ids.map(id => actions.find(action => action.id === id)).filter(Boolean);
+}
+
 function focusedToolsSnapshot() {
   const actions = focusedToolsActions();
   const aliases = new Map(actions.filter(action => action.id.startsWith("native:") && action.label.startsWith("/"))
@@ -2544,7 +2598,10 @@ function initializeFocusedShell() {
     nodes: { ...elements, settingsRoot: settingsWorkspace.element, layout: $(".layout"), conversation: $(".workspace-column"), navigation: elements.terminalTabsShell, home: elements.workspaceDashboard, footer: $("[data-control-deck-shared-footer]"), versions: $(".side-panel-version-row") },
     sections: focusedInspectorRecords(), onNavigate: navigateFocusedShell,
     onPreferences: saveFocusedShellPreferences, onInvoke: invokeFocusedTool,
-    getTools: focusedToolsSnapshot,
+    getTools: focusedToolsSnapshot, getContextActions: focusedContextActions,
+    getAttention: focusedAttentionSnapshot, onAttentionSelect: openFocusedAttentionItem,
+    onBehaviorChange: setBusyPromptBehavior,
+    onModel: () => openNativeModelSelector(), onEffort: () => openNativeEffortSelector(),
   });
   $("#desktopShellSelect").value = shellPreferenceState.value.desktopLayout;
   $("#focusedNavigationSelect").value = shellPreferenceState.value.navigation || "left";
@@ -7678,6 +7735,8 @@ function setBusyPromptBehavior(value, { persist = true } = {}) {
   webuiSettings = { ...webuiSettings, busyPromptBehavior: next };
   if (persist) persistBusyPromptBehavior(next);
   renderBusyPromptBehaviorTag();
+  scheduleComposerModeButtonsUpdate();
+  scheduleFocusedShellRender();
 }
 
 function restoreBusyPromptBehaviorSetting() {
@@ -7840,7 +7899,7 @@ function updateComposerModeButtons() {
   const before = runActive && elements.abortButton.parentElement === target ? elements.abortButton : null;
   for (const button of [elements.steerButton, elements.followUpButton]) {
     if (button.parentElement !== target) target.insertBefore(button, before);
-    button.hidden = !runActive;
+    button.hidden = !runActive || focusedShell?.active === true;
     button.disabled = !runActive;
   }
   const abortHoldActive = isAbortLongPressActive();
@@ -7868,15 +7927,17 @@ function renderSendButtonMode(runActive = isRunActive()) {
   const button = elements.sendButton;
   if (!button) return;
   const behavior = normalizeBusyPromptBehavior(busyPromptBehavior);
-  const label = !runActive ? "Send" : behavior === "steer" ? "Steer" : "Queue";
+  const presentation = focusedShell?.active ? composerSubmissionPresentation({ runActive, behavior }) : null;
+  const label = presentation?.label || (!runActive ? "Send" : behavior === "steer" ? "Steer" : "Queue");
   const title = !runActive
     ? "Send prompt — Shift+F10 opens visibility options"
     : behavior === "steer"
       ? "Pi is running: Enter steers the active run with this text. Change the behavior via the tag above the prompt."
       : "Pi is running: Enter queues this text as a follow-up. Change the behavior via the tag above the prompt.";
   if (button.textContent !== label) button.textContent = label;
-  if (button.title !== title) button.title = title;
-  button.setAttribute("aria-label", runActive ? `${label} (Send while Pi is running)` : "Send");
+  const help = presentation?.description || title;
+  if (button.title !== help) button.title = help;
+  button.setAttribute("aria-label", presentation ? label : runActive ? `${label} (Send while Pi is running)` : "Send");
   button.classList.toggle("send-busy-mode", runActive);
 }
 
@@ -7897,7 +7958,7 @@ function isFooterPickerOpen() {
 function footerActivePickerTarget() {
   if (footerBranchPickerOpen) return elements.statusBar.querySelector(".footer-branch.footer-meta-action");
   if (footerThinkingPickerOpen) return elements.statusBar.querySelector(".footer-thinking.footer-meta-action");
-  if (footerModelPickerOpen) return focusedShell?.active ? elements.modelSelect : elements.statusBar.querySelector(".footer-model.footer-meta-action, .footer-tui-model");
+  if (footerModelPickerOpen) return focusedShell?.active ? focusedShell.modelTrigger : elements.statusBar.querySelector(".footer-model.footer-meta-action, .footer-tui-model");
   return null;
 }
 
@@ -24251,7 +24312,7 @@ async function applyFooterModel(model) {
 
 function focusFooterModelTrigger() {
   queueMicrotask(() => {
-    const trigger = focusedShell?.active ? elements.modelSelect : elements.statusBar.querySelector(".footer-model.footer-meta-action, .footer-tui-model");
+    const trigger = focusedShell?.active ? focusedShell.modelTrigger : elements.statusBar.querySelector(".footer-model.footer-meta-action, .footer-tui-model");
     trigger?.focus({ preventScroll: true });
   });
 }
@@ -46106,7 +46167,7 @@ function renderCommandPalette({ preserveScroll = false } = {}) {
 }
 
 function openCommandPalette(initialQuery = "") {
-  if (focusedShell?.active && !initialQuery) { focusedShell.openTools(); return; }
+  if (focusedShell?.active) { focusedShell.openTools(undefined, undefined, initialQuery); return; }
   setComposerActionsOpen(false);
   setPublishMenuOpen(false);
   setNativeCommandMenuOpen(false);

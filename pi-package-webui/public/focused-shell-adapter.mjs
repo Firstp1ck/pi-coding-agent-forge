@@ -1,8 +1,11 @@
 import { createFocusedWorkspace } from './shell-workspace.mjs';
 import { createToolsLauncher } from './shell-tools-launcher.mjs';
+import { createFocusedComposerControls } from './focused-composer-controls.mjs';
+import { createContextActions } from './shell-context-actions.mjs';
+import { createAttentionInbox } from './shell-attention-inbox.mjs';
 
 /** Places existing application views. The caller retains feature state and navigation. */
-export function createFocusedShellAdapter({ document, viewHost, nodes, sections, onNavigate, onPreferences, onInvoke, getTools }) {
+export function createFocusedShellAdapter({ document, viewHost, nodes, sections, onNavigate, onPreferences, onInvoke, getTools, getContextActions, onBehaviorChange, onModel, onEffort, getAttention, onAttentionSelect }) {
   let mounted = false;
   let inspector = null;
   let toolsTrigger = null;
@@ -11,9 +14,8 @@ export function createFocusedShellAdapter({ document, viewHost, nodes, sections,
   const contentHidden = new Map();
   const settingsIds = ['controls', 'optional-features'];
   const byId = new Map(sections.map(record => [record.id, record]));
-  const modelRows = [nodes.modelSelect, nodes.thinkingSelect].map(node => node.closest('.control-row'));
-  const composerControls = document.createElement('div');
-  composerControls.className = 'focused-composer-controls';
+  const composer = createFocusedComposerControls({ document, onBehaviorChange, onModel, onEffort });
+  const composerControls = composer.element;
   composerControls.hidden = true;
   nodes.composer.append(composerControls);
   const tools = createToolsLauncher({ document, onInvoke,
@@ -22,17 +24,33 @@ export function createFocusedShellAdapter({ document, viewHost, nodes, sections,
     },
     onClose: () => syncModalRunControls(),
   });
+  let contextCategory = null;
+  let contextSignature = '';
+  const contextActions = createContextActions({ document, onInvoke,
+    onMore: category => {
+      const trigger = closeTools();
+      openTools(category, trigger);
+    },
+    onClose: () => syncModalRunControls(),
+  });
+  const inbox = createAttentionInbox({ document, onSelect: onAttentionSelect,
+    onClose: () => syncModalRunControls(),
+  });
   const workspace = createFocusedWorkspace({ document, onNavigate,
     onTools: () => openTools(),
+    onAttention: () => {
+      inbox.open(getAttention(), document.activeElement);
+      if (mounted) moveRunControls(inbox.slots.runControls);
+    },
     onToggleNavigation: () => onPreferences({ navCollapsed: !snapshot.navCollapsed }),
-    onSessionMenu: () => openTools('Session'),
-    onProjectMenu: () => openTools('Project'),
+    onSessionMenu: () => openContextActions('Session'),
+    onProjectMenu: () => openContextActions('Project'),
     onInspectorClose: () => onNavigate('conversation', null),
     onConversation: () => onNavigate('conversation', null),
     onInspectorSelect: id => onNavigate(snapshot.destination, id),
   });
   workspace.element.hidden = true;
-  document.body.append(workspace.element, tools.element);
+  document.body.append(workspace.element, tools.element, contextActions.element, inbox.element);
   let snapshot = {};
 
   function moveRunControls(host) {
@@ -45,6 +63,8 @@ export function createFocusedShellAdapter({ document, viewHost, nodes, sections,
     const dialog = modalStack.at(-1);
     let host = workspace.slots.runControls;
     if (dialog === tools.element) host = tools.slots.runControls;
+    else if (dialog === contextActions.element) host = contextActions.slots.runControls;
+    else if (dialog === inbox.element) host = inbox.slots.runControls;
     else if (dialog) {
       host = modalHosts.get(dialog);
       if (!host) {
@@ -87,18 +107,31 @@ export function createFocusedShellAdapter({ document, viewHost, nodes, sections,
     contentHidden.delete(id);
   }
 
-  function openTools(category) {
-    if (!tools.element.open) toolsTrigger = document.activeElement;
+  function contextSnapshot(category) {
     const data = getTools();
-    // Context menus use the same authoritative records and dispatch checks.
-    if (category) data.actions = data.actions.filter(action => action.category === category);
-    tools.open(data);
+    return { title: `${category} actions`, category, contextLabel: data.contextLabel,
+      actions: getContextActions(category, data.actions) };
+  }
+
+  function openContextActions(category) {
+    toolsTrigger = document.activeElement;
+    contextCategory = category;
+    const data = contextSnapshot(category);
+    contextSignature = JSON.stringify(data);
+    contextActions.open(data, toolsTrigger);
+    if (mounted) moveRunControls(contextActions.slots.runControls);
+  }
+
+  function openTools(category, trigger, initialQuery = '') {
+    if (!tools.element.open) toolsTrigger = trigger || document.activeElement;
+    tools.open({ ...getTools(), initialCategory: category, initialQuery });
     if (mounted) moveRunControls(tools.slots.runControls);
   }
 
   function closeTools() {
-    const trigger = tools.element.open ? toolsTrigger : undefined;
+    const trigger = tools.element.open || contextActions.element.open ? toolsTrigger : undefined;
     tools.close();
+    contextActions.close();
     toolsTrigger = null;
     return trigger;
   }
@@ -107,12 +140,13 @@ export function createFocusedShellAdapter({ document, viewHost, nodes, sections,
     snapshot = next;
     if (!next.enabled) {
       if (!mounted) return;
-      tools.close();
+      closeTools();
+      inbox.close();
       nodes.layout.hidden = false;
       nodes.layout.inert = false;
       document.documentElement.removeAttribute('data-desktop-shell');
       for (const id of [...contentHidden.keys()]) restoreContent(id);
-      for (const node of [...modelRows, nodes.abortButton, nodes.conversationModeEndButton, nodes.navigation, nodes.home, nodes.footer, nodes.versions, nodes.settingsRoot, nodes.conversation]) {
+      for (const node of [nodes.abortButton, nodes.conversationModeEndButton, nodes.navigation, nodes.home, nodes.footer, nodes.versions, nodes.settingsRoot, nodes.conversation]) {
         if (node) viewHost.restore(node);
       }
       nodes.home.hidden = next.homeCollapsed;
@@ -125,7 +159,14 @@ export function createFocusedShellAdapter({ document, viewHost, nodes, sections,
     workspace.element.hidden = false;
     document.documentElement.dataset.desktopShell = 'focused';
     workspace.update(next);
-    for (const host of [workspace.slots.runControls, tools.slots.runControls]) host.setAttribute("aria-label", `Run controls for ${next.title}`);
+    composer.update(next.composer || {});
+    if (inbox.element.open) inbox.update(getAttention());
+    if (contextActions.element.open) {
+      const data = contextSnapshot(contextCategory);
+      const signature = JSON.stringify(data);
+      if (signature !== contextSignature) { contextSignature = signature; contextActions.update(data); }
+    }
+    for (const host of [workspace.slots.runControls, tools.slots.runControls, contextActions.slots.runControls, inbox.slots.runControls]) host.setAttribute("aria-label", `Run controls for ${next.title}`);
     if (!mounted) {
       viewHost.move(nodes.conversation, workspace.slots.conversation);
       viewHost.move(nodes.navigation, workspace.slots.navigation);
@@ -135,7 +176,6 @@ export function createFocusedShellAdapter({ document, viewHost, nodes, sections,
         for (const id of settingsIds) mountContent(id, workspace.slots.settings);
         for (const node of [nodes.footer, nodes.versions]) if (node) viewHost.move(node, workspace.slots.settings);
       }
-      for (const row of modelRows) viewHost.move(row, composerControls);
       composerControls.hidden = false;
       moveRunControls(workspace.slots.runControls);
       mounted = true;
@@ -152,5 +192,5 @@ export function createFocusedShellAdapter({ document, viewHost, nodes, sections,
     }
   }
 
-  return { update, openTools, closeTools, get active() { return mounted; }, get inspector() { return mounted ? inspector : null; } };
+  return { update, openTools, closeTools, closeAttention: () => inbox.close(), get modelTrigger() { return composerControls.querySelector('.focused-composer-model-value').parentElement; }, get active() { return mounted; }, get inspector() { return mounted ? inspector : null; } };
 }

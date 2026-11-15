@@ -20,7 +20,7 @@ for (const layout of ['flat', 'advanced']) {
     await expect(page.locator('#focusedWorkspace')).toBeVisible();
     await expect(page.locator('#modelSelect')).not.toBeEmpty();
     await expect(page.locator('#statusBar .footer-model, #statusBar .footer-tui-model')).toBeHidden();
-    await expect(page.locator('.focused-composer-controls #modelSelect')).toBeVisible();
+    await expect(page.locator('.focused-composer-controls').getByRole('button', { name: /^Model:/ })).toBeVisible();
     const rail = page.getByRole('navigation', { name: 'Workspace destinations' });
     await rail.getByRole('button', { name: 'Settings', exact: true }).click();
     await rail.getByRole('button', { name: 'All tools', exact: true }).click();
@@ -37,7 +37,7 @@ for (const layout of ['flat', 'advanced']) {
     await page.screenshot({ path: testInfo.outputPath('focused-model-' + layout + '.png') });
     await page.keyboard.press('Escape');
     await expect(picker).toHaveCount(0);
-    await expect(page.locator('#modelSearchInput')).toBeFocused();
+    await expect(page.locator('.focused-composer-controls').getByRole('button', { name: /^Model:/ })).toBeFocused();
     await rail.getByRole('button', { name: 'All tools', exact: true }).click();
     await page.getByRole('searchbox', { name: 'Search all tools' }).fill('model shortcuts');
     const nextLayout = layout === 'advanced' ? 'simple' : 'advanced';

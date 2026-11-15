@@ -1,15 +1,9 @@
 html[data-desktop-shell="focused"] .layout[hidden] { display: none !important; }
 .focused-composer-controls[hidden] { display: none; }
-html[data-desktop-shell="focused"] .focused-composer-controls {
-  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
-  border-top: 1px solid var(--border); padding: 6px 0 0;
-}
-html[data-desktop-shell="focused"] .focused-composer-controls .control-row {
-  display: flex; gap: 5px; align-items: center; position: relative; min-width: 0;
-}
-html[data-desktop-shell="focused"] .focused-composer-controls select { max-width: 230px; }
-html[data-desktop-shell="focused"] .focused-composer-controls .control-row-label { font-size: 11px; }
-html[data-desktop-shell="focused"] .focused-composer-controls .model-search-results { position: absolute; bottom: 100%; z-index: 50; }
+html[data-desktop-shell="focused"] .control-row:has(#modelSelect),
+html[data-desktop-shell="focused"] .control-row:has(#thinkingSelect),
+html[data-desktop-shell="focused"] #busyPromptBehaviorTag,
+html[data-desktop-shell="focused"] #busyPromptBehaviorMenu { display: none !important; }
 html[data-desktop-shell="focused"] #composerActionsButton { display: inline-flex; }
 html[data-desktop-shell="focused"] #composerActionsPanel { display: none; }
 html[data-desktop-shell="focused"] body.composer-actions-open #composerActionsPanel {
@@ -47,8 +41,7 @@ html[data-desktop-shell="focused"] #focusedWorkspace { height: var(--visual-view
 
 .focused-modal-run-controls { display: flex; gap: 8px; flex-wrap: wrap; }
 .focused-modal-run-controls:has(> button:not([hidden])) { padding-block: 8px; border-top: 1px solid var(--border); }
-#focusedWorkspace .focused-composer-controls button,
-#focusedWorkspace .focused-composer-controls select { min-height: 30px; padding-block: 4px; font-size: 12px; }
+
 #focusedWorkspace .composer-row > button { min-height: 34px; padding-block: 5px; }
 #focusedWorkspace .terminal-tab-actions { flex: 0 0 40px; min-width: 40px; flex-direction: row; }
 #focusedWorkspace .terminal-tab-close { flex-basis: 22px; min-width: 22px; padding-inline: 3px; }
@@ -92,3 +85,8 @@ html[data-desktop-shell="focused"] #focusedWorkspace { height: var(--visual-view
 
 html[data-desktop-shell="focused"] #statusBar .footer-model,
 html[data-desktop-shell="focused"] #statusBar .footer-tui-model { display: none; }
+
+.focused-inbox-button { position: relative; }
+.focused-inbox-button .focused-attention { position: static; }
+.focused-finished { color: var(--muted); font-size: 11px; }
+.focused-inbox-button [hidden] { display: none; }

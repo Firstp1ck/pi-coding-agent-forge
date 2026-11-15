@@ -168,7 +168,7 @@ export function createToolsLauncher({ document, onInvoke, onPinsChange, onClose 
   function open(snapshot = {}) {
     if (disposed) return;
     if (!element.open) {
-      search.value = '';
+      search.value = typeof snapshot.initialQuery === 'string' ? snapshot.initialQuery : '';
       selectedCategory = snapshot.initialCategory ? `category:${snapshot.initialCategory}` : 'all';
     }
     update(snapshot);

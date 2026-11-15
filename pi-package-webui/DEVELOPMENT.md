@@ -4,6 +4,18 @@ Contributor-only implementation, API, architecture, testing, and maintenance inf
 
 [Back to README](README.md) · [Advanced user technical reference](TECHNICAL.md)
 
+## Compact interaction controls
+
+`focused-composer-controls.mjs` projects effective model/effort and busy submission state. `app.js` retains draft, attachment, request-ID and dispatch ownership. Busy normal submissions remain prompt requests with `streamingBehavior`; the UI does not replace that path with direct steer/follow-up calls. Classic controls remain in their original DOM homes.
+
+`nativeSessionChoiceOwner` captures the session lifetime and native-dialog generation. It admits one request at a time and prevents late success/error handlers from changing a replacement session or dialog. Effort uses the server's pending-value response; model changes use the existing native RPC. These pickers do not persist global defaults.
+
+`shell-context-actions.mjs` renders a bounded selection from the same records used by `shell-tools-launcher.mjs`. More actions changes the initial category without limiting full-catalog search. Native slash aliases share one focused entry, and old alias pins resolve to its canonical ID. Dispatch still recomputes target validity and availability.
+
+`shell-attention-inbox.mjs` renders caller-owned snapshots without polling or changing seen state. The adapter moves canonical run controls into the foreground native dialog. The app validates the selected tab lifetime, folder and completion serial, then uses normal tab switching and blocking-request replay. It never constructs response payloads from metadata counts.
+
+Run the `interaction-*` browser specs together with existing focused-shell, session-ownership, launcher and mobile coverage. `native-session-choice-owner.test.mjs` exercises deferred responses against the actual application function. Browser fixtures use disposable state and fake Pi; the busy-submission test records HTTP delivery metadata while holding a real fixture stream, because fake Pi does not implement upstream busy prompt delivery.
+
 ## Shell ownership
 
 Classic and mobile adapters in `public/app.js` share five flat ES modules:

@@ -69,6 +69,7 @@ window.createFocusedWorkspace = createFocusedWorkspace;
 window.shell = createFocusedWorkspace({ document,
   onNavigate: (destination) => { events.push(['navigate', destination]); shell.update({ destination, inspectorTitle: destination === 'activity' ? 'Activity' : 'Project' }); },
   onTools: () => events.push(['tools']),
+  onAttention: () => events.push(['attention']),
   onToggleNavigation: () => { events.push(['toggle']); shell.update({ navCollapsed: shell.element.dataset.navCollapsed !== 'true' }); },
   onSessionMenu: () => events.push(['session']),
   onProjectMenu: () => events.push(['project']),
@@ -133,7 +134,8 @@ test('keyboard controls route only their callback and show the selected destinat
   await expect(rail.getByRole('button', { name: 'Project', exact: true })).toHaveAttribute('aria-current', 'page');
   await page.getByRole('button', { name: 'Close inspector', exact: true }).click();
   await expect(page.locator('.focused-inspector')).toBeHidden();
-  await rail.getByRole('button', { name: /Activity, 2 items/ }).click();
+  await page.getByRole('button', { name: 'Attention, 2 decisions waiting, 0 finished', exact: true }).press('Enter');
+  await rail.getByRole('button', { name: 'Activity', exact: true }).click();
   await expect(page.locator('#focusedWorkspaceInspectorTitle')).toHaveText('Activity');
   await rail.getByRole('button', { name: 'Settings', exact: true }).click();
   await expect(page.locator('#settingsView')).toBeVisible();
@@ -146,7 +148,7 @@ test('keyboard controls route only their callback and show the selected destinat
   await page.getByRole('button', { name: 'Project actions', exact: true }).click();
   expect(await page.evaluate(() => events)).toEqual([
     ['navigate', 'home'], ['conversation'], ['navigate', 'project'], ['close'],
-    ['navigate', 'activity'], ['navigate', 'settings'], ['conversation'], ['navigate', 'conversation'],
+    ['attention'], ['navigate', 'activity'], ['navigate', 'settings'], ['conversation'], ['navigate', 'conversation'],
     ['tools'], ['session'], ['project'],
   ]);
 });

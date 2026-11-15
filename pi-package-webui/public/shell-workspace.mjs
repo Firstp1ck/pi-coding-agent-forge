@@ -13,7 +13,7 @@ const ICONS = {
 /** Creates presentation chrome. The caller owns mounting, slot contents and state. */
 export function createFocusedWorkspace({
   document, onNavigate, onTools, onToggleNavigation, onSessionMenu,
-  onProjectMenu, onInspectorClose, onConversation, onInspectorSelect,
+  onProjectMenu, onInspectorClose, onConversation, onInspectorSelect, onAttention,
 }) {
   const listeners = [];
   const rememberedFocus = new Map();
@@ -76,7 +76,11 @@ export function createFocusedWorkspace({
   }
   const attention = node('span', 'focused-attention');
   attention.setAttribute('aria-hidden', 'true');
-  destinationButtons.get('activity').append(attention);
+  const inboxButton = button('Attention', 'activity', onAttention);
+  inboxButton.classList.add('focused-inbox-button');
+  const finished = node('span', 'focused-finished');
+  finished.setAttribute('aria-hidden', 'true');
+  inboxButton.append(attention, finished);
   rail.append(node('div', 'focused-rail-spacer'), button('All tools', 'tools', onTools));
   const settingsButton = button('Settings', 'settings', () => onNavigate?.('settings'));
   destinationButtons.set('settings', settingsButton);
@@ -101,7 +105,7 @@ export function createFocusedWorkspace({
   const runControls = node('div', 'focused-run-controls');
   runControls.setAttribute('role', 'group');
   runControls.setAttribute('aria-label', 'Active run controls');
-  header.append(heading, sessionMenu, contextButton, toolsButton, runControls);
+  header.append(heading, sessionMenu, contextButton, inboxButton, toolsButton, runControls);
 
   const body = node('div', 'focused-body');
   const conversation = node('section', 'focused-conversation');
@@ -264,9 +268,12 @@ export function createFocusedWorkspace({
     const count = Number.isSafeInteger(state.attentionCount) ? Math.max(0, state.attentionCount) : 0;
     attention.hidden = count === 0;
     attention.textContent = count > 99 ? '99+' : String(count);
-    const activityLabel = count ? `Activity, ${count} ${count === 1 ? 'item needs' : 'items need'} attention` : 'Activity';
-    destinationButtons.get('activity').setAttribute('aria-label', activityLabel);
-    destinationButtons.get('activity').title = activityLabel;
+    const completed = Number.isSafeInteger(state.finishedCount) ? Math.max(0, state.finishedCount) : 0;
+    finished.hidden = completed === 0;
+    finished.textContent = completed > 99 ? '+99' : `+${completed}`;
+    const inboxLabel = `Attention, ${count} decisions waiting, ${completed} finished`;
+    inboxButton.setAttribute('aria-label', inboxLabel);
+    inboxButton.title = inboxLabel;
     for (const [destination, control] of destinationButtons) {
       if (destination === state.destination) control.setAttribute('aria-current', 'page');
       else control.removeAttribute('aria-current');
