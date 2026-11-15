@@ -23,3 +23,7 @@ Each worker owns only its unique ignored `handoffs/ui-polish-<id>.md` plus dispo
 ## Status
 
 Discovery pending. No findings accepted or fixes implemented yet.
+
+### Discovery disposition
+
+Settings BUG-001 accepted. Source verification confirms that unregistered packages intentionally receive the conservative `unknown` migration state and stay outside bulk installation eligibility. Fix the misleading bulk status and accessible labels without weakening classification or installation guards. Terra SETTINGS-FIX owns only the optional-feature display symbols in app.js and its new focused tests; it also completes the initial audit's documented Settings interaction gaps. NAV and TOOLS discovery remain independent and read-only. Responsive and individual-control coverage remains pending.
