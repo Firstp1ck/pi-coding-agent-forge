@@ -70,7 +70,7 @@ The complete Chromium command used a local wrapper of `playwright.config.mjs` se
 
 ### Terra live polish pass
 
-The follow-up pass uses GPT-6.1 Terra at high reasoning effort, with isolated fake-Pi servers and disposable Git repositories. The original W0-W7 results above are historical; follow-up acceptance is still in progress.
+The follow-up pass uses GPT-6.1 Terra at high reasoning effort, with isolated fake-Pi servers and disposable Git repositories. The original W0-W7 measurements above are historical. Follow-up acceptance passed at code commit `a8a118a6`: all 250 package Node/static/harness test files and all 529 Chromium cases, with zero retries or skips. The four complete shards passed 133, 133, 132 and 131 cases.
 
 | Live finding | Correction |
 | --- | --- |
@@ -85,6 +85,12 @@ The follow-up pass uses GPT-6.1 Terra at high reasoning effort, with isolated fa
 Seven browser specs retain the live regressions and workflow checks. These exercise real disposable Git staging, stash, tag, branch and worktree operations, runner configuration and stdin, queue behavior, session actions, menu reachability and picker keyboard/error handling. The background decision fixture emits through fake Pi and the real server so attention discovery and response targeting are tested together. Fork, tree and export responses are simulated where fake Pi lacks upstream behavior; a synthetic decision title does not establish real workflow-provider integration.
 
 Audits distinguish direct preview checks, automated browser scenarios and source-only inspection. They do not establish exhaustive coverage of every control and state. Live installed companions, remote/PIN combinations, browser notification permission/click behavior, provider account changes, voice downloads and hardware, real updates and publishing remain unverified. No production install or configuration mutation is needed for the delivered fixes.
+
+Both Terra review rounds are complete. Round one reported no concrete scoped defect. After parent acceptance found a launcher return-focus regression, round two independently passed all four rail/header and pointer/keyboard return paths and 59 controller/action checks without a qualifying finding. The later mobile-notice CSS repair was verified by the parent through two real failed-fetch cases and the complete combined suite; it did not receive a third review round.
+
+The full-suite repairs also retain the original assertions while making fixture setup deterministic: a held fake stream is explicitly aborted after geometry sampling, mobile paste selection is set on the current connected field in one browser task, and serial visibility tests await final settings durability. No source behavior was changed to hide these fixture races.
+
+Inventory regeneration, required packaged assets, local documentation links and whitespace checks pass. The 504-file npm dry run excludes internal evidence. The frozen baseline JSON files are unchanged. Package validation used `npm --prefix pi-package-webui run check`; Chromium used the package configuration with a local system-browser wrapper, two workers, zero retries and four disjoint shards. These acceptance commands ran with isolated outer HOME, XDG, agent and update paths. An initial worker fixture exception, before that isolation was applied, remains recorded in the audit handoff; those scenarios were rerun in isolation. No evidence establishes a production configuration mutation.
 
 Screenshots from the follow-up pass show [mobile file actions](screenshots/polish/mobile-file-actions.png) and the [repository-specific tag confirmation](screenshots/polish/git-confirmation.png).
 
