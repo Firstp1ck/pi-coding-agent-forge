@@ -18,7 +18,7 @@ import { createSessionEventStream } from "./platform-event-stream.mjs";
 import { createExtensionRequestStore } from "./session-extension-requests.mjs";
 import { filterActionItems, checkActionTarget } from "./shell-actions.mjs";
 import { createShellHistory } from "./shell-navigation.mjs";
-import { readShellPreferences, writeShellPreferences, resolveShellMode } from "./shell-preferences.mjs";
+import { readShellPreferences, writeShellPreferences, effectiveShellPreferences, resolveShellMode } from "./shell-preferences.mjs";
 import { createViewHost } from "./shell-view-host.mjs";
 import { createSurfaceCoordinator } from "./shell-surfaces.mjs";
 import { aurReviewSafePath as parsedAurReviewSafePath, parseAurReviewPayload as parseValidatedAurReviewPayload } from "./aur-review-payload.mjs";
@@ -1736,10 +1736,12 @@ const colorSchemeMedia = window.matchMedia?.("(prefers-color-scheme: dark)") || 
 const initialUrlParams = new URLSearchParams(window.location.search);
 const embeddedSplitMode = initialUrlParams.get("embed") === "split";
 const forceClassicShell = initialUrlParams.get("shell") === "classic";
-let shellPreferenceState = (() => {
+let shellPreferenceRecord = (() => {
   try { return readShellPreferences(window.localStorage); }
   catch { return readShellPreferences(null); }
 })();
+let shellRolloutCohort = null;
+let shellPreferenceState = { ...shellPreferenceRecord, value: effectiveShellPreferences(shellPreferenceRecord) };
 let focusedShell = null;
 let settingsWorkspace = null;
 let pendingSettingsReveal = null;
@@ -2342,6 +2344,16 @@ function renderFocusedShell() {
   }
 }
 
+function applyShellRolloutCohort(cohort) {
+  shellRolloutCohort = cohort === "fresh" || cohort === "established" ? cohort : null;
+  const value = effectiveShellPreferences(shellPreferenceRecord, shellRolloutCohort);
+  if (JSON.stringify(value) === JSON.stringify(shellPreferenceState.value)) return;
+  shellPreferenceState = { ...shellPreferenceRecord, value };
+  $("#desktopShellSelect").value = value.desktopLayout;
+  $("#focusedNavigationSelect").value = value.navigation || "left";
+  renderFocusedShell();
+}
+
 function saveFocusedShellPreferences(patch) {
   const value = { ...shellPreferenceState.value, ...patch };
   let result;
@@ -2352,7 +2364,8 @@ function saveFocusedShellPreferences(patch) {
     $("#desktopShellSelect").value = shellPreferenceState.value.desktopLayout;
     return false;
   }
-  shellPreferenceState = { status: "valid", value };
+  shellPreferenceRecord = { status: "valid", value };
+  shellPreferenceState = { ...shellPreferenceRecord, value: effectiveShellPreferences(shellPreferenceRecord, shellRolloutCohort) };
   $("#desktopShellSelect").value = value.desktopLayout;
   $("#focusedNavigationSelect").value = value.navigation || "left";
   renderFocusedShell();
@@ -14790,6 +14803,7 @@ async function restoreSidePanelWidthPreference() {
     // One non-blocking unscoped read hydrates both the width preference and the
     // durable layout after the synchronous local-cache startup pass.
     const response = await api("/api/interface-preferences", { scoped: false });
+    applyShellRolloutCohort(response.data?.shellRolloutCohort);
     applyDurableUiLayoutSnapshot(response.data, { generations: layoutGenerations, readEpoch });
     if (restoreRevision !== sidePanelWidthPreferenceRevision) return;
     const userWidth = Number(response.data?.preferences?.sidePanelWidth);
