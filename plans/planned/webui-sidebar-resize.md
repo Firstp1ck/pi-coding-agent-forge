@@ -15,3 +15,7 @@ Four actual-app Chromium cases pass (drag/release persistence/reload, cancellati
 ## Round-one disposition
 
 Accepted BUG-001 (no-op pointer click overwrote a temporarily clamped preference) and BUG-002 (Escape missed an active drag after Tab moved focus). Parent now commits only changed displayed widths and captures Escape on the owner document only for the active drag, removing that listener on finish/disposal. Added both actual-app regressions. Six sidebar cases pass, exit0 (/tmp/sidebar-review-fixes.log). Final second review is limited to these fixes and direct regressions.
+
+## Final review disposition
+
+Sol round two reviewed9579ee4. Both accepted findings are resolved, with no direct regressions. Independent checks passed19 Chromium cases (six retained actual-app cases and13 lifecycle/bounds probes), exit0. Parent accepts the bounded resize implementation. No further review round. Final asset/cache and combined package verification remain pending with the other active UI units, so this plan stays active until those gates finish.
