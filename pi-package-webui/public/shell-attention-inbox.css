@@ -1,0 +1,72 @@
+#shellAttentionInbox {
+  box-sizing: border-box;
+  width: min(640px, calc(100% - 24px));
+  max-width: none;
+  max-height: calc(100dvh - 24px);
+  padding: 0;
+  overflow: hidden;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 24px 90px var(--shadow, #0008);
+  font: inherit;
+  font-size: var(--text-sm, 0.875rem);
+}
+
+#shellAttentionInbox[open] { display: flex; flex-direction: column; }
+#shellAttentionInbox::backdrop { background: #080810aa; backdrop-filter: blur(3px); }
+#shellAttentionInbox * { box-sizing: border-box; min-width: 0; }
+#shellAttentionInbox [hidden] { display: none !important; }
+#shellAttentionInbox button { font: inherit; color: inherit; cursor: pointer; border-radius: 5px; }
+#shellAttentionInbox :is(.attention-inbox-close, .attention-inbox-item) { box-shadow: none; transform: none; transition: none; }
+#shellAttentionInbox button:disabled { cursor: default; opacity: 0.65; }
+#shellAttentionInbox button:focus-visible { outline: 2px solid var(--accent-2, var(--accent)); outline-offset: -2px; }
+#shellAttentionInbox .attention-inbox-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px 4px;
+  flex-shrink: 0;
+}
+#shellAttentionInbox h2 { margin: 0; font-size: 1rem; font-weight: 600; }
+#shellAttentionInbox .attention-inbox-close { flex-shrink: 0; padding: 6px 9px; border: 1px solid var(--border); background: var(--panel); }
+#shellAttentionInbox .attention-inbox-summary { flex-shrink: 0; margin: 0; padding: 4px 16px 12px; color: var(--muted); overflow-wrap: anywhere; }
+#shellAttentionInbox .attention-inbox-run-controls { flex-shrink: 0; max-height: 25dvh; overflow: auto; overflow-wrap: anywhere; }
+#shellAttentionInbox .attention-inbox-run-controls:not(:empty) { padding: 8px 16px; border-top: 1px solid var(--border); }
+#shellAttentionInbox .attention-inbox-body { min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 0 16px; border-top: 1px solid var(--border); }
+#shellAttentionInbox .attention-inbox-section { padding: 14px 0; }
+#shellAttentionInbox .attention-inbox-section + .attention-inbox-section { border-top: 1px solid var(--border); }
+#shellAttentionInbox .attention-inbox-section-title { margin: 0; font-size: var(--text-sm, 0.875rem); font-weight: 600; }
+#shellAttentionInbox .attention-inbox-blocked .attention-inbox-section-title { color: var(--warning); }
+#shellAttentionInbox .attention-inbox-count { margin: 3px 0 8px; color: var(--muted); font-size: var(--text-xs, 0.75rem); }
+#shellAttentionInbox .attention-inbox-list { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+#shellAttentionInbox .attention-inbox-item { display: block; width: 100%; text-align: left; padding: 10px; border: 1px solid var(--border); background: var(--panel); overflow-wrap: anywhere; white-space: normal; }
+#shellAttentionInbox .attention-inbox-item:hover:not(:disabled) { background: var(--panel-2); }
+#shellAttentionInbox .attention-inbox-item-title { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; font-weight: 550; }
+#shellAttentionInbox .attention-inbox-item-detail { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; margin-top: 3px; color: var(--muted); font-size: var(--text-xs, 0.75rem); }
+#shellAttentionInbox .attention-inbox-item-status { display: block; margin-top: 5px; color: var(--accent-2, var(--accent)); font-size: var(--text-xs, 0.75rem); }
+#shellAttentionInbox .attention-inbox-blocked .attention-inbox-item-status { color: var(--warning); }
+#shellAttentionInbox :is(.attention-inbox-empty, .attention-inbox-placeholder) { margin: 8px 0 0; color: var(--muted); overflow-wrap: anywhere; }
+#shellAttentionInbox .attention-inbox-empty { padding-top: 8px; }
+#shellAttentionInbox .attention-inbox-footer { flex-shrink: 0; padding: 10px 16px; border-top: 1px solid var(--border); color: var(--muted); font-size: var(--text-xs, 0.75rem); overflow-wrap: anywhere; }
+
+@media (max-width: 600px) {
+  #shellAttentionInbox { width: calc(100% - 16px); max-height: calc(100dvh - 16px); }
+  #shellAttentionInbox .attention-inbox-header { padding: 10px 12px 4px; }
+  #shellAttentionInbox :is(.attention-inbox-summary, .attention-inbox-run-controls:not(:empty), .attention-inbox-body, .attention-inbox-footer) { padding-inline: 12px; }
+}
+
+@media (forced-colors: active) {
+  #shellAttentionInbox {
+    --bg: Canvas;
+    --panel: Canvas;
+    --panel-2: Canvas;
+    --text: CanvasText;
+    --muted: CanvasText;
+    --accent-2: LinkText;
+    --warning: CanvasText;
+    --border: CanvasText;
+  }
+}
