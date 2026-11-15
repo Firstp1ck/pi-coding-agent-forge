@@ -26,3 +26,7 @@ User supplied the provider-grouped picker screenshot and reported its absence in
 ## Integration evidence
 
 Sol worker `3866ef63` integrated as `2a7a1d93`, exactly three owned files, eleven component cases passed. Parent adapted existing Activity tab locators to select labels while retaining controller assertions; added two actual-app cases traversing every section, Back/Forward, no horizontal overflow, draft and Project rollback. Combined affected browser run: 74 passed, zero retries. The scoped picker initially exposed a capture-phase global Alt+Up collision with queue restore; parent excludes model options from that global branch. Four scoped actual-app cases passed after the correction, with draft/no-queue-warning assertions. Offline PWA179 passed. Whole-package check and round-one review remain pending.
+
+## Review disposition
+
+Sol round one reviewed b8d8fd1 and passed 40 independent browser cases. Accepted BUG-001: 24 static assertions retained app203 after the entry moved to app204. Parent corrected them in 2e9af8e; all 28 test cases across those 24 files passed (exit0, /tmp/activity-revision-fixes.log). No runtime finding remained. Final combined package verification is deferred until the concurrent Settings and composer changes are integrated; no second review round is needed for the literal assertion repair.

@@ -18,7 +18,7 @@ Disposable actual-app Chromium with fake Pi, isolated HOME/XDG/Pi/Git configurat
 ## Progress
 
 - Gear implementation prepared in focused-shell-adapter.mjs/css. Both real-app geometry/navigation/fallback cases passed, zero retries.
-- Coverage scout pending; comprehensive Settings coverage is not yet claimed.
+- Coverage scout completed; six accepted gaps are recorded below. Sol implementation runs in an isolated worktree; comprehensive Settings coverage is not yet claimed.
 
 ### Accepted coverage additions
 

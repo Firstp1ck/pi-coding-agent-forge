@@ -132,7 +132,7 @@ Activity replaces its horizontal topic strip with a full-width View selector. Op
 
 A Scoped models button beside Model opens the existing saved-scope picker directly. It retains provider columns, simple layout, ordering and keyboard selection; Model still opens the full catalog. Escape returns to Scoped models. Alt+Up inside a model option reorders it without also invoking global queue restoration.
 
-The affected browser run passed 74 cases; the final shortcut correction passed all four scoped-model cases. PWA179 offline recovery passed. Independent review and the whole-package gate remain pending. See [Activity picker](screenshots/navigation/activity-picker.png) and [scoped models](screenshots/navigation/scoped-models.png).
+The affected browser run passed 74 cases; the final shortcut correction passed all four scoped-model cases. PWA179 offline recovery passed. Independent review passed 40 browser cases and found 24 stale app-revision assertions. Those were corrected; all 28 affected static cases pass. The final combined package gate remains pending. See [Activity picker](screenshots/navigation/activity-picker.png) and [scoped models](screenshots/navigation/scoped-models.png).
 
 ### Platform limits
 
