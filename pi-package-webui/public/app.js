@@ -21115,6 +21115,9 @@ function clearGitFooterWebuiPayloadCache() {
 
 function parseGitFooterWebuiPayload() {
   if (isOptionalFeatureDisabled("gitFooterStatus")) return null;
+  // A draft has no Pi session yet. The cached payload belongs to the last
+  // thread, and its cwd guard cannot reject it because a draft has no cwd here.
+  if (!activeTabId) return null;
 
   const livePayload = parseGitFooterWebuiPayloadRaw(statusEntries.get(GIT_FOOTER_WEBUI_STATUS_KEY));
   if (livePayload) return livePayload;

@@ -1234,7 +1234,7 @@ assert.doesNotMatch(compactSubagentAgentSource, /subagent-agent-meta|subagentExe
 assert.doesNotMatch(compactSubagentRunSource, /subagent-run-(?:header|title|meta|state)|`Run \$\{/, "side-panel run groups should not repeat IDs, metadata headers, or state badges");
 assert.match(compactSubagentRunSource, /Dismiss finished run[\s\S]*dismissSubagentRun\(tab, run\)/, "compact terminal subagent runs should retain their dismiss action");
 assert.match(compactSubagentRunSource, /subagentRunCanCancel\(run\)[\s\S]*Cancel entire subagent run[\s\S]*openSubagentCancelDialog\(tab, run\)/, "compact running subagent runs should retain whole-run cancellation through the shared dialog");
-assert.match(app, /function renderSubagentTerminalView\(\)[\s\S]*subagentRunElapsed\(view\.run\)[\s\S]*subagentExecutionFacts\(agent\)[\s\S]*parent \$\{parent\?\.title[\s\S]*run \$\{view\.runId\}/, "the dedicated subagent view should own elapsed, execution, parent, and run details removed from the side panel");
+assert.match(app, /function renderSubagentTerminalView\(\)[\s\S]*subagentRunElapsed\(view\.run\)[\s\S]*subagentExecutionFacts\(agent\)[\s\S]*parent \$\{threadDisplayTitle\(parent\?\.title[\s\S]*run \$\{view\.runId\}/, "the dedicated subagent view should own elapsed, execution, parent, and run details removed from the side panel");
 const subagentTerminalViewGroupsSource = appFunctionSource("subagentTerminalViewGroups", "renderSubagentTerminalTab");
 const subagentTerminalGroupingContext = vm.createContext({
   subagentTerminalViews: new Map([

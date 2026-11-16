@@ -404,3 +404,17 @@ test('a stored legacy title shows as a thread in All tools', async ({ page, empt
   await page.getByRole('navigation', { name: 'Workspace destinations' }).getByRole('button', { name: 'All tools', exact: true }).click();
   await expect(page.locator('.tools-launcher-context')).toHaveText('Thread 7');
 });
+
+test('a No project draft ignores the git footer cached by the previous thread', async ({ page, emptyStartup }) => {
+  const { current } = await readyWithThread(page, emptyStartup);
+  await page.evaluate(cwd => localStorage.setItem('pi-webui-git-footer-webui-payload-cache', JSON.stringify({
+    cwd,
+    raw: JSON.stringify({ type: 'firstpick.git-footer-status.footer', version: 1, main: [{ key: 'cwd', label: 'CWD', value: 'stale-previous-thread' }], meta: [] }),
+  })), current);
+  await openPalette(page);
+  await paletteOption(page, /No project/).click();
+  await expectDraftFolder(page, 'No Project');
+  await expect(page.locator('#statusBar')).toContainText('Ready for your first message');
+  await expect(page.locator('#statusBar')).not.toContainText('stale-previous-thread');
+  await expect(page.locator('#statusBar')).not.toHaveClass(/statusbar-git-footer/);
+});
