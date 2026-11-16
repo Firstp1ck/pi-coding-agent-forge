@@ -90,3 +90,38 @@ for (const [width, height] of [[1100, 500], [1440, 900]]) {
     await page.locator('#sendButton').click({ trial: true });
   });
 }
+
+for (const [width, height, side] of [[1440, 900, 'right'], [1100, 600, 'left']]) {
+  test(`Options submenus fly out to the ${side} at ${width}x${height} and stay open on the way in`, async ({ page, ownership }, info) => {
+    await page.setViewportSize({ width, height });
+    await page.addInitScript(() => localStorage.setItem('pi-webui-shell-preferences-v1', JSON.stringify({ v: 1, desktopLayout: 'focused' })));
+    await page.goto(ownership.baseURL);
+    await expect(page.locator('#chat')).toContainText('fake answer');
+    await page.locator('#composerActionsButton').click();
+    await page.locator('#optionsMenuButton').click();
+    const trigger = page.locator('#optionsSessionSubmenuButton');
+    const submenu = page.locator('#optionsSessionSubmenu');
+    await trigger.hover();
+    await expect(submenu).toBeVisible();
+    await expect(submenu).toHaveCSS('position', 'fixed');
+    const menu = await page.locator('#optionsMenu').boundingBox();
+    const triggerBox = await trigger.boundingBox();
+    const flyout = await submenu.boundingBox();
+    if (side === 'right') expect(flyout.x).toBeGreaterThanOrEqual(menu.x + menu.width - 8);
+    else expect(flyout.x + flyout.width).toBeLessThanOrEqual(menu.x + 8);
+    expect(flyout.x).toBeGreaterThanOrEqual(0);
+    expect(flyout.x + flyout.width).toBeLessThanOrEqual(width);
+    expect(flyout.y + flyout.height).toBeLessThanOrEqual(height);
+    await page.screenshot({ path: info.outputPath(`options-flyout-${side}.png`) });
+
+    const item = page.locator('#optionsNameButton');
+    const itemBox = await item.boundingBox();
+    const startX = side === 'right' ? triggerBox.x + triggerBox.width - 2 : triggerBox.x + 2;
+    await page.mouse.move(startX, triggerBox.y + triggerBox.height / 2);
+    await page.mouse.move(itemBox.x + itemBox.width / 2, itemBox.y + itemBox.height / 2, { steps: 8 });
+    await expect(submenu).toBeVisible();
+    await item.click();
+    await expect(page.getByPlaceholder('New session name')).toBeVisible();
+    await page.keyboard.press('Escape');
+  });
+}

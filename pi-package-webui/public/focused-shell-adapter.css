@@ -124,6 +124,20 @@ html[data-desktop-shell="focused"] #focusedWorkspace .composer-options-submenu-p
   padding-top: 6px;
   overflow: visible;
 }
+/* With room beside the menu, app.js places an open submenu as a fixed flyout instead. */
+html[data-desktop-shell="focused"] #focusedWorkspace .composer-options-submenu-panel.options-submenu-flyout {
+  position: fixed;
+  z-index: 130;
+  box-sizing: border-box;
+  padding: 6px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--ctp-mantle);
+  box-shadow: 0 8px 24px var(--shadow);
+}
 html[data-desktop-shell="focused"] #composerActionsPanel[hidden],
 html[data-desktop-shell="focused"] #focusedWorkspace .composer-options-menu-panel[hidden],
 html[data-desktop-shell="focused"] #focusedWorkspace .composer-options-submenu-panel[hidden] { display: none; }

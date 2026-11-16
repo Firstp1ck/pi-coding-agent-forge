@@ -1262,6 +1262,12 @@ const OPTIONS_SUBMENU_TRIGGER_SELECTOR = "[data-options-submenu-trigger]";
 const OPTIONS_SUBMENU_PANEL_SELECTOR = "[data-options-submenu-panel]";
 const OPTIONS_SUBMENU_BACK_SELECTOR = "[data-options-submenu-back]";
 const OPTIONS_SUBMENU_LEFT_CLASS = "opens-left";
+const OPTIONS_SUBMENU_FLYOUT_CLASS = "options-submenu-flyout";
+// Stays inside the 0.3rem hover bridge (::after) so moving the pointer to the flyout keeps it open.
+const OPTIONS_SUBMENU_FLYOUT_GAP_PX = 3;
+const OPTIONS_SUBMENU_FLYOUT_MARGIN_PX = 8;
+// Narrower than the focused root menu so the flyout usually fits to its right.
+const OPTIONS_SUBMENU_FLYOUT_MAX_WIDTH_PX = 256;
 const OPTIONS_SUBMENU_DRILL_IN_QUERY = "(hover: none), (pointer: coarse)";
 const OPTIONS_MENU_LABEL_SELECTOR = '.composer-options-menu-item > span:not([aria-hidden="true"]):not(.composer-options-submenu-chevron)';
 const OPTIONS_MENU_LABEL_FONT_SIZE_PROPERTY = "--options-menu-label-font-size";
@@ -40172,11 +40178,58 @@ function scheduleOptionsMenuLabelFit() {
   });
 }
 
+/**
+ * The focused desktop conversation clips absolutely positioned flyouts, so
+ * there an open submenu is placed with fixed coordinates beside its trigger:
+ * right when it fits, otherwise left. Returns the side used, or "" when
+ * neither side fits and the panel should expand inline.
+ */
+function placeFocusedOptionsSubmenuFlyout(group, panel) {
+  clearOptionsSubmenuFlyout(panel);
+  if (document.documentElement.dataset.desktopShell !== "focused") return "";
+  if (!window.matchMedia?.("(hover: hover) and (pointer: fine)")?.matches) return "";
+  const trigger = optionsSubmenuTrigger(group) || group;
+  const anchor = trigger.getBoundingClientRect();
+  const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
+  const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+  const width = Math.min(anchor.width, OPTIONS_SUBMENU_FLYOUT_MAX_WIDTH_PX);
+  const fitsRight = anchor.right + OPTIONS_SUBMENU_FLYOUT_GAP_PX + width <= viewportWidth - OPTIONS_SUBMENU_FLYOUT_MARGIN_PX;
+  const fitsLeft = anchor.left - OPTIONS_SUBMENU_FLYOUT_GAP_PX - width >= OPTIONS_SUBMENU_FLYOUT_MARGIN_PX;
+  if (!width || (!fitsRight && !fitsLeft)) return "";
+  panel.classList.add(OPTIONS_SUBMENU_FLYOUT_CLASS);
+  const maxHeight = Math.max(0, viewportHeight - 2 * OPTIONS_SUBMENU_FLYOUT_MARGIN_PX);
+  const widthPx = `${width}px`;
+  Object.assign(panel.style, { top: "0px", left: "0px", width: widthPx, minWidth: widthPx, maxWidth: widthPx, maxHeight: `${maxHeight}px` });
+  // A transformed or filtered ancestor becomes the containing block for
+  // position: fixed, so measure where (0, 0) actually lands and offset from it.
+  const origin = panel.getBoundingClientRect();
+  // offsetHeight already honours max-height and includes the border.
+  const height = panel.offsetHeight;
+  const top = Math.max(OPTIONS_SUBMENU_FLYOUT_MARGIN_PX, Math.min(anchor.top, viewportHeight - OPTIONS_SUBMENU_FLYOUT_MARGIN_PX - height));
+  const left = fitsRight ? anchor.right + OPTIONS_SUBMENU_FLYOUT_GAP_PX : anchor.left - OPTIONS_SUBMENU_FLYOUT_GAP_PX - width;
+  Object.assign(panel.style, { top: `${top - origin.top}px`, left: `${left - origin.left}px` });
+  return fitsRight ? "right" : "left";
+}
+
+function clearOptionsSubmenuFlyout(panel) {
+  if (!panel?.classList.contains(OPTIONS_SUBMENU_FLYOUT_CLASS)) return;
+  panel.classList.remove(OPTIONS_SUBMENU_FLYOUT_CLASS);
+  for (const property of ["top", "left", "width", "minWidth", "maxWidth", "maxHeight"]) panel.style[property] = "";
+}
+
 function updateOptionsSubmenuPlacement(group) {
   const panel = optionsSubmenuPanel(group);
   if (!group || !panel) return;
   if (optionsSubmenuUsesDrillIn()) {
+    clearOptionsSubmenuFlyout(panel);
     group.classList.remove(OPTIONS_SUBMENU_LEFT_CLASS);
+    panel.classList.remove(OPTIONS_SUBMENU_LEFT_CLASS);
+    return;
+  }
+  const flyoutSide = placeFocusedOptionsSubmenuFlyout(group, panel);
+  if (flyoutSide) {
+    // The group's class moves the hover bridge to the flyout's side; the fixed panel ignores it.
+    group.classList.toggle(OPTIONS_SUBMENU_LEFT_CLASS, flyoutSide === "left");
     panel.classList.remove(OPTIONS_SUBMENU_LEFT_CLASS);
     return;
   }
@@ -40216,6 +40269,7 @@ function setOptionsSubmenuOpen(group, open, { focusFirstItem = false, restoreFoc
   else {
     group.classList.remove(OPTIONS_SUBMENU_LEFT_CLASS);
     panel?.classList.remove(OPTIONS_SUBMENU_LEFT_CLASS);
+    clearOptionsSubmenuFlyout(panel);
   }
   if (shouldOpen && focusFirstItem) focusOptionsMenuItem(optionsSubmenuItems(group)[0]);
   if (!shouldOpen && restoreFocus) focusOptionsMenuItem(trigger);

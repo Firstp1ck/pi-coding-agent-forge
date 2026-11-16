@@ -23,7 +23,8 @@ const canonicalOptions = [
   'optionsSubmenuGroups', 'optionsSubmenuTrigger', 'optionsSubmenuPanel', 'optionsSubmenuBackButton',
   'isOptionsSubmenuPanelItem', 'isVisibleOptionsMenuItem', 'optionsSubmenuActionItems',
   'optionsSubmenuHasVisibleActions', 'optionsSubmenuItems', 'optionsMenuRootItems', 'focusOptionsMenuItem',
-  'optionsSubmenuUsesDrillIn', 'syncOptionsSubmenuAvailability', 'updateOptionsSubmenuPlacement',
+  'optionsSubmenuUsesDrillIn', 'syncOptionsSubmenuAvailability', 'placeFocusedOptionsSubmenuFlyout',
+  'clearOptionsSubmenuFlyout', 'updateOptionsSubmenuPlacement',
   'setOptionsSubmenuOpen', 'closeOptionsSubmenus', 'moveOptionsMenuFocus', 'handleOptionsMenuKeydown',
   'handleOptionsSubmenuClick',
 ].map(canonicalFunction).join('\n');
@@ -64,6 +65,10 @@ const OPTIONS_SUBMENU_TRIGGER_SELECTOR = '[data-options-submenu-trigger]';
 const OPTIONS_SUBMENU_PANEL_SELECTOR = '[data-options-submenu-panel]';
 const OPTIONS_SUBMENU_BACK_SELECTOR = '[data-options-submenu-back]';
 const OPTIONS_SUBMENU_LEFT_CLASS = 'opens-left';
+const OPTIONS_SUBMENU_FLYOUT_CLASS = 'options-submenu-flyout';
+const OPTIONS_SUBMENU_FLYOUT_GAP_PX = 3;
+const OPTIONS_SUBMENU_FLYOUT_MARGIN_PX = 8;
+const OPTIONS_SUBMENU_FLYOUT_MAX_WIDTH_PX = 256;
 const OPTIONS_SUBMENU_DRILL_IN_QUERY = '(hover: none), (pointer: coarse)';
 let openOptionsSubmenuGroup = null;
 let optionsSubmenuSyncing = false;
@@ -240,8 +245,13 @@ test('pointer transit, nested keyboard navigation and dialog focus keep canonica
   const before = await page.locator('#optionsMenu').boundingBox();
   await page.keyboard.press('ArrowRight');
   await expect(page.locator('#optionsResumeButton')).toBeFocused();
-  await expect.poll(async () => (await page.locator('#optionsMenu').boundingBox()).height).toBeGreaterThan(before.height);
+  // With room beside the menu, the submenu flies out instead of growing the menu.
+  await expect(page.locator('#optionsSessionSubmenu')).toHaveClass(/options-submenu-flyout/);
+  expect((await page.locator('#optionsMenu').boundingBox()).height).toBeCloseTo(before.height, 0);
+  const flyout = await page.locator('#optionsSessionSubmenu').boundingBox();
+  expect(flyout.x + flyout.width <= before.x + 8 || flyout.x >= before.x + before.width - 8).toBe(true);
   await fitInViewport(page, '#optionsMenu');
+  await fitInViewport(page, '#optionsSessionSubmenu');
   await page.keyboard.press('Escape');
   await expect(page.locator('#optionsSessionSubmenuButton')).toBeFocused();
   await expect(page.locator('#optionsMenuButton')).toHaveAttribute('aria-expanded', 'true');
