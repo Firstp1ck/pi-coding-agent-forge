@@ -288,6 +288,13 @@ test('a dropdown change while the first prompt is pending never redirects it', a
   await page.locator('#promptInput').fill(text);
   await page.locator('#sendButton').click();
   const created = await hold.created;
+  // The pending send shows the message at once, so the start card leaves.
+  await expect(page.locator('.message.user').first()).toContainText(text);
+  await expect(page.locator('#promptInput')).toHaveValue('');
+  await expect(workspaceButton(page)).toHaveCount(0);
+  // Returning to the pending draft brings the card back; its folder must still be locked.
+  await page.locator('#tabBar [role="tab"]').first().click();
+  await page.locator('[data-draft-id] [role="tab"]').click();
   await expect(workspaceButton(page)).toBeVisible();
   await workspaceButton(page).click();
   await pickerOption(page, /pinned-project/).click();
@@ -417,4 +424,58 @@ test('a No project draft ignores the git footer cached by the previous thread', 
   await expect(page.locator('#statusBar')).toContainText('Ready for your first message');
   await expect(page.locator('#statusBar')).not.toContainText('stale-previous-thread');
   await expect(page.locator('#statusBar')).not.toHaveClass(/statusbar-git-footer/);
+});
+
+test('the first prompt shows at once and is sent before the new thread finishes loading its UI', async ({ page, emptyStartup }) => {
+  await readyWithThread(page, emptyStartup);
+  await openPalette(page);
+  await paletteOption(page, /current-project/).click();
+  const hold = await holdCreation(page);
+  const timeline = [];
+  // A freshly started Pi answers its first reads slowly; the prompt must not wait for them.
+  await page.route('**/api/state?*', async route => {
+    await delay(1500);
+    await route.continue().catch(() => {});
+  });
+  page.on('request', request => {
+    const path = new URL(request.url()).pathname;
+    if (path === '/api/prompt' || path === '/api/state') timeline.push(`start ${path}`);
+  });
+  page.on('requestfinished', request => {
+    if (new URL(request.url()).pathname === '/api/state') timeline.push('end /api/state');
+  });
+  const text = 'Show me before the thread exists';
+  await page.locator('#promptInput').fill(text);
+  await page.locator('#sendButton').click();
+  await hold.created;
+  await expect(page.locator('.message.user').first()).toContainText(text);
+  await expect(page.locator('#promptInput')).toHaveValue('');
+  hold.release();
+  await expect.poll(async () => (await emptyStartup.commands()).filter(item => item.type === 'prompt' && item.message === text)).toHaveLength(1);
+  const promptAt = timeline.indexOf('start /api/prompt');
+  expect(promptAt, timeline.join(', ')).toBeGreaterThanOrEqual(0);
+  const firstStateEnd = timeline.indexOf('end /api/state');
+  expect(firstStateEnd === -1 || promptAt < firstStateEnd, timeline.join(', ')).toBe(true);
+});
+
+test('a failed thread start puts the prompt back, followed by text typed while it was starting', async ({ page, emptyStartup }) => {
+  const { current } = await readyWithThread(page, emptyStartup);
+  await openPalette(page);
+  await paletteOption(page, /current-project/).click();
+  let release;
+  const released = new Promise(resolve => { release = resolve; });
+  await page.route('**/api/tabs', async route => {
+    if (route.request().method() !== 'POST') return route.continue();
+    await Promise.race([released, delay(5000)]);
+    await route.fulfill({ status: 500, json: { success: false, error: 'Pi could not start' } });
+  });
+  await page.locator('#promptInput').fill('Original first prompt');
+  await page.locator('#sendButton').click();
+  await expect(page.locator('.message.user').first()).toContainText('Original first prompt');
+  await page.locator('#promptInput').fill('typed while starting');
+  release();
+  await expect(page.locator('#promptInput')).toHaveValue('Original first prompt\n\ntyped while starting');
+  await expect(page.locator('.message.user')).toHaveCount(0);
+  await expectDraftFolder(page, current);
+  expect((await emptyStartup.api('/api/tabs')).tabs).toHaveLength(1);
 });

@@ -16411,7 +16411,10 @@ function reportDraftStorageError() {
 function saveClientDraft({ leaving = false } = {}) {
   const id = draftConversations.activeId;
   if (activeTabId || !id) return;
-  draftConversations.edit(id, elements.promptInput.value || "");
+  const text = elements.promptInput.value || "";
+  // The first send clears the composer at once. Until the thread exists, the
+  // stored draft keeps the submitted text so a failed start can restore it.
+  if (!draftSubmissions.has(id) || text.trim()) draftConversations.edit(id, text);
   if (leaving && !elements.promptInput.value.trim() && !draftSubmissions.has(id)) draftConversations.remove(id);
   else draftConversations.save(id);
   reportDraftStorageError();
@@ -47891,6 +47894,33 @@ function discardMobileFailedSend() {
   recordMobileDiagnostic("failed send discarded");
 }
 
+/**
+ * Undoes the immediate first-send feedback after thread creation failed: the
+ * optimistic message goes away and the submitted text returns to its draft,
+ * followed by anything typed while the thread was starting.
+ */
+function restoreUnstartedDraftPrompt(draftId, inputMessage, optimisticPromptId) {
+  const draft = draftConversations.get(draftId);
+  const selected = !activeTabId && draftConversations.activeId === draftId;
+  if (selected) {
+    // Clear the indicator first: the transcript re-renders the start card
+    // only when no run indicator is active.
+    clearRunIndicatorActivity({ render: false });
+    discardOptimisticUserPrompt(optimisticPromptId);
+  }
+  if (!draft) return;
+  const newer = selected ? elements.promptInput.value : draft.text;
+  const recovered = newer.trim() && newer !== inputMessage && !newer.startsWith(`${inputMessage}\n\n`)
+    ? `${inputMessage}\n\n${newer}` : newer.trim() ? newer : inputMessage;
+  draftConversations.edit(draftId, recovered);
+  draftConversations.save(draftId);
+  reportDraftStorageError();
+  if (selected) {
+    elements.promptInput.value = recovered;
+    resizePromptInput();
+  }
+}
+
 async function sendEmptyStartPrompt(inputMessage) {
   const sourceDraftId = draftConversations.activeId || draftConversations.create();
   if (draftSubmissions.has(sourceDraftId)) return;
@@ -47903,10 +47933,23 @@ async function sendEmptyStartPrompt(inputMessage) {
   const sourceDraftNavigation = draftNavigationRevision;
   draftSubmissions.add(sourceDraftId);
   saveClientDraft();
+  // Slash commands need the new session's command catalog before dispatch;
+  // plain prompts can be shown and sent as soon as the thread exists.
+  const needsSessionCatalog = inputMessage.trim().startsWith("/");
+  let startingPromptId = "";
+  if (!needsSessionCatalog) {
+    startingPromptId = appendOptimisticUserPrompt(inputMessage);
+    setRunIndicatorActivity("Starting Pi…");
+    elements.promptInput.value = "";
+    resizePromptInput();
+  }
   try {
     // Creation must not switch away from a destination chosen while it was pending.
     const tab = await createTerminalTab(sourceCwd, { workspaceKind: sourceCwd ? "project" : "no-project", triggerButton: null, activate: false });
-    if (!tab?.id) return;
+    if (!tab?.id) {
+      if (startingPromptId) restoreUnstartedDraftPrompt(sourceDraftId, inputMessage, startingPromptId);
+      return;
+    }
     const selected = !activeTabId && draftConversations.activeId === sourceDraftId;
     if (selected) draftConversations.edit(sourceDraftId, elements.promptInput.value);
     const draft = draftConversations.get(sourceDraftId);
@@ -47921,8 +47964,12 @@ async function sendEmptyStartPrompt(inputMessage) {
         draftConversations.select(draftConversations.create());
       }
     }
+    let switching = null;
     if (selected && isCurrentTabContext(sourceContext) && focusedShellState === sourceNavigation && draftNavigationRevision === sourceDraftNavigation) {
-      await switchTab(tab.id);
+      // switchTab activates the thread synchronously, then loads its full UI.
+      // Only slash commands wait for that load before dispatch.
+      switching = switchTab(tab.id);
+      if (needsSessionCatalog) await switching;
     } else {
       renderTabs();
       if (selected) restoreActiveDraft();
@@ -47955,6 +48002,7 @@ async function sendEmptyStartPrompt(inputMessage) {
       retainSubmittedText();
       if (!isCurrentTabContext(tabContext)) addEvent(error.message || String(error), "error");
     }
+    await switching;
   } finally {
     draftSubmissions.delete(sourceDraftId);
     persistDesktopDrafts();
