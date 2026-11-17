@@ -58,14 +58,29 @@ async function startServer() {
   tempRoot = await mkdtemp(join(tmpdir(), "pi-webui-footer-model-advanced-"));
   await mkdir(join(tempRoot, "agent"), { recursive: true });
   await writeFile(join(tempRoot, "settings.json"), "{}", "utf8");
+  const footerPi = join(tempRoot, "footer-pi.mjs");
+  // The shared fake supplies session ownership; this advertised extension must
+  // also publish live status so later state reads do not refresh a cache forever.
+  await writeFile(footerPi, `#!/usr/bin/env node
+import { randomUUID } from "node:crypto";
+import { createInterface } from "node:readline";
+await import(${JSON.stringify(fakePi)});
+const statusText = ${JSON.stringify(footerPayload)};
+createInterface({ input: process.stdin }).on("line", (line) => {
+  const command = JSON.parse(line);
+  if (command.type !== "prompt" || !/^\\/git-footer-refresh(?:\\s|$)/u.test(command.message || "")) return;
+  process.stdout.write(JSON.stringify({ type: "extension_ui_request", id: randomUUID(), method: "setStatus", statusKey: "git-footer-webui", statusText }) + "\\n");
+});
+`, { encoding: "utf8", mode: 0o755 });
   baseURL = `http://127.0.0.1:${port}`;
-  child = spawn(process.execPath, [serverScript, "--cwd", tempRoot, "--host", "127.0.0.1", "--port", String(port), "--pi", fakePi], {
+  child = spawn(process.execPath, [serverScript, "--cwd", tempRoot, "--host", "127.0.0.1", "--port", String(port), "--pi", footerPi], {
     stdio: ["ignore", "pipe", "pipe"],
     env: {
       ...process.env,
       PI_WEBUI_RPC_SUPERVISOR: "0",
       PI_CODING_AGENT_DIR: join(tempRoot, "agent"),
       PI_WEBUI_SETTINGS_FILE: join(tempRoot, "settings.json"),
+      FAKE_PI_SESSION_OWNERSHIP: "1",
     },
   });
   child.stdout.on("data", (chunk) => { output += String(chunk); });
@@ -98,7 +113,6 @@ async function stopServer() {
 
 async function installFixture(page, models = scopedModels) {
   const modelCalls = [];
-  let selectedModel = null;
   await page.addInitScript(({ cacheKey, raw }) => {
     localStorage.setItem(cacheKey, JSON.stringify({ raw, cwd: "", savedAt: Date.now() }));
   }, { cacheKey: footerCacheKey, raw: footerPayload });
@@ -119,22 +133,13 @@ async function installFixture(page, models = scopedModels) {
       body: JSON.stringify({ ok: true, data: { models, patterns: ["*"], source: "browser-fixture", rpcRunning: true } }),
     });
   });
-  await page.route("**/api/state*", async (route) => {
-    const response = await route.fetch();
-    const body = await response.json();
-    if (selectedModel && body?.data) body.data.model = selectedModel;
-    await route.fulfill({ response, json: body });
-  });
   await page.route(/\/api\/model(?:\?.*)?$/, async (route) => {
     const body = route.request().postDataJSON();
     modelCalls.push(body);
-    selectedModel = { provider: body.provider, id: body.modelId };
     await delay(120);
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({ ok: true, data: { provider: body.provider, id: body.modelId } }),
-    });
+    // Keep HTTP and SSE state on the same session-owning fake RPC process.
+    const response = await route.fetch();
+    await route.fulfill({ response });
   });
   return modelCalls;
 }
@@ -147,6 +152,7 @@ async function preparePage(page) {
   await page.addStyleTag({ content: "#optionalFeatureMigrationSurface, #updateNotification { display: none !important; }" });
   await expect(page.locator("#statusBar")).toHaveClass(/statusbar-git-footer/);
   await expect(page.locator(".footer-model.footer-meta-action")).toBeVisible();
+  await expect(page.locator(".git-footer-refresh-button")).toBeEnabled();
 }
 
 async function openModelMenu(page) {
@@ -345,6 +351,7 @@ test("advanced footer model layout persists, groups providers, navigates, applie
     await page2.bringToFront();
     await page2.addStyleTag({ content: "#optionalFeatureMigrationSurface, #updateNotification { display: none !important; }" });
     await expect.poll(() => page2.evaluate((key) => localStorage.getItem(key), layoutKey)).toBe("advanced");
+    await expect(page2.locator(".git-footer-refresh-button")).toBeEnabled();
 
     await page2.addStyleTag({ content: ".footer-model-picker-advanced { width: 20rem !important; } .footer-model-provider-columns { max-width: 18rem; max-height: 7rem; }" });
     const picker = await openPicker(page2, /footer-model-picker-advanced/);
@@ -511,12 +518,18 @@ test("advanced footer model layout persists, groups providers, navigates, applie
     await expect.poll(() => page2.evaluate((key) => JSON.parse(localStorage.getItem(key) || "[]"), orderKey)).toEqual([
       "alpha/a-one", "zeta/z-one", "beta/b-one", "alpha/a-two", "zeta/z-two", "alpha/a-three",
     ]);
+    const appliedModels = page2.waitForResponse((response) => new URL(response.url()).pathname === "/api/scoped-models" && response.ok());
     await flatPicker.locator('[data-footer-model-key="alpha/a-two"]').click();
     await expect.poll(() => page2ModelCalls).toEqual([
       { provider: "zeta", modelId: "z-two" },
       { provider: "zeta", modelId: "z-one" },
       { provider: "alpha", modelId: "a-two" },
     ]);
+    // The request log precedes the delayed response and its state/catalog refresh.
+    // Opening the menu before those complete lets that refresh dismiss it.
+    await appliedModels;
+    await expect(page2.locator(".footer-model .footer-meta-value")).toContainText("a-two");
+    await expect(page2.locator(".git-footer-refresh-button")).toBeEnabled();
 
     // Narrow presentation stacks columns and remains inside the viewport.
     const advancedMenu = await openModelMenu(page2);

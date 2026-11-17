@@ -1178,7 +1178,7 @@ The central trust policy restricts these classes of operation to localhost:
 - workflow-policy saves;
 - subagent slot saves, cancel, and dismiss;
 - recovery-plan creation;
-- restart, shutdown, update plan, apply, and rollback;
+- restart, shutdown, update plan and apply (the rollback endpoint is retired);
 - optional package installation;
 - skill-file save;
 - file delete, move, save, and default-editor open;
@@ -1219,30 +1219,15 @@ Provider API keys remain server-side. Supervisor credentials, IPC paths, recover
 
 Internal recovery environment variables are credentials. They must not be logged, copied into settings, or supplied to untrusted child processes.
 
-## 29. Updates, restart, and rollback
+## 29. Native updates and restart
 
-The update interface covers Pi, Web UI, and eligible registered optional packages.
+The update interface plans one Pi or Web UI action at a time. Optional-companion sweeps and combined actions are retired. The server discovers eligible installations, owns the plan and freezes command arguments, roots and execution context. Apply requires the matching transaction ID and digest, then revalidates ownership under the existing install lock. Commands execute with process-tree timeouts and durable per-command receipts.
 
-The transaction flow is:
+Command outcomes include changed, unchanged, failed and unknown. Partial results remain visible after reconnect. Unknown completion blocks a new plan and automatic retry/restart until host-side recovery; it is never inferred to have succeeded. A changed active component can restart only after verification and affected work becomes idle. Restart authorization, restart pending and successor health are separate phases.
 
-1. Resolve current ownership and moving release metadata once.
-2. Create a private plan with exact target versions and commands.
-3. Hash the plan with SHA-256.
-4. Show the exact plan for confirmation.
-5. Apply only the matching transaction ID and digest.
-6. Acquire a cross-process install lock.
-7. Revalidate runtime identity and ownership.
-8. Execute commands with process-tree timeouts.
-9. Verify installed targets.
-10. Record ordered durable receipts.
+Native package commands may run lifecycle scripts and cannot be automatically rolled back by switching a runtime pointer. Legacy pointer migration is a separate launcher compatibility operation: it preserves backups and accepts only a validated equal-or-newer candidate. It does not undo package updates. App runners stop on server restart; supervised Pi tabs retain their separate process ownership. Zero downtime is not promised.
 
-Accepted outcomes are success, partial, failed, and rolled-back. Unsupported source, linked, pnpm, Yarn, opaque, nested, and unknown ownership fails closed with manual guidance.
-
-A Web UI candidate installs beside the active runtime under the Pi agent directory. The server probes it before activation. The stable launcher follows private `current` and `previous` pointers. Health verification lasts at least 90 seconds and requires the expected version plus a changed boot identity. Failed activation restores the prior pointer automatically.
-
-Zero downtime is not promised. App runners stop. Existing supervised Pi tabs can remain on code already loaded while new or reloaded tabs use the new version.
-
-Legacy broad update endpoints return `410 Gone`.
+The rollback route and legacy broad update mutation endpoints return 410 Gone. See [the native update contracts](DEVELOPMENT.md) for exact route, receipt, locking and validation details.
 
 ## 30. Persistence and storage
 
@@ -1266,6 +1251,9 @@ Legacy broad update endpoints return `410 Gone`.
 Web UI settings use schema version 8. Interface layout uses schema version 3. Writes use private temporary files, atomic replacement, same-process serialization, and a bounded cross-process writer lock. Dead or malformed lock records are cleaned conservatively.
 
 The settings migration imports a valid legacy file once only when the new file is absent. It never deletes or modifies the old file. An explicit `PI_WEBUI_SETTINGS_FILE` disables that import.
+
+Startup-only shell rollout evidence is stored in the raw settings record as shellRollout version 1 with a fresh or established cohort. It is independent of settings/layout versions and layout revision hashes. Initialization preserves legacy migration, raw future layout values and unknown fields; generic reads do not add a marker. Only a proven absent default state root with no prior-use evidence can establish a new fresh cohort. Failed or ambiguous proof stays conservative. Browser preferences remain same-origin and explicit choices take precedence.
+
 
 Native export downloads use opaque single-use style tokens with a ten-minute lifetime. Export temp artifacts expire after one hour.
 
@@ -1402,6 +1390,8 @@ Prompt requests support browser request deduplication. Prompt, steering, follow-
 - `GET, PUT /api/tabs/<id>/sampling-parameters`
 - `GET, PUT /api/interface-preferences`
 - `GET, PUT /api/webui-output-mode`
+
+The interface-preferences response includes validated shellRolloutCohort metadata. Its PUT allowlist excludes rollout markers and cohort writes. Browser default hydration is separate from revision-fenced layout persistence.
 
 ### 32.6 Files, directories, attachments, and runners
 

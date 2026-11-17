@@ -1,0 +1,6297 @@
+{
+  "schemaVersion": 1,
+  "workstream": "W0-C",
+  "capturedAt": "2026-11-14T20:42:32.078Z",
+  "sourceRevision": "06351edae0d87829dfa8c747d31a061825568b0e",
+  "integrationBase": "ad514adba3f4e57c10c72b26eec0dce570eab30e",
+  "command": "node node_modules/@playwright/test/cli.js test --config playwright.overhaul-layout.config.mjs",
+  "acceptance": "Baseline evidence only. Passing characterization tests do not mean known product defects pass layout acceptance.",
+  "scenarios": [
+    {
+      "id": "layout-classic-top-right",
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      },
+      "tabs": "top",
+      "deck": "right",
+      "sourceRevision": "06351edae0d87829dfa8c747d31a061825568b0e",
+      "status": "pass",
+      "steps": [
+        "Expand Controls; choose right deck; choose top tabs using normal selects.",
+        "Move Files upward using Alt+ArrowUp; Both also moves Files left with Alt+ArrowLeft; wait for isolated server persistence.",
+        "Collapse right deck with its actual toggle; verify composer and expand control."
+      ],
+      "measurements": [
+        {
+          "state": "customized",
+          "screenshot": "test-results/overhaul-baseline/layout-2026-11-14T20-42-32-078Z/layout-classic-top-right-customized.png",
+          "viewport": {
+            "width": 1920,
+            "height": 1080,
+            "devicePixelRatio": 1,
+            "visual": {
+              "width": 1920,
+              "height": 1080,
+              "scale": 1,
+              "offsetTop": 0
+            }
+          },
+          "documentOverflowX": 0,
+          "bodyClasses": "control-deck-right composer-action-grid-enabled theme-dark",
+          "keyboardInset": "0px",
+          "sidebarWidthProperty": "clamp(13rem, 18vw, 19rem)",
+          "regions": [
+            {
+              "selector": ".terminal-tabs-shell",
+              "box": {
+                "x": 17,
+                "y": 17,
+                "width": 1486,
+                "height": 68.5625,
+                "right": 1503,
+                "bottom": 85.5625
+              },
+              "gridColumns": "none"
+            },
+            {
+              "selector": ".chat-panel",
+              "box": {
+                "x": 16,
+                "y": 16,
+                "width": 1488,
+                "height": 1048,
+                "right": 1504,
+                "bottom": 1064
+              },
+              "gridColumns": "none"
+            },
+            {
+              "selector": "#chat",
+              "box": {
+                "x": 17,
+                "y": 85.5625,
+                "width": 1486,
+                "height": 770.546875,
+                "right": 1503,
+                "bottom": 856.109375
+              },
+              "gridColumns": "none"
+            },
+            {
+              "selector": ".composer",
+              "box": {
+                "x": 17,
+                "y": 920.640625,
+                "width": 1486,
+                "height": 142.359375,
+                "right": 1503,
+                "bottom": 1063
+              },
+              "gridColumns": "none"
+            }
+          ],
+          "controls": [
+            {
+              "selector": "#promptInput",
+              "present": true,
+              "box": {
+                "x": 31.390625,
+                "y": 936.03125,
+                "width": 1399.625,
+                "height": 55,
+                "right": 1431.015625,
+                "bottom": 991.03125
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "promptInput",
+              "reachable": true,
+              "clickTrial": "pass"
+            },
+            {
+              "selector": "#attachButton",
+              "present": true,
+              "box": {
+                "x": 1439.8125,
+                "y": 936.03125,
+                "width": 48.796875,
+                "height": 55,
+                "right": 1488.609375,
+                "bottom": 991.03125
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "svg",
+              "reachable": true,
+              "clickTrial": "pass"
+            },
+            {
+              "selector": "#sendButton",
+              "present": true,
+              "box": {
+                "x": 445.703125,
+                "y": 1002.21875,
+                "width": 110.375,
+                "height": 46.390625,
+                "right": 556.078125,
+                "bottom": 1048.609375
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "sendButton",
+              "reachable": true,
+              "clickTrial": "pass"
+            },
+            {
+              "selector": "#modelSelect",
+              "present": true,
+              "box": {
+                "x": 1654.453125,
+                "y": 339.546875,
+                "width": 139.578125,
+                "height": 36,
+                "right": 1794.03125,
+                "bottom": 375.546875
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "modelSelect",
+              "reachable": true,
+              "clickTrial": "pass"
+            },
+            {
+              "selector": "#thinkingSelect",
+              "present": true,
+              "box": {
+                "x": 1654.453125,
+                "y": 395.265625,
+                "width": 139.578125,
+                "height": 36,
+                "right": 1794.03125,
+                "bottom": 431.265625
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "thinkingSelect",
+              "reachable": true,
+              "clickTrial": "pass"
+            }
+          ]
+        },
+        {
+          "state": "collapsed",
+          "screenshot": "test-results/overhaul-baseline/layout-2026-11-14T20-42-32-078Z/layout-classic-top-right-collapsed.png",
+          "viewport": {
+            "width": 1920,
+            "height": 1080,
+            "devicePixelRatio": 1,
+            "visual": {
+              "width": 1920,
+              "height": 1080,
+              "scale": 1,
+              "offsetTop": 0
+            }
+          },
+          "documentOverflowX": 0,
+          "bodyClasses": "control-deck-right composer-action-grid-enabled theme-dark side-panel-collapsed side-panel-right-collapsed",
+          "keyboardInset": "0px",
+          "sidebarWidthProperty": "clamp(13rem, 18vw, 19rem)",
+          "regions": [
+            {
+              "selector": ".terminal-tabs-shell",
+              "box": {
+                "x": 17,
+                "y": 17,
+                "width": 1886,
+                "height": 68.5625,
+                "right": 1903,
+                "bottom": 85.5625
+              },
+              "gridColumns": "none"
+            },
+            {
+              "selector": ".chat-panel",
+              "box": {
+                "x": 16,
+                "y": 16,
+                "width": 1888,
+                "height": 1048,
+                "right": 1904,
+                "bottom": 1064
+              },
+              "gridColumns": "none"
+            },
+            {
+              "selector": "#chat",
+              "box": {
+                "x": 17,
+                "y": 85.5625,
+                "width": 1886,
+                "height": 770.546875,
+                "right": 1903,
+                "bottom": 856.109375
+              },
+              "gridColumns": "none"
+            },
+            {
+              "selector": ".composer",
+              "box": {
+                "x": 17,
+                "y": 920.640625,
+                "width": 1886,
+                "height": 142.359375,
+                "right": 1903,
+                "bottom": 1063
+              },
+              "gridColumns": "none"
+            }
+          ],
+          "controls": [
+            {
+              "selector": "#promptInput",
+              "present": true,
+              "box": {
+                "x": 31.390625,
+                "y": 936.03125,
+                "width": 1799.625,
+                "height": 55,
+                "right": 1831.015625,
+                "bottom": 991.03125
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "promptInput",
+              "reachable": true,
+              "clickTrial": "pass"
+            },
+            {
+              "selector": "#attachButton",
+              "present": true,
+              "box": {
+                "x": 1839.8125,
+                "y": 936.03125,
+                "width": 48.796875,
+                "height": 55,
+                "right": 1888.609375,
+                "bottom": 991.03125
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "svg",
+              "reachable": true,
+              "clickTrial": "pass"
+            },
+            {
+              "selector": "#sendButton",
+              "present": true,
+              "box": {
+                "x": 445.703125,
+                "y": 1002.21875,
+                "width": 110.375,
+                "height": 46.390625,
+                "right": 556.078125,
+                "bottom": 1048.609375
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "sendButton",
+              "reachable": true,
+              "clickTrial": "pass"
+            },
+            {
+              "selector": "#sidePanelExpandButton",
+              "present": true,
+              "box": {
+                "x": 1864.8125,
+                "y": 16,
+                "width": 40.796875,
+                "height": 40.796875,
+                "right": 1905.609375,
+                "bottom": 56.796875
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "SPAN",
+              "reachable": true,
+              "clickTrial": "pass"
+            }
+          ]
+        }
+      ],
+      "errors": [],
+      "pageErrors": [],
+      "persistedLayout": {
+        "version": 3,
+        "sidePanel": {
+          "placement": "right",
+          "sectionLayout": {
+            "order": [
+              "files",
+              "controls",
+              "git",
+              "optional-features",
+              "codex-usage",
+              "claude-usage",
+              "session",
+              "sampling",
+              "subagents",
+              "queue",
+              "commands",
+              "events"
+            ],
+            "leftSectionIds": []
+          },
+          "collapsedSectionIds": [
+            "files",
+            "git",
+            "optional-features",
+            "codex-usage",
+            "claude-usage",
+            "session",
+            "sampling",
+            "subagents",
+            "queue",
+            "commands",
+            "events"
+          ],
+          "hiddenSectionIds": null,
+          "collapsedPanels": {
+            "left": false,
+            "right": false
+          },
+          "panelWidths": {
+            "left": 384,
+            "right": 384
+          }
+        },
+        "composerActions": {
+          "order": null,
+          "grid": null
+        },
+        "controlVisibility": {
+          "hiddenIds": null
+        },
+        "footerScopedModelOrder": null,
+        "terminalTabs": {
+          "layout": "top",
+          "customGroups": null,
+          "sidebarWidth": null
+        },
+        "fileViewerWidth": null
+      },
+      "sectionStates": [
+        {
+          "section": "files",
+          "expanded": "false"
+        },
+        {
+          "section": "controls",
+          "expanded": "true"
+        },
+        {
+          "section": "git",
+          "expanded": "false"
+        },
+        {
+          "section": "optional-features",
+          "expanded": "false"
+        },
+        {
+          "section": "codex-usage",
+          "expanded": "false"
+        },
+        {
+          "section": "claude-usage",
+          "expanded": "false"
+        },
+        {
+          "section": "session",
+          "expanded": "false"
+        },
+        {
+          "section": "sampling",
+          "expanded": "false"
+        },
+        {
+          "section": "subagents",
+          "expanded": "false"
+        },
+        {
+          "section": "queue",
+          "expanded": "false"
+        },
+        {
+          "section": "commands",
+          "expanded": "false"
+        },
+        {
+          "section": "events",
+          "expanded": "false"
+        }
+      ],
+      "collapsedLayout": {
+        "preferences": {
+          "sidePanelWidth": 384
+        },
+        "layout": {
+          "version": 3,
+          "sidePanel": {
+            "placement": "right",
+            "sectionLayout": {
+              "order": [
+                "files",
+                "controls",
+                "git",
+                "optional-features",
+                "codex-usage",
+                "claude-usage",
+                "session",
+                "sampling",
+                "subagents",
+                "queue",
+                "commands",
+                "events"
+              ],
+              "leftSectionIds": []
+            },
+            "collapsedSectionIds": [
+              "files",
+              "git",
+              "optional-features",
+              "codex-usage",
+              "claude-usage",
+              "session",
+              "sampling",
+              "subagents",
+              "queue",
+              "commands",
+              "events"
+            ],
+            "hiddenSectionIds": null,
+            "collapsedPanels": {
+              "left": false,
+              "right": true
+            },
+            "panelWidths": {
+              "left": 384,
+              "right": 384
+            }
+          },
+          "composerActions": {
+            "order": null,
+            "grid": null
+          },
+          "controlVisibility": {
+            "hiddenIds": null
+          },
+          "footerScopedModelOrder": null,
+          "terminalTabs": {
+            "layout": "top",
+            "customGroups": null,
+            "sidebarWidth": null
+          },
+          "fileViewerWidth": null
+        },
+        "layoutRevision": "e17f7a03c939fc170a70fda760d166514c8370973b72a3150430f2089fa62250"
+      }
+    },
+    {
+      "id": "layout-classic-top-left",
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      },
+      "tabs": "top",
+      "deck": "left",
+      "theme": "catppuccin-latte",
+      "mode": "light",
+      "sourceRevision": "06351edae0d87829dfa8c747d31a061825568b0e",
+      "status": "pass",
+      "steps": [
+        "Expand Controls; choose left deck; choose top tabs using normal selects.",
+        "Move Files upward using Alt+ArrowUp; Both also moves Files left with Alt+ArrowLeft; wait for isolated server persistence.",
+        "Collapse left deck with its actual toggle; verify composer and expand control."
+      ],
+      "measurements": [
+        {
+          "state": "customized",
+          "screenshot": "test-results/overhaul-baseline/layout-2026-11-14T20-42-32-078Z/layout-classic-top-left-customized.png",
+          "viewport": {
+            "width": 1920,
+            "height": 1080,
+            "devicePixelRatio": 1,
+            "visual": {
+              "width": 1920,
+              "height": 1080,
+              "scale": 1,
+              "offsetTop": 0
+            }
+          },
+          "documentOverflowX": 0,
+          "bodyClasses": "control-deck-left composer-action-grid-enabled theme-light",
+          "keyboardInset": "0px",
+          "sidebarWidthProperty": "clamp(13rem, 18vw, 19rem)",
+          "regions": [
+            {
+              "selector": ".terminal-tabs-shell",
+              "box": {
+                "x": 417,
+                "y": 17,
+                "width": 1486,
+                "height": 68.5625,
+                "right": 1903,
+                "bottom": 85.5625
+              },
+              "gridColumns": "none"
+            },
+            {
+              "selector": ".chat-panel",
+              "box": {
+                "x": 416,
+                "y": 16,
+                "width": 1488,
+                "height": 1048,
+                "right": 1904,
+                "bottom": 1064
+              },
+              "gridColumns": "none"
+            },
+            {
+              "selector": "#chat",
+              "box": {
+                "x": 417,
+                "y": 85.5625,
+                "width": 1486,
+                "height": 770.546875,
+                "right": 1903,
+                "bottom": 856.109375
+              },
+              "gridColumns": "none"
+            },
+            {
+              "selector": ".composer",
+              "box": {
+                "x": 417,
+                "y": 920.640625,
+                "width": 1486,
+                "height": 142.359375,
+                "right": 1903,
+                "bottom": 1063
+              },
+              "gridColumns": "none"
+            }
+          ],
+          "controls": [
+            {
+              "selector": "#promptInput",
+              "present": true,
+              "box": {
+                "x": 431.390625,
+                "y": 936.03125,
+                "width": 1399.625,
+                "height": 55,
+                "right": 1831.015625,
+                "bottom": 991.03125
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "promptInput",
+              "reachable": true,
+              "clickTrial": "pass"
+            },
+            {
+              "selector": "#attachButton",
+              "present": true,
+              "box": {
+                "x": 1839.8125,
+                "y": 936.03125,
+                "width": 48.796875,
+                "height": 55,
+                "right": 1888.609375,
+                "bottom": 991.03125
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "svg",
+              "reachable": true,
+              "clickTrial": "pass"
+            },
+            {
+              "selector": "#sendButton",
+              "present": true,
+              "box": {
+                "x": 845.703125,
+                "y": 1002.21875,
+                "width": 110.375,
+                "height": 46.390625,
+                "right": 956.078125,
+                "bottom": 1048.609375
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "sendButton",
+              "reachable": true,
+              "clickTrial": "pass"
+            },
+            {
+              "selector": "#modelSelect",
+              "present": true,
+              "box": {
+                "x": 150.453125,
+                "y": 336.546875,
+                "width": 139.578125,
+                "height": 36,
+                "right": 290.03125,
+                "bottom": 372.546875
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "modelSelect",
+              "reachable": true,
+              "clickTrial": "pass"
+            },
+            {
+              "selector": "#thinkingSelect",
+              "present": true,
+              "box": {
+                "x": 150.453125,
+                "y": 392.265625,
+                "width": 139.578125,
+                "height": 36,
+                "right": 290.03125,
+                "bottom": 428.265625
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "thinkingSelect",
+              "reachable": true,
+              "clickTrial": "pass"
+            }
+          ]
+        },
+        {
+          "state": "collapsed",
+          "screenshot": "test-results/overhaul-baseline/layout-2026-11-14T20-42-32-078Z/layout-classic-top-left-collapsed.png",
+          "viewport": {
+            "width": 1920,
+            "height": 1080,
+            "devicePixelRatio": 1,
+            "visual": {
+              "width": 1920,
+              "height": 1080,
+              "scale": 1,
+              "offsetTop": 0
+            }
+          },
+          "documentOverflowX": 0,
+          "bodyClasses": "control-deck-left composer-action-grid-enabled theme-light side-panel-collapsed side-panel-left-collapsed",
+          "keyboardInset": "0px",
+          "sidebarWidthProperty": "clamp(13rem, 18vw, 19rem)",
+          "regions": [
+            {
+              "selector": ".terminal-tabs-shell",
+              "box": {
+                "x": 17,
+                "y": 17,
+                "width": 1886,
+                "height": 68.5625,
+                "right": 1903,
+                "bottom": 85.5625
+              },
+              "gridColumns": "none"
+            },
+            {
+              "selector": ".chat-panel",
+              "box": {
+                "x": 16,
+                "y": 16,
+                "width": 1888,
+                "height": 1048,
+                "right": 1904,
+                "bottom": 1064
+              },
+              "gridColumns": "none"
+            },
+            {
+              "selector": "#chat",
+              "box": {
+                "x": 17,
+                "y": 85.5625,
+                "width": 1886,
+                "height": 770.546875,
+                "right": 1903,
+                "bottom": 856.109375
+              },
+              "gridColumns": "none"
+            },
+            {
+              "selector": ".composer",
+              "box": {
+                "x": 17,
+                "y": 920.640625,
+                "width": 1886,
+                "height": 142.359375,
+                "right": 1903,
+                "bottom": 1063
+              },
+              "gridColumns": "none"
+            }
+          ],
+          "controls": [
+            {
+              "selector": "#promptInput",
+              "present": true,
+              "box": {
+                "x": 31.390625,
+                "y": 936.03125,
+                "width": 1799.625,
+                "height": 55,
+                "right": 1831.015625,
+                "bottom": 991.03125
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "promptInput",
+              "reachable": true,
+              "clickTrial": "pass"
+            },
+            {
+              "selector": "#attachButton",
+              "present": true,
+              "box": {
+                "x": 1839.8125,
+                "y": 936.03125,
+                "width": 48.796875,
+                "height": 55,
+                "right": 1888.609375,
+                "bottom": 991.03125
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "svg",
+              "reachable": true,
+              "clickTrial": "pass"
+            },
+            {
+              "selector": "#sendButton",
+              "present": true,
+              "box": {
+                "x": 445.703125,
+                "y": 1002.21875,
+                "width": 110.375,
+                "height": 46.390625,
+                "right": 556.078125,
+                "bottom": 1048.609375
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "sendButton",
+              "reachable": true,
+              "clickTrial": "pass"
+            },
+            {
+              "selector": "#sidePanelLeftExpandButton",
+              "present": true,
+              "box": {
+                "x": 14.390625,
+                "y": 16,
+                "width": 40.796875,
+                "height": 40.796875,
+                "right": 55.1875,
+                "bottom": 56.796875
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "SPAN",
+              "reachable": true,
+              "clickTrial": "pass"
+            }
+          ]
+        }
+      ],
+      "errors": [],
+      "pageErrors": [],
+      "persistedLayout": {
+        "version": 3,
+        "sidePanel": {
+          "placement": "left",
+          "sectionLayout": {
+            "order": [
+              "files",
+              "controls",
+              "git",
+              "optional-features",
+              "codex-usage",
+              "claude-usage",
+              "session",
+              "sampling",
+              "subagents",
+              "queue",
+              "commands",
+              "events"
+            ],
+            "leftSectionIds": []
+          },
+          "collapsedSectionIds": [
+            "files",
+            "git",
+            "optional-features",
+            "codex-usage",
+            "claude-usage",
+            "session",
+            "sampling",
+            "subagents",
+            "queue",
+            "commands",
+            "events"
+          ],
+          "hiddenSectionIds": null,
+          "collapsedPanels": {
+            "left": false,
+            "right": false
+          },
+          "panelWidths": {
+            "left": 384,
+            "right": 384
+          }
+        },
+        "composerActions": {
+          "order": null,
+          "grid": null
+        },
+        "controlVisibility": {
+          "hiddenIds": null
+        },
+        "footerScopedModelOrder": null,
+        "terminalTabs": {
+          "layout": "top",
+          "customGroups": null,
+          "sidebarWidth": null
+        },
+        "fileViewerWidth": null
+      },
+      "sectionStates": [
+        {
+          "section": "files",
+          "expanded": "false"
+        },
+        {
+          "section": "controls",
+          "expanded": "true"
+        },
+        {
+          "section": "git",
+          "expanded": "false"
+        },
+        {
+          "section": "optional-features",
+          "expanded": "false"
+        },
+        {
+          "section": "codex-usage",
+          "expanded": "false"
+        },
+        {
+          "section": "claude-usage",
+          "expanded": "false"
+        },
+        {
+          "section": "session",
+          "expanded": "false"
+        },
+        {
+          "section": "sampling",
+          "expanded": "false"
+        },
+        {
+          "section": "subagents",
+          "expanded": "false"
+        },
+        {
+          "section": "queue",
+          "expanded": "false"
+        },
+        {
+          "section": "commands",
+          "expanded": "false"
+        },
+        {
+          "section": "events",
+          "expanded": "false"
+        }
+      ],
+      "collapsedLayout": {
+        "preferences": {
+          "sidePanelWidth": 384
+        },
+        "layout": {
+          "version": 3,
+          "sidePanel": {
+            "placement": "left",
+            "sectionLayout": {
+              "order": [
+                "files",
+                "controls",
+                "git",
+                "optional-features",
+                "codex-usage",
+                "claude-usage",
+                "session",
+                "sampling",
+                "subagents",
+                "queue",
+                "commands",
+                "events"
+              ],
+              "leftSectionIds": []
+            },
+            "collapsedSectionIds": [
+              "files",
+              "git",
+              "optional-features",
+              "codex-usage",
+              "claude-usage",
+              "session",
+              "sampling",
+              "subagents",
+              "queue",
+              "commands",
+              "events"
+            ],
+            "hiddenSectionIds": null,
+            "collapsedPanels": {
+              "left": true,
+              "right": false
+            },
+            "panelWidths": {
+              "left": 384,
+              "right": 384
+            }
+          },
+          "composerActions": {
+            "order": null,
+            "grid": null
+          },
+          "controlVisibility": {
+            "hiddenIds": null
+          },
+          "footerScopedModelOrder": null,
+          "terminalTabs": {
+            "layout": "top",
+            "customGroups": null,
+            "sidebarWidth": null
+          },
+          "fileViewerWidth": null
+        },
+        "layoutRevision": "4aed65f95c56aa0e0d55e3adf4ccf340c4b45d1412debfcc20b8bc7df3a0550b"
+      }
+    },
+    {
+      "id": "layout-classic-top-both",
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      },
+      "tabs": "top",
+      "deck": "both",
+      "theme": "overhaul-custom",
+      "mode": "dark",
+      "sourceRevision": "06351edae0d87829dfa8c747d31a061825568b0e",
+      "status": "pass",
+      "steps": [
+        "Expand Controls; choose both deck; choose top tabs using normal selects.",
+        "Move Files upward using Alt+ArrowUp; Both also moves Files left with Alt+ArrowLeft; wait for isolated server persistence.",
+        "Collapse right deck with its actual toggle; verify composer and expand control."
+      ],
+      "measurements": [
+        {
+          "state": "customized",
+          "screenshot": "test-results/overhaul-baseline/layout-2026-11-14T20-42-32-078Z/layout-classic-top-both-customized.png",
+          "viewport": {
+            "width": 1920,
+            "height": 1080,
+            "devicePixelRatio": 1,
+            "visual": {
+              "width": 1920,
+              "height": 1080,
+              "scale": 1,
+              "offsetTop": 0
+            }
+          },
+          "documentOverflowX": 0,
+          "bodyClasses": "control-deck-both control-deck-right composer-action-grid-enabled theme-dark custom-background-active",
+          "keyboardInset": "0px",
+          "sidebarWidthProperty": "clamp(13rem, 18vw, 19rem)",
+          "regions": [
+            {
+              "selector": ".terminal-tabs-shell",
+              "box": {
+                "x": 417,
+                "y": 17,
+                "width": 1086,
+                "height": 68.5625,
+                "right": 1503,
+                "bottom": 85.5625
+              },
+              "gridColumns": "none"
+            },
+            {
+              "selector": ".chat-panel",
+              "box": {
+                "x": 416,
+                "y": 16,
+                "width": 1088,
+                "height": 1048,
+                "right": 1504,
+                "bottom": 1064
+              },
+              "gridColumns": "none"
+            },
+            {
+              "selector": "#chat",
+              "box": {
+                "x": 417,
+                "y": 85.5625,
+                "width": 1086,
+                "height": 770.546875,
+                "right": 1503,
+                "bottom": 856.109375
+              },
+              "gridColumns": "none"
+            },
+            {
+              "selector": ".composer",
+              "box": {
+                "x": 417,
+                "y": 920.640625,
+                "width": 1086,
+                "height": 142.359375,
+                "right": 1503,
+                "bottom": 1063
+              },
+              "gridColumns": "none"
+            }
+          ],
+          "controls": [
+            {
+              "selector": "#promptInput",
+              "present": true,
+              "box": {
+                "x": 431.390625,
+                "y": 936.03125,
+                "width": 999.625,
+                "height": 55,
+                "right": 1431.015625,
+                "bottom": 991.03125
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "promptInput",
+              "reachable": true,
+              "clickTrial": "pass"
+            },
+            {
+              "selector": "#attachButton",
+              "present": true,
+              "box": {
+                "x": 1439.8125,
+                "y": 936.03125,
+                "width": 48.796875,
+                "height": 55,
+                "right": 1488.609375,
+                "bottom": 991.03125
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "svg",
+              "reachable": true,
+              "clickTrial": "pass"
+            },
+            {
+              "selector": "#sendButton",
+              "present": true,
+              "box": {
+                "x": 845.703125,
+                "y": 1002.21875,
+                "width": 110.375,
+                "height": 46.390625,
+                "right": 956.078125,
+                "bottom": 1048.609375
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "sendButton",
+              "reachable": true,
+              "clickTrial": "pass"
+            },
+            {
+              "selector": "#modelSelect",
+              "present": true,
+              "box": {
+                "x": 1654.453125,
+                "y": 283.078125,
+                "width": 139.578125,
+                "height": 36,
+                "right": 1794.03125,
+                "bottom": 319.078125
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "modelSelect",
+              "reachable": true,
+              "clickTrial": "pass"
+            },
+            {
+              "selector": "#thinkingSelect",
+              "present": true,
+              "box": {
+                "x": 1654.453125,
+                "y": 338.796875,
+                "width": 139.578125,
+                "height": 36,
+                "right": 1794.03125,
+                "bottom": 374.796875
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "thinkingSelect",
+              "reachable": true,
+              "clickTrial": "pass"
+            }
+          ]
+        },
+        {
+          "state": "collapsed",
+          "screenshot": "test-results/overhaul-baseline/layout-2026-11-14T20-42-32-078Z/layout-classic-top-both-collapsed.png",
+          "viewport": {
+            "width": 1920,
+            "height": 1080,
+            "devicePixelRatio": 1,
+            "visual": {
+              "width": 1920,
+              "height": 1080,
+              "scale": 1,
+              "offsetTop": 0
+            }
+          },
+          "documentOverflowX": 0,
+          "bodyClasses": "control-deck-both control-deck-right composer-action-grid-enabled theme-dark custom-background-active side-panel-right-collapsed",
+          "keyboardInset": "0px",
+          "sidebarWidthProperty": "clamp(13rem, 18vw, 19rem)",
+          "regions": [
+            {
+              "selector": ".terminal-tabs-shell",
+              "box": {
+                "x": 417,
+                "y": 17,
+                "width": 1486,
+                "height": 68.5625,
+                "right": 1903,
+                "bottom": 85.5625
+              },
+              "gridColumns": "none"
+            },
+            {
+              "selector": ".chat-panel",
+              "box": {
+                "x": 416,
+                "y": 16,
+                "width": 1488,
+                "height": 1048,
+                "right": 1904,
+                "bottom": 1064
+              },
+              "gridColumns": "none"
+            },
+            {
+              "selector": "#chat",
+              "box": {
+                "x": 417,
+                "y": 85.5625,
+                "width": 1486,
+                "height": 770.546875,
+                "right": 1903,
+                "bottom": 856.109375
+              },
+              "gridColumns": "none"
+            },
+            {
+              "selector": ".composer",
+              "box": {
+                "x": 417,
+                "y": 920.640625,
+                "width": 1486,
+                "height": 142.359375,
+                "right": 1903,
+                "bottom": 1063
+              },
+              "gridColumns": "none"
+            }
+          ],
+          "controls": [
+            {
+              "selector": "#promptInput",
+              "present": true,
+              "box": {
+                "x": 431.390625,
+                "y": 936.03125,
+                "width": 1399.625,
+                "height": 55,
+                "right": 1831.015625,
+                "bottom": 991.03125
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "promptInput",
+              "reachable": true,
+              "clickTrial": "pass"
+            },
+            {
+              "selector": "#attachButton",
+              "present": true,
+              "box": {
+                "x": 1839.8125,
+                "y": 936.03125,
+                "width": 48.796875,
+                "height": 55,
+                "right": 1888.609375,
+                "bottom": 991.03125
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "svg",
+              "reachable": true,
+              "clickTrial": "pass"
+            },
+            {
+              "selector": "#sendButton",
+              "present": true,
+              "box": {
+                "x": 845.703125,
+                "y": 1002.21875,
+                "width": 110.375,
+                "height": 46.390625,
+                "right": 956.078125,
+                "bottom": 1048.609375
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "sendButton",
+              "reachable": true,
+              "clickTrial": "pass"
+            },
+            {
+              "selector": "#sidePanelExpandButton",
+              "present": true,
+              "box": {
+                "x": 1864.8125,
+                "y": 16,
+                "width": 40.796875,
+                "height": 40.796875,
+                "right": 1905.609375,
+                "bottom": 56.796875
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "SPAN",
+              "reachable": true,
+              "clickTrial": "pass"
+            }
+          ]
+        }
+      ],
+      "errors": [],
+      "pageErrors": [],
+      "persistedLayout": {
+        "version": 3,
+        "sidePanel": {
+          "placement": "both",
+          "sectionLayout": {
+            "order": [
+              "controls",
+              "git",
+              "optional-features",
+              "codex-usage",
+              "claude-usage",
+              "session",
+              "sampling",
+              "subagents",
+              "queue",
+              "commands",
+              "events",
+              "files"
+            ],
+            "leftSectionIds": [
+              "files"
+            ]
+          },
+          "collapsedSectionIds": [
+            "files",
+            "git",
+            "optional-features",
+            "codex-usage",
+            "claude-usage",
+            "session",
+            "sampling",
+            "subagents",
+            "queue",
+            "commands",
+            "events"
+          ],
+          "hiddenSectionIds": null,
+          "collapsedPanels": {
+            "left": false,
+            "right": false
+          },
+          "panelWidths": {
+            "left": 384,
+            "right": 384
+          }
+        },
+        "composerActions": {
+          "order": null,
+          "grid": null
+        },
+        "controlVisibility": {
+          "hiddenIds": null
+        },
+        "footerScopedModelOrder": null,
+        "terminalTabs": {
+          "layout": "top",
+          "customGroups": null,
+          "sidebarWidth": null
+        },
+        "fileViewerWidth": null
+      },
+      "sectionStates": [
+        {
+          "section": "files",
+          "expanded": "false"
+        },
+        {
+          "section": "controls",
+          "expanded": "true"
+        },
+        {
+          "section": "git",
+          "expanded": "false"
+        },
+        {
+          "section": "optional-features",
+          "expanded": "false"
+        },
+        {
+          "section": "codex-usage",
+          "expanded": "false"
+        },
+        {
+          "section": "claude-usage",
+          "expanded": "false"
+        },
+        {
+          "section": "session",
+          "expanded": "false"
+        },
+        {
+          "section": "sampling",
+          "expanded": "false"
+        },
+        {
+          "section": "subagents",
+          "expanded": "false"
+        },
+        {
+          "section": "queue",
+          "expanded": "false"
+        },
+        {
+          "section": "commands",
+          "expanded": "false"
+        },
+        {
+          "section": "events",
+          "expanded": "false"
+        }
+      ],
+      "collapsedLayout": {
+        "preferences": {
+          "sidePanelWidth": 384
+        },
+        "layout": {
+          "version": 3,
+          "sidePanel": {
+            "placement": "both",
+            "sectionLayout": {
+              "order": [
+                "controls",
+                "git",
+                "optional-features",
+                "codex-usage",
+                "claude-usage",
+                "session",
+                "sampling",
+                "subagents",
+                "queue",
+                "commands",
+                "events",
+                "files"
+              ],
+              "leftSectionIds": [
+                "files"
+              ]
+            },
+            "collapsedSectionIds": [
+              "files",
+              "git",
+              "optional-features",
+              "codex-usage",
+              "claude-usage",
+              "session",
+              "sampling",
+              "subagents",
+              "queue",
+              "commands",
+              "events"
+            ],
+            "hiddenSectionIds": null,
+            "collapsedPanels": {
+              "left": false,
+              "right": true
+            },
+            "panelWidths": {
+              "left": 384,
+              "right": 384
+            }
+          },
+          "composerActions": {
+            "order": null,
+            "grid": null
+          },
+          "controlVisibility": {
+            "hiddenIds": null
+          },
+          "footerScopedModelOrder": null,
+          "terminalTabs": {
+            "layout": "top",
+            "customGroups": null,
+            "sidebarWidth": null
+          },
+          "fileViewerWidth": null
+        },
+        "layoutRevision": "bc6e72394e60eaf3990daf0fedb1d9686157c660aa9b1d065937c377b0b05338"
+      }
+    },
+    {
+      "id": "layout-classic-left-right",
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      },
+      "tabs": "left",
+      "deck": "right",
+      "sourceRevision": "06351edae0d87829dfa8c747d31a061825568b0e",
+      "status": "known-defect",
+      "steps": [
+        "Expand Controls; choose right deck; choose left tabs using normal selects.",
+        "Move Files upward using Alt+ArrowUp; Both also moves Files left with Alt+ArrowLeft; wait for isolated server persistence.",
+        "Collapse right deck with its actual toggle; verify composer and expand control."
+      ],
+      "measurements": [
+        {
+          "state": "customized",
+          "screenshot": "test-results/overhaul-baseline/layout-2026-11-14T20-42-32-078Z/layout-classic-left-right-customized.png",
+          "viewport": {
+            "width": 1920,
+            "height": 1080,
+            "devicePixelRatio": 1,
+            "visual": {
+              "width": 1920,
+              "height": 1080,
+              "scale": 1,
+              "offsetTop": 0
+            }
+          },
+          "documentOverflowX": 0,
+          "bodyClasses": "terminal-tabs-left control-deck-sidebar terminal-tabs-sidebar-start control-deck-right composer-action-grid-enabled theme-dark",
+          "keyboardInset": "0px",
+          "sidebarWidthProperty": "1071px",
+          "regions": [
+            {
+              "selector": ".terminal-tabs-shell",
+              "box": {
+                "x": 17,
+                "y": 17,
+                "width": 1071,
+                "height": 1046,
+                "right": 1088,
+                "bottom": 1063
+              },
+              "gridColumns": "none"
+            },
+            {
+              "selector": ".chat-panel",
+              "box": {
+                "x": 16,
+                "y": 16,
+                "width": 1488,
+                "height": 1048,
+                "right": 1504,
+                "bottom": 1064
+              },
+              "gridColumns": "1071px 415px"
+            },
+            {
+              "selector": "#chat",
+              "box": {
+                "x": 1088,
+                "y": 17,
+                "width": 415,
+                "height": 784.71875,
+                "right": 1503,
+                "bottom": 801.71875
+              },
+              "gridColumns": "none"
+            },
+            {
+              "selector": ".composer",
+              "box": {
+                "x": 1088,
+                "y": 866.25,
+                "width": 415,
+                "height": 196.75,
+                "right": 1503,
+                "bottom": 1063
+              },
+              "gridColumns": "none"
+            }
+          ],
+          "controls": [
+            {
+              "selector": "#promptInput",
+              "present": true,
+              "box": {
+                "x": 1102.390625,
+                "y": 881.640625,
+                "width": 328.625,
+                "height": 55,
+                "right": 1431.015625,
+                "bottom": 936.640625
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "promptInput",
+              "reachable": true,
+              "clickTrial": "pass"
+            },
+            {
+              "selector": "#attachButton",
+              "present": true,
+              "box": {
+                "x": 1439.8125,
+                "y": 881.640625,
+                "width": 48.796875,
+                "height": 55,
+                "right": 1488.609375,
+                "bottom": 936.640625
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "svg",
+              "reachable": true,
+              "clickTrial": "pass"
+            },
+            {
+              "selector": "#sendButton",
+              "present": true,
+              "box": {
+                "x": 1220.765625,
+                "y": 1002.21875,
+                "width": 110.375,
+                "height": 46.390625,
+                "right": 1331.140625,
+                "bottom": 1048.609375
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "sendButton",
+              "reachable": true,
+              "clickTrial": "pass"
+            },
+            {
+              "selector": "#modelSelect",
+              "present": true,
+              "box": {
+                "x": 1654.453125,
+                "y": 339.546875,
+                "width": 139.578125,
+                "height": 36,
+                "right": 1794.03125,
+                "bottom": 375.546875
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "modelSelect",
+              "reachable": true,
+              "clickTrial": "pass"
+            },
+            {
+              "selector": "#thinkingSelect",
+              "present": true,
+              "box": {
+                "x": 1654.453125,
+                "y": 395.265625,
+                "width": 139.578125,
+                "height": 36,
+                "right": 1794.03125,
+                "bottom": 431.265625
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "thinkingSelect",
+              "reachable": true,
+              "clickTrial": "pass"
+            }
+          ]
+        },
+        {
+          "state": "collapsed",
+          "screenshot": "test-results/overhaul-baseline/layout-2026-11-14T20-42-32-078Z/layout-classic-left-right-collapsed.png",
+          "viewport": {
+            "width": 1920,
+            "height": 1080,
+            "devicePixelRatio": 1,
+            "visual": {
+              "width": 1920,
+              "height": 1080,
+              "scale": 1,
+              "offsetTop": 0
+            }
+          },
+          "documentOverflowX": 0,
+          "bodyClasses": "terminal-tabs-left control-deck-sidebar terminal-tabs-sidebar-start control-deck-right composer-action-grid-enabled theme-dark side-panel-collapsed side-panel-right-collapsed",
+          "keyboardInset": "0px",
+          "sidebarWidthProperty": "1071px",
+          "regions": [
+            {
+              "selector": ".terminal-tabs-shell",
+              "box": {
+                "x": 17,
+                "y": 17,
+                "width": 1071,
+                "height": 1046,
+                "right": 1088,
+                "bottom": 1063
+              },
+              "gridColumns": "none"
+            },
+            {
+              "selector": ".chat-panel",
+              "box": {
+                "x": 16,
+                "y": 16,
+                "width": 1888,
+                "height": 1048,
+                "right": 1904,
+                "bottom": 1064
+              },
+              "gridColumns": "1071px 815px"
+            },
+            {
+              "selector": "#chat",
+              "box": {
+                "x": 1088,
+                "y": 17,
+                "width": 815,
+                "height": 839.109375,
+                "right": 1903,
+                "bottom": 856.109375
+              },
+              "gridColumns": "none"
+            },
+            {
+              "selector": ".composer",
+              "box": {
+                "x": 1088,
+                "y": 920.640625,
+                "width": 815,
+                "height": 142.359375,
+                "right": 1903,
+                "bottom": 1063
+              },
+              "gridColumns": "none"
+            }
+          ],
+          "controls": [
+            {
+              "selector": "#promptInput",
+              "present": true,
+              "box": {
+                "x": 1102.390625,
+                "y": 936.03125,
+                "width": 728.625,
+                "height": 55,
+                "right": 1831.015625,
+                "bottom": 991.03125
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "promptInput",
+              "reachable": true,
+              "clickTrial": "pass"
+            },
+            {
+              "selector": "#attachButton",
+              "present": true,
+              "box": {
+                "x": 1839.8125,
+                "y": 936.03125,
+                "width": 48.796875,
+                "height": 55,
+                "right": 1888.609375,
+                "bottom": 991.03125
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "svg",
+              "reachable": true,
+              "clickTrial": "pass"
+            },
+            {
+              "selector": "#sendButton",
+              "present": true,
+              "box": {
+                "x": 1516.703125,
+                "y": 1002.21875,
+                "width": 110.375,
+                "height": 46.390625,
+                "right": 1627.078125,
+                "bottom": 1048.609375
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "sendButton",
+              "reachable": true,
+              "clickTrial": "pass"
+            },
+            {
+              "selector": "#sidePanelExpandButton",
+              "present": true,
+              "box": {
+                "x": 1864.8125,
+                "y": 16,
+                "width": 40.796875,
+                "height": 40.796875,
+                "right": 1905.609375,
+                "bottom": 56.796875
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "SPAN",
+              "reachable": true,
+              "clickTrial": "pass"
+            }
+          ]
+        }
+      ],
+      "errors": [],
+      "pageErrors": [],
+      "persistedLayout": {
+        "version": 3,
+        "sidePanel": {
+          "placement": "right",
+          "sectionLayout": {
+            "order": [
+              "files",
+              "controls",
+              "git",
+              "optional-features",
+              "codex-usage",
+              "claude-usage",
+              "session",
+              "sampling",
+              "subagents",
+              "queue",
+              "commands",
+              "events"
+            ],
+            "leftSectionIds": []
+          },
+          "collapsedSectionIds": [
+            "files",
+            "git",
+            "optional-features",
+            "codex-usage",
+            "claude-usage",
+            "session",
+            "sampling",
+            "subagents",
+            "queue",
+            "commands",
+            "events"
+          ],
+          "hiddenSectionIds": null,
+          "collapsedPanels": {
+            "left": false,
+            "right": false
+          },
+          "panelWidths": {
+            "left": 384,
+            "right": 384
+          }
+        },
+        "composerActions": {
+          "order": null,
+          "grid": null
+        },
+        "controlVisibility": {
+          "hiddenIds": null
+        },
+        "footerScopedModelOrder": null,
+        "terminalTabs": {
+          "layout": "left",
+          "customGroups": null,
+          "sidebarWidth": null
+        },
+        "fileViewerWidth": null
+      },
+      "sectionStates": [
+        {
+          "section": "files",
+          "expanded": "false"
+        },
+        {
+          "section": "controls",
+          "expanded": "true"
+        },
+        {
+          "section": "git",
+          "expanded": "false"
+        },
+        {
+          "section": "optional-features",
+          "expanded": "false"
+        },
+        {
+          "section": "codex-usage",
+          "expanded": "false"
+        },
+        {
+          "section": "claude-usage",
+          "expanded": "false"
+        },
+        {
+          "section": "session",
+          "expanded": "false"
+        },
+        {
+          "section": "sampling",
+          "expanded": "false"
+        },
+        {
+          "section": "subagents",
+          "expanded": "false"
+        },
+        {
+          "section": "queue",
+          "expanded": "false"
+        },
+        {
+          "section": "commands",
+          "expanded": "false"
+        },
+        {
+          "section": "events",
+          "expanded": "false"
+        }
+      ],
+      "defects": [
+        {
+          "id": "W0-C-003",
+          "severity": "Major",
+          "target": "W3 Classic sidebar layout; W7 deck-placement regression",
+          "expected": "Session sidebar retains a compact width and leaves most available space to conversation content.",
+          "actual": {
+            "rail": {
+              "selector": ".terminal-tabs-shell",
+              "box": {
+                "x": 17,
+                "y": 17,
+                "width": 1071,
+                "height": 1046,
+                "right": 1088,
+                "bottom": 1063
+              },
+              "gridColumns": "none"
+            },
+            "chat": {
+              "selector": "#chat",
+              "box": {
+                "x": 1088,
+                "y": 17,
+                "width": 415,
+                "height": 784.71875,
+                "right": 1503,
+                "bottom": 801.71875
+              },
+              "gridColumns": "none"
+            },
+            "sidebarWidthProperty": "1071px",
+            "regions": [
+              {
+                "selector": ".terminal-tabs-shell",
+                "box": {
+                  "x": 17,
+                  "y": 17,
+                  "width": 1071,
+                  "height": 1046,
+                  "right": 1088,
+                  "bottom": 1063
+                },
+                "gridColumns": "none"
+              },
+              {
+                "selector": ".chat-panel",
+                "box": {
+                  "x": 16,
+                  "y": 16,
+                  "width": 1488,
+                  "height": 1048,
+                  "right": 1504,
+                  "bottom": 1064
+                },
+                "gridColumns": "1071px 415px"
+              },
+              {
+                "selector": "#chat",
+                "box": {
+                  "x": 1088,
+                  "y": 17,
+                  "width": 415,
+                  "height": 784.71875,
+                  "right": 1503,
+                  "bottom": 801.71875
+                },
+                "gridColumns": "none"
+              },
+              {
+                "selector": ".composer",
+                "box": {
+                  "x": 1088,
+                  "y": 866.25,
+                  "width": 415,
+                  "height": 196.75,
+                  "right": 1503,
+                  "bottom": 1063
+                },
+                "gridColumns": "none"
+              }
+            ]
+          },
+          "screenshot": "test-results/overhaul-baseline/layout-2026-11-14T20-42-32-078Z/layout-classic-left-right-customized.png",
+          "reproduction": [
+            "Expand Controls; choose right deck; choose left tabs using normal selects.",
+            "Move Files upward using Alt+ArrowUp; Both also moves Files left with Alt+ArrowLeft; wait for isolated server persistence."
+          ]
+        }
+      ],
+      "collapsedLayout": {
+        "preferences": {
+          "sidePanelWidth": 384
+        },
+        "layout": {
+          "version": 3,
+          "sidePanel": {
+            "placement": "right",
+            "sectionLayout": {
+              "order": [
+                "files",
+                "controls",
+                "git",
+                "optional-features",
+                "codex-usage",
+                "claude-usage",
+                "session",
+                "sampling",
+                "subagents",
+                "queue",
+                "commands",
+                "events"
+              ],
+              "leftSectionIds": []
+            },
+            "collapsedSectionIds": [
+              "files",
+              "git",
+              "optional-features",
+              "codex-usage",
+              "claude-usage",
+              "session",
+              "sampling",
+              "subagents",
+              "queue",
+              "commands",
+              "events"
+            ],
+            "hiddenSectionIds": null,
+            "collapsedPanels": {
+              "left": false,
+              "right": true
+            },
+            "panelWidths": {
+              "left": 384,
+              "right": 384
+            }
+          },
+          "composerActions": {
+            "order": null,
+            "grid": null
+          },
+          "controlVisibility": {
+            "hiddenIds": null
+          },
+          "footerScopedModelOrder": null,
+          "terminalTabs": {
+            "layout": "left",
+            "customGroups": null,
+            "sidebarWidth": null
+          },
+          "fileViewerWidth": null
+        },
+        "layoutRevision": "ed0c659502330ed000ff6bd559ef89d861f83ef726ce69a08a3bc42ef1b3a10d"
+      }
+    },
+    {
+      "id": "layout-classic-left-left",
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      },
+      "tabs": "left",
+      "deck": "left",
+      "sourceRevision": "06351edae0d87829dfa8c747d31a061825568b0e",
+      "status": "pass",
+      "steps": [
+        "Expand Controls; choose left deck; choose left tabs using normal selects.",
+        "Move Files upward using Alt+ArrowUp; Both also moves Files left with Alt+ArrowLeft; wait for isolated server persistence.",
+        "Collapse left deck with its actual toggle; verify composer and expand control."
+      ],
+      "measurements": [
+        {
+          "state": "customized",
+          "screenshot": "test-results/overhaul-baseline/layout-2026-11-14T20-42-32-078Z/layout-classic-left-left-customized.png",
+          "viewport": {
+            "width": 1920,
+            "height": 1080,
+            "devicePixelRatio": 1,
+            "visual": {
+              "width": 1920,
+              "height": 1080,
+              "scale": 1,
+              "offsetTop": 0
+            }
+          },
+          "documentOverflowX": 0,
+          "bodyClasses": "terminal-tabs-left control-deck-sidebar control-deck-left composer-action-grid-enabled theme-dark",
+          "keyboardInset": "0px",
+          "sidebarWidthProperty": "208px",
+          "regions": [
+            {
+              "selector": ".terminal-tabs-shell",
+              "box": {
+                "x": 1695,
+                "y": 17,
+                "width": 208,
+                "height": 1046,
+                "right": 1903,
+                "bottom": 1063
+              },
+              "gridColumns": "none"
+            },
+            {
+              "selector": ".chat-panel",
+              "box": {
+                "x": 416,
+                "y": 16,
+                "width": 1488,
+                "height": 1048,
+                "right": 1904,
+                "bottom": 1064
+              },
+              "gridColumns": "1278px 208px"
+            },
+            {
+              "selector": "#chat",
+              "box": {
+                "x": 417,
+                "y": 17,
+                "width": 1278,
+                "height": 839.109375,
+                "right": 1695,
+                "bottom": 856.109375
+              },
+              "gridColumns": "none"
+            },
+            {
+              "selector": ".composer",
+              "box": {
+                "x": 417,
+                "y": 920.640625,
+                "width": 1278,
+                "height": 142.359375,
+                "right": 1695,
+                "bottom": 1063
+              },
+              "gridColumns": "none"
+            }
+          ],
+          "controls": [
+            {
+              "selector": "#promptInput",
+              "present": true,
+              "box": {
+                "x": 431.390625,
+                "y": 936.03125,
+                "width": 1191.625,
+                "height": 55,
+                "right": 1623.015625,
+                "bottom": 991.03125
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "promptInput",
+              "reachable": true,
+              "clickTrial": "pass"
+            },
+            {
+              "selector": "#attachButton",
+              "present": true,
+              "box": {
+                "x": 1631.8125,
+                "y": 936.03125,
+                "width": 48.796875,
+                "height": 55,
+                "right": 1680.609375,
+                "bottom": 991.03125
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "svg",
+              "reachable": true,
+              "clickTrial": "pass"
+            },
+            {
+              "selector": "#sendButton",
+              "present": true,
+              "box": {
+                "x": 845.703125,
+                "y": 1002.21875,
+                "width": 110.375,
+                "height": 46.390625,
+                "right": 956.078125,
+                "bottom": 1048.609375
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "sendButton",
+              "reachable": true,
+              "clickTrial": "pass"
+            },
+            {
+              "selector": "#modelSelect",
+              "present": true,
+              "box": {
+                "x": 150.453125,
+                "y": 336.546875,
+                "width": 139.578125,
+                "height": 36,
+                "right": 290.03125,
+                "bottom": 372.546875
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "modelSelect",
+              "reachable": true,
+              "clickTrial": "pass"
+            },
+            {
+              "selector": "#thinkingSelect",
+              "present": true,
+              "box": {
+                "x": 150.453125,
+                "y": 392.265625,
+                "width": 139.578125,
+                "height": 36,
+                "right": 290.03125,
+                "bottom": 428.265625
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "thinkingSelect",
+              "reachable": true,
+              "clickTrial": "pass"
+            }
+          ]
+        },
+        {
+          "state": "collapsed",
+          "screenshot": "test-results/overhaul-baseline/layout-2026-11-14T20-42-32-078Z/layout-classic-left-left-collapsed.png",
+          "viewport": {
+            "width": 1920,
+            "height": 1080,
+            "devicePixelRatio": 1,
+            "visual": {
+              "width": 1920,
+              "height": 1080,
+              "scale": 1,
+              "offsetTop": 0
+            }
+          },
+          "documentOverflowX": 0,
+          "bodyClasses": "terminal-tabs-left control-deck-sidebar control-deck-left composer-action-grid-enabled theme-dark side-panel-collapsed side-panel-left-collapsed",
+          "keyboardInset": "0px",
+          "sidebarWidthProperty": "208px",
+          "regions": [
+            {
+              "selector": ".terminal-tabs-shell",
+              "box": {
+                "x": 1695,
+                "y": 17,
+                "width": 208,
+                "height": 1046,
+                "right": 1903,
+                "bottom": 1063
+              },
+              "gridColumns": "none"
+            },
+            {
+              "selector": ".chat-panel",
+              "box": {
+                "x": 16,
+                "y": 16,
+                "width": 1888,
+                "height": 1048,
+                "right": 1904,
+                "bottom": 1064
+              },
+              "gridColumns": "1678px 208px"
+            },
+            {
+              "selector": "#chat",
+              "box": {
+                "x": 17,
+                "y": 17,
+                "width": 1678,
+                "height": 839.109375,
+                "right": 1695,
+                "bottom": 856.109375
+              },
+              "gridColumns": "none"
+            },
+            {
+              "selector": ".composer",
+              "box": {
+                "x": 17,
+                "y": 920.640625,
+                "width": 1678,
+                "height": 142.359375,
+                "right": 1695,
+                "bottom": 1063
+              },
+              "gridColumns": "none"
+            }
+          ],
+          "controls": [
+            {
+              "selector": "#promptInput",
+              "present": true,
+              "box": {
+                "x": 31.390625,
+                "y": 936.03125,
+                "width": 1591.625,
+                "height": 55,
+                "right": 1623.015625,
+                "bottom": 991.03125
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "promptInput",
+              "reachable": true,
+              "clickTrial": "pass"
+            },
+            {
+              "selector": "#attachButton",
+              "present": true,
+              "box": {
+                "x": 1631.8125,
+                "y": 936.03125,
+                "width": 48.796875,
+                "height": 55,
+                "right": 1680.609375,
+                "bottom": 991.03125
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "svg",
+              "reachable": true,
+              "clickTrial": "pass"
+            },
+            {
+              "selector": "#sendButton",
+              "present": true,
+              "box": {
+                "x": 445.703125,
+                "y": 1002.21875,
+                "width": 110.375,
+                "height": 46.390625,
+                "right": 556.078125,
+                "bottom": 1048.609375
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "sendButton",
+              "reachable": true,
+              "clickTrial": "pass"
+            },
+            {
+              "selector": "#sidePanelLeftExpandButton",
+              "present": true,
+              "box": {
+                "x": 14.390625,
+                "y": 16,
+                "width": 40.796875,
+                "height": 40.796875,
+                "right": 55.1875,
+                "bottom": 56.796875
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "SPAN",
+              "reachable": true,
+              "clickTrial": "pass"
+            }
+          ]
+        }
+      ],
+      "errors": [],
+      "pageErrors": [],
+      "persistedLayout": {
+        "version": 3,
+        "sidePanel": {
+          "placement": "left",
+          "sectionLayout": {
+            "order": [
+              "files",
+              "controls",
+              "git",
+              "optional-features",
+              "codex-usage",
+              "claude-usage",
+              "session",
+              "sampling",
+              "subagents",
+              "queue",
+              "commands",
+              "events"
+            ],
+            "leftSectionIds": []
+          },
+          "collapsedSectionIds": [
+            "files",
+            "git",
+            "optional-features",
+            "codex-usage",
+            "claude-usage",
+            "session",
+            "sampling",
+            "subagents",
+            "queue",
+            "commands",
+            "events"
+          ],
+          "hiddenSectionIds": null,
+          "collapsedPanels": {
+            "left": false,
+            "right": false
+          },
+          "panelWidths": {
+            "left": 384,
+            "right": 384
+          }
+        },
+        "composerActions": {
+          "order": null,
+          "grid": null
+        },
+        "controlVisibility": {
+          "hiddenIds": null
+        },
+        "footerScopedModelOrder": null,
+        "terminalTabs": {
+          "layout": "left",
+          "customGroups": null,
+          "sidebarWidth": null
+        },
+        "fileViewerWidth": null
+      },
+      "sectionStates": [
+        {
+          "section": "files",
+          "expanded": "false"
+        },
+        {
+          "section": "controls",
+          "expanded": "true"
+        },
+        {
+          "section": "git",
+          "expanded": "false"
+        },
+        {
+          "section": "optional-features",
+          "expanded": "false"
+        },
+        {
+          "section": "codex-usage",
+          "expanded": "false"
+        },
+        {
+          "section": "claude-usage",
+          "expanded": "false"
+        },
+        {
+          "section": "session",
+          "expanded": "false"
+        },
+        {
+          "section": "sampling",
+          "expanded": "false"
+        },
+        {
+          "section": "subagents",
+          "expanded": "false"
+        },
+        {
+          "section": "queue",
+          "expanded": "false"
+        },
+        {
+          "section": "commands",
+          "expanded": "false"
+        },
+        {
+          "section": "events",
+          "expanded": "false"
+        }
+      ],
+      "collapsedLayout": {
+        "preferences": {
+          "sidePanelWidth": 384
+        },
+        "layout": {
+          "version": 3,
+          "sidePanel": {
+            "placement": "left",
+            "sectionLayout": {
+              "order": [
+                "files",
+                "controls",
+                "git",
+                "optional-features",
+                "codex-usage",
+                "claude-usage",
+                "session",
+                "sampling",
+                "subagents",
+                "queue",
+                "commands",
+                "events"
+              ],
+              "leftSectionIds": []
+            },
+            "collapsedSectionIds": [
+              "files",
+              "git",
+              "optional-features",
+              "codex-usage",
+              "claude-usage",
+              "session",
+              "sampling",
+              "subagents",
+              "queue",
+              "commands",
+              "events"
+            ],
+            "hiddenSectionIds": null,
+            "collapsedPanels": {
+              "left": true,
+              "right": false
+            },
+            "panelWidths": {
+              "left": 384,
+              "right": 384
+            }
+          },
+          "composerActions": {
+            "order": null,
+            "grid": null
+          },
+          "controlVisibility": {
+            "hiddenIds": null
+          },
+          "footerScopedModelOrder": null,
+          "terminalTabs": {
+            "layout": "left",
+            "customGroups": null,
+            "sidebarWidth": null
+          },
+          "fileViewerWidth": null
+        },
+        "layoutRevision": "b983d448e56edbbbd320f8e580e3ee2876d619d42f1ce84a81c02bea34270841"
+      }
+    },
+    {
+      "id": "layout-populated-groups",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "sourceRevision": "06351edae0d87829dfa8c747d31a061825568b0e",
+      "status": "pass",
+      "steps": [
+        "Create three additional isolated sessions with existing tabs API; persist two named three-session groups through the real interface-preferences API; reload and expand each actual group menu."
+      ],
+      "measurements": [
+        {
+          "state": "baseline-review",
+          "screenshot": "test-results/overhaul-baseline/layout-2026-11-14T20-42-32-078Z/layout-populated-groups-baseline-review.png",
+          "viewport": {
+            "width": 1440,
+            "height": 900,
+            "devicePixelRatio": 1,
+            "visual": {
+              "width": 1440,
+              "height": 900,
+              "scale": 1,
+              "offsetTop": 0
+            }
+          },
+          "documentOverflowX": 0,
+          "bodyClasses": "control-deck-right composer-action-grid-enabled theme-dark",
+          "keyboardInset": "0px",
+          "sidebarWidthProperty": "clamp(13rem, 18vw, 19rem)",
+          "regions": [
+            {
+              "selector": ".terminal-tabs-shell",
+              "box": {
+                "x": 17,
+                "y": 17,
+                "width": 1006,
+                "height": 68.5625,
+                "right": 1023,
+                "bottom": 85.5625
+              },
+              "gridColumns": "none"
+            },
+            {
+              "selector": ".chat-panel",
+              "box": {
+                "x": 16,
+                "y": 16,
+                "width": 1008,
+                "height": 868,
+                "right": 1024,
+                "bottom": 884
+              },
+              "gridColumns": "none"
+            },
+            {
+              "selector": "#chat",
+              "box": {
+                "x": 17,
+                "y": 85.5625,
+                "width": 1006,
+                "height": 590.546875,
+                "right": 1023,
+                "bottom": 676.109375
+              },
+              "gridColumns": "none"
+            },
+            {
+              "selector": ".composer",
+              "box": {
+                "x": 17,
+                "y": 740.640625,
+                "width": 1006,
+                "height": 142.359375,
+                "right": 1023,
+                "bottom": 883
+              },
+              "gridColumns": "none"
+            }
+          ],
+          "controls": [
+            {
+              "selector": "[data-custom-group-id=\"baseline-review\"] [data-tab-id=\"d246d2d3-70d3-4b7e-818f-0075552a9a1e\"] .terminal-tab-group-item-button",
+              "present": true,
+              "box": {
+                "x": 31.46875,
+                "y": 80.734375,
+                "width": 133.53125,
+                "height": 45.75,
+                "right": 165,
+                "bottom": 126.484375
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "SPAN",
+              "reachable": true,
+              "clickTrial": "pass"
+            },
+            {
+              "selector": "[data-custom-group-id=\"baseline-review\"] [data-tab-id=\"bf509d36-86cd-4b64-87d7-52282b7ed44b\"] .terminal-tab-group-item-button",
+              "present": true,
+              "box": {
+                "x": 31.46875,
+                "y": 134.5625,
+                "width": 133.53125,
+                "height": 45.75,
+                "right": 165,
+                "bottom": 180.3125
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "SPAN",
+              "reachable": true,
+              "clickTrial": "pass"
+            },
+            {
+              "selector": "[data-custom-group-id=\"baseline-review\"] [data-tab-id=\"a265edca-e7ed-4281-9dd7-3d489fe14299\"] .terminal-tab-group-item-button",
+              "present": true,
+              "box": {
+                "x": 31.46875,
+                "y": 188.390625,
+                "width": 133.53125,
+                "height": 45.75,
+                "right": 165,
+                "bottom": 234.140625
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "SPAN",
+              "reachable": true,
+              "clickTrial": "pass"
+            },
+            {
+              "selector": "#promptInput",
+              "present": true,
+              "box": {
+                "x": 31.390625,
+                "y": 756.03125,
+                "width": 919.625,
+                "height": 55,
+                "right": 951.015625,
+                "bottom": 811.03125
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "promptInput",
+              "reachable": true,
+              "clickTrial": "pass"
+            },
+            {
+              "selector": "#attachButton",
+              "present": true,
+              "box": {
+                "x": 959.8125,
+                "y": 756.03125,
+                "width": 48.796875,
+                "height": 55,
+                "right": 1008.609375,
+                "bottom": 811.03125
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "svg",
+              "reachable": true,
+              "clickTrial": "pass"
+            },
+            {
+              "selector": "#sendButton",
+              "present": true,
+              "box": {
+                "x": 445.703125,
+                "y": 822.21875,
+                "width": 110.375,
+                "height": 46.390625,
+                "right": 556.078125,
+                "bottom": 868.609375
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "sendButton",
+              "reachable": true,
+              "clickTrial": "pass"
+            }
+          ]
+        },
+        {
+          "state": "baseline-build",
+          "screenshot": "test-results/overhaul-baseline/layout-2026-11-14T20-42-32-078Z/layout-populated-groups-baseline-build.png",
+          "viewport": {
+            "width": 1440,
+            "height": 900,
+            "devicePixelRatio": 1,
+            "visual": {
+              "width": 1440,
+              "height": 900,
+              "scale": 1,
+              "offsetTop": 0
+            }
+          },
+          "documentOverflowX": 0,
+          "bodyClasses": "control-deck-right composer-action-grid-enabled theme-dark",
+          "keyboardInset": "0px",
+          "sidebarWidthProperty": "clamp(13rem, 18vw, 19rem)",
+          "regions": [
+            {
+              "selector": ".terminal-tabs-shell",
+              "box": {
+                "x": 17,
+                "y": 17,
+                "width": 1006,
+                "height": 68.5625,
+                "right": 1023,
+                "bottom": 85.5625
+              },
+              "gridColumns": "none"
+            },
+            {
+              "selector": ".chat-panel",
+              "box": {
+                "x": 16,
+                "y": 16,
+                "width": 1008,
+                "height": 868,
+                "right": 1024,
+                "bottom": 884
+              },
+              "gridColumns": "none"
+            },
+            {
+              "selector": "#chat",
+              "box": {
+                "x": 17,
+                "y": 85.5625,
+                "width": 1006,
+                "height": 590.546875,
+                "right": 1023,
+                "bottom": 676.109375
+              },
+              "gridColumns": "none"
+            },
+            {
+              "selector": ".composer",
+              "box": {
+                "x": 17,
+                "y": 740.640625,
+                "width": 1006,
+                "height": 142.359375,
+                "right": 1023,
+                "bottom": 883
+              },
+              "gridColumns": "none"
+            }
+          ],
+          "controls": [
+            {
+              "selector": "[data-custom-group-id=\"baseline-build\"] [data-tab-id=\"a7b85c8b-cf83-4e92-8067-475e58cf08c5\"] .terminal-tab-group-item-button",
+              "present": true,
+              "box": {
+                "x": 264.1875,
+                "y": 80.734375,
+                "width": 126.328125,
+                "height": 45.75,
+                "right": 390.515625,
+                "bottom": 126.484375
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "SPAN",
+              "reachable": true,
+              "clickTrial": "pass"
+            },
+            {
+              "selector": "[data-custom-group-id=\"baseline-build\"] [data-tab-id=\"cc540451-4523-4ad2-b2e1-654492df39b1\"] .terminal-tab-group-item-button",
+              "present": true,
+              "box": {
+                "x": 264.1875,
+                "y": 134.5625,
+                "width": 126.328125,
+                "height": 45.75,
+                "right": 390.515625,
+                "bottom": 180.3125
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "SPAN",
+              "reachable": true,
+              "clickTrial": "pass"
+            },
+            {
+              "selector": "[data-custom-group-id=\"baseline-build\"] [data-tab-id=\"dee12add-7415-4bde-b0d3-f3db3fbaead4\"] .terminal-tab-group-item-button",
+              "present": true,
+              "box": {
+                "x": 264.1875,
+                "y": 188.390625,
+                "width": 126.328125,
+                "height": 45.75,
+                "right": 390.515625,
+                "bottom": 234.140625
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "SPAN",
+              "reachable": true,
+              "clickTrial": "pass"
+            },
+            {
+              "selector": "#promptInput",
+              "present": true,
+              "box": {
+                "x": 31.390625,
+                "y": 756.03125,
+                "width": 919.625,
+                "height": 55,
+                "right": 951.015625,
+                "bottom": 811.03125
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "promptInput",
+              "reachable": true,
+              "clickTrial": "pass"
+            },
+            {
+              "selector": "#attachButton",
+              "present": true,
+              "box": {
+                "x": 959.8125,
+                "y": 756.03125,
+                "width": 48.796875,
+                "height": 55,
+                "right": 1008.609375,
+                "bottom": 811.03125
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "svg",
+              "reachable": true,
+              "clickTrial": "pass"
+            },
+            {
+              "selector": "#sendButton",
+              "present": true,
+              "box": {
+                "x": 445.703125,
+                "y": 821.21875,
+                "width": 110.375,
+                "height": 46.390625,
+                "right": 556.078125,
+                "bottom": 867.609375
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "sendButton",
+              "reachable": true,
+              "clickTrial": "pass"
+            }
+          ]
+        }
+      ],
+      "errors": [],
+      "pageErrors": [],
+      "groups": {
+        "version": 1,
+        "groups": [
+          {
+            "id": "baseline-review",
+            "title": "Review sessions",
+            "tabIds": [
+              "d246d2d3-70d3-4b7e-818f-0075552a9a1e",
+              "bf509d36-86cd-4b64-87d7-52282b7ed44b",
+              "a265edca-e7ed-4281-9dd7-3d489fe14299"
+            ]
+          },
+          {
+            "id": "baseline-build",
+            "title": "Build sessions",
+            "tabIds": [
+              "a7b85c8b-cf83-4e92-8067-475e58cf08c5",
+              "cc540451-4523-4ad2-b2e1-654492df39b1",
+              "dee12add-7415-4bde-b0d3-f3db3fbaead4"
+            ]
+          }
+        ]
+      },
+      "sessionIds": [
+        "d246d2d3-70d3-4b7e-818f-0075552a9a1e",
+        "bf509d36-86cd-4b64-87d7-52282b7ed44b",
+        "a265edca-e7ed-4281-9dd7-3d489fe14299",
+        "a7b85c8b-cf83-4e92-8067-475e58cf08c5",
+        "cc540451-4523-4ad2-b2e1-654492df39b1",
+        "dee12add-7415-4bde-b0d3-f3db3fbaead4"
+      ]
+    },
+    {
+      "id": "layout-split",
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      },
+      "query": "tabletShell=legacy",
+      "sourceRevision": "06351edae0d87829dfa8c747d31a061825568b0e",
+      "status": "known-defect",
+      "steps": [
+        "Fill source draft; click actual source Split button; verify newly created independent split session and distinct draft.",
+        "Resize existing split to 1920×1080; verify both session drafts and API membership.",
+        "Resize existing split to 1200×768; verify both session drafts and API membership.",
+        "Resize existing split to 1024×768; verify both session drafts and API membership.",
+        "Resize existing split to 720×450; verify both session drafts and API membership."
+      ],
+      "measurements": [
+        {
+          "state": "1920-primary",
+          "screenshot": "test-results/overhaul-baseline/layout-2026-11-14T20-42-32-078Z/layout-split-1920-primary.png",
+          "viewport": {
+            "width": 1920,
+            "height": 1080,
+            "devicePixelRatio": 1,
+            "visual": {
+              "width": 1920,
+              "height": 1080,
+              "scale": 1,
+              "offsetTop": 0
+            }
+          },
+          "documentOverflowX": 0,
+          "bodyClasses": "control-deck-right composer-action-grid-enabled theme-dark terminal-split-open",
+          "keyboardInset": "0px",
+          "sidebarWidthProperty": "clamp(13rem, 18vw, 19rem)",
+          "regions": [
+            {
+              "selector": ".terminal-tabs-shell",
+              "box": {
+                "x": 17,
+                "y": 17,
+                "width": 734,
+                "height": 68.5625,
+                "right": 751,
+                "bottom": 85.5625
+              },
+              "gridColumns": "none"
+            },
+            {
+              "selector": ".chat-panel",
+              "box": {
+                "x": 16,
+                "y": 16,
+                "width": 736,
+                "height": 1048,
+                "right": 752,
+                "bottom": 1064
+              },
+              "gridColumns": "none"
+            },
+            {
+              "selector": "#chat",
+              "box": {
+                "x": 17,
+                "y": 85.5625,
+                "width": 734,
+                "height": 770.546875,
+                "right": 751,
+                "bottom": 856.109375
+              },
+              "gridColumns": "none"
+            },
+            {
+              "selector": ".composer",
+              "box": {
+                "x": 17,
+                "y": 920.640625,
+                "width": 734,
+                "height": 142.359375,
+                "right": 751,
+                "bottom": 1063
+              },
+              "gridColumns": "none"
+            }
+          ],
+          "controls": [
+            {
+              "selector": "#promptInput",
+              "present": true,
+              "box": {
+                "x": 31.390625,
+                "y": 936.03125,
+                "width": 647.625,
+                "height": 55,
+                "right": 679.015625,
+                "bottom": 991.03125
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "promptInput",
+              "reachable": true,
+              "clickTrial": "pass"
+            },
+            {
+              "selector": "#attachButton",
+              "present": true,
+              "box": {
+                "x": 687.8125,
+                "y": 936.03125,
+                "width": 48.796875,
+                "height": 55,
+                "right": 736.609375,
+                "bottom": 991.03125
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "svg",
+              "reachable": true,
+              "clickTrial": "pass"
+            },
+            {
+              "selector": "#sendButton",
+              "present": true,
+              "box": {
+                "x": 445.703125,
+                "y": 1002.21875,
+                "width": 110.375,
+                "height": 46.390625,
+                "right": 556.078125,
+                "bottom": 1048.609375
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "sendButton",
+              "reachable": true,
+              "clickTrial": "pass"
+            },
+            {
+              "selector": "#terminalSplitCloseButton",
+              "present": true,
+              "box": {
+                "x": 1392.703125,
+                "y": 34.9375,
+                "width": 98.78125,
+                "height": 35.1875,
+                "right": 1491.484375,
+                "bottom": 70.125
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "terminalSplitCloseButton",
+              "reachable": true,
+              "clickTrial": "pass"
+            }
+          ]
+        },
+        {
+          "state": "1920-embedded",
+          "screenshot": "test-results/overhaul-baseline/layout-2026-11-14T20-42-32-078Z/layout-split-1920-embedded.png",
+          "viewport": {
+            "width": 734,
+            "height": 974,
+            "devicePixelRatio": 1,
+            "visual": {
+              "width": 734,
+              "height": 974,
+              "scale": 1,
+              "offsetTop": 0
+            }
+          },
+          "documentOverflowX": 0,
+          "bodyClasses": "embedded-split composer-action-grid-enabled theme-dark",
+          "keyboardInset": "0px",
+          "sidebarWidthProperty": "clamp(13rem, 18vw, 19rem)",
+          "regions": [
+            {
+              "selector": ".terminal-tabs-shell",
+              "box": {
+                "x": 0,
+                "y": 0,
+                "width": 0,
+                "height": 0,
+                "right": 0,
+                "bottom": 0
+              },
+              "gridColumns": "none"
+            },
+            {
+              "selector": ".chat-panel",
+              "box": {
+                "x": 0,
+                "y": 0,
+                "width": 734,
+                "height": 942,
+                "right": 734,
+                "bottom": 942
+              },
+              "gridColumns": "none"
+            },
+            {
+              "selector": "#chat",
+              "box": {
+                "x": 1,
+                "y": 1,
+                "width": 732,
+                "height": 733.109375,
+                "right": 733,
+                "bottom": 734.109375
+              },
+              "gridColumns": "none"
+            },
+            {
+              "selector": ".composer",
+              "box": {
+                "x": 1,
+                "y": 798.640625,
+                "width": 732,
+                "height": 142.359375,
+                "right": 733,
+                "bottom": 941
+              },
+              "gridColumns": "none"
+            }
+          ],
+          "controls": [
+            {
+              "selector": "#promptInput",
+              "present": true,
+              "box": {
+                "x": 15.390625,
+                "y": 814.03125,
+                "width": 645.625,
+                "height": 55,
+                "right": 661.015625,
+                "bottom": 869.03125
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "promptInput",
+              "reachable": true,
+              "topLevelBox": {
+                "x": 784.390625,
+                "y": 903.09375,
+                "right": 1430.015625,
+                "bottom": 958.09375
+              },
+              "topLevelReachable": true,
+              "clickTrial": "pass"
+            },
+            {
+              "selector": "#attachButton",
+              "present": true,
+              "box": {
+                "x": 669.8125,
+                "y": 814.03125,
+                "width": 48.796875,
+                "height": 55,
+                "right": 718.609375,
+                "bottom": 869.03125
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "svg",
+              "reachable": true,
+              "topLevelBox": {
+                "x": 1438.8125,
+                "y": 903.09375,
+                "right": 1487.609375,
+                "bottom": 958.09375
+              },
+              "topLevelReachable": true,
+              "clickTrial": "pass"
+            },
+            {
+              "selector": "#sendButton",
+              "present": true,
+              "box": {
+                "x": 429.703125,
+                "y": 880.21875,
+                "width": 110.375,
+                "height": 46.390625,
+                "right": 540.078125,
+                "bottom": 926.609375
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "sendButton",
+              "reachable": true,
+              "topLevelBox": {
+                "x": 1198.703125,
+                "y": 969.28125,
+                "right": 1309.078125,
+                "bottom": 1015.671875
+              },
+              "topLevelReachable": true,
+              "clickTrial": "pass"
+            }
+          ],
+          "iframeHost": {
+            "x": 769,
+            "y": 89.0625,
+            "width": 734,
+            "height": 973.9375
+          }
+        },
+        {
+          "state": "1200-primary",
+          "screenshot": "test-results/overhaul-baseline/layout-2026-11-14T20-42-32-078Z/layout-split-1200-primary.png",
+          "viewport": {
+            "width": 1200,
+            "height": 768,
+            "devicePixelRatio": 1,
+            "visual": {
+              "width": 1200,
+              "height": 768,
+              "scale": 1,
+              "offsetTop": 0
+            }
+          },
+          "documentOverflowX": 0,
+          "bodyClasses": "control-deck-right composer-action-grid-enabled theme-dark terminal-split-open",
+          "keyboardInset": "0px",
+          "sidebarWidthProperty": "clamp(13rem, 18vw, 19rem)",
+          "regions": [
+            {
+              "selector": ".terminal-tabs-shell",
+              "box": {
+                "x": 17,
+                "y": 17,
+                "width": 374,
+                "height": 68.5625,
+                "right": 391,
+                "bottom": 85.5625
+              },
+              "gridColumns": "none"
+            },
+            {
+              "selector": ".chat-panel",
+              "box": {
+                "x": 16,
+                "y": 16,
+                "width": 376,
+                "height": 736,
+                "right": 392,
+                "bottom": 752
+              },
+              "gridColumns": "none"
+            },
+            {
+              "selector": "#chat",
+              "box": {
+                "x": 17,
+                "y": 85.5625,
+                "width": 374,
+                "height": 404.15625,
+                "right": 391,
+                "bottom": 489.71875
+              },
+              "gridColumns": "none"
+            },
+            {
+              "selector": ".composer",
+              "box": {
+                "x": 17,
+                "y": 554.25,
+                "width": 374,
+                "height": 196.75,
+                "right": 391,
+                "bottom": 751
+              },
+              "gridColumns": "none"
+            }
+          ],
+          "controls": [
+            {
+              "selector": "#promptInput",
+              "present": true,
+              "box": {
+                "x": 31.390625,
+                "y": 569.640625,
+                "width": 287.625,
+                "height": 55,
+                "right": 319.015625,
+                "bottom": 624.640625
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "promptInput",
+              "reachable": true,
+              "clickTrial": "pass"
+            },
+            {
+              "selector": "#attachButton",
+              "present": true,
+              "box": {
+                "x": 327.8125,
+                "y": 569.640625,
+                "width": 48.796875,
+                "height": 55,
+                "right": 376.609375,
+                "bottom": 624.640625
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "svg",
+              "reachable": true,
+              "clickTrial": "pass"
+            },
+            {
+              "selector": "#sendButton",
+              "present": true,
+              "box": {
+                "x": 149.765625,
+                "y": 690.21875,
+                "width": 110.375,
+                "height": 46.390625,
+                "right": 260.140625,
+                "bottom": 736.609375
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "sendButton",
+              "reachable": true,
+              "clickTrial": "pass"
+            },
+            {
+              "selector": "#terminalSplitCloseButton",
+              "present": true,
+              "box": {
+                "x": 672.703125,
+                "y": 34.9375,
+                "width": 98.78125,
+                "height": 35.1875,
+                "right": 771.484375,
+                "bottom": 70.125
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "terminalSplitCloseButton",
+              "reachable": true,
+              "clickTrial": "pass"
+            }
+          ]
+        },
+        {
+          "state": "1200-embedded",
+          "screenshot": "test-results/overhaul-baseline/layout-2026-11-14T20-42-32-078Z/layout-split-1200-embedded.png",
+          "viewport": {
+            "width": 374,
+            "height": 662,
+            "devicePixelRatio": 1,
+            "visual": {
+              "width": 374,
+              "height": 662,
+              "scale": 1,
+              "offsetTop": 0
+            }
+          },
+          "documentOverflowX": 0,
+          "bodyClasses": "embedded-split theme-dark mobile-keyboard-open mobile-composer-disclosure side-panel-collapsed side-panel-right-collapsed",
+          "keyboardInset": "0px",
+          "sidebarWidthProperty": "clamp(13rem, 18vw, 19rem)",
+          "regions": [
+            {
+              "selector": ".terminal-tabs-shell",
+              "box": {
+                "x": 0,
+                "y": 0,
+                "width": 0,
+                "height": 0,
+                "right": 0,
+                "bottom": 0
+              },
+              "gridColumns": "none"
+            },
+            {
+              "selector": ".chat-panel",
+              "box": {
+                "x": 0,
+                "y": 0,
+                "width": 374,
+                "height": 630,
+                "right": 374,
+                "bottom": 630
+              },
+              "gridColumns": "none"
+            },
+            {
+              "selector": "#chat",
+              "box": {
+                "x": 1,
+                "y": 1,
+                "width": 372,
+                "height": 513.3125,
+                "right": 373,
+                "bottom": 514.3125
+              },
+              "gridColumns": "none"
+            },
+            {
+              "selector": ".composer",
+              "box": {
+                "x": 1,
+                "y": 514.3125,
+                "width": 372,
+                "height": 114.6875,
+                "right": 373,
+                "bottom": 629
+              },
+              "gridColumns": "none"
+            }
+          ],
+          "controls": [
+            {
+              "selector": "#promptInput",
+              "present": true,
+              "box": {
+                "x": 7.390625,
+                "y": 520.421875,
+                "width": 314.75,
+                "height": 55,
+                "right": 322.140625,
+                "bottom": 575.421875
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "promptInput",
+              "reachable": true,
+              "topLevelBox": {
+                "x": 416.390625,
+                "y": 609.484375,
+                "right": 731.140625,
+                "bottom": 664.484375
+              },
+              "topLevelReachable": true,
+              "clickTrial": "pass"
+            },
+            {
+              "selector": "#attachButton",
+              "present": true,
+              "box": {
+                "x": 326.609375,
+                "y": 520.421875,
+                "width": 40,
+                "height": 40,
+                "right": 366.609375,
+                "bottom": 560.421875
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "svg",
+              "reachable": true,
+              "topLevelBox": {
+                "x": 735.609375,
+                "y": 609.484375,
+                "right": 775.609375,
+                "bottom": 649.484375
+              },
+              "topLevelReachable": true,
+              "clickTrial": "pass"
+            },
+            {
+              "selector": "#sendButton",
+              "present": true,
+              "box": {
+                "x": 7.390625,
+                "y": 579.890625,
+                "width": 359.21875,
+                "height": 44,
+                "right": 366.609375,
+                "bottom": 623.890625
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "sendButton",
+              "reachable": true,
+              "topLevelBox": {
+                "x": 416.390625,
+                "y": 668.953125,
+                "right": 775.609375,
+                "bottom": 712.953125
+              },
+              "topLevelReachable": true,
+              "clickTrial": "pass"
+            }
+          ],
+          "iframeHost": {
+            "x": 409,
+            "y": 89.0625,
+            "width": 374,
+            "height": 661.9375
+          }
+        },
+        {
+          "state": "1024-hidden-split",
+          "screenshot": "test-results/overhaul-baseline/layout-2026-11-14T20-42-32-078Z/layout-split-1024-hidden-split.png",
+          "viewport": {
+            "width": 1024,
+            "height": 768,
+            "devicePixelRatio": 1,
+            "visual": {
+              "width": 1024,
+              "height": 768,
+              "scale": 1,
+              "offsetTop": 0
+            }
+          },
+          "documentOverflowX": 0,
+          "bodyClasses": "control-deck-right composer-action-grid-enabled theme-dark terminal-split-open side-panel-collapsed control-deck-overlay",
+          "keyboardInset": "0px",
+          "sidebarWidthProperty": "clamp(13rem, 18vw, 19rem)",
+          "regions": [
+            {
+              "selector": ".terminal-tabs-shell",
+              "box": {
+                "x": 17,
+                "y": 17,
+                "width": 486,
+                "height": 68.5625,
+                "right": 503,
+                "bottom": 85.5625
+              },
+              "gridColumns": "none"
+            },
+            {
+              "selector": ".chat-panel",
+              "box": {
+                "x": 16,
+                "y": 16,
+                "width": 488,
+                "height": 736,
+                "right": 504,
+                "bottom": 752
+              },
+              "gridColumns": "none"
+            },
+            {
+              "selector": "#chat",
+              "box": {
+                "x": 17,
+                "y": 85.5625,
+                "width": 486,
+                "height": 406.546875,
+                "right": 503,
+                "bottom": 492.109375
+              },
+              "gridColumns": "none"
+            },
+            {
+              "selector": ".composer",
+              "box": {
+                "x": 17,
+                "y": 556.640625,
+                "width": 486,
+                "height": 194.359375,
+                "right": 503,
+                "bottom": 751
+              },
+              "gridColumns": "none"
+            }
+          ],
+          "controls": [
+            {
+              "selector": "#promptInput",
+              "present": true,
+              "box": {
+                "x": 31.390625,
+                "y": 572.03125,
+                "width": 399.625,
+                "height": 55,
+                "right": 431.015625,
+                "bottom": 627.03125
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "promptInput",
+              "reachable": true,
+              "clickTrial": "pass"
+            },
+            {
+              "selector": "#attachButton",
+              "present": true,
+              "box": {
+                "x": 439.8125,
+                "y": 572.03125,
+                "width": 48.796875,
+                "height": 55,
+                "right": 488.609375,
+                "bottom": 627.03125
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "svg",
+              "reachable": true,
+              "clickTrial": "pass"
+            },
+            {
+              "selector": "#sendButton",
+              "present": true,
+              "box": {
+                "x": 31.390625,
+                "y": 692.609375,
+                "width": 110.375,
+                "height": 44,
+                "right": 141.765625,
+                "bottom": 736.609375
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "sendButton",
+              "reachable": true,
+              "clickTrial": "pass"
+            },
+            {
+              "selector": "#terminalSplitShell",
+              "present": true,
+              "box": {
+                "x": 0,
+                "y": 0,
+                "width": 0,
+                "height": 0,
+                "right": 0,
+                "bottom": 0
+              },
+              "rendered": false,
+              "withinViewport": false,
+              "clippedBy": null,
+              "centerHit": false,
+              "disabled": false,
+              "hit": "MAIN",
+              "reachable": false
+            },
+            {
+              "selector": "#terminalSplitCloseButton",
+              "present": true,
+              "box": {
+                "x": 0,
+                "y": 0,
+                "width": 0,
+                "height": 0,
+                "right": 0,
+                "bottom": 0
+              },
+              "rendered": false,
+              "withinViewport": false,
+              "clippedBy": null,
+              "centerHit": false,
+              "disabled": false,
+              "hit": "MAIN",
+              "reachable": false
+            }
+          ]
+        },
+        {
+          "state": "720-hidden-split",
+          "screenshot": "test-results/overhaul-baseline/layout-2026-11-14T20-42-32-078Z/layout-split-720-hidden-split.png",
+          "viewport": {
+            "width": 720,
+            "height": 450,
+            "devicePixelRatio": 1,
+            "visual": {
+              "width": 720,
+              "height": 450,
+              "scale": 1,
+              "offsetTop": 0
+            }
+          },
+          "documentOverflowX": 0,
+          "bodyClasses": "control-deck-right theme-dark terminal-split-open side-panel-collapsed control-deck-overlay mobile-composer-disclosure",
+          "keyboardInset": "0px",
+          "sidebarWidthProperty": "clamp(13rem, 18vw, 19rem)",
+          "regions": [
+            {
+              "selector": ".terminal-tabs-shell",
+              "box": {
+                "x": 1,
+                "y": 1,
+                "width": 350,
+                "height": 43.53125,
+                "right": 351,
+                "bottom": 44.53125
+              },
+              "gridColumns": "none"
+            },
+            {
+              "selector": ".chat-panel",
+              "box": {
+                "x": 0,
+                "y": 0,
+                "width": 352,
+                "height": 418,
+                "right": 352,
+                "bottom": 418
+              },
+              "gridColumns": "none"
+            },
+            {
+              "selector": "#chat",
+              "box": {
+                "x": 1,
+                "y": 44.53125,
+                "width": 350,
+                "height": 131.4375,
+                "right": 351,
+                "bottom": 175.96875
+              },
+              "gridColumns": "none"
+            },
+            {
+              "selector": ".composer",
+              "box": {
+                "x": 1,
+                "y": 306.609375,
+                "width": 350,
+                "height": 110.390625,
+                "right": 351,
+                "bottom": 417
+              },
+              "gridColumns": "none"
+            }
+          ],
+          "controls": [
+            {
+              "selector": "#promptInput",
+              "present": true,
+              "box": {
+                "x": 6.4375,
+                "y": 312.40625,
+                "width": 294.65625,
+                "height": 55,
+                "right": 301.09375,
+                "bottom": 367.40625
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "promptInput",
+              "reachable": true,
+              "clickTrial": "pass"
+            },
+            {
+              "selector": "#attachButton",
+              "present": true,
+              "box": {
+                "x": 305.5625,
+                "y": 312.40625,
+                "width": 40,
+                "height": 40,
+                "right": 345.5625,
+                "bottom": 352.40625
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "svg",
+              "reachable": true,
+              "clickTrial": "pass"
+            },
+            {
+              "selector": "#sendButton",
+              "present": true,
+              "box": {
+                "x": 143.484375,
+                "y": 372.203125,
+                "width": 202.0625,
+                "height": 40,
+                "right": 345.546875,
+                "bottom": 412.203125
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "sendButton",
+              "reachable": true,
+              "clickTrial": "pass"
+            },
+            {
+              "selector": "#terminalSplitShell",
+              "present": true,
+              "box": {
+                "x": 0,
+                "y": 0,
+                "width": 0,
+                "height": 0,
+                "right": 0,
+                "bottom": 0
+              },
+              "rendered": false,
+              "withinViewport": false,
+              "clippedBy": null,
+              "centerHit": false,
+              "disabled": false,
+              "hit": "SECTION",
+              "reachable": false
+            },
+            {
+              "selector": "#terminalSplitCloseButton",
+              "present": true,
+              "box": {
+                "x": 0,
+                "y": 0,
+                "width": 0,
+                "height": 0,
+                "right": 0,
+                "bottom": 0
+              },
+              "rendered": false,
+              "withinViewport": false,
+              "clippedBy": null,
+              "centerHit": false,
+              "disabled": false,
+              "hit": "SECTION",
+              "reachable": false
+            }
+          ]
+        }
+      ],
+      "errors": [],
+      "pageErrors": [],
+      "sourceIds": [
+        "c979a47e-69da-4428-a497-233382b6a98b",
+        "209779ae-442a-4d3f-b88c-c7b39d8a75cb",
+        "7cf7d8b0-13c0-407a-8634-0ec059f4a6d6"
+      ],
+      "splitId": "098dd205-478d-474c-8efb-659882c70e8e",
+      "defects": [
+        {
+          "id": "W0-C-001",
+          "severity": "Major",
+          "target": "W3 split/narrow layout; W7 resize regression",
+          "expected": "An explicit split remains reachable or the primary conversation reclaims the hidden pane space.",
+          "actual": {
+            "primaryBox": {
+              "x": 16,
+              "y": 16,
+              "width": 488,
+              "height": 736
+            },
+            "splitDisplay": "none",
+            "controls": [
+              {
+                "selector": "#terminalSplitShell",
+                "present": true,
+                "box": {
+                  "x": 0,
+                  "y": 0,
+                  "width": 0,
+                  "height": 0,
+                  "right": 0,
+                  "bottom": 0
+                },
+                "rendered": false,
+                "withinViewport": false,
+                "clippedBy": null,
+                "centerHit": false,
+                "disabled": false,
+                "hit": "MAIN",
+                "reachable": false
+              },
+              {
+                "selector": "#terminalSplitCloseButton",
+                "present": true,
+                "box": {
+                  "x": 0,
+                  "y": 0,
+                  "width": 0,
+                  "height": 0,
+                  "right": 0,
+                  "bottom": 0
+                },
+                "rendered": false,
+                "withinViewport": false,
+                "clippedBy": null,
+                "centerHit": false,
+                "disabled": false,
+                "hit": "MAIN",
+                "reachable": false
+              }
+            ],
+            "bodyClasses": "control-deck-right composer-action-grid-enabled theme-dark terminal-split-open side-panel-collapsed control-deck-overlay"
+          },
+          "screenshot": "test-results/overhaul-baseline/layout-2026-11-14T20-42-32-078Z/layout-split-1024-hidden-split.png",
+          "reproduction": [
+            "Fill source draft; click actual source Split button; verify newly created independent split session and distinct draft.",
+            "Resize existing split to 1920×1080; verify both session drafts and API membership.",
+            "Resize existing split to 1200×768; verify both session drafts and API membership.",
+            "Resize existing split to 1024×768; verify both session drafts and API membership."
+          ]
+        },
+        {
+          "id": "W0-C-001",
+          "severity": "Major",
+          "target": "W3 split/narrow layout; W7 resize regression",
+          "expected": "An explicit split remains reachable or the primary conversation reclaims the hidden pane space.",
+          "actual": {
+            "primaryBox": {
+              "x": 0,
+              "y": 0,
+              "width": 352,
+              "height": 418
+            },
+            "splitDisplay": "none",
+            "controls": [
+              {
+                "selector": "#terminalSplitShell",
+                "present": true,
+                "box": {
+                  "x": 0,
+                  "y": 0,
+                  "width": 0,
+                  "height": 0,
+                  "right": 0,
+                  "bottom": 0
+                },
+                "rendered": false,
+                "withinViewport": false,
+                "clippedBy": null,
+                "centerHit": false,
+                "disabled": false,
+                "hit": "SECTION",
+                "reachable": false
+              },
+              {
+                "selector": "#terminalSplitCloseButton",
+                "present": true,
+                "box": {
+                  "x": 0,
+                  "y": 0,
+                  "width": 0,
+                  "height": 0,
+                  "right": 0,
+                  "bottom": 0
+                },
+                "rendered": false,
+                "withinViewport": false,
+                "clippedBy": null,
+                "centerHit": false,
+                "disabled": false,
+                "hit": "SECTION",
+                "reachable": false
+              }
+            ],
+            "bodyClasses": "control-deck-right theme-dark terminal-split-open side-panel-collapsed control-deck-overlay mobile-composer-disclosure"
+          },
+          "screenshot": "test-results/overhaul-baseline/layout-2026-11-14T20-42-32-078Z/layout-split-720-hidden-split.png",
+          "reproduction": [
+            "Fill source draft; click actual source Split button; verify newly created independent split session and distinct draft.",
+            "Resize existing split to 1920×1080; verify both session drafts and API membership.",
+            "Resize existing split to 1200×768; verify both session drafts and API membership.",
+            "Resize existing split to 1024×768; verify both session drafts and API membership.",
+            "Resize existing split to 720×450; verify both session drafts and API membership."
+          ]
+        }
+      ],
+      "finalSessionIds": [
+        "c979a47e-69da-4428-a497-233382b6a98b",
+        "209779ae-442a-4d3f-b88c-c7b39d8a75cb",
+        "7cf7d8b0-13c0-407a-8634-0ec059f4a6d6",
+        "098dd205-478d-474c-8efb-659882c70e8e"
+      ]
+    },
+    {
+      "id": "layout-zoom-200",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "query": "tabletShell=legacy",
+      "sourceRevision": "06351edae0d87829dfa8c747d31a061825568b0e",
+      "status": "pass",
+      "steps": [
+        "Browser shortcuts did not establish 200% browser zoom; constrain CSS viewport to 720×450, representing the reflow area of a 1440×900 window at 200%. DPR stays 1; visual scale stays 1; no CSS zoom or pinch emulation."
+      ],
+      "measurements": [
+        {
+          "state": "reflow",
+          "screenshot": "test-results/overhaul-baseline/layout-2026-11-14T20-42-32-078Z/layout-zoom-200-reflow.png",
+          "viewport": {
+            "width": 720,
+            "height": 450,
+            "devicePixelRatio": 1,
+            "visual": {
+              "width": 720,
+              "height": 450,
+              "scale": 1,
+              "offsetTop": 0
+            }
+          },
+          "documentOverflowX": 0,
+          "bodyClasses": "control-deck-right theme-dark mobile-composer-disclosure side-panel-collapsed control-deck-overlay mobile-keyboard-open",
+          "keyboardInset": "0px",
+          "sidebarWidthProperty": "clamp(13rem, 18vw, 19rem)",
+          "regions": [
+            {
+              "selector": ".terminal-tabs-shell",
+              "box": {
+                "x": 0,
+                "y": 0,
+                "width": 0,
+                "height": 0,
+                "right": 0,
+                "bottom": 0
+              },
+              "gridColumns": "none"
+            },
+            {
+              "selector": ".chat-panel",
+              "box": {
+                "x": 0,
+                "y": 0,
+                "width": 720,
+                "height": 418,
+                "right": 720,
+                "bottom": 418
+              },
+              "gridColumns": "none"
+            },
+            {
+              "selector": "#chat",
+              "box": {
+                "x": 1,
+                "y": 1,
+                "width": 718,
+                "height": 316.3125,
+                "right": 719,
+                "bottom": 317.3125
+              },
+              "gridColumns": "none"
+            },
+            {
+              "selector": ".composer",
+              "box": {
+                "x": 1,
+                "y": 317.3125,
+                "width": 718,
+                "height": 99.6875,
+                "right": 719,
+                "bottom": 417
+              },
+              "gridColumns": "none"
+            }
+          ],
+          "controls": [
+            {
+              "selector": "#promptInput",
+              "present": true,
+              "box": {
+                "x": 7.390625,
+                "y": 323.421875,
+                "width": 660.75,
+                "height": 40,
+                "right": 668.140625,
+                "bottom": 363.421875
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "promptInput",
+              "reachable": true,
+              "clickTrial": "pass"
+            },
+            {
+              "selector": "#attachButton",
+              "present": true,
+              "box": {
+                "x": 672.609375,
+                "y": 323.421875,
+                "width": 40,
+                "height": 40,
+                "right": 712.609375,
+                "bottom": 363.421875
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "svg",
+              "reachable": true,
+              "clickTrial": "pass"
+            },
+            {
+              "selector": "#sendButton",
+              "present": true,
+              "box": {
+                "x": 7.390625,
+                "y": 366.890625,
+                "width": 705.21875,
+                "height": 44,
+                "right": 712.609375,
+                "bottom": 410.890625
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "sendButton",
+              "reachable": true,
+              "clickTrial": "pass"
+            }
+          ]
+        }
+      ],
+      "errors": [],
+      "pageErrors": [],
+      "zoomAttempt": {
+        "mechanism": "Control+0 then five Control++ browser shortcuts in headless Chromium",
+        "before": {
+          "width": 1440,
+          "height": 900,
+          "devicePixelRatio": 1,
+          "visual": {
+            "width": 1440,
+            "height": 900,
+            "scale": 1,
+            "offsetTop": 0
+          }
+        },
+        "after": {
+          "width": 1440,
+          "height": 900,
+          "devicePixelRatio": 1,
+          "visual": {
+            "width": 1440,
+            "height": 900,
+            "scale": 1,
+            "offsetTop": 0
+          }
+        },
+        "actualZoom": 1,
+        "status": "missing",
+        "limitation": "Shortcut dispatch may not invoke headless browser chrome. devicePixelRatio and innerWidth verify whether browser zoom changed; visualViewport.scale alone would indicate pinch."
+      }
+    },
+    {
+      "id": "layout-keyboard-legacy-portrait",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "isMobile": true,
+      "query": "mobileShell=legacy",
+      "sourceRevision": "06351edae0d87829dfa8c747d31a061825568b0e",
+      "status": "pass",
+      "steps": [
+        "Type draft and attach text file through existing file input; focus composer; shrink layout viewport height 844→500 without changing width; keep visualViewport.scale=1. This exercises resize/max-height keyboard detection, not native keyboard occlusion or visual-viewport-only resize."
+      ],
+      "measurements": [
+        {
+          "state": "draft-attachment",
+          "screenshot": "test-results/overhaul-baseline/layout-2026-11-14T20-42-32-078Z/layout-keyboard-legacy-portrait-draft-attachment.png",
+          "viewport": {
+            "width": 390,
+            "height": 500,
+            "devicePixelRatio": 1,
+            "visual": {
+              "width": 390,
+              "height": 500,
+              "scale": 1,
+              "offsetTop": 0
+            }
+          },
+          "documentOverflowX": 0,
+          "bodyClasses": "mobile-composer-disclosure control-deck-overlay control-deck-right side-panel-collapsed theme-dark mobile-keyboard-open",
+          "keyboardInset": "0px",
+          "sidebarWidthProperty": "clamp(13rem, 18vw, 19rem)",
+          "regions": [
+            {
+              "selector": ".terminal-tabs-shell",
+              "box": {
+                "x": 0,
+                "y": 0,
+                "width": 0,
+                "height": 0,
+                "right": 0,
+                "bottom": 0
+              },
+              "gridColumns": "none"
+            },
+            {
+              "selector": ".chat-panel",
+              "box": {
+                "x": 0,
+                "y": 0,
+                "width": 390,
+                "height": 468,
+                "right": 390,
+                "bottom": 468
+              },
+              "gridColumns": "none"
+            },
+            {
+              "selector": "#chat",
+              "box": {
+                "x": 1,
+                "y": 1,
+                "width": 388,
+                "height": 319.546875,
+                "right": 389,
+                "bottom": 320.546875
+              },
+              "gridColumns": "none"
+            },
+            {
+              "selector": ".composer",
+              "box": {
+                "x": 1,
+                "y": 320.546875,
+                "width": 388,
+                "height": 146.453125,
+                "right": 389,
+                "bottom": 467
+              },
+              "gridColumns": "none"
+            }
+          ],
+          "controls": [
+            {
+              "selector": "#promptInput",
+              "present": true,
+              "box": {
+                "x": 7.390625,
+                "y": 326.65625,
+                "width": 330.75,
+                "height": 40,
+                "right": 338.140625,
+                "bottom": 366.65625
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "promptInput",
+              "reachable": true,
+              "clickTrial": "pass"
+            },
+            {
+              "selector": "#attachButton",
+              "present": true,
+              "box": {
+                "x": 342.609375,
+                "y": 326.65625,
+                "width": 40,
+                "height": 40,
+                "right": 382.609375,
+                "bottom": 366.65625
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "svg",
+              "reachable": true,
+              "clickTrial": "pass"
+            },
+            {
+              "selector": "#sendButton",
+              "present": true,
+              "box": {
+                "x": 7.390625,
+                "y": 417.890625,
+                "width": 375.21875,
+                "height": 44,
+                "right": 382.609375,
+                "bottom": 461.890625
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "sendButton",
+              "reachable": true,
+              "clickTrial": "pass"
+            },
+            {
+              "selector": "#attachmentTray",
+              "present": true,
+              "box": {
+                "x": 7.390625,
+                "y": 375.453125,
+                "width": 375.21875,
+                "height": 37.96875,
+                "right": 382.609375,
+                "bottom": 413.421875
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "SPAN",
+              "reachable": true,
+              "clickTrial": "pass"
+            }
+          ]
+        }
+      ],
+      "errors": [],
+      "pageErrors": [],
+      "beforeConstraint": {
+        "width": 390,
+        "height": 844,
+        "devicePixelRatio": 1,
+        "visual": {
+          "width": 390,
+          "height": 844,
+          "scale": 1,
+          "offsetTop": 0
+        }
+      },
+      "restored": {
+        "viewport": {
+          "width": 390,
+          "height": 844,
+          "devicePixelRatio": 1,
+          "visual": {
+            "width": 390,
+            "height": 844,
+            "scale": 1,
+            "offsetTop": 0
+          }
+        },
+        "documentOverflowX": 0,
+        "bodyClasses": "mobile-composer-disclosure control-deck-overlay control-deck-right side-panel-collapsed theme-dark",
+        "keyboardInset": "0px",
+        "sidebarWidthProperty": "clamp(13rem, 18vw, 19rem)",
+        "regions": [
+          {
+            "selector": ".terminal-tabs-shell",
+            "box": {
+              "x": 1,
+              "y": 1,
+              "width": 388,
+              "height": 43.53125,
+              "right": 389,
+              "bottom": 44.53125
+            },
+            "gridColumns": "none"
+          },
+          {
+            "selector": ".chat-panel",
+            "box": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 812,
+              "right": 390,
+              "bottom": 812
+            },
+            "gridColumns": "none"
+          },
+          {
+            "selector": "#chat",
+            "box": {
+              "x": 1,
+              "y": 44.53125,
+              "width": 388,
+              "height": 512.71875,
+              "right": 389,
+              "bottom": 557.25
+            },
+            "gridColumns": "none"
+          },
+          {
+            "selector": ".composer",
+            "box": {
+              "x": 1,
+              "y": 668.84375,
+              "width": 388,
+              "height": 142.15625,
+              "right": 389,
+              "bottom": 811
+            },
+            "gridColumns": "none"
+          }
+        ],
+        "controls": [
+          {
+            "selector": "#promptInput",
+            "present": true,
+            "box": {
+              "x": 6.4375,
+              "y": 674.640625,
+              "width": 332.65625,
+              "height": 40,
+              "right": 339.09375,
+              "bottom": 714.640625
+            },
+            "rendered": true,
+            "withinViewport": true,
+            "clippedBy": null,
+            "centerHit": true,
+            "disabled": false,
+            "hit": "promptInput",
+            "reachable": true
+          },
+          {
+            "selector": "#attachButton",
+            "present": true,
+            "box": {
+              "x": 343.5625,
+              "y": 674.640625,
+              "width": 40,
+              "height": 40,
+              "right": 383.5625,
+              "bottom": 714.640625
+            },
+            "rendered": true,
+            "withinViewport": true,
+            "clippedBy": null,
+            "centerHit": true,
+            "disabled": false,
+            "hit": "svg",
+            "reachable": true
+          },
+          {
+            "selector": "#sendButton",
+            "present": true,
+            "box": {
+              "x": 158.6875,
+              "y": 766.203125,
+              "width": 224.875,
+              "height": 40,
+              "right": 383.5625,
+              "bottom": 806.203125
+            },
+            "rendered": true,
+            "withinViewport": true,
+            "clippedBy": null,
+            "centerHit": true,
+            "disabled": false,
+            "hit": "sendButton",
+            "reachable": true
+          }
+        ]
+      }
+    },
+    {
+      "id": "layout-keyboard-legacy-landscape",
+      "viewport": {
+        "width": 844,
+        "height": 390
+      },
+      "isMobile": true,
+      "query": "mobileShell=legacy",
+      "sourceRevision": "06351edae0d87829dfa8c747d31a061825568b0e",
+      "status": "pass",
+      "steps": [
+        "Type draft and attach text file through existing file input; focus composer; shrink layout viewport height 390→220 without changing width; keep visualViewport.scale=1. This exercises resize/max-height keyboard detection, not native keyboard occlusion or visual-viewport-only resize."
+      ],
+      "measurements": [
+        {
+          "state": "draft-attachment",
+          "screenshot": "test-results/overhaul-baseline/layout-2026-11-14T20-42-32-078Z/layout-keyboard-legacy-landscape-draft-attachment.png",
+          "viewport": {
+            "width": 844,
+            "height": 220,
+            "devicePixelRatio": 1,
+            "visual": {
+              "width": 844,
+              "height": 220,
+              "scale": 1,
+              "offsetTop": 0
+            }
+          },
+          "documentOverflowX": 0,
+          "bodyClasses": "mobile-composer-disclosure control-deck-overlay control-deck-right side-panel-collapsed theme-dark mobile-keyboard-open",
+          "keyboardInset": "0px",
+          "sidebarWidthProperty": "clamp(13rem, 18vw, 19rem)",
+          "regions": [
+            {
+              "selector": ".terminal-tabs-shell",
+              "box": {
+                "x": 0,
+                "y": 0,
+                "width": 0,
+                "height": 0,
+                "right": 0,
+                "bottom": 0
+              },
+              "gridColumns": "none"
+            },
+            {
+              "selector": ".chat-panel",
+              "box": {
+                "x": 0,
+                "y": 0,
+                "width": 844,
+                "height": 188,
+                "right": 844,
+                "bottom": 188
+              },
+              "gridColumns": "none"
+            },
+            {
+              "selector": "#chat",
+              "box": {
+                "x": 1,
+                "y": 1,
+                "width": 842,
+                "height": 39.546875,
+                "right": 843,
+                "bottom": 40.546875
+              },
+              "gridColumns": "none"
+            },
+            {
+              "selector": ".composer",
+              "box": {
+                "x": 1,
+                "y": 40.546875,
+                "width": 842,
+                "height": 146.453125,
+                "right": 843,
+                "bottom": 187
+              },
+              "gridColumns": "none"
+            }
+          ],
+          "controls": [
+            {
+              "selector": "#promptInput",
+              "present": true,
+              "box": {
+                "x": 7.390625,
+                "y": 46.65625,
+                "width": 784.75,
+                "height": 40,
+                "right": 792.140625,
+                "bottom": 86.65625
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "promptInput",
+              "reachable": true,
+              "clickTrial": "pass"
+            },
+            {
+              "selector": "#attachButton",
+              "present": true,
+              "box": {
+                "x": 796.609375,
+                "y": 46.65625,
+                "width": 40,
+                "height": 40,
+                "right": 836.609375,
+                "bottom": 86.65625
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "svg",
+              "reachable": true,
+              "clickTrial": "pass"
+            },
+            {
+              "selector": "#sendButton",
+              "present": true,
+              "box": {
+                "x": 7.390625,
+                "y": 137.890625,
+                "width": 829.21875,
+                "height": 44,
+                "right": 836.609375,
+                "bottom": 181.890625
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "sendButton",
+              "reachable": true,
+              "clickTrial": "pass"
+            },
+            {
+              "selector": "#attachmentTray",
+              "present": true,
+              "box": {
+                "x": 7.390625,
+                "y": 95.453125,
+                "width": 829.21875,
+                "height": 37.96875,
+                "right": 836.609375,
+                "bottom": 133.421875
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "attachmentTray",
+              "reachable": true,
+              "clickTrial": "pass"
+            }
+          ]
+        }
+      ],
+      "errors": [],
+      "pageErrors": [],
+      "beforeConstraint": {
+        "width": 844,
+        "height": 390,
+        "devicePixelRatio": 1,
+        "visual": {
+          "width": 844,
+          "height": 390,
+          "scale": 1,
+          "offsetTop": 0
+        }
+      },
+      "restored": {
+        "viewport": {
+          "width": 844,
+          "height": 390,
+          "devicePixelRatio": 1,
+          "visual": {
+            "width": 844,
+            "height": 390,
+            "scale": 1,
+            "offsetTop": 0
+          }
+        },
+        "documentOverflowX": 0,
+        "bodyClasses": "mobile-composer-disclosure control-deck-overlay control-deck-right side-panel-collapsed theme-dark",
+        "keyboardInset": "0px",
+        "sidebarWidthProperty": "clamp(13rem, 18vw, 19rem)",
+        "regions": [
+          {
+            "selector": ".terminal-tabs-shell",
+            "box": {
+              "x": 1,
+              "y": 1,
+              "width": 842,
+              "height": 43.53125,
+              "right": 843,
+              "bottom": 44.53125
+            },
+            "gridColumns": "none"
+          },
+          {
+            "selector": ".chat-panel",
+            "box": {
+              "x": 0,
+              "y": 0,
+              "width": 844,
+              "height": 358,
+              "right": 844,
+              "bottom": 358
+            },
+            "gridColumns": "none"
+          },
+          {
+            "selector": "#chat",
+            "box": {
+              "x": 1,
+              "y": 44.53125,
+              "width": 842,
+              "height": 58.71875,
+              "right": 843,
+              "bottom": 103.25
+            },
+            "gridColumns": "none"
+          },
+          {
+            "selector": ".composer",
+            "box": {
+              "x": 1,
+              "y": 214.84375,
+              "width": 842,
+              "height": 142.15625,
+              "right": 843,
+              "bottom": 357
+            },
+            "gridColumns": "none"
+          }
+        ],
+        "controls": [
+          {
+            "selector": "#promptInput",
+            "present": true,
+            "box": {
+              "x": 6.4375,
+              "y": 220.640625,
+              "width": 786.65625,
+              "height": 40,
+              "right": 793.09375,
+              "bottom": 260.640625
+            },
+            "rendered": true,
+            "withinViewport": true,
+            "clippedBy": null,
+            "centerHit": true,
+            "disabled": false,
+            "hit": "promptInput",
+            "reachable": true
+          },
+          {
+            "selector": "#attachButton",
+            "present": true,
+            "box": {
+              "x": 797.5625,
+              "y": 220.640625,
+              "width": 40,
+              "height": 40,
+              "right": 837.5625,
+              "bottom": 260.640625
+            },
+            "rendered": true,
+            "withinViewport": true,
+            "clippedBy": null,
+            "centerHit": true,
+            "disabled": false,
+            "hit": "svg",
+            "reachable": true
+          },
+          {
+            "selector": "#sendButton",
+            "present": true,
+            "box": {
+              "x": 340.28125,
+              "y": 312.203125,
+              "width": 497.28125,
+              "height": 40,
+              "right": 837.5625,
+              "bottom": 352.203125
+            },
+            "rendered": true,
+            "withinViewport": true,
+            "clippedBy": null,
+            "centerHit": true,
+            "disabled": false,
+            "hit": "sendButton",
+            "reachable": true
+          }
+        ]
+      }
+    },
+    {
+      "id": "layout-keyboard-v2-portrait",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "isMobile": true,
+      "query": "mobileShell=v2",
+      "sourceRevision": "06351edae0d87829dfa8c747d31a061825568b0e",
+      "status": "pass",
+      "steps": [
+        "Type draft and attach text file through existing file input; focus composer; shrink layout viewport height 844→500 without changing width; keep visualViewport.scale=1. This exercises resize/max-height keyboard detection, not native keyboard occlusion or visual-viewport-only resize."
+      ],
+      "measurements": [
+        {
+          "state": "draft-attachment",
+          "screenshot": "test-results/overhaul-baseline/layout-2026-11-14T20-42-32-078Z/layout-keyboard-v2-portrait-draft-attachment.png",
+          "viewport": {
+            "width": 390,
+            "height": 500,
+            "devicePixelRatio": 1,
+            "visual": {
+              "width": 390,
+              "height": 500,
+              "scale": 1,
+              "offsetTop": 0
+            }
+          },
+          "documentOverflowX": 0,
+          "bodyClasses": "control-deck-overlay control-deck-right theme-dark mobile-keyboard-open",
+          "keyboardInset": "0px",
+          "sidebarWidthProperty": "clamp(13rem, 18vw, 19rem)",
+          "regions": [
+            {
+              "selector": ".terminal-tabs-shell",
+              "box": {
+                "x": 0,
+                "y": 0,
+                "width": 0,
+                "height": 0,
+                "right": 0,
+                "bottom": 0
+              },
+              "gridColumns": "none"
+            },
+            {
+              "selector": ".chat-panel",
+              "box": {
+                "x": 0,
+                "y": 0,
+                "width": 390,
+                "height": 468,
+                "right": 390,
+                "bottom": 468
+              },
+              "gridColumns": "none"
+            },
+            {
+              "selector": "#chat",
+              "box": {
+                "x": 1,
+                "y": 15.71875,
+                "width": 388,
+                "height": 174.453125,
+                "right": 389,
+                "bottom": 190.171875
+              },
+              "gridColumns": "none"
+            },
+            {
+              "selector": ".composer",
+              "box": {
+                "x": 1,
+                "y": 301.765625,
+                "width": 388,
+                "height": 165.234375,
+                "right": 389,
+                "bottom": 467
+              },
+              "gridColumns": "none"
+            }
+          ],
+          "controls": [
+            {
+              "selector": "#promptInput",
+              "present": true,
+              "box": {
+                "x": 10.265625,
+                "y": 310.765625,
+                "width": 325,
+                "height": 53,
+                "right": 335.265625,
+                "bottom": 363.765625
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "promptInput",
+              "reachable": true,
+              "clickTrial": "pass"
+            },
+            {
+              "selector": "#attachButton",
+              "present": true,
+              "box": {
+                "x": 339.734375,
+                "y": 310.765625,
+                "width": 40,
+                "height": 40,
+                "right": 379.734375,
+                "bottom": 350.765625
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "svg",
+              "reachable": true,
+              "clickTrial": "pass"
+            },
+            {
+              "selector": "#sendButton",
+              "present": true,
+              "box": {
+                "x": 198.359375,
+                "y": 415,
+                "width": 181.375,
+                "height": 44,
+                "right": 379.734375,
+                "bottom": 459
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "sendButton",
+              "reachable": true,
+              "clickTrial": "pass"
+            },
+            {
+              "selector": "#attachmentTray",
+              "present": true,
+              "box": {
+                "x": 10.265625,
+                "y": 372.5625,
+                "width": 369.46875,
+                "height": 37.96875,
+                "right": 379.734375,
+                "bottom": 410.53125
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "SPAN",
+              "reachable": true,
+              "clickTrial": "pass"
+            }
+          ]
+        }
+      ],
+      "errors": [],
+      "pageErrors": [],
+      "beforeConstraint": {
+        "width": 390,
+        "height": 844,
+        "devicePixelRatio": 1,
+        "visual": {
+          "width": 390,
+          "height": 844,
+          "scale": 1,
+          "offsetTop": 0
+        }
+      },
+      "restored": {
+        "viewport": {
+          "width": 390,
+          "height": 844,
+          "devicePixelRatio": 1,
+          "visual": {
+            "width": 390,
+            "height": 844,
+            "scale": 1,
+            "offsetTop": 0
+          }
+        },
+        "documentOverflowX": 0,
+        "bodyClasses": "control-deck-overlay control-deck-right theme-dark",
+        "keyboardInset": "0px",
+        "sidebarWidthProperty": "clamp(13rem, 18vw, 19rem)",
+        "regions": [
+          {
+            "selector": ".terminal-tabs-shell",
+            "box": {
+              "x": 0,
+              "y": 0,
+              "width": 0,
+              "height": 0,
+              "right": 0,
+              "bottom": 0
+            },
+            "gridColumns": "none"
+          },
+          {
+            "selector": ".chat-panel",
+            "box": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 704.59375,
+              "right": 390,
+              "bottom": 704.59375
+            },
+            "gridColumns": "none"
+          },
+          {
+            "selector": "#chat",
+            "box": {
+              "x": 1,
+              "y": 1,
+              "width": 388,
+              "height": 321.125,
+              "right": 389,
+              "bottom": 322.125
+            },
+            "gridColumns": "none"
+          },
+          {
+            "selector": ".composer",
+            "box": {
+              "x": 1,
+              "y": 433.71875,
+              "width": 388,
+              "height": 269.875,
+              "right": 389,
+              "bottom": 703.59375
+            },
+            "gridColumns": "none"
+          }
+        ],
+        "controls": [
+          {
+            "selector": "#promptInput",
+            "present": true,
+            "box": {
+              "x": 10.265625,
+              "y": 442.71875,
+              "width": 325,
+              "height": 53,
+              "right": 335.265625,
+              "bottom": 495.71875
+            },
+            "rendered": true,
+            "withinViewport": true,
+            "clippedBy": null,
+            "centerHit": true,
+            "disabled": false,
+            "hit": "promptInput",
+            "reachable": true
+          },
+          {
+            "selector": "#attachButton",
+            "present": true,
+            "box": {
+              "x": 339.734375,
+              "y": 442.71875,
+              "width": 40,
+              "height": 40,
+              "right": 379.734375,
+              "bottom": 482.71875
+            },
+            "rendered": true,
+            "withinViewport": true,
+            "clippedBy": null,
+            "centerHit": true,
+            "disabled": false,
+            "hit": "svg",
+            "reachable": true
+          },
+          {
+            "selector": "#sendButton",
+            "present": true,
+            "box": {
+              "x": 10.265625,
+              "y": 594,
+              "width": 369.46875,
+              "height": 40,
+              "right": 379.734375,
+              "bottom": 634
+            },
+            "rendered": true,
+            "withinViewport": true,
+            "clippedBy": null,
+            "centerHit": true,
+            "disabled": false,
+            "hit": "sendButton",
+            "reachable": true
+          }
+        ]
+      }
+    },
+    {
+      "id": "layout-keyboard-v2-landscape",
+      "viewport": {
+        "width": 844,
+        "height": 390
+      },
+      "isMobile": true,
+      "query": "mobileShell=v2",
+      "sourceRevision": "06351edae0d87829dfa8c747d31a061825568b0e",
+      "status": "known-defect",
+      "steps": [
+        "Type draft and attach text file through existing file input; focus composer; shrink layout viewport height 390→220 without changing width; keep visualViewport.scale=1. This exercises resize/max-height keyboard detection, not native keyboard occlusion or visual-viewport-only resize."
+      ],
+      "measurements": [
+        {
+          "state": "draft-attachment",
+          "screenshot": "test-results/overhaul-baseline/layout-2026-11-14T20-42-32-078Z/layout-keyboard-v2-landscape-draft-attachment.png",
+          "viewport": {
+            "width": 844,
+            "height": 220,
+            "devicePixelRatio": 1,
+            "visual": {
+              "width": 844,
+              "height": 220,
+              "scale": 1,
+              "offsetTop": 0
+            }
+          },
+          "documentOverflowX": 0,
+          "bodyClasses": "control-deck-overlay control-deck-right theme-dark mobile-keyboard-open",
+          "keyboardInset": "0px",
+          "sidebarWidthProperty": "clamp(13rem, 18vw, 19rem)",
+          "regions": [
+            {
+              "selector": ".terminal-tabs-shell",
+              "box": {
+                "x": 0,
+                "y": 0,
+                "width": 0,
+                "height": 0,
+                "right": 0,
+                "bottom": 0
+              },
+              "gridColumns": "none"
+            },
+            {
+              "selector": ".chat-panel",
+              "box": {
+                "x": 0,
+                "y": 0,
+                "width": 844,
+                "height": 188,
+                "right": 844,
+                "bottom": 188
+              },
+              "gridColumns": "none"
+            },
+            {
+              "selector": "#chat",
+              "box": {
+                "x": 1,
+                "y": 15.71875,
+                "width": 842,
+                "height": 86.703125,
+                "right": 843,
+                "bottom": 102.421875
+              },
+              "gridColumns": "none"
+            },
+            {
+              "selector": ".composer",
+              "box": {
+                "x": 1,
+                "y": 34.765625,
+                "width": 842,
+                "height": 152.234375,
+                "right": 843,
+                "bottom": 187
+              },
+              "gridColumns": "none"
+            }
+          ],
+          "controls": [
+            {
+              "selector": "#promptInput",
+              "present": true,
+              "box": {
+                "x": 10.265625,
+                "y": 43.765625,
+                "width": 779,
+                "height": 40,
+                "right": 789.265625,
+                "bottom": 83.765625
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": false,
+              "disabled": false,
+              "hit": "mobileShellIndicators",
+              "reachable": false
+            },
+            {
+              "selector": "#attachButton",
+              "present": true,
+              "box": {
+                "x": 793.734375,
+                "y": 43.765625,
+                "width": 40,
+                "height": 40,
+                "right": 833.734375,
+                "bottom": 83.765625
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": false,
+              "disabled": false,
+              "hit": "mobileShellIndicators",
+              "reachable": false
+            },
+            {
+              "selector": "#sendButton",
+              "present": true,
+              "box": {
+                "x": 425.359375,
+                "y": 135,
+                "width": 408.375,
+                "height": 44,
+                "right": 833.734375,
+                "bottom": 179
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "sendButton",
+              "reachable": true,
+              "clickTrial": "pass"
+            },
+            {
+              "selector": "#attachmentTray",
+              "present": true,
+              "box": {
+                "x": 10.265625,
+                "y": 92.5625,
+                "width": 823.46875,
+                "height": 37.96875,
+                "right": 833.734375,
+                "bottom": 130.53125
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "attachmentTray",
+              "reachable": true,
+              "clickTrial": "pass"
+            }
+          ]
+        }
+      ],
+      "errors": [],
+      "pageErrors": [],
+      "beforeConstraint": {
+        "width": 844,
+        "height": 390,
+        "devicePixelRatio": 1,
+        "visual": {
+          "width": 844,
+          "height": 390,
+          "scale": 1,
+          "offsetTop": 0
+        }
+      },
+      "defects": [
+        {
+          "id": "W0-C-002",
+          "severity": "Major",
+          "target": "W3 phone layout; W7 keyboard/landscape regression",
+          "expected": "Focused prompt and attachment control stay reachable in the constrained viewport.",
+          "actual": [
+            {
+              "selector": "#promptInput",
+              "present": true,
+              "box": {
+                "x": 10.265625,
+                "y": 43.765625,
+                "width": 779,
+                "height": 40,
+                "right": 789.265625,
+                "bottom": 83.765625
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": false,
+              "disabled": false,
+              "hit": "mobileShellIndicators",
+              "reachable": false
+            },
+            {
+              "selector": "#attachButton",
+              "present": true,
+              "box": {
+                "x": 793.734375,
+                "y": 43.765625,
+                "width": 40,
+                "height": 40,
+                "right": 833.734375,
+                "bottom": 83.765625
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": false,
+              "disabled": false,
+              "hit": "mobileShellIndicators",
+              "reachable": false
+            }
+          ],
+          "clickErrors": [
+            {
+              "selector": "#promptInput",
+              "error": "locator.click: Timeout 800ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('#promptInput')\u001b[22m\n\u001b[2m    - locator resolved to <textarea rows=\"1\" autofocus=\"\" role=\"combobox\" id=\"promptInput\" enterkeyhint=\"enter\" placeholder=\"Ask Pi…\" aria-expanded=\"false\" aria-autocomplete=\"list\" aria-controls=\"commandSuggest\"></textarea>\u001b[22m\n\u001b[2m  - attempting click action (trial run)\u001b[22m\n\u001b[2m    2 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m      - element is visible, enabled and stable\u001b[22m\n\u001b[2m      - scrolling into view if needed\u001b[22m\n\u001b[2m      - done scrolling\u001b[22m\n\u001b[2m      - <div role=\"group\" id=\"mobileShellIndicators\" class=\"mobile-shell-indicators\" aria-label=\"Connection and attention status\" data-signature=\"[false,\"online\",\"Online\",0]\">…</div> from <div id=\"mobileShellV2\" class=\"mobile-shell-v2\">…</div> subtree intercepts pointer events\u001b[22m\n\u001b[2m    - retrying click action (trial run)\u001b[22m\n\u001b[2m    - waiting 20ms\u001b[22m\n\u001b[2m    2 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m      - element is visible, enabled and stable\u001b[22m\n\u001b[2m      - scrolling into view if needed\u001b[22m\n\u001b[2m      - done scrolling\u001b[22m\n\u001b[2m      - <div role=\"group\" id=\"mobileShellIndicators\" class=\"mobile-shell-indicators\" aria-label=\"Connection and attention status\" data-signature=\"[false,\"online\",\"Online\",0]\">…</div> from <div id=\"mobileShellV2\" class=\"mobile-shell-v2\">…</div> subtree intercepts pointer events\u001b[22m\n\u001b[2m    - retrying click action (trial run)\u001b[22m\n\u001b[2m      - waiting 100ms\u001b[22m\n\u001b[2m    - waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m    - element is visible, enabled and stable\u001b[22m\n\u001b[2m    - scrolling into view if needed\u001b[22m\n\u001b[2m    - done scrolling\u001b[22m\n\u001b[2m    - <div role=\"group\" id=\"mobileShellIndicators\" class=\"mobile-shell-indicators\" aria-label=\"Connection and attention status\" data-signature=\"[false,\"online\",\"Online\",0]\">…</div> from <div id=\"mobileShellV2\" class=\"mobile-shell-v2\">…</div> subtree intercepts pointer events\u001b[22m\n\u001b[2m  - retrying click action (trial run)\u001b[22m\n\u001b[2m    - waiting 500ms\u001b[22m\n"
+            },
+            {
+              "selector": "#attachButton",
+              "error": "locator.click: Timeout 800ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('#attachButton')\u001b[22m\n\u001b[2m    - locator resolved to <button type=\"button\" id=\"attachButton\" title=\"Attach files\" data-visibility-key=\"input.attach-files\" class=\"composer-icon-button composer-attach-button\" aria-label=\"Attach images, videos, documents, audio, or other files\" data-tooltip=\"Attach files:↵• Click to choose images, videos, audio, PDFs, docs, text/code, or other files.↵• Paste images/docs from the clipboard.↵• Drag and drop files onto the composer.\">…</button>\u001b[22m\n\u001b[2m  - attempting click action (trial run)\u001b[22m\n\u001b[2m    2 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m      - element is visible, enabled and stable\u001b[22m\n\u001b[2m      - scrolling into view if needed\u001b[22m\n\u001b[2m      - done scrolling\u001b[22m\n\u001b[2m      - <div role=\"group\" id=\"mobileShellIndicators\" class=\"mobile-shell-indicators\" aria-label=\"Connection and attention status\" data-signature=\"[false,\"online\",\"Online\",0]\">…</div> from <div id=\"mobileShellV2\" class=\"mobile-shell-v2\">…</div> subtree intercepts pointer events\u001b[22m\n\u001b[2m    - retrying click action (trial run)\u001b[22m\n\u001b[2m    - waiting 20ms\u001b[22m\n\u001b[2m    2 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m      - element is visible, enabled and stable\u001b[22m\n\u001b[2m      - scrolling into view if needed\u001b[22m\n\u001b[2m      - done scrolling\u001b[22m\n\u001b[2m      - <div role=\"group\" id=\"mobileShellIndicators\" class=\"mobile-shell-indicators\" aria-label=\"Connection and attention status\" data-signature=\"[false,\"online\",\"Online\",0]\">…</div> from <div id=\"mobileShellV2\" class=\"mobile-shell-v2\">…</div> subtree intercepts pointer events\u001b[22m\n\u001b[2m    - retrying click action (trial run)\u001b[22m\n\u001b[2m      - waiting 100ms\u001b[22m\n\u001b[2m    - waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m    - element is visible, enabled and stable\u001b[22m\n\u001b[2m    - scrolling into view if needed\u001b[22m\n\u001b[2m    - done scrolling\u001b[22m\n\u001b[2m    - <div role=\"group\" id=\"mobileShellIndicators\" class=\"mobile-shell-indicators\" aria-label=\"Connection and attention status\" data-signature=\"[false,\"online\",\"Online\",0]\">…</div> from <div id=\"mobileShellV2\" class=\"mobile-shell-v2\">…</div> subtree intercepts pointer events\u001b[22m\n\u001b[2m  - retrying click action (trial run)\u001b[22m\n\u001b[2m    - waiting 500ms\u001b[22m\n"
+            }
+          ],
+          "screenshot": "test-results/overhaul-baseline/layout-2026-11-14T20-42-32-078Z/layout-keyboard-v2-landscape-draft-attachment.png",
+          "reproduction": [
+            "Type draft and attach text file through existing file input; focus composer; shrink layout viewport height 390→220 without changing width; keep visualViewport.scale=1. This exercises resize/max-height keyboard detection, not native keyboard occlusion or visual-viewport-only resize."
+          ]
+        }
+      ],
+      "restored": {
+        "viewport": {
+          "width": 844,
+          "height": 390,
+          "devicePixelRatio": 1,
+          "visual": {
+            "width": 844,
+            "height": 390,
+            "scale": 1,
+            "offsetTop": 0
+          }
+        },
+        "documentOverflowX": 0,
+        "bodyClasses": "control-deck-overlay control-deck-right theme-dark",
+        "keyboardInset": "0px",
+        "sidebarWidthProperty": "clamp(13rem, 18vw, 19rem)",
+        "regions": [
+          {
+            "selector": ".terminal-tabs-shell",
+            "box": {
+              "x": 0,
+              "y": 0,
+              "width": 0,
+              "height": 0,
+              "right": 0,
+              "bottom": 0
+            },
+            "gridColumns": "none"
+          },
+          {
+            "selector": ".chat-panel",
+            "box": {
+              "x": 0,
+              "y": 0,
+              "width": 844,
+              "height": 358,
+              "right": 844,
+              "bottom": 358
+            },
+            "gridColumns": "none"
+          },
+          {
+            "selector": "#chat",
+            "box": {
+              "x": 1,
+              "y": -11,
+              "width": 842,
+              "height": 86.703125,
+              "right": 843,
+              "bottom": 75.703125
+            },
+            "gridColumns": "none"
+          },
+          {
+            "selector": ".composer",
+            "box": {
+              "x": 1,
+              "y": 100.125,
+              "width": 842,
+              "height": 256.875,
+              "right": 843,
+              "bottom": 357
+            },
+            "gridColumns": "none"
+          }
+        ],
+        "controls": [
+          {
+            "selector": "#promptInput",
+            "present": true,
+            "box": {
+              "x": 10.265625,
+              "y": 109.125,
+              "width": 779,
+              "height": 40,
+              "right": 789.265625,
+              "bottom": 149.125
+            },
+            "rendered": true,
+            "withinViewport": true,
+            "clippedBy": null,
+            "centerHit": true,
+            "disabled": false,
+            "hit": "promptInput",
+            "reachable": true
+          },
+          {
+            "selector": "#attachButton",
+            "present": true,
+            "box": {
+              "x": 793.734375,
+              "y": 109.125,
+              "width": 40,
+              "height": 40,
+              "right": 833.734375,
+              "bottom": 149.125
+            },
+            "rendered": true,
+            "withinViewport": true,
+            "clippedBy": null,
+            "centerHit": true,
+            "disabled": false,
+            "hit": "svg",
+            "reachable": true
+          },
+          {
+            "selector": "#sendButton",
+            "present": true,
+            "box": {
+              "x": 10.265625,
+              "y": 247.40625,
+              "width": 823.46875,
+              "height": 40,
+              "right": 833.734375,
+              "bottom": 287.40625
+            },
+            "rendered": true,
+            "withinViewport": true,
+            "clippedBy": null,
+            "centerHit": true,
+            "disabled": false,
+            "hit": "sendButton",
+            "reachable": true
+          }
+        ]
+      }
+    },
+    {
+      "id": "layout-tablet-v2-bug-002",
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "query": "tabletShell=v2",
+      "sourceRevision": "06351edae0d87829dfa8c747d31a061825568b0e",
+      "status": "known-defect",
+      "steps": [
+        "Open existing tablet v2 at 768×1024; measure full mandatory control rectangles and hit targets."
+      ],
+      "measurements": [
+        {
+          "state": "clipping",
+          "screenshot": "test-results/overhaul-baseline/layout-2026-11-14T20-42-32-078Z/layout-tablet-v2-bug-002-clipping.png",
+          "viewport": {
+            "width": 768,
+            "height": 1024,
+            "devicePixelRatio": 1,
+            "visual": {
+              "width": 768,
+              "height": 1024,
+              "scale": 1,
+              "offsetTop": 0
+            }
+          },
+          "documentOverflowX": 0,
+          "bodyClasses": "control-deck-overlay control-deck-right composer-action-grid-enabled theme-dark",
+          "keyboardInset": "0px",
+          "sidebarWidthProperty": "clamp(13rem, 18vw, 19rem)",
+          "regions": [
+            {
+              "selector": ".terminal-tabs-shell",
+              "box": {
+                "x": 0,
+                "y": 0,
+                "width": 0,
+                "height": 0,
+                "right": 0,
+                "bottom": 0
+              },
+              "gridColumns": "none"
+            },
+            {
+              "selector": ".chat-panel",
+              "box": {
+                "x": 112,
+                "y": 0,
+                "width": 768,
+                "height": 597.5625,
+                "right": 880,
+                "bottom": 597.5625
+              },
+              "gridColumns": "none"
+            },
+            {
+              "selector": "#chat",
+              "box": {
+                "x": 113,
+                "y": 1,
+                "width": 766,
+                "height": 397.46875,
+                "right": 879,
+                "bottom": 398.46875
+              },
+              "gridColumns": "none"
+            },
+            {
+              "selector": ".composer",
+              "box": {
+                "x": 113,
+                "y": 463,
+                "width": 766,
+                "height": 133.5625,
+                "right": 879,
+                "bottom": 596.5625
+              },
+              "gridColumns": "none"
+            }
+          ],
+          "controls": [
+            {
+              "selector": "#promptInput",
+              "present": true,
+              "box": {
+                "x": 129,
+                "y": 475.1875,
+                "width": 676.40625,
+                "height": 55,
+                "right": 805.40625,
+                "bottom": 530.1875
+              },
+              "rendered": true,
+              "withinViewport": false,
+              "clippedBy": "control-deck-overlay control-deck-right composer-action-grid-enabled theme-dark",
+              "centerHit": true,
+              "disabled": false,
+              "hit": "promptInput",
+              "reachable": false
+            },
+            {
+              "selector": "#attachButton",
+              "present": true,
+              "box": {
+                "x": 814.203125,
+                "y": 475.1875,
+                "width": 48.796875,
+                "height": 55,
+                "right": 863,
+                "bottom": 530.1875
+              },
+              "rendered": true,
+              "withinViewport": false,
+              "clippedBy": "control-deck-overlay control-deck-right composer-action-grid-enabled theme-dark",
+              "centerHit": false,
+              "disabled": false,
+              "hit": null,
+              "reachable": false
+            },
+            {
+              "selector": "#sendButton",
+              "present": true,
+              "box": {
+                "x": 129,
+                "y": 541.375,
+                "width": 110.375,
+                "height": 44,
+                "right": 239.375,
+                "bottom": 585.375
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "sendButton",
+              "reachable": true
+            }
+          ]
+        },
+        {
+          "state": "after-trial-scroll",
+          "screenshot": "test-results/overhaul-baseline/layout-2026-11-14T20-42-32-078Z/layout-tablet-v2-bug-002-after-trial-scroll.png",
+          "viewport": {
+            "width": 768,
+            "height": 1024,
+            "devicePixelRatio": 1,
+            "visual": {
+              "width": 768,
+              "height": 1024,
+              "scale": 1,
+              "offsetTop": 0
+            }
+          },
+          "documentOverflowX": 0,
+          "bodyClasses": "control-deck-overlay control-deck-right composer-action-grid-enabled theme-dark",
+          "keyboardInset": "0px",
+          "sidebarWidthProperty": "clamp(13rem, 18vw, 19rem)",
+          "regions": [
+            {
+              "selector": ".terminal-tabs-shell",
+              "box": {
+                "x": 0,
+                "y": 0,
+                "width": 0,
+                "height": 0,
+                "right": 0,
+                "bottom": 0
+              },
+              "gridColumns": "none"
+            },
+            {
+              "selector": ".chat-panel",
+              "box": {
+                "x": 0,
+                "y": 0,
+                "width": 768,
+                "height": 597.5625,
+                "right": 768,
+                "bottom": 597.5625
+              },
+              "gridColumns": "none"
+            },
+            {
+              "selector": "#chat",
+              "box": {
+                "x": 1,
+                "y": 1,
+                "width": 766,
+                "height": 397.46875,
+                "right": 767,
+                "bottom": 398.46875
+              },
+              "gridColumns": "none"
+            },
+            {
+              "selector": ".composer",
+              "box": {
+                "x": 1,
+                "y": 463,
+                "width": 766,
+                "height": 133.5625,
+                "right": 767,
+                "bottom": 596.5625
+              },
+              "gridColumns": "none"
+            }
+          ],
+          "controls": [
+            {
+              "selector": "#promptInput",
+              "present": true,
+              "box": {
+                "x": 17,
+                "y": 475.1875,
+                "width": 676.40625,
+                "height": 55,
+                "right": 693.40625,
+                "bottom": 530.1875
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "promptInput",
+              "reachable": true
+            },
+            {
+              "selector": "#attachButton",
+              "present": true,
+              "box": {
+                "x": 702.203125,
+                "y": 474.1875,
+                "width": 48.796875,
+                "height": 55,
+                "right": 751,
+                "bottom": 529.1875
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "svg",
+              "reachable": true
+            },
+            {
+              "selector": "#sendButton",
+              "present": true,
+              "box": {
+                "x": 17,
+                "y": 541.375,
+                "width": 110.375,
+                "height": 44,
+                "right": 127.375,
+                "bottom": 585.375
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": false,
+              "disabled": false,
+              "hit": "NAV",
+              "reachable": false
+            }
+          ]
+        }
+      ],
+      "errors": [],
+      "pageErrors": [],
+      "attachmentTrial": {
+        "status": "pass-after-automatic-scroll",
+        "error": null,
+        "afterTrial": {
+          "state": "after-trial-scroll",
+          "screenshot": "test-results/overhaul-baseline/layout-2026-11-14T20-42-32-078Z/layout-tablet-v2-bug-002-after-trial-scroll.png",
+          "viewport": {
+            "width": 768,
+            "height": 1024,
+            "devicePixelRatio": 1,
+            "visual": {
+              "width": 768,
+              "height": 1024,
+              "scale": 1,
+              "offsetTop": 0
+            }
+          },
+          "documentOverflowX": 0,
+          "bodyClasses": "control-deck-overlay control-deck-right composer-action-grid-enabled theme-dark",
+          "keyboardInset": "0px",
+          "sidebarWidthProperty": "clamp(13rem, 18vw, 19rem)",
+          "regions": [
+            {
+              "selector": ".terminal-tabs-shell",
+              "box": {
+                "x": 0,
+                "y": 0,
+                "width": 0,
+                "height": 0,
+                "right": 0,
+                "bottom": 0
+              },
+              "gridColumns": "none"
+            },
+            {
+              "selector": ".chat-panel",
+              "box": {
+                "x": 0,
+                "y": 0,
+                "width": 768,
+                "height": 597.5625,
+                "right": 768,
+                "bottom": 597.5625
+              },
+              "gridColumns": "none"
+            },
+            {
+              "selector": "#chat",
+              "box": {
+                "x": 1,
+                "y": 1,
+                "width": 766,
+                "height": 397.46875,
+                "right": 767,
+                "bottom": 398.46875
+              },
+              "gridColumns": "none"
+            },
+            {
+              "selector": ".composer",
+              "box": {
+                "x": 1,
+                "y": 463,
+                "width": 766,
+                "height": 133.5625,
+                "right": 767,
+                "bottom": 596.5625
+              },
+              "gridColumns": "none"
+            }
+          ],
+          "controls": [
+            {
+              "selector": "#promptInput",
+              "present": true,
+              "box": {
+                "x": 17,
+                "y": 475.1875,
+                "width": 676.40625,
+                "height": 55,
+                "right": 693.40625,
+                "bottom": 530.1875
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "promptInput",
+              "reachable": true
+            },
+            {
+              "selector": "#attachButton",
+              "present": true,
+              "box": {
+                "x": 702.203125,
+                "y": 474.1875,
+                "width": 48.796875,
+                "height": 55,
+                "right": 751,
+                "bottom": 529.1875
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": true,
+              "disabled": false,
+              "hit": "svg",
+              "reachable": true
+            },
+            {
+              "selector": "#sendButton",
+              "present": true,
+              "box": {
+                "x": 17,
+                "y": 541.375,
+                "width": 110.375,
+                "height": 44,
+                "right": 127.375,
+                "bottom": 585.375
+              },
+              "rendered": true,
+              "withinViewport": true,
+              "clippedBy": null,
+              "centerHit": false,
+              "disabled": false,
+              "hit": "NAV",
+              "reachable": false
+            }
+          ]
+        }
+      },
+      "defects": [
+        {
+          "id": "BUG-002",
+          "severity": "Major",
+          "target": "W3 layout fix; W7 narrow-screen regression",
+          "expected": "Composer and attachment fit the tablet viewport and receive pointer input without scrolling the layout sideways.",
+          "actual": {
+            "selector": "#attachButton",
+            "present": true,
+            "box": {
+              "x": 814.203125,
+              "y": 475.1875,
+              "width": 48.796875,
+              "height": 55,
+              "right": 863,
+              "bottom": 530.1875
+            },
+            "rendered": true,
+            "withinViewport": false,
+            "clippedBy": "control-deck-overlay control-deck-right composer-action-grid-enabled theme-dark",
+            "centerHit": false,
+            "disabled": false,
+            "hit": null,
+            "reachable": false
+          },
+          "trial": {
+            "status": "pass-after-automatic-scroll",
+            "error": null,
+            "afterTrial": {
+              "state": "after-trial-scroll",
+              "screenshot": "test-results/overhaul-baseline/layout-2026-11-14T20-42-32-078Z/layout-tablet-v2-bug-002-after-trial-scroll.png",
+              "viewport": {
+                "width": 768,
+                "height": 1024,
+                "devicePixelRatio": 1,
+                "visual": {
+                  "width": 768,
+                  "height": 1024,
+                  "scale": 1,
+                  "offsetTop": 0
+                }
+              },
+              "documentOverflowX": 0,
+              "bodyClasses": "control-deck-overlay control-deck-right composer-action-grid-enabled theme-dark",
+              "keyboardInset": "0px",
+              "sidebarWidthProperty": "clamp(13rem, 18vw, 19rem)",
+              "regions": [
+                {
+                  "selector": ".terminal-tabs-shell",
+                  "box": {
+                    "x": 0,
+                    "y": 0,
+                    "width": 0,
+                    "height": 0,
+                    "right": 0,
+                    "bottom": 0
+                  },
+                  "gridColumns": "none"
+                },
+                {
+                  "selector": ".chat-panel",
+                  "box": {
+                    "x": 0,
+                    "y": 0,
+                    "width": 768,
+                    "height": 597.5625,
+                    "right": 768,
+                    "bottom": 597.5625
+                  },
+                  "gridColumns": "none"
+                },
+                {
+                  "selector": "#chat",
+                  "box": {
+                    "x": 1,
+                    "y": 1,
+                    "width": 766,
+                    "height": 397.46875,
+                    "right": 767,
+                    "bottom": 398.46875
+                  },
+                  "gridColumns": "none"
+                },
+                {
+                  "selector": ".composer",
+                  "box": {
+                    "x": 1,
+                    "y": 463,
+                    "width": 766,
+                    "height": 133.5625,
+                    "right": 767,
+                    "bottom": 596.5625
+                  },
+                  "gridColumns": "none"
+                }
+              ],
+              "controls": [
+                {
+                  "selector": "#promptInput",
+                  "present": true,
+                  "box": {
+                    "x": 17,
+                    "y": 475.1875,
+                    "width": 676.40625,
+                    "height": 55,
+                    "right": 693.40625,
+                    "bottom": 530.1875
+                  },
+                  "rendered": true,
+                  "withinViewport": true,
+                  "clippedBy": null,
+                  "centerHit": true,
+                  "disabled": false,
+                  "hit": "promptInput",
+                  "reachable": true
+                },
+                {
+                  "selector": "#attachButton",
+                  "present": true,
+                  "box": {
+                    "x": 702.203125,
+                    "y": 474.1875,
+                    "width": 48.796875,
+                    "height": 55,
+                    "right": 751,
+                    "bottom": 529.1875
+                  },
+                  "rendered": true,
+                  "withinViewport": true,
+                  "clippedBy": null,
+                  "centerHit": true,
+                  "disabled": false,
+                  "hit": "svg",
+                  "reachable": true
+                },
+                {
+                  "selector": "#sendButton",
+                  "present": true,
+                  "box": {
+                    "x": 17,
+                    "y": 541.375,
+                    "width": 110.375,
+                    "height": 44,
+                    "right": 127.375,
+                    "bottom": 585.375
+                  },
+                  "rendered": true,
+                  "withinViewport": true,
+                  "clippedBy": null,
+                  "centerHit": false,
+                  "disabled": false,
+                  "hit": "NAV",
+                  "reachable": false
+                }
+              ]
+            }
+          },
+          "screenshot": "test-results/overhaul-baseline/layout-2026-11-14T20-42-32-078Z/layout-tablet-v2-bug-002-clipping.png",
+          "reproduction": [
+            "Open existing tablet v2 at 768×1024; measure full mandatory control rectangles and hit targets."
+          ]
+        }
+      ]
+    }
+  ],
+  "omissions": [
+    "No native device, OS software keyboard, IME, safe-area hardware, or physical keyboard verification.",
+    "Headless keyboard browser-zoom attempt is measured; fallback viewport reflow is not true browser zoom, CSS zoom, pinch zoom, or device scale emulation.",
+    "Short existing fake-Pi transcripts and no installed companions. No simulated catalog responses are used by this layout workstream.",
+    "Stop/approval states and the original 42 screenshots/performance budgets belong to the frozen original baseline; this supplement does not replace or change them.",
+    "Model/effort selector geometry is measured in expanded desktop Controls. Phone model/effort workflow parity remains outside this layout-only pass."
+  ],
+  "executionHead": "ad514adba3f4e57c10c72b26eec0dce570eab30e",
+  "environment": {
+    "node": "v22.23.5",
+    "chromium": "157.0.8103.38",
+    "executable": "/usr/bin/chromium",
+    "platform": "linux",
+    "arch": "x64",
+    "kernel": "7.2.14-zen1-1-zen"
+  },
+  "summary": {
+    "pass": 9,
+    "known-defect": 4,
+    "missing": 0
+  },
+  "missingEvidence": [
+    {
+      "scenario": "native-mobile-keyboard",
+      "status": "missing",
+      "reason": "No real device or OS software keyboard is available in this headless Chromium fixture."
+    },
+    {
+      "scenario": "layout-zoom-200",
+      "status": "missing",
+      "reason": "True browser 200% zoom was not established; only equivalent CSS viewport reflow was measured."
+    }
+  ]
+}

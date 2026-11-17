@@ -28,19 +28,19 @@ const helperEnd = app.indexOf("\nfunction updateFileViewerSearchCount()", helper
 assert.ok(helperStart >= 0 && helperEnd > helperStart, "file viewer search matching should remain independently testable");
 const helperSource = app.slice(helperStart, helperEnd);
 const sourceMatches = JSON.parse(vm.runInNewContext(`${helperSource}\nJSON.stringify(collectFileViewerSearchMatches("alpha"))`, {
-  activeFileViewer: { mode: "source", content: "stale" },
+  projectFiles: { viewer: { mode: "source", content: "stale" } },
   elements: { fileViewerEditor: { value: "Alpha beta ALPHA" }, fileViewerPreview: { textContent: "preview" }, fileViewerChanges: { textContent: "changes" } },
   resolveFileViewerMode: (viewer) => viewer.mode,
 }));
 assert.deepEqual(sourceMatches, { matches: [{ start: 0, end: 5 }, { start: 11, end: 16 }], truncated: false }, "source search should use live edited text and match case-insensitively");
 const previewMatches = JSON.parse(vm.runInNewContext(`${helperSource}\nJSON.stringify(collectFileViewerSearchMatches("rendered"))`, {
-  activeFileViewer: { mode: "preview" },
+  projectFiles: { viewer: { mode: "preview" } },
   elements: { fileViewerEditor: { value: "source" }, fileViewerPreview: { textContent: "Rendered preview" }, fileViewerChanges: { textContent: "changes" } },
   resolveFileViewerMode: (viewer) => viewer.mode,
 }));
 assert.deepEqual(previewMatches, { matches: [{ start: 0, end: 8 }], truncated: false }, "preview search should use the rendered file surface instead of hidden source text");
 const truncatedMatches = JSON.parse(vm.runInNewContext(`${helperSource}\nJSON.stringify(collectFileViewerSearchMatches("a"))`, {
-  activeFileViewer: { mode: "source" },
+  projectFiles: { viewer: { mode: "source" } },
   elements: { fileViewerEditor: { value: "a".repeat(10_001) }, fileViewerPreview: { textContent: "" }, fileViewerChanges: { textContent: "" } },
   resolveFileViewerMode: (viewer) => viewer.mode,
 }));
@@ -52,13 +52,13 @@ assert.match(app, /function renderFileViewerSearchHighlights\(\)[\s\S]*new Highl
 assert.match(app, /function focusFileViewerSearchMatch\(\)[\s\S]*setSelectionRange\(match\.start, match\.end\)[\s\S]*syncFileViewerSearchOverlayScroll\(\)[\s\S]*textOffsetPosition\(surface, match\.start\)[\s\S]*scrollIntoView/, "match navigation should select and center source or rendered matches without mutating document selection");
 assert.doesNotMatch(app.slice(app.indexOf("function focusFileViewerSearchMatch("), app.indexOf("\nfunction runFileViewerSearch(", app.indexOf("function focusFileViewerSearchMatch("))), /getSelection|addRange|removeAllRanges/, "rendered file search must not overwrite selections used by the Send to Pi workflow");
 assert.match(app, /function runFileViewerSearch\([\s\S]*setAttribute\("aria-controls", surface\.id\)/, "the search input should identify the active Source, Preview, or Changes surface");
-assert.match(app, /function setFileViewerMode\([\s\S]*updateFileViewerUi\(\);[\s\S]*runFileViewerSearch\(\{ navigate: true \}\)/, "an explicit mode switch should reveal the first match on the new surface");
+assert.match(app, /function setFileViewerMode\([\s\S]*projectFiles\.setMode\(mode\);[\s\S]*runFileViewerSearch\(\{ navigate: true \}\)/, "an explicit mode switch should reveal the first match on the new surface");
 assert.match(app, /function updateFileViewerUi\([\s\S]*runFileViewerSearch\(\{ navigate: false \}\)/, "background viewer refreshes should reindex without stealing focus or scrolling to a match");
 assert.match(app, /fileViewerSearchInput\?\.addEventListener\("input"[\s\S]*setTimeout\([\s\S]*runFileViewerSearch\(\{ navigate: true \}\)[\s\S]*150/, "typing should debounce search work for large files");
 assert.match(app, /fileViewerSearchInput\?\.addEventListener\("keydown"[\s\S]*event\.key === "Enter"[\s\S]*stepFileViewerSearch\(event\.shiftKey \? -1 : 1\)[\s\S]*event\.key === "Escape"[\s\S]*closeFileViewerSearch\(\)/, "Enter, Shift+Enter, and Escape should navigate or close in-file search");
 assert.match(
   app,
-  /if \(activeFileViewer && elements\.fileViewerPane\?\.contains\(event\.target\)\) openFileViewerSearch\(\);\s*else openChatSearch\(\);/,
+  /if \(projectFiles\.viewer && elements\.fileViewerPane\?\.contains\(event\.target\)\) openFileViewerSearch\(\);\s*else openChatSearch\(\);/,
   "Ctrl/Cmd+F should route to in-file search only when the event target is inside the open file viewer",
 );
 assert.match(app, /function openChatSearch\(\)[\s\S]*closeFileViewerSearch\(\{ restoreFocus: false \}\)/, "opening transcript search should close any stale in-file search bar");

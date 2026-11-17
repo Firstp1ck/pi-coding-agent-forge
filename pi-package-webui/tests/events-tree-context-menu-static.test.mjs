@@ -11,10 +11,12 @@ const [html, app, styles, serviceWorker] = await Promise.all([
   readFile(join(root, "public", "service-worker.js"), "utf8"),
 ]);
 
+const events = await readFile(join(root, "public", "activity-events-controller.mjs"), "utf8");
+
 function functionSource(source, name) {
   const start = source.indexOf(`function ${name}(`);
   assert.ok(start >= 0, `${name} should exist`);
-  const next = source.slice(start + 1).match(/\n(?:async )?function [A-Za-z0-9_$]+\(/);
+  const next = source.slice(start + 1).match(/\n\s*(?:async )?function [A-Za-z0-9_$]+\(/);
   const end = next ? start + 1 + next.index : source.length;
   return source.slice(start, end);
 }
@@ -27,27 +29,27 @@ assert.match(html, /role="separator"[\s\S]*id="eventTreeContextMenuAction"[^>]*r
 assert.match(html, /<label for="eventFilterSelect">Show<\/label>[\s\S]*id="eventFilterSelect"[\s\S]*value="all">All events<[\s\S]*value="errors">Errors \/ failures<[\s\S]*value="warnings">Warnings<[\s\S]*value="tools">Tool activity<[\s\S]*value="tree">Tree available</, "Events should expose the recommended native filter choices");
 assert.match(html, /id="eventFilterStatus"[^>]*role="status"[^>]*aria-live="polite"[\s\S]*id="eventFilterEmpty"[^>]*hidden/, "the filter should expose live counts and an empty state");
 
-const normalizeDisplaySource = functionSource(app, "normalizeEventDisplayMode");
+const normalizeDisplaySource = functionSource(events, "normalizeEventDisplayMode");
 assert.match(normalizeDisplaySource, /value === "compact" \? "compact" : "detailed"/, "unknown values should fall back to detailed mode");
-assert.match(functionSource(app, "readStoredEventDisplayMode"), /localStorage\.getItem\(EVENT_DISPLAY_MODE_STORAGE_KEY\)/, "the display preference should restore from browser-local storage");
-const setDisplaySource = functionSource(app, "setEventDisplayMode");
-assert.match(setDisplaySource, /localStorage\.setItem\(EVENT_DISPLAY_MODE_STORAGE_KEY, eventDisplayMode\)/, "display choices should persist");
-assert.match(functionSource(app, "syncEventDisplayModeUi"), /eventLog\.dataset\.displayMode = eventDisplayMode[\s\S]*eventDisplayDetailedAction[\s\S]*eventDisplayCompactAction/, "the current choice should update the log and radio menu state");
+assert.match(functionSource(events, "readStoredEventDisplayMode"), /readPreference\(EVENT_DISPLAY_MODE_STORAGE_KEY\)/, "the display preference should restore from browser-local storage");
+const setDisplaySource = functionSource(events, "setEventDisplayMode");
+assert.match(setDisplaySource, /writePreference\(EVENT_DISPLAY_MODE_STORAGE_KEY, eventDisplayMode\)/, "display choices should persist");
+assert.match(functionSource(events, "syncEventDisplayModeUi"), /eventLog\.dataset\.displayMode = eventDisplayMode[\s\S]*eventDisplayDetailedAction[\s\S]*eventDisplayCompactAction/, "the current choice should update the log and radio menu state");
 
-const normalizeFilterSource = functionSource(app, "normalizeEventFilter");
+const normalizeFilterSource = functionSource(events, "normalizeEventFilter");
 assert.match(normalizeFilterSource, /EVENT_FILTER_VALUES\.has\(value\) \? value : "all"/, "unknown filters should fall back to all events");
-assert.match(functionSource(app, "readStoredEventFilter"), /localStorage\.getItem\(EVENT_FILTER_STORAGE_KEY\)/, "the event filter should restore from browser-local storage");
-const filterMatchSource = functionSource(app, "eventRowMatchesFilter");
+assert.match(functionSource(events, "readStoredEventFilter"), /readPreference\(EVENT_FILTER_STORAGE_KEY\)/, "the event filter should restore from browser-local storage");
+const filterMatchSource = functionSource(events, "eventRowMatchesFilter");
 for (const contract of [
   /filter === "errors"[\s\S]*eventLevel === "error"/,
   /filter === "warnings"[\s\S]*eventLevel === "warn"/,
   /filter === "tools"[\s\S]*eventToolPhase/,
   /filter === "tree"[\s\S]*eventTreeAvailable === "true"/,
 ]) assert.match(filterMatchSource, contract, "each visible filter should have an explicit row predicate");
-const applyFilterSource = functionSource(app, "applyEventFilter");
+const applyFilterSource = functionSource(events, "applyEventFilter");
 assert.match(applyFilterSource, /line\.hidden = !matches[\s\S]*eventFilterStatus[\s\S]*eventFilterEmpty\.hidden/, "filtering should hide rows in place and update count and empty-state feedback");
-const setFilterSource = functionSource(app, "setEventFilter");
-assert.match(setFilterSource, /localStorage\.setItem\(EVENT_FILTER_STORAGE_KEY, eventFilter\)/, "filter choices should persist");
+const setFilterSource = functionSource(events, "setEventFilter");
+assert.match(setFilterSource, /writePreference\(EVENT_FILTER_STORAGE_KEY, eventFilter\)/, "filter choices should persist");
 assert.match(app, /eventFilterSelect\?\.addEventListener\("change"[\s\S]*setEventFilter\(elements\.eventFilterSelect\.value\)/, "the native select should apply its selected filter");
 assert.match(app, /event\.key === EVENT_FILTER_STORAGE_KEY[\s\S]*setEventFilter\(event\.newValue, \{ persist: false \}\)/, "filter changes should synchronize across same-origin tabs");
 
@@ -71,13 +73,15 @@ assert.match(lifecycleArgumentsSource, /toolLifecycleEventDetails[\s\S]*toolEven
 assert.match(detailsSource, /phase === "finish"[\s\S]*toolEventStartedAt\.get\(toolEventTimerKey\(event\)\)[\s\S]*boundedToolEventTarget\(event\) \|\| startRecord\?\.target/, "finish rows should reuse the matching bounded start target when completion args omit it");
 
 // Every row exposes display choices; stable lifecycle rows alone expose Tree navigation.
-const addEventSource = functionSource(app, "addEvent");
+const addEventSource = functionSource(events, "addEvent");
 assert.match(addEventSource, /const toolLifecycle = \["start", "finish"\]\.includes\(toolEventPhase\)[\s\S]*stableToolCallId && toolLifecycle/, "only stable lifecycle rows should be Tree eligible");
 assert.match(addEventSource, /line\.dataset\.eventLevel = String\(level[\s\S]*line\.dataset\.eventTreeAvailable = String\(!!treeEligible\)/, "rows should retain bounded filter metadata without copying payloads");
 assert.match(addEventSource, /if \(toolLifecycle\) line\.dataset\.eventToolPhase = toolEventPhase/, "all tool lifecycle rows should remain visually identifiable in compact mode");
-assert.match(addEventSource, /while \(elements\.eventLog\.children\.length > 120\)[\s\S]*applyEventFilter\(\)/, "new rows should apply the active filter after preserving the existing history bound");
+assert.match(addEventSource, /while \(nodes\.eventLog\.children\.length > 120\)[\s\S]*applyEventFilter\(\)/, "new rows should apply the active filter after preserving the existing history bound");
 assert.match(addEventSource, /setAttribute\("aria-keyshortcuts", "ContextMenu Shift\+F10"\)/, "every event row should expose keyboard display choices");
-assert.match(addEventSource, /addEventListener\("click", \(\) => jumpToChatEvent\(line\)\)/, "event rows should preserve click-to-jump");
+assert.match(events, /nodes\.eventLog\.addEventListener\("click", jumpToEvent\)/, "the canonical log should own delegated click-to-jump");
+assert.match(functionSource(events, "jumpToEvent"), /row\.parentNode !== nodes\.eventLog[\s\S]*onJump\(row\)/, "delegated clicks should retain the exact canonical row");
+assert.match(app, /onJump: jumpToChatEvent/, "the controller should use existing chat navigation");
 assert.match(
   functionSource(app, "handleEvent"),
   /case "tool_execution_start":[\s\S]*isIntercomTransportToolName\(event\.toolName\)[\s\S]*break;[\s\S]*toolLifecycleEventArguments\(event, "start"\)[\s\S]*case "tool_execution_end":[\s\S]*isIntercomTransportToolName\(event\.toolName\)[\s\S]*break;[\s\S]*toolLifecycleEventArguments\(event, "finish"\)/,
@@ -124,8 +128,8 @@ assert.match(styles, /\.event-log\[data-display-mode="compact"\] \.event\[data-e
 assert.match(styles, /\.event-tree-context-menu \{[\s\S]*max-width: calc\(100vw - 1rem\)/, "the dedicated menu should remain viewport bounded");
 
 // Cache tuple for this browser-asset change.
-assert.match(serviceWorker, /const CACHE_NAME = "pi-webui-pwa-v156";/, "the PWA cache identity should advance");
-assert.match(html, /styles\.css\?v=154/, "compact-mode styles should advance the stylesheet revision");
-assert.match(html, /data-app-src="\/app\.js\?v=185"/, "the app query revision should advance");
+assert.match(serviceWorker, /const CACHE_NAME = "pi-webui-pwa-v200";/, "the PWA cache identity should advance");
+assert.match(html, /styles\.css\?v=167/, "compact-mode styles should advance the stylesheet revision");
+assert.match(html, /data-app-src="\/app\.js\?v=220"/, "the app query revision should advance");
 
 console.log("events-tree-context-menu-static.test.mjs passed");

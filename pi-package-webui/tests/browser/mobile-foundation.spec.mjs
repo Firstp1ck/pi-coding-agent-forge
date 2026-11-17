@@ -199,12 +199,15 @@ test("legacy phone keeps terminal navigation and secondary composer actions coll
   await expect(page.locator(".terminal-tabs-shell")).toHaveAttribute("aria-modal", "true");
 
   await page.locator("#newTabButton").tap();
-  await expect(page.locator("#newTabMenuPanel")).toBeVisible();
-  let drawerLayers = await page.evaluate(() => ({
-    drawer: Number.parseInt(getComputedStyle(document.querySelector(".terminal-tabs-shell")).zIndex, 10),
-    backdrop: Number.parseInt(getComputedStyle(document.querySelector("#terminalTabsBackdrop")).zIndex, 10),
-  }));
-  assert.ok(drawerLayers.drawer > drawerLayers.backdrop, `open + Tab options must remain above the blurred backdrop, got ${JSON.stringify(drawerLayers)}`);
+  await expect(page.locator("#newThreadDialog")).toBeVisible();
+  await expect(page.locator("dialog:modal")).toHaveId("newThreadDialog");
+  await expect(page.locator("#terminalTabsDrawerContent"), "the top-layer palette replaces the drawer").toBeHidden();
+  const palette = await page.locator("#newThreadDialog").boundingBox();
+  assert.ok(palette && palette.x >= 0 && palette.y >= 0 && palette.x + palette.width <= 320 && palette.y + palette.height <= 720, `the new-thread palette must fit 320×720, got ${JSON.stringify(palette)}`);
+  await page.keyboard.press("Escape");
+  await expect(page.locator("#newThreadDialog")).toBeHidden();
+  await page.locator("#terminalTabsToggleButton").tap();
+  await expect(page.locator("#terminalTabsDrawerContent")).toBeVisible();
 
   await page.evaluate(() => {
     const fixture = document.createElement("div");
@@ -235,8 +238,8 @@ test("legacy phone keeps terminal navigation and secondary composer actions coll
     }
     const overallNewTab = document.createElement("div");
     overallNewTab.id = "mobileOverallNewTabFixture";
-    overallNewTab.className = "terminal-new-tab-menu composer-publish-menu";
-    overallNewTab.textContent = "+ Tab";
+    overallNewTab.className = "terminal-new-tab-menu";
+    overallNewTab.textContent = "+ Thread";
     visibilityFixture.append(overallNewTab);
 
     document.querySelector("#terminalTabsDrawerContent").append(fixture, visibilityFixture);
@@ -253,10 +256,9 @@ test("legacy phone keeps terminal navigation and secondary composer actions coll
   await expect(mobileGroupFixtureButton.locator(".terminal-tab-meta")).toBeVisible();
   await expect(mobileGroupFixtureButton.locator(".terminal-tab-meta")).toContainText("project-cwd");
   await mobileGroupFixtureButton.tap();
-  await expect(page.locator("#newTabMenuPanel")).toBeHidden();
   await expect(mobileGroupFixtureButton).toHaveAttribute("aria-expanded", "true");
   await expect(mobileGroupFixtureMenu).toBeVisible();
-  drawerLayers = await page.evaluate(() => ({
+  const drawerLayers = await page.evaluate(() => ({
     drawer: Number.parseInt(getComputedStyle(document.querySelector(".terminal-tabs-shell")).zIndex, 10),
     backdrop: Number.parseInt(getComputedStyle(document.querySelector("#terminalTabsBackdrop")).zIndex, 10),
   }));
@@ -311,10 +313,11 @@ test("legacy phone keeps terminal navigation and secondary composer actions coll
     const target = sections[1]?.querySelector("[data-side-panel-section-toggle]");
     const before = sections.map((section) => section.dataset.sidePanelSection);
     const sourceRect = source.getBoundingClientRect();
-    const targetRect = target.getBoundingClientRect();
     source.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerId: id, button: 0, clientX: sourceRect.left + 10, clientY: sourceRect.top + 10 }));
-    window.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, pointerId: id, button: 0, clientX: targetRect.left + 10, clientY: targetRect.bottom - 4 }));
-    window.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: id, button: 0, clientX: targetRect.left + 10, clientY: targetRect.bottom - 4 }));
+    window.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, pointerId: id, button: 0, clientX: sourceRect.left + 10, clientY: sourceRect.top + 24 }));
+    const dropRect = target.getBoundingClientRect();
+    window.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, pointerId: id, button: 0, clientX: dropRect.left + 10, clientY: dropRect.bottom - 4 }));
+    window.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: id, button: 0, clientX: dropRect.left + 10, clientY: dropRect.bottom - 4 }));
     return {
       before,
       after: [...document.querySelectorAll("[data-side-panel-section]")].filter((section) => !section.hidden).map((section) => section.dataset.sidePanelSection),
@@ -499,7 +502,12 @@ test("phone v2 destinations, canonical actions, history, and presentation remain
   await expect(page.locator("#mobileSessionsSearchInput")).toBeVisible();
   await page.locator("#promptInput").evaluate((node) => { node.value = "draft survives switch"; node.dispatchEvent(new Event("input", { bubbles: true })); });
   await page.locator("#mobileNewCurrentDirectoryButton").click();
-  await expect(page.locator(".mobile-session-select")).toHaveCount(2);
+  await expect(page.locator("#newThreadDialog")).toBeVisible();
+  await page.locator("#newThreadList [role=\"option\"]").first().click();
+  await expect(page.locator("#emptyStartTitle")).toHaveText("Start a conversation");
+  await expect(page.locator("#promptInput")).toHaveValue("");
+  await phoneNav.getByRole("button", { name: "Sessions", exact: true }).click();
+  await expect(page.locator(".mobile-session-select"), "a thread draft is not a server session").toHaveCount(1);
   await page.locator(".mobile-session-select").first().click();
   await expect(page.locator("#promptInput")).toHaveValue("draft survives switch");
   await assertAxeClean(page, "phone Sessions route");
@@ -610,7 +618,11 @@ test("mobile continuity preserves drafts, restores metadata honestly, and retrie
   const pasteInput = page.locator(".mobile-paste-context-text");
   const pasteDraft = Array.from({ length: 18 }, (_, index) => `pasted context line ${index}`).join("\n");
   await pasteInput.fill(pasteDraft);
-  const pasteBefore = await pasteInput.evaluate((node) => {
+  // Resolve and edit in one browser task. A reconnect can replace this field
+  // between locator resolution and evaluate, leaving an already-detached handle.
+  const pasteBefore = await page.evaluate(() => {
+    const node = document.querySelector(".mobile-paste-context-text");
+    if (!(node instanceof HTMLTextAreaElement)) throw new Error("Paste context field is unavailable");
     node.focus();
     node.setSelectionRange(14, 41, "backward");
     node.scrollTop = 48;
@@ -669,7 +681,10 @@ test("a blocker notification switches to its background tab before exact-target 
   const targetTabId = initialTabs.data.tabs[0].id;
   await page.getByRole("button", { name: "Sessions", exact: true }).click();
   await page.locator("#mobileNewCurrentDirectoryButton").click();
-  await expect(page.locator(".mobile-session-select")).toHaveCount(2);
+  await page.locator("#newThreadList [role=\"option\"]").first().click();
+  await page.locator("#promptInput").fill("fixture second mobile thread");
+  await page.locator("#sendButton").click();
+  await expect.poll(async () => (await (await page.request.get(`${baseURL}/api/tabs`)).json()).data.tabs.length).toBe(2);
   const currentTabs = await (await page.request.get(`${baseURL}/api/tabs`)).json();
   const activeTabId = currentTabs.data.activeTabId || currentTabs.data.tabs.find((tab) => tab.id !== targetTabId)?.id;
   assert.notEqual(activeTabId, targetTabId, "fixture requires a different active tab");
@@ -749,17 +764,17 @@ test("desktop remains equivalent at required viewport fixtures", async ({ page }
     await expect(page.locator("#mobileShellV2")).toBeHidden();
     await expect(page.locator("#promptInput")).toBeVisible();
     await expect(page.locator(".terminal-tabs-shell")).toBeVisible();
-    await expect(page.locator(".side-panel")).toBeVisible();
+    await expect(page.locator("#sidePanel")).toBeVisible();
   }
 });
 
 test("desktop left-sidebar actions are compact accessible icon buttons", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto(baseURL);
+  await page.goto(`${baseURL}/?shell=classic`);
   await page.locator("body").evaluate((body) => body.classList.add("terminal-tabs-left"));
 
-  const actions = page.locator(".terminal-sidebar-actions > button");
-  await expect(actions).toHaveCount(4);
+  const actions = page.locator(".terminal-sidebar-actions > button:visible");
+  await expect(actions).toHaveCount(3);
   const snapshots = await actions.evaluateAll((buttons) => buttons.map((button) => ({
     text: button.textContent.trim(),
     ariaLabel: button.getAttribute("aria-label"),
@@ -772,4 +787,141 @@ test("desktop left-sidebar actions are compact accessible icon buttons", async (
     assert.ok(action.width >= 44 && action.height >= 44, `icon action must retain a 44px target, got ${action.width}×${action.height}`);
   }
   assert.ok(Math.max(...snapshots.map((action) => action.width)) - Math.min(...snapshots.map((action) => action.width)) <= 1, "icon actions should remain equal width");
+});
+
+test("shell recovery overrides previews across resize without losing the draft", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`${baseURL}/?shell=classic&mobileShell=v2&tabletShell=v2`);
+  await page.locator('#promptInput').fill('recovery retains this draft');
+  for (const width of [390, 820, 1440, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await expect(page.locator('#mobileShellV2')).toBeHidden();
+    await expect(page.locator('html')).not.toHaveAttribute('data-mobile-shell');
+    await expect(page.locator('html')).not.toHaveAttribute('data-tablet-shell');
+    await expect(page.locator('#promptInput')).toHaveValue('recovery retains this draft');
+  }
+});
+
+test("shell history failure leaves the current view and draft usable", async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`${baseURL}/?mobileShell=v2`);
+  await page.locator('#promptInput').fill('history failure draft');
+  await page.evaluate(() => {
+    const original = history.pushState;
+    history.pushState = function (...args) {
+      history.pushState = original;
+      throw new DOMException('fixture history write denied', 'SecurityError');
+    };
+  });
+  await page.locator('#mobileMoreButton').click();
+  await expect(page.locator('#mobileShellSurface')).toBeHidden();
+  await expect(page.locator('#promptInput')).toHaveValue('history failure draft');
+  await page.locator('#mobileMoreButton').click();
+  await expect(page.locator('#mobileShellSurface')).toBeVisible();
+  await page.locator('#mobileSurfaceCloseButton').click();
+  await expect(page.locator('#promptInput')).toHaveValue('history failure draft');
+  assert.deepEqual(errors, []);
+});
+
+test("shell canonical project navigation retains nodes, filters, history fields and stream", async ({ page }, testInfo) => {
+  let streams = 0;
+  page.on('request', request => { if (new URL(request.url()).pathname === '/api/events') streams += 1; });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`${baseURL}/?mobileShell=v2`);
+  await page.locator('#promptInput').fill('project navigation draft');
+  await expect.poll(() => streams).toBeGreaterThan(0);
+  const before = streams;
+  await page.evaluate(() => {
+    window.originalFilesView = document.querySelector('#sidePanelSectionFiles');
+    history.replaceState({ ...history.state, independentMarker: 'retained' }, '');
+  });
+  const nav = page.getByRole('navigation', { name: 'Phone destinations' });
+  await nav.getByRole('button', { name: 'Project', exact: true }).click();
+  await page.locator('#fileTreeSearchInput').fill('tablet');
+  await nav.getByRole('button', { name: 'Chat', exact: true }).click();
+  await expect(page.locator('#promptInput')).toHaveValue('project navigation draft');
+  await page.goBack();
+  await expect(page.locator('#fileTreeSearchInput')).toBeVisible();
+  await expect(page.locator('#fileTreeSearchInput')).toHaveValue('tablet');
+  assert.deepEqual(await page.evaluate(() => ({ same: window.originalFilesView === document.querySelector('#sidePanelSectionFiles'), marker: history.state.independentMarker })), { same: true, marker: 'retained' });
+  assert.equal(streams, before);
+  await page.screenshot({ path: testInfo.outputPath('shell-project-continuity.png') });
+});
+
+test("shell palette stable actions dispatch the real transcript search", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(baseURL);
+  await page.locator('#promptInput').fill('palette retains draft');
+  await page.locator('#commandPaletteButton').click();
+  const ids = await page.locator('#commandPaletteList [data-action-id]').evaluateAll(nodes => nodes.map(node => node.dataset.actionId));
+  assert.ok(ids.length > 10);
+  assert.equal(new Set(ids).size, ids.length);
+  await page.locator('#commandPaletteInput').fill('Search transcript');
+  await page.locator('[data-action-id="conversation:search"]').click();
+  await expect(page.locator('#chatSearchInput')).toBeVisible();
+  await expect(page.locator('#commandPaletteDialog')).toBeHidden();
+  await expect(page.locator('#promptInput')).toHaveValue('palette retains draft');
+});
+
+test("shell modules survive the service-worker offline cache and online refresh", async ({ page, context }) => {
+  await page.goto(baseURL);
+  await expect(page.locator('#promptInput')).toBeVisible();
+  await page.evaluate(() => navigator.serviceWorker.ready);
+  await page.reload();
+  await expect.poll(() => page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true);
+  const modules = ['project-file-viewer-controller', 'project-git-tools-controller', 'project-runners-controller', 'project-artifact-controller', 'activity-queue-controller', 'activity-agents-controller', 'activity-intercom-controller', 'activity-events-controller', 'activity-usage-controller', 'activity-todo-view', 'shell-workspace', 'shell-tools-launcher', 'focused-shell-adapter', 'shell-actions', 'shell-navigation', 'shell-preferences', 'shell-view-host', 'shell-surfaces', 'session-context', 'session-shelf-state', 'session-shelves', 'session-composer-store', 'session-attention-scheduler', 'platform-event-stream', 'session-extension-requests'];
+  const cacheState = await page.evaluate(async names => {
+    const cacheNames = await caches.keys();
+    const active = cacheNames.find(name => name.startsWith('pi-webui-pwa-'));
+    const cache = await caches.open(active);
+    return { active, shelvesCss: !!await cache.match('/session-shelves.css'), modules: await Promise.all(names.map(async name => !!await cache.match(`/${name}.mjs`))), api: (await cache.keys()).some(request => new URL(request.url).pathname.startsWith('/api/')) };
+  }, modules);
+  assert.equal(cacheState.active, 'pi-webui-pwa-v200');
+  assert.equal(cacheState.shelvesCss, true);
+  assert.deepEqual(cacheState.modules, modules.map(() => true));
+  assert.equal(cacheState.api, false);
+  try {
+    await context.setOffline(true);
+    await page.reload();
+    assert.deepEqual(await page.evaluate(async names => Promise.all(names.map(async name => Object.keys(await import(`/${name}.mjs`)).length > 0)), modules), modules.map(() => true));
+  } finally {
+    await context.setOffline(false);
+  }
+  await page.reload();
+  await expect(page.locator('#promptInput')).toBeVisible();
+  await page.locator('#commandPaletteButton').click();
+  await expect(page.locator('[data-action-id="conversation:search"]')).toBeVisible();
+});
+
+test("shell breakpoint return restores focus and selection into the expanded Classic Files view", async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(`${baseURL}/?mobileShell=v2&tabletShell=legacy&mobileRoute=project`);
+  await page.locator('#sidePanelSectionToggleFiles').click();
+  const input = page.locator('#fileTreeSearchInput');
+  await expect(input).toBeVisible();
+  await input.fill('tablet-example');
+  await input.evaluate(node => {
+    window.focusedFilesInput = node;
+    node.focus();
+    node.setSelectionRange(2, 6, 'backward');
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole('navigation', { name: 'Phone destinations' }).getByRole('button', { name: 'Project', exact: true }).click();
+  await expect(page.locator('#mobileProjectRoute')).toBeVisible();
+  await input.focus();
+  await input.evaluate(node => node.setSelectionRange(2, 6, 'backward'));
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await expect(input).toBeVisible();
+  await expect(input).toBeFocused();
+  assert.deepEqual(await input.evaluate(node => ({ same: node === window.focusedFilesInput, value: node.value, start: node.selectionStart, end: node.selectionEnd, direction: node.selectionDirection })), { same: true, value: 'tablet-example', start: 2, end: 6, direction: 'backward' });
+  await page.screenshot({ path: testInfo.outputPath('classic-files-focus-restored.png') });
+  await page.keyboard.insertText('retained');
+  await expect(input).toHaveValue('taretained-example');
+  await input.evaluate(node => node.setSelectionRange(2, 6, 'backward'));
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(input).toBeFocused();
+  assert.deepEqual(await input.evaluate(node => [node.selectionStart, node.selectionEnd, node.selectionDirection]), [2, 6, 'backward']);
+  await expect(input).toHaveValue('taretained-example');
 });

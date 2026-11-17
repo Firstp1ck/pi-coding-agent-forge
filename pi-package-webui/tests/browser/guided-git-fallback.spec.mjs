@@ -47,6 +47,7 @@ test.beforeAll(async () => {
   const logFile = join(tempRoot, "rpc.jsonl");
   await writeFile(fakePi, `#!/usr/bin/env node
 import { appendFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
 const logFile = process.env.GUIDED_GIT_BROWSER_LOG;
@@ -58,26 +59,11 @@ function send(value) { process.stdout.write(JSON.stringify(value) + "\\n"); }
 function log(value) { appendFileSync(logFile, JSON.stringify(value) + "\\n"); }
 function fallbackSuccessEnabled() { return existsSync(fallbackSuccessFlag); }
 function event(value) { send(value); }
-function assistantFailure() { return { role: "assistant", stopReason: "error", content: [{ type: "text", text: "fixture failure" }] }; }
 function writeCommitArtifacts() {
   const directory = join(artifactRoot, "dev", "COMMIT");
   mkdirSync(directory, { recursive: true });
   writeFileSync(join(directory, "staged-commit-short.txt"), "fallback short\\n");
   writeFileSync(join(directory, "staged-commit-long.txt"), "fallback long\\n");
-}
-function settle({ failed = false, wait = 20 } = {}) {
-  setTimeout(() => {
-    event({ type: "agent_start" });
-    if (failed) {
-      const message = assistantFailure();
-      event({ type: "message_end", message });
-      event({ type: "agent_end", willRetry: false, messages: [message] });
-    } else {
-      event({ type: "message_end", message: { role: "assistant", content: [{ type: "text", text: "fixture success" }] } });
-      event({ type: "agent_end" });
-    }
-    event({ type: "agent_settled" });
-  }, wait);
 }
 const models = [
   { provider: "fake", id: "original", name: "Original", reasoning: true },
@@ -87,22 +73,38 @@ const models = [
 createInterface({ input: process.stdin }).on("line", (line) => {
   const command = JSON.parse(line);
   if (!command?.id) return;
-  log({ type: command.type, modelId: command.modelId, activeModel: model.id, message: command.message });
+  const encodedProfile = command.type === "prompt" && command.message?.match(/--firstpick-webui-generation-profile=([A-Za-z0-9_-]+)/)?.[1];
+  const generationProfile = encodedProfile ? JSON.parse(Buffer.from(encodedProfile, "base64url").toString("utf8")) : null;
+  log({ type: command.type, modelId: command.modelId, activeModel: model.id, message: command.message, generationProfile });
   const response = { type: "response", id: command.id, command: command.type, success: true };
   if (command.type === "get_state") send({ ...response, data: { model, thinkingLevel, isStreaming: false, isCompacting: false, pendingMessageCount: 0, sessionId: "browser", sessionName: "browser" } });
   else if (command.type === "get_available_models") send({ ...response, data: { models } });
   else if (command.type === "get_commands") send({ ...response, data: { commands: [
+    { name: "git-guided-workflow", source: "extension", description: "Start Guided Git" },
     { name: "git-staged-msg", source: "extension", description: "Generate commit messages" },
     { name: "git-branch-name", source: "extension", description: "Generate branch names" },
     { name: "pr", source: "extension", description: "Generate PR text" },
   ] } });
   else if (command.type === "get_messages") send({ ...response, data: { messages: [] } });
-  else if (command.type === "set_model" && command.modelId === "primary" && !fallbackSuccessEnabled()) send({ ...response, success: false, error: "SECRET primary failure at /private/provider.mjs:12" });
   else if (command.type === "set_model") { model = { provider: command.provider, id: command.modelId }; send({ ...response, data: model }); }
   else if (command.type === "set_thinking_level") { thinkingLevel = command.level; send({ ...response, data: { level: thinkingLevel } }); }
-  else if (command.type === "prompt" && model.id === "primary" && fallbackSuccessEnabled()) { send({ ...response, data: {} }); settle({ failed: true }); }
-  else if (command.type === "prompt" && model.id === "fallback" && !fallbackSuccessEnabled()) send({ ...response, success: false, error: "SECRET fallback failure at /private/provider.mjs:44" });
-  else if (command.type === "prompt" && model.id === "fallback") { send({ ...response, data: {} }); setTimeout(writeCommitArtifacts, 450); settle({ wait: 600 }); }
+  else if (command.type === "prompt" && command.message === "/git-guided-workflow") {
+    send({ ...response, data: {} });
+    const statusKey = "git-guided-workflow:webui-start";
+    const statusText = JSON.stringify({ type: "firstpick.pi-extension-git-guided-workflow.start", version: 1, action: "start", requestId: randomUUID() });
+    event({ type: "extension_ui_request", id: randomUUID(), method: "setStatus", statusKey, statusText });
+    event({ type: "extension_ui_request", id: randomUUID(), method: "setStatus", statusKey });
+  }
+  else if (generationProfile?.modelId === "primary" && fallbackSuccessEnabled()) {
+    send({ ...response, data: {} });
+    setTimeout(() => event({ type: "extension_error", event: "command", extensionPath: "command:git-staged-msg", error: "FIRSTPICK_GUIDED_GIT_PROVIDER_FAILURE fixture failure" }), 20);
+  }
+  else if (generationProfile?.modelId === "primary") send({ ...response, success: false, error: "FIRSTPICK_GUIDED_GIT_PROVIDER_FAILURE SECRET primary failure at /private/provider.mjs:12" });
+  else if (generationProfile?.modelId === "fallback" && !fallbackSuccessEnabled()) send({ ...response, success: false, error: "FIRSTPICK_GUIDED_GIT_PROVIDER_FAILURE SECRET fallback failure at /private/provider.mjs:44" });
+  else if (generationProfile?.modelId === "fallback") {
+    setTimeout(writeCommitArtifacts, 450);
+    setTimeout(() => send({ ...response, data: {} }), 600);
+  }
   else send({ ...response, data: {} });
 });
 `, "utf8");
@@ -149,11 +151,19 @@ test.afterAll(async () => {
 });
 
 test("pre-response fallback lifecycle survives correlation and remains browser-observation-only", async ({ page }) => {
+  const browserModelRequests = [];
+  page.on("request", (request) => {
+    const pathname = new URL(request.url()).pathname;
+    if (request.method() === "POST" && ["/api/prompt", "/api/model", "/api/thinking"].includes(pathname)) {
+      browserModelRequests.push({ pathname, body: request.postDataJSON() });
+    }
+  });
   await page.route("**/api/commands?*", async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({ ok: true, data: { commands: [
+        { name: "git-guided-workflow", source: "extension", description: "Start Guided Git" },
         { name: "git-staged-msg", source: "extension", description: "Generate commit messages" },
         { name: "git-branch-name", source: "extension", description: "Generate branch names" },
         { name: "pr", source: "extension", description: "Generate PR text" },
@@ -181,7 +191,15 @@ test("pre-response fallback lifecycle survives correlation and remains browser-o
 
   const log = (await import("node:fs/promises")).readFile(join(tempRoot, "rpc.jsonl"), "utf8");
   const entries = (await log).trim().split("\n").filter(Boolean).map((line) => JSON.parse(line));
-  assert.equal(entries.filter((entry) => entry.type === "prompt" && entry.activeModel === "fallback").length, 1, "the browser must not dispatch another fallback prompt");
+  assert.equal(entries.filter((entry) => entry.type === "prompt" && entry.generationProfile?.modelId === "fallback").length, 1, "the browser must not dispatch another fallback prompt");
+  assert.deepEqual(entries.filter((entry) => entry.generationProfile).map((entry) => entry.generationProfile), [
+    { version: 1, provider: "fake", modelId: "primary", thinkingLevel: "low" },
+    { version: 1, provider: "fake", modelId: "fallback", thinkingLevel: "off" },
+  ]);
+  assert.equal(entries.filter((entry) => ["set_model", "set_thinking_level"].includes(entry.type)).length, 0, "browser generation must leave model and effort changes to the extension");
+  assert.equal(browserModelRequests.length, 1, "the browser may activate the extension but must not dispatch generation attempts or model changes");
+  assert.equal(browserModelRequests[0].pathname, "/api/prompt");
+  assert.equal(browserModelRequests[0].body.message, "/git-guided-workflow");
 });
 
 test("a slow successful fallback opens the generated message preview automatically", async ({ page }) => {
@@ -197,6 +215,7 @@ test("a slow successful fallback opens the generated message preview automatical
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({ ok: true, data: { commands: [
+        { name: "git-guided-workflow", source: "extension", description: "Start Guided Git" },
         { name: "git-staged-msg", source: "extension", description: "Generate commit messages" },
         { name: "git-branch-name", source: "extension", description: "Generate branch names" },
         { name: "pr", source: "extension", description: "Generate PR text" },

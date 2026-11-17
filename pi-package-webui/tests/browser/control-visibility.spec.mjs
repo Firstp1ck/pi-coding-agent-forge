@@ -463,6 +463,11 @@ test("keyboard-only recovery from Send after every catalog item is hidden", asyn
   await openAreaMenu(page);
   await expect.poll(async () => checkboxes.evaluateAll((items) => items.map((item) => item.getAttribute("aria-checked")))).toEqual(Array(24).fill("true"));
   await page.keyboard.press("Escape");
+  // The next serial case reads the same server settings. Do not close this
+  // page while its final Show all write is still queued behind earlier toggles.
+  await expect.poll(hiddenIdsOnDisk).toEqual([]);
+  await expect.poll(() => page.evaluate(() => Object.keys(localStorage)
+    .filter((key) => key.startsWith("pi-webui-ui-layout-pending")).length)).toBe(0);
 });
 
 test("pending visibility mutation survives same-origin cache adoption and rewrites the cache after acknowledgment", async ({ browser }) => {

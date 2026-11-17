@@ -1,0 +1,1929 @@
+{
+  "schemaVersion": 1,
+  "workstream": "W0-D",
+  "capturedAt": "2026-11-14T20:47:19.065Z",
+  "sourceBaseline": "06351edae0d87829dfa8c747d31a061825568b0e",
+  "integrationBase": "ad514adba3f4e57c10c72b26eec0dce570eab30e",
+  "originalReference": "docs/overhaul/browser-baseline.json, unchanged; no new performance budgets or replacement workflow metrics",
+  "scenarios": [
+    {
+      "id": "model-desktop",
+      "view": {
+        "name": "desktop",
+        "width": 1440,
+        "height": 900,
+        "query": ""
+      },
+      "status": "partial-fixture-limitation",
+      "actions": [
+        {
+          "selector": "#sidePanelSectionToggleControls",
+          "description": "expand Controls",
+          "completed": true
+        },
+        {
+          "selector": "#modelSelect",
+          "description": "choose alternative fake model",
+          "completed": true
+        },
+        {
+          "selector": "#setModelButton",
+          "description": "apply model",
+          "completed": true
+        }
+      ],
+      "screenshots": [
+        "test-results/overhaul-baseline/capability-2026-11-14T20-47-19-065Z/capability-model-desktop-chosen-before-apply.png",
+        "test-results/overhaul-baseline/capability-2026-11-14T20-47-19-065Z/capability-model-desktop-accepted.png"
+      ],
+      "pageErrors": [],
+      "simulation": "Simulated HTTP GET model/command catalogs only; real UI handlers, POST APIs, fake-Pi RPC and temporary settings persistence. No installed companion/provider verification.",
+      "modelResponse": {
+        "type": "response",
+        "id": "4037adc1-81e7-494e-9782-9c44130c6c51",
+        "command": "set_model",
+        "success": true,
+        "data": {
+          "provider": "fake",
+          "id": "z-capability-alternative"
+        },
+        "tab": {
+          "id": "d9963422-1fd5-4d81-b608-abc531f740da",
+          "index": 1,
+          "title": "Terminal 1",
+          "titleSource": "default",
+          "conversationStarted": false,
+          "cwd": "/tmp/pi-overhaul-baseline-UmkPhB/project",
+          "gitWorkspace": null,
+          "prompt": null,
+          "pendingThinkingLevel": null,
+          "createdAt": "2026-11-14T20:47:19.584Z",
+          "startedAt": "2026-11-14T20:47:19.584Z",
+          "pid": 1276630,
+          "running": true,
+          "command": "/usr/bin/node /home/firstpick/.t3/worktrees/npm-packages/t3-9d015eb9-dfdf6a665aef0719/pi-package-webui/tests/fixtures/fake-pi.mjs --mode rpc --no-extensions --no-skills --no-prompt-templates --no-themes --extension /home/firstpick/.t3/worktrees/npm-packages/t3-9d015eb9-dfdf6a665aef0719/pi-package-webui/index.ts --extension /home/firstpick/.t3/worktrees/npm-packages/t3-9d015eb9-dfdf6a665aef0719/pi-package-webui/session-summary.ts --theme /tmp/pi-overhaul-baseline-UmkPhB/agent/themes/overhaul-custom.json --extension /home/firstpick/.t3/worktrees/npm-packages/t3-9d015eb9-dfdf6a665aef0719/pi-package-webui/webui-rpc-helper.mjs",
+          "clientCount": 1,
+          "pendingExtensionUiRequestCount": 0,
+          "activity": {
+            "status": "idle",
+            "isWorking": false,
+            "runStarted": false,
+            "runId": null,
+            "completionSerial": 0,
+            "lastChangedAt": "2026-11-14T20:47:19.584Z",
+            "lastStartedAt": null,
+            "lastCompletedAt": null
+          },
+          "appRunner": null,
+          "conversationMode": {
+            "featureId": "naturalConversation",
+            "available": true,
+            "enabled": false,
+            "uiState": "off",
+            "statusText": "",
+            "allowedTools": [
+              "read",
+              "grep",
+              "find",
+              "ls"
+            ],
+            "provider": "browser-shell",
+            "startedAt": null,
+            "packageInstalled": true,
+            "loadedCommands": [
+              "talk",
+              "voice",
+              "conversation"
+            ],
+            "updatedAt": "2026-11-14T20:47:19.585Z"
+          },
+          "sessionSummary": null
+        }
+      },
+      "authoritativeModel": {
+        "provider": "fake",
+        "id": "fake-model"
+      },
+      "limitation": "Alternative choice and real POST/RPC acceptance verified. Existing fake Pi set_model echoes the request but get_state always returns fake/fake-model; durable provider/model switching is unverified, not a production regression.",
+      "completedActionCount": 3
+    },
+    {
+      "id": "resources-desktop",
+      "view": {
+        "name": "desktop",
+        "width": 1440,
+        "height": 900,
+        "query": ""
+      },
+      "status": "verified",
+      "actions": [
+        {
+          "selector": "#nativeCommandMenuButton",
+          "description": "open resource menu",
+          "completed": true
+        },
+        {
+          "selector": "#nativeToolsButton",
+          "description": "open Tools Setup",
+          "completed": true
+        },
+        {
+          "selector": ".native-selector-item containing bash",
+          "description": "disable bash for this session",
+          "completed": true
+        },
+        {
+          "selector": "button \"Use inherited defaults\"",
+          "description": "restore inherited session tools",
+          "completed": true
+        },
+        {
+          "selector": ".native-resource-scope select",
+          "description": "choose model default",
+          "completed": true
+        },
+        {
+          "selector": ".native-selector-item containing bash",
+          "description": "disable bash for fake-model default",
+          "completed": true
+        },
+        {
+          "selector": "button \"Use inherited defaults\"",
+          "description": "clear model override",
+          "completed": true
+        },
+        {
+          "selector": ".native-resource-scope select",
+          "description": "choose global default",
+          "completed": true
+        },
+        {
+          "selector": ".native-selector-item containing bash",
+          "description": "disable bash globally",
+          "completed": true
+        },
+        {
+          "selector": "button \"Use inherited defaults\"",
+          "description": "clear global override",
+          "completed": true
+        },
+        {
+          "selector": "button \"Cancel\"",
+          "description": "close Tools Setup",
+          "completed": true
+        },
+        {
+          "selector": "#nativeCommandMenuButton",
+          "description": "open resource menu again",
+          "completed": true
+        },
+        {
+          "selector": "#nativeSkillsButton",
+          "description": "open Skills Setup",
+          "completed": true
+        },
+        {
+          "selector": ".native-resource-scope select",
+          "description": "choose exact-model skill default",
+          "completed": true
+        },
+        {
+          "selector": "skill code-security",
+          "description": "disable code-security for fake-model default",
+          "completed": true
+        },
+        {
+          "selector": "button \"Use inherited defaults\"",
+          "description": "clear skill model override",
+          "completed": true
+        },
+        {
+          "selector": "button \"Cancel\"",
+          "description": "close Skills Setup",
+          "completed": true
+        }
+      ],
+      "screenshots": [
+        "test-results/overhaul-baseline/capability-2026-11-14T20-47-19-065Z/capability-resources-desktop-model-profile.png",
+        "test-results/overhaul-baseline/capability-2026-11-14T20-47-19-065Z/capability-resources-desktop-skill-profile.png"
+      ],
+      "pageErrors": [],
+      "simulation": "Simulated HTTP GET model/command catalogs only; real UI handlers, POST APIs, fake-Pi RPC and temporary settings persistence. No installed companion/provider verification.",
+      "sessionOnlySettings": {
+        "modelProfiles": [],
+        "tools": {
+          "enabledTools": null
+        },
+        "skills": {
+          "enabledSkills": null
+        }
+      },
+      "sessionToolScopes": [
+        {
+          "tabId": "7eacb91c-a712-4132-a70d-437b4ab0e231",
+          "bashEnabled": false
+        },
+        {
+          "tabId": "b2784104-15d1-4624-ab62-aaa0f9a09d9b",
+          "bashEnabled": true
+        }
+      ],
+      "modelProfile": [
+        {
+          "provider": "fake",
+          "modelId": "fake-model",
+          "tools": {
+            "enabledTools": [
+              "read"
+            ]
+          },
+          "skills": {
+            "enabledSkills": null
+          }
+        }
+      ],
+      "configurationActionCount": 6,
+      "globalProfile": {
+        "enabledTools": [
+          "read"
+        ]
+      },
+      "skillProfile": [
+        {
+          "provider": "fake",
+          "modelId": "fake-model",
+          "tools": {
+            "enabledTools": null
+          },
+          "skills": {
+            "enabledSkills": [
+              "repo-explorer"
+            ]
+          }
+        }
+      ],
+      "scopeVerification": "Session tools changed only the originating fake process; exact-model/global tool defaults and exact-model skill defaults saved then cleared in temporary real-server settings. No provider/native companion execution implied.",
+      "completedActionCount": 17
+    },
+    {
+      "id": "approval-desktop",
+      "view": {
+        "name": "desktop",
+        "width": 1440,
+        "height": 900,
+        "query": ""
+      },
+      "status": "known-defect-characterization",
+      "actions": [
+        {
+          "selector": "browser reload",
+          "description": "reload to discover background approval",
+          "completed": true
+        },
+        {
+          "selector": "tab Terminal 2",
+          "description": "select session",
+          "completed": true
+        },
+        {
+          "selector": "#dialogActions button \"Yes\"",
+          "description": "approve exact background request",
+          "completed": true
+        },
+        {
+          "selector": "tab Terminal 1",
+          "description": "select session",
+          "completed": true
+        }
+      ],
+      "screenshots": [
+        "test-results/overhaul-baseline/capability-2026-11-14T20-47-19-065Z/capability-approval-desktop-stale-discovery.png",
+        "test-results/overhaul-baseline/capability-2026-11-14T20-47-19-065Z/capability-approval-desktop-discovery.png",
+        "test-results/overhaul-baseline/capability-2026-11-14T20-47-19-065Z/capability-approval-desktop-dialog.png"
+      ],
+      "pageErrors": [],
+      "origin": {
+        "foregroundTab": "f0b6ae61-7b3e-4f85-8abb-8ed45734cecc",
+        "approvalTab": "440588ec-16c2-483a-aa23-0a8d80c5bf59",
+        "id": "fixture_blocker_12345678"
+      },
+      "beforeReconcile": {
+        "backendPending": 1,
+        "label": "Terminal 2: Idle"
+      },
+      "defect": {
+        "id": "CAP-001",
+        "severity": "Major",
+        "source": "existing per-tab SSE delivery and polling only when browser already knows about working tabs",
+        "summary": "An idle foreground client does not discover a new background approval until metadata reconciliation",
+        "expected": "Background session signals needs input without a reload or manual refresh",
+        "actual": "Server pending=1 while foreground browser still labels target Idle",
+        "reproduction": "Open three idle tabs, prompt fixture mobile blocker against a nonforeground tab through the real API, wait one second; observe Idle. Refresh metadata to reveal it."
+      },
+      "accessActionCount": 2,
+      "responseTarget": "440588ec-16c2-483a-aa23-0a8d80c5bf59",
+      "returnVerified": true,
+      "completedActionCount": 4
+    },
+    {
+      "id": "model-phone-legacy",
+      "view": {
+        "name": "phone-legacy",
+        "width": 390,
+        "height": 844,
+        "query": "mobileShell=legacy",
+        "isMobile": true
+      },
+      "status": "partial-fixture-limitation",
+      "actions": [
+        {
+          "selector": "#sidePanelExpandButton",
+          "description": "open Control Deck",
+          "completed": true
+        },
+        {
+          "selector": "#sidePanelSectionToggleControls",
+          "description": "expand Controls",
+          "completed": true
+        },
+        {
+          "selector": "#modelSelect",
+          "description": "choose alternative fake model",
+          "completed": true
+        },
+        {
+          "selector": "#setModelButton",
+          "description": "apply model",
+          "completed": true
+        }
+      ],
+      "screenshots": [
+        "test-results/overhaul-baseline/capability-2026-11-14T20-47-19-065Z/capability-model-phone-legacy-chosen-before-apply.png",
+        "test-results/overhaul-baseline/capability-2026-11-14T20-47-19-065Z/capability-model-phone-legacy-accepted.png"
+      ],
+      "pageErrors": [],
+      "simulation": "Simulated HTTP GET model/command catalogs only; real UI handlers, POST APIs, fake-Pi RPC and temporary settings persistence. No installed companion/provider verification.",
+      "modelResponse": {
+        "type": "response",
+        "id": "4fe9b157-84e4-4305-a49b-eb5035af394c",
+        "command": "set_model",
+        "success": true,
+        "data": {
+          "provider": "fake",
+          "id": "z-capability-alternative"
+        },
+        "tab": {
+          "id": "0f90f293-4f68-45e0-8ed0-27b2842dfc8d",
+          "index": 1,
+          "title": "Terminal 1",
+          "titleSource": "default",
+          "conversationStarted": false,
+          "cwd": "/tmp/pi-overhaul-baseline-Ug3yxi/project",
+          "gitWorkspace": null,
+          "prompt": null,
+          "pendingThinkingLevel": null,
+          "createdAt": "2026-11-14T20:47:27.330Z",
+          "startedAt": "2026-11-14T20:47:27.331Z",
+          "pid": 1279233,
+          "running": true,
+          "command": "/usr/bin/node /home/firstpick/.t3/worktrees/npm-packages/t3-9d015eb9-dfdf6a665aef0719/pi-package-webui/tests/fixtures/fake-pi.mjs --mode rpc --no-extensions --no-skills --no-prompt-templates --no-themes --extension /home/firstpick/.t3/worktrees/npm-packages/t3-9d015eb9-dfdf6a665aef0719/pi-package-webui/index.ts --extension /home/firstpick/.t3/worktrees/npm-packages/t3-9d015eb9-dfdf6a665aef0719/pi-package-webui/session-summary.ts --theme /tmp/pi-overhaul-baseline-Ug3yxi/agent/themes/overhaul-custom.json --extension /home/firstpick/.t3/worktrees/npm-packages/t3-9d015eb9-dfdf6a665aef0719/pi-package-webui/webui-rpc-helper.mjs",
+          "clientCount": 1,
+          "pendingExtensionUiRequestCount": 0,
+          "activity": {
+            "status": "idle",
+            "isWorking": false,
+            "runStarted": false,
+            "runId": null,
+            "completionSerial": 0,
+            "lastChangedAt": "2026-11-14T20:47:27.330Z",
+            "lastStartedAt": null,
+            "lastCompletedAt": null
+          },
+          "appRunner": null,
+          "conversationMode": {
+            "featureId": "naturalConversation",
+            "available": true,
+            "enabled": false,
+            "uiState": "off",
+            "statusText": "",
+            "allowedTools": [
+              "read",
+              "grep",
+              "find",
+              "ls"
+            ],
+            "provider": "browser-shell",
+            "startedAt": null,
+            "packageInstalled": true,
+            "loadedCommands": [
+              "talk",
+              "voice",
+              "conversation"
+            ],
+            "updatedAt": "2026-11-14T20:47:27.331Z"
+          },
+          "sessionSummary": null
+        }
+      },
+      "authoritativeModel": {
+        "provider": "fake",
+        "id": "fake-model"
+      },
+      "limitation": "Alternative choice and real POST/RPC acceptance verified. Existing fake Pi set_model echoes the request but get_state always returns fake/fake-model; durable provider/model switching is unverified, not a production regression.",
+      "completedActionCount": 4
+    },
+    {
+      "id": "resources-phone-legacy",
+      "view": {
+        "name": "phone-legacy",
+        "width": 390,
+        "height": 844,
+        "query": "mobileShell=legacy",
+        "isMobile": true
+      },
+      "status": "verified",
+      "actions": [
+        {
+          "selector": "#composerActionsButton",
+          "description": "open composer actions",
+          "completed": true
+        },
+        {
+          "selector": "#nativeCommandMenuButton",
+          "description": "open resource menu",
+          "completed": true
+        },
+        {
+          "selector": "#nativeToolsButton",
+          "description": "open Tools Setup",
+          "completed": true
+        },
+        {
+          "selector": ".native-selector-item containing bash",
+          "description": "disable bash for this session",
+          "completed": true
+        },
+        {
+          "selector": "button \"Use inherited defaults\"",
+          "description": "restore inherited session tools",
+          "completed": true
+        },
+        {
+          "selector": ".native-resource-scope select",
+          "description": "choose model default",
+          "completed": true
+        },
+        {
+          "selector": ".native-selector-item containing bash",
+          "description": "disable bash for fake-model default",
+          "completed": true
+        },
+        {
+          "selector": "button \"Use inherited defaults\"",
+          "description": "clear model override",
+          "completed": true
+        },
+        {
+          "selector": ".native-resource-scope select",
+          "description": "choose global default",
+          "completed": true
+        },
+        {
+          "selector": ".native-selector-item containing bash",
+          "description": "disable bash globally",
+          "completed": true
+        },
+        {
+          "selector": "button \"Use inherited defaults\"",
+          "description": "clear global override",
+          "completed": true
+        },
+        {
+          "selector": "button \"Cancel\"",
+          "description": "close Tools Setup",
+          "completed": true
+        },
+        {
+          "selector": "#composerActionsButton",
+          "description": "reopen composer actions",
+          "completed": true
+        },
+        {
+          "selector": "#nativeCommandMenuButton",
+          "description": "open resource menu again",
+          "completed": true
+        },
+        {
+          "selector": "#nativeSkillsButton",
+          "description": "open Skills Setup",
+          "completed": true
+        },
+        {
+          "selector": ".native-resource-scope select",
+          "description": "choose exact-model skill default",
+          "completed": true
+        },
+        {
+          "selector": "skill code-security",
+          "description": "disable code-security for fake-model default",
+          "completed": true
+        },
+        {
+          "selector": "button \"Use inherited defaults\"",
+          "description": "clear skill model override",
+          "completed": true
+        },
+        {
+          "selector": "button \"Cancel\"",
+          "description": "close Skills Setup",
+          "completed": true
+        }
+      ],
+      "screenshots": [
+        "test-results/overhaul-baseline/capability-2026-11-14T20-47-19-065Z/capability-resources-phone-legacy-model-profile.png",
+        "test-results/overhaul-baseline/capability-2026-11-14T20-47-19-065Z/capability-resources-phone-legacy-skill-profile.png"
+      ],
+      "pageErrors": [],
+      "simulation": "Simulated HTTP GET model/command catalogs only; real UI handlers, POST APIs, fake-Pi RPC and temporary settings persistence. No installed companion/provider verification.",
+      "sessionOnlySettings": {
+        "modelProfiles": [],
+        "tools": {
+          "enabledTools": null
+        },
+        "skills": {
+          "enabledSkills": null
+        }
+      },
+      "sessionToolScopes": [
+        {
+          "tabId": "f72500b2-515e-499a-9b98-c0a77a24b441",
+          "bashEnabled": false
+        },
+        {
+          "tabId": "274b9ac9-f3f6-461e-a689-3b8c59466093",
+          "bashEnabled": true
+        }
+      ],
+      "modelProfile": [
+        {
+          "provider": "fake",
+          "modelId": "fake-model",
+          "tools": {
+            "enabledTools": [
+              "read"
+            ]
+          },
+          "skills": {
+            "enabledSkills": null
+          }
+        }
+      ],
+      "configurationActionCount": 7,
+      "globalProfile": {
+        "enabledTools": [
+          "read"
+        ]
+      },
+      "skillProfile": [
+        {
+          "provider": "fake",
+          "modelId": "fake-model",
+          "tools": {
+            "enabledTools": null
+          },
+          "skills": {
+            "enabledSkills": [
+              "repo-explorer"
+            ]
+          }
+        }
+      ],
+      "scopeVerification": "Session tools changed only the originating fake process; exact-model/global tool defaults and exact-model skill defaults saved then cleared in temporary real-server settings. No provider/native companion execution implied.",
+      "completedActionCount": 19
+    },
+    {
+      "id": "approval-phone-legacy",
+      "view": {
+        "name": "phone-legacy",
+        "width": 390,
+        "height": 844,
+        "query": "mobileShell=legacy",
+        "isMobile": true
+      },
+      "status": "known-defect-characterization",
+      "actions": [
+        {
+          "selector": "browser reload",
+          "description": "reload to discover background approval",
+          "completed": true
+        },
+        {
+          "selector": "#terminalTabsToggleButton",
+          "description": "open Tabs drawer",
+          "completed": true
+        },
+        {
+          "selector": "tab Terminal 2",
+          "description": "select session",
+          "completed": true
+        },
+        {
+          "selector": "#dialogActions button \"Yes\"",
+          "description": "approve exact background request",
+          "completed": true
+        },
+        {
+          "selector": "#terminalTabsToggleButton",
+          "description": "open Tabs drawer",
+          "completed": true
+        },
+        {
+          "selector": "tab Terminal 1",
+          "description": "select session",
+          "completed": true
+        }
+      ],
+      "screenshots": [
+        "test-results/overhaul-baseline/capability-2026-11-14T20-47-19-065Z/capability-approval-phone-legacy-stale-discovery.png",
+        "test-results/overhaul-baseline/capability-2026-11-14T20-47-19-065Z/capability-approval-phone-legacy-discovery.png",
+        "test-results/overhaul-baseline/capability-2026-11-14T20-47-19-065Z/capability-approval-phone-legacy-dialog.png"
+      ],
+      "pageErrors": [],
+      "origin": {
+        "foregroundTab": "d75e6d63-5033-4a48-8b2d-6613688a951f",
+        "approvalTab": "db90cb9f-323e-431a-9076-bb4321fd9470",
+        "id": "fixture_blocker_12345678"
+      },
+      "beforeReconcile": {
+        "backendPending": 1,
+        "label": "Terminal 2: Idle"
+      },
+      "defect": {
+        "id": "CAP-001",
+        "severity": "Major",
+        "source": "existing per-tab SSE delivery and polling only when browser already knows about working tabs",
+        "summary": "An idle foreground client does not discover a new background approval until metadata reconciliation",
+        "expected": "Background session signals needs input without a reload or manual refresh",
+        "actual": "Server pending=1 while foreground browser still labels target Idle",
+        "reproduction": "Open three idle tabs, prompt fixture mobile blocker against a nonforeground tab through the real API, wait one second; observe Idle. Refresh metadata to reveal it."
+      },
+      "accessActionCount": 3,
+      "responseTarget": "db90cb9f-323e-431a-9076-bb4321fd9470",
+      "returnVerified": true,
+      "completedActionCount": 6
+    },
+    {
+      "id": "model-phone-v2",
+      "view": {
+        "name": "phone-v2",
+        "width": 390,
+        "height": 844,
+        "query": "mobileShell=v2",
+        "isMobile": true
+      },
+      "status": "partial-fixture-limitation",
+      "actions": [
+        {
+          "selector": "#mobileMoreButton",
+          "description": "open More",
+          "completed": true
+        },
+        {
+          "selector": "button \"Settings\"",
+          "description": "open Settings",
+          "completed": true
+        },
+        {
+          "selector": "#modelSelect",
+          "description": "choose alternative fake model",
+          "completed": true
+        },
+        {
+          "selector": "#setModelButton",
+          "description": "apply model",
+          "completed": true
+        }
+      ],
+      "screenshots": [
+        "test-results/overhaul-baseline/capability-2026-11-14T20-47-19-065Z/capability-model-phone-v2-chosen-before-apply.png",
+        "test-results/overhaul-baseline/capability-2026-11-14T20-47-19-065Z/capability-model-phone-v2-accepted.png"
+      ],
+      "pageErrors": [],
+      "simulation": "Simulated HTTP GET model/command catalogs only; real UI handlers, POST APIs, fake-Pi RPC and temporary settings persistence. No installed companion/provider verification.",
+      "modelResponse": {
+        "type": "response",
+        "id": "8cfba5cf-b80d-42ad-ab74-2d0513da75ff",
+        "command": "set_model",
+        "success": true,
+        "data": {
+          "provider": "fake",
+          "id": "z-capability-alternative"
+        },
+        "tab": {
+          "id": "31ecdda6-bc18-4d21-a73a-8e2ba3ba755b",
+          "index": 1,
+          "title": "Terminal 1",
+          "titleSource": "default",
+          "conversationStarted": false,
+          "cwd": "/tmp/pi-overhaul-baseline-1nKrAp/project",
+          "gitWorkspace": null,
+          "prompt": null,
+          "pendingThinkingLevel": null,
+          "createdAt": "2026-11-14T20:47:33.456Z",
+          "startedAt": "2026-11-14T20:47:33.456Z",
+          "pid": 1281836,
+          "running": true,
+          "command": "/usr/bin/node /home/firstpick/.t3/worktrees/npm-packages/t3-9d015eb9-dfdf6a665aef0719/pi-package-webui/tests/fixtures/fake-pi.mjs --mode rpc --no-extensions --no-skills --no-prompt-templates --no-themes --extension /home/firstpick/.t3/worktrees/npm-packages/t3-9d015eb9-dfdf6a665aef0719/pi-package-webui/index.ts --extension /home/firstpick/.t3/worktrees/npm-packages/t3-9d015eb9-dfdf6a665aef0719/pi-package-webui/session-summary.ts --theme /tmp/pi-overhaul-baseline-1nKrAp/agent/themes/overhaul-custom.json --extension /home/firstpick/.t3/worktrees/npm-packages/t3-9d015eb9-dfdf6a665aef0719/pi-package-webui/webui-rpc-helper.mjs",
+          "clientCount": 1,
+          "pendingExtensionUiRequestCount": 0,
+          "activity": {
+            "status": "idle",
+            "isWorking": false,
+            "runStarted": false,
+            "runId": null,
+            "completionSerial": 0,
+            "lastChangedAt": "2026-11-14T20:47:33.456Z",
+            "lastStartedAt": null,
+            "lastCompletedAt": null
+          },
+          "appRunner": null,
+          "conversationMode": {
+            "featureId": "naturalConversation",
+            "available": true,
+            "enabled": false,
+            "uiState": "off",
+            "statusText": "",
+            "allowedTools": [
+              "read",
+              "grep",
+              "find",
+              "ls"
+            ],
+            "provider": "browser-shell",
+            "startedAt": null,
+            "packageInstalled": true,
+            "loadedCommands": [
+              "talk",
+              "voice",
+              "conversation"
+            ],
+            "updatedAt": "2026-11-14T20:47:33.456Z"
+          },
+          "sessionSummary": null
+        }
+      },
+      "authoritativeModel": {
+        "provider": "fake",
+        "id": "fake-model"
+      },
+      "limitation": "Alternative choice and real POST/RPC acceptance verified. Existing fake Pi set_model echoes the request but get_state always returns fake/fake-model; durable provider/model switching is unverified, not a production regression.",
+      "completedActionCount": 4
+    },
+    {
+      "id": "resources-phone-v2",
+      "view": {
+        "name": "phone-v2",
+        "width": 390,
+        "height": 844,
+        "query": "mobileShell=v2",
+        "isMobile": true
+      },
+      "status": "verified",
+      "actions": [
+        {
+          "selector": "#mobileMoreButton",
+          "description": "open More",
+          "completed": true
+        },
+        {
+          "selector": "button \"Extensions\"",
+          "description": "open Extensions",
+          "completed": true
+        },
+        {
+          "selector": "button \"Set up TUI Tools command\"",
+          "description": "open Tools Setup",
+          "completed": true
+        },
+        {
+          "selector": ".native-selector-item containing bash",
+          "description": "disable bash for this session",
+          "completed": true
+        },
+        {
+          "selector": "button \"Use inherited defaults\"",
+          "description": "restore inherited session tools",
+          "completed": true
+        },
+        {
+          "selector": ".native-resource-scope select",
+          "description": "choose model default",
+          "completed": true
+        },
+        {
+          "selector": ".native-selector-item containing bash",
+          "description": "disable bash for fake-model default",
+          "completed": true
+        },
+        {
+          "selector": "button \"Use inherited defaults\"",
+          "description": "clear model override",
+          "completed": true
+        },
+        {
+          "selector": ".native-resource-scope select",
+          "description": "choose global default",
+          "completed": true
+        },
+        {
+          "selector": ".native-selector-item containing bash",
+          "description": "disable bash globally",
+          "completed": true
+        },
+        {
+          "selector": "button \"Use inherited defaults\"",
+          "description": "clear global override",
+          "completed": true
+        },
+        {
+          "selector": "button \"Cancel\"",
+          "description": "close Tools Setup",
+          "completed": true
+        },
+        {
+          "selector": "button \"Set up TUI Skills command\"",
+          "description": "open Skills Setup",
+          "completed": true
+        },
+        {
+          "selector": ".native-resource-scope select",
+          "description": "choose exact-model skill default",
+          "completed": true
+        },
+        {
+          "selector": "skill code-security",
+          "description": "disable code-security for fake-model default",
+          "completed": true
+        },
+        {
+          "selector": "button \"Use inherited defaults\"",
+          "description": "clear skill model override",
+          "completed": true
+        },
+        {
+          "selector": "button \"Cancel\"",
+          "description": "close Skills Setup",
+          "completed": true
+        }
+      ],
+      "screenshots": [
+        "test-results/overhaul-baseline/capability-2026-11-14T20-47-19-065Z/capability-resources-phone-v2-model-profile.png",
+        "test-results/overhaul-baseline/capability-2026-11-14T20-47-19-065Z/capability-resources-phone-v2-skill-profile.png"
+      ],
+      "pageErrors": [],
+      "simulation": "Simulated HTTP GET model/command catalogs only; real UI handlers, POST APIs, fake-Pi RPC and temporary settings persistence. No installed companion/provider verification.",
+      "sessionOnlySettings": {
+        "modelProfiles": [],
+        "tools": {
+          "enabledTools": null
+        },
+        "skills": {
+          "enabledSkills": null
+        }
+      },
+      "sessionToolScopes": [
+        {
+          "tabId": "99e64507-d482-443a-a4dc-6dbc09188755",
+          "bashEnabled": false
+        },
+        {
+          "tabId": "1510905f-8c9f-4b3a-9a5d-71029de6d5c3",
+          "bashEnabled": true
+        }
+      ],
+      "modelProfile": [
+        {
+          "provider": "fake",
+          "modelId": "fake-model",
+          "tools": {
+            "enabledTools": [
+              "read"
+            ]
+          },
+          "skills": {
+            "enabledSkills": null
+          }
+        }
+      ],
+      "configurationActionCount": 7,
+      "globalProfile": {
+        "enabledTools": [
+          "read"
+        ]
+      },
+      "skillProfile": [
+        {
+          "provider": "fake",
+          "modelId": "fake-model",
+          "tools": {
+            "enabledTools": null
+          },
+          "skills": {
+            "enabledSkills": [
+              "repo-explorer"
+            ]
+          }
+        }
+      ],
+      "scopeVerification": "Session tools changed only the originating fake process; exact-model/global tool defaults and exact-model skill defaults saved then cleared in temporary real-server settings. No provider/native companion execution implied.",
+      "completedActionCount": 17
+    },
+    {
+      "id": "approval-phone-v2",
+      "view": {
+        "name": "phone-v2",
+        "width": 390,
+        "height": 844,
+        "query": "mobileShell=v2",
+        "isMobile": true
+      },
+      "status": "known-defect-characterization",
+      "actions": [
+        {
+          "selector": "[data-mobile-route-button=\"activity\"]",
+          "description": "open Activity",
+          "completed": true
+        },
+        {
+          "selector": "#mobileActivityRefreshButton",
+          "description": "refresh Activity to discover background approval",
+          "completed": true
+        },
+        {
+          "selector": "blocked activity button \"Review\"",
+          "description": "open background approval",
+          "completed": true
+        },
+        {
+          "selector": "#dialogActions button \"Yes\"",
+          "description": "approve exact background request",
+          "completed": true
+        },
+        {
+          "selector": "#mobileSessionButton",
+          "description": "open Sessions from app bar",
+          "completed": true
+        },
+        {
+          "selector": "session Terminal 1",
+          "description": "select session",
+          "completed": true
+        }
+      ],
+      "screenshots": [
+        "test-results/overhaul-baseline/capability-2026-11-14T20-47-19-065Z/capability-approval-phone-v2-stale-discovery.png",
+        "test-results/overhaul-baseline/capability-2026-11-14T20-47-19-065Z/capability-approval-phone-v2-discovery.png",
+        "test-results/overhaul-baseline/capability-2026-11-14T20-47-19-065Z/capability-approval-phone-v2-dialog.png",
+        "test-results/overhaul-baseline/capability-2026-11-14T20-47-19-065Z/capability-approval-phone-v2-after-response.png"
+      ],
+      "pageErrors": [],
+      "origin": {
+        "foregroundTab": "20cfad6b-495a-40a7-80db-f937820b1707",
+        "approvalTab": "8dc3ba9c-5ef5-494a-b971-c8147f519538",
+        "id": "fixture_blocker_12345678"
+      },
+      "beforeReconcile": {
+        "backendPending": 1,
+        "label": "Terminal 2: Idle"
+      },
+      "defect": {
+        "id": "CAP-001",
+        "severity": "Major",
+        "source": "existing per-tab SSE delivery and polling only when browser already knows about working tabs",
+        "summary": "An idle foreground client does not discover a new background approval until metadata reconciliation",
+        "expected": "Background session signals needs input without a reload or manual refresh",
+        "actual": "Server pending=1 while foreground browser still labels target Idle",
+        "reproduction": "Open three idle tabs, prompt fixture mobile blocker against a nonforeground tab through the real API, wait one second; observe Idle. Refresh metadata to reveal it."
+      },
+      "accessActionCount": 3,
+      "responseTarget": "8dc3ba9c-5ef5-494a-b971-c8147f519538",
+      "bottomNavigationObstruction": {
+        "obstructed": true,
+        "hitClass": "notice-toast warn",
+        "toastText": "Fixture mobile blocker blocked: waiting for your responseEvents×recovered pending confirm requestEvents×"
+      },
+      "additionalDefects": [
+        {
+          "id": "CAP-002",
+          "severity": "Minor",
+          "summary": "Approval recovery notifications cover the bottom Sessions navigation target",
+          "actual": {
+            "obstructed": true,
+            "hitClass": "notice-toast warn",
+            "toastText": "Fixture mobile blocker blocked: waiting for your responseEvents×recovered pending confirm requestEvents×"
+          },
+          "workaround": "Use the top Open Sessions control or dismiss the notification"
+        }
+      ],
+      "returnVerified": true,
+      "completedActionCount": 6
+    },
+    {
+      "id": "common-session-phone-legacy",
+      "view": {
+        "name": "phone-legacy",
+        "width": 390,
+        "height": 844,
+        "query": "mobileShell=legacy",
+        "isMobile": true
+      },
+      "status": "verified",
+      "actions": [
+        {
+          "selector": "#terminalTabsToggleButton",
+          "description": "open Tabs drawer",
+          "completed": true
+        },
+        {
+          "selector": "tab Terminal 2",
+          "description": "select session",
+          "completed": true
+        },
+        {
+          "selector": "#terminalTabsToggleButton",
+          "description": "open Tabs drawer",
+          "completed": true
+        },
+        {
+          "selector": "tab Terminal 1",
+          "description": "select session",
+          "completed": true
+        }
+      ],
+      "screenshots": [
+        "test-results/overhaul-baseline/capability-2026-11-14T20-47-19-065Z/capability-common-session-phone-legacy-switched.png"
+      ],
+      "pageErrors": [],
+      "accessActionCount": 2,
+      "draftRestored": true,
+      "completedActionCount": 4
+    },
+    {
+      "id": "common-effort-phone-legacy",
+      "view": {
+        "name": "phone-legacy",
+        "width": 390,
+        "height": 844,
+        "query": "mobileShell=legacy",
+        "isMobile": true
+      },
+      "status": "verified",
+      "actions": [
+        {
+          "selector": "#sidePanelExpandButton",
+          "description": "open Control Deck",
+          "completed": true
+        },
+        {
+          "selector": "#sidePanelSectionToggleControls",
+          "description": "expand Controls",
+          "completed": true
+        },
+        {
+          "selector": "#thinkingSelect",
+          "description": "choose High effort",
+          "completed": true
+        },
+        {
+          "selector": "#setThinkingButton",
+          "description": "apply High effort",
+          "completed": true
+        }
+      ],
+      "screenshots": [
+        "test-results/overhaul-baseline/capability-2026-11-14T20-47-19-065Z/capability-common-effort-phone-legacy-applied.png"
+      ],
+      "pageErrors": [],
+      "sessionIsolationVerified": true,
+      "completedActionCount": 4
+    },
+    {
+      "id": "common-attachment-phone-legacy",
+      "view": {
+        "name": "phone-legacy",
+        "width": 390,
+        "height": 844,
+        "query": "mobileShell=legacy",
+        "isMobile": true
+      },
+      "status": "verified",
+      "actions": [
+        {
+          "selector": "#attachButton",
+          "description": "open file chooser",
+          "completed": true
+        },
+        {
+          "selector": "native file chooser",
+          "description": "choose mobile-context.txt",
+          "completed": true
+        }
+      ],
+      "screenshots": [
+        "test-results/overhaul-baseline/capability-2026-11-14T20-47-19-065Z/capability-common-attachment-phone-legacy-attached.png"
+      ],
+      "pageErrors": [],
+      "nativeDeviceLimitation": "Real app chooser handler with a Playwright-supplied file; no native OS picker, camera, photo permission or physical device verification.",
+      "completedActionCount": 2
+    },
+    {
+      "id": "common-session-phone-v2",
+      "view": {
+        "name": "phone-v2",
+        "width": 390,
+        "height": 844,
+        "query": "mobileShell=v2",
+        "isMobile": true
+      },
+      "status": "verified",
+      "actions": [
+        {
+          "selector": "#mobileSessionButton",
+          "description": "open Sessions from app bar",
+          "completed": true
+        },
+        {
+          "selector": "session Terminal 2",
+          "description": "select session",
+          "completed": true
+        },
+        {
+          "selector": "#mobileSessionButton",
+          "description": "open Sessions from app bar",
+          "completed": true
+        },
+        {
+          "selector": "session Terminal 1",
+          "description": "select session",
+          "completed": true
+        }
+      ],
+      "screenshots": [
+        "test-results/overhaul-baseline/capability-2026-11-14T20-47-19-065Z/capability-common-session-phone-v2-switched.png"
+      ],
+      "pageErrors": [],
+      "accessActionCount": 2,
+      "draftRestored": true,
+      "completedActionCount": 4
+    },
+    {
+      "id": "common-effort-phone-v2",
+      "view": {
+        "name": "phone-v2",
+        "width": 390,
+        "height": 844,
+        "query": "mobileShell=v2",
+        "isMobile": true
+      },
+      "status": "verified",
+      "actions": [
+        {
+          "selector": "#mobileMoreButton",
+          "description": "open More",
+          "completed": true
+        },
+        {
+          "selector": "button \"Settings\"",
+          "description": "open Settings",
+          "completed": true
+        },
+        {
+          "selector": "#thinkingSelect",
+          "description": "choose High effort",
+          "completed": true
+        },
+        {
+          "selector": "#setThinkingButton",
+          "description": "apply High effort",
+          "completed": true
+        }
+      ],
+      "screenshots": [
+        "test-results/overhaul-baseline/capability-2026-11-14T20-47-19-065Z/capability-common-effort-phone-v2-applied.png"
+      ],
+      "pageErrors": [],
+      "sessionIsolationVerified": true,
+      "completedActionCount": 4
+    },
+    {
+      "id": "common-attachment-phone-v2",
+      "view": {
+        "name": "phone-v2",
+        "width": 390,
+        "height": 844,
+        "query": "mobileShell=v2",
+        "isMobile": true
+      },
+      "status": "verified",
+      "actions": [
+        {
+          "selector": "#attachButton",
+          "description": "open Add Context",
+          "completed": true
+        },
+        {
+          "selector": ".mobile-context-actions button \"Files\"",
+          "description": "open Files chooser",
+          "completed": true
+        },
+        {
+          "selector": "native file chooser",
+          "description": "choose mobile-context.txt",
+          "completed": true
+        },
+        {
+          "selector": "#mobileSurfaceCloseButton",
+          "description": "return to chat with attachment",
+          "completed": true
+        }
+      ],
+      "screenshots": [
+        "test-results/overhaul-baseline/capability-2026-11-14T20-47-19-065Z/capability-common-attachment-phone-v2-attached.png"
+      ],
+      "pageErrors": [],
+      "nativeDeviceLimitation": "Real app chooser handler with a Playwright-supplied file; no native OS picker, camera, photo permission or physical device verification.",
+      "completedActionCount": 4
+    },
+    {
+      "id": "disabled-setup",
+      "view": {
+        "name": "desktop",
+        "width": 1440,
+        "height": 900,
+        "query": ""
+      },
+      "status": "verified",
+      "actions": [
+        {
+          "selector": "#sidePanelSectionToggleOptionalFeatures",
+          "description": "expand Optional features",
+          "completed": true
+        }
+      ],
+      "screenshots": [
+        "test-results/overhaul-baseline/capability-2026-11-14T20-47-19-065Z/capability-disabled-setup-discovery.png"
+      ],
+      "pageErrors": [],
+      "rows": [
+        "! command autocomplete-Registration neededPackage files exist, but the package is not registered in Pi settings · package 0.2.3 (expects ^0.2.2)pi install npm:@firstpick/pi-extension-bang-command-autocompleteInstall…Copy cmd",
+        "Fish user bash-Registration neededPackage files exist, but the package is not registered in Pi settings · package 0.2.4 (expects ^0.2.2)pi install npm:@firstpick/pi-extension-fish-user-bashInstall…Copy cmd",
+        "/btw side questions-Registration neededPackage files exist, but the package is not registered in Pi settings · package 0.1.6 (expects ^0.1.4)pi install npm:@firstpick/pi-extension-btwInstall…Copy cmd",
+        "Guided Git workflow-Registration neededPackage files exist, but the package is not registered in Pi settings · package 0.1.7 (expects ^0.1.0)pi install npm:@firstpick/pi-extension-git-guided-workflowInstall…Copy cmd",
+        "Workflows+EnabledDetected and enabled in Web UI · package 0.2.0 (expects ^0.1.7)DisableSetup",
+        "Feature workflow routing+...Registration neededPackage files exist, but the package is not registered in Pi settings · package 0.1.7 (expects ^0.1.3)pi install npm:@firstpick/pi-extension-feature-system-promptInstall…Copy cmd",
+        "NPM Release-Registration neededPackage files exist, but the package is not registered in Pi settings · package 0.5.0 (expects ^0.4.4)pi install npm:@firstpick/pi-extension-release-npmInstall…Copy cmd",
+        "AUR Release+Registration neededPackage files exist, but the package is not registered in Pi settings · package 0.1.9 (expects ^0.1.8)pi install npm:@firstpick/pi-extension-release-aurInstall…Copy cmd",
+        "Manual repository review-Registration neededPackage files exist, but the package is not registered in Pi settings · package 0.1.3 (expects ^0.1.1)pi install npm:@firstpick/pi-extension-aur-reviewInstall…Copy cmd",
+        "Safety guard-EnabledDetected and enabled in Web UI · package 0.3.3 (expects ^0.2.6)DisableSetup",
+        "Remote WebUI-Registration neededPackage files exist, but the package is not registered in Pi settings · package 0.1.9 (expects ^0.1.8)pi install npm:@firstpick/pi-package-remote-webuiInstall…Copy cmd",
+        "TUI Skills command-Registration neededPackage files exist, but the package is not registered in Pi settings · package 0.3.0 (expects ^0.1.9)pi install npm:@firstpick/pi-extension-setup-skillsInstall…Copy cmd",
+        "Todo progress widget+Registration neededPackage files exist, but the package is not registered in Pi settings · package 0.3.4 (expects ^0.2.9)pi install npm:@firstpick/pi-extension-todo-progressInstall…Copy cmd",
+        "TUI Tools command-Registration neededPackage files exist, but the package is not registered in Pi settings · package 0.2.7 (expects ^0.1.7)pi install npm:@firstpick/pi-extension-toolsInstall…Copy cmd",
+        "Native questionnaires+Registration neededPackage files exist, but the package is not registered in Pi settings · package 0.1.1 (expects ^0.1.0)pi install npm:@firstpick/pi-package-questionnaireInstall…Copy cmd",
+        "Git footer status-Registration neededPackage files exist, but the package is not registered in Pi settings · package 0.5.5 (expects ^0.5.0)pi install npm:@firstpick/pi-extension-git-footer-statusInstall…Copy cmd",
+        "Stats dashboard-Registration neededPackage files exist, but the package is not registered in Pi settings · package 0.3.4 (expects ^0.2.9)pi install npm:@firstpick/pi-extension-statsInstall…Copy cmd",
+        "Theme bundle-EnabledDetected and enabled in Web UI · package 0.1.7 (expects ^0.1.5)Disable",
+        "Natural Conversation+...EnabledDetected and enabled in Web UI · package 0.1.5 (expects ^0.1.4)Disable",
+        "Codex Fast mode-EnabledDetected and enabled in Web UI · package 0.1.2 (expects ^0.1.0)Disable"
+      ],
+      "setupButtons": [
+        "Setup",
+        "Setup"
+      ],
+      "simulation": "None; original no-installed-companion discovery. No install or Setup activation performed.",
+      "completedActionCount": 1
+    },
+    {
+      "id": "enabled-companions",
+      "view": {
+        "name": "desktop",
+        "width": 1440,
+        "height": 900,
+        "query": ""
+      },
+      "status": "verified",
+      "actions": [
+        {
+          "selector": "#gitWorkflowButton",
+          "description": "open Guided Git",
+          "completed": true
+        },
+        {
+          "selector": "#gitWorkflowCancelButton",
+          "description": "cancel Guided Git before execution",
+          "completed": true
+        },
+        {
+          "selector": "#optionsMenuButton",
+          "description": "open Common Options",
+          "completed": true
+        },
+        {
+          "selector": "#optionsViewDiagnosticsSubmenuButton",
+          "description": "hover View & Diagnostics",
+          "completed": true
+        },
+        {
+          "selector": "#optionsStatsButton",
+          "description": "open stats dashboard",
+          "completed": true
+        },
+        {
+          "selector": "#statsOverlayTab-prompt",
+          "description": "view prompt and resource inventory",
+          "completed": true
+        },
+        {
+          "selector": "summary \"Active tool schemas\"",
+          "description": "expand tool-schema inventory",
+          "completed": true
+        },
+        {
+          "selector": "summary \"Skills\"",
+          "description": "expand skill inventory",
+          "completed": true
+        }
+      ],
+      "screenshots": [
+        "test-results/overhaul-baseline/capability-2026-11-14T20-47-19-065Z/capability-enabled-companions-guided-git.png",
+        "test-results/overhaul-baseline/capability-2026-11-14T20-47-19-065Z/capability-enabled-companions-stats-resources.png",
+        "test-results/overhaul-baseline/capability-2026-11-14T20-47-19-065Z/capability-enabled-companions-stats-resource-details.png"
+      ],
+      "pageErrors": [],
+      "simulation": "Existing fake-Pi activation and structured stats status payload plus simulated HTTP command discovery for /stats, /tools and /skills and alternative-model catalog; real browser handlers. No installed companion, Git generation, commit or publication.",
+      "familyMapping": [
+        "Guided Git activation and draft/attachment continuity",
+        "structured companion status dashboard",
+        "prompt/context, tool-schema and skill resource inventory"
+      ],
+      "completedActionCount": 8
+    },
+    {
+      "id": "busy-agents",
+      "view": {
+        "name": "desktop",
+        "width": 1440,
+        "height": 900,
+        "query": ""
+      },
+      "status": "verified",
+      "actions": [
+        {
+          "selector": "[data-side-panel-section-toggle=\"subagents\"]",
+          "description": "expand Subagents",
+          "completed": true
+        },
+        {
+          "selector": ".subagent-agent-row:first",
+          "description": "open representative agent output",
+          "completed": true
+        },
+        {
+          "selector": ".subagent-overlay-close-action",
+          "description": "close agent output",
+          "completed": true
+        }
+      ],
+      "screenshots": [
+        "test-results/overhaul-baseline/capability-2026-11-14T20-47-19-065Z/capability-busy-agents-running-gate.png",
+        "test-results/overhaul-baseline/capability-2026-11-14T20-47-19-065Z/capability-busy-agents-agent-output.png",
+        "test-results/overhaul-baseline/capability-2026-11-14T20-47-19-065Z/capability-busy-agents-workflow.png"
+      ],
+      "pageErrors": [],
+      "simulation": "Existing fake prompts emit canonical agent/gate/workflow events; no actual inference providers or child agents run.",
+      "subagentSnapshot": {
+        "version": 2,
+        "updatedAt": 1794689271495,
+        "available": true,
+        "groups": [
+          {
+            "id": "tab:7069b73e-b708-455d-bed8-7e6b4697d99d",
+            "kind": "tab",
+            "tabId": "7069b73e-b708-455d-bed8-7e6b4697d99d",
+            "tabIndex": 1,
+            "title": "Fixture subagents running",
+            "cwdLabel": "project",
+            "runs": [
+              {
+                "id": "fixture-run",
+                "source": "async",
+                "launcher": "pi-subagents",
+                "provider": "pi-subagents",
+                "status": "running",
+                "startedAt": 1794689268933,
+                "capabilities": {
+                  "open": true,
+                  "refresh": true,
+                  "cancel": true,
+                  "steer": false
+                },
+                "agents": [
+                  {
+                    "id": "fixture-run:0",
+                    "instanceId": "fixture-run:0",
+                    "name": "reviewer",
+                    "status": "running",
+                    "launcher": "pi-subagents",
+                    "provider": "pi-subagents",
+                    "origin": "async",
+                    "model": "anthropic/claude-opus-4-8:high",
+                    "thinking": "high",
+                    "currentTool": "read",
+                    "capabilities": {
+                      "open": true,
+                      "refresh": true,
+                      "cancel": true,
+                      "steer": false
+                    },
+                    "outputRef": {
+                      "kind": "helper",
+                      "id": "h-0c170c70d5efda4ab9611222a250a273"
+                    }
+                  },
+                  {
+                    "id": "fixture-run:1",
+                    "instanceId": "fixture-run:1",
+                    "name": "scout",
+                    "status": "running",
+                    "launcher": "pi-subagents",
+                    "provider": "pi-subagents",
+                    "origin": "async",
+                    "model": "openai-codex/gpt-5.6-sol",
+                    "thinking": "high",
+                    "capabilities": {
+                      "open": true,
+                      "refresh": true,
+                      "cancel": true,
+                      "steer": false
+                    },
+                    "outputRef": {
+                      "kind": "helper",
+                      "id": "h-5b71851ed8b2c0d29b0ad68f0a039481"
+                    }
+                  }
+                ]
+              }
+            ],
+            "gates": [
+              {
+                "version": 1,
+                "id": "fixture-gate",
+                "status": "running",
+                "requiredSuccesses": 2,
+                "qualifyingSuccesses": 1,
+                "requireDistinctProviders": true,
+                "startedAt": 1794689268433,
+                "updatedAt": 1794689271433,
+                "attempts": [
+                  {
+                    "id": "fixture-gate:0:1",
+                    "taskIndex": 0,
+                    "attempt": 1,
+                    "maxAttempts": 2,
+                    "agent": "reviewer",
+                    "retrySafety": "read-only",
+                    "runId": "fixture-review-1",
+                    "model": "anthropic/claude-opus-4-8",
+                    "provider": "anthropic",
+                    "status": "succeeded"
+                  },
+                  {
+                    "id": "fixture-gate:1:1",
+                    "taskIndex": 1,
+                    "attempt": 1,
+                    "maxAttempts": 2,
+                    "agent": "reviewer",
+                    "retrySafety": "read-only",
+                    "runId": "fixture-review-2",
+                    "model": "openrouter/moonshotai/kimi-k3",
+                    "provider": "openrouter",
+                    "status": "failed",
+                    "failureKind": "transient-provider",
+                    "error": "provider overloaded"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "tab:74075e0c-dac0-477c-ade7-d88c07b648b8",
+            "kind": "tab",
+            "tabId": "74075e0c-dac0-477c-ade7-d88c07b648b8",
+            "tabIndex": 2,
+            "title": "Terminal 2",
+            "cwdLabel": "project",
+            "runs": [
+              {
+                "id": "fixture-run",
+                "source": "async",
+                "launcher": "pi-subagents",
+                "provider": "pi-subagents",
+                "status": "running",
+                "startedAt": 1794689268933,
+                "capabilities": {
+                  "open": true,
+                  "refresh": true,
+                  "cancel": true,
+                  "steer": false
+                },
+                "agents": [
+                  {
+                    "id": "fixture-run:0",
+                    "instanceId": "fixture-run:0",
+                    "name": "reviewer",
+                    "status": "running",
+                    "launcher": "pi-subagents",
+                    "provider": "pi-subagents",
+                    "origin": "async",
+                    "model": "anthropic/claude-opus-4-8:high",
+                    "thinking": "high",
+                    "currentTool": "read",
+                    "capabilities": {
+                      "open": true,
+                      "refresh": true,
+                      "cancel": true,
+                      "steer": false
+                    },
+                    "outputRef": {
+                      "kind": "helper",
+                      "id": "h-0c170c70d5efda4ab9611222a250a273"
+                    }
+                  },
+                  {
+                    "id": "fixture-run:1",
+                    "instanceId": "fixture-run:1",
+                    "name": "scout",
+                    "status": "running",
+                    "launcher": "pi-subagents",
+                    "provider": "pi-subagents",
+                    "origin": "async",
+                    "model": "openai-codex/gpt-5.6-sol",
+                    "thinking": "high",
+                    "capabilities": {
+                      "open": true,
+                      "refresh": true,
+                      "cancel": true,
+                      "steer": false
+                    },
+                    "outputRef": {
+                      "kind": "helper",
+                      "id": "h-5b71851ed8b2c0d29b0ad68f0a039481"
+                    }
+                  }
+                ]
+              }
+            ],
+            "gates": []
+          },
+          {
+            "id": "tab:49c8cbec-92f1-4ed0-bda9-981a0ae1afef",
+            "kind": "tab",
+            "tabId": "49c8cbec-92f1-4ed0-bda9-981a0ae1afef",
+            "tabIndex": 3,
+            "title": "Terminal 3",
+            "cwdLabel": "project",
+            "runs": [
+              {
+                "id": "fixture-run",
+                "source": "async",
+                "launcher": "pi-subagents",
+                "provider": "pi-subagents",
+                "status": "running",
+                "startedAt": 1794689268933,
+                "capabilities": {
+                  "open": true,
+                  "refresh": true,
+                  "cancel": true,
+                  "steer": false
+                },
+                "agents": [
+                  {
+                    "id": "fixture-run:0",
+                    "instanceId": "fixture-run:0",
+                    "name": "reviewer",
+                    "status": "running",
+                    "launcher": "pi-subagents",
+                    "provider": "pi-subagents",
+                    "origin": "async",
+                    "model": "anthropic/claude-opus-4-8:high",
+                    "thinking": "high",
+                    "currentTool": "read",
+                    "capabilities": {
+                      "open": true,
+                      "refresh": true,
+                      "cancel": true,
+                      "steer": false
+                    },
+                    "outputRef": {
+                      "kind": "helper",
+                      "id": "h-0c170c70d5efda4ab9611222a250a273"
+                    }
+                  },
+                  {
+                    "id": "fixture-run:1",
+                    "instanceId": "fixture-run:1",
+                    "name": "scout",
+                    "status": "running",
+                    "launcher": "pi-subagents",
+                    "provider": "pi-subagents",
+                    "origin": "async",
+                    "model": "openai-codex/gpt-5.6-sol",
+                    "thinking": "high",
+                    "capabilities": {
+                      "open": true,
+                      "refresh": true,
+                      "cancel": true,
+                      "steer": false
+                    },
+                    "outputRef": {
+                      "kind": "helper",
+                      "id": "h-5b71851ed8b2c0d29b0ad68f0a039481"
+                    }
+                  }
+                ]
+              }
+            ],
+            "gates": []
+          }
+        ],
+        "counts": {
+          "totalRuns": 3,
+          "totalAgents": 2,
+          "runningAgents": 2,
+          "staleAgents": 0,
+          "byLauncher": {
+            "pi-subagents": 2
+          }
+        },
+        "diagnostics": [],
+        "fleet": {
+          "version": 1,
+          "totalActive": 0,
+          "omitted": 0
+        },
+        "totalRuns": 3,
+        "totalAgents": 2,
+        "runningRuns": 3,
+        "runningAgents": 2,
+        "totalGates": 1,
+        "tabs": [
+          {
+            "tabId": "7069b73e-b708-455d-bed8-7e6b4697d99d",
+            "tabIndex": 1,
+            "tabTitle": "Fixture subagents running",
+            "cwd": "/tmp/pi-overhaul-baseline-QPcuRk/project",
+            "sessionName": "fake",
+            "sessionFile": null,
+            "running": true,
+            "available": true,
+            "updatedAt": 1794689271433,
+            "receivedAt": 1794689271433,
+            "fleet": null,
+            "runs": [
+              {
+                "id": "fixture-run",
+                "source": "async",
+                "mode": "parallel",
+                "status": "running",
+                "startedAt": 1794689268933,
+                "agents": [
+                  {
+                    "id": "fixture-run:0",
+                    "name": "reviewer",
+                    "status": "running",
+                    "index": 0,
+                    "currentTool": "read",
+                    "model": "anthropic/claude-opus-4-8:high",
+                    "thinking": "high",
+                    "nested": false
+                  },
+                  {
+                    "id": "fixture-run:1",
+                    "name": "scout",
+                    "status": "running",
+                    "index": 1,
+                    "model": "openai-codex/gpt-5.6-sol",
+                    "thinking": "high",
+                    "nested": false
+                  }
+                ]
+              }
+            ],
+            "gates": [
+              {
+                "version": 1,
+                "id": "fixture-gate",
+                "status": "running",
+                "requiredSuccesses": 2,
+                "qualifyingSuccesses": 1,
+                "requireDistinctProviders": true,
+                "startedAt": 1794689268433,
+                "updatedAt": 1794689271433,
+                "attempts": [
+                  {
+                    "id": "fixture-gate:0:1",
+                    "taskIndex": 0,
+                    "attempt": 1,
+                    "maxAttempts": 2,
+                    "agent": "reviewer",
+                    "retrySafety": "read-only",
+                    "runId": "fixture-review-1",
+                    "model": "anthropic/claude-opus-4-8",
+                    "provider": "anthropic",
+                    "status": "succeeded"
+                  },
+                  {
+                    "id": "fixture-gate:1:1",
+                    "taskIndex": 1,
+                    "attempt": 1,
+                    "maxAttempts": 2,
+                    "agent": "reviewer",
+                    "retrySafety": "read-only",
+                    "runId": "fixture-review-2",
+                    "model": "openrouter/moonshotai/kimi-k3",
+                    "provider": "openrouter",
+                    "status": "failed",
+                    "failureKind": "transient-provider",
+                    "error": "provider overloaded"
+                  }
+                ]
+              }
+            ],
+            "agentCount": 2,
+            "runningRuns": 1,
+            "runningAgents": 2,
+            "gateCount": 1
+          },
+          {
+            "tabId": "74075e0c-dac0-477c-ade7-d88c07b648b8",
+            "tabIndex": 2,
+            "tabTitle": "Terminal 2",
+            "cwd": "/tmp/pi-overhaul-baseline-QPcuRk/project",
+            "sessionName": "fake",
+            "sessionFile": null,
+            "running": true,
+            "available": false,
+            "updatedAt": null,
+            "receivedAt": null,
+            "fleet": null,
+            "runs": [],
+            "gates": [],
+            "agentCount": 0,
+            "runningRuns": 0,
+            "runningAgents": 0,
+            "gateCount": 0
+          },
+          {
+            "tabId": "49c8cbec-92f1-4ed0-bda9-981a0ae1afef",
+            "tabIndex": 3,
+            "tabTitle": "Terminal 3",
+            "cwd": "/tmp/pi-overhaul-baseline-QPcuRk/project",
+            "sessionName": "fake",
+            "sessionFile": null,
+            "running": true,
+            "available": false,
+            "updatedAt": null,
+            "receivedAt": null,
+            "fleet": null,
+            "runs": [],
+            "gates": [],
+            "agentCount": 0,
+            "runningRuns": 0,
+            "runningAgents": 0,
+            "gateCount": 0
+          }
+        ]
+      },
+      "aggregateStatus": "6 total · 6 running · 1 retry gate · across 3 groups",
+      "identityLimitation": "All three fake processes report sessionId=fake-session. Canonical identity grouping projects the same two instances into three terminal groups; aggregate six is not six executed agents or proof of session isolation.",
+      "gateText": "Retry gate\n1/2 · running · distinct providers\nreviewer\n· succeeded · anthropic/claude-opus-4-8 · unknown · read-only\nreviewer\n· failed · openrouter/moonshotai/kimi-k3 · unknown · read-only",
+      "familyMapping": [
+        "agent roster, running state and output",
+        "gate progress and failed-provider attempt display",
+        "workflow controller with nested worker"
+      ],
+      "completedActionCount": 3
+    },
+    {
+      "id": "long-transcript",
+      "view": {
+        "name": "desktop",
+        "width": 1440,
+        "height": 900,
+        "query": ""
+      },
+      "status": "verified",
+      "actions": [],
+      "screenshots": [
+        "test-results/overhaul-baseline/capability-2026-11-14T20-47-19-065Z/capability-long-transcript-preserved.png"
+      ],
+      "pageErrors": [],
+      "simulation": "200 fixed messages supplied through existing fake-Pi get_messages override; real stream, DOM Range, application find and scroll handlers.",
+      "continuity": {
+        "messageCount": 200,
+        "beforeScrollTop": 14033,
+        "samples": [
+          {
+            "selection": "Deterministic message 101.",
+            "scrollTop": 14033,
+            "find": "1/1",
+            "query": "Deterministic message 101."
+          },
+          {
+            "selection": "Deterministic message 101.",
+            "scrollTop": 14033,
+            "find": "1/1",
+            "query": "Deterministic message 101."
+          },
+          {
+            "selection": "Deterministic message 101.",
+            "scrollTop": 14033,
+            "find": "1/1",
+            "query": "Deterministic message 101."
+          },
+          {
+            "selection": "Deterministic message 101.",
+            "scrollTop": 14033,
+            "find": "1/1",
+            "query": "Deterministic message 101."
+          },
+          {
+            "selection": "Deterministic message 101.",
+            "scrollTop": 14033,
+            "find": "1/1",
+            "query": "Deterministic message 101."
+          },
+          {
+            "selection": "Deterministic message 101.",
+            "scrollTop": 14033,
+            "find": "1/1",
+            "query": "Deterministic message 101."
+          }
+        ],
+        "finalOutput": "This is a long streaming answer that keeps going."
+      },
+      "completedActionCount": 0
+    },
+    {
+      "id": "large-file-tree",
+      "view": {
+        "name": "desktop",
+        "width": 1440,
+        "height": 900,
+        "query": ""
+      },
+      "status": "verified",
+      "actions": [
+        {
+          "selector": "#sidePanelSectionToggleFiles",
+          "description": "expand Files",
+          "completed": true
+        },
+        {
+          "selector": "#fileTreeSearchInput",
+          "description": "find context-119",
+          "completed": true
+        },
+        {
+          "selector": "file \"context-119.txt\"",
+          "description": "open final file",
+          "completed": true
+        }
+      ],
+      "screenshots": [
+        "test-results/overhaul-baseline/capability-2026-11-14T20-47-19-065Z/capability-large-file-tree-expanded.png",
+        "test-results/overhaul-baseline/capability-2026-11-14T20-47-19-065Z/capability-large-file-tree-searched-open.png"
+      ],
+      "pageErrors": [],
+      "fileCount": 120,
+      "firstFile": "context-000.txt",
+      "lastFile": "context-119.txt",
+      "completedActionCount": 3
+    }
+  ],
+  "executionHead": "ad514adba3f4e57c10c72b26eec0dce570eab30e",
+  "environment": {
+    "platform": "linux",
+    "release": "7.2.14-zen1-1-zen",
+    "node": "v22.23.5",
+    "chromium": "157.0.8103.38",
+    "executable": "/usr/bin/chromium"
+  },
+  "omissions": [
+    "Model catalog and tools/skills discovery are simulated. Existing fake Pi does not retain set_model state; durable provider switching cannot be asserted.",
+    "No installed-companion matrix or real provider execution; representative feature families only.",
+    "Chromium phone emulation does not establish native device/engine, OS keyboard or touch usability.",
+    "Tablet-v2 attachment clipping remains parent BUG-002; no fix or original baseline replacement.",
+    "No new performance measurements or crowding denominators; original 42-image reference and frozen budgets remain authoritative."
+  ]
+}

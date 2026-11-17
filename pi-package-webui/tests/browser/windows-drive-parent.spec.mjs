@@ -120,10 +120,11 @@ test("Windows drive Parent flow remains navigation-only, accessible, and cwd-saf
 
   await page.setViewportSize({ width: 1280, height: 850 });
   await page.goto(baseURL);
-  await expect(page.locator("#promptInput")).toBeVisible();
+  await expect(page.locator("#chat")).toContainText("fake answer");
+  await expect(page.locator("#promptInput")).toBeFocused();
 
   await page.keyboard.press("Control+k");
-  await page.locator("#commandPaletteInput").fill("Choose directory for new tab");
+  await page.locator("#commandPaletteInput").fill("Choose directory for new thread");
   await page.keyboard.press("Enter");
 
   const dialog = page.locator("#pathPickerDialog");
@@ -134,6 +135,7 @@ test("Windows drive Parent flow remains navigation-only, accessible, and cwd-saf
   await expect(dialog).toBeVisible();
   await expect(current).toHaveText("C:\\");
 
+  await page.locator(".path-picker-pinned summary").click();
   await page.locator("#pathPickerFastPicks .path-picker-fast-pick-button", { hasText: "D:" }).click();
   await expect(current).toHaveText("D:\\");
   await expect(search).toBeFocused();

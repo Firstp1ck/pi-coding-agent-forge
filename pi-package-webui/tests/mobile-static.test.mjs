@@ -1,10 +1,27 @@
+import { createActivityAgentsController } from "../public/activity-agents-controller.mjs";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+
+
 import vm from "node:vm";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+const extensionRequests = await readFile(new URL("../lib/server/extension-ui-requests.mjs", import.meta.url), "utf8");
+const rpcProtocol = await readFile(new URL("../lib/rpc-supervisor-protocol.mjs", import.meta.url), "utf8");
+const rpcTransports = await readFile(new URL("../lib/server/rpc-transports.mjs", import.meta.url), "utf8");
+const voiceService = await readFile(new URL("../lib/server/conversation-voice.mjs", import.meta.url), "utf8");
+const gitWorktrees = await readFile(new URL("../lib/server/git-worktree-sessions.mjs", import.meta.url), "utf8");
+const gitMutations = await readFile(new URL("../lib/server/git-mutations.mjs", import.meta.url), "utf8");
+const gitGeneration = await readFile(new URL("../lib/server/git-generation.mjs", import.meta.url), "utf8");
+const conversationMode = await readFile(new URL("../lib/server/conversation-mode.mjs", import.meta.url), "utf8");
+const gitReads = await readFile(new URL("../lib/server/git-reads.mjs", import.meta.url), "utf8");
+const runnerService = await readFile(new URL("../lib/server/app-runners.mjs", import.meta.url), "utf8");
+
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+const agentsControllerSource = await readFile(join(root, "public", "activity-agents-controller.mjs"), "utf8");
+const runnersControllerSource = await readFile(join(root, "public", "project-runners-controller.mjs"), "utf8");
+const eventsControllerSource = await readFile(join(root, "public", "activity-events-controller.mjs"), "utf8");
 const [pkgRaw, html, css, app, server, extension, readme, technical, development, startScript, manifestRaw, serviceWorker, appleIcon, icon192, icon512, matrixBackground, mochaBackground] = await Promise.all([
   readFile(join(root, "package.json"), "utf8"),
   readFile(join(root, "public", "index.html"), "utf8"),
@@ -65,13 +82,10 @@ assert.match(html, /<meta name="theme-color" content="#11111b" \/>/, "PWA should
 assert.match(html, /<link rel="manifest" href="\/manifest\.webmanifest" \/>/, "PWA should expose a web app manifest");
 assert.match(html, /<link rel="apple-touch-icon" href="\/apple-touch-icon\.png" \/>/, "PWA should expose the conventional iOS home-screen icon path");
 assert.match(html, /id="terminalTabsToggleButton"/, "mobile should expose a compact terminal-tabs toggle");
-assert.match(html, /id="newTabMenu" class="terminal-new-tab-menu composer-publish-menu"/, "new-tab control should reuse the shared composer dropdown container");
-assert.match(html, /id="newTabButton"[\s\S]*aria-haspopup="menu"[\s\S]*aria-controls="newTabMenuPanel"/, "new-tab control should open a dropdown menu");
-assert.match(html, /id="newTabMenuPanel" class="terminal-new-tab-menu-panel composer-publish-menu-panel"/, "new-tab menu should reuse the shared composer dropdown panel");
-assert.match(html, /id="newTabCurrentDirectoryButton" class="terminal-new-tab-menu-item composer-publish-menu-item"[\s\S]*<span>Current Directory<\/span>/, "new-tab menu should offer the active cwd");
-assert.match(html, /id="newTabChooseDirectoryButton" class="terminal-new-tab-menu-item composer-publish-menu-item"[\s\S]*<span>Choose Directory<\/span>/, "new-tab menu should offer the cwd picker");
-assert.match(html, /id="newTabWorktreeButton" class="terminal-new-tab-menu-item composer-publish-menu-item"[\s\S]*<span>Branch Worktree…<\/span>/, "new-tab menu should offer branch worktree tabs");
-assert.match(html, /id="closeAllTabsButton"[\s\S]*?>Close all Tabs<\/button>/, "tab header should expose a top-right close-all tabs action");
+assert.match(html, /<div id="newTabMenu" class="terminal-new-tab-menu">\s*<button id="newTabButton" class="terminal-new-tab-button" type="button" aria-label="New thread" aria-haspopup="dialog" aria-controls="newThreadDialog"><svg class="terminal-new-tab-icon"[^>]*aria-hidden="true"[\s\S]*?<\/svg><\/button>\s*<\/div>/, "the new-thread control should be one labelled compose icon button that opens the folder palette");
+assert.doesNotMatch(html, /newTabMenuPanel|newTabNoProjectButton|newTabCurrentDirectoryButton|newTabChooseDirectoryButton|newTabWorktreeButton|\+ Thread ▾/, "the old new-tab dropdown and its items should be removed");
+assert.match(html, /<dialog id="newThreadDialog" class="extension-dialog command-palette-dialog" aria-labelledby="newThreadDialogTitle">[\s\S]*?<h2 id="newThreadDialogTitle">New thread<\/h2>[\s\S]*?id="newThreadInput" class="dialog-input command-palette-input"[^>]*role="combobox"[^>]*aria-controls="newThreadList"[\s\S]*?id="newThreadList" class="command-palette-list" role="listbox"[\s\S]*?↑↓ Navigate · Enter Select · Esc Close/, "the folder palette should reuse the command palette dialog structure");
+assert.match(html, /id="closeAllTabsButton"[\s\S]*?>Close all Threads<\/button>/, "tab header should expose a top-right close-all tabs action");
 assert.match(html, /id="sidePanelBackdrop"/, "mobile side panel needs an overlay/backdrop close target");
 assert.match(html, /<div class="side-panel-heading">[\s\S]*<strong class="side-panel-title">Control Deck<\/strong>[\s\S]*<div class="side-panel-version-row"[\s\S]*<button id="piVersionButton"[\s\S]*aria-controls="piReleaseNotesDialog"[\s\S]*<button id="webuiVersionButton"[\s\S]*aria-controls="webuiPackageDialog"[\s\S]*id="webuiDevBadge"/, "Control Deck header should keep its title separate from an aligned version and build row");
 assert.match(html, /<div class="side-panel-brand-row">[\s\S]*<span class="side-panel-kicker">Pi Web UI<\/span>[\s\S]*<a class="sponsor-link" data-visibility-key="control-deck\.sponsor" href="https:\/\/github\.com\/sponsors\/Firstp1ck" target="_blank" rel="noopener noreferrer" aria-label="Sponsor Firstp1ck on GitHub"[^>]*>♡<\/a>/, "Control Deck brand should expose a subtle, accessible sponsor link beside the Pi Web UI name");
@@ -81,7 +95,7 @@ assert.doesNotMatch(app, /confirmationAlternative|\balternative:\s*options\.alte
 assert.doesNotMatch(html, /id="sessionLine"/, "Control Deck title should not show verbose session status metadata");
 assert.match(html, /id="themeSelect"/, "side panel should expose a theme selector");
 assert.match(html, /class="controls-intro"[\s\S]*aria-labelledby="sessionControlsTitle"[\s\S]*aria-labelledby="interfaceControlsTitle"[\s\S]*id="networkControlField"[\s\S]*aria-labelledby="serverControlsTitle"/, "Controls should explain scope and group session, interface, remote-access, and server settings in task order");
-assert.match(html, /id="sessionControlsTitle">Active session<[\s\S]*class="control-scope-badge">This tab<[\s\S]*id="interfaceControlsTitle">Interface<[\s\S]*class="control-scope-badge">This browser</, "Controls groups should state whether settings affect the active tab or this browser");
+assert.match(html, /id="sessionControlsTitle">Active session<[\s\S]*class="control-scope-badge">This thread<[\s\S]*id="interfaceControlsTitle">Interface<[\s\S]*class="control-scope-badge">Browser and shared layout</, "Controls groups should distinguish active-tab settings from browser and shared layout controls");
 assert.match(html, /class="control-action-row">[\s\S]*id="modelSelect"[\s\S]*id="setModelButton"[^>]*>Apply<\/button>[\s\S]*id="thinkingSelect"[\s\S]*id="setThinkingButton"[^>]*>Apply<\/button>/, "model and thinking controls should keep their apply actions beside the selection");
 assert.match(css, /\.control-group-header[\s\S]*\.control-scope-badge[\s\S]*\.control-action-row/, "Controls should visually separate group headers, scope badges, and compact action rows");
 assert.match(html, /<label for="themeSelect"[^>]*id="themeControlLabel"[^>]*>Theme<\/label>/, "theme selector should be labeled in side-panel controls");
@@ -150,16 +164,16 @@ assert.match(app, /body: \{ policy: policyToSave, expectedRevision: data\.revisi
 assert.match(html, /id="nativeCommandSearch"[^>]*type="search"/, "native slash selector dialog should expose a filter box");
 assert.match(html, /id="remoteQrDialog"[\s\S]*id="remoteQrBody"[\s\S]*id="remoteQrCopyButton"/, "remote WebUI should expose a dedicated QR popup dialog");
 assert.match(html, /id="commandPaletteCloseButton"[^>]*aria-label="Close command palette"[^>]*>Close<\/button>/, "command palette should expose a visible accessible close button");
-assert.match(html, /id="pathPickerCreateNameInput"[^>]*placeholder="New directory name"/, "cwd picker should expose a new-directory name input");
-assert.match(html, /id="pathPickerCreateButton"[^>]*>Create directory<\/button>/, "cwd picker should expose a create-directory action");
-assert.match(html, /id="pathPickerSearchInput"[^>]*type="search"[^>]*placeholder="Search current directory…"/, "cwd picker should expose a current-directory search box");
+assert.match(html, /id="pathPickerCreateNameInput"[^>]*placeholder="Folder name"/, "cwd picker should expose a new-directory name input");
+assert.match(html, /id="pathPickerCreateButton"[^>]*>Create folder<\/button>/, "cwd picker should expose a create-directory action");
+assert.match(html, /id="pathPickerSearchInput"[^>]*type="search"[^>]*placeholder="Search folders…"/, "cwd picker should expose a current-directory search box");
 assert.match(html, /id="pathPickerClearSearchButton"[^>]*hidden[^>]*>Clear<\/button>/, "cwd picker should expose a clear-search action");
 assert.match(app, /function fileTreeGitStatusForEntry\(entry = \{\}\) \{\s+return fileTreeState\.gitStatusByPath\.get\(normalizeFileTreePath\(entry\.path \|\| ""\)\) \|\| null;\s+\}/, "file tree rendering should use the refreshed Git-status snapshot instead of stale status embedded in cached entries");
 assert.match(app, /function fileTreeExpander\(expanded = false\)[\s\S]*make\("span", "file-tree-expander", expanded \? "▾" : "▸"\)[\s\S]*aria-hidden/, "file tree arrows should be visual children rather than separate buttons");
 assert.match(app, /function appendFileTreeEntry\(parent, entry, depth = 0\)[\s\S]*button\.append\([\s\S]*isDirectory \? fileTreeExpander\(expanded\)[\s\S]*file-tree-name[\s\S]*button\.addEventListener\("click"[\s\S]*toggleFileTreeDirectory\(path\)[\s\S]*item\.append\(button, fileTreeOverflowButton\(entry\)\)/, "each directory arrow and label should share one expansion button");
 assert.match(app, /function appendFileSearchEntry\(parent, entry\)[\s\S]*button\.append\([\s\S]*isDirectory \? fileTreeExpander\(expanded\)[\s\S]*button\.addEventListener\("click"[\s\S]*toggleFileTreeDirectory\(path\)[\s\S]*item\.append\(button, fileTreeOverflowButton\(entry\)\)/, "directory search results should combine their arrow and label action while toggling in place");
 assert.match(css, /\.file-tree-node \{[\s\S]*grid-template-columns: minmax\(0, 1fr\) auto[\s\S]*\.file-tree-item \{[\s\S]*grid-template-columns: auto auto minmax\(0, 1fr\) auto auto/, "file tree layout should reserve one row button plus the overflow action while keeping the arrow inside the row button");
-assert.match(app, /confirmLabel: activeAgentTabs\.length \? "Close and stop work" : count === 1 \? "Close tab" : "Close tabs"/, "single-tab confirmation should use singular close wording");
+assert.match(app, /confirmLabel: activeAgentTabs\.length \? "Close and stop work" : count === 1 \? "Close thread" : "Close threads"/, "single-tab confirmation should use singular close wording");
 assert.match(html, /data-side-panel-section="git"[\s\S]*class="side-panel-section-label">Git<[\s\S]*id="gitPanelCountBadge"[\s\S]*id="gitPanelGroups"[\s\S]*aria-label="Git repositories"[\s\S]*id="gitPanelContextMenu"[\s\S]*role="menu"/, "side panel should expose a collapsed, globally deduplicated Git repository list with a count and dedicated action menu");
 assert.match(app, /const GIT_PANEL_CACHE_MAX_AGE_MS = 5 \* 60 \* 1000/, "Git panel should use the approved five-minute page-local freshness window");
 assert.match(app, /function gitPanelTerminalGroups\(\)[\s\S]*tabCwdGroups\(\)[\s\S]*shouldRenderTerminalTabGroup[\s\S]*key: `tab:\$\{tab\.id\}`[\s\S]*title: tabGroupTitle\(tab\.cwd, "Working directory"\)/, "Git panel discovery should mirror visible terminal groups while cwd—not session title—defines ungrouped labels");
@@ -193,8 +207,8 @@ assert.doesNotMatch(app, /git-side-panel-file-actions|git-side-panel-toolbar-act
 assert.match(app, /function renderGitPanelFolder\(node, card, category, depth = 0\)[\s\S]*const defaultOpen = true[\s\S]*details\.open = gitPanelState\.openFolders\.has\(folderKey\) \? gitPanelState\.openFolders\.get\(folderKey\) : defaultOpen[\s\S]*details\.open === defaultOpen[\s\S]*gitPanelState\.openFolders\.set\(folderKey, details\.open\)[\s\S]*git-side-panel-folder-chevron[\s\S]*aria-hidden/, "Git folders should start expanded at every depth while retaining explicit user collapse overrides");
 assert.match(css, /\.git-side-panel-folder-chevron[\s\S]*transform: rotate\(0deg\)[\s\S]*\.git-side-panel-folder\[open\][\s\S]*transform: rotate\(90deg\)/, "Git folder arrows should indicate collapsed and expanded states");
 assert.match(css, /\.git-side-panel-repository[\s\S]*\.git-side-panel-file[\s\S]*grid-template-columns: 1\.3rem minmax\(5rem, 1fr\) auto[\s\S]*\.git-side-panel-context-menu[\s\S]*\.git-side-panel-commit/, "Git side panel should prioritize filename width and style repository, context-menu, and history surfaces");
-assert.match(server, /async function readGitPanel\(cwd\)[\s\S]*GIT_PANEL_HISTORY_LIMIT[\s\S]*"status", "--porcelain=v1", "-z"[\s\S]*"--numstat", "-z"/, "server should build compact bounded local Git snapshots without full file contents");
-assert.match(server, /async function readGitCommit\(cwd, requestedHash\)[\s\S]*\^\[a-f0-9\][\s\S]*"show", "--format="/, "commit inspection should require a full hash and use a bounded read-only Git show");
+assert.match(gitReads, /async function readGitPanel\(cwd\)[\s\S]*GIT_PANEL_HISTORY_LIMIT[\s\S]*"status", "--porcelain=v1", "-z"[\s\S]*"--numstat", "-z"/, "server should build compact bounded local Git snapshots without full file contents");
+assert.match(gitReads, /async function readGitCommit\(cwd, requestedHash\)[\s\S]*\^\[a-f0-9\][\s\S]*"show", "--format="/, "commit inspection should require a full hash and use a bounded read-only Git show");
 assert.match(server, /"\/api\/git-changes\/stage-all"[\s\S]*stageAllGitChanges[\s\S]*"\/api\/git-changes\/unstage-all"[\s\S]*unstageAllGitChanges/, "server should expose repository-wide stage and unstage mutations");
 assert.match(technical, /side-panel \*\*Git\*\* section[\s\S]*five-minute cache window[\s\S]*confirmed discard\/delete actions[\s\S]*latest 30 commits/, "technical reference should document Git panel grouping, refresh, actions, and history behavior");
 assert.match(html, /id="optionalFeaturesBox"/, "side panel should expose optional feature status and controls");
@@ -203,7 +217,7 @@ assert.doesNotMatch(html, /id="btwOverlayDialog"/, "/btw should not use a blocki
 assert.match(html, /id="codexUsageBox"/, "side panel should expose Codex subscription usage status");
 assert.match(html, /data-side-panel-section="codex-usage"/, "Codex usage should live in a collapsible side-panel section");
 assert.match(html, /data-side-panel-section="subagents"[\s\S]*class="side-panel-section-label">Subagents<\/span>[\s\S]*id="subagentCountBadge"[\s\S]*class="subagents-help"[\s\S]*Managed and registered Pi agent runs appear here[\s\S]*External agents[\s\S]*id="subagentsBox"/, "side panel should explain managed and registered agent visibility with a live count");
-assert.match(html, /id="subagentOpenModeSelect"[\s\S]*<option value="overlay">Overlay<\/option>[\s\S]*<option value="tab">Tab \/ terminal<\/option>[\s\S]*id="subagentOpenModeStatus"/, "Subagents should offer a browser-persisted overlay or terminal-tab opening choice");
+assert.match(html, /id="subagentOpenModeSelect"[\s\S]*<option value="overlay">Overlay<\/option>[\s\S]*<option value="tab">Thread view<\/option>[\s\S]*id="subagentOpenModeStatus"/, "Subagents should offer a browser-persisted overlay or terminal-tab opening choice");
 assert.match(html, /class="subagents-status-row"[\s\S]*id="subagentsAutoClearButton"[^>]*aria-pressed="false"[^>]*>Auto-Clear<\/button>[\s\S]*id="subagentsStatus"[\s\S]*id="subagentsClearFinishedButton"[^>]*disabled[^>]*>Clear finished<\/button>/, "Subagents should expose selectable auto-clear and manual clear controls beside its live status");
 const subagentCancelDialogHtml = html.match(/<dialog id="subagentCancelDialog"[\s\S]*?<\/dialog>/)?.[0] || "";
 assert.match(subagentCancelDialogHtml, /id="subagentCancelDialogTitle">Cancel subagent<[\s\S]*id="subagentCancelDialogSubtitle"/, "subagent cancellation should use a titled dialog with dynamic target context");
@@ -212,12 +226,12 @@ assert.match(subagentCancelDialogHtml, /<textarea id="subagentCancelNote"[^>]*pl
 assert.doesNotMatch(subagentCancelDialogHtml, /<(?:select|textarea) id="subagentCancel(?:Reason|Note)"[^>]*\brequired\b/, "subagent cancellation reason and note must remain optional");
 assert.match(subagentCancelDialogHtml, /id="subagentCancelSubmitButton" class="danger" type="submit">Cancel subagent<\/button>[\s\S]*id="subagentCancelKeepRunningButton"|id="subagentCancelKeepRunningButton"[\s\S]*id="subagentCancelSubmitButton" class="danger" type="submit">Cancel subagent/, "subagent cancellation should expose danger submit and keep-running controls");
 assert.match(html, /id="subagentTerminalView"[\s\S]*id="subagentTerminalCancelButton" class="danger"[^>]*hidden>Cancel…<\/button>/, "subagent terminal headers should include a hidden-until-running cancel control");
-assert.match(html, /id="subagentLaunchSlots"[\s\S]*id="subagentLaunchSlotsTitle">Agent models<[\s\S]*id="subagentLaunchSlotScope"[\s\S]*<option value="user">User default<\/option>[\s\S]*<option value="project">This project<\/option>[\s\S]*id="subagentLaunchSlotRoles"[\s\S]*id="subagentLaunchSlotsSave"[\s\S]*Save agent models[\s\S]*id="subagentLaunchSlotsReload"[\s\S]*Reload active tab/, "Subagents should expose a separate scoped Agent models editor before the live monitor");
+assert.match(html, /id="subagentLaunchSlots"[\s\S]*id="subagentLaunchSlotsTitle">Agent models<[\s\S]*id="subagentLaunchSlotScope"[\s\S]*<option value="user">User default<\/option>[\s\S]*<option value="project">This project<\/option>[\s\S]*id="subagentLaunchSlotRoles"[\s\S]*id="subagentLaunchSlotsSave"[\s\S]*Save agent models[\s\S]*id="subagentLaunchSlotsReload"[\s\S]*Reload active thread/, "Subagents should expose a separate scoped Agent models editor before the live monitor");
 assert.match(html, /id="subagentLaunchSlotsInherit"[^>]*hidden[^>]*>Use user defaults<\/button>/, "project launch-slot overrides should expose an explicit inheritance reset");
 assert.match(html, /id="subagentLaunchSlotScope"[^>]*aria-describedby="subagentLaunchSlotScopeStatus"/, "scope selection should use stable scope help rather than dynamic live status as its accessible description");
 assert.match(html, /id="subagentLaunchSlotsAnnouncer"[^>]*aria-live="polite"[^>]*aria-atomic="true"/, "launch-slot additions and removals should have a dedicated live announcement");
 assert.match(css, /\.subagent-launch-slots-reload-actions span \{\s*flex: 1 1 auto;\s*min-width: min\(12rem, 100%\);/, "narrow launch-slot reload prompts should size from their content instead of reserving a tall fixed flex basis");
-assert.match(html, /id="subagentTerminalView"[\s\S]*Subagent · view only[\s\S]*id="subagentTerminalTranscript"[\s\S]*id="subagentTerminalStatus"[^>]*aria-live="off"[\s\S]*id="subagentTerminalInput"[^>]*placeholder="View only — send messages from the parent terminal"[^>]*disabled[\s\S]*Use its parent terminal to interact with the run/, "dedicated subagent tabs should expose a view-only transcript, non-announcing routine status, and disabled input");
+assert.match(html, /id="subagentTerminalView"[\s\S]*Subagent · view only[\s\S]*id="subagentTerminalTranscript"[\s\S]*id="subagentTerminalStatus"[^>]*aria-live="off"[\s\S]*id="subagentTerminalInput"[^>]*placeholder="View only — send messages from the parent thread"[^>]*disabled[\s\S]*Use its parent thread to interact with the run/, "dedicated subagent tabs should expose a view-only transcript, non-announcing routine status, and disabled input");
 const subagentTerminalCardsHtml = html.match(/<footer id="subagentTerminalCards"[\s\S]*?<\/footer>/)?.[0] || "";
 assert.match(subagentTerminalCardsHtml, /^<footer id="subagentTerminalCards"[^>]*class="subagent-terminal-cards"[^>]*aria-label="Subagent session telemetry"[^>]*>[\s\S]*<dl class="subagent-terminal-card-list">/, "dedicated subagent telemetry should use a labelled footer and definition list");
 const subagentTerminalCards = [
@@ -287,7 +301,8 @@ assert.match(html, /data-side-panel-section="controls"/, "side panel controls sh
 assert.match(html, /data-side-panel-section="commands"/, "side panel commands should live in a collapsible section");
 assert.match(html, /class="side-panel-section-toggle"[^>]*aria-controls="sidePanelSectionControls"/, "side panel section toggles should target their content panels");
 assert.match(html, /class="side-panel-section-label">Events<\/span>/, "side panel events should expose a section toggle label");
-assert.match(app, /function addEvent\(message, level = "info", \{ toolCallId = "", toolEventPhase = "", details = \[\], notify = true,[\s\S]*?make\("button", `event \$\{level\}`[\s\S]*?chatEventTimestamp[\s\S]*?jumpToChatEvent\(line\)/, "event log entries should be keyboard-accessible controls that navigate into the chat");
+assert.match(eventsControllerSource, /function addEvent\(message, level = "info", \{ toolCallId = "", toolEventPhase = "", details = \[\], notify = true,[\s\S]*?make\("button", `event \$\{level\}`[\s\S]*?chatEventTimestamp/, "event log entries should retain keyboard-accessible buttons and navigation metadata");
+assert.match(app, /onJump: jumpToChatEvent/, "the event owner should use canonical chat navigation");
 assert.match(app, /function chatEventTargetForLine\(line\)[\s\S]*?chatToolCallId[\s\S]*?data-tool-call-id[\s\S]*?\.message\[data-chat-timestamp\]/, "event navigation should prefer exact tool cards and otherwise match the closest chat timestamp");
 assert.match(app, /function jumpToChatEvent\(line\)[\s\S]*?setChatScrollTopInstant[\s\S]*?highlightChatEventTarget[\s\S]*?setSidePanelCollapsed\(true, \{ persist: false \}\)/, "event navigation should dismiss overlay sidebars, scroll the chat, and highlight its target");
 assert.match(app, /function applyChatEventMetadata\(bubble, message\)[\s\S]*?bubble\.dataset\.chatTimestamp/, "rendered chat events should expose timestamps for sidebar navigation");
@@ -400,7 +415,7 @@ assert.match(app, /function conversationVoiceLanguageLabel\(voiceId\)/, "voice l
 assert.match(app, /function conversationVoiceGenderLabel\(voiceId\)/, "voice labels should include a compact M/F gender indicator");
 assert.match(app, /\$\{label\} ↓\$\{conversationVoiceDownloadSizeText\(voice\)\}/, "voices that are not downloaded yet should use compact labels with a download marker and size");
 assert.match(app, /showConversationVoiceFeedback/, "voice selection and download should surface explicit user feedback");
-assert.match(app, /event\.stopPropagation\(\);\n\s*void switchConversationVoice\(voice\.id\);/, "voice menu item clicks should not be swallowed by surrounding dropdown handlers");
+assert.match(app, /event\.stopPropagation\(\);\n\s*if \(panel\.contains\(item\) && isCurrentProjectTarget\(target\)\) void switchConversationVoice\(voice\.id\);/, "voice item clicks should stop propagation and retain their canonical node and originating target");
 assert.match(app, /downloading\|testing/, "voice-switch progress from the package status text should surface on the conversation chip");
 assert.match(app, /function nativeConversationAudioEngaged\(\)[\s\S]*widgets\.has\("natural-conversation-audio"\)/, "frontend should detect the package's native audio loop via its widget");
 assert.match(app, /mode\.enabled === true && !!activeTabId && !nativeConversationAudioEngaged\(\)/, "browser Web Speech loop must stand down while native audio is armed (no double voices)");
@@ -408,7 +423,7 @@ assert.match(html, /id="appRunnerMenuPanel"[^>]*aria-label="Detected app runners
 assert.match(html, /id="appRunnerInfoDialog"[\s\S]*id="appRunnerInfoBody"/, "app-runner explanation popup should have a dynamic details body");
 assert.match(app, /\.pi-webui-runners\.json/, "app-runner popup should explain the project-local custom runner config file");
 assert.match(app, /appRunnerCustomPathInput[\s\S]*Browse/, "custom app-runner path should be browseable from the popup");
-assert.match(server, /APP_RUNNER_CONFIG_FILE = "\.pi-webui-runners\.json"/, "server should use a project-local custom app-runner config file");
+assert.match(runnerService, /APP_RUNNER_CONFIG_FILE = "\.pi-webui-runners\.json"/, "server should use a project-local custom app-runner config file");
 assert.match(server, /\/api\/app-runner-config/, "server should expose custom app-runner config endpoints");
 assert.match(server, /\/api\/app-runner-files/, "server should expose project-scoped file browsing for custom runner paths");
 assert.match(app, /function renderAppRunnerSearchPathSection\(\)[\s\S]*Project discovery paths/, "app-runner popup should offer a project discovery paths section");
@@ -623,7 +638,7 @@ assert.match(css, /\.action-feedback-controls \{[\s\S]*?position:\s*absolute/, "
 assert.match(css, /\.action-feedback-controls \{[\s\S]*?bottom:\s*0\.48rem/, "action reactions should sit inside the message box by default");
 assert.match(css, /\.action-feedback-controls \{[\s\S]*?opacity:\s*0/, "action reactions should stay hidden until hovered or focused");
 assert.match(css, /\.action-feedback-controls:hover,[\s\S]*?\.action-feedback-controls:focus-within/, "action reactions should reveal on hover or keyboard focus");
-assert.match(css, /\.action-feedback-controls:not\(:hover\):not\(:focus-within\) \.action-feedback-button/, "hidden action reactions should not expose button hit targets until the hover area is reached");
+assert.match(css, /@media \(hover: hover\)[\s\S]*?\.message:not\(:hover\):not\(:focus-within\) > \.action-feedback-controls:not\(:hover\):not\(:focus-within\) \.action-feedback-button\s*\{\s*pointer-events:\s*none/, "hidden action reactions should not expose button hit targets until the message hover area is reached");
 assert.match(css, /\.action-feedback-button\.feedback-question\.active/, "question-mark reaction should have selected styling");
 assert.match(css, /\.composer-row button\[data-tooltip\]::after/, "composer-row button tooltips should be shared across Git, Steer, and Follow-up buttons");
 assert.doesNotMatch(css, /\.composer-row \.composer-workflow-mode-button\[data-tooltip\]/, "isolated Workflow Mode dock should not retain composer-row pseudo-tooltip overrides");
@@ -648,28 +663,26 @@ assert.match(css, /\.composer-actions-panel > \.composer-publish-menu[\s\S]*?gri
 assert.match(css, /body\.mobile-composer-disclosure \.composer-actions-panel \{[\s\S]*?position:\s*fixed;[\s\S]*?inset:\s*0;[\s\S]*?width:\s*100vw;[\s\S]*?height:\s*var\(--visual-viewport-height, 100dvh\);[\s\S]*?max-height:\s*none;/, "mobile composer actions should open as a full-screen visual-viewport overlay");
 assert.match(css, /body\.composer-actions-open \.composer-actions-panel \{ display: grid; \}/, "composer actions panel should only open when toggled");
 assert.match(css, /\.terminal-tabs-toggle-button \{ display: none; \}/, "terminal tab toggle should be hidden outside mobile CSS");
-assert.match(html, /id="terminalTabsDrawerContent"[^>]*aria-label="Terminal navigation"[\s\S]*class="terminal-sidebar-actions"[^>]*aria-label="Tab and workspace actions"[\s\S]*id="closeAllTabsButton"/, "mobile terminal disclosure should group canonical tabs and workspace actions in one labelled drawer");
-assert.match(html, /id="terminalTabsBackdrop"[^>]*aria-label="Close terminal navigation"[^>]*hidden/, "mobile terminal drawer should expose an accessible backdrop close target");
+assert.match(html, /id="terminalTabsDrawerContent"[^>]*aria-label="Thread navigation"[\s\S]*class="terminal-sidebar-actions"[^>]*aria-label="Thread and workspace actions"[\s\S]*id="closeAllTabsButton"/, "mobile terminal disclosure should group canonical tabs and workspace actions in one labelled drawer");
+assert.match(html, /id="terminalTabsBackdrop"[^>]*aria-label="Close thread navigation"[^>]*hidden/, "mobile terminal drawer should expose an accessible backdrop close target");
 assert.match(css, /\.command-palette-close-button \{[\s\S]*?min-width:\s*44px;[\s\S]*?min-height:\s*44px/, "command palette close button should meet touch-target sizing by default");
 assert.match(css, /@media \(max-width: 720px\) \{[\s\S]*?\.command-palette-dialog \{[\s\S]*?width:\s*min\(100vw - 0\.5rem, 42rem\)[\s\S]*?\.command-palette-list \{[\s\S]*?align-content:\s*start;[\s\S]*?grid-auto-rows:\s*max-content;[\s\S]*?scrollbar-gutter:\s*auto;[\s\S]*?\.command-palette-item \{[\s\S]*?grid-template-columns:\s*minmax\(3\.4rem, 0\.26fr\) minmax\(0, 1fr\);[\s\S]*?min-height:\s*3rem;/, "mobile command palette results should keep text-height rows and use compact two-column cards");
 assert.match(css, /@media \(max-width: 720px\) \{[\s\S]*?\.command-palette-item-kind \{[\s\S]*?font-size:\s*var\(--text-xs\);[\s\S]*?\.command-palette-item-label \{ font-size:\s*0\.82rem; \}[\s\S]*?\.command-palette-item-description \{ font-size:\s*var\(--text-xs\); \}/, "mobile command palette result text should respect the typography floor");
 assert.match(css, /body\.terminal-tabs-left \.chat-panel \{[\s\S]*?grid-template-columns:\s*minmax\(13rem, var\(--terminal-tabs-sidebar-width\)\) minmax\(0, 1fr\)/, "terminal tabs left layout should split the chat panel into a resizable sidebar and transcript area");
 assert.match(css, /body\.terminal-tabs-left \.terminal-tabs-shell \{[\s\S]*?grid-column:\s*1;[\s\S]*?grid-row:\s*1 \/ -1;[\s\S]*?flex-direction:\s*column/, "terminal tabs left layout should turn the top tab strip into a vertical sidebar");
-assert.match(html, /class="terminal-sidebar-actions"[^>]*aria-label="Tab and workspace actions"[\s\S]*id="workspaceSaveButton"[^>]*aria-label="Save workspace"[\s\S]*id="commandPaletteButton"[^>]*aria-label="Open command palette"[\s\S]*id="workspaceDashboardToggleButton"[^>]*aria-label="Show workspace overview"/, "save, command, and workspace actions should share one accessibly labelled sidebar toolbar");
+assert.match(html, /class="terminal-sidebar-actions"[^>]*aria-label="Thread and workspace actions"[\s\S]*id="workspaceSaveButton"[^>]*aria-label="Save workspace"[\s\S]*id="commandPaletteButton"[^>]*aria-label="Open command palette"[\s\S]*id="workspaceDashboardToggleButton"[^>]*aria-label="Show workspace overview"/, "save, command, and workspace actions should share one accessibly labelled sidebar toolbar");
 assert.doesNotMatch(html, /id="splitTabButton"|class="terminal-split-button"/, "the global terminal-header Split control should be removed");
 assert.doesNotMatch(html, /terminal-sidebar-action-label/, "left-sidebar action buttons should be icon-only without redundant visible labels");
 assert.match(css, /body\.terminal-tabs-left \.terminal-sidebar-actions \{[\s\S]*?display:\s*grid;[\s\S]*?grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\);[\s\S]*?body\.terminal-tabs-left \.terminal-sidebar-actions > button \{[\s\S]*?place-items:\s*center;[\s\S]*?min-height:\s*2\.75rem;[\s\S]*?padding:\s*0\.42rem;/, "left-sidebar actions should render as three compact equal-width icon buttons with 44px targets");
 assert.match(css, /@media \(min-width: 721px\) \{[\s\S]*?body\.terminal-tabs-left \.terminal-sidebar-actions \{[\s\S]*?z-index:\s*130;[\s\S]*?overflow:\s*visible;[\s\S]*?terminal-workspace-save-button\[data-tooltip\]::after,[\s\S]*?terminal-command-palette-button\[data-tooltip\]::after,[\s\S]*?terminal-dashboard-button\[data-tooltip\]::after \{[\s\S]*?bottom:\s*calc\(100% \+ 0\.62rem\);[\s\S]*?z-index:\s*220;[\s\S]*?width:\s*calc\(300% \+ 0\.84rem\);/, "left-sidebar save, command, and overview tooltips should render above the full toolbar without clipping");
 assert.match(css, /terminal-workspace-save-button\[data-tooltip\]::after \{\s+left:\s*0;[\s\S]*?terminal-command-palette-button\[data-tooltip\]::after \{\s+left:\s*calc\(-100% - 0\.42rem\);[\s\S]*?terminal-dashboard-button\[data-tooltip\]::after \{\s+left:\s*calc\(-200% - 0\.84rem\);/, "left-sidebar tooltips should align to the toolbar edges from their individual buttons");
 assert.match(app, /function updateTerminalSplitControls\(canShowSplit[\s\S]*terminal-tab-split-button[\s\S]*setAttribute\("aria-pressed", isOpenSplit \? "true" : "false"\)[\s\S]*terminal-tab:\$\{tabId\}:split/, "per-tab Split controls should expose open or close state through accessibility text and stable tooltips");
-assert.match(app, /async function splitTerminalTab\(tabId[\s\S]*tabs\.find\(\(tab\) => tab\.id === tabId\)[\s\S]*sourceTab\.cwd[\s\S]*body: \{ cwd: resolvedCwd \}/, "per-tab Split should create the independent terminal from the clicked tab's working directory");
+assert.match(app, /async function splitTerminalTab\(tabId[\s\S]*tabs\.find\(\(tab\) => tab\.id === tabId\)[\s\S]*sourceTab\.cwd[\s\S]*body: sourceTab\.workspaceKind === "no-project" \? \{ workspaceKind: "no-project" \} : \{ cwd: resolvedCwd \}/, "per-tab Split should create the independent terminal from the clicked tab's working directory");
 assert.match(css, /body\.terminal-tabs-left \.terminal-close-all-button \{[\s\S]*?margin-top:\s*0;[\s\S]*?justify-content:\s*center;[\s\S]*?text-align:\s*center;/, "left-sidebar close-all action should remain a separate centered destructive row");
 assert.match(css, /body\.terminal-tabs-left \.terminal-tabs \{[\s\S]*?flex-direction:\s*column/, "terminal tabs left layout should stack tabs vertically");
 assert.match(css, /body\.terminal-tabs-left \.terminal-tab-group-menu \{[\s\S]*?inset:\s*0 auto auto 100%;[\s\S]*?padding-left:\s*var\(--terminal-left-dropdown-bridge\)/, "left-sidebar grouped tab menus should include a hover bridge so they do not vanish between button and dropdown");
-assert.match(css, /body\.terminal-tabs-left \.terminal-new-tab-menu \.composer-publish-menu-panel \{[\s\S]*?inset:\s*0 auto auto 100%;[\s\S]*?padding-left:\s*var\(--terminal-left-dropdown-bridge\)/, "left-sidebar new-tab dropdown should include a hover bridge so it does not vanish between button and dropdown");
-assert.match(css, /\.terminal-new-tab-menu \.composer-publish-menu-panel \{[\s\S]*?inset:\s*100% 0 auto auto;[\s\S]*?padding-top:\s*0\.38rem/, "new-tab dropdown should reuse the shared composer panel and open below the tab bar");
-assert.match(css, /\.terminal-tabs > \.terminal-new-tab-menu:only-child \.composer-publish-menu-panel \{\s*inset:\s*100% auto auto 0;/, "zero-tab new-tab dropdown should align to the left edge instead of extending off-screen");
-assert.match(css, /\.terminal-new-tab-menu \.composer-publish-menu-item \{[\s\S]*?color:\s*var\(--ctp-pink\)/, "new-tab dropdown items should reuse shared composer menu items with a tab-specific color");
+assert.doesNotMatch(css, /terminal-new-tab-menu-item|\.terminal-new-tab-menu \.composer-publish-menu-(?:panel|item)/, "no styles should remain for the removed new-tab dropdown");
+assert.match(css, /\.terminal-new-tab-button \{\n\s+display:\s*inline-grid;[\s\S]*?width:\s*2\.35rem;[\s\S]*?color:\s*var\(--ctp-pink\)/, "the compose button should keep the pink new-thread accent as a square icon button");
 assert.match(css, /\.terminal-close-all-button \{[\s\S]*?color:\s*var\(--ctp-red\)/, "close-all tabs action should render as a top-right destructive tab action");
 assert.match(css, /\.terminal-tabs\.terminal-tabs-dense \{[\s\S]*?flex-wrap:\s*wrap/, "large terminal tab sets should wrap into a readable dense tab strip");
 assert.match(css, /\.terminal-tab-group-close \{[\s\S]*?border-left-color/, "terminal tab groups should style their close button distinctly");
@@ -727,7 +740,7 @@ assert.match(app, /function openGitChangesDialog\(requestedTabId = activeTabId\)
 assert.doesNotMatch(app, /options\.onClick = openGitChangesDialog/, "git changes handlers must not forward click events as tab IDs");
 assert.match(app, /async function loadGitChangesDialog[\s\S]*api\("\/api\/git-changes"/, "git changes modal should load diff data from the server endpoint");
 assert.match(app, /"Resolve with agent"[\s\S]*api\("\/api\/git-operation\/resolve-with-agent", \{ method: "POST"[\s\S]*switchToResponseTab\(response\)/, "conflict panel should open the resolution agent in the new tab returned by the server");
-assert.match(server, /function gitConflictResolutionAgentPrompt\(operation\)[\s\S]*Conflicted files:[\s\S]*Do not continue, skip, abort, commit, reset, or push[\s\S]*diff-filter=U is empty/, "server should build a bounded conflict handoff with operation safety and verification instructions");
+assert.match(gitWorktrees, /function gitConflictResolutionAgentPrompt\(operation\)[\s\S]*Conflicted files:[\s\S]*Do not continue, skip, abort, commit, reset, or push[\s\S]*diff-filter=U is empty/, "server should build a bounded conflict handoff with operation safety and verification instructions");
 assert.match(server, /"\/api\/git-operation\/resolve-with-agent"[\s\S]*openGitConflictResolutionAgentTab\(tab\)/, "server should expose conflict-resolution agent tab creation through the git operation routes");
 assert.match(app, /async function pullGitChangesDialog\(\)[\s\S]*api\("\/api\/git-changes\/pull", \{ method: "POST"/, "git changes modal should post to the pull endpoint from the Pull button");
 assert.match(app, /async function pullGitFooterSync\(tabId = activeTabId, \{ syncValue = "" \} = \{\}\)[\s\S]*api\("\/api\/git-changes\/pull", \{ method: "POST", body: \{ remote: "origin" \}, tabId \}\)[\s\S]*requestGitFooterWebuiPayload\(tabContext, \{ force: true \}\)/, "incoming-only footer Sync should pull directly from origin and refresh the footer payload");
@@ -820,7 +833,8 @@ const gitPullErrorDialogContext = {
   gitFooterSyncCounts: () => ({ ahead: 1, behind: 0 }),
   pushGitFooterSync: async (tabId, value) => resumedPushes.push({ tabId, value }),
 };
-vm.runInNewContext(`${app.slice(gitPullErrorDialogStart, gitPullErrorDialogEnd)}\nthis.openPullError = openGitPullErrorDialog; this.copyPullError = copyGitPullErrorOutput; this.reviewPullError = reviewGitPullDivergence; this.integratePullError = integrateGitPullDivergence;`, gitPullErrorDialogContext);
+const threadDisplayTitleSource = app.slice(app.indexOf("function threadDisplayTitle("), app.indexOf("\nfunction tabIndicator("));
+vm.runInNewContext(`${threadDisplayTitleSource}\n${app.slice(gitPullErrorDialogStart, gitPullErrorDialogEnd)}\nthis.openPullError = openGitPullErrorDialog; this.copyPullError = copyGitPullErrorOutput; this.reviewPullError = reviewGitPullDivergence; this.integratePullError = integrateGitPullDivergence;`, gitPullErrorDialogContext);
 gitPullErrorDialogContext.openPullError("network unavailable\n\ncheck the connection", { code: "DIVERGED", tabId: "tab-pull", syncValue: "⇡1 · ⇣2" });
 assert.equal(nativePullErrorDialog.open, true, "Git pull error dialog should open natively");
 assert.equal(nativePullErrorTitle.textContent, "Branches diverged", "DIVERGED popup should use a specific title");
@@ -902,7 +916,7 @@ const pushRecoveryContext = {
   formatGitCommandResult: () => "",
   pullThenPushGitFooterSync: async (tabId, value) => pushRecoveryCalls.push({ tabId, value, locked: pushRecoveryInFlight.has(tabId) }),
 };
-vm.runInNewContext(`${app.slice(pushGitFooterSyncStart, pushGitFooterSyncEnd)}\nthis.runPushGitFooterSync = pushGitFooterSync;`, pushRecoveryContext);
+vm.runInNewContext(`${threadDisplayTitleSource}\n${app.slice(pushGitFooterSyncStart, pushGitFooterSyncEnd)}\nthis.runPushGitFooterSync = pushGitFooterSync;`, pushRecoveryContext);
 await pushRecoveryContext.runPushGitFooterSync("tab-push", "⇡2");
 assert.deepEqual(JSON.parse(JSON.stringify(pushRecoveryRequests)), [{ path: "/api/git-workflow/push", options: { method: "POST", body: {}, tabId: "tab-push" } }], "footer Push should not offer or attempt force-with-lease after a non-fast-forward rejection");
 assert.deepEqual(JSON.parse(JSON.stringify(pushRecoveryCalls)), [{ tabId: "tab-push", value: "⇡2", locked: false }], "footer Push should hand non-fast-forward recovery to the existing pull-then-push workflow after unlocking the tab");
@@ -939,13 +953,13 @@ assert.match(app, /async function loadMissingGitUntrackedContent\(entry[\s\S]*?\
 assert.match(app, /function updateGitChangesCurrentFileHeader\(\)[\s\S]*?querySelectorAll\("\.git-diff-file\[data-git-diff-file\]"\)/, "git changes modal should derive the sticky current-file header from visible file cards");
 assert.match(app, /function renderGitChangesFileList\(parsedSections, untracked\)[\s\S]*dataset\.gitChangesJumpFile = item\.path[\s\S]*git-changes-file-jump-meta/, "git changes modal should render jump buttons for each changed file");
 assert.match(app, /gitChangesBody\?\.addEventListener\("click"[\s\S]*data-git-changes-jump-file[\s\S]*scrollIntoView\(\{ block: "start", behavior: "smooth" \}\)/, "git changes file jump buttons should scroll to their diff cards");
-assert.match(server, /async function readGitUntrackedEntry\(root, file, \{ maxBytes = Number\.POSITIVE_INFINITY \} = \{\}\)[\s\S]*?content: binary \? "" : buffer\.toString\("utf8"\)/, "server should include complete text contents for untracked files");
+assert.match(gitReads, /async function readGitUntrackedEntry\(root, file, \{ maxBytes = Number\.POSITIVE_INFINITY \} = \{\}\)[\s\S]*?content: binary \? "" : buffer\.toString\("utf8"\)/, "server should include complete text contents for untracked files");
 assert.match(server, /url\.pathname === "\/api\/git-changes\/untracked-file" && req\.method === "GET"/, "server should expose a focused untracked-file content endpoint for stale path-only payload fallbacks");
-assert.match(server, /async function readGitChanges\(cwd\)[\s\S]*?const diffArgs = \["diff", "--no-ext-diff"[\s\S]*?"--unified=0"[\s\S]*?\["diff", "--cached"/, "server should collect compact staged and unstaged git diffs for the changes modal");
-assert.match(server, /\["status", "--porcelain=2", "--branch", "--untracked-files=all"\][\s\S]*?summarizeGitPorcelainStatus\(porcelainStatusText\)/, "server should derive behind/ahead from locale-independent porcelain status so the Pull button activates after fetch");
-assert.match(server, /async function readGitIncomingChanges\(root, summary\)[\s\S]*?"HEAD\.\.@\{upstream\}"/, "server should collect incoming upstream diffs when remote commits are behind");
+assert.match(gitReads, /async function readGitChanges\(cwd\)[\s\S]*?const diffArgs = \["diff", "--no-ext-diff"[\s\S]*?"--unified=0"[\s\S]*?\["diff", "--cached"/, "server should collect compact staged and unstaged git diffs for the changes modal");
+assert.match(gitReads, /\["status", "--porcelain=2", "--branch", "--untracked-files=all"\][\s\S]*?summarizeGitPorcelainStatus\(porcelainStatusText\)/, "server should derive behind/ahead from locale-independent porcelain status so the Pull button activates after fetch");
+assert.match(gitReads, /async function readGitIncomingChanges\(root, summary\)[\s\S]*?"HEAD\.\.@\{upstream\}"/, "server should collect incoming upstream diffs when remote commits are behind");
 assert.match(server, /url\.pathname === "\/api\/git-changes" && req\.method === "GET"/, "server should expose GET /api/git-changes for the changes modal");
-assert.match(server, /async function pullGitChanges\(cwd, \{ remote \} = \{\}\)[\s\S]*?const pullArgs = \["pull", "--ff-only"\];[\s\S]*?remote === "origin"[\s\S]*?pullArgs\.push\("origin"\)[\s\S]*?runGuardedGitMutation\(pullArgs/, "server should allow the guarded pull endpoint to target origin explicitly");
+assert.match(gitMutations, /async function pullGitChanges\(cwd, \{ remote \} = \{\}\)[\s\S]*?const pullArgs = \["pull", "--ff-only"\];[\s\S]*?remote === "origin"[\s\S]*?pullArgs\.push\("origin"\)[\s\S]*?runGuardedGitMutation\(pullArgs/, "server should allow the guarded pull endpoint to target origin explicitly");
 assert.match(server, /url\.pathname === "\/api\/git-changes\/pull" && req\.method === "POST"[\s\S]*?pullGitChanges\(tab\.cwd, \{ remote: body\?\.remote \}\)/, "server should expose POST /api/git-changes/pull for modal and footer Pull actions");
 assert.match(css, /@media \(max-width: 1050px\)[\s\S]*?\.footer-line-meta \{[\s\S]*?display:\s*flex;[\s\S]*?flex-wrap:\s*wrap;[\s\S]*?\.footer-line-meta \.footer-meta \{[\s\S]*?flex:\s*1 1 var\(--footer-chip-min-width\);[\s\S]*?width:\s*auto;[\s\S]*?\.footer-workspace,\n\s+\.footer-model,\n\s+\.footer-thinking \{ grid-column:\s*auto; \}/, "narrow git-footer metadata should wrap like the top metric row instead of forcing a two-column grid");
 assert.match(css, /@media \(max-width: 720px\), \(max-device-width: 720px\), \(pointer: coarse\) and \(hover: none\)[\s\S]*?\.context-meter-bar \{ display:\s*none !important; \}/, "mobile should hide the WebUI context meter that appears after high context usage");
@@ -1045,7 +1059,7 @@ assert.doesNotMatch(css, /#networkControlField\s+#showRemoteQrButton\s*\{[^}]*di
 assert.match(app, /showRemoteQrButton\.hidden = !open;[\s\S]*?showRemoteQrButton\.disabled = rebinding \|\| !open;[\s\S]*?showRemoteQrButton\.textContent = "Open QR-Code";/, "Open QR-Code should keep the existing remote-open and rebinding availability rules");
 assert.match(app, /showRemoteQrButton\?\.addEventListener\("click", \(\) => showRemoteWebuiQrPopupFromNetwork\(\)/, "Open QR-Code should open the existing Remote WebUI QR popup");
 assert.match(app, /remoteWebuiCommand\(enable \? "authOn" : "authOff"/, "remote PIN auth toggle should dispatch through the Remote WebUI package command");
-assert.match(server, /webuiSettingsFile,[\s\S]*from "\.\.\/lib\/git-workflow-preferences\.mjs"/, "server should use the shared Pi Web UI settings persistence module");
+assert.match(server, /webuiSettingsFile,[\s\S]*from "\.\.\/lib\/server\/settings-store\.mjs"/, "server should use the shared Pi Web UI settings persistence module");
 assert.match(server, /const persistedStartupSettings = await readWebuiSettings\(undefined, \{ reportInvalidOutputMode: true \}\);[\s\S]*?let persistedRemoteAuthEnabled = persistedStartupSettings\.remoteAuthEnabled === true;/, "server should load the saved Remote PIN auth preference before startup");
 assert.match(server, /if \(remoteAuthStartupEnabled\(\)\) enableRemoteAuth\(remoteAuthStartupReason\(\)\)/, "saved Remote PIN auth preference should enable auth on startup");
 assert.match(server, /await saveRemoteAuthPreference\(true\)/, "enabling Remote PIN auth should persist the on preference");
@@ -1070,7 +1084,7 @@ assert.match(server, /async function validateStartupCwd\(cwd\)/, "server should 
 assert.match(server, /--cwd does not exist:/, "server should report nonexistent startup cwd paths clearly");
 assert.match(server, /options\.cwd = await validateStartupCwd\(options\.cwd\)/, "server should fail fast for invalid startup cwd paths");
 assert.match(server, /cwdExplicit: false/, "server should track whether startup cwd was explicitly requested");
-assert.match(server, /return options\.cwdExplicit \? \[await createTab\(\)\] : \[\]/, "server should wait for UI cwd selection when no --cwd is supplied");
+assert.match(server, /return options\.cwdExplicit \? \[await createTab\(\)\] : \[\]/, "server should start without a session when no --cwd or restore is supplied");
 assert.match(server, /async function resolvedPiCliScript\(\)[\s\S]*require\.resolve\.paths\(PI_CODING_AGENT_PACKAGE\)[\s\S]*nodeModulesRoot[\s\S]*dist[\s\S]*cli\.js/, "server should resolve the bundled Pi CLI through Node resolution roots so hoisted global installs can spawn RPC tabs");
 assert.match(server, /canonicalPiRuntimeIdentity[\s\S]*bundledCli: await resolvedPiCliScript\(\)/, "standalone server should use the canonical resolver with the bundled Pi CLI before PATH pi");
 assert.match(server, /resolveCanonicalPiRuntime\([\s\S]*explicitCommand: options\.piBinExplicit \? options\.piBin : ""[\s\S]*bundledCli/, "tabs should retain their explicit or bundled Pi selection independently of updates");
@@ -1084,16 +1098,19 @@ assert.match(app, /api\("\/api\/shutdown", \{ method: "POST", scoped: false \}\)
 assert.match(server, /url\.pathname === "\/api\/restart" && req\.method === "POST"/, "server should expose restart endpoint");
 assert.match(server, /PI_WEBUI_RESTORE_FILE: restore\.file/, "server restart should pass tab metadata through a private read-once restore file");
 assert.match(server, /if \(webuiDevServer\) env\.PI_WEBUI_DEV = "1";/, "server restart should explicitly preserve dev mode");
-assert.match(server, /url\.pathname === "\/api\/update\/plan"[\s\S]*validateUpdatePlanRequest[\s\S]*createNativeServerPlan/, "server should expose single-action native update planning");
-assert.match(server, /url\.pathname === "\/api\/update\/apply"[\s\S]*validateUpdateApplyRequest[\s\S]*applyNativeServerPlan/, "server should apply only a confirmed native transaction id and digest");
+assert.match(server, /url\.pathname === "\/api\/update\/plan"[\s\S]*validateUpdatePlanRequest[\s\S]*packageUpdates\.plan/, "server should expose single-action native update planning");
+assert.match(server, /url\.pathname === "\/api\/update\/apply"[\s\S]*validateUpdateApplyRequest[\s\S]*packageUpdates\.apply/, "server should apply only a validated native transaction id and digest");
 assert.match(server, /updateTransactionRoute && req\.method === "GET"[\s\S]*finalizeNativeJob\(updateTransactionRoute\[1\]\)/, "native job status should reconnect to the same transaction");
 assert.match(server, /Legacy update mutation is disabled/, "divergent legacy update mutation routes should fail closed");
 assert.doesNotMatch(server, /function resolveUpdateTasks|function projectPackageRootUpdateTasks|function npmGlobalPackageRootUpdateTask|function bunGlobalPackageRootUpdateTask/, "broad heuristic package-root mutation should be removed");
-assert.match(app, /componentUpdateConfirmationText\(plan\)[\s\S]*item\.installedRoot[\s\S]*item\.effectRoot[\s\S]*plan\.warning[\s\S]*Plan digest: \$\{plan\.digest\}/, "frontend should confirm affected installations and bound plan digest");
-assert.match(app, /api\("\/api\/update\/apply", \{ method: "POST", body: \{ transactionId: plan\.transactionId, planDigest: plan\.digest \}/, "frontend should apply only the confirmed transaction and digest");
+const updateMenuSource = await readFile(join(root, "public", "sidebar-update-menu.mjs"), "utf8");
+assert.match(updateMenuSource, /item\.command\.command[\s\S]*item\.command\.args[\s\S]*item\.installedRoot/, "job Details should retain detected installations and fixed commands");
+const updateSelectionSource = app.slice(app.indexOf("async function startComponentUpdate(target)"), app.indexOf("async function openWebuiPackageDialog()"));
+assert.doesNotMatch(updateSelectionSource, /appConfirmText|confirmationDialog/, "selecting an update scope should launch without another confirmation");
+assert.match(app, /api\("\/api\/update\/apply", \{ method: "POST", body: \{ transactionId: plan\.transactionId, planDigest: plan\.digest \}/, "frontend should apply only the selected transaction and digest");
 assert.match(html, /<option value="update-webui">Update Web UI<\/option>/, "side panel should offer Web UI separately from Pi");
 assert.doesNotMatch(html, /update-all|Update all/, "combined update action should be removed");
-assert.match(readme, /Update Pi[\s\S]*Update Web UI[\s\S]*lifecycle scripts/, "README should explain independent updates and the lifecycle warning");
+assert.match(readme, /Updates[\s\S]*WebUI only[\s\S]*Pi only[\s\S]*Package scripts/, "README should explain the three update choices and package script behavior");
 assert.match(server, /async function closeNetworkAccess\(\)/, "server should expose a local-only rebind helper for closing network access");
 assert.match(server, /url\.pathname === "\/api\/network\/close" && req\.method === "POST"/, "server should route network close requests");
 assert.match(server, /server\.closeAllConnections\?\.\(\)/, "network rebind should force-close long-lived clients so close-to-localhost can complete");
@@ -1103,18 +1120,15 @@ assert.match(app, /window\.visualViewport/, "app should listen to VisualViewport
 assert.match(html, /<textarea id="promptInput"[^>]*autofocus/, "prompt composer should autofocus for new Web UI/app launches");
 assert.match(app, /function syncMobileChatToBottomForInput\(\)/, "mobile input focus should force the output view to the latest message");
 assert.match(app, /function updateMobileDropdownScrollBounds\(\)[\s\S]*--mobile-dropdown-max-height/, "mobile dropdowns should compute a viewport-bounded scroll height when opened");
-assert.match(app, /function setAppRunnerMenuOpen\(open\)[\s\S]*scheduleMobileDropdownScrollBoundsUpdate\(\)/, "app-runner dropdown opening should refresh mobile scroll bounds");
+assert.match(app, /function setAppRunnerMenuOpen\(open, \{ preserveOpeningIntent = false \} = \{\}\)[\s\S]*scheduleMobileDropdownScrollBoundsUpdate\(\)/, "app-runner dropdown opening should refresh mobile scroll bounds");
 assert.match(app, /function setOptionsMenuOpen\(open\)[\s\S]*scheduleMobileDropdownScrollBoundsUpdate\(\)/, "Options dropdown opening should refresh mobile scroll bounds");
 assert.match(app, /function focusPromptInput\(\{ defer = false \} = \{\}\)/, "frontend should focus the prompt composer programmatically after tab/app startup");
 assert.match(app, /async function switchTab\(tabId\)[\s\S]*?restoreActiveDraft\(\);\n\s+focusPromptInput\(\{ defer: true \}\);/, "switching to a newly opened tab should focus the prompt input immediately");
-assert.match(app, /async function initializeTabs\(\)[\s\S]*?restoreActiveDraft\(\);[\s\S]*if \(!loadedTabs\.length\)[\s\S]*focusPromptInput\(\{ defer: true \}\);/, "starting the Web UI should prompt for cwd when needed and focus active tabs");
+assert.match(app, /async function initializeTabs\(\)[\s\S]*?restoreActiveDraft\(\);[\s\S]*if \(!loadedTabs\.length\)[\s\S]*focusPromptInput\(\{ defer: true \}\);/, "empty startup should restore the draft and focus the composer");
 assert.match(app, /resizePromptInput\(\);\nclearRemovedSidePanelSectionHeightState\(\);\nrestoreDurableUiLayoutPendingJournal\(\);\nrestoreSidePanelWidthPreference\(\);\nrestoreFileViewerWidthPreference\(\);\nrestoreTerminalTabsSidebarWidthPreference\(\);\nfocusPromptInput\(\{ defer: true \}\);\nrestoreStoredSkillUsage\(\);\nrestoreBusyPromptBehaviorSetting\(\);\nsyncMobileComposerDisclosureLayout\(\);\nupdateComposerModeButtons\(\);/, "startup should clear retired section-height state, restore resizable panel preferences, request prompt focus, and restore skill tags before waiting for tab state refreshes");
 assert.match(app, /elements\.promptInput\.addEventListener\("focus", \(\) => \{\n\s+syncMobileChatToBottomForInput\(\);/, "focusing mobile input should scroll output to bottom");
 assert.match(app, /navigator\.serviceWorker\.register\("\/service-worker\.js"\)/, "PWA service worker should be registered by the app");
 assert.match(app, /function serverStartCommandText\(\)[\s\S]*return `pi-webui\$\{currentPortArg\(\)\}`/, "PWA/offline shell should build a pathless pi-webui recovery command");
-assert.match(app, /async function createFirstTerminalTabFromChosenDirectory\(\)/, "frontend should define the first-terminal cwd prompt");
-assert.match(app, /async function initializeTabs\(\)[\s\S]*?if \(!saved\.length\) await createFirstTerminalTabFromChosenDirectory\(\)/, "frontend should still prompt for the first terminal cwd when no saved workspace can be loaded");
-assert.match(app, /Choose CWD for first terminal/, "frontend should title the first-terminal cwd picker clearly");
 assert.match(app, /Pi Web UI server is offline/, "PWA/offline shell should clearly report backend-down state");
 assert.match(app, /navigator\.clipboard\.writeText\(text\)/, "backend-offline recovery panel should copy the start command when possible");
 assert.match(app, /function messageCopyText\(message, body = null\)/, "frontend should derive copy text from transcript messages");
@@ -1147,27 +1161,29 @@ assert.match(app, /elements\.dialog\.classList\.toggle\("guardrail-dialog", isGu
 assert.match(app, /elements\.dialog\.classList\.toggle\("release-dialog", isReleaseDialog\)/, "release extension dialogs should get dedicated roomy styling");
 assert.match(app, /release-publish-action/, "release dialogs should distinguish the publish confirmation button");
 assert.match(app, /guardrail-safe-action/, "guardrail dialogs should distinguish safe and allow actions");
-assert.match(app, /function hasQueuedDialogRequest\(id\)/, "frontend should deduplicate replayed extension UI dialogs by request id");
+assert.match(app, /function hasQueuedDialogRequest\(id, tabId = activeTabId\)/, "frontend should deduplicate replayed extension UI dialogs by request id");
 assert.match(app, /if \(request\.replayed\) addEvent\(`recovered pending \$\{request\.method\} request`, "warn"\)/, "frontend should surface replayed extension UI blockers");
 assert.match(app, /case "webui_extension_ui_cancelled":/, "frontend should close dialogs cancelled by backend abort handling");
-assert.match(app, /case "webui_extension_ui_resolved":[\s\S]*?removeQueuedDialogRequests\(\[event\.id\]\)/, "frontend should close dialogs resolved by another connected browser");
-assert.match(app, /if \(responseId && activeDialog && String\(activeDialog\.id \|\| ""\) !== responseId\) return;/, "dialog response cleanup should not close the next queued dialog after a resolve-event race");
+assert.match(app, /case "webui_extension_ui_resolved":[\s\S]*?removeQueuedDialogRequests\(\[event\.id\], event\.tabId \|\| activeTabId\)/, "frontend should close dialogs resolved by another connected browser");
+assert.match(app, /if \(extensionRequests\.active !== request \|\| !sessionContext\.isLifetimeCurrent\(lifetime\)\) return;/, "dialog response cleanup should not close the next queued dialog after a resolve-event race");
 assert.match(app, /if \(runIndicatorIsActive\(\)\) \{\s*setRunIndicatorActivity\("Continuing after your response…"\);[\s\S]*?scheduleRefreshState\(120, tabContext\);\s*\}/, "extension UI responses should promptly reconcile canonical state so background release commands cannot leave a stale running indicator");
+const usageControllerSource = await readFile(new URL("../public/activity-usage-controller.mjs", import.meta.url), "utf8");
+const todoView = await readFile(new URL("../public/activity-todo-view.mjs", import.meta.url), "utf8");
 assert.match(app, /function parseTodoProgressWidget\(lines\)/, "todo-progress widgets should be parsed from extension widget lines");
-assert.ok(app.includes("const goalLine = cleanLines.find((line) => /^Goal\\s*[:：]/i.test(line));"), "todo-progress parser should preserve an optional Goal line from extension widget lines");
-assert.ok(app.includes("if (todo.goal) summary.append(make(\"div\", \"todo-widget-goal\", `Goal: ${todo.goal}`));"), "todo-progress widget should display the goal above the progress header");
+assert.ok(todoView.includes("const goalLine = cleanLines.find((line) => /^Goal\\s*[:：]/i.test(line));"), "todo-progress parser should preserve an optional Goal line from extension widget lines");
+assert.ok(todoView.includes("if (todo.goal) summary.append(make(\"div\", \"todo-widget-goal\", `Goal: ${todo.goal}`));"), "todo-progress widget should display the goal above the progress header");
 assert.match(app, /const todoProgressWidgetExpandedByTab = new Map\(\)/, "todo-progress expansion state should survive widget re-renders per tab");
 assert.match(app, /const todoProgressSignatureByTab = new Map\(\)/, "todo-progress should track per-tab signatures to avoid unchanged re-renders");
 assert.match(app, /function widgetRequestEquivalent\(a, b\)[\s\S]*?return a\.widgetLines\.every/, "todo-progress and generic widgets should no-op identical widget payloads");
 assert.match(app, /todoProgressSignatureByTab\.get\(tabId\) === signature\) return false/, "live todo-progress sync should skip unchanged checklist signatures");
-assert.match(app, /const node = make\("details", "widget todo-widget"\)/, "todo-progress widget should render collapsed by default as expandable details");
+assert.match(todoView, /const node = make\("details", "widget todo-widget"\)/, "todo-progress widget should render collapsed by default as expandable details");
 assert.match(app, /Optional feature detection intentionally checks loaded Pi capabilities/, "optional Web UI features should be detected through loaded capabilities, not package folders");
 assert.match(app, /function resetOptionalFeatureAvailability\(\)/, "optional feature state should reset across active-tab and reload boundaries");
 assert.match(app, /function renderOptionalFeaturePanel\(\)/, "side panel should render optional feature installed/enabled state");
 assert.match(app, /const OPTIONAL_FEATURE_SECTIONS = \[[\s\S]*label: "Composer & commands"[\s\S]*label: "Workflows & releases"[\s\S]*label: "Safety & access"[\s\S]*label: "UI widgets & native parity"[\s\S]*featureIds: \[[^\]]*"questionnaire"[\s\S]*label: "Conversation"/, "optional features should be grouped into five type subsections with questionnaires under native parity");
 assert.match(app, /function renderOptionalFeatureSection\(section, features\)[\s\S]*optional-feature-section[\s\S]*optional-feature-section-title[\s\S]*optional-feature-section-list/, "optional feature panel should render subsection headers and lists");
 assert.match(app, /async function refreshQuestionnaireFeatureAvailability[\s\S]*\/api\/tools\?scope=session[\s\S]*tool\?\.name === "questionnaire"/, "questionnaire availability should be detected from the active Pi tab's loaded tool capability");
-assert.match(app, /async function setToolManagedOptionalFeatureEnabled\(feature, enabled\)[\s\S]*\/api\/tools\?scope=session[\s\S]*enabledTools[\s\S]*scope: "session"[\s\S]*\/api\/tools/, "the questionnaire row toggle should update the active session tool allowlist while preserving other tool states");
+assert.match(app, /async function setToolManagedOptionalFeatureEnabled\(feature, enabled\)[\s\S]*\/api\/tools\?scope=session[\s\S]*const enabledTools = new Set[\s\S]*api\("\/api\/tools", \{[\s\S]*body: \{ enabledTools: \[\.\.\.enabledTools\], scope: "session" \}/, "the questionnaire row toggle should update the active session tool allowlist while preserving other tool states");
 assert.match(app, /detected && feature\.manageWith === "tools"[\s\S]*action\.textContent = enabled \? "Disable" : "Enable"[\s\S]*setToolManagedOptionalFeatureEnabled/, "loaded questionnaire access should expose a dedicated enable or disable action");
 assert.match(app, /if \(detected && feature\.setup\)[\s\S]*"optional-feature-action setup", "Setup"[\s\S]*openOptionalFeatureSetup/, "detected configurable optional features should expose a separate Setup action");
 assert.match(app, /case "skills": return openNativeSkillsSelector\(\)/, "TUI Skills command Setup should open the browser-native Skills Setup dialog");
@@ -1188,7 +1204,7 @@ assert.match(
   /setSidePanelSectionCollapsed\(record, !record\.section\.classList\.contains\("collapsed"\)\);/,
   "side-panel section toggles should open and close each section independently",
 );
-assert.match(app, /function renderCodexUsage\(\)/, "frontend should render Codex usage buckets in the side panel");
+assert.match(usageControllerSource, /function renderCodexUsage\(\)/, "frontend should render Codex usage buckets in the side panel");
 assert.match(app, /function renderSubagents\(\)[\s\S]*subagentTabsWithRunningAgents\(\)[\s\S]*totalGates[\s\S]*renderSubagentTabGroup\(tab\)/, "frontend should group running subagents and retained retry gates by terminal and session");
 assert.match(app, /function renderSubagents\(\)[\s\S]*activeTabs\.reduce\(\(count, tab\) => count \+ Number\(tab\.runningAgents \|\| 0\), 0\)[\s\S]*subagentCountBadge\.textContent = String\(totalAgents\)/, "the subagent count badge should derive visible agent totals without counting workflow containers or retry-gated attempts twice");
 const workflowControllerSource = appFunctionSource("subagentIsWorkflowController", "subagentCapabilities");
@@ -1218,7 +1234,7 @@ assert.doesNotMatch(compactSubagentAgentSource, /subagent-agent-meta|subagentExe
 assert.doesNotMatch(compactSubagentRunSource, /subagent-run-(?:header|title|meta|state)|`Run \$\{/, "side-panel run groups should not repeat IDs, metadata headers, or state badges");
 assert.match(compactSubagentRunSource, /Dismiss finished run[\s\S]*dismissSubagentRun\(tab, run\)/, "compact terminal subagent runs should retain their dismiss action");
 assert.match(compactSubagentRunSource, /subagentRunCanCancel\(run\)[\s\S]*Cancel entire subagent run[\s\S]*openSubagentCancelDialog\(tab, run\)/, "compact running subagent runs should retain whole-run cancellation through the shared dialog");
-assert.match(app, /function renderSubagentTerminalView\(\)[\s\S]*subagentRunElapsed\(view\.run\)[\s\S]*subagentExecutionFacts\(agent\)[\s\S]*parent \$\{parent\?\.title[\s\S]*run \$\{view\.runId\}/, "the dedicated subagent view should own elapsed, execution, parent, and run details removed from the side panel");
+assert.match(app, /function renderSubagentTerminalView\(\)[\s\S]*subagentRunElapsed\(view\.run\)[\s\S]*subagentExecutionFacts\(agent\)[\s\S]*parent \$\{threadDisplayTitle\(parent\?\.title[\s\S]*run \$\{view\.runId\}/, "the dedicated subagent view should own elapsed, execution, parent, and run details removed from the side panel");
 const subagentTerminalViewGroupsSource = appFunctionSource("subagentTerminalViewGroups", "renderSubagentTerminalTab");
 const subagentTerminalGroupingContext = vm.createContext({
   subagentTerminalViews: new Map([
@@ -1248,13 +1264,16 @@ assert.match(css, /\.subagent-agent-list \{[\s\S]*gap: 0\.16rem;[\s\S]*\.subagen
 assert.match(css, /\.subagent-workflow \{[\s\S]*\.subagent-workflow-header \{[\s\S]*list-style: none;[\s\S]*\.subagent-workflow:not\(\[open\]\)[\s\S]*\.subagent-workflow-agents \{[\s\S]*border-left:/, "workflow disclosures should have a distinct collapsible header and visually nested child-agent section");
 assert.match(app, /function renderSubagentOverlayWidget\(\)[\s\S]*openSubagentCancelDialog\(selection\.tab, selection\.run, agent\)[\s\S]*subagent-overlay-cancel-action/, "running overlays should route cancel through the shared dialog");
 assert.match(app, /subagentTerminalCancelButton[\s\S]*openSubagentCancelDialog\(view\.tab \|\| \{ tabId: view\.parentTabId, tabTitle: view\.parentTitle \}, view\.run, view\.data\?\.agent \|\| view\.agent\)/, "running terminal headers should route cancel through the shared dialog");
-assert.match(app, /function openSubagentCancelDialog\(tab, run, agent = null\)[\s\S]*agentCount[\s\S]*The entire run will be stopped[\s\S]*subagentCancelDialog\.showModal\(\)[\s\S]*async function submitSubagentCancel\(\)[\s\S]*api\("\/api\/subagents\/cancel", \{[\s\S]*method: "POST",[\s\S]*scoped: false,[\s\S]*group: selection\.groupId,[\s\S]*runId: selection\.runId/, "the shared cancel dialog should honestly describe and submit whole-run cancellation with optional reason/note data");
+assert.match(app, /function openSubagentCancelDialog[\s\S]*activityAgents\.beginCancel\(tab, run, agent\)[\s\S]*The entire run will be stopped[\s\S]*subagentCancelDialog\.showModal\(\)/, "the shared dialog explains whole-run cancellation and captures its owner");
+assert.match(agentsControllerSource, /async function submitCancel[\s\S]*api\("\/api\/subagents\/cancel", \{[\s\S]*method: "POST",[\s\S]*scoped: false,[\s\S]*group: selection\.groupId,[\s\S]*runId: selection\.runId/, "cancellation retains the explicit owning group and run");
 assert.doesNotMatch(app, /body: \{\n\s+tab: selection\.tabId,\n\s+runId: selection\.runId,\n\s+\.\.\.\(selection\.agentId/, "the frontend must not imply unsupported per-agent cancellation in its request contract");
-assert.match(app, /async function dismissSubagentRun\(tab, run\)[\s\S]*api\("\/api\/subagents\/dismiss", \{[\s\S]*method: "POST",[\s\S]*scoped: false,[\s\S]*body: \{ group: tab\.groupId, runId: run\.id \}/, "finished-run dismiss controls should call the owning group endpoint");
-assert.match(app, /function finishedSubagentRunSelections\(data = latestSubagents\)[\s\S]*subagentRunIsTerminal\(run\) && subagentRunCanDismiss\(run\)[\s\S]*async function clearFinishedSubagentRuns\(\{ automatic = false \} = \{\}\)[\s\S]*for \(const selection of selections\)[\s\S]*api\("\/api\/subagents\/dismiss", \{[\s\S]*body: \{ group: selection\.groupId, runId: selection\.runId \}[\s\S]*subagentsClearFinishedButton\.disabled = subagentsLoading \|\| subagentsClearingFinished \|\| finishedRuns\.length === 0/, "clear-finished should dismiss visible terminal ordinary runs while preserving retry-gated, active, and workflow runs");
+assert.match(agentsControllerSource, /async function dismiss\(tab, run\)[\s\S]*const groupId = tab\.groupId;[\s\S]*const runId = run\.id;[\s\S]*api\("\/api\/subagents\/dismiss", \{ method: "POST", scoped: false, body: \{ group: groupId, runId \} \}\)/, "finished-run dismiss controls retain the owning group endpoint");
+assert.match(app, /function finishedSubagentRunSelections[\s\S]*subagentRunIsTerminal\(run\) && subagentRunCanDismiss\(run\)/, "clear policy excludes active and ineligible runs");
+assert.match(agentsControllerSource, /for \(const selection of selections\)[\s\S]*body: \{ group: selection\.groupId, runId: selection\.runId \}/, "clear applies exact selected group/run identities");
+assert.match(app, /subagentsClearFinishedButton\.disabled = activityAgents\.getSnapshot\(\)\.loading \|\| activityAgents\.getSnapshot\(\)\.clearingFinished \|\| finishedRuns\.length === 0/, "clear controls use the sole loading/clearing owner");
 assert.match(app, /subagentsAutoClearButton\?\.addEventListener\("click", \(\) => \{[\s\S]*setSubagentAutoClearEnabled\(!subagentAutoClearEnabled, \{ announce: true \}\)/, "the Auto-Clear button should toggle the selected browser preference");
 assert.match(app, /SUBAGENT_AUTO_CLEAR_STORAGE_KEY = "pi-webui-subagent-auto-clear"[\s\S]*function readStoredSubagentAutoClearEnabled\(\)[\s\S]*localStorage\.getItem\(SUBAGENT_AUTO_CLEAR_STORAGE_KEY\) === "1"[\s\S]*function setSubagentAutoClearEnabled[\s\S]*clearFinishedSubagentRuns\(\{ automatic: true \}\)[\s\S]*restoreSubagentAutoClearSetting\(\)/, "Auto-Clear should persist per browser and immediately clear already-finished ordinary runs when selected");
-assert.match(app, /async function refreshSubagents\(\)[\s\S]*refreshed = true[\s\S]*refreshed && subagentAutoClearEnabled && finishedSubagentRunSelections\(\)\.length[\s\S]*await clearFinishedSubagentRuns\(\{ automatic: true \}\)/, "successful overview refreshes should await guarded auto-clear when terminal runs appear");
+assert.match(agentsControllerSource, /refreshed && getAutoClear\(\) && finishedSelections\(data\)\.length[\s\S]*await clearFinished\(\{ automatic: true \}\)/, "successful refreshes await guarded Auto-Clear");
 assert.match(app, /subagentsClearFinishedButton\?\.addEventListener\("click", \(\) => \{[\s\S]*clearFinishedSubagentRuns\(\)/, "the clear-finished button should invoke the guarded bulk dismissal action");
 assert.match(css, /\.subagents-status-row \{[\s\S]*display: flex;[\s\S]*\.subagents-auto-clear-button,[\s\S]*\.subagents-clear-finished-button \{[\s\S]*min-height: 2rem;[\s\S]*\.subagents-auto-clear-button\[aria-pressed="true"\]/, "the clear controls should share a compact row with a visible Auto-Clear selected state");
 const clearFinishedSourceStart = app.indexOf("function finishedSubagentRunSelections(");
@@ -1280,17 +1299,22 @@ const clearFinishedContext = {
   },
   subagentRunIsTerminal(run) { return ["done", "failed", "cancelled"].includes(run?.status); },
   subagentRunCanDismiss(run) { return clearFinishedContext.subagentRunIsTerminal(run) && run?.source !== "workflow"; },
-  subagentsClearingFinished: false,
-  subagentsLoading: false,
-  refreshSubagentsTimer: null,
-  clearTimeout() {},
-  renderSubagents() {},
-  async api(path, options) { clearFinishedCalls.push({ path, options }); },
-  async refreshSubagents() { clearFinishedRefreshes += 1; },
-  scheduleRefreshSubagents() {},
-  addEvent(message, level, options = {}) { clearFinishedEvents.push({ message, level, options }); },
 };
-vm.runInNewContext(`${app.slice(clearFinishedSourceStart, clearFinishedSourceEnd)}\nthis.runClearFinishedSubagentRuns = clearFinishedSubagentRuns;`, clearFinishedContext);
+vm.runInNewContext(`${app.slice(clearFinishedSourceStart, clearFinishedSourceEnd)}\nthis.runClearFinishedSubagentRuns = clearFinishedSubagentRuns; this.finishedSelections = finishedSubagentRunSelections;`, clearFinishedContext);
+clearFinishedContext.activityAgents = createActivityAgentsController({
+  getVisibility: () => "visible", getAutoClear: () => false,
+  finishedSelections: data => clearFinishedContext.finishedSelections(data),
+  canCancel: () => false, canDismiss: clearFinishedContext.subagentRunCanDismiss,
+  isAttachedProjection: () => false, agentCount: () => 0,
+  setTimeout() { return 1; }, clearTimeout() {},
+  async api(path, options) {
+    if (path === "/api/subagents") { clearFinishedRefreshes += 1; return { data: clearFinishedContext.latestSubagents }; }
+    clearFinishedCalls.push({ path, options });
+  },
+  onEvent(message, level, options = {}) { clearFinishedEvents.push({ message, level, options }); },
+});
+await clearFinishedContext.activityAgents.refresh();
+clearFinishedRefreshes = 0;
 await clearFinishedContext.runClearFinishedSubagentRuns();
 assert.deepEqual(JSON.parse(JSON.stringify(clearFinishedCalls)), [
   { path: "/api/subagents/dismiss", options: { method: "POST", scoped: false, body: { group: "tab:tab-a", runId: "done-a" } } },
@@ -1298,10 +1322,12 @@ assert.deepEqual(JSON.parse(JSON.stringify(clearFinishedCalls)), [
   { path: "/api/subagents/dismiss", options: { method: "POST", scoped: false, body: { group: "tab:tab-b", runId: "cancelled-b" } } },
 ], "clear-finished should call the existing dismiss endpoint only for visible terminal ordinary runs");
 assert.equal(clearFinishedRefreshes, 1, "clear-finished should refresh the overview once after all dismissals");
-assert.equal(clearFinishedContext.subagentsClearingFinished, false, "clear-finished should always release its in-flight guard");
+assert.equal(clearFinishedContext.activityAgents.getSnapshot().clearingFinished, false, "clear-finished should always release its in-flight guard");
 assert.deepEqual(clearFinishedEvents, [{ message: "cleared 3 finished subagent runs", level: "info", options: {} }]);
 clearFinishedContext.latestSubagents = { tabs: [{ tabId: "tab-c", runs: [{ id: "done-c", status: "done", source: "async" }] }] };
+await clearFinishedContext.activityAgents.refresh();
 await clearFinishedContext.runClearFinishedSubagentRuns({ automatic: true });
+clearFinishedContext.activityAgents.dispose();
 assert.deepEqual(JSON.parse(JSON.stringify(clearFinishedEvents.at(-1))), {
   message: "auto-cleared",
   level: "info",
@@ -1312,7 +1338,7 @@ assert.deepEqual(JSON.parse(JSON.stringify(clearFinishedEvents.at(-1))), {
     aggregatePlural: "finished subagent runs",
   },
 }, "automatic clearing should use one keyed event whose cleared-run counter can accumulate");
-const addEventSource = appFunctionSource("addEvent", "closeEventTreeContextMenu");
+const addEventSource = eventsControllerSource.slice(eventsControllerSource.indexOf("function addEvent("), eventsControllerSource.indexOf("function renderEventsUnreadBadge("));
 assert.match(addEventSource, /eventAggregateKey === stableAggregateKey[\s\S]*eventAggregateCount[\s\S]*priorAggregate\?\.remove\(\)[\s\S]*eventLog\.prepend\(line\)/, "keyed events should replace their prior row, retain a cumulative count, and return to the top of the log");
 assert.match(addEventSource, /aggregateCount === 1 \? aggregateSingular : aggregatePlural/, "aggregate rows should keep singular and plural summaries accurate");
 const aggregateEventLog = {
@@ -1345,11 +1371,12 @@ function aggregateEventNode(_tag, className = "", text = "") {
   };
 }
 const aggregateEventContext = {
-  elements: { eventLog: aggregateEventLog },
+  nodes: { eventLog: aggregateEventLog },
+  disposed: false,
   make: aggregateEventNode,
   applyEventFilter() {},
   jumpToChatEvent() {},
-  showNoticeToast() {},
+  onNotice() {},
   noteUnreadEvent() {},
 };
 vm.runInNewContext(`${addEventSource}\nthis.runAddEvent = addEvent;`, aggregateEventContext);
@@ -1510,8 +1537,8 @@ const subagentWidgetSource = appFunctionSource("renderSubagentOverlayWidget", "s
 assert.ok(subagentWidgetSource.includes("const visibleFallbackText = !hasStructuredTranscript ? fallbackText : emptyTranscriptFallback;"), "the widget should render a fallback instead of leaving structured-but-hidden output blank");
 assert.ok(subagentWidgetSource.includes("if (visibleFallbackText) {"), "the widget should append the nonblank fallback bubble");
 assert.ok(subagentWidgetSource.includes("if (running) appendSubagentRunIndicator(output, { agent, run: selection.run });"), "running subagent widgets should append the shared live activity indicator");
-assert.match(app, /api\("\/api\/subagents", \{ scoped: false \}\)/, "frontend should refresh the cross-tab subagent overview");
-assert.match(app, /SUBAGENTS_ACTIVE_REFRESH_MS = 1500/, "running subagents should receive a fast live refresh cadence");
+assert.match(agentsControllerSource, /api\("\/api\/subagents", \{ scoped: false \}\)/, "frontend should refresh the cross-tab subagent overview");
+assert.match(agentsControllerSource, /ACTIVE_REFRESH_MS = 1500/, "running subagents retain their live refresh cadence");
 assert.match(server, /url\.pathname === "\/api\/subagents" && req\.method === "GET"[\s\S]*await webuiSubagentsData\(\)/, "server should await enriched cross-tab running-subagent titles");
 assert.match(server, /async function resolveSubagentDisplayTitle\(tab\)[\s\S]*tab\.titleSource !== "auto"[\s\S]*get_messages[\s\S]*message\?\.role === "user"[\s\S]*generatedTabTitleFromPrompt\(extractSessionTextContent\(firstUserMessage\?\.content\)\)/, "existing auto-named subagent groups should recover their longer title from the first user message without relaunching children");
 assert.match(server, /const tabSummaries = await Promise\.all\([\s\S]*runs\.length \|\| gates\.length \|\| tab\.webuiAgentRuns\?\.instances\?\.length \? await resolveSubagentDisplayTitle\(tab\) : tab\.title/, "subagent title recovery should run once for visible run and retry-gate groups");
@@ -1536,9 +1563,10 @@ assert.equal(await resolveSubagentDisplayTitleContext.runResolveSubagentDisplayT
 assert.equal(subagentTitleMessageReads, 1, "title recovery should read the existing parent conversation once and must not require spawning another subagent");
 assert.match(server, /url\.pathname === "\/api\/subagents\/output" && req\.method === "GET"[\s\S]*canonicalWebuiSubagentOutputData\(groupId, runId, agentId\)[\s\S]*webuiSubagentOutputData\(getRequestedTab\(req, url\), runId, agentId\)/, "server should expose selected running subagent output only through its owning group or tab");
 assert.match(server, /rememberWebuiSubagentsStatusEvent\(tab, event\)/, "server should ingest the helper's structured subagent status without forwarding internal JSON to the browser footer");
-assert.match(server, /PI_RPC_JSONL_LINE_MAX_BYTES = 32 \* 1024 \* 1024/, "Pi RPC JSONL parsing should use an explicit line-size limit with inline-image headroom");
-assert.match(server, /function ensureStderrMirrorErrorHandler\(stream\)[\s\S]*stream\.on\("error"/, "Pi stderr mirroring should contain asynchronous closed-sink failures");
-assert.match(server, /type: "pi_stdout_line_too_large"[\s\S]*discardingOversizedLine/, "oversized unterminated Pi RPC lines should be discarded until their newline");
+assert.match(rpcProtocol, /PI_RPC_JSONL_LINE_MAX_BYTES = 32 \* 1024 \* 1024/, "Pi RPC JSONL parsing should use an explicit line-size limit with inline-image headroom");
+assert.match(rpcTransports, /import \{ PI_RPC_JSONL_LINE_MAX_BYTES \} from "\.\.\/rpc-supervisor-protocol\.mjs"/, "direct and supervised transports must share the protocol line limit");
+assert.match(rpcTransports, /function ensureStderrMirrorErrorHandler\(stream\)[\s\S]*stream\.on\("error"/, "Pi stderr mirroring should contain asynchronous closed-sink failures");
+assert.match(rpcTransports, /type: "pi_stdout_line_too_large"[\s\S]*discardingOversizedLine/, "oversized unterminated Pi RPC lines should be discarded until their newline");
 assert.match(helper, /SUBAGENT_RPC_REQUEST_EVENT = "subagents:rpc:v1:request"/, "Web UI helper should use pi-subagents' stable status RPC");
 assert.match(helper, /case "subagent-output":[\s\S]*subagentOutputSnapshot\(payload\)/, "Web UI helper should return bounded live state and recent output for the selected child agent");
 assert.match(helper, /function subagentTranscriptOutput\(sessionFile\)[\s\S]*const empty = \{ recentOutput: \[\], transcript: \[\] \}[\s\S]*transcript: subagentTranscriptMessages\(boundedCandidates\)/, "subagent transcript extraction should return bounded structured entries alongside recentOutput");
@@ -1546,8 +1574,8 @@ assert.match(helper, /line\.trim\(\)\.toLowerCase\(\) === "\(no output\)"/, "sub
 assert.match(server, /function normalizeWebuiSubagentTranscript\(value\)[\s\S]*remainingParts = WEBUI_SUBAGENT_OUTPUT_LINE_LIMIT[\s\S]*const transcript = normalizeWebuiSubagentTranscript\(rawAgent\.transcript\)/, "server output normalization should preserve the structured transcript under the existing line limit");
 assert.match(helper, /SUBAGENT_ASYNC_STARTED_EVENT = "subagent:async-started"[\s\S]*SUBAGENT_ASYNC_COMPLETE_EVENT = "subagent:async-complete"/, "Web UI helper should track async subagent lifecycle events");
 assert.match(helper, /pi\.on\("tool_execution_start"[\s\S]*event\.toolName !== "subagent"[\s\S]*pi\.on\("tool_execution_end"/, "Web UI helper should track foreground subagent executions");
-assert.match(app, /if \(normalized === "prolite"\) return "Usage";/, "Codex Prolite plan labels should display as Usage in the side panel");
-assert.match(app, /api\(`\/api\/codex-usage\$\{suffix\}`, \{ scoped: false \}\)/, "Codex usage should load through a server endpoint without browser credentials");
+assert.match(usageControllerSource, /if \(normalized === "prolite"\) return "Usage";/, "Codex Prolite plan labels should display as Usage in the side panel");
+assert.match(usageControllerSource, /api\(`\/api\/codex-usage\$\{suffix\}`, \{ scoped: false \}\)/, "Codex usage should load through a server endpoint without browser credentials");
 assert.match(app, /restoreSidePanelSectionState\(\);\n[\s\S]{0,200}?bindSidePanelSectionToggles\(\);/, "side panel section state should restore before toggles are bound");
 assert.match(app, /OPTIONAL_FEATURES_STORAGE_KEY/, "optional feature disable toggles should persist in browser storage");
 assert.match(app, /GIT_FOOTER_WEBUI_STATUS_KEY = "git-footer-webui"/, "git footer Web UI data should be received as an extension-owned status payload");
@@ -1626,7 +1654,7 @@ assert.match(app, /let footerBranchCreateDraft = \{ type: "", name: "" \}/, "new
 assert.match(app, /function footerBranchCreateType\(value = footerBranchCreateDraft\.type\) \{\n\s+return slugifyGitBranchPart\(value\);\n\}/, "branch type suggestions should not restrict or default custom user-entered prefixes");
 assert.match(app, /const slash = make\("span", "footer-branch-create-slash", "\/"\)/, "branch creation should visibly separate the prefix and user input with a slash");
 assert.match(app, /function gitWorktreeCreateCommandDisplay\(branch, state = footerBranchPickerState, baseRef = "origin\/main"\)[\s\S]*git worktree add -b[\s\S]*preview\.textContent = gitWorktreeCreateCommandDisplay\(branchName \|\| footerBranchCreatePreviewName\(\), state\)/, "branch worktree creation should preview the default origin/main start point");
-assert.match(app, /function footerBranchCreateTooltip\(branchName = footerBranchCreateName\(\), state = footerBranchPickerState\)[\s\S]*A branch worktree is a separate checkout for parallel changes\.[\s\S]*origin\/main \(default\)[\s\S]*creates the worktree, then asks whether to open and switch to it in a separate Pi tab[\s\S]*does not switch this tab's branch, commit, push, or delete anything[\s\S]*ignored dependencies such as node_modules or \.venv are not copied/, "create worktree button should explain the base choice and post-creation switch choice");
+assert.match(app, /function footerBranchCreateTooltip\(branchName = footerBranchCreateName\(\), state = footerBranchPickerState\)[\s\S]*A branch worktree is a separate checkout for parallel changes\.[\s\S]*origin\/main \(default\)[\s\S]*creates the worktree, then asks whether to open and switch to it in a separate Pi thread[\s\S]*does not switch this thread's branch, commit, push, or delete anything[\s\S]*ignored dependencies such as node_modules or \.venv are not copied/, "create worktree button should explain the base choice and post-creation switch choice");
 assert.match(html, /id="gitWorktreeBaseDialog"[\s\S]*id="gitWorktreeBaseOriginMain"[^>]*value="origin\/main" checked[\s\S]*id="gitWorktreeBaseCurrentHead"[^>]*value="HEAD"[\s\S]*id="gitWorktreeBaseCreateButton"/, "worktree creation should present an origin/main-default base picker with a current-HEAD alternative");
 assert.match(app, /function chooseGitWorktreeBase\(branch\)[\s\S]*gitWorktreeBaseOriginMain\.checked = true[\s\S]*gitWorktreeBaseCurrentHead\.checked = false/, "the worktree base picker should reset to origin/main for every creation");
 assert.match(css, /\.git-worktree-base-option:has\(input:checked\)[\s\S]*border-color:/, "the selected worktree base should be visibly highlighted");
@@ -1650,8 +1678,9 @@ assert.match(app, /async function createFooterGitBranchWorktree\(branch = footer
 assert.match(app, /async function confirmSwitchToCreatedFooterGitWorktree\(payload = \{\}, branchName = ""\)[\s\S]*payload\.created !== true[\s\S]*title: "Switch to new worktree\?"[\s\S]*switch to it now\?[\s\S]*confirmLabel: "Switch to worktree"[\s\S]*danger: false/, "newly created worktrees should prompt with a non-danger action before switching tabs");
 assert.match(app, /if \(payload\.created\) \{[\s\S]*openWorktreeResponseTab\(response, \{ branchName, action: "create" \}\)[\s\S]*confirmSwitchToCreatedFooterGitWorktree\(payload, branchName\)[\s\S]*openFooterGitWorktree\(worktreePath, \{ branchName, tabContext, skipConfirm: true, announce: false \}\)[\s\S]*\} else \{[\s\S]*openFooterGitWorktree\(worktreePath, \{ branchName, tabContext, skipConfirm: true \}\)/, "creation should switch only after acceptance while existing-worktree results retain automatic opening");
 assert.match(app, /async function openFooterGitWorktree\(path,[\s\S]*api\("\/api\/git-worktrees\/open", \{ method: "POST", body: \{ path: worktreePath, sessionMode: "fork-current", openTab: true \}/, "accepted and existing worktree actions should call the worktree open endpoint");
-assert.match(app, /elements\.newTabWorktreeButton\?\.addEventListener\("click", \(\) => openBranchWorktreePicker\(\)\)/, "new-tab menu branch worktree item should open the picker");
-assert.match(app, /\{ kind: "Git", label: "Branch worktree"[\s\S]*openBranchWorktreePicker\(\)/, "command palette should include branch worktree actions");
+assert.match(app, /async function chooseNewThreadPaletteEntry\(choice\) \{[\s\S]*?if \(choice\.kind === "worktree"\) openBranchWorktreePicker\(\);/, "the folder palette's Branch worktree entry should open the picker");
+assert.match(app, /mobileShellElement\("mobileNewWorktreeButton"\)\?\.addEventListener\("click", \(\) => openBranchWorktreePicker\(\)\)/, "the mobile Worktree action should open the picker directly");
+assert.match(app, /\{ id: "project:branch-worktree", scope: "project", destination: "project", kind: "Git", label: "Branch worktree"[\s\S]*openBranchWorktreePicker\(\)/, "command palette should include branch worktree actions");
 assert.match(app, /dashboardAction\("Branch worktree", \(\) => openBranchWorktreePicker\(\), "worktree"\)/, "workspace dashboard should expose a branch worktree action");
 assert.match(app, /async function createFooterGitBranch\(branch = footerBranchCreateName\(\)\)[\s\S]*confirmFooterGitBranchAction\(branchName, \{ create: true, requireConfirm: true/, "advanced in-place branch creation should still require confirmation before running git switch -c");
 assert.match(app, /function footerBranchAgentWarningLines[\s\S]*WARNING:[\s\S]*still running or waiting for input in this Git working tree/, "branch create/switch confirmation should warn when an agent is active in the current git working tree");
@@ -1661,8 +1690,8 @@ assert.match(server, /url\.pathname === "\/api\/git-worktrees" && req\.method ==
 assert.match(server, /url\.pathname === "\/api\/git-worktrees\/open" && req\.method === "POST"[\s\S]*openExistingGitWorktreeTab\(tab, body\)/, "server should expose existing git worktree opening for branch tabs");
 assert.match(server, /url\.pathname === "\/api\/git-worktrees" && req\.method === "DELETE"[\s\S]*requireLocalhost\(req, "Removing Git worktrees is only allowed from localhost"\)[\s\S]*removeGitWorktreeForTab\(tab, body\)/, "server should guard destructive git worktree removal behind localhost and confirmation");
 assert.match(server, /url\.pathname === "\/api\/git-branch"[\s\S]*const remoteRef = requestedRemoteRef\(body\);[\s\S]*switchGitBranch\(tab\.cwd, body\.branch, \{ create: body\.create === true, remoteRef \}\)/, "server should preserve optional exact remote-ref intent for advanced footer branch switching");
-assert.match(server, /runGitReadCommandDetailed\(root, \["for-each-ref", "--format=%\(refname\)%09%\(symref\)"[\s\S]*remoteBranchesTruncated: remoteData\.truncated === true[\s\S]*item\.remote !== true && item\.name === targetBranch/, "server branch listing should parse full remote refs, expose truncation, and keep local branch guards local-only");
-assert.match(server, /async function switchGitBranch[\s\S]*BRANCH_CHECKED_OUT_ELSEWHERE[\s\S]*const args = create \? \["switch", "-c", targetBranch\] : \["switch", targetBranch\]/, "server branch switching should refuse branches checked out in another worktree before git switch");
+assert.match(gitMutations, /runGitReadCommandDetailed\(root, \["for-each-ref", "--format=%\(refname\)%09%\(symref\)"[\s\S]*remoteBranchesTruncated: remoteData\.truncated === true[\s\S]*item\.remote !== true && item\.name === targetBranch/, "server branch listing should parse full remote refs, expose truncation, and keep local branch guards local-only");
+assert.match(gitMutations, /async function switchGitBranch[\s\S]*BRANCH_CHECKED_OUT_ELSEWHERE[\s\S]*const args = create \? \["switch", "-c", targetBranch\] : \["switch", targetBranch\]/, "server branch switching should refuse branches checked out in another worktree before git switch");
 assert.match(app, /let latestStats = null/, "default footer should retain session stats for token and context display");
 assert.match(app, /async function refreshStats\(tabContext = activeTabContext\(\)\)[\s\S]*api\("\/api\/stats"/, "default footer should fetch session stats");
 assert.match(app, /function renderMinimalFooter\(\)[\s\S]*stats: fallbackFooterStats\(\)/, "minimal default footer should include token, cost, and context stats");
@@ -1684,7 +1713,7 @@ assert.match(app, /if \(response\.data\?\.level\) requestGitFooterWebuiPayload\(
 assert.match(app, /Loading git footer status…/, "missing git footer payload should show a loading state before declaring the extension unavailable");
 assert.match(app, /GIT_FOOTER_WEBUI_PAYLOAD_CACHE_KEY/, "git footer payloads should be cached across Web UI reloads");
 assert.match(app, /function setOptionalFeatureDisabled\(featureId, disabled\)[\s\S]*clearGitFooterWebuiPayloadCache\(\)/, "changing the git footer feature toggle should invalidate the cached footer payload");
-const workspaceInfoSource = server.match(/async function getWorkspaceInfo[\s\S]*?\r?\n}\r?\n\r?\nlet activeGitWorkflowProcess/)?.[0] || "";
+const workspaceInfoSource = server.match(/async function getWorkspaceInfo[\s\S]*?\r?\n}/)?.[0] || "";
 assert.ok(workspaceInfoSource, "server workspace info source should be inspectable");
 assert.doesNotMatch(workspaceInfoSource, /runCommand\("git"|branchStatus|isRepo/, "Web UI workspace endpoint should not duplicate git footer status collection");
 assert.match(app, /function renderOptionalFeatureDependentDisplays\(\)[\s\S]*renderOptionalFeatureControls\(\);[\s\S]*renderThemeSelect\(\);[\s\S]*renderWidgets\(\);[\s\S]*renderStatus\(\);[\s\S]*renderCommands\(\);[\s\S]*renderAllMessages\(\{ preserveScroll: true, forceRebuild: true \}\);[\s\S]*if \(streamRawText\) renderStreamingAssistantText\(\);/, "optional feature toggles should immediately refresh visible controls, commands, transcript, and live stream displays");
@@ -1730,7 +1759,7 @@ assert.match(app, /const WORKFLOW_MODE_RPC_WIDGET_KEY = "workflow-mode:rpc"[\s\S
 assert.match(app, /function workflowModeStateFromRpcPayload\(lines\)[\s\S]*payload\?\.type !== WORKFLOW_MODE_RPC_PAYLOAD_TYPE[\s\S]*normalizeWorkflowModeState/, "frontend should strictly validate structured Workflow Mode payloads");
 assert.match(app, /const workflowModeByTab = new Map\(\)/, "frontend should track Workflow Mode independently for each Pi tab");
 assert.match(app, /function renderWorkflowModeControls\(\)[\s\S]*workflow-mode-active[\s\S]*workflowModeButton[\s\S]*workflowModeChip/, "frontend should render toggle, active chip, and composer state from extension status");
-assert.match(app, /if \(pending\) elements\.workflowModeButton\.setAttribute\("aria-busy", "true"\);[\s\S]*else elements\.workflowModeButton\.removeAttribute\("aria-busy"\);[\s\S]*pending\s*\? "Updating JavaScript Workflow Mode for this Pi tab\."/, "Workflow Mode icon should expose valid pending busy semantics and accessible tooltip feedback");
+assert.match(app, /if \(pending\) elements\.workflowModeButton\.setAttribute\("aria-busy", "true"\);[\s\S]*else elements\.workflowModeButton\.removeAttribute\("aria-busy"\);[\s\S]*pending\s*\? "Updating JavaScript Workflow Mode for this Pi thread\."/, "Workflow Mode icon should expose valid pending busy semantics and accessible tooltip feedback");
 assert.match(app, /workflowOverlayOpenButton\.setAttribute\("aria-expanded", openAvailable \? "false" : "true"\)/, "Workflow overlay restore should keep disclosure state synchronized while visible or hidden");
 assert.match(app, /applyStyledTooltip\(elements\.workflowOverlayOpenButton, "Open the minimized workflow overlay\.", \{ ariaLabel: true, align: "end" \}\)/, "isolated Workflow restore should use the viewport-clamped floating tooltip");
 assert.match(app, /applyStyledTooltip\(elements\.workflowModeButton, tooltip, \{ ariaLabel: true, align: "end" \}\)/, "isolated Workflow Mode should use the viewport-clamped floating tooltip");
@@ -1748,7 +1777,7 @@ assert.match(app, /const workflowInspectorByTab = new Map\(\)[\s\S]*workflowInsp
 assert.match(app, /const workflowTerminalScrollByTab = new Map\(\);\s*const workflowSubprocessMinimizedByTab = new Set\(\);\s*const workflowOverlayMinimizedByTab = new Set\(\);/, "Workflow subprocess and complete-overlay minimize state should be isolated per browser tab");
 assert.match(app, /function setWorkflowOverlayMinimized\(minimized\)[\s\S]*workflowOverlayMinimizedByTab\.(?:add|delete)[\s\S]*renderWidgets\(\)[\s\S]*workflowOverlayOpenButton[\s\S]*workflow-overlay-close-button[\s\S]*focus\(\{ preventScroll: true \}\)/, "complete Workflow overlay minimize and restore should survive rerenders and move focus to the replacement control");
 assert.match(app, /function workflowOverlayHasContent\(\)[\s\S]*getWidgetLines\("workflow"\)\.length[\s\S]*getWidgetLines\("workflow:subprocess"\)/, "the Workflow restore affordance should remain available when only the legacy status/details widget remains");
-assert.match(app, /function renderWidgets\(\)[\s\S]*if \(!workflowOverlayIsMinimized\(\)\)[\s\S]*attachWorkflowOverlayCloseButton\(workflowInspectorWidget \|\| workflowSubprocessWidget\)[\s\S]*for \(const \[key, value\] of widgets\)[\s\S]*widgetFeatureId === "workflows" && workflowOverlayIsMinimized\(\)/, "closing the complete Workflow overlay should omit specialized surfaces and the legacy workflow status/details widget");
+assert.match(app, /function renderWidgets\(\)[\s\S]*if \(visible\("progress"\) && !workflowOverlayIsMinimized\(\)\)[\s\S]*attachWorkflowOverlayCloseButton\(workflowInspectorWidget \|\| workflowSubprocessWidget\)[\s\S]*for \(const \[key, value\] of widgets\)[\s\S]*widgetFeatureId === "workflows" && workflowOverlayIsMinimized\(\)/, "closing the complete Workflow overlay should omit specialized surfaces and the legacy workflow status/details widget");
 assert.match(app, /workflowOverlayOpenButton\?\.addEventListener\("click", \(\) => setWorkflowOverlayMinimized\(false\)\)/, "the Workflow-button restore affordance should reopen the complete overlay");
 assert.match(app, /function workflowInspectorSetMinimized\(minimized\)[\s\S]*workflowInspectorMinimizedByTab\.(?:add|delete)[\s\S]*renderWidgets\(\)[\s\S]*requestAnimationFrame[\s\S]*workflow-inspector-minimize-button[\s\S]*focus\(\{ preventScroll: true \}\)/, "Workflow inspector minimize state should survive rerenders and restore focus to the replacement control");
 assert.match(app, /function renderWorkflowInspectorWidget\(\)[\s\S]*workflow-inspector-body[\s\S]*workflow-inspector-minimize-button[\s\S]*minimized \? "Restore" : "Minimize"[\s\S]*minimizeButton\.type = "button"[\s\S]*aria-controls[\s\S]*aria-expanded[\s\S]*aria-label[\s\S]*if \(minimized\) return node/, "Workflow inspector should expose an accessible minimize and restore disclosure control");
@@ -1869,7 +1898,7 @@ assert.match(app, /gitWorkflow\.step === "generate"\) \{\n\s+const commitInputBu
 assert.match(app, /gitWorkflow\.step === "message"\) \{[\s\S]*const commitInputButton = renderGitWorkflowManualCommitInput\(\{ appendCommitButton: false \}\);[\s\S]*addGitWorkflowAction\("Regenerate"[\s\S]*gitWorkflowActions\.append\(commitInputButton\)/, "Commit choice stage should place Commit input immediately after Regenerate");
 assert.match(app, /async function commitGitWorkflow\(variant[\s\S]*variant === "input"[\s\S]*message: inputMessage/, "Commit input should send the typed message to the git workflow commit API");
 assert.match(app, /const donePatch = variant === "input"[\s\S]*message: true, commit: true/, "Commit input should mark both message and commit workflow processes done");
-assert.match(server, /\["short", "long", "input"\][\s\S]*cleanGitCommitMessageInput\(body\.message\)[\s\S]*git commit -m <input message>/, "server should accept typed git workflow commit messages");
+assert.match(gitMutations, /\["short", "long", "input"\][\s\S]*cleanGitCommitMessageInput\(body\.message\)[\s\S]*git commit -m <input message>/, "server should accept typed git workflow commit messages");
 assert.match(css, /\.git-workflow-message-input-row \{[\s\S]*flex:\s*1 1 100%/, "manual git workflow commit input should span the Message stage actions row");
 assert.match(css, /\.git-workflow-actions button\[data-tooltip\]::after \{[\s\S]*content:\s*attr\(data-tooltip\)[\s\S]*white-space:\s*pre-line/, "guided git workflow action tooltips should render multiline step lists");
 assert.match(app, /function gitBranchNamePromptMessage\(tabId = gitWorkflowActionTabId\(\)\)[\s\S]*hasLoadedGuidedGitNativeCommand\("git-branch-name", tabId\)[\s\S]*"\/git-branch-name"/, "guided git workflow should invoke native PR branch-name generation only when the extension command is available");
@@ -1889,23 +1918,23 @@ assert.match(app, /async function publishGitWorkflowRepository\(tabId, failure\)
 assert.match(app, /async function publishGitWorkflowRepository\([\s\S]*const confirmed = await appConfirmText\(\[[\s\S]*Repository name: \$\{repoName\}[\s\S]*Visibility: \$\{visibility\}[\s\S]*Branch to push: \$\{branch\}[\s\S]*Resulting remote: origin[\s\S]*if \(!confirmed\) return false;[\s\S]*gitWorkflowRequest\("\/api\/git-workflow\/publish", \{ body: \{ visibility, confirmed: true \}/, "guided git publication should confirm the derived name and omit a client-controlled name from the publish request");
 assert.match(app, /async function publishGitWorkflowRepository\([\s\S]*Published \$\{result\.repoName \|\| repoName\} as \$\{result\.visibility \|\| visibility\}\.[\s\S]*Remote: \$\{result\.remote \|\| "origin"\}[\s\S]*Branch: \$\{result\.branch \|\| branch\}[\s\S]*scheduleRefreshFooter\(\)/, "successful publication should report branch/remote metadata and refresh the footer");
 assert.doesNotMatch(app, /function promptGitPublishRepoName\(/, "publication should not ask the user to name a repository");
-assert.match(server, /case "\/api\/git-workflow\/publish": \{[\s\S]*const root = await getGitRoot\(cwd\);[\s\S]*const repoName = cleanGitHubRepoName\(path\.basename\(root\)\);[\s\S]*\["repo", "create", repoName, `--\$\{visibility\}`, "--source", "\.", "--remote", "origin", "--push"\][\s\S]*\{ cwd: root, timeoutMs:/, "server publication should derive the Git root directory name and let gh use system configuration while adding origin and pushing");
+assert.match(gitMutations, /async function publishGitRepository\(cwd, body = \{\}\) \{[\s\S]*const root = await getGitRoot\(cwd\);[\s\S]*const repoName = cleanGitHubRepoName\(path\.basename\(root\)\);[\s\S]*\["repo", "create", repoName, `--\$\{visibility\}`, "--source", "\.", "--remote", "origin", "--push"\][\s\S]*\{ cwd: root, timeoutMs:/, "server publication should derive the Git root directory name and let gh use system configuration while adding origin and pushing");
 assert.match(html, /<select id="textPromptSelect" class="dialog-input" aria-labelledby="textPromptTitle" hidden><\/select>/, "the application prompt should provide a native dropdown control");
 assert.match(app, /function appPromptSelect\([\s\S]*placeholderOption\.disabled = true;[\s\S]*placeholderOption\.selected = true;[\s\S]*select\.value = "";/, "selection prompts should require an explicit choice with no preselected value");
 assert.match(app, /async function promptGitPublishVisibility\(repoName\) \{[\s\S]*await appPromptSelect\(\{[\s\S]*\{ value: "public", label: "Public" \}[\s\S]*\{ value: "private", label: "Private" \}[\s\S]*placeholder: "Choose visibility…"/, "repository visibility should use a public/private dropdown with no default");
 assert.doesNotMatch(app, /async function promptGitPublishVisibility\(repoName\) \{[\s\S]{0,500}window\.prompt/, "repository visibility should not use the browser text prompt");
 assert.match(app, /function cleanGitPublishVisibilityInput\(value\)[\s\S]*if \(visibility !== "public" && visibility !== "private"\)[\s\S]*nothing was published/, "publication visibility must be exactly public or private");
 assert.doesNotMatch(app, /visibility = "(?:public|private)"/, "publication visibility should never be defaulted in the frontend");
-assert.match(server, /async function gitAddAllPayload\([\s\S]*platform\(\) === "win32"[\s\S]*findWindowsReservedGitPath\([\s\S]*windowsReservedGitPathFailure\(/, "guided git add should preflight Windows-reserved untracked paths before staging");
+assert.match(gitMutations, /async function gitAddAllPayload\([\s\S]*platform\(\) === "win32"[\s\S]*findWindowsReservedGitPath\([\s\S]*windowsReservedGitPathFailure\(/, "guided git add should preflight Windows-reserved untracked paths before staging");
 assert.match(app, /Pre-commit verification reminder[\s\S]*Continue with this commit/, "configured verification reminders should run before committing");
-assert.match(server, /function gitWorkflowGenerationProfileArgument\(profile\)[\s\S]*--firstpick-webui-generation-profile=/, "server should encode the configured generation profile for the native extension command");
-assert.match(server, /async function dispatchGitWorkflowGenerationAttempt\([\s\S]*record\.message = gitWorkflowGenerationPrompt\(record\.kind, record\.preferences, record\.nativeCommandName, profile\)[\s\S]*type: "prompt"/, "server should dispatch the configured generation profile without changing the tab profile");
-assert.match(server, /function consumeGitWorkflowGenerationEvent\(tab, event[\s\S]*event\?\.type !== "agent_settled"[\s\S]*settleGitWorkflowGeneration\(tab, record, settlement\)/, "server should settle the owned Guided Git attempt only after agent settlement");
-assert.match(server, /async function finishGitWorkflowGeneration\(tab, record[\s\S]*if \(tab\.gitWorkflowGeneration === record\) tab\.gitWorkflowGeneration = null;/, "server should finish Guided Git generation without restoring or changing the active tab model and effort");
+assert.match(gitGeneration, /function gitWorkflowGenerationProfileArgument\(profile\)[\s\S]*--firstpick-webui-generation-profile=/, "server should encode the configured generation profile for the native extension command");
+assert.match(gitGeneration, /async function dispatchGitWorkflowGenerationAttempt\([\s\S]*record\.message = gitWorkflowGenerationPrompt\(record\.kind, record\.preferences, record\.nativeCommandName, profile\)[\s\S]*type: "prompt"/, "server should dispatch the configured generation profile without changing the tab profile");
+assert.match(gitGeneration, /function consumeGitWorkflowGenerationEvent\(tab, event[\s\S]*event\?\.type !== "agent_settled"[\s\S]*settleGitWorkflowGeneration\(tab, record, settlement\)/, "server should settle the owned Guided Git attempt only after agent settlement");
+assert.match(gitGeneration, /async function finishGitWorkflowGeneration\(tab, record[\s\S]*if \(tab\.gitWorkflowGeneration === record\) tab\.gitWorkflowGeneration = null;/, "server should finish Guided Git generation without restoring or changing the active tab model and effort");
 assert.match(server, /case "\/api\/git-workflow\/branch-name": \{[\s\S]*generationId[\s\S]*readGitWorkflowBranchName\(cwd, \{ generationId/, "server should expose exactly correlated generated branch-name loading for the guided PR workflow");
 assert.match(server, /case "\/api\/git-workflow\/branch":[\s\S]*createGitWorkflowBranchWorktree\(tab, body\)/, "server should route guided PR branch creation through worktree tabs");
-assert.match(server, /async function createGitWorkflowBranchWorktree\(tab, body = \{\}\)[\s\S]*expectedStagedContentHashFromBody\(body\)[\s\S]*snapshotGitWorkflowBranchState\(root, tab\.cwd, expectedStagedContentHash\)[\s\S]*applyGitWorkflowBranchStateToWorktree\(snapshot, worktreePath\)[\s\S]*openWorktreeResultForTab\(tab, createdResult/, "guided PR worktree creation should verify and copy exact staged state before opening the worktree tab");
-assert.match(server, /case "\/api\/git-workflow\/create-pr":[\s\S]*runGitHubWorkflowCommand\(\["pr", "create"/, "server should create PRs with the GitHub CLI after confirmation");
+assert.match(gitWorktrees, /async function createGitWorkflowBranchWorktree\(tab, body = \{\}\)[\s\S]*expectedStagedContentHashFromBody\(body\)[\s\S]*snapshotGitWorkflowBranchState\(root, tab\.cwd, expectedStagedContentHash\)[\s\S]*applyGitWorkflowBranchStateToWorktree\(snapshot, worktreePath\)[\s\S]*openWorktreeResultForTab\(tab, createdResult/, "guided PR worktree creation should verify and copy exact staged state before opening the worktree tab");
+assert.match(gitMutations, /async function createGitWorkflowPr\(cwd, body = \{\}\)[\s\S]*runGitHubWorkflowCommand\(\["pr", "create"/, "server should create PRs with the GitHub CLI after confirmation");
 assert.doesNotMatch(app, /gitWorkflowVisibleTabId|Workflow belongs to/, "guided git workflow should not pin or show workflows outside their owning terminal tab");
 assert.match(app, /function renderReleaseNpmOutputWidget\(\)/, "release-npm live output should use a specialized Web UI renderer");
 assert.match(app, /async function refreshAppRunners\(tabContext = activeTabContext\(\)\)/, "frontend should load detected app runners for the active tab cwd");
@@ -1921,20 +1950,21 @@ assert.match(app, /function renderTerminalTabGroup\(group[\s\S]*tabGroupAppRunne
 assert.match(server, /function tabMeta\(tab\)[\s\S]*appRunner: publicAppRunnerState\(tab\.appRunner\)/, "server should expose app-runner state in tab metadata for inactive tab indicators");
 assert.match(app, /function renderAppRunnerInputForm\(run\)[\s\S]*app-runner-stdin-input[\s\S]*Send stdin/, "frontend should let running app runners receive line-oriented stdin");
 assert.match(app, /function renderAppRunnerContextForm\(run\)[\s\S]*app-runner-context-lines-input[\s\S]*Add to context/, "frontend should let users choose how many app-runner output lines to add to agent context");
-assert.match(app, /async function transferAppRunnerOutputToContext\(run, form\)[\s\S]*\/api\/app-runner\/context[\s\S]*scheduleRefreshMessages/, "frontend should submit selected app-runner output lines and refresh the transcript after context transfer");
-assert.match(app, /function appRunnerFailureState\(runnerId, error[\s\S]*failed to start app runner/, "frontend should render visible app-runner start failures instead of only logging them");
+assert.match(app, /async function transferAppRunnerOutputToContext\(run, form\)[\s\S]*projectRunners\.transferContext/, "frontend should submit through the runner owner");
+assert.match(app, /onRefreshContext: target =>[\s\S]*scheduleRefreshMessages\(120, target\)[\s\S]*scheduleRefreshState\(120, target\)/, "context transfer should retain the captured refresh target");
+assert.match(runnersControllerSource, /function failureState\(runnerId, error[\s\S]*failed to start app runner/, "runner ownership should retain visible start failure output");
 assert.match(app, /appRunnerCustomFeedback[\s\S]*Custom app runner was not saved/, "custom app-runner save failures should be shown inline in the dialog");
-assert.match(server, /function customAppRunnerUnavailableReason\(projectRoot, runner\)[\s\S]*Command is not available/, "server should explain why saved custom app runners are unavailable");
+assert.match(runnerService, /function customAppRunnerUnavailableReason\(projectRoot, runner\)[\s\S]*Command is not available/, "server should explain why saved custom app runners are unavailable");
 assert.match(server, /url\.pathname === "\/api\/app-runners" && req\.method === "GET"/, "server should expose detected app runners for the active tab cwd");
 assert.match(server, /url\.pathname === "\/api\/app-runner" && req\.method === "POST"/, "server should start selected app runners directly");
 assert.match(server, /url\.pathname === "\/api\/app-runner\/input" && req\.method === "POST"[\s\S]*sendAppRunnerInput/, "server should accept stdin for running app runners");
 assert.match(server, /url\.pathname === "\/api\/app-runner\/context" && req\.method === "POST"[\s\S]*transferAppRunnerContext/, "server should expose app-runner output transfer into agent context");
-assert.match(server, /function transferAppRunnerContext\(tab, body = \{\}\)[\s\S]*sendWebuiHelperCommand\(tab, "app-runner-context"[\s\S]*publicAppRunnerState\(run\)/, "server should send selected app-runner output lines through the Web UI helper as a custom context message");
-assert.match(server, /function addGoRunner\(runners, cwd\)[\s\S]*Go\/Golang app entry/, "server should detect Go\/Golang app runners");
-assert.match(server, /function addZigRunner\(runners, cwd\)[\s\S]*zig build run[\s\S]*zig run/, "server should detect Zig build and entry-file runners");
-assert.match(server, /function addCppRunners\(runners, cwd\)[\s\S]*C\/C\+\+ CMake executable target[\s\S]*language: "C\+\+"/, "server should detect C\/C++ CMake and entry-file runners");
-assert.match(server, /function addDockerComposeRunner\(runners, cwd\)[\s\S]*docker compose up[\s\S]*docker-compose up/, "server should detect Docker Compose runners");
-assert.match(server, /APP_RUNNER_SHELL_SCRIPT_DIRS = \["", "dev", "scripts", "dev\/scripts"\][\s\S]*function addShellScriptRunners\(runners, cwd\)/, "server should detect bash\/zsh\/fish scripts in root, dev, scripts, and dev\/scripts");
+assert.match(runnerService, /function transferAppRunnerContext\(tab, body = \{\}\)[\s\S]*sendWebuiHelperCommand\(tab, "app-runner-context"[\s\S]*publicAppRunnerState\(run\)/, "server should send selected app-runner output lines through the Web UI helper as a custom context message");
+assert.match(runnerService, /function addGoRunner\(runners, cwd\)[\s\S]*Go\/Golang app entry/, "server should detect Go\/Golang app runners");
+assert.match(runnerService, /function addZigRunner\(runners, cwd\)[\s\S]*zig build run[\s\S]*zig run/, "server should detect Zig build and entry-file runners");
+assert.match(runnerService, /function addCppRunners\(runners, cwd\)[\s\S]*C\/C\+\+ CMake executable target[\s\S]*language: "C\+\+"/, "server should detect C\/C++ CMake and entry-file runners");
+assert.match(runnerService, /function addDockerComposeRunner\(runners, cwd\)[\s\S]*docker compose up[\s\S]*docker-compose up/, "server should detect Docker Compose runners");
+assert.match(runnerService, /APP_RUNNER_SHELL_SCRIPT_DIRS = \["", "dev", "scripts", "dev\/scripts"\][\s\S]*function addShellScriptRunners\(runners, cwd\)/, "server should detect bash\/zsh\/fish scripts in root, dev, scripts, and dev\/scripts");
 assert.match(app, /const releaseNpmOutputExpandedByTab = new Map\(\)/, "release-npm output collapse state should be tracked per browser tab");
 assert.match(app, /const workflowTerminalScrollByTab = new Map\(\)/, "workflow terminal follow state should be isolated per browser tab");
 assert.match(app, /function renderReleaseNpmOutputDetails\(key, streamHeader, terminal, controls = null\)[\s\S]*node\.open = releaseNpmOutputExpandedByTab\.get\(stateKey\) !== false[\s\S]*release-npm-output-toggle/, "release-npm output should render as a browser-side details expander");
@@ -1948,7 +1978,7 @@ assert.match(app, /renderReleaseNpmOutputDetails\("release-npm:output", streamHe
 assert.match(app, /function renderReleaseAurOutputWidget\(\)/, "release-aur live output should use a specialized Web UI renderer");
 assert.match(app, /releaseNpmActionButton\("Abort", "\/release-abort", "danger"\)/, "release-npm Web UI output should expose an abort action");
 assert.match(app, /releaseNpmActionButton\("Abort", "\/release-aur abort", "danger"\)/, "release-aur Web UI output should expose an abort action");
-assert.match(app, /key === "todo-progress" && isOptionalFeatureEnabled\("todoProgressWidget"\) \? renderTodoProgressWidget\(key, lines\) : null/, "todo-progress should use the specialized widget renderer only when enabled");
+assert.match(app, /const isTodo = key === "todo-progress" && isOptionalFeatureEnabled\("todoProgressWidget"\)[\s\S]*const specialized = isTodo \? renderTodoProgressWidget\(key, lines\) : null/, "todo-progress should use the specialized widget renderer only when enabled");
 assert.match(app, /let transientMessages = \[\]/, "frontend should keep transient Web UI/extension output messages");
 assert.match(app, /function orderedTranscriptItems\(\)/, "frontend should merge persisted and transient messages chronologically");
 assert.match(app, /items\.sort\(\(a, b\) => a\.timestampMs - b\.timestampMs \|\| a\.order - b\.order\)/, "transient extension output should not pin itself below newer persisted messages");
@@ -2125,8 +2155,8 @@ assert.match(app, /function resizePromptInput\(\)/, "prompt textarea should auto
 assert.match(app, /elements\.promptInput\.addEventListener\("input", \(\) => \{[\s\S]*?resizePromptInput\(\);/, "prompt textarea should resize whenever the user edits it");
 assert.match(app, /function updateComposerModeButtons\(\)/, "composer should relocate Steer and Follow-up based on run state");
 assert.match(app, /const target = runActive \? elements\.composerRow : elements\.composerActionsPanel/, "Steer and Follow-up should move into the bottom row only while an agent run is active");
-assert.match(app, /const before = runActive \? elements\.abortButton : null/, "active Steer and Follow-up controls should sit before Abort and Send");
-assert.match(app, /button\.hidden = !runActive;\n\s+button\.disabled = !runActive;/, "Steer and Follow-up should be hidden and disabled when the agent is not running");
+assert.match(app, /const before = runActive && elements\.abortButton\.parentElement === target \? elements\.abortButton : null/, "active Steer and Follow-up retain their order when Abort shares the composer host");
+assert.match(app, /button\.hidden = !runActive \|\| focusedShell\?\.active === true;\n\s+button\.disabled = !runActive;/, "Steer and Follow-up should be hidden and disabled when the agent is not running");
 assert.match(app, /renderBusyPromptBehaviorTag\(\);\n\s+renderSendButtonMode\(runActive\);\n\s+document\.body\.classList\.toggle\("pi-run-active", runActive \|\| abortAvailable\)/, "composer mode refresh should keep the busy prompt behavior tag and Send label current");
 assert.match(app, /const abortHoldActive = isAbortLongPressActive\(\);\n\s+if \(!abortAvailable && !abortHoldActive\) resetAbortLongPressAffordance\(\);\n\s+elements\.abortButton\.hidden = !abortAvailable && !abortHoldActive;\n\s+elements\.abortButton\.disabled = \(!abortAvailable && !abortHoldActive\) \|\| abortRequestInFlight;/, "Abort should stay visible during an active hold even if run state briefly refreshes unavailable");
 assert.match(app, /document\.body\.classList\.toggle\("pi-run-active", runActive \|\| abortAvailable\)/, "run-active or abort-available state should be reflected in CSS for mobile composer layout");
@@ -2163,7 +2193,7 @@ assert.doesNotMatch(resetActiveTabUiSource, /btwWidgetDismissedIdsByTab/, "switc
 assert.match(app, /async function sendBtwPromptFromButton\(\)[\s\S]*?if \(!question\) \{\n\s+openBtwComposerWidget\(\);/, "empty /btw button should open the side-question widget input");
 assert.match(app, /function renderBtwComposerForm\(\)[\s\S]*?form\.requestSubmit\(\)[\s\S]*?sendBtwQuestion\(question\)/, "/btw widget input should submit each message as a /btw trigger");
 assert.match(app, /function makeBtwTransferIcon\(\)[\s\S]*?class", "btw-transfer-icon"[\s\S]*?function transferBtwContextToMain\(button, \{ transferMode = "full" \} = \{\}\)[\s\S]*?`\/btw-transfer \$\{encoded\}`[\s\S]*?streamingBehavior: "steer"[\s\S]*?Summarize & Steer/, "/btw widget should expose full-context and summary transfer actions that send steering context during active runs");
-assert.match(app, /async function sendPrompt\(kind = "prompt", explicitMessage, \{ targetTabId = activeTabId, throwOnError = false, streamingBehavior \} = \{\}\)[\s\S]*?if \(targetWasBusy\) body\.streamingBehavior = streamingBehavior \|\| busyBehavior/, "prompt sending should support a per-call streaming behavior override");
+assert.match(app, /async function sendPrompt\(kind = "prompt", explicitMessage, \{ targetTabId = activeTabId, throwOnError = false, streamingBehavior, preserveWhitespace = false \} = \{\}\)[\s\S]*?if \(targetWasBusy\) body\.streamingBehavior = streamingBehavior \|\| busyBehavior/, "prompt sending should support a per-call streaming behavior override");
 assert.match(app, /function appendOptimisticUserPrompt\([\s\S]*?transientMessages\.push\(\{[\s\S]*?role: "user"[\s\S]*?optimisticPromptId[\s\S]*?renderAllMessages\(\)/, "new prompts should enter transcript state optimistically before routing finishes");
 assert.match(app, /function reconcileOptimisticUserPrompts\([\s\S]*?persistedUserMessageCount\(messages\)[\s\S]*?message\?\.optimisticPromptId[\s\S]*?persistedUserCount <= Number\(message\.optimisticBaselineUserCount \|\| 0\)/, "optimistic prompts should remain renderable until a newer persisted user message supersedes them");
 assert.match(app, /function renderMessages\(messages\) \{\n\s+latestMessages = messages \|\| \[\];\n\s+reconcileOptimisticUserPrompts\(latestMessages\);/, "message refreshes should reconcile rather than blindly discard optimistic prompts");
@@ -2178,17 +2208,18 @@ assert.match(app, /async function runNativeCommandMenu\(command\)[\s\S]*?await h
 assert.match(app, /async function runNativeCommandMenu\(command\)[\s\S]*?sendPrompt\("prompt", command\)/, "generic native command menu should fall back to slash-command prompt execution");
 assert.match(app, /function setOptionsMenuOpen\(open\)/, "Options menu should have explicit open state");
 assert.match(app, /function nativeToolOriginTag\(resource\)[\s\S]*?sourceInfo\?\.source === "builtin"[\s\S]*?label: "Pi Native"[\s\S]*?label: "External"/, "Tools Setup should classify built-in Pi tools separately from external tools");
-assert.match(app, /renderNativeResourceToggles\(tools, \{[\s\S]*?getResourceTag: nativeToolOriginTag/, "Tools Setup should render Pi Native\/External tags");
+assert.match(app, /renderNativeResourceToggles\(resources, \{[\s\S]*?getResourceTag: kind === "tools" \? nativeToolOriginTag/, "Tools Setup should render Pi Native\/External tags");
 assert.match(app, /function nativeResourceScopeControl\(scope,[\s\S]*Session only[\s\S]*Global default/, "Tools and Skills Setup should expose a visible session/global scope control");
-assert.match(app, /\/api\/tools\?scope=\$\{encodeURIComponent\(scope\)\}[\s\S]*enabledTools: \[\.\.\.enabledTools\], scope/, "Tools Setup should load and save the selected scope");
-assert.match(app, /\/api\/skills\?scope=\$\{encodeURIComponent\(scope\)\}[\s\S]*enabledSkills: \[\.\.\.enabledSkills\], scope/, "Skills Setup should load and save the selected scope");
+assert.match(app, /async function openNativeToolsSelector\(\) \{ return openNativeResourceSelector\("tools"\); \}/, "Tools Setup should use the shared scoped resource owner");
+assert.match(app, /async function openNativeSkillsSelector\(\) \{ return openNativeResourceSelector\("skills"\); \}/, "Skills Setup should use the shared scoped resource owner");
+assert.match(app, /read: async \(kind, selection, target\)[\s\S]*nativeResourceSelectionQuery\(selection\)[\s\S]*const body = \{ scope: selection.scope \}[\s\S]*body\[kind === "tools" \? "enabledTools" : "enabledSkills"\] = change.enabled[\s\S]*tabId: target.tabId/, "resource reads and full-set writes must retain scope, kind and original target");
 assert.match(server, /updateWebuiSettings\(\(current\) => \(\{\s+resourceDefaults: \{\s+tools: \{[\s\S]*updateWebuiSettings\(\(current\) => \(\{\s+resourceDefaults: \{\s+skills: \{/, "server should persist global tool and skill defaults in the shared Web UI settings file");
 assert.match(helper, /const directive = branchResourceDirective\(lastBranchConfig\(ctx, TOOLS_CONFIG_TYPE\), "tools"\);[\s\S]*?directive\.pinned\s+\? \{ names: directive\.names \|\| \[\], source: "session" \}\s+: resolveResourceSelection\(resourceDefaults, "tools"/, "session tool entries should take precedence over global defaults");
 assert.match(helper, /const directive = branchResourceDirective\(lastBranchConfig\(ctx, SKILLS_CONFIG_TYPE\), "skills"\);[\s\S]*?if \(directive\.pinned && directive\.legacyDisabledNames !== null\)/, "session skill entries should take precedence over global defaults");
 assert.match(technical, /Session only[\s\S]*Global default/, "technical reference should document resource selector scopes");
 assert.match(app, /const tags = Array\.isArray\(item\.tags\)[\s\S]*?item\.badge, \.\.\.tags/, "native selector filtering should include extra resource tags");
 assert.match(app, /publishMenuContainer\?\.addEventListener\("pointerenter", \(\) => \{[\s\S]*?setPublishMenuOpen\(true\);[\s\S]*?\}\)/, "Publish menu should expand on hover");
-assert.match(app, /publishMenuContainer\?\.addEventListener\("pointerleave", \(\) => setPublishMenuOpen\(false\)\)/, "Publish menu should collapse after hover leaves");
+assert.match(app, /publishMenuContainer\?\.addEventListener\("pointerleave", \(\) => \{\s*if \(!publishMenuContainer\.contains\(document\.activeElement\)\) setPublishMenuOpen\(false\);\s*\}\)/, "Publish menu should collapse after hover leaves unless keyboard focus remains inside");
 assert.match(app, /nativeCommandMenuContainer\?\.addEventListener\("pointerenter", \(\) => \{[\s\S]*?setNativeCommandMenuOpen\(true\);[\s\S]*?\}\)/, "skills/tools command menu should expand on hover");
 assert.match(app, /nativeCommandMenuContainer\?\.addEventListener\("pointerleave", \(\) => setNativeCommandMenuOpen\(false\)\)/, "skills/tools command menu should collapse after hover leaves");
 assert.match(app, /optionsMenuContainer\?\.addEventListener\("pointerenter", \(\) => \{[\s\S]*?setOptionsMenuOpen\(true\);[\s\S]*?\}\)/, "Options menu should expand on hover");
@@ -2208,14 +2239,14 @@ assert.match(app, /async function openNativeSafetyGuardSetupDialog\([\s\S]*\/api
 assert.match(server, /url\.pathname === "\/api\/safety-guard\/config" && req\.method === "GET"[\s\S]*url\.pathname === "\/api\/safety-guard\/config" && req\.method === "POST"/, "server should expose native safety guard config read and save endpoints");
 assert.match(app, /async function openNativeGitWorkflowSetupDialog\([\s\S]*\/api\/git-workflow\/preferences[\s\S]*Manual review process[\s\S]*reviewProcessEnabled: controls\.reviewProcess\.select\.value === "enabled"/, "Web UI should persist the Guided Git review-process toggle through the preferences API");
 assert.match(extension, /Manual review process[\s\S]*reviewProcessEnabled: reviewProcess === "enabled"/, "Pi's reusable setup command should persist the same review-process choice");
-assert.match(app, /async function sendPrompt\(kind = "prompt", explicitMessage, \{ targetTabId = activeTabId, throwOnError = false, streamingBehavior \} = \{\}\)/, "prompt sending should accept direct messages that bypass the input field and optional target tab");
+assert.match(app, /async function sendPrompt\(kind = "prompt", explicitMessage, \{ targetTabId = activeTabId, throwOnError = false, streamingBehavior, preserveWhitespace = false \} = \{\}\)/, "prompt sending should accept direct messages that bypass the input field and optional target tab");
 assert.match(app, /const rawMessage = usesPromptInput \? elements\.promptInput\.value : explicitMessage/, "direct prompt sends should not read the input textarea");
 assert.match(app, /function clearPromptInputForRouting\(\{ usesPromptInput,[\s\S]*?if \(!usesPromptInput\) return;/, "direct prompt sends should preserve the input textarea draft");
 assert.match(app, /make\("button", "command-item"\)[\s\S]*?sendPrompt\("prompt", `\/\$\{command\.name\}`\)/, "side-panel command clicks should send the slash command directly");
 assert.match(app, /const NATIVE_SELECTOR_COMMANDS = new Set\(\["model", "settings", "summary", "summary-setup", "workflow-setup", "safety-guard-setup", "git-workflow-setup", "theme", "fork", "clone", "name", "resume", "tree", "login", "logout", "scoped-models", "tools", "skills"\]\)/, "frontend should route native slash commands, including session summary, workflow permission, safety, and Guided Git setup, into selector UIs");
 assert.match(app, /async function handleNativeSlashSelectorCommand\(message/, "frontend should intercept exact native slash commands before prompt forwarding");
 assert.match(app, /kind === "prompt" && attachments\.length === 0 && await handleNativeSlashSelectorCommand/, "prompt sending should open native selector dialogs before marking a run active");
-assert.match(app, /function openNativeModelSelector\(\)[\s\S]*?nativeCommandApi\("\/api\/models"\)/, "native /model selector should load models through the active tab API");
+assert.match(app, /function openNativeModelSelector\(\)[\s\S]*?nativeCommandApi\("\/api\/models", \{ tabId: owner\.tabContext\.tabId \}\)/, "native /model selector should load models through the active tab API");
 assert.match(app, /function openNativeSettingsDialog\(\)[\s\S]*?\/api\/steering-mode[\s\S]*?\/api\/follow-up-mode[\s\S]*?\/api\/auto-compaction/, "native /settings selector should expose queue and compaction controls");
 assert.match(app, /function openNativeNameDialog\(\)[\s\S]*?sendPrompt\("prompt", `\/name \$\{name\}`\)/, "native /name selector should prompt before running the slash command");
 assert.match(app, /function openNativeForkSelector\(\)[\s\S]*?\/api\/fork-messages[\s\S]*?\/api\/fork/, "native /fork selector should pair fork-point loading with the fork action");
@@ -2280,7 +2311,9 @@ assert.match(app, /function updateTerminalTabGroupOpenState\(\)/, "frontend shou
 assert.match(app, /const totalTabCount = tabs\.length \+ subagentTerminalViews\.size;[\s\S]*classList\.toggle\("terminal-tabs-dense", totalTabCount >= 10\)/, "frontend should include virtual subagent tabs when enabling dense tab layout");
 assert.match(app, /appendTerminalTabContent\(button, \{ title: activeTitle,[\s\S]*?count: groupTabs\.length,[^}]*\}\)/, "group buttons should show the active terminal name instead of only the cwd label");
 assert.match(app, /wrapper\.addEventListener\("pointerenter", \(event\) => \{\s+if \(event\.pointerType === "touch"\) return;\s+setOpenTerminalTabGroup\(group\.key\);/, "terminal tab groups should mark themselves open while hovered with a non-touch pointer");
-assert.match(app, /if \(openTerminalTabGroupKey\) \{\n\s+scheduleRefreshTabs\(600\);/, "tab polling should defer full tab refreshes while a group menu is open");
+assert.match(app, /menuOpen: !!openTerminalTabGroupKey/, "attention scheduler should receive group-menu interaction state");
+const attentionSource = await readFile(join(root, "public", "session-attention-scheduler.mjs"), "utf8");
+assert.match(attentionSource, /const MENU_DELAY = 600/, "tab polling should defer full tab refreshes while a group menu is open");
 assert.match(app, /function shouldRenderTerminalTabGroup\(group, groupCount\) \{\n\s+if \(group\.custom\) return group\.tabs\.length > 1;\n\s+return groupCount > 1 && group\.tabs\.length > 1 && Boolean\(group\.cwd\);\n\}/, "terminal tabs should always render custom groups while only collapsing multi-tab cwd groups when multiple groups are available");
 assert.match(app, /TERMINAL_CUSTOM_GROUPS_STORAGE_KEY/, "frontend should persist custom terminal tab groups in browser storage");
 assert.match(app, /function bindTerminalTabDragAndDrop\(/, "terminal tabs should bind drag-and-drop grouping behavior");
@@ -2295,9 +2328,9 @@ assert.match(app, /const groups = tabCwdGroups\(\);[\s\S]*?for \(const group of 
 assert.match(app, /const subagentGroups = subagentTerminalViewGroups\(\)[\s\S]*renderSubagentTerminalTabGroup\(group\)[\s\S]*renderSubagentTerminalTab\(group\.views\[0\]\)/, "open subagent views should render as first-class virtual tabs, grouped by parent workspace when siblings exist");
 assert.match(technical, /Tracked subagent output[\s\S]*dedicated \*\*Subagent\*\* terminal tab[\s\S]*read-only[\s\S]*does not stop or interrupt/, "technical reference should document the selectable read-only child terminal behavior");
 assert.match(app, /let tabSeenCompletionSerials = new Map\(\)/, "frontend should track which tab completions have been seen");
-assert.match(app, /let activeTabGeneration = 0/, "frontend should version active-tab UI state to reject stale async work");
+assert.match(app, /let activeTabGeneration = sessionContext\.generation/, "frontend should version active-tab UI state to reject stale async work");
 assert.match(app, /function isCurrentTabContext\(context\)/, "frontend should identify stale active-tab refresh contexts");
-assert.match(app, /function connectEvents\(tabContext = activeTabContext\(\), \{ requestedMode = "auto", fallbackAttempted = false \} = \{\}\)[\s\S]*?eventSource !== source/, "frontend should ignore stale SSE messages from old active tabs");
+assert.match(app, /function connectEvents\(tabContext = activeTabContext\(\), \{ requestedMode = "auto", fallbackAttempted = false \} = \{\}\)[\s\S]*?sessionEvents\.connect\(/, "frontend should route SSE connections through the context-guarded owner");
 assert.match(app, /let foregroundReconcileTimer = null/, "frontend should debounce foreground resume reconciliation");
 assert.match(app, /case "webui_connected":[\s\S]*?clearFeatureDecisionStateForTab\(connectedTabId, \{ render: true \}\)[\s\S]*?scheduleForegroundReconcile\("event stream reconnect", 0\)/, "SSE reconnect should close stale popup content and clear cached category/output before authoritative status replay");
 assert.match(app, /async function reconcileForegroundState\(reason = "resume"\)[\s\S]*?refreshTabs\(\)[\s\S]*?ensureActiveEventStream\(tabContext\)[\s\S]*?refreshAll\(tabContext\)/, "foreground reconciliation should refresh tabs plus active transcript after mobile backgrounding");
@@ -2323,7 +2356,7 @@ assert.match(app, /function markTabDoneLocally\(/, "frontend should locally reco
 assert.match(app, /function syncActiveTabActivityFromState\(state = currentState\)/, "frontend should reconcile active-tab indicators from authoritative state snapshots");
 assert.match(app, /event\.command === "get_state" && event\.tabId === activeTabId[\s\S]*?syncActiveTabActivityFromState\(currentState\)/, "get_state response events should update stale active-tab activity");
 assert.match(app, /function applyResponseTab\(response\)/, "frontend should merge tab metadata returned by prompt responses");
-assert.match(app, /newSessionButton\.addEventListener\("click", async \(\) => \{[\s\S]*?api\("\/api\/new-session"[\s\S]*?applyResponseTab\(response\)[\s\S]*?refreshAll\(tabContext\)/, "the New button should apply returned terminal-tab metadata before the full session refresh");
+assert.match(app, /newSessionButton\.addEventListener\("click", async \(\) => \{[\s\S]*?api\("\/api\/new-session"[\s\S]*?applyResponseTab\(response\)[\s\S]*?invalidateActiveSession\(tabContext\)/, "the New button should apply returned terminal-tab metadata before the full session refresh");
 assert.match(app, /case "webui_tab_renamed":/, "frontend should update tab labels from backend rename events");
 assert.match(app, /case "webui_recovery_opened":[\s\S]*?refreshTabs\(\)[\s\S]*?switchTab\(event\.recoveryTabId\)/, "recovery events should refresh tabs and activate the new recovery session");
 assert.match(app, /terminalTabsToggleButton\.addEventListener\("click"/, "terminal tabs trigger should be wired in JS");
@@ -2405,8 +2438,8 @@ assert.match(server, /case "response":[\s\S]*?event\.command === "get_state"[\s\
 assert.match(server, /async function listTabsWithReconciledActivity\(\)/, "server tab listing should reconcile stale working tabs before returning metadata");
 assert.match(server, /tabs: await listTabsWithReconciledActivity\(\)/, "GET /api/tabs should use reconciled tab activity metadata");
 assert.match(server, /tabActivity: tabActivitySnapshot\(tab\)/, "server should expose tab activity over tab metadata and events");
-assert.match(server, /const EXTENSION_UI_BLOCKING_METHODS = new Set\(\["select", "confirm", "input", "editor"\]\)/, "server should know which extension UI requests can block Pi runs");
-assert.match(server, /function trackPendingExtensionUiRequest\(tab, event\)/, "server should track blocking extension UI requests per tab");
+assert.match(extensionRequests, /const EXTENSION_UI_BLOCKING_METHODS = new Set\(\["select", "confirm", "input", "editor"\]\)/, "server should know which extension UI requests can block Pi runs");
+assert.match(extensionRequests, /function trackPendingExtensionUiRequest\(tab, event\)/, "server should track blocking extension UI requests per tab");
 assert.match(server, /pendingExtensionUiRequests: new Map\(\)/, "new tabs should initialize pending extension UI request storage");
 assert.match(server, /extensionStatuses: new Map\(\)/, "new tabs should initialize replayable extension status storage");
 assert.match(server, /extensionWidgets: new Map\(\)/, "new tabs should initialize replayable extension widget storage");
@@ -2420,13 +2453,13 @@ assert.match(server, /trackPendingExtensionUiRequest\(tab, scopedEvent\)/, "RPC 
 assert.match(server, /scopedEvent = \{ \.\.\.scopedEvent,[\s\S]*?pendingExtensionUiRequestCount: pendingExtensionUiRequests\(tab\)\.length \}/, "RPC events should broadcast pending blocker counts for tab indicators");
 assert.match(server, /function replayExtensionStatuses\(tab, client\)[\s\S]*method: "setStatus"/, "server should replay latest extension statuses on SSE reconnect");
 assert.match(server, /function replayExtensionWidgets\(tab, client\)[\s\S]*method: "setWidget"/, "server should replay latest extension widgets on SSE reconnect");
-assert.match(server, /function replayPendingExtensionUiRequests\(tab, client\)/, "server should be able to replay missed extension UI requests on SSE reconnect");
+assert.match(extensionRequests, /function replayPendingExtensionUiRequests\(tab, client\)/, "server should be able to replay missed extension UI requests on SSE reconnect");
 assert.match(server, /replayExtensionStatuses\(tab, client\);\n\s+replayExtensionWidgets\(tab, client\);[\s\S]*?webui_session_summary[\s\S]*?replayPendingExtensionUiRequests\(tab, client\)/, "SSE connections should replay extension statuses, widgets, and the tab-scoped summary before pending blockers");
 assert.match(server, /pendingExtensionUiRequests: pendingExtensionUiRequestSummaries\(tab\)/, "detailed Web UI status should expose pending extension UI blockers");
 assert.match(server, /resolvePendingExtensionUiRequest\(tab, payload\.id\)/, "extension UI responses should clear the pending blocker cache");
 assert.match(server, /type: "webui_extension_ui_resolved"[\s\S]*?pendingExtensionUiRequestCount/, "extension UI responses should notify clients that a blocker resolved");
 assert.match(server, /command\.type === "abort"[\s\S]*?cancelPendingExtensionUiRequests\(tab\)/, "abort should cancel hidden pending extension UI requests");
-assert.match(server, /type: "webui_extension_ui_cancelled"/, "server should notify browsers when pending extension UI requests are cancelled");
+assert.match(extensionRequests, /type: "webui_extension_ui_cancelled"/, "server should notify browsers when pending extension UI requests are cancelled");
 assert.match(server, /async function handleNativeSlashCommand\(tab, body, req\)/, "server should intercept supported native slash commands with request context for security guards");
 assert.match(server, /const restoreTabs = await readRestoreTabsFromEnv\(\)/, "server should accept private restart tab restore descriptors from the launcher environment");
 assert.match(server, /delete process\.env\.PI_WEBUI_RESTORE_FILE[\s\S]*delete process\.env\.PI_WEBUI_RESTORE_TABS/, "server should avoid leaking private or obsolete restore descriptors into spawned Pi RPC processes");
@@ -2488,7 +2521,7 @@ assert.match(server, /url\.pathname === "\/api\/commands" && req\.method === "GE
 assert.match(server, /WEBUI_TUI_NATIVE_PARITY\.json/, "server should load the native parity matrix");
 assert.match(server, /url\.pathname === "\/api\/native-parity" && req\.method === "GET"/, "server should expose the native parity matrix endpoint");
 assert.match(server, /function safeRpcResponse\(tab, command/, "server should provide stopped-RPC fallbacks for refresh endpoints");
-assert.match(server, /function primeTabRpc\(tab\)/, "server should prime new terminal RPC state before returning created tabs");
+assert.match(server, /function primeTabRpc\(tab, \{ strict = false \} = \{\}\)/, "server should prime new terminal RPC state before returning created tabs");
 assert.match(server, /specific Web UI action or final-output cards/, "server feedback-learning prompt should cover final outputs as well as actions");
 assert.match(server, /function formatActionFeedbackLearningPrompt\(items\)/, "server should convert feedback into a LEARNING prompt");
 assert.match(server, /url\.pathname === "\/api\/action-feedback" && req\.method === "POST"[\s\S]*?handleActionFeedback\(tab, body\)/, "POST /api/action-feedback should trigger the feedback-learning prompt");
@@ -2528,15 +2561,15 @@ assert.match(optionalFeatureCatalog, /\["tuiSkillsCommand", "@firstpick\/pi-exte
 assert.match(optionalFeatureCatalog, /\["tuiToolsCommand", "@firstpick\/pi-extension-tools"/, "catalog should allow installing the TUI tools optional feature");
 assert.match(optionalFeatureCatalog, /\["questionnaire", "@firstpick\/pi-package-questionnaire"/, "catalog should allow explicitly installing the native questionnaire optional feature");
 assert.match(optionalFeatureCatalog, /\["naturalConversation", "@firstpick\/pi-package-natural-conversation"/, "catalog should know the standalone Natural Conversation package for status and install guidance");
-assert.match(server, /const NATURAL_CONVERSATION_COMMAND_NAMES = \["talk", "voice", "conversation"\]/, "server should detect Natural Conversation from RPC-visible command aliases");
-assert.match(server, /function naturalConversationFeatureData\(tab[\s\S]*getCommandData\(tab, \{ annotateSkills: false \}\)[\s\S]*available[\s\S]*mode/, "server should expose a capability-based Natural Conversation feature snapshot");
+assert.match(conversationMode, /const NATURAL_CONVERSATION_COMMAND_NAMES = \["talk", "voice", "conversation"\]/, "server should detect Natural Conversation from RPC-visible command aliases");
+assert.match(conversationMode, /function naturalConversationFeatureData\(tab[\s\S]*getCommandData\(tab, \{ annotateSkills: false \}\)[\s\S]*available[\s\S]*mode/, "server should expose a capability-based Natural Conversation feature snapshot");
 assert.match(server, /url\.pathname === "\/api\/features\/natural-conversation" && req\.method === "GET"[\s\S]*naturalConversationFeatureData\(tab\)/, "server should expose Natural Conversation feature metadata");
 assert.match(server, /url\.pathname === "\/api\/conversation-mode" && req\.method === "POST"[\s\S]*setNaturalConversationMode\(tab, body\)/, "server should toggle Natural Conversation through the package-owned slash command");
 assert.match(server, /url\.pathname === "\/api\/stt\/transcribe"[\s\S]*handleNaturalConversationSttTranscribe[\s\S]*url\.pathname === "\/api\/tts\/speech"[\s\S]*handleNaturalConversationTtsSpeech/, "server should expose opt-in Natural Conversation STT/TTS fallback routes");
-assert.match(server, /PI_VOICE_STT_URL[\s\S]*PI_VOICE_TTS_URL[\s\S]*GROQ_API_KEY[\s\S]*OPENAI_API_KEY[\s\S]*CLOUDFLARE_API_TOKEN/, "server voice fallbacks should be gated by server-side provider environment variables");
-assert.match(server, /function requireRemoteMicConsentForStt\(req, body = \{\}\)[\s\S]*remoteMicStreamingConsentAccepted/, "server STT fallback should require explicit remote microphone streaming consent for remote clients");
-assert.match(server, /function ensureNaturalConversationPromptSafety\(tab, command\)[\s\S]*setThinkingLevelForTab\(tab, "off"/, "server should force thinking off before WebUI prompts while conversation mode is active");
-assert.match(server, /function enforceNaturalConversationCommandAllowed\(tab, command\)[\s\S]*thinking is forced off[\s\S]*slash commands are blocked from the Web UI shell/, "server should block unsafe direct RPC\/WebUI commands while conversation mode is active");
+assert.match(voiceService, /PI_VOICE_STT_URL[\s\S]*PI_VOICE_TTS_URL[\s\S]*GROQ_API_KEY[\s\S]*OPENAI_API_KEY[\s\S]*CLOUDFLARE_API_TOKEN/, "server voice fallbacks should be gated by server-side provider environment variables");
+assert.match(voiceService, /function requireRemoteMicConsentForStt\(req, body = \{\}\)[\s\S]*remoteMicStreamingConsentAccepted/, "server STT fallback should require explicit remote microphone streaming consent for remote clients");
+assert.match(conversationMode, /function ensureNaturalConversationPromptSafety\(tab, command\)[\s\S]*setThinkingLevelForTab\(tab, "off"/, "server should force thinking off before WebUI prompts while conversation mode is active");
+assert.match(conversationMode, /function enforceNaturalConversationCommandAllowed\(tab, command\)[\s\S]*thinking is forced off[\s\S]*slash commands are blocked from the Web UI shell/, "server should block unsafe direct RPC\/WebUI commands while conversation mode is active");
 assert.match(server, /async function topLevelOptionalFeatureResourceIndex\(cwd = options\.cwd\)[\s\S]*metadata\?\.origin === "package"[\s\S]*packageNameForResourcePath/, "server should detect enabled top-level resources by owning package");
 assert.match(server, /function optionalFeaturePackageStatus\(featureId, cwd = options\.cwd, topLevelResourceIndex\)[\s\S]*installed[\s\S]*configured[\s\S]*locallyConfigured[\s\S]*resourceConflict[\s\S]*ready/, "server should report package registration, top-level availability, conflicts, and readiness separately");
 assert.match(server, /if \(beforeStatus\.locallyConfigured\)[\s\S]*load it twice[\s\S]*local-resource-conflict/, "server should block npm registration when a top-level resource already owns the optional feature");
@@ -2579,7 +2612,8 @@ assert.match(development, /GET \/api\/path-suggestions\?tab=<tabId>&query=<path>
 assert.match(development, /GET \/api\/optional-features/, "development guide should document optional feature status endpoint");
 assert.match(development, /POST \/api\/optional-feature-install/, "development guide should document optional feature install endpoint");
 assert.match(development, /POST \/api\/optional-feature-install-batch[\s\S]*bounded allowlisted[\s\S]*sequentially/, "development guide should document the bounded sequential batch endpoint");
-assert.match(technical, /\*\*Install all\*\*[\s\S]*\*\*Install missing\*\*[\s\S]*missing or unregistered[\s\S]*one confirmation[\s\S]*continue after individual failures/, "technical reference should document bulk control scope and partial-failure behavior");
+assert.match(technical, /\*\*Install all\*\*[\s\S]*eligible for bulk installation[\s\S]*\*\*Install missing\*\*[\s\S]*section[\s\S]*one confirmation[\s\S]*continue after individual failures/, "technical reference should document bulk control scope and partial-failure behavior");
+assert.match(technical, /unknown status, registration problems, conflicts, updates or disabled access[\s\S]*individual review[\s\S]*summary explains exclusions/, "technical reference should explain why some feature cards require individual review");
 assert.match(technical, /pi install npm:@firstpick\/pi-extension-stats[\s\S]*Re-running the same `pi install npm:<package>` command is the supported update path/, "technical reference should document separate manual Pi package installation and updates");
 assert.match(development, /server-persisted fast picks/, "development guide should describe server-persisted fast picks");
 assert.match(development, /`\/btw` side-question output widgets with optional context transfer\/live steering, browser notifications when a tab needs an extension UI response, and an optional side-panel toggle for agent-done notifications/, "development guide should describe /btw, blocked-tab, and agent-done notifications");
@@ -2670,4 +2704,8 @@ assert.doesNotMatch(css, /body\.subagent-terminal-active \.chat-search-bar/, "th
 assert.match(css, /\.chat \{[^}]*overflow:\s*auto;[^}]*overflow-anchor:\s*none;/, "the transcript should disable browser scroll anchoring because paused-reader position is controlled explicitly during live growth");
 assert.match(css, /\.chat-search-bar,\n\.file-viewer-search-bar \{/, "transcript search bar should be styled");
 
+assert.match(server, /case "\/api\/git-workflow\/create-pr":[\s\S]*return await createGitWorkflowPr\(cwd, body\);/, "the PR route must pass the selected cwd and request to its confirmed mutation owner");
+
 console.log("mobile static checks passed");
+
+assert.doesNotMatch(app, /createFirstTerminalTabFromChosenDirectory/, "empty startup must not open a directory picker automatically");

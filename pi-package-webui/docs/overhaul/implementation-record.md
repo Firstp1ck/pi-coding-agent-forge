@@ -1,0 +1,247 @@
+# Compact WebUI implementation and acceptance
+
+Contributor record for the compact workspace overhaul. [Development guide](../../DEVELOPMENT.md) · [Feature destinations](feature-destinations.md) · [Capability ledger](capability-ledger.md)
+
+Status: implementation accepted on 2026-11-15. W0-W7 are complete, both W7 review rounds are closed, and all applicable central checks pass. Production source candidate: `d0a6a25`.
+
+## Delivered behavior
+
+The compact shell separates session navigation, conversation, a single contextual inspector, and searchable Settings. All tools provides categorized search and up to twenty pins. Contextual controls retain their original scopes, confirmations and availability reasons. Existing Pi colors, backgrounds, typography and message treatment remain.
+
+Fresh installations use compact desktop only when the server can prove no previous WebUI state exists. Established, custom or unknown installations retain Classic. Explicit browser choices take precedence. Classic recovery preserves saved layout data; phone and tablet choices remain independent.
+
+## Screenshots
+
+Verified captures use disposable test sessions and the existing Pi theme. Open the [desktop workspace](screenshots/desktop.png), [All tools](screenshots/all-tools.png), [Settings](screenshots/settings.png), or [mobile conversation](screenshots/mobile.png) at full size.
+
+## Implementation boundaries
+
+| Area | Owners and preserved behavior |
+| --- | --- |
+| Shell | Native modules own action discovery, navigation, preferences, canonical views and surface focus. No framework migration. |
+| Session | Originating tab/session generations guard asynchronous work. Drafts, attachments, extension requests and streams keep their lifetimes across views. Resume creates a new tab and retains the source. |
+| Project | Files retain dirty buffers; Git preserves review and confirmation; runners survive hidden views; documents retain their canonical viewer. |
+| Activity | Queue edits, agents, conversations, Events and provider usage have focused owners. Dismissing a view does not cancel work. |
+| Settings | Category/search navigation reuses scoped controls. Session, Global and exact Model resource defaults remain distinct. |
+| Server | Cohesive settings, Files, Git, runner, companion, RPC, SSE and helper services retain existing routes and guards. Supervisor continuity, replay, backpressure, atomic settings and revision checks remain. |
+
+## Verification boundaries
+
+The frozen W0 reference remains unchanged. W7 compares the same eleven viewport/mode identities, three states each, and seven repeated samples per performance metric. It rejects incompatible or incomplete captures. The static inventory maps thirty-four capability families and existing optional-package identities, but does not by itself prove runtime parity.
+
+Integrated browser checks cover real disposable application/server interactions. Companion catalogs and provider responses are controlled fixtures. Native 200% Chromium zoom is measured through DPR and layout viewport changes with an unchanged outer window; it is not viewport emulation.
+
+The package check completed with exit 0 in `/tmp/webui-w7-r2-check.log`. The complete Chromium run passed all 479 cases in 8.7 minutes with exit 0 in `/tmp/webui-w7-r2-browser.log`. The matching-runtime measurement run passed all 16 checks with exit 0 in `/tmp/webui-w7-r2-measurements.log`. Its 33 captures and seven samples per repeated metric are complete; all frozen budgets pass and no final stream output was lost. Historical failing captures and reviewer dispositions are retained in the local execution archive and HTML report. W0-W7 are accepted for the implemented scope, with the platform limits below.
+
+## Independent review
+
+The user selected Sol/high for isolated workers and reviewers and waived Anthropic. Every wave uses at most two review rounds. Each first round has two independent read-only perspectives; the final round checks accepted repairs. Parent integration owns every finding disposition.
+
+W7 accepted corrections include the offline-cache assertion, horizontal session-action geometry, and cleanup of a retired summary request's own busy state. Additional complete-suite repairs cover startup readiness and delayed mobile paste-field focus capture. Newer summary content and requests are preserved during stale completion. Final reviewer `webui-overhaul-w7-review-r2-20261115` independently passed five browser cases, six ownership cases, boot diagnostics and ten inventory checks at `d0a6a25`. All three original findings and the separate whitespace observation are resolved; no qualifying regression was found. The parent inspected the report and the replacement-summary screenshot and accepted those dispositions. Both review rounds are closed.
+
+## Final evidence
+
+| Gate | Result |
+| --- | --- |
+| Package check | 250/250 Node, static and harness test files pass |
+| Chromium integration | 479/479 cases pass, zero retries or skips |
+| Remote companion | 20 checks pass; no later shared-contract changes |
+| Frozen measurements | 16/16 checks pass; identical machine and fixture identity |
+| Inventory and payload | Deterministic inventory current; required shell and backend assets packaged; internal evidence excluded |
+| Review | Two first-round Sol perspectives and one final fix-only Sol review; all accepted findings resolved |
+| Documentation | Local links and whitespace checked; completed execution plan archived locally |
+
+| Measurement | Current p95 | Frozen limit |
+| --- | ---: | ---: |
+| Cold useful render | 342.4 ms | 365.3 ms |
+| Warm useful render | 228.7 ms | 244.8 ms |
+| Input to paint | 30.1 ms | 46.9 ms |
+| Tab switch to content | 65.4 ms | 85.4 ms |
+| Stream render gap | 500.1 ms | 550.11 ms |
+| Retained heap after cycles | 10,079,116 bytes | 19,683,948 bytes |
+
+Desktop secondary controls decrease from 29 to 18 when idle and from 31 to 20 while streaming. That is a 37.9% and 35.5% reduction against a 30% target. Duplicate expanded summaries remain zero; phone and tablet counts do not increase. These fixture measurements establish bounded regression checks, not general hardware performance guarantees.
+
+Raw local artifacts are under `test-results/overhaul-w7/run-2026-11-15T04-24-51-961Z-3920029/`. Historical failed and interrupted runs remain evidence, but do not replace the completed results above. The three frozen baseline JSON files are unchanged from the W7 starting revision.
+
+The complete Chromium command used a local wrapper of `playwright.config.mjs` selecting `/usr/bin/chromium`, disabling video and retaining every base project/test. Its command was `node node_modules/@playwright/test/cli.js test --config=playwright.w1-local.config.mjs --project=chromium --workers=2 --retries=0`. The wrapper is retained with local handoffs. Normal provisioned environments use the package's documented `test:browser` command. Measurements use the tracked `playwright.overhaul-w7.config.mjs` with the original Node 22.23.5 runtime. No browser or global package installation was required.
+
+## Operational limits
+
+### Terra live polish pass
+
+The follow-up pass uses GPT-6.1 Terra at high reasoning effort, with isolated fake-Pi servers and disposable Git repositories. The original W0-W7 measurements above are historical. Follow-up acceptance passed at code commit `a8a118a6`: all 250 package Node/static/harness test files and all 529 Chromium cases, with zero retries or skips. The four complete shards passed 133, 133, 132 and 131 cases.
+
+| Live finding | Correction |
+| --- | --- |
+| New-tab choices opened above the viewport | The compact menu chooses an available direction and stays within the viewport during scrolling and resizing. |
+| Feature summaries claimed everything was registered despite registration-needed cards | Summary, accessible labels and tooltips explain excluded states. Installation eligibility and confirmation remain unchanged. |
+| The phone Control Deck button covered a file action | File actions wrap beneath the title, with room reserved for the deck control. |
+| Directory-picker cancellation lost focus or let an earlier response reach a reopened picker | Loading has an enabled focus target; cancellation aborts the read and restores a valid caller. Picker identity rejects late results, including after reopen. Footer callers retain their control key through redraws. |
+| Tag confirmation omitted the selected repository | Confirmation uses the authoritative root already loaded for that section, preserving the captured request target. |
+| A nested directory picker returned to a hidden launcher button | All tools retains the visible rail/header opener for the picker and returns focus after cancellation. |
+| Error notifications covered mobile failed-send Retry | While recovery is visible, notices stay beneath the mobile app bar. The original request ID survives manual retry. |
+
+Seven browser specs retain the live regressions and workflow checks. These exercise real disposable Git staging, stash, tag, branch and worktree operations, runner configuration and stdin, queue behavior, session actions, menu reachability and picker keyboard/error handling. The background decision fixture emits through fake Pi and the real server so attention discovery and response targeting are tested together. Fork, tree and export responses are simulated where fake Pi lacks upstream behavior; a synthetic decision title does not establish real workflow-provider integration.
+
+Audits distinguish direct preview checks, automated browser scenarios and source-only inspection. They do not establish exhaustive coverage of every control and state. Live installed companions, remote/PIN combinations, browser notification permission/click behavior, provider account changes, voice downloads and hardware, real updates and publishing remain unverified. No production install or configuration mutation is needed for the delivered fixes.
+
+Both Terra review rounds are complete. Round one reported no concrete scoped defect. After parent acceptance found a launcher return-focus regression, round two independently passed all four rail/header and pointer/keyboard return paths and 59 controller/action checks without a qualifying finding. The later mobile-notice CSS repair was verified by the parent through two real failed-fetch cases and the complete combined suite; it did not receive a third review round.
+
+The full-suite repairs also retain the original assertions while making fixture setup deterministic: a held fake stream is explicitly aborted after geometry sampling, mobile paste selection is set on the current connected field in one browser task, and serial visibility tests await final settings durability. No source behavior was changed to hide these fixture races.
+
+Inventory regeneration, required packaged assets, local documentation links and whitespace checks pass. The 504-file npm dry run excludes internal evidence. The frozen baseline JSON files are unchanged. Package validation used `npm --prefix pi-package-webui run check`; Chromium used the package configuration with a local system-browser wrapper, two workers, zero retries and four disjoint shards. These acceptance commands ran with isolated outer HOME, XDG, agent and update paths. An initial worker fixture exception, before that isolation was applied, remains recorded in the audit handoff; those scenarios were rerun in isolation. No evidence establishes a production configuration mutation.
+
+Screenshots from the follow-up pass show [mobile file actions](screenshots/polish/mobile-file-actions.png) and the [repository-specific tag confirmation](screenshots/polish/git-confirmation.png).
+
+### Interaction improvements
+
+The compact composer now has one submission action, labeled Send, Steer run or Queue message according to the visible behavior choice. Model and effort controls show the effective session value and open immediate-apply pickers. Busy effort changes remain labeled for the next prompt. Picker failures stay inline, and late responses cannot repaint a replacement session or dialog.
+
+All tools and Ctrl/Cmd+K share the same catalog, search and pins. Session and Project menus present six relevant actions, with More actions opening the full catalog. The separate Attention button opens decisions, running work and unseen completions. Selecting a decision switches to its originating conversation and uses authoritative dialog replay; merely opening the inbox does not mark finished work seen.
+
+Three isolated Sol/high workers implemented the components. Two independent Sol/high reviewers examined the combined implementation at `eb1c84ea` and reported no actionable findings. Their checks passed 41 unit/adapter cases and 71 browser cases across the two reviews. No second review round was needed. Parent fixes after review changed only obsolete browser selectors and evidence documents.
+
+Central validation passed all 251 package Node/static/harness files and all 51 new browser cases. The full Chromium run completed 580 cases with 572 passes and eight failures. Seven cases still targeted the deliberately hidden Classic model/effort controls; after retargeting them to the compact pickers, all seven passed with their original geometry, request-target, effective-state and navigation-budget assertions retained. The unchanged Classic deck-overlay case passed the isolated rerun and three further repetitions. Its initial failure remains unexplained and is retained as intermittent-test evidence, not claimed fixed. No test was skipped or given automatic retries.
+
+The corrected responsive/Classic suite passed 44 cases, model/effort reachability passed two, and the session-effort case passed one. Together with the unchanged cases in the full run, every browser case has passing evidence on the final production code. This is combined full-run and targeted-recheck evidence, not a claim that one full run was green. Genuine browser zoom, mobile modes, draft/attachment ownership and offline cache checks remain covered. Provider-side steering timing, installed companions, hardware and non-Chromium platforms were not newly verified.
+
+Inventory, package/cache coherence, documentation links and whitespace checks pass. No dependencies, backend contracts, settings schemas or installed configuration changed. The original crowding/performance figures above were not recaptured for this interaction pass.
+
+Current fixture screenshots show the [busy composer](screenshots/interaction/busy-composer.png), [attention inbox](screenshots/interaction/attention-inbox.png) and [model picker](screenshots/interaction/model-picker.png).
+
+### Composer More layout repair
+
+The compact More disclosure inherited the customizable action grid, so its entire panel occupied one narrow cell and stretched More and Send from 34px to about 227px tall. The expanded actions now span a separate grid row and retain their existing action order. Visible overflow lets nested menus remain clickable above the composer. No JavaScript behavior or saved layout changed.
+
+The regression reproduced at 1100px and 1440px before the fix. Three browser cases now cover an open Project inspector, a normal desktop and a 500px-high window, including nested action access, compact primary-button geometry and draft preservation. The combined regression/composer suite passed 15 cases; 25 affected static test files passed. The cache identity advances to PWA175 with adapter CSS5 so existing previews receive the stylesheet. See the [expanded More screenshot](screenshots/interaction/more-expanded.png).
+
+### Session shelves and scrollbar controls
+
+Compact left navigation now separates Inbox (idle, completed and input-needed sessions), Working and Settled. Settled starts collapsed. Settle and Restore change browser-local organization without closing sessions or discarding drafts. New work, pending input, session replacement and newer completion restore the session automatically. Group fragments retain their original group identity while close actions target only the displayed members. Classic, top navigation and phone modes keep their existing organization.
+
+The sidebar and inspector topic strip hide their scrollbar tracks while retaining native scrolling. Inspector tabs retain arrow, Home and End navigation. The Documents empty state no longer allocates a second full-height viewer beneath its message; loaded pages scroll inside the viewer, including short windows. When a keyboard-focused session moves between shelves, the inner list reveals its retained control; ordinary updates preserve the scroll offset.
+
+The combined candidate passed 54 Chromium cases and all 253 package test files. Ten inventory checks, packaged-asset assertions and offline-cache recovery also passed. A round-one Sol review found a focused session could move offscreen; the parent accepted and repaired it, with a strict full-visibility regression for both directions. The initial repair exposed fractional clipping, corrected with rounded scrolling and a focus-outline margin. The final shelf candidate passed eleven integration cases. Six additional Documents cases pass for empty states, loaded-page scrolling, canonical viewer continuity and Classic fallback. The second Sol review confirmed transition visibility and found a routine refresh could override deliberate wheel scrolling. The parent accepted that regression and restricted reveal to controls displaced by rendering. All ten shelf integration cases and fourteen affected Node checks pass after this correction. Both review rounds are closed; parent acceptance covers this bounded change, with the platform limits below.
+
+Captures: [Working and collapsed Settled](screenshots/session-shelves/working-and-settled.png), [expanded Settled](screenshots/session-shelves/settled-expanded.png), [Light theme](screenshots/session-shelves/light.png), [scrolling without a track](screenshots/session-shelves/scrolling.png), and [inspector topics without a track](screenshots/session-shelves/inspector-tabs.png).
+
+### Activity navigation and scoped model access
+
+Activity replaces its horizontal topic strip with a full-width View selector. Options are grouped by Work, Conversations, and Usage & diagnostics. The selected section remains visible at narrow inspector widths. Project retains its shorter tab row. Native selection drives the existing navigation callback, preserving canonical content, filters, queues, drafts and browser history.
+
+A Scoped models button beside Model opens the existing saved-scope picker directly. It retains provider columns, simple layout, ordering and keyboard selection; Model still opens the full catalog. Escape returns to Scoped models. Alt+Up inside a model option reorders it without also invoking global queue restoration.
+
+The affected browser run passed 74 cases; the final shortcut correction passed all four scoped-model cases. PWA179 offline recovery passed. Independent review passed 40 browser cases and found 24 stale app-revision assertions. Those were corrected; all 28 affected static cases pass. The final combined package check passed all 254 test files with exit 0. PWA180 offline/online recovery also passed. See [Activity picker](screenshots/navigation/activity-picker.png) and [scoped models](screenshots/navigation/scoped-models.png).
+
+### Settings, model catalog, composer and sidebar controls
+
+The bottom-left Settings gear opens the existing searchable page. Six configuration homes now use their original controls or dialogs: Sampling, Codex speed, Summary Setup, runner configuration, Git-footer Visibility, and saved tool-output expansion. Resource navigation performs reads without changing preferences. Dialogs retain their originating session or project through asynchronous work. Footer context-menu Hide remains available independently of the Settings dialog.
+
+The full model picker groups models by provider. Valid explicit release dates sort newest first; undated models follow alphabetically. Current selection stays inside its provider group. Search, keyboard selection, and saved scoped-model order retain their existing behavior. Provider headings remain in normal flow so wrapped names cannot cover keyboard-highlighted options.
+
+The composer has a compact primary row and a separate More action grid. Short windows permit vertical focus recovery without horizontal conversation scrolling. Minimized workflow controls occupy two cells. The session sidebar supports pointer dragging, keyboard resizing, cancellation and browser-local width persistence; viewport clamping does not overwrite the saved width.
+
+Candidate `04dc31f` passed 60 combined Chromium cases, 27 composer cases and the service-worker offline/online case. Model hierarchy also passed three focused cases. Inventory and package payload checks passed. The full package check passed all 254 test files with exit 0. Settings review found no confirmed defects, with 16 independent browser cases and six VM/static test files passing. All validation used isolated state; initial read-only instruction/Git inspection preceded the reviewer isolation wrapper. Parent accepts the Settings unit. Model round one found a wrapped-heading overlap at 320px. Parent reproduced and fixed it, and eight affected browser cases passed. Final Sol recheck passed five Chromium cases with no open findings. Parent accepts the model unit. The final CSS/cache correction also passed 31 checks across 27 affected static files, inventory validation and PWA181 offline recovery. All units in this addition are accepted. Composer round two verified both reachability/overlap fixes with four selected cases and two independent probes; no eligible regression remained. Parent accepts the composer unit. Sidebar round two also resolved both findings. Earlier failed runs exposed missing test-fixture dependencies and composer overflow, which were corrected without removing assertions.
+
+Inspected captures: [compact composer](screenshots/controls/composer.png), [provider-grouped models](screenshots/controls/model-providers.png), and [canonical Sampling controls in Settings](screenshots/controls/settings-sampling.png). These use disposable fake-Pi fixtures and do not demonstrate installed provider behavior.
+
+### Inspector header and conversation overview
+
+Project and Activity now live as two tabs above the right inspector header. The header itself selects the current section. Session, Sampling and Commands are included under Activity. Header controls reopen the inspector and toggle a floating conversation overview; the compact layout hides the obsolete Control Deck toggles. Classic and mobile keep their own navigation.
+
+The overview projects existing owner data and opens canonical actions. It adds no polling. Session generation, identity and working folder are checked before dispatch. Its browser-local visibility preference survives reload, while Settings and Home hide it temporarily. Missing data is explicit. The card stays above the sticky prompt banner and within the transcript's available height. Its content remains scrollable without a visible scrollbar track.
+
+More opens actions beside its button, with Send at the right. Both composer and footer open the saved scoped-model picker; focus returns to the actual opener. Restoring the footer access is an explicit user-requested exception to the earlier duplicate-model-summary reduction. Sidebar tooltips use the shared top-layer owner instead of clipped pseudo elements. Native single-select dropdowns use app-themed pickers when supported; option ownership and change events remain native.
+
+Verification passed: all 255 package test files, 128 migrated workflow browser cases, 52 component browser cases, 23 composer/overview cases, seven ownership/continuity cases, six final offline/recovery cases, and ten inventory checks. These are separate runs with overlapping cases, not a whole-browser-suite total. Mobile/Classic compatibility passed 17 cases after correcting the icon-count fixture; earlier offline cases were repeated against the final asset graph. The original two-action Changes/Runners budgets remain unchanged.
+
+Round-one Sol reviews found three issues, all repaired by the parent: external-agent counts leaking into selected-session summaries, unavailable agent reporting displayed as zero, and Overview intercepting Options clicks. Overview now uses explicit tab ownership and raw capability metadata; stale refreshes identify prior counts. Compact composer menus stack above the overview. New disposable-app regressions pass. Final Sol round two verified all three repairs with eight adapter and twenty browser cases; no actionable findings remain. Parent acceptance passed against production commit `1721e49`; only documentation and EOF whitespace changed afterward.
+
+Captures: [Overview and inspector tabs](screenshots/inspector-overview/overview.png), [themed header picker](screenshots/inspector-overview/section-menu.png), [More actions beside the button](screenshots/inspector-overview/more-actions.png). Final browser assets are app207, adapter CSS10 and PWA184. No dependency exports or ranges changed.
+
+### No Project conversations and stable compact controls
+
+The Pi brand and **+ Tab → No Project** open a fresh empty conversation in a unique durable directory. New-session actions in those conversations create another tab and directory, preserving the source conversation and its files. Resume and restore keep the original directory. Explicit project folders retain their previous behavior. Owned directories live under the resolved agent directory and are never automatically deleted; this separates working files rather than restricting shell access.
+
+The overview now grows naturally with its contents. At normal desktop height all rows fit without internal scrolling. Short windows use two columns where possible, then allow whole-card scrolling when the physical viewport cannot fit the content. More is a floating tray that leaves the composer, footer and transcript stationary; Options anchors to its actual button. Attention moves to the lower rail, the redundant header All tools button is removed, and the right inspector gains drag/keyboard resizing. Model, scoped models and effort remain in the footer; the duplicate idle composer row is removed while the busy delivery choice remains.
+
+Scoped verification passed 71 combined layout/mobile/PWA/reconnect browser cases, three No Project actual-app cases, and 22 distinct footer/model/toolbar cases (the final five-case footer rerun supersedes its earlier selected-focus failure). Direct, supervised and no-session HTTP lifecycle checks cover uniqueness, source preservation, restore/resume, missing directories, launch failure and compaction admission. Inventory and package payload checks pass. The exact-candidate package check passed all 258 files. Final Sol round two independently passed all 22 footer/model/toolbar cases and the corrected startup static check, with no reportable findings. Parent acceptance passed at e2648c05; subsequent changes record evidence only. The 96 affected browser cases have passing evidence across combined runs, not a complete browser-suite run.
+
+R1 UI found one selected-effort focus issue. The parent fixed selection preference and focus after deferred pointer rendering. R1 lifecycle found no actionable defects. Integration also repaired metadata loss in private restart handoffs, footer focus loss during refresh and invisible tooltip overflow inside More. No dependency exports or ranges changed. Assets use app208, workspace CSS7, adapter CSS11, overview CSS3 and PWA186.
+
+Captures use disposable fake-Pi sessions: [No Project welcome](screenshots/no-project/no-project.png), [floating More tray](screenshots/no-project/more.png), and [natural-height overview](screenshots/no-project/overview.png).
+
+### Empty No Project startup
+
+Default standalone and `/webui-start` launches now show an empty No Project conversation without a session, Pi child or owned directory. Explicit `--cwd`, supervised reattachment and restore descriptors retain precedence. The extension keeps its process working directory but no longer implicitly selects it as a project. The first nonempty submission allocates a durable No Project conversation and dispatches once to that captured tab. Empty submissions do nothing; creation failures retain the draft. Navigation and concurrent draft edits preserve their owners. Native selector commands deferred by navigation remain in their original conversation's draft until the user returns. Both Settings buttons use an outlined gear.
+
+Final source candidate `7281faa` passed all 259 package Node/static/harness files and 21 affected Chromium cases: 13 empty-startup scenarios, three explicit No Project scenarios, four session-ownership scenarios, and one offline-cache case. Ten inventory tests, package payload assertions, syntax and whitespace checks passed. These are affected browser checks, not a complete browser-suite rerun. Assets use app210 and PWA188. No dependency exports or ranges changed.
+
+Two independent Sol/high R1 reviews found the missing VM fixture guard and a first `/name` selector that could target an intervening session. The parent accepted and fixed both. The bounded R2 independently passed 13 browser cases, 19 lifetime/static/inventory checks and one cache case with no remaining in-scope findings. No third round ran. Real providers, extension-host end-to-end startup and physical devices were not exercised; pre-session drafts remain in memory across navigation, not across browser reload.
+
+Captures: [empty startup with zero sessions](screenshots/empty-startup/empty-no-project.png) and [first message creates its conversation](screenshots/empty-startup/first-message.png). The local isolated preview helper now omits its former implicit `--cwd`, so a fresh preview demonstrates the default.
+
+### Draft conversations and control repairs
+
+Accepted source candidate `a5e9e55` implements the seven requested changes. Pi/Home and No Project now open a client blank without creating a terminal or directory. Leaving typed text creates a persistent browser-only Draft in Inbox; drafts can reopen or close but cannot settle. First submission promotes its own draft to a real No Project session. Closing the last real terminal returns to a blank conversation, and closing a background terminal preserves selected draft text.
+
+More keeps actions in one horizontal row with working anchored menus and stable composer geometry. The duplicate rail Settings icon is removed while the sidebar gear remains. Git username Cancel ends setup without opening the repository workflow. The folder picker separates location, folder navigation and optional pin/create controls. The new-tab menu opens only from its visible trigger and sizes to its contents; Classic hover keeps each full button visible.
+
+One Sol/high worker and one fresh Sol/high reviewer handled each task. Accepted findings covered delayed runner-menu reopening, draft preservation during unrelated closes, and Classic hover clipping. Parent repairs passed their reproductions. Central integration also fixed minimized-workflow flex shrinking and migrated stale footer/toolbar test assumptions while preserving target, order, reachability and geometry assertions. All review slots are closed; no extra rounds ran.
+
+Verification: all 260 package Node/static/harness files pass. All 175 distinct affected Chromium cases have passing evidence across the combined run and targeted repair runs, with no retries or waived assertions. This is not a complete browser-suite rerun. Ten inventory tests, current inventory, payload assertions and whitespace checks pass. The final production edits after the package run are CSS-only; affected browser and CSS static checks pass afterward. Assets use app211, styles165, adapter CSS12, shelf CSS2 and PWA189. No dependency exports or ranges changed.
+
+Drafts persist only in the current browser origin. Storage failures retain memory and display a warning. A lost creation acknowledgment followed by browser termination or reload remains ambiguous because the existing creation endpoint lacks durable idempotency; no automatic retry was added. The review also reproduced existing short-Classic pointer instability at 1440×300; keyboard opening works. Real providers, physical devices and other engines remain outside the measured scope.
+
+Captures: [saved Draft](screenshots/drafts-controls/saved-draft.png), [single-row More](screenshots/drafts-controls/more-row.png), [folder picker](screenshots/drafts-controls/folder-picker.png), and [button-anchored new-tab menu](screenshots/drafts-controls/new-tab.png).
+
+### Persistent update progress
+
+Updates beside Settings offers Pi and extensions + WebUI, WebUI only, and Pi only. The installation-aware command flow remains simple. After confirmation, a persistent card shows command steps, elapsed time, bounded output and a labeled time-based percentage. It stays below 100 while running. Explicit successful no-change output produces Already up to date without a restart prompt. Failures and uncertain launch replies remain visible, and reload recovers the server's current job.
+
+One Sol/high worker and one fresh reviewer handled each of the backend and UI tasks. Parent fixes resolve all three findings: stale status replacing the confirmed launch, multiline environment values leaking through line-by-line redaction, and a viewport test sampling before positioning settled. Guarded child-process tests cover delayed LF/CRLF secret fragments on both streams, raw callbacks, live job snapshots and terminal results. Three actual-app race regressions and five repeated geometry cases pass.
+
+Production candidate `72099e23` passed all 261 package test files in the final guarded run. A prior run interrupted by SIGTERM is superseded by that complete exit-0 result. Affected Chromium cases pass across integrated and targeted runs, including running, unchanged, failed and reload-recovery paths. Syntax, deterministic inventory, package payload and whitespace checks pass. Screenshots were captured, inspected and displayed. No full browser-suite rerun, real installed updates or Windows/macOS execution is claimed. Assets use app213, sidebar update CSS2 and PWA191. No dependency changes or additional update eligibility checks were introduced.
+
+### Direct updates and job details
+
+Selecting an update scope now starts it immediately. Details shows the commands, per-step outcomes and bounded output, with Back to progress. Status and Details omit the internal job identifier. The menu offers Back to progress only during an active update; finished Details uses Back to result, and dismissed results stay closed. This follow-up passed 40 affected browser cases across the initial run and two corrected status-text assertions, plus 44 static/inventory checks. Already up to date shows only its heading, component and Details/Dismiss actions. Failed command receipts can explain a read-only installation without adding preflight checks or automatic retries. Keyboard navigation reveals return controls even in a short menu.
+
+One Sol/high worker and one fresh Sol/high reviewer handled each of UI feedback and the isolated preview helper. All supported findings were fixed and rechecked. Package evidence covers all 261 test files across a full run and the corrected stale static assertion. The integrated 58 Chromium cases and subsequent 40 menu/progress cases pass. These are affected checks, not a full browser-suite rerun. Assets use app215, sidebar update CSS3 and PWA194. Dependencies are unchanged.
+
+The local preview helper now clones the user-owned npm prefix and mounts it at the same absolute path inside Bubblewrap. It preserves global npm configuration across the working-directory change and removes generated state when sandbox startup fails. Five original isolation scenarios and six added regressions pass; a real-prefix clone check confirms writable preview copies and unchanged original package/config hashes. No real update ran. Existing previews must restart with the same launch command. Installed-copy updates do not replace the checkout served by the preview. The helper and tests remain ignored local development artifacts.
+
+Captures: [minimal unchanged feedback](screenshots/update-feedback/minimal-unchanged.png) and [job details and return](screenshots/update-feedback/running-details-back.png).
+
+### Folder picker section order
+
+Pinned folders now precedes Current location, and Create a folder precedes Folders in this location. Both disclosures start expanded. Panel padding and consistent section gaps keep labels, fields and buttons clear of borders. The dialog retains its fixed action footer and scrollable body on short screens. Styles use revision 167 and PWA195. All nine folder-picker browser scenarios and 42 static/inventory checks pass. Desktop dark and narrow light screenshots were inspected; folder creation, pinning, cancellation, keyboard access and short-screen footer reachability remain verified.
+
+### Platform limits
+
+Linux Chromium is the verified browser environment. Physical Android/iOS keyboards, IME, microphones, Windows/macOS behavior, WebKit and installed live-provider/companion combinations remain unmeasured. Existing platform-specific behavior is preserved in code and focused contracts, not claimed as device-tested.
+
+No production installation, package publication, deployment or merge is part of this implementation. The implementation is submitted through PR #38. Use the user documents for layout selection and recovery. Runtime ownership/protocol downgrades retain their documented drain and explicit shutdown requirements.
+
+### Workspace selection before first prompt
+
+Open workspace and recent-workspace choices on an empty conversation now select a folder in the browser draft. They create no terminal or Pi process. The first prompt creates the project terminal in the captured folder. Saved Drafts retain their text and folder across navigation and reload. Folder-only selections remain local to the current page until text is saved or submitted. Pinning and creating folders also work when no real terminal exists; explicit invalid terminal IDs and existing authorization checks remain enforced.
+
+One Sol/high worker and one fresh Sol/high reviewer handled the repair. Review found no scoped defects and independently passed 54 unit cases, 43 Chromium/API cases, cache checks, inventory and the No Project HTTP lifecycle harness. The parent package run passed 260 of 261 files; the unchanged SSE harness timed out before server health and passed on isolated rerun. The timeout cause remains unclassified. All package files have passing evidence across those runs, but no uninterrupted green full-package run is claimed. A new browser fixture now waits for Choose to become enabled before testing same-task navigation, preserving its ownership assertions.
+
+Assets use app216 and PWA196. No dependencies changed. Real providers, other browser engines, remote PIN login and installed deployment were not exercised. Captures: [selected workspace before first send](screenshots/workspace-drafts/selected-workspace-before-send.png) and [saved Draft after reload](screenshots/workspace-drafts/saved-workspace-draft.png).
+
+### Thread start flow
+
+Visible text now calls Pi conversations threads; code, `/api/tabs` and stored data keep tab naming, and stored `Terminal N` titles display as `Thread N`. The sidebar pencil button opens a New thread folder palette (Current, No project, pinned, recent, Browse…, Branch worktree…). Folder choices open an empty draft with no server thread until the first prompt. The draft card's Workspace value opens the same list as a dropdown. Two Opus workers implemented the rename and the flow; two Sol/high reviewers found five defects, all fixed with regression tests, and a second Sol round found none. Package suite 263/263; 9 pre-existing Chromium failures remain. Assets use app217 and PWA197. Report: [webui-thread-start-flow.html](../../reports/webui-thread-start-flow.html). Captures: [palette](screenshots/thread-start/desktop-2-palette.png), [card dropdown](screenshots/thread-start/desktop-4-card-dropdown.png).
+
+Follow-up: a draft (no thread selected) no longer renders the git footer payload cached by the previous thread. The cache's cwd guard could not reject it because a draft has no thread cwd, so a No Project draft showed the last thread's CWD, Git and token chips. Drafts now always use the minimal footer. Covered by a thread-start-flow regression test that fails without the fix. Assets use app218 and PWA198.
+
+### Options submenus fly out on desktop
+
+In the focused desktop layout, Options submenus (Session, Feature Setup, Safety & Permissions, Remote & System) used to expand inline because the conversation clipped absolute flyouts. With a fine pointer, an open submenu is now a fixed-position flyout beside its trigger: right when it fits, otherwise left, inline only when neither side fits. The flyout is at most 256px wide, offsets from any transformed ancestor's containing block, and keeps the existing hover bridge on its side. Phones and touch keep drill-in. Covered by focused-composer-more (right at 1440×900, left at 1100×600, pointer transit, item activation) and the updated composer-disclosure keyboard case. Assets use app219 and PWA199. Captures: [right](screenshots/options-flyout/right.png), [left](screenshots/options-flyout/left.png).
+
+### Faster first message
+
+The first prompt from a draft used to wait for thread creation, then the new thread's full UI refresh (about 14 reads, then scoped models and themes), before `POST /api/prompt`. With 400 ms per read the prompt left 1346 ms after the click and the message appeared at 1381 ms. A plain-text first prompt now shows immediately with "Starting Pi…", clears the composer, and dispatches as soon as the thread exists while the UI loads in parallel (about 100 ms after the click in the same probe). Slash commands still wait for the session's command catalog. A failed start removes the message, restores the start card and puts the prompt back, followed by text typed meanwhile. The No Project server-side wait for Pi's first state answer is unchanged, since it guards cleanup of the owned folder. Package suite 263/263; 17-spec Chromium batch 187/189 with the two known base failures. Assets use app220 and PWA200.

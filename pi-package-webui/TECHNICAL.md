@@ -4,11 +4,65 @@ Advanced user setup, configuration, compatibility, security, and troubleshooting
 
 [Back to the human-friendly README](README.md) · [Contributor and implementation guide](DEVELOPMENT.md)
 
+## Workspace selection before the first prompt
+
+On an empty conversation, Open workspace selects a folder without starting Pi. The first nonempty prompt creates the session in that folder. Leaving typed text saves a browser Draft with its selected folder, including across reloads. A blank folder selection stays in the current page only until you type or send. Pinned folders and folder creation work before any terminal exists. Existing-session, split and restore actions keep their current behavior.
+
+
+## Starting threads
+
+The sidebar **New thread** button opens a folder palette built by `public/workspace-choices.mjs`: Current folder, No project, pinned folders, recent thread folders (deduplicated, at most 12), then Browse… and Branch worktree…. Folder and No project choices only open or reuse a blank client draft with that cwd. On a draft's empty screen, the Workspace value opens the same list as a dropdown and changes only that draft's cwd; No project clears it. Neither path calls `POST /api/tabs`; the first nonempty prompt creates exactly one thread. Branch worktree keeps creating its thread immediately.
+
+Visible text calls Pi conversations threads. Code, element IDs, `/api/tabs` and storage keys still say tab. New threads default to `Thread N`, and stored `Terminal N` titles display as `Thread N` without being rewritten.
+## Compact desktop preview
+
+Fresh installations default to the compact layout only when the server can establish that no earlier Web UI state exists. Existing installations keep Classic; choose **Controls → Interface → Desktop layout → Compact preview** to switch. Its session navigation can sit on the left or above the conversation. **All tools** supports up to twenty pins, saved with the layout choice in this browser. Settings and inspectors reuse your existing controls and their original scopes. Settings groups Appearance, Models and resources, Features, Accounts, Voice, Connection, System, and Help. Search shows each result’s scope and why a control is unavailable. A result opens its category and original control; browser Back and Forward restore the destination. Search does not apply settings. A Settings gear beside the bottom-left workspace buttons opens this same page. Models and resources includes Sampling, Codex speed and Summary Setup; Appearance includes Git-footer Visibility and saved tool-output expansion; System includes project runner configuration. These controls retain their session, browser, global or project scope as shown. Runtime settings and Features Setup remain the home for their existing preferences. **All tools → Model shortcuts** opens the scoped model picker; **Use advanced model shortcuts** or **Use simple model shortcuts** changes its layout while retaining saved ordering. The footer Model chip opens your saved scoped picker and restores keyboard focus when you close it.
+
+The footer **Model** chip opens the saved scoped picker directly, retaining simple or provider-grouped layout, ordering, keyboard selection and Escape focus return. **All tools → /model** opens the complete model catalog, grouped alphabetically by provider. Within each provider, explicit release dates sort newest first; models without dates follow in alphabetical order by name. The current model stays marked within its group. Search retains matching provider groups. Your saved scoped-model ordering is unchanged. Footer model and effort controls show the session's effective values. Selecting a model applies it once and does not restart an in-progress response. Selecting effort while running or compacting saves it for the next prompt; the footer distinguishes current and pending effort. A failed selection stays in its picker with an error and can be retried. Global and exact-model defaults remain in Setup.
+
+**Overview** in the conversation header opens a floating card at the top right. It shows the selected session’s folder, Git summary, runner, agents, queue, context and available provider limits. Select a row to open its controls. Close the card or use Overview again to dismiss it; this browser remembers your choice. Data that has not loaded is marked as unavailable or not loaded. The overview grows with its content and can reflow into columns when the conversation is wide enough. In short windows, you can scroll the whole card to reach content that cannot fit on screen. It does not start background refreshes or stop work when closed.
+
+Dropdowns use the app’s theme. Browsers supporting customizable native selects also theme the expanded list; other browsers retain their native picker.
+
+The compact composer has one submission button. **More** opens a single-row floating tray beside its trigger without shifting the prompt, transcript or Send button. In a narrow window, scroll the row to reach its remaining actions. Common options opens beside its own trigger. During a run it says **Steer run** or **Queue message**, matching the **During this run** choice and Enter. Steering supplies guidance during the run; it does not promise immediate interruption. Abort is a separate control. Classic and the independent phone/tablet modes retain their existing controls.
+
+**Attention** in the lower-left rail shows waiting decisions separately from running sessions and work finished since it was last viewed. Opening the inbox does not mark finished output as read. Selecting an item opens its originating session, and pending decisions replay through the existing session connection. The urgent count includes only decisions. Metadata can identify a session and decision count before the full prompt is available.
+
+Tools and Skills Setup keep Session, Global, and exact Model defaults separate. Changing the model in Setup does not change the session’s active model. An explicit empty selection differs from inheriting defaults. Disabled companions retain their existing Setup actions. Voice selection may download a voice. It saves the shared Pi voice configuration for future sessions and applies it to the active audio session. Opening Voice alone does not start the microphone. Provider login opens terminal sign-in guidance, while logout retains its confirmation. Restart, stop, and updates remain under System with their access restrictions. Restart and stop retain confirmation; selecting an update scope starts it immediately.
+
+Open **Inspector** in the conversation header, then choose the **Project** or **Activity** tab at the top of the right panel. Its header is also the section picker, so every section is reachable without scrolling a row of tabs. Activity groups its sections by Work, Conversations, and Usage & diagnostics. Keyboard selection follows your platform’s standard select control. Files retain separate unsaved buffers per session; changing views does not save them or stop app runners. Agent output and conversation viewers remain read-only; stopping a run requires its explicit cancel action. The composer queue and Activity Queues operate on the same session queue, including edits, reordering, and removal. Provider usage remains account-wide.
+
+A saved browser choice takes precedence over the server default. With no saved choice, a recognized fresh installation uses compact desktop; an existing installation, older server, unknown state, or custom settings location uses Classic. Invalid or unavailable browser storage also uses Classic. Opening an existing installation in a new browser, clearing browser storage, or changing its address does not turn it into a fresh installation. The installation choice is retained with Web UI settings; do not delete those settings to change your layout. To recover from a layout problem, add `?shell=classic` to the address, or `&shell=classic` when it already has a query. This forces Classic without deleting the saved preference. Remove that parameter to use your choice again. Switching layouts preserves the saved Classic arrangement; phone and tablet preview choices remain independent.
+
+The compact layout is verified in Linux Chromium, including keyboard navigation and genuine 200% browser zoom. Physical mobile keyboards and IME, other browser engines, Windows/macOS devices, and live installed-companion combinations remain unverified.
+
+### Session sidebar organization
+
+Drag the compact sidebar’s right edge to resize it. Your width is saved in this browser. Focus the edge and use Left/Right arrows to adjust it, Shift for larger steps, or Home/End for the limits. Double-click the edge to reset its width; Escape cancels an active drag. Narrow windows temporarily limit the width to keep the conversation usable.
+
+The compact left sidebar has Inbox, Working, and Settled sections. Settle and Restore affect only this browser and origin; other browsers, saved workspaces, Classic, and top-tab navigation retain their own presentation. Section expansion is remembered locally. Clearing browser storage removes these organization choices.
+
+Settle is unavailable while a session is working or awaiting input. A new run, pending input, replaced conversation, or a newer completed run brings a settled session back automatically. Selecting a settled session alone does not restore it. App runners and known workflow runs count as active work. Read-only subagent views appear in Inbox or Working and retain their existing close behavior.
+
+A group can appear in more than one section. Its membership is unchanged; closing a group fragment closes only the sessions listed in that section. Settle never stops work or closes a session. If browser storage is unavailable, changes last for the current page and the app reports that they could not be saved.
+
 ## Requirements
 
 - Node.js 22.19 or newer
 - Pi installed and configured
 - A modern browser
+
+## No Project conversations
+
+Press the compact layout's **Pi** button or choose **New thread → No project** to open a fresh conversation without selecting a repository. Each fresh conversation receives its own directory under `~/.pi/agent/webui/no-project/`. If you set `PI_CODING_AGENT_DIR`, the directory is under that agent location instead. Opening an empty conversation does not allocate a folder or start Pi. The first submitted message creates its terminal and directory.
+
+Paste text directly into the empty composer. File attachments require a running session; choose a project or send the first message before attaching files. If you submit a command that opens a dialog and navigate away while its conversation is being created, the command stays in that conversation's draft. Return there and submit it to open the dialog.
+
+Unsent No Project text becomes a **Draft** in Inbox when you switch away. Drafts are saved in this browser for the same Web UI address, including port. They are not shared with another browser or device. Closing a draft discards it; drafts cannot be settled. You can also close the last real terminal: the Web UI returns to an empty No Project conversation without starting a replacement or deleting its working folder. If browser storage is unavailable or full, a message explains that edits remain only in the current page. Copy them before closing or reloading.
+
+Your files remain after closing a tab. Resume, reopen and saved-workspace restoration reuse that conversation's directory. **New session** and `/new` from a No Project conversation open a new tab with a new directory and keep the old tab available. Choosing a project explicitly uses that project folder. Missing No Project folders produce an error rather than silently switching to another folder. There is no automatic deletion of these directories.
+
+These folders separate working files; they are not a security sandbox. Pi still has the permissions and configured resources of the user running it.
 
 ## Install
 
@@ -31,6 +85,7 @@ Common options:
 ```text
 /webui-start 31500
 /webui-start --no-open
+/webui-start --cwd ~/src/my-project
 /webui-start --name browser
 /webui-start --remote-auth --host 0.0.0.0
 ```
@@ -61,7 +116,7 @@ Useful options:
 - `--remote-auth` enables PIN protection for non-local browsers.
 - `--migration-dry-run` previews optional-feature migration without changing packages.
 
-If `--cwd` is omitted, the browser asks which project to open first.
+Without `--cwd`, a fresh start opens **No Project** with no active session or Pi child. The first submitted message creates a conversation and its own working directory. Existing supervised sessions and explicit restore information take precedence. This does not enable `--no-session`; conversations still persist normally.
 
 ## Settings and storage
 
@@ -81,19 +136,29 @@ Private runtime and recovery files should not be edited or removed while Web UI 
 
 ## Pi and Web UI updates
 
-Use **Update Pi** and **Update Web UI** separately from localhost. Each action previews the exact executable, command, affected installation roots, working directory, Pi agent directory, npm prefix where relevant, and skipped installations. Confirm only after reviewing that list. If an executable, owner, or installation changes before launch, request a new preview. A small spinner means the job is still being checked, not a percentage estimate. Its ID, bounded command output and per-installation result remain visible after reconnect.
+Open **Updates** beside Settings. Choose a scope to start immediately:
 
-**Update Pi** runs `pi update` with the verified PATH Pi, not necessarily the Pi currently running your tabs. Initial automatic support is proven only for PATH Pi 0.87.1; other versions get manual or unproven guidance. The separately selected, bundled, or explicit Pi runtime is not silently replaced. **Update Web UI** runs `npm -g update @firstpick/pi-package-webui` for a proven npm-global installation and `pi update --extension npm:@firstpick/pi-package-webui --no-approve` for a proven Pi user installation, using its configured npm range or tag. Eligible installations run in sequence. Project copies, exact pins, Git/local sources and unproven ownership need manual attention. No optional companion packages are included.
+- **Pi only** runs `pi update` using Pi on your PATH.
+- **WebUI only** checks the global npm installation and the Pi agent's npm installation. It runs `npm update -g @firstpick/pi-package-webui` for the global copy and `pi update --extension npm:@firstpick/pi-package-webui` for the Pi-managed copy. Missing copies are reported and are not installed.
+- **Pi and extensions + WebUI** runs `pi update --all` and updates a separate global npm WebUI copy if present. Pi-managed WebUI is already included in the all-extensions command. Pi handles its configured packages normally; `--all` can restore a configured package whose files are missing.
 
-Finish known affected Pi work before updating. PowerShell or Bash runs in the background; a desktop terminal is not needed. Native package lifecycle scripts run with your existing configuration and are not sandboxed. The updater does not elevate permissions. Native package updates may change dependencies and cannot be automatically rolled back. The displayed output is bounded and masks common credential patterns, but arbitrary script output may still expose secrets. Do not paste it into a public issue without checking it.
+The update commands use your existing Pi and npm configuration. WebUI does not require a specific Pi version or perform ownership, idle-session or post-update health checks. Command failures are shown directly, without retrying with alternative commands. Only one update job runs at a time in this WebUI server. The result reports command exit status, not an independent verification of the new installation.
 
-A changed, verified healthy active component restarts automatically once all commands finish and affected work is idle, even when another installation failed. Unchanged, failed or unverified active installations do not auto-restart. Partial and unknown results stay visible after reconnect; unknown completion blocks retry and restart until you verify and recover on the host. A short interruption is possible; zero downtime is not promised. The launcher can migrate old managed-runtime pointers only to a validated, compatible equal-or-newer installed Web UI. It retains pointer backups and old runtimes. A failed validation or downgrade keeps the old launch path with manual guidance; this is not rollback of a native update.
+A progress card stays visible after you select an update. It shows the current command step, elapsed time and recent output. The percentage is a time-based estimate, not a download measurement; slow commands can remain near completion until they exit. Failures and lost connections are shown without claiming completion. Use **Details** to inspect the job’s commands, individual results and output. **Back to progress** returns to the running card; once finished, this control becomes **Back to result**. Opening Updates shows the scope choices, with **Back to progress** only while commands are running. Dismiss closes a finished card. Reopening Updates keeps the concise result text without reopening the dismissed card.
+
+When every command explicitly reports that its target is already up to date, the compact result shows only **Already up to date**, the component name, and Details/Dismiss controls. No restart is needed; output and timing remain available in Details. Successful output that does not identify whether anything changed is reported as commands completed.
+
+The server stays running during the commands. Restart WebUI after successful updates to load changed code. Progress and command results remain available while that server process runs; they are not a durable update history after a server restart. If a connection or process is lost during an update, inspect the host before rerunning the commands.
+
+Only localhost can start updates. Package lifecycle scripts run with your existing configuration and are not sandboxed. The updater does not elevate permissions, and native package updates cannot be automatically rolled back. Review command output for private information before sharing it. If a command reports `EROFS`, its installation is on a read-only filesystem. Use a writable installation or run outside the read-only sandbox; the updater does not change mounts or permissions.
 
 ## Session continuity
 
 The working-directory picker accepts a direct path for first, new, and split terminals and for cwd changes. On Windows, enter a rooted drive path such as `C:/` or `D:/project` to switch drives. From a drive root, **Parent** opens a **This PC** view listing ready filesystem drives; choose a drive to browse its root. **This PC** is navigation-only, so search and direct path entry remain available while selecting, creating, or pinning that virtual location is disabled. Web UI loads and validates a directory before it can be selected; an invalid or unavailable path remains in the field so you can correct it.
 
-When tabs span multiple working directories, a directory with one tab stays a normal, non-dropdown tab. Hover over it—or focus controls within it—to reveal **+ Tab** directly below, matching the placement used by grouped terminal menus without repeating the current tab. Directories with multiple tabs continue to use the grouped terminal menu.
+**Escape** or **Cancel** closes the directory picker even while a folder is loading. Cancellation returns keyboard focus to the visible control that opened it, unless you have moved to another tab or view. The **New thread** palette and the empty-screen folder dropdown render in the top layer, so scrolling lists cannot clip them.
+
+When tabs span multiple working directories, a directory with one tab stays a normal, non-dropdown tab. Hover over it—or focus controls within it—to reveal **+ Thread** directly below, matching the placement used by grouped terminal menus without repeating the current tab. Directories with multiple tabs continue to use the grouped terminal menu.
 
 Restarting only the Web UI normally keeps managed Pi tabs, working folders, saved sessions, and active work connected to the replacement server. Choosing a saved session from `/resume` opens it in a separate terminal tab and leaves the current terminal unchanged.
 
@@ -126,7 +191,7 @@ Prompt-impact indicators distinguish initial system-prompt text (`+`), condition
 - **Retry failed** retries only failed package installs.
 - **Copy commands** provides manual Pi install commands.
 - **Recheck** repeats the read-only package check.
-- **Install all** selects every missing or unregistered companion. A section's **Install missing** selects only missing or unregistered companions in that section. Both use one confirmation, install sequentially, and continue after individual failures.
+- **Install all** selects companions eligible for bulk installation. A section's **Install missing** limits that selection to its section. Both use one confirmation, install sequentially, and continue after individual failures. Features with unknown status, registration problems, conflicts, updates or disabled access may need individual review. The summary explains exclusions; check each card's available action before proceeding.
 - Configurable loaded companions show separate **Enable/Disable** and **Setup** actions. The loaded **TUI Skills command** and **TUI Tools command** rows open the browser-native Skills Setup and Tools Setup dialogs. Native questionnaires use the real active-session `questionnaire` tool state and expose only direct **Enable/Disable** access controls.
 
 Installs run one at a time and never invent percentage progress. Busy tabs are not restarted without a visible follow-up action. For unattended migration, use `--migrate-optional-features`; use `--migration-dry-run` to print the planned audit-selected migration without changing packages.
@@ -145,7 +210,7 @@ Normal output shows the full live tool and response stream. Compact output keeps
 
 Completed responses replace streamed drafts, including shortened or removed thinking. Refreshing history does not restore text removed by the provider. On older Pi releases, tool arguments stay hidden until Pi identifies the tool, which may happen only when argument generation completes. This keeps Intercom transport content out of the main transcript.
 
-Choose the mode under **Controls → Output processing** or **Settings → Browser workflow**, then select **Compact**. The stable setting and command-line identifier is `compact-v1`. The setting affects display only; it does not change Pi prompts, tools, models, saved transcript meaning, or inference.
+Choose the mode under **Controls → Output processing** or **compact Settings → System**, then select **Compact**. The stable setting and command-line identifier is `compact-v1`. The setting affects display only; it does not change Pi prompts, tools, models, saved transcript meaning, or inference.
 
 ## Code block syntax highlighting
 
@@ -393,6 +458,8 @@ At the phone/coarse-pointer breakpoint, the legacy mobile shell collapses termin
 - Tablet layout, desktop tab placement, stored composer ordering, and command behavior are unchanged.
 
 The optional Mobile Experience v2 shell remains separately controlled by its existing preview setting and is not changed by this legacy mobile layout. Tablet adaptation is independently opt-in at medium widths with `?tabletShell=v2`; use `?tabletShell=legacy` for immediate rollback without changing the phone preview flag.
+
+For recovery, add `shell=classic` to the address, for example `http://127.0.0.1:31415/?shell=classic`. It bypasses phone and tablet previews for that page, including after resizing. Remove it to restore your saved choices; it does not reset your layout or sessions.
 
 ## Git panel
 

@@ -1,0 +1,264 @@
+html[data-desktop-shell="focused"] .layout[hidden] { display: none !important; }
+.focused-composer-controls[hidden] { display: none; }
+/* Composer flyouts must clear both the sticky prompt and the floating overview. */
+html[data-desktop-shell="focused"] #focusedWorkspace .composer { z-index: 15; }
+html[data-desktop-shell="focused"] .control-row:has(#modelSelect),
+html[data-desktop-shell="focused"] .control-row:has(#thinkingSelect),
+html[data-desktop-shell="focused"] #busyPromptBehaviorTag,
+html[data-desktop-shell="focused"] #busyPromptBehaviorMenu { display: none !important; }
+html[data-desktop-shell="focused"] #composerActionsButton { display: inline-flex; }
+html[data-desktop-shell="focused"] #focusedWorkspace .composer-row {
+  position: relative;
+  overflow-x: clip;
+  overflow-y: visible;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 8px;
+  margin-top: 8px;
+}
+html[data-desktop-shell="focused"] #focusedWorkspace .composer-row > .spacer { display: none; }
+/* Saved action order stays inside More and cannot place the primary action. */
+html[data-desktop-shell="focused"] #focusedWorkspace #composerActionsButton,
+html[data-desktop-shell="focused"] #focusedWorkspace #sendButton {
+  grid-row: 1;
+  order: 0;
+  transform: none;
+  width: auto;
+  min-height: 34px;
+  padding: 5px 14px;
+}
+html[data-desktop-shell="focused"] #focusedWorkspace #composerActionsButton {
+  grid-column: 1;
+  justify-self: start;
+  justify-content: center;
+  min-width: 64px;
+  gap: 8px;
+}
+html[data-desktop-shell="focused"] #composerActionsButton[data-focused-disclosure]::after {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: translateY(-2px) rotate(45deg);
+}
+html[data-desktop-shell="focused"] #composerActionsButton[data-focused-disclosure="open"]::after {
+  transform: translateY(2px) rotate(225deg);
+}
+html[data-desktop-shell="focused"] #focusedWorkspace #sendButton {
+  grid-column: 2;
+  justify-self: end;
+  min-width: 96px;
+}
+html[data-desktop-shell="focused"] #composerActionsPanel { display: none; }
+html[data-desktop-shell="focused"] body.composer-actions-open #composerActionsPanel {
+  position: fixed;
+  z-index: 100;
+  inset: var(--focused-flyout-top, 0) auto auto var(--focused-flyout-left, 0);
+  display: flex;
+  flex-wrap: nowrap;
+  grid-column: 2;
+  grid-row: 1;
+  order: 0;
+  min-width: 0;
+  box-sizing: border-box;
+  width: max-content;
+  max-width: var(--focused-flyout-width, calc(100vw - 16px));
+  max-height: var(--focused-flyout-max-height, calc(100dvh - 16px));
+  gap: .5rem;
+  align-items: center;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior: contain;
+  touch-action: pan-x;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--ctp-mantle);
+  box-shadow: 0 8px 24px var(--shadow);
+}
+/* Keep saved order and spans without letting saved grid coordinates wrap the row. */
+html[data-desktop-shell="focused"] #composerActionsPanel > [data-composer-action-id] {
+  flex: 0 0 auto;
+  width: auto;
+  min-width: calc(var(--composer-action-grid-span, 1) * var(--composer-action-cell-min-width, 3.2rem));
+  grid-column: auto;
+  grid-row: auto;
+  transform: none;
+  touch-action: pan-x;
+}
+html[data-desktop-shell="focused"] #composerActionsPanel > .composer-publish-menu {
+  position: static;
+  isolation: auto;
+}
+/* Fixed descendants escape the row's scroll clip while keeping native event ancestry. */
+html[data-desktop-shell="focused"] #composerActionsPanel > .composer-publish-menu > .composer-publish-menu-panel {
+  position: fixed;
+  z-index: 101;
+  inset: var(--focused-flyout-top, 0) auto auto var(--focused-flyout-left, 0);
+  box-sizing: border-box;
+  width: var(--focused-flyout-width, 14rem);
+  min-width: 0;
+  max-width: calc(100vw - 16px);
+  max-height: var(--focused-flyout-max-height, calc(100dvh - 16px));
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--ctp-mantle);
+  box-shadow: 0 8px 24px var(--shadow);
+}
+html[data-desktop-shell="focused"] #composerActionsPanel > .composer-publish-menu .composer-publish-menu-item {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+}
+/* The conversation clips sideways flyouts, so keep nested Options in one scroll area. */
+html[data-desktop-shell="focused"] #focusedWorkspace .composer-options-submenu { flex-direction: column; }
+html[data-desktop-shell="focused"] #focusedWorkspace .composer-options-submenu-panel {
+  position: static;
+  max-height: none;
+  padding-top: 6px;
+  overflow: visible;
+}
+/* With room beside the menu, app.js places an open submenu as a fixed flyout instead. */
+html[data-desktop-shell="focused"] #focusedWorkspace .composer-options-submenu-panel.options-submenu-flyout {
+  position: fixed;
+  z-index: 130;
+  box-sizing: border-box;
+  padding: 6px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--ctp-mantle);
+  box-shadow: 0 8px 24px var(--shadow);
+}
+html[data-desktop-shell="focused"] #composerActionsPanel[hidden],
+html[data-desktop-shell="focused"] #focusedWorkspace .composer-options-menu-panel[hidden],
+html[data-desktop-shell="focused"] #focusedWorkspace .composer-options-submenu-panel[hidden] { display: none; }
+@media (pointer: coarse) {
+  /* Touch styles size the chat to the viewport; the focused header needs room too. */
+  html[data-desktop-shell="focused"] #focusedWorkspace .chat-panel { height: 100%; max-height: 100%; }
+  html[data-desktop-shell="focused"] #focusedWorkspace #composerActionsButton,
+  html[data-desktop-shell="focused"] #focusedWorkspace #sendButton { min-height: 44px; }
+}
+html[data-desktop-shell="focused"] .side-panel-section-content { min-width: 0; }
+html[data-desktop-shell="focused"] .side-panel-controls { display: grid; gap: 16px; }
+html[data-desktop-shell="focused"] #focusedWorkspace { height: var(--visual-viewport-height, 100dvh); }
+/* Preserve focus-driven scroll recovery when short windows fill with suggestions. */
+#focusedWorkspace .chat-panel { display: flex; flex-direction: column; overflow: hidden; }
+#focusedWorkspace .terminal-tabs-shell { display: flex; flex-direction: column; align-items: stretch; height: 100%; min-height: 0; }
+#focusedWorkspace .terminal-tabs-drawer-content { display: flex; flex-direction: column; gap: 8px; min-height: 0; height: 100%; }
+#focusedWorkspace .terminal-tabs { flex: 1; display: flex; flex-direction: column; align-items: stretch; overflow: auto; max-height: none; }
+#focusedWorkspace .terminal-tab { flex: 0 0 auto; min-width: 0; width: 100%; max-width: none; }
+#focusedWorkspace .terminal-tab-group-menu { position: static; display: flex; width: 100%; min-width: 0; max-width: 100%; max-height: none; padding: 4px 0 0; overflow: visible; }
+#focusedWorkspace .terminal-tab-group { display: flex; flex-direction: column; }
+#focusedWorkspace .terminal-tab-group-item { border-radius: 5px; box-shadow: none; }
+#focusedWorkspace .terminal-sidebar-actions { display: flex; flex-wrap: wrap; gap: 4px; }
+#focusedWorkspace .terminal-sidebar-actions > button { flex: 1 1 32px; min-width: 32px; max-width: 38px; width: 32px; padding-inline: 6px; }
+#focusedWorkspace .terminal-tabs button { min-height: 30px; padding-block: 4px; box-shadow: none; }
+#focusedWorkspace .terminal-close-all-button { font-size: 11px; min-height: 28px; }
+#focusedWorkspace[data-navigation="top"] .terminal-tabs-shell,
+#focusedWorkspace[data-navigation="top"] .terminal-tabs-drawer-content,
+#focusedWorkspace[data-navigation="top"] .terminal-tabs { flex-direction: row; height: auto; align-items: center; }
+#focusedWorkspace[data-navigation="top"] .terminal-tab { width: auto; min-width: 180px; }
+#focusedWorkspace[data-navigation="top"] .terminal-tab-group-menu { max-height: 100px; overflow: auto; }
+
+.focused-modal-run-controls { display: flex; gap: 8px; flex-wrap: wrap; }
+.focused-modal-run-controls:has(> button:not([hidden])) { padding-block: 8px; border-top: 1px solid var(--border); }
+
+#focusedWorkspace .composer-row > button { min-height: 34px; padding-block: 5px; }
+#focusedWorkspace .terminal-tab-actions { flex: 0 0 40px; min-width: 40px; flex-direction: row; }
+#focusedWorkspace .terminal-tab-close { flex-basis: 22px; min-width: 22px; padding-inline: 3px; }
+#focusedWorkspace .terminal-tab-actions > button { min-height: 28px; }
+#focusedWorkspace .terminal-tab-button { padding: 5px 7px; }
+#focusedWorkspace .terminal-tab-title { font-size: 12px; letter-spacing: normal; }
+
+.focused-artifacts-host { display: flex; flex-direction: column; height: 100%; min-height: 0; min-width: 0; }
+.focused-artifacts-host > .document-artifact-content { flex: 1; min-height: 0; }
+.focused-artifact-empty { flex: 0 0 auto; margin: 0; padding: 1rem; }
+#focusedWorkspace .focused-artifacts-host .document-artifact-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+#focusedWorkspace .focused-artifacts-host .document-artifact-sidebar { display: flex; overflow-x: auto; max-height: 6rem; border-right: 0; border-bottom: 1px solid var(--ctp-surface0); }
+#focusedWorkspace .focused-artifacts-host .document-artifact-thumbnail { flex: 0 0 4.5rem; padding: .25rem; }
+#focusedWorkspace .focused-artifacts-host .document-artifact-thumbnail img { height: 2.75rem; object-fit: contain; }
+#focusedWorkspace .focused-artifacts-host .document-artifact-toolbar { position: static; padding: 0; gap: .25rem; }
+#focusedWorkspace .focused-artifacts-host .document-artifact-stage { padding: .5rem; }
+#focusedWorkspace .focused-artifacts-host .document-artifact-header { padding: .5rem; flex-wrap: wrap; }
+#focusedWorkspace .focused-artifacts-host .document-artifact-search { min-width: 0; width: 100%; }
+#focusedWorkspace .focused-artifacts-host .document-artifact-semantic { min-width: 0; max-width: 100%; }
+#focusedWorkspace .focused-artifacts-host .document-artifact-thumbnail span { white-space: nowrap; }
+#focusedWorkspace .focused-artifacts-host .document-artifact-toolbar button { min-height: 1.75rem; padding: .3rem .45rem; font-size: var(--text-xs); }
+
+#focusedWorkspace .focused-feature-host { min-width: 0; padding: .6rem; }
+#focusedWorkspace .focused-feature-controls { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; margin-bottom: .6rem; }
+#focusedWorkspace .focused-feature-controls .composer-publish-menu-panel { display: flex; position: static; flex: 1 1 100%; flex-direction: column; min-width: 0; max-width: 100%; width: 100%; max-height: none; box-shadow: none; border: 0; padding: 0; background: transparent; transform: none; }
+#focusedWorkspace .focused-feature-controls .composer-publish-menu-item { min-width: 0; width: 100%; white-space: normal; }
+#focusedWorkspace .focused-feature-widgets { min-width: 0; }
+#focusedWorkspace .focused-feature-widgets > * { min-width: 0; max-width: 100%; }
+#focusedWorkspace .focused-feature-widgets .release-npm-output-details { min-width: 0; }
+#focusedWorkspace .focused-feature-empty { font-size: var(--text-xs); line-height: 1.5; }
+
+#focusedWorkspace .focused-feature-controls .composer-app-runner-info-button { position: static; opacity: 1; pointer-events: auto; transform: none; }
+#focusedWorkspace .focused-feature-widgets .app-runner-stdin-form { display: grid; grid-template-columns: 1fr auto; }
+#focusedWorkspace .focused-feature-widgets .app-runner-stdin-input { grid-column: 1 / -1; width: 100%; }
+#focusedWorkspace .focused-conversation-link { width: 100%; min-width: 0; white-space: normal; text-align: left; }
+
+#focusedWorkspace .focused-feature-widgets .btw-widget .release-npm-header { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .4rem; align-items: start; }
+#focusedWorkspace .focused-feature-widgets .btw-widget .release-npm-meta { min-width: 0; max-width: 100%; }
+#focusedWorkspace .focused-feature-widgets .btw-widget .release-npm-actions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; min-width: 0; }
+#focusedWorkspace .focused-feature-widgets .btw-widget .release-npm-actions button { max-width: 100%; white-space: normal; }
+
+/* The compact inspector owns panel navigation; Classic keeps its floating controls. */
+html[data-desktop-shell="focused"] .side-panel-expand-button { display: none !important; }
+
+.focused-inbox-button { position: relative; }
+.focused-inbox-button .focused-attention { position: static; }
+.focused-finished { color: var(--muted); font-size: 11px; }
+.focused-inbox-button [hidden] { display: none; }
+
+#focusedWorkspace .terminal-tab-settlement-button { color: var(--ctp-teal); padding-inline: 2px; border: 0; border-radius: 3px; background: transparent; }
+#focusedWorkspace .terminal-tab-settlement-button:disabled { color: var(--muted); opacity: .5; cursor: not-allowed; }
+#focusedWorkspace .terminal-tab-settlement-button:not(:disabled):hover { background: var(--hover-bg, rgba(148, 226, 213, .15)); }
+#focusedWorkspace .terminal-tab-settlement-button:focus-visible { outline: 2px solid var(--ctp-teal); outline-offset: -2px; }
+#focusedWorkspace .has-session-shelves .terminal-tab-group-menu[hidden] { display: none; }
+#focusedWorkspace[data-navigation="left"] .focused-navigation,
+#focusedWorkspace[data-navigation="left"] .terminal-tabs {
+  scrollbar-width: none;
+  scrollbar-gutter: auto;
+}
+#focusedWorkspace[data-navigation="left"] .focused-navigation::-webkit-scrollbar,
+#focusedWorkspace[data-navigation="left"] .terminal-tabs::-webkit-scrollbar { display: none; }
+
+#focusedWorkspace .terminal-settings-button { display: inline-grid; place-items: center; flex: 0 0 38px; width: 38px; min-height: 38px; padding: 8px; }
+#focusedWorkspace .terminal-settings-button[hidden] { display: none; }
+#focusedWorkspace .terminal-settings-button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+#focusedWorkspace .terminal-settings-button[aria-current="page"] { color: var(--accent); border-color: var(--accent); }
+
+/* These controls move out of the input frame when More opens. */
+html[data-desktop-shell="focused"] #composerActionsPanel > .composer-workflow-mode-dock,
+html[data-desktop-shell="focused"] #composerActionsPanel > .composer-context-tags {
+  flex: 0 0 auto;
+  position: relative;
+  inset: auto;
+  width: auto;
+  max-width: 100%;
+  margin: 0;
+  transform: none;
+}
+html[data-desktop-shell="focused"] #composerActionsPanel > .composer-context-tags {
+  grid-column: 1 / -1;
+  flex-wrap: nowrap;
+}
+html[data-desktop-shell="focused"] #composerActionsPanel .composer-workflow-overlay-open-button {
+  position: static;
+  margin: 0;
+}
+
+html[data-desktop-shell="focused"] #composerActionsPanel > .composer-workflow-mode-dock.has-open-control {
+  grid-column: span 2;
+}

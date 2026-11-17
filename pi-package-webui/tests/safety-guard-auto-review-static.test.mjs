@@ -16,7 +16,7 @@ assert.match(dialog, /nativeSettingSelect\("Review model"[\s\S]*nativeSettingSel
 assert.match(dialog, /data\.modelThinkingLevels\?\.\[selectedModelKey\]/, "thinking options should come from the server's per-model support map");
 assert.match(dialog, /controls\.autoReviewModel\.select\.disabled = !models\.length[\s\S]*controls\.autoReviewThinking\.select\.disabled = !selectedAvailable/, "model and thinking selectors should remain configurable before auto-review is enabled");
 assert.match(dialog, /model and thinking can still be preselected before enabling auto-review/, "disabled auto-review state should explain that model setup remains available");
-assert.match(dialog, /Unavailable: no authenticated Pi models are available[\s\S]*Unavailable: select one of the authenticated models from this active tab/, "dialog should explain model-unavailable states");
+assert.match(dialog, /Unavailable: no authenticated Pi models are available[\s\S]*Unavailable: select one of the authenticated models from this active thread/, "dialog should explain model-unavailable states");
 assert.match(dialog, /const collectConfig = \(\) =>[\s\S]*autoReview: \{[\s\S]*enabled: controls\.autoReview\.input\.checked[\s\S]*provider:[\s\S]*modelId:[\s\S]*thinkingLevel:/, "collection should persist the canonical nested autoReview shape");
 assert.match(dialog, /const applyConfig = \(value\) =>[\s\S]*controls\.autoReview\.input\.checked = value\?\.autoReview\?\.enabled === true[\s\S]*syncAutoReviewControls/, "application and reset should restore auto-review controls and availability state");
 assert.match(dialog, /addNativeCommandAction\("Reset defaults"[\s\S]*applyConfig\(defaults\)/, "reset should apply canonical defaults");

@@ -35,7 +35,8 @@ assert.match(app, /mobileCanonicalMountContent\(host, \["sidePanelSectionQueue"\
 assert.match(app, /mobileCanonicalMountContent\(host, topic\[1\]/, "More must reuse canonical settings/action nodes");
 assert.match(app, /await appConfirm\(\{ title: "Abort active run\?"/, "Abort must have visible tap-confirm parity");
 assert.match(app, /elements\.optionsConversationModeButton\?\.click\(\)/, "voice entry must retain the existing action");
-assert.match(app, /window\.history\.pushState/, "route and sheet transitions must be history-owned");
+assert.match(app, /shellHistory\.write\(\{ state: \{ piMobileShellV2: true/, "route and sheet transitions must use the shared history owner");
+assert.match(app, /if \(!commitMobileNavigation\(next\)\) return;/, "a failed history write must not update the rendered view");
 assert.match(app, /document\.addEventListener\("keydown", \(event\) => \{[\s\S]*?event\.key !== "Escape"[\s\S]*?document\.querySelector\("dialog\[open\]"\)/, "Escape must share mobile Back handling without dismissing a surface under a native dialog");
 assert.match(app, /projectTopics\?\.addEventListener\("keydown"[\s\S]*?"ArrowLeft"[\s\S]*?"Home"[\s\S]*?activateProjectTopic/, "Project tabs require arrow/Home/End keyboard activation");
 assert.match(app, /function syncMobileShellInteractivity\([\s\S]*?layout\.inert = layoutObscured[\s\S]*?destination\.setAttribute\("role", "main"\)/, "full-screen destinations must inert the obscured layout and own the main landmark");
@@ -60,6 +61,6 @@ assert.match(css, /data-mobile-presentation="essential"/, "Essential presentatio
 assert.match(css, /html\[data-mobile-shell="v2"\] body\.mobile-keyboard-open \.widget-area,[\s\S]*?\.composer-actions-button \{ display: block !important; \}/, "v2 keyboard mode must keep run widgets and the actions entry available");
 assert.match(css, /@media \(prefers-reduced-motion: reduce\)/, "reduced-motion behavior is required");
 assert.match(css, /@media \(forced-colors: active\)/, "forced-color affordances are required");
-assert.match(serviceWorker, /const CACHE_NAME = "pi-webui-pwa-v156"/, "browser asset changes need a coherent cache tuple");
+assert.match(serviceWorker, /const CACHE_NAME = "pi-webui-pwa-v200"/, "browser asset changes need a coherent cache tuple");
 
 console.log("mobile-phone-experience-static.test.mjs passed");

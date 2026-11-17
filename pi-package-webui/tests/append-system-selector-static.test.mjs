@@ -73,20 +73,20 @@ assert.match(selector, /result\.changed === true && result\.restartRequired === 
 assert.doesNotMatch(selector, /sendPrompt\("prompt", "\/reload"/, "the selector body must not reload the tab directly");
 
 const restartBody = app.slice(app.indexOf("async function confirmAppendSystemRestart"));
-assert.match(restartBody, /appConfirmText\([\s\S]*?confirmLabel: "Restart tab"/, "restart must be gated behind an explicit confirmation");
+assert.match(restartBody, /appConfirmText\([\s\S]*?confirmLabel: "Restart thread"/, "restart must be gated behind an explicit confirmation");
 assert.match(restartBody, /if \(!confirmed\) return;/, "cancelling the confirmation must not restart the tab");
 assert.match(restartBody, /sendPrompt\("prompt", "\/reload", \{ targetTabId: tabId, throwOnError: true \}\)/, "confirmed restart must reuse the standard active-tab reload path");
-assert.match(restartBody, /Append-system tab restart failed:/, "reload errors must remain visible in the events log");
-assert.match(restartBody, /Cancel keeps it for the next manual reload or new tab/, "cancellation must be described as keeping the saved choice");
+assert.match(restartBody, /Append-system thread restart failed:/, "reload errors must remain visible in the events log");
+assert.match(restartBody, /Cancel keeps it for the next manual reload or new thread/, "cancellation must be described as keeping the saved choice");
 
 assert.match(
   app,
-  /\{ kind: "Pi", label: "\/append-system", description: "Choose the APPEND_SYSTEM\.md append prompt", keywords: "append system prompt settings global", run: \(\) => openNativeAppendSystemSelector\(\) \},/,
+  /\{ id: "native:append-system", scope: "server", destination: "settings", kind: "Pi", label: "\/append-system", description: "Choose the APPEND_SYSTEM\.md append prompt", keywords: "append system prompt settings global", run: \(\) => openNativeAppendSystemSelector\(\) \},/,
   "the command palette must expose the append-system selector",
 );
 
-assert.match(selector, /one global APPEND_SYSTEM\.md append prompt for WebUI-managed Pi tabs/i, "the dialog must label the choice as a global WebUI setting");
-assert.match(selector, /bounded scan uses the active tab folder and ~\/\.pi up to depth 10/i, "the dialog must describe the bounded scan roots and depth");
+assert.match(selector, /one global APPEND_SYSTEM\.md append prompt for WebUI-managed Pi threads/i, "the dialog must label the choice as a global WebUI setting");
+assert.match(selector, /bounded scan uses the active thread folder and ~\/\.pi up to depth 10/i, "the dialog must describe the bounded scan roots and depth");
 assert.match(selector, /follows file and folder links even outside those roots/i, "the dialog must warn that followed links can leave the visible roots");
 assert.match(selector, /never shows file contents/i, "the dialog must promise no prompt content exposure");
 

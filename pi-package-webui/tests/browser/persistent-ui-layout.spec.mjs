@@ -968,6 +968,9 @@ test("a delayed GET cannot regress the revision acknowledged by a newer PUT", as
     await route.continue();
   });
   await page.goto(baseURL);
+  // Let the initial snapshot apply before holding a later reconciliation read.
+  // Otherwise the keyboard move can recreate the seeded order without a write.
+  await expect.poll(async () => (await sectionOrder(page)).slice(0, 3)).toEqual(["files", "controls", "git"]);
   holdReconcileGet = true;
   await page.evaluate(() => window.dispatchEvent(new Event("online")));
   await delayedGetCapturedPromise;

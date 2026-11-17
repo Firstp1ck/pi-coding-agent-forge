@@ -1,3 +1,4 @@
+import { createActivityAgentsController } from "../public/activity-agents-controller.mjs";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import vm from "node:vm";
@@ -135,38 +136,18 @@ assert.match(viewSyncSource, /run && !subagentRunCanOpen\(run,[\s\S]*subagentOve
 assert.match(app, /async function openSubagentOverlay\(tab, run, agent\)[\s\S]*!subagentRunCanOpen\(run, agent\)/, "direct overlay entry should reject unsupported rows");
 assert.match(app, /function subagentGateAttemptTarget\(tab, attempt\)[\s\S]*subagentRunCanOpen\(run, agent\)/, "retry-gate output entry should reject unsupported rows");
 
-const refreshSource = sourceBetween(app, "async function refreshSubagents(", "\nfunction scheduleRefreshSubagents(");
+const refreshSource = sourceBetween(app, "function refreshSubagents(", "\nfunction scheduleRefreshSubagents(");
 let resolveFirst;
 let resolveSecond;
 let apiCalls = 0;
 const firstResponse = new Promise((resolve) => { resolveFirst = resolve; });
 const secondResponse = new Promise((resolve) => { resolveSecond = resolve; });
-const refreshContext = {
-  subagentsRefreshPromise: null,
-  subagentsRefreshQueued: false,
-  subagentsLoading: false,
-  latestSubagents: null,
-  subagentsError: null,
-  dismissedSubagentGateKeys: new Set(),
-  subagentOverlaySelection: null,
-  activeTabId: "tab-a",
-  activeSubagentTerminalId: null,
-  subagentAutoClearEnabled: false,
-  renderSubagents() {},
-  pruneDismissedSubagentGateKeys() {},
-  syncSubagentTerminalViewsFromOverview() { return false; },
-  materializeRetainedSubagentTerminalViews() { return false; },
-  renderWidgets() {},
-  renderSubagentTerminalView() {},
-  scheduleSubagentTerminalRefresh() {},
-  renderTabs() {},
-  finishedSubagentRunSelections() { return []; },
-  async clearFinishedSubagentRuns() {},
-  api() {
-    apiCalls += 1;
-    return apiCalls === 1 ? firstResponse : secondResponse;
-  },
-};
+const overviewOwner = createActivityAgentsController({
+  getVisibility: () => "visible", getAutoClear: () => false, finishedSelections: () => [],
+  canCancel: () => false, canDismiss: () => false, isAttachedProjection: () => false, agentCount: () => 0,
+  api() { apiCalls += 1; return apiCalls === 1 ? firstResponse : secondResponse; },
+});
+const refreshContext = { activityAgents: overviewOwner };
 vm.runInNewContext(`${refreshSource}\nthis.runRefreshSubagents = refreshSubagents;`, refreshContext);
 const initialRefresh = refreshContext.runRefreshSubagents();
 const overlappingRefresh = refreshContext.runRefreshSubagents();
@@ -176,8 +157,10 @@ await new Promise((resolve) => setImmediate(resolve));
 assert.equal(apiCalls, 2, "an overlapping request should guarantee one trailing authoritative refresh");
 resolveSecond({ data: { revision: "authoritative" } });
 await Promise.all([initialRefresh, overlappingRefresh]);
-assert.equal(refreshContext.latestSubagents?.revision, "authoritative", "the trailing refresh should own final browser state");
-assert.equal(refreshContext.subagentsLoading, false, "coalesced refresh should release its loading guard");
-assert.equal(refreshContext.subagentsRefreshPromise, null, "coalesced refresh should clear its shared promise");
+assert.equal(overviewOwner.getSnapshot().data?.revision, "authoritative", "the trailing refresh should own final browser state");
+assert.equal(overviewOwner.getSnapshot().loading, false, "coalesced refresh should release its loading guard");
+await refreshContext.runRefreshSubagents();
+assert.equal(apiCalls, 3, "settled refresh should release its shared promise for new work");
+overviewOwner.dispose();
 
 console.log("subagent-reliability-integration.test.mjs passed");

@@ -14,8 +14,8 @@ const [server, state, launcher, runner, trust] = await Promise.all([
 assert.match(state, /validateUpdatePlanRequest[\s\S]*targets must contain exactly one value/);
 assert.match(state, /validateUpdateApplyRequest[\s\S]*Apply accepts only transactionId and planDigest/);
 assert.match(server, /url\.pathname === "\/api\/update\/plan"[\s\S]*requireLocalhostRoute[\s\S]*validateUpdatePlanRequest[\s\S]*sendJson\(res, 201/);
-assert.match(server, /url\.pathname === "\/api\/update\/apply"[\s\S]*requireLocalhostRoute[\s\S]*validateUpdateApplyRequest[\s\S]*applyNativeServerPlan/);
-assert.match(server, /createNativeServerPlan\(validation\.targets\)/);
+assert.match(server, /url\.pathname === "\/api\/update\/apply"[\s\S]*requireLocalhostRoute[\s\S]*validateUpdateApplyRequest[\s\S]*packageUpdates\.apply/);
+assert.match(server, /packageUpdates\.plan\(validation\.targets\[0\]\)/);
 assert.match(server, /validateNativePlan\(job\.plan, digest\)/);
 assert.match(server, /url\.pathname === "\/api\/restart"[\s\S]*requireLocalhostRoute[\s\S]*assertNativeMutationAdmission\(\)/,
   "ordinary server restarts must not race a native update fence");

@@ -5,7 +5,7 @@ import * as modes from "../public/codex-speed-mode.mjs";
 
 const source = await readFile(new URL("../public/app.js", import.meta.url), "utf8");
 const start = source.indexOf("// Codex subscription Fast mode is owned");
-const end = source.indexOf("function scheduleRefreshCodexUsage", start);
+const end = source.indexOf("const SUBAGENT_LAUNCHER_LABELS", start);
 assert.ok(start >= 0 && end > start, "execute the actual browser speed-control implementation");
 const controlSource = source.slice(start, end);
 
@@ -13,6 +13,7 @@ function harness({ confirm = true, eligible = true, enabledFeature = true } = {}
   const calls = [];
   const confirmations = [];
   const events = [];
+  let shellRenders = 0;
   const ultrafastOption = { disabled: true };
   const select = { value: "normal", disabled: true, querySelector: () => ultrafastOption };
   let currentTab = "tab-one";
@@ -36,6 +37,7 @@ function harness({ confirm = true, eligible = true, enabledFeature = true } = {}
     normalizeSelectedModel: (model) => model,
     modelStateKey: (model) => `${model?.provider}/${model?.id}`,
     renderStatus() {},
+    scheduleFocusedShellRender() { shellRenders++; },
     requestGitFooterWebuiPayload() {},
     queueMicrotask,
     async appConfirm(options) {
@@ -57,14 +59,14 @@ function harness({ confirm = true, eligible = true, enabledFeature = true } = {}
   context.applyCodexFastModeData(data("normal"));
   vm.runInContext("codexFastModeLoaded = true", context);
   context.renderCodexFastModeControl();
-  return { context, calls, confirmations, events, select, tabModes, ultrafastOption, data, setEligible(value) { eligible = value; } };
+  return { context, calls, confirmations, events, get shellRenders() { return shellRenders; }, select, tabModes, ultrafastOption, data, setEligible(value) { eligible = value; } };
 }
 
 {
   const h = harness();
   assert.equal(h.context.applyCodexFastModeStatus("ultrafast"), true);
   assert.equal(h.select.value, "ultrafast");
-  assert.equal(h.context.codexFastModeStatusText(), "Ultrafast · This tab");
+  assert.equal(h.context.codexFastModeStatusText(), "Ultrafast · This thread");
   assert.equal(h.context.applyCodexFastModeStatus("ultrafast now"), false);
   assert.equal(h.select.value, "ultrafast");
   assert.equal(h.context.codexFastModeConfirmedOff({ statusKnown: true, mode: "ultrafast", enabled: false }), false);
@@ -98,6 +100,7 @@ function harness({ confirm = true, eligible = true, enabledFeature = true } = {}
   h.select.value = "ultrafast";
   await h.context.applyCodexFastMode();
   assert.equal(h.calls.length, 0, "changing tabs during cost confirmation must cancel the mutation");
+  assert.equal(h.shellRenders, 1, "settling the old confirmation schedules current Settings controls");
 }
 {
   const h = harness({ eligible: false });

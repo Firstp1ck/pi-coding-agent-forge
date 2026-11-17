@@ -23,9 +23,9 @@ export function subagentLaunchSlotSaveState({
 } = {}) {
   if (saving) return { disabled: true, reason: "Saving agent models…" };
   if (loading) return { disabled: true, reason: "Wait for agent models to finish loading." };
-  if (!hasConfig || !hasDraft) return { disabled: true, reason: "Agent model configuration is not available for this tab." };
+  if (!hasConfig || !hasDraft) return { disabled: true, reason: "Agent model configuration is not available for this thread." };
   if (!dirty) return { disabled: true, reason: "Change a model or thinking preset to enable saving." };
-  if (!activeConfigTab) return { disabled: true, reason: "Switch back to the tab where these changes were made to save them." };
+  if (!activeConfigTab) return { disabled: true, reason: "Switch back to the thread where these changes were made to save them." };
   return { disabled: false, reason: "Ready to save." };
 }
 

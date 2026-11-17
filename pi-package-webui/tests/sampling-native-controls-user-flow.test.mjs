@@ -143,7 +143,7 @@ function createHarness() {
   const hostValue = (value, fallback = undefined) => (value === undefined ? fallback : JSON.parse(JSON.stringify(value)));
 
   const context = {
-    console,
+    console, AbortSignal,
     document: mockDocument,
     elements,
     SAMPLING_PARAMETER_CATALOG,
@@ -179,6 +179,12 @@ function createHarness() {
     let samplingParametersRequestSerial = 0;
     let activeTabId = "tab-a";
     function activeTabContext(tabId = activeTabId) { return { tabId: tabId || null, generation: 0 }; }
+    function isCurrentTabContext(context) { return context.tabId === activeTabId && context.generation === 0; }
+    const focusedShell = null;
+    const sessionContext = {
+      captureLifetime: tabId => ({ tabId, generation: 0 }),
+      isLifetimeCurrent: target => target.generation === 0,
+    };
     ${samplingBlock}
     globalThis.samplingHarness = {
       setActiveTab(value) { activeTabId = value; },

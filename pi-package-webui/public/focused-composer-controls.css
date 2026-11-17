@@ -1,0 +1,111 @@
+.focused-composer-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+  max-width: 100%;
+  color: var(--text);
+  font-size: var(--text-xs, 0.75rem);
+}
+
+.focused-composer-controls * { box-sizing: border-box; min-width: 0; }
+.focused-composer-controls [hidden] { display: none !important; }
+.focused-composer-scope { padding-block: 13px; color: var(--muted); }
+.focused-composer-setting { flex: 0 1 auto; max-width: 100%; }
+.focused-composer-controls .focused-composer-setting-button {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-height: 44px;
+  max-width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  overflow-wrap: anywhere;
+  box-shadow: none;
+  transform: none;
+}
+.focused-composer-caption { flex-shrink: 0; color: var(--muted); }
+.focused-composer-model-value, .focused-composer-effort-value { font-weight: 550; }
+.focused-composer-setting-button:disabled { cursor: not-allowed; opacity: 0.65; }
+.focused-composer-reason {
+  max-width: 32em;
+  margin: 4px 0 0;
+  color: var(--warning);
+  overflow-wrap: anywhere;
+}
+.focused-composer-busy { flex: 1 1 230px; max-width: 100%; }
+.focused-composer-behavior-label { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; color: var(--muted); }
+.focused-composer-controls .focused-composer-behavior {
+  flex: 0 1 auto;
+  min-width: 0;
+  min-height: 44px;
+  max-width: 100%;
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  appearance: auto;
+  -webkit-appearance: auto;
+  padding: 8px;
+}
+.focused-composer-description { margin: 4px 0 0; color: var(--muted); overflow-wrap: anywhere; }
+.focused-composer-controls :is(button, select):focus-visible {
+  outline: 2px solid var(--accent-2, var(--accent));
+  outline-offset: -2px;
+}
+
+html[data-desktop-shell="focused"] #focusedWorkspace .focused-composer-controls {
+  align-items: flex-start;
+  gap: 4px 8px;
+  margin-top: 6px;
+}
+html[data-desktop-shell="focused"] #focusedWorkspace .focused-composer-scope {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 2px;
+}
+html[data-desktop-shell="focused"] #focusedWorkspace .focused-composer-setting {
+  max-width: min(100%, 26rem);
+}
+html[data-desktop-shell="focused"] #focusedWorkspace .focused-composer-setting-button {
+  align-items: center;
+  min-height: 30px;
+  padding: 4px 7px;
+  border-color: transparent;
+  background: transparent;
+  line-height: 20px;
+}
+html[data-desktop-shell="focused"] #focusedWorkspace .focused-composer-setting-button:not(:disabled):hover {
+  border-color: var(--border);
+  background: var(--panel-2);
+}
+html[data-desktop-shell="focused"] #focusedWorkspace :is(.focused-composer-model-value, .focused-composer-effort-value) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+html[data-desktop-shell="focused"] #focusedWorkspace .focused-composer-busy {
+  flex: 1 1 17rem;
+}
+html[data-desktop-shell="focused"] #focusedWorkspace .focused-composer-behavior {
+  min-height: 30px;
+  padding: 3px 6px;
+  border: 1px solid var(--border);
+  background: transparent;
+}
+html[data-desktop-shell="focused"] #focusedWorkspace :is(.focused-composer-description, .focused-composer-reason) {
+  margin-top: 2px;
+  line-height: 1.4;
+}
+@media (pointer: coarse) {
+  html[data-desktop-shell="focused"] #focusedWorkspace :is(.focused-composer-setting-button, .focused-composer-behavior, .focused-composer-scope) {
+    min-height: 44px;
+  }
+}

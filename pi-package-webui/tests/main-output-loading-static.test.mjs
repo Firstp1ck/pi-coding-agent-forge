@@ -45,7 +45,7 @@ assert.match(refreshMessages, /beginMainOutputLoading\(tabContext, loadDelta \? 
 assert.match(refreshMessages, /updateMainOutputLoading\(loadingRequest, "Loading conversation history…"\)[\s\S]*api\("\/api\/messages"/, "delta fallback should report that it is loading the complete transcript");
 assert.match(refreshMessages, /updateMainOutputLoading\(loadingRequest, "Preparing your conversation…"\)[\s\S]*renderMessages\(latestMessages\)/, "the status should report transcript rendering after data arrives");
 assert.match(refreshMessages, /finally \{\s*finishMainOutputLoading\(loadingRequest\);\s*\}/, "success, failure, and stale responses should all clear their request token");
-assert.match(app, /activeTabId = nextTabId;\s*renderMainOutputLoading\(\);/, "tab changes should immediately reconcile stale and current request visibility");
+assert.match(app, /activeTabId = context\.tabId;\s*activeTabGeneration = context\.generation;\s*renderMainOutputLoading\(\);/, "tab changes should immediately reconcile stale and current request visibility");
 
 assert.match(css, /\.main-output-loading\[hidden\] \{ display: none !important; \}/, "hidden loading feedback should not render");
 assert.match(css, /\.main-output-surface \{[\s\S]*?position: relative;[\s\S]*?flex: 1 1 auto;[\s\S]*?min-height: 0;/, "the transcript should retain its flexible layout surface");
@@ -58,9 +58,9 @@ assert.match(css, /@media \(prefers-reduced-motion: reduce\)[\s\S]*?animation-du
 assert.match(css, /body\.terminal-tabs-left \.main-output-surface \{ grid-row: 4; \}[\s\S]*body\.terminal-tabs-left \.footer-status-host \{ grid-row: 7; \}[\s\S]*body\.terminal-tabs-left \.context-meter-bar \{ grid-row: 8; \}/, "sidebar tab placement should keep the loading overlay anchored to the footer host");
 assert.match(css, /body\.subagent-terminal-active \.main-output-surface,[\s\S]*body\.subagent-terminal-active \.main-output-loading,/, "dedicated subagent output should hide the main transcript and its loading status");
 
-assert.match(html, /styles\.css\?v=154/, "the stylesheet cache query should advance");
-assert.match(html, /app\.js\?v=185/, "the app cache query should advance");
-assert.match(serviceWorker, /const CACHE_NAME = "pi-webui-pwa-v156"/, "the PWA cache identity should advance with browser assets");
+assert.match(html, /styles\.css\?v=167/, "the stylesheet cache query should advance");
+assert.match(html, /app\.js\?v=220/, "the app cache query should advance");
+assert.match(serviceWorker, /const CACHE_NAME = "pi-webui-pwa-v200"/, "the PWA cache identity should advance with browser assets");
 assert.match(readme, /Loading conversation history/, "user documentation should describe the plain-language loading feedback");
 assert.match(development, /main output loading/i, "developer documentation should preserve the request-ownership contract");
 

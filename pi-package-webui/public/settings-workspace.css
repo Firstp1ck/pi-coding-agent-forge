@@ -1,0 +1,19 @@
+.settings-workspace { max-width: 72rem; margin: 0 auto; width: 100%; }
+.settings-workspace .settings-navigation-layout { grid-template-columns: 10.5rem minmax(0, 1fr); gap: 1.5rem; }
+.settings-workspace .settings-page { min-width: 0; }
+.settings-workspace .control-group { padding: 0; margin: 0 0 1rem; border: 0; background: transparent; box-shadow: none; }
+.settings-workspace .control-row { padding: .5rem 0; border-bottom: 1px solid var(--border); }
+.settings-workspace .control-row-label { font-size: var(--text-sm); }
+.settings-workspace .settings-page-note { color: var(--muted); font-size: var(--text-sm); line-height: 1.5; margin: 0 0 1rem; }
+.settings-workspace .settings-action-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .25rem .75rem; padding: .65rem 0; border-bottom: 1px solid var(--border); align-items: center; }
+.settings-workspace .settings-action-row > button { justify-self: start; padding: .35rem .6rem; font-size: var(--text-sm); box-shadow: none; }
+.settings-workspace .settings-action-row > p { grid-column: 1 / -1; margin: 0; font-size: var(--text-xs); color: var(--muted); }
+.settings-workspace #conversationVoiceMenuPanel { display: flex; position: static; width: 100%; max-width: none; max-height: none; opacity: 1; visibility: visible; transform: none; box-shadow: none; flex-direction: column; border: 0; padding: 0; }
+.settings-workspace .optional-feature-row { padding: .65rem; }
+.settings-workspace .side-panel-version-row { margin: 1rem 0; }
+.settings-workspace .sponsor-link { display: inline-flex; margin-top: 1rem; }
+@media (max-width: 760px) {
+  .settings-workspace .settings-navigation-layout { grid-template-columns: minmax(0, 1fr); gap: .75rem; }
+  .settings-workspace .settings-navigation-categories { flex-direction: row; flex-wrap: wrap; }
+  .settings-workspace .settings-action-row { grid-template-columns: minmax(0, 1fr); }
+}

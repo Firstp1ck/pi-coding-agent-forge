@@ -9,7 +9,7 @@ const [catalog, app, development, manifest] = await Promise.all([
 ]);
 
 assert.equal(manifest.name, "@firstpick/pi-extension-feature-system-prompt");
-assert.equal(manifest.version, "0.1.6");
+assert.equal(manifest.version, "0.1.7");
 assert.match(
   catalog,
   /\["featureSystemPrompt", "@firstpick\/pi-extension-feature-system-prompt", "\^0\.1\.3"\]/,

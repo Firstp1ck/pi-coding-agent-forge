@@ -56,6 +56,7 @@ async function dispatchPointerMenu(row) {
 }
 
 async function openEvents(page) {
+  await expect(page.locator("#chat")).toContainText("fake answer");
   const section = page.locator("#sidePanelSectionEvents");
   if (await section.isHidden()) await page.locator("#sidePanelSectionToggleEvents").click();
   await expect(section).toBeVisible();
