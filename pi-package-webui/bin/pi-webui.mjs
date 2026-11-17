@@ -5522,10 +5522,23 @@ async function prepareRpcSupervisorHandoff() {
   return { epoch: handoff.epoch, seq: handoff.latestSeq };
 }
 
+// During a host shutdown the supervisor can exit before this process does. The
+// following detach frame then hits a socket that is already closing, and
+// net.Socket surfaces the failed write as EPIPE (or as a closed stream). The
+// session is preserved either way, so these are transport races, not shutdown
+// failures, and must not be reported as one.
+const RPC_SHUTDOWN_RACE_CODES = new Set(["EPIPE", "ECONNRESET", "ECONNREFUSED", "ERR_STREAM_DESTROYED", "ERR_STREAM_WRITE_AFTER_END"]);
+
+function isBenignRpcShutdownError(error) {
+  if (!error) return false;
+  if (RPC_SHUTDOWN_RACE_CODES.has(error.code)) return true;
+  return /RPC supervisor (is not connected|is not attached|client closed|connection closed)/i.test(String(error.message || ""));
+}
+
 async function detachRpcSupervisor() {
   if (!rpcSupervisor) return;
   try {
-    if (rpcSupervisor.isConnected()) await rpcSupervisor.detach();
+    if (rpcSupervisor.isConnected()) await rpcSupervisor.detach().catch((error) => { if (!isBenignRpcShutdownError(error)) throw error; });
   } finally {
     rpcSupervisorEventUnsubscribe?.();
     rpcSupervisorEventUnsubscribe = null;
@@ -12330,7 +12343,8 @@ async function shutdown(signal, { preserveSessions = false, exitCode = 0 } = {})
       await Promise.all([...tabs.values()].map((tab) => Promise.resolve(tab.rpc.stop()).catch(() => {})));
     }
   } catch (error) {
-    console.error("Web UI RPC shutdown failed:", sanitizeError(error));
+    if (isBenignRpcShutdownError(error)) console.log("Web UI RPC supervisor already disconnected; continuing shutdown.");
+    else console.error("Web UI RPC shutdown failed:", sanitizeError(error));
   }
 
   const forceCloseTimer = setTimeout(() => {
