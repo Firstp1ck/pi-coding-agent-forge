@@ -126,7 +126,7 @@ Keep blocking approvals and critical connection errors visible even when their f
 
 ### Compact design refinement — 2026-11-14
 
-The user requested a bolder, more compact and minimal design after viewing the first mock. The revised [interactive prototype](../../dev/mockups/pi-webui-focused/README.md) and its [design record](../../dev/mockups/pi-webui-focused/DESIGN.md) establish this direction for the focused shell:
+The user requested a bolder, more compact and minimal design after viewing the first mock. The revised interactive prototype and its design record (since removed) established this direction for the focused shell:
 
 - A narrow activity rail, collapsible session list, single-line header, and compact composer. Flatten secondary cards and collapse completed tool history; preserve Pi's visual tokens and message identity.
 - All tools is a visible, categorized launcher, with intent search, keyboard navigation, and user-pinned shortcuts. The same action definitions feed contextual menus and the catalog. No feature may be reachable only by knowing its command or shortcut.
