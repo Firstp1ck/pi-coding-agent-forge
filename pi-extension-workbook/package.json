@@ -1,6 +1,6 @@
 {
   "name": "@firstpick/pi-extension-workbook",
-  "version": "0.2.0",
+  "version": "0.1.7",
   "description": "High-fidelity, fail-closed XLSX/XLSM inspection, rendering, editing, diffing, and validation tools for Pi agents, with user-approved VBA module editing on Windows Excel.",
   "type": "module",
   "license": "MIT",

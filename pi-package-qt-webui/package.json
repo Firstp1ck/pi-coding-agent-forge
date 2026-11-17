@@ -1,6 +1,6 @@
 {
   "name": "@firstpick/pi-package-qt-webui",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "A Quickshell and Qt Quick desktop client for the Pi coding agent with rich transcript output, extension dialogs, and a supervised local backend.",
   "license": "MIT",
   "homepage": "https://github.com/Firstp1ck/pi-coding-agent-forge/tree/main/pi-package-qt-webui#readme",
