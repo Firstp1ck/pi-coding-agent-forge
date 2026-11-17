@@ -204,22 +204,29 @@ check_auth() {
   return 1
 }
 
+# Captures the client's output in DRY_RUN_OUTPUT instead of discarding it, so a
+# blocked package can show the actual error. The caller prints it only for real
+# failures, because an already-published version also fails the dry run.
+DRY_RUN_OUTPUT=""
 run_publish_dry_run() {
   local client="$1"
   local dir="$2"
   local access="$3"
+  local status=0
 
-  if [[ "$client" == "npm" ]]; then
-    (cd "$dir" && npm publish --dry-run --access "$access" >/dev/null 2>&1)
-    return $?
-  fi
+  DRY_RUN_OUTPUT=""
+  case "$client" in
+    npm|bun) ;;
+    *) return 1 ;;
+  esac
 
-  if [[ "$client" == "bun" ]]; then
-    (cd "$dir" && bun publish --dry-run --access "$access" >/dev/null 2>&1)
-    return $?
-  fi
+  DRY_RUN_OUTPUT="$(cd "$dir" && "$client" publish --dry-run --access "$access" 2>&1)" || status=$?
+  return $status
+}
 
-  return 1
+print_dry_run_tail() {
+  [[ -n "$DRY_RUN_OUTPUT" ]] || return 0
+  printf '%s\n' "$DRY_RUN_OUTPUT" | tail -n 15 | sed 's/^/      | /'
 }
 
 run_publish() {
@@ -471,8 +478,10 @@ for pkg_dir in "${PACKAGE_DIRS[@]}"; do
       print_check "$(info "INFO")" "$PRIMARY_CLIENT publish --dry-run failed because version is already published"
     elif [[ $AUTH_OK -eq 0 && $STRICT_AUTH -eq 0 ]]; then
       print_check "$(warn)" "$PRIMARY_CLIENT publish --dry-run failed (likely auth-related)"
+      print_dry_run_tail
     else
       print_check "$(fail)" "$PRIMARY_CLIENT publish --dry-run failed"
+      print_dry_run_tail
       pkg_fail=1
     fi
   fi
