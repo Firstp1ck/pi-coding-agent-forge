@@ -4,6 +4,8 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 
+const fileService = await readFile(new URL("../lib/server/workspace-files.mjs", import.meta.url), "utf8");
+const fileOwner = await readFile(new URL("../public/project-file-viewer-controller.mjs", import.meta.url), "utf8");
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const [app, css, html, server, readme, technical, development, serviceWorker] = await Promise.all([
   readFile(join(root, "public", "app.js"), "utf8"),
@@ -23,9 +25,11 @@ function sourceBetween(source, startMarker, endMarker, label) {
   return source.slice(start, end);
 }
 
+assert.match(server, /createWorkspaceFilesService\(\{/, "the server should bind the Files owner");
+
 const imageHelpers = sourceBetween(app, "const FILE_VIEWER_IMAGE_MIME_TYPES", "\n// Changes mode only exists", "image data helper");
-const modeSource = sourceBetween(app, "function resolveFileViewerMode(", "\nfunction setFileViewerMode(", "image-aware mode resolver");
-const openSource = sourceBetween(app, "async function openFileInViewer(", "\nasync function openAurReviewReportInViewer(", "file open flow");
+const modeSource = sourceBetween(fileOwner, "export function resolveFileViewerMode(", "\n/**", "image-aware mode resolver").replace("export ", "");
+const openSource = sourceBetween(fileOwner, "  async function open(", "\n  async function openReport(", "file open flow");
 const uiSource = sourceBetween(app, "function updateFileViewerUi(", "\nconst FILE_VIEWER_SEARCH_MATCH_LIMIT", "file viewer UI renderer");
 
 const helperResults = JSON.parse(vm.runInNewContext(`${imageHelpers}\nJSON.stringify([
@@ -43,18 +47,18 @@ const modes = JSON.parse(vm.runInNewContext(`${modeSource}\nJSON.stringify([
 ])`));
 assert.deepEqual(modes, ["image", "image", "changes", "preview"], "supported images should default back to Image mode while preserving Git Changes mode");
 
-assert.match(server, /const FILE_VIEWER_IMAGE_MIME_TYPES_BY_EXTENSION = Object\.freeze\(\{[\s\S]*"\.png": "image\/png"[\s\S]*"\.jpe?g": "image\/jpeg"[\s\S]*"\.gif": "image\/gif"[\s\S]*"\.webp": "image\/webp"[\s\S]*"\.avif": "image\/avif"/, "the server should use an explicit raster extension allowlist");
-assert.doesNotMatch(server, /"\.svg": "image\/svg\+xml"/, "active SVG documents should remain outside image-viewer scope");
-assert.match(server, /if \(imageMimeType\) \{\s*return \{ \.\.\.shared, kind: "image", mimeType: imageMimeType, data: buffer\.toString\("base64"\) \};\s*\}/, "the bounded content endpoint should return image bytes without UTF-8 reinterpretation");
-assert.match(server, /resolved\.info\.size > FILE_VIEWER_MAX_BYTES[\s\S]*const buffer = await readFile\(resolved\.targetPath\);[\s\S]*const imageMimeType = fileViewerImageMimeType/, "image reads should stay behind the existing workspace file size limit");
+assert.match(fileService, /const FILE_VIEWER_IMAGE_MIME_TYPES_BY_EXTENSION = Object\.freeze\(\{[\s\S]*"\.png": "image\/png"[\s\S]*"\.jpe?g": "image\/jpeg"[\s\S]*"\.gif": "image\/gif"[\s\S]*"\.webp": "image\/webp"[\s\S]*"\.avif": "image\/avif"/, "the server should use an explicit raster extension allowlist");
+assert.doesNotMatch(fileService, /"\.svg": "image\/svg\+xml"/, "active SVG documents should remain outside image-viewer scope");
+assert.match(fileService, /if \(imageMimeType\) \{\s*return \{ \.\.\.shared, kind: "image", mimeType: imageMimeType, data: buffer\.toString\("base64"\) \};\s*\}/, "the bounded content endpoint should return image bytes without UTF-8 reinterpretation");
+assert.match(fileService, /resolved\.info\.size > FILE_VIEWER_MAX_BYTES[\s\S]*const buffer = await readFile\(resolved\.targetPath\);[\s\S]*const imageMimeType = fileViewerImageMimeType/, "image reads should stay behind the existing workspace file size limit");
 
 assert.match(html, /id="fileViewerImage"[^>]*role="group"[^>]*aria-label="Image preview"[^>]*hidden>[\s\S]*<img id="fileViewerImageElement" alt="" \/>/, "the viewer should expose a labelled, initially hidden image surface");
 assert.match(app, /fileViewerImage: \$\("#fileViewerImage"\)[\s\S]*fileViewerImageElement: \$\("#fileViewerImageElement"\)/, "the image surface should be registered in the frontend element map");
-assert.match(openSource, /const kind = data\.kind === "image" \? "image" : "text";[\s\S]*const imageUrl = kind === "image" \? fileViewerImageDataUrl\(data\) : "";/, "the standard file-open flow should validate image payloads through the allowlisted data URL helper");
+assert.match(openSource, /const kind = data\.kind === "image" \? "image" : "text";[\s\S]*const imageUrl = kind === "image" \? imageDataUrl\(data\) : "";/, "the standard file-open flow should validate image payloads through the allowlisted data URL helper");
 assert.match(openSource, /readOnly: kind === "image",\s*sourceAvailable: kind === "text"/, "images should be read-only and unavailable to the source editor");
 assert.match(uiSource, /elements\.fileViewerImage\.hidden = mode !== "image"/, "the image surface should render only in image mode");
 assert.match(uiSource, /elements\.fileViewerImageElement\.alt = `Preview of \$\{viewer\.name \|\| fileDisplayName\(viewer\.path\)\}`/, "rendered images should receive a useful filename-based alternative label");
-assert.match(app, /if \(!activeFileViewer \|\| activeFileViewer\.kind === "image" \|\| !elements\.fileViewerSearchBar\) return;/, "text search should not open for image previews");
+assert.match(app, /if \(!projectFiles\.viewer \|\| projectFiles\.viewer\.kind === "image" \|\| !elements\.fileViewerSearchBar\) return;/, "text search should not open for image previews");
 assert.match(app, /elements\.fileViewerImageElement\.removeAttribute\("src"\);\s*elements\.fileViewerImageElement\.alt = "";/, "closing or replacing a viewer should release stale image source state");
 
 assert.match(css, /\.file-viewer-image \{[\s\S]*display: grid;[\s\S]*place-items: center;/, "the image surface should center its preview");
@@ -62,8 +66,8 @@ assert.match(css, /\.file-viewer-image img \{[\s\S]*max-width: 100%;[\s\S]*max-h
 assert.match(readme, /PNG, JPEG, GIF, WebP, and AVIF/i, "the Files panel guide should list supported image formats");
 assert.match(technical, /supported raster images[\s\S]*2 MiB/i, "the advanced reference should document image support and its size limit");
 assert.match(development, /kind: "image"[\s\S]*base64/i, "the contributor guide should document the image response contract");
-assert.match(serviceWorker, /const CACHE_NAME = "pi-webui-pwa-v156"/, "changed viewer assets should advance the PWA cache identity");
-assert.match(html, /styles\.css\?v=154/, "changed image styles should advance the stylesheet revision");
-assert.match(html, /app\.js\?v=185/, "changed image rendering should advance the app revision");
+assert.match(serviceWorker, /const CACHE_NAME = "pi-webui-pwa-v200"/, "changed viewer assets should advance the PWA cache identity");
+assert.match(html, /styles\.css\?v=167/, "changed image styles should advance the stylesheet revision");
+assert.match(html, /app\.js\?v=220/, "changed image rendering should advance the app revision");
 
 console.log("file viewer image static tests passed");

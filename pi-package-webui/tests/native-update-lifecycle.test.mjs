@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { createServer } from "node:net";
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -36,7 +36,8 @@ try {
   await mkdir(path.join(npmRoot, "bin"), { recursive: true });
   await writeFile(manifest, JSON.stringify({ name: "@earendil-works/pi-coding-agent", version: "0.87.1", bin: { pi: "dist/cli.js" } }));
   const fakePi = path.join(packageRoot, "tests", "fixtures", "fake-pi.mjs");
-  await writeFile(cli, `import { readFileSync, writeFileSync } from 'node:fs';\nconst manifest = ${JSON.stringify(manifest)};\nconst current = JSON.parse(readFileSync(manifest, 'utf8'));\nif (process.argv.includes('--version')) { console.log(current.version); process.exit(0); }\nif (process.argv.includes('update')) { current.version = '0.87.2'; writeFileSync(manifest, JSON.stringify(current)); process.exit(0); }\nawait import(${JSON.stringify(pathToFileURL(fakePi).href)});\n`);
+  await writeFile(cli, `#!${process.execPath}\nimport { readFileSync, writeFileSync } from 'node:fs';\nconst manifest = ${JSON.stringify(manifest)};\nconst current = JSON.parse(readFileSync(manifest, 'utf8'));\nif (process.argv.includes('--version')) { console.log(current.version); process.exit(0); }\nif (process.argv.includes('update')) { current.version = '0.87.2'; writeFileSync(manifest, JSON.stringify(current)); process.exit(0); }\nawait import(${JSON.stringify(pathToFileURL(fakePi).href)});\n`);
+  await chmod(cli, 0o755);
   if (windows) {
     await writeFile(path.join(bin, "pi.cmd"), `@echo off\r\nnode "%dp0%\\node_modules\\@earendil-works\\pi-coding-agent\\dist\\cli.js" %*\r\n`);
   } else await symlink(cli, path.join(bin, "pi"));
@@ -48,7 +49,7 @@ try {
     env: { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH || ""}`,
       PI_CODING_AGENT_DIR: path.join(temp, "agent"), PI_WEBUI_NPM_BIN: path.join(npmRoot, "bin", "npm-cli.js"),
       PI_WEBUI_UPDATE_TEST_HOME: temp, NODE_ENV: "test", PI_OFFLINE: "1",
-      // Supervised tabs are the only ones a fenced native restart can preserve; run-all disables the supervisor by default.
+      // Exercise an existing supervised session while the fake update runs without restarting it.
       PI_WEBUI_RPC_SUPERVISOR: "1" },
   });
   child.stdout.on("data", (chunk) => { output += chunk; });
@@ -58,6 +59,7 @@ try {
     try { if ((await api("/api/health")).ok) break; } catch {}
     await delay(100);
   }
+  const originalBoot = (await (await api("/api/health")).json()).bootIdentity;
   const planned = await api("/api/update/plan", { targets: ["pi"] });
   const planResult = await planned.json();
   assert.equal(planned.status, 201, JSON.stringify(planResult) + output);
@@ -72,8 +74,11 @@ try {
     await delay(200);
   }
   assert.equal(result.phase, "success", JSON.stringify(result) + output);
-  assert.equal(result.receipts[0].status, "changed");
-  assert.equal(result.verifiedTargets[0].status, "healthy");
+  assert.equal(result.receipts[0].status, "success");
+  assert.equal(result.receipts[0].exitCode, 0);
+  assert.deepEqual(result.verifiedTargets, [], "command exit is not a health claim");
+  assert.equal(result.restartRequired, true);
+  assert.equal((await (await api("/api/health")).json()).bootIdentity, originalBoot, "updates leave restart to the user");
   assert.equal(JSON.parse(await readFile(manifest, "utf8")).version, "0.87.2");
   const state = await api("/api/state");
   assert.equal(state.status, 200, output);

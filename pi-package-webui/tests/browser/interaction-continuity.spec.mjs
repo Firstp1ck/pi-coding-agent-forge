@@ -347,10 +347,28 @@ test("autosizing the main input does not move settled agent output", async ({ pa
   await expect(outputCard).toBeVisible();
 
   const promptInput = page.locator("#promptInput");
-  const initial = await outputCard.evaluate((node) => ({
-    top: node.getBoundingClientRect().top,
-    inputHeight: document.querySelector("#promptInput")?.getBoundingClientRect().height || 0,
-  }));
+  await expect(page.locator("#chat")).toHaveAttribute("aria-busy", "false");
+  const initial = await outputCard.evaluate(async (node) => {
+    await document.fonts.ready;
+    const started = performance.now();
+    let stableSince = started;
+    let previous = null;
+    while (performance.now() - started < 4_000) {
+      if (!node.isConnected) throw new Error("settled output was replaced during startup");
+      const current = {
+        top: node.getBoundingClientRect().top,
+        inputHeight: document.querySelector("#promptInput")?.getBoundingClientRect().height || 0,
+        chatHeight: document.querySelector("#chat")?.clientHeight || 0,
+        chatScroll: document.querySelector("#chat")?.scrollTop || 0,
+      };
+      if (!previous || Object.keys(current).some((key) => current[key] !== previous[key])) stableSince = performance.now();
+      previous = current;
+      // Initial transcript following has a delayed settling pass; measure only after layout stops moving.
+      if (performance.now() - stableSince >= 200) return current;
+      await new Promise(requestAnimationFrame);
+    }
+    throw new Error("initial transcript layout did not settle");
+  });
   await promptInput.fill("composer stability ".repeat(120));
   await expect.poll(() => promptInput.evaluate((node) => node.getBoundingClientRect().height)).toBeGreaterThan(initial.inputHeight + 40);
   const expandedTop = await outputCard.evaluate((node) => node.getBoundingClientRect().top);
@@ -528,7 +546,10 @@ test("focus reconciliation and terminal switching keep the running status geomet
   expect(focusMovement.gapDrift).toBeLessThanOrEqual(1.5);
   assert.equal(focusMovement.stickyStable, true, "focus reconciliation should preserve unchanged sticky-prompt children");
 
-  await triggerDelayedStream(page, foregroundTabId);
+  // Keep the fixture running until sampling ends, independent of navigation latency.
+  await api(page, `/api/prompt?tab=${encodeURIComponent(foregroundTabId)}`, {
+    method: "POST", data: { message: "fixture continuity held stream", requestId: `geometry-${Date.now()}` },
+  });
   await expect(runIndicator).toBeVisible();
   await page.locator(`[data-tab-id="${backgroundTabId}"] .terminal-tab-button`).click();
   await expect.poll(() => activeTabId(page)).toBe(backgroundTabId);
@@ -563,6 +584,9 @@ test("focus reconciliation and terminal switching keep the running status geomet
   expect(switchMovement.composerHeight).toBeLessThanOrEqual(1.5);
   expect(switchMovement.contextHeight).toBeLessThanOrEqual(1.5);
 
+  await api(page, `/api/abort?tab=${encodeURIComponent(foregroundTabId)}`, { method: "POST", data: {} });
+  await waitForFixtureSettlement(page, foregroundTabId);
+
   await api(page, `/api/tabs/${encodeURIComponent(backgroundTabId)}`, { method: "DELETE" });
   await expect.poll(async () => (await tabIds(page)).length).toBe(1);
 });
@@ -571,6 +595,9 @@ test("main output text selection survives streaming-tail and settlement rerender
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto(baseURL);
   const tabId = await activeTabId(page) || (await tabIds(page))[0];
+  const priorMessages = (await api(page, `/api/messages?tab=${encodeURIComponent(tabId)}`)).data?.messages;
+  assert.ok(Array.isArray(priorMessages), "selection identity needs the authoritative transcript before this run");
+  const expectedMessageKey = `m:${priorMessages.length + 1}`;
   await api(page, `/api/prompt?tab=${encodeURIComponent(tabId)}`, {
     method: "POST",
     data: { message: "fixture continuity delayed stream", requestId: `selection-${Date.now()}` },
@@ -587,7 +614,7 @@ test("main output text selection survives streaming-tail and settlement rerender
   await expect.poll(() => page.evaluate(() => window.getSelection()?.toString() || "")).toBe(selectedText);
   await expect(page.locator(".message.assistant:not(.streaming)").last()).toContainText("continuity stream complete");
   await expect.poll(() => originalSurface.evaluate((node) => node.isConnected), { timeout: 8_000 }).toBe(true);
-  await expect.poll(() => originalBubble.evaluate((node) => ({ connected: node.isConnected, streaming: node.classList.contains("streaming"), itemKey: node.dataset.itemKey, messageKey: node.dataset.transcriptMessageKey })), { timeout: 8_000 }).toEqual({ connected: true, streaming: false, itemKey: "m:4", messageKey: "m:4" });
+  await expect.poll(() => originalBubble.evaluate((node) => ({ connected: node.isConnected, streaming: node.classList.contains("streaming"), itemKey: node.dataset.itemKey, messageKey: node.dataset.transcriptMessageKey })), { timeout: 8_000 }).toEqual({ connected: true, streaming: false, itemKey: expectedMessageKey, messageKey: expectedMessageKey });
   await expect.poll(() => page.evaluate(() => window.getSelection()?.toString() || ""), { timeout: 8_000 }).toBe(selectedText);
   await waitForFixtureSettlement(page, tabId);
   await delay(4_000);
@@ -1047,19 +1074,15 @@ test("tab navigation clears transcript selection and never restores it into anot
   const initialOutput = page.locator(".message.assistant .markdown-body").first();
   await expect(initialOutput).toContainText("fake answer");
   assert.equal((await selectRenderedText(initialOutput, "fake answer")).text, "fake answer");
-  await page.locator("#newTabButton").click();
-  await page.locator("#newTabCurrentDirectoryButton").click();
-  await expect.poll(async () => (await tabIds(page)).length).toBe(2);
-  await expect.poll(() => page.evaluate(() => window.getSelection()?.toString() || "")).toBe("");
   const originalTab = page.locator("#tabBar [role=\"tab\"]").first();
-  const originalTabId = await originalTab.evaluate((node) => node.closest("[data-tab-id]")?.dataset.tabId || "");
+  await page.locator("#newTabButton").click();
+  await page.locator("#newThreadList [role=\"option\"]").first().click();
+  await expect(page.locator("#emptyStartTitle")).toHaveText("Start a conversation");
+  await expect.poll(() => page.evaluate(() => window.getSelection()?.toString() || "")).toBe("");
   await originalTab.click();
   await expect(page.locator("#promptInput")).toBeFocused();
   await expect.poll(() => page.evaluate(() => window.getSelection()?.toString() || "")).toBe("");
-  const extraTabId = (await tabIds(page)).find((id) => id !== originalTabId);
-  assert.ok(extraTabId, "navigation fixture should create a distinct tab to clean up");
-  await api(page, `/api/tabs/${encodeURIComponent(extraTabId)}`, { method: "DELETE" });
-  await expect.poll(async () => (await tabIds(page)).length).toBe(1);
+  expect(await tabIds(page), "opening a thread draft must not create a server thread").toHaveLength(1);
 });
 
 test("semantic tooltip, held pointer, open dropdown, and stale tab contexts survive only when valid", async ({ page }) => {
@@ -1068,10 +1091,11 @@ test("semantic tooltip, held pointer, open dropdown, and stale tab contexts surv
   const initialIds = await tabIds(page);
   assert.equal(initialIds.length, 1, "continuity fixture starts with one terminal tab");
 
-  await page.locator("#newTabButton").click();
-  await page.locator("#newTabCurrentDirectoryButton").click();
-  await expect.poll(async () => (await tabIds(page)).length).toBe(2);
+  await api(page, "/api/tabs", { method: "POST", data: {} });
+  // A plain reload may land on a draft with no thread selected; pin the original thread so exactly one tab is inactive.
+  await page.goto(`${baseURL}/?tab=${encodeURIComponent(initialIds[0])}`);
   await expect(page.locator("#tabBar [role=\"tab\"]")).toHaveCount(2);
+  await expect(page.locator(`#tabBar [data-tab-id="${initialIds[0]}"] [role="tab"]`)).toHaveAttribute("aria-selected", "true");
 
   const inactiveTabButton = page.locator("#tabBar [role=\"tab\"][aria-selected=\"false\"]");
   await expect(inactiveTabButton).toBeVisible();
@@ -1091,23 +1115,23 @@ test("semantic tooltip, held pointer, open dropdown, and stale tab contexts surv
 
   const inactiveTab = page.locator(`[data-tab-id="${inactiveTabId}"]`);
   await inactiveTab.locator(".terminal-tab-close").click();
-  await page.getByRole("button", { name: "Close tab", exact: true }).click();
   await expect.poll(async () => (await tabIds(page)).length).toBe(1);
   await expect(page.locator(`[data-tooltip-target-key="terminal-tab:${inactiveTabId}:switch"]`)).toHaveCount(0);
   await page.mouse.move(0, 0);
   await expect(tooltip).toBeHidden();
 
   await page.locator("#newTabButton").click();
-  await expect(page.locator("#newTabButton")).toHaveAttribute("aria-expanded", "true");
+  await expect(page.locator("#newThreadDialog")).toBeVisible();
   await triggerDelayedStream(page);
-  await expect(page.locator("#newTabButton")).toHaveAttribute("aria-expanded", "true");
-  await expect(page.locator("#newTabMenu")).toHaveClass(/open/);
-  await page.locator("#promptInput").click();
-  await expect(page.locator("#newTabButton")).toHaveAttribute("aria-expanded", "false");
+  await expect(page.locator("#newThreadDialog")).toBeVisible();
+  await expect(page.locator("#newThreadInput")).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(page.locator("#newThreadDialog")).toBeHidden();
+  await expect(page.locator("#newTabButton")).toBeFocused();
 
-  await page.locator("#newTabButton").click();
-  await page.locator("#newTabCurrentDirectoryButton").click();
-  await expect.poll(async () => (await tabIds(page)).length).toBe(2);
+  await api(page, "/api/tabs", { method: "POST", data: {} });
+  await page.reload();
+  await expect(page.locator("#tabBar [role=\"tab\"]")).toHaveCount(2);
   const heldButton = page.locator("#tabBar [role=\"tab\"][aria-selected=\"true\"]");
   await expect(heldButton).toBeVisible();
   await heldButton.hover();

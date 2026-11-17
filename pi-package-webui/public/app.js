@@ -1,3 +1,34 @@
+import { createSidebarUpdateMenu } from "./sidebar-update-menu.mjs";
+import { groupModelCatalog, modelReleaseDate } from "./model-catalog-order.mjs";
+import { createSessionShelfState } from "./session-shelf-state.mjs";
+import { createSessionShelves } from "./session-shelves.mjs";
+import { createDraftConversations } from "./draft-conversations.mjs";
+import { buildWorkspaceChoices, filterWorkspaceChoices } from "./workspace-choices.mjs";
+import { createFocusedComposerDisclosure } from "./focused-composer-disclosure.mjs";
+import { composerSubmissionPresentation } from "./focused-composer-controls.mjs";
+import { createSettingsResourceController } from "./settings-resource-controller.mjs";
+import { createActivityQueueController, normalizeQueuedMessages, queueMessageCount } from "./activity-queue-controller.mjs";
+import { createActivityAgentsController } from "./activity-agents-controller.mjs";
+import { createActivityTodoView } from "./activity-todo-view.mjs";
+import { createActivityIntercomController } from "./activity-intercom-controller.mjs";
+import { createActivityUsageController } from "./activity-usage-controller.mjs";
+import { createProjectArtifactController } from "./project-artifact-controller.mjs";
+import { createProjectFileViewerController, gitFileDiffCategory, resolveFileViewerMode } from "./project-file-viewer-controller.mjs";
+import { createProjectGitToolsController, GIT_TOOLS_SECTIONS } from "./project-git-tools-controller.mjs";
+import { createProjectRunnersController, APP_RUNNER_CONTEXT_DEFAULT_LINES, APP_RUNNER_CONTEXT_MAX_LINES, normalizeAppRunnerContextLineCount } from "./project-runners-controller.mjs";
+import { createActivityEventsController, EVENT_DISPLAY_MODE_STORAGE_KEY, EVENT_FILTER_STORAGE_KEY } from "./activity-events-controller.mjs";
+import { createSettingsWorkspace, SETTINGS_CATEGORIES } from "./settings-workspace.mjs";
+import { createFocusedShellAdapter } from "./focused-shell-adapter.mjs";
+import { createSessionContext } from "./session-context.mjs";
+import { createSessionComposerStore } from "./session-composer-store.mjs";
+import { createAttentionScheduler } from "./session-attention-scheduler.mjs";
+import { createSessionEventStream } from "./platform-event-stream.mjs";
+import { createExtensionRequestStore } from "./session-extension-requests.mjs";
+import { filterActionItems, checkActionTarget } from "./shell-actions.mjs";
+import { createShellHistory } from "./shell-navigation.mjs";
+import { readShellPreferences, writeShellPreferences, effectiveShellPreferences, resolveShellMode } from "./shell-preferences.mjs";
+import { createViewHost } from "./shell-view-host.mjs";
+import { createSurfaceCoordinator } from "./shell-surfaces.mjs";
 import { aurReviewSafePath as parsedAurReviewSafePath, parseAurReviewPayload as parseValidatedAurReviewPayload } from "./aur-review-payload.mjs";
 import { GUIDED_GIT_START_STATUS_KEY, createGuidedGitActivationController, createGuidedGitLaunchPermitController, guidedGitLaunchBlockedReason, guidedGitLaunchModeForTabCatalog, guidedGitReviewAvailableForTabCatalog, guidedGitWorkflowCommandForTabCatalog, resolveCommandForTabCatalog, resolveRpcSlashCommandForTabCatalog } from "./guided-git-command-state.mjs";
 import { guidedGitReviewCanRequestStagedContent, guidedGitReviewHasApprovedBinding, guidedGitReviewProcessNavigationAllowed, guidedGitReviewProcessSelectionPatch, guidedGitReviewTransition, guidedGitReviewWidgetRemovalTransition } from "./guided-git-review-state.mjs";
@@ -8,7 +39,7 @@ import { pruneDismissedSubagentGateKeys, subagentGateIsTerminal, subagentGateKey
 import { groupConsecutiveWorkflowStatusItems, isCompletedWorkflowStatusExecution, workflowStatusSnapshot } from "./workflow-status-stack.mjs";
 import { buildIssuePayload, createIssueWizardCatalog, createIssueWizardState, getCompatibleTemplates, isIssueWizardStepValid, issueClipboardText, reduceIssueWizardState } from "./issue-wizard-state.mjs";
 import { createIssueBotClient, readIssueBotRuntimeConfig } from "./issue-bot-client.mjs";
-import { MOBILE_SHELL_STORAGE_KEY, TABLET_SHELL_STORAGE_KEY, createMobileShellState, isMobileShellV2Enabled, mobileNavigationTargetFromSearch, normalizeMobileNavigationTarget, reduceMobileShellState, resolveMobileShellFeatureMode, resolveTabletShellFeatureMode } from "./mobile-shell-state.mjs";
+import { MOBILE_SHELL_STORAGE_KEY, TABLET_SHELL_STORAGE_KEY, createMobileShellState, mobileNavigationTargetFromSearch, normalizeMobileNavigationTarget, reduceMobileShellState, resolveMobileShellFeatureMode, resolveTabletShellFeatureMode } from "./mobile-shell-state.mjs";
 import { createTranscriptRenderer, groupConsecutiveThinkingItems, groupConsecutiveThinkingMessages } from "./transcript-renderer.mjs";
 import { createStreamDerivedOutputState } from "./stream-derived-output.mjs";
 import { advanceStreamingMarkdownTail } from "./stream-markdown-tail.mjs";
@@ -42,12 +73,9 @@ const elements = {
   terminalTabsDrawerContent: $("#terminalTabsDrawerContent"),
   terminalTabsBackdrop: $("#terminalTabsBackdrop"),
   workspaceSaveButton: $("#workspaceSaveButton"),
+  sidebarUpdateButton: $("#sidebarUpdateButton"),
   newTabMenu: $("#newTabMenu"),
   newTabButton: $("#newTabButton"),
-  newTabMenuPanel: $("#newTabMenuPanel"),
-  newTabCurrentDirectoryButton: $("#newTabCurrentDirectoryButton"),
-  newTabChooseDirectoryButton: $("#newTabChooseDirectoryButton"),
-  newTabWorktreeButton: $("#newTabWorktreeButton"),
   closeAllTabsButton: $("#closeAllTabsButton"),
   terminalSplitShell: $("#terminalSplitShell"),
   terminalSplitFrame: $("#terminalSplitFrame"),
@@ -565,6 +593,10 @@ const elements = {
   commandPaletteList: $("#commandPaletteList"),
   commandPaletteHint: $("#commandPaletteHint"),
   commandPaletteCloseButton: $("#commandPaletteCloseButton"),
+  newThreadDialog: $("#newThreadDialog"),
+  newThreadInput: $("#newThreadInput"),
+  newThreadList: $("#newThreadList"),
+  newThreadCloseButton: $("#newThreadCloseButton"),
   editRetryDialog: $("#editRetryDialog"),
   editRetryMessage: $("#editRetryMessage"),
   editRetryText: $("#editRetryText"),
@@ -615,35 +647,54 @@ const transcriptRenderer = createTranscriptRenderer({
 });
 
 const PI_WEBUI_NPM_URL = "https://www.npmjs.com/package/@firstpick/pi-package-webui";
-const EVENT_DISPLAY_MODE_STORAGE_KEY = "pi-webui-event-display-mode-v1";
-const EVENT_FILTER_STORAGE_KEY = "pi-webui-event-filter-v1";
-const EVENT_FILTER_VALUES = new Set(["all", "errors", "warnings", "tools", "tree"]);
 
 let currentState = null;
 let tabStateCache = new Map();
 let tabStatsCache = new Map();
 let tabWorkspaceCache = new Map();
 let tabs = [];
-let activeTabId = null;
-let activeTabGeneration = 0;
-const intercomConversationSummariesByTab = new Map();
-let intercomSummaryRequestSerial = 0;
-let intercomSummaryRefreshTimer = null;
-let intercomDetailRequestSerial = 0;
-let intercomDetailRefreshTimer = null;
-let intercomConversationDialogState = null;
-let tabDrafts = new Map();
-let tabAttachments = new Map();
+const sessionContext = createSessionContext();
+// Legacy renderers read this projection; the session owner alone changes identity.
+let activeTabId = sessionContext.activeTabId;
+let activeTabGeneration = sessionContext.generation;
+let shellActionSessionEpoch = 0;
+const composerStore = createSessionComposerStore();
+const activityTodo = createActivityTodoView({ document, stripAnsi, parseItem: parseTodoProgressItemLine });
+const activityIntercom = createActivityIntercomController({
+  document, nodes: elements, api,
+  getContext: projectTargetFromContext,
+  isCurrent: isCurrentProjectTarget,
+  onEvent: addEvent,
+  onChange: renderIntercomActivityLinks,
+  onDialogOpen(dialog) { if (!dialog.open) dialog.showModal(); },
+  onDialogClose(dialog, { restoreFocus }) {
+    if (!restoreFocus) modalSurfaceState.delete(dialog);
+    if (dialog.open) dialog.close();
+  },
+});
+
 let activeTextAttachmentEditor = null;
 let activeSkillEditor = null;
 let fileTreeState = { root: "", entriesByPath: new Map(), expanded: new Set(), loading: new Set(), selectedPath: "", requestSerial: 0, searchQuery: "", searchEntries: [], searchLoading: false, searchTruncated: false, searchTotal: 0, gitStatusRoot: "", gitStatusByPath: new Map() };
 let fileTreeLastRenderSignature = "";
-let activeFileViewer = null;
-let fileViewersByTab = new Map();
-let fileViewerOpenRequestSerial = 0;
-let fileViewerGitChangesRequestSerial = 0;
-let fileViewerSelection = null;
-let fileViewerSelectionsByTab = new Map();
+const projectFiles = createProjectFileViewerController({
+  api,
+  captureTarget: projectTargetFromContext,
+  isTargetCurrent: isCurrentProjectTarget,
+  isTargetAlive: isAliveProjectTarget,
+  confirmDiscardEdits,
+  normalizePath: normalizeFileTreePath,
+  fileApiPath, fileDisplayName, fileExtensionForPath, fileLanguageForPath,
+  imageDataUrl: fileViewerImageDataUrl,
+  remapPath: remapFileTreePathAfterMove,
+  onChange: handleProjectFileChange,
+  onStatus: setFileViewerStatus,
+  onSelectPath(path) { fileTreeState.selectedPath = path; renderFileTree(); },
+  async onRefreshDirectory(path, target) {
+    if (isCurrentProjectTarget(target)) await loadFileTreeDirectory(fileParentPath(path), { force: true });
+  },
+  addEvent,
+});
 let fileViewerSearchMatches = [];
 let fileViewerSearchIndex = -1;
 let fileViewerSearchTruncated = false;
@@ -652,8 +703,16 @@ let fileContextMenuState = null;
 let sidePanelContextMenuState = null;
 let gitFooterContextMenuState = null;
 let eventTreeContextMenuState = null;
-let eventDisplayMode = readStoredEventDisplayMode();
-let eventFilter = readStoredEventFilter();
+const activityEvents = createActivityEventsController({
+  document,
+  nodes: elements,
+  readPreference: key => localStorage.getItem(key),
+  writePreference: (key, value) => localStorage.setItem(key, value),
+  isVisible: eventsSectionIsVisibleAndExpanded,
+  onJump: jumpToChatEvent,
+  onNotice: showNoticeToast,
+  onUnreadChange: () => scheduleFocusedShellRender(),
+});
 const toolEventStartedAt = new Map();
 let sidePanelSectionEditMode = false;
 let sidePanelSectionPointerDrag = null;
@@ -687,7 +746,6 @@ const PATH_SUGGEST_DEBOUNCE_MS = 120;
 const NOTICE_TOAST_LIMIT = 3;
 const NOTICE_TOAST_TIMEOUT_MS = { info: 5000, success: 5000, warn: 6000, error: 10000 };
 const noticeToasts = [];
-let eventsUnreadCount = 0;
 let streamRawText = "";
 let streamThinkingRawText = "";
 let streamDerivedOutputState = null;
@@ -1055,7 +1113,12 @@ let refreshFooterTimer = null;
 const mainOutputLoadingRequests = new Set();
 let mainOutputLoadingRevealTimer = null;
 const MAIN_OUTPUT_LOADING_REVEAL_DELAY_MS = 120;
-let refreshTabsTimer = null;
+let tabsRefreshSerial = 0;
+const attentionScheduler = createAttentionScheduler({
+  refresh: ({ signal }) => refreshTabs({ signal }),
+  getState: () => ({ tabCount: tabs.length, working: hasWorkingTab(), visible: document.visibilityState !== "hidden", menuOpen: !!openTerminalTabGroupKey }),
+  onError: (error) => addEvent(error.message || String(error), "error"),
+});
 let tabsRenderFrame = null;
 let foregroundReconcileTimer = null;
 let foregroundSupplementalRefreshCancel = null;
@@ -1064,14 +1127,20 @@ let foregroundTranscriptSuppressedEvents = 0;
 let eventStreamPausedForBackground = false;
 let backgroundReconnectSnapshotFresh = false;
 let foregroundReconnectSnapshotFreshUntil = 0;
-let eventSource = null;
+const sessionEvents = createSessionEventStream({
+  createSource: (url) => new EventSource(url),
+  isCurrent: isCurrentTabContext,
+  onOpen: handleSessionStreamOpen,
+  onMessage: handleSessionStreamMessage,
+  onError: handleSessionStreamError,
+});
 const supervisorEventCursors = new Map();
 const supervisorRetiredEpochs = new Map();
 const supervisorGapWarnings = new Set();
 const supervisorContinuityRefreshes = new Map();
 const closingTerminalTabIds = new Set();
 const supervisorEnvelopeWarnings = new Set();
-let activeDialog = null;
+const extensionRequests = createExtensionRequestStore();
 let activeDialogCancel = null;
 let activeConfirmationResolve = null;
 let activeWorkspaceReplacementResolve = null;
@@ -1081,12 +1150,39 @@ let activeUndoAction = null;
 let undoToastTimer = null;
 let undoToastFocusReturn = null;
 const modalSurfaceState = new WeakMap();
-let activeDrawerModal = null;
+const drawerSurfaceCoordinator = createSurfaceCoordinator({
+  document,
+  getFocusableElements: modalFocusableElements,
+  onEscape(surface, event) {
+    if (surface !== elements.terminalTabsShell || !openTerminalTabGroupKey) return false;
+    event.preventDefault();
+    event.stopPropagation();
+    const openGroup = [...elements.tabBar.querySelectorAll(".terminal-tab-group")]
+      .find((group) => group.dataset.groupKey === openTerminalTabGroupKey);
+    clearOpenTerminalTabGroup(openTerminalTabGroupKey, { force: true });
+    openGroup?.querySelector(".terminal-tab-group-button")?.focus({ preventScroll: true });
+    return true;
+  },
+});
 let activeGitPrDialogResolve = null;
 let gitChangesState = { loading: false, pulling: false, fetching: false, error: "", errorCode: "", errorHint: "", message: "", pullResult: null, data: null, operation: null, lastFetch: null, tabId: null, mode: "changes", commit: null };
-let gitToolsState = { tabId: null, openSections: new Set(), cache: {}, busy: new Set(), notice: {} };
+let gitToolsDialogEpoch = 0;
+const projectGitTools = createProjectGitToolsController({
+  api,
+  captureTarget: captureGitToolsTarget,
+  isTargetCurrent: isCurrentGitToolsTarget,
+  confirm: appConfirmText,
+  addEvent,
+  onChange: renderGitChangesDialog,
+  onRefreshChanges: (target) => loadGitChangesDialog(target),
+  onRefreshFooter: (target) => requestGitFooterWebuiPayload(target, { force: true }),
+  onMessage(message, target) {
+    if (isCurrentGitToolsTarget(target)) gitChangesState = { ...gitChangesState, message };
+  },
+});
 let gitPanelState = {
   expandedCardKey: "",
+  focusedInitializedRoots: new Set(),
   discovery: new Map(),
   repositories: new Map(),
   activeViews: new Map(),
@@ -1101,15 +1197,34 @@ const gitChangesUntrackedContentRequests = new Set();
 let nativeCommandTabId = null;
 let nativeCommandDialogGeneration = 0;
 let nativeSettingsDirty = false;
+const settingsResources = createSettingsResourceController({
+  read: async (kind, selection, target) => (await api(`/api/${kind}?${nativeResourceSelectionQuery(selection)}`, { tabId: target.tabId })).data,
+  write: async (kind, selection, change, target) => {
+    const body = { scope: selection.scope };
+    if (selection.scope === "model") Object.assign(body, { provider: selection.provider, modelId: selection.modelId });
+    if (change.inherit) body.inherit = true;
+    else body[kind === "tools" ? "enabledTools" : "enabledSkills"] = change.enabled;
+    return (await api(`/api/${kind}`, { method: "POST", body, tabId: target.tabId })).data;
+  },
+  listModels: async target => (await api("/api/models", { tabId: target.tabId })).data?.models || [],
+  isCurrent: isCurrentNativeResourceTarget,
+  onChange: renderNativeResourceSelector,
+  onMutation: announceNativeResourceMutation,
+});
 let guidedGitSetupDialogOwner = null;
 let sessionSummaryOverlayTabId = null;
 let sessionSummaryOverlayFocusReturn = null;
 let sessionSummaryOverlayFocusReturnKey = "";
 let sessionSummaryControlsRenderSignature = "";
 const sessionSummaryByTab = new Map();
+const sessionSummaryGenerationByTab = new Map();
 let pathPickerState = null;
-let firstTerminalCwdPromptShown = false;
 let pathFastPicks = [];
+// Most recent activation per thread id; orders the "Recent" folder choices.
+const threadActivationOrder = new Map();
+let threadActivationSerial = 0;
+const newThreadPaletteState = { choices: [], index: 0, returnFocus: null, restoreFocus: true };
+let draftWorkspacePicker = null;
 let pathFastPicksReady = false;
 let pathFastPicksLoadPromise = null;
 let mobileTabsExpanded = false;
@@ -1127,11 +1242,14 @@ let savedWorkspacesError = "";
 let savedWorkspacesRefreshPromise = null;
 let terminalTabDragId = null;
 let splitTabId = null;
-let newTabMenuOpen = false;
 let nativeCommandMenuOpen = false;
 let appRunnerMenuOpen = false;
+let appRunnerMenuIntent = 0;
 let busyPromptBehaviorMenuOpen = false;
 const skillUsageByTab = new Map();
+let appRunnerInfoTarget = null;
+let appRunnerInfoLoading = false;
+let appRunnerInfoError = "";
 let appRunnerCustomDraft = { id: "", label: "", command: "./", path: "", args: "" };
 let appRunnerCustomFeedback = { type: "", message: "" };
 let appRunnerFileBrowserState = { open: false, loading: false, path: "", data: null, error: "" };
@@ -1144,6 +1262,12 @@ const OPTIONS_SUBMENU_TRIGGER_SELECTOR = "[data-options-submenu-trigger]";
 const OPTIONS_SUBMENU_PANEL_SELECTOR = "[data-options-submenu-panel]";
 const OPTIONS_SUBMENU_BACK_SELECTOR = "[data-options-submenu-back]";
 const OPTIONS_SUBMENU_LEFT_CLASS = "opens-left";
+const OPTIONS_SUBMENU_FLYOUT_CLASS = "options-submenu-flyout";
+// Stays inside the 0.3rem hover bridge (::after) so moving the pointer to the flyout keeps it open.
+const OPTIONS_SUBMENU_FLYOUT_GAP_PX = 3;
+const OPTIONS_SUBMENU_FLYOUT_MARGIN_PX = 8;
+// Narrower than the focused root menu so the flyout usually fits to its right.
+const OPTIONS_SUBMENU_FLYOUT_MAX_WIDTH_PX = 256;
 const OPTIONS_SUBMENU_DRILL_IN_QUERY = "(hover: none), (pointer: coarse)";
 const OPTIONS_MENU_LABEL_SELECTOR = '.composer-options-menu-item > span:not([aria-hidden="true"]):not(.composer-options-submenu-chevron)';
 const OPTIONS_MENU_LABEL_FONT_SIZE_PROPERTY = "--options-menu-label-font-size";
@@ -1189,26 +1313,44 @@ let networkStatusLoaded = false;
 let webuiVersion = "";
 let piVersion = "";
 let webuiDevServer = false;
-let latestCodexUsage = null;
-let codexUsageError = null;
-let codexUsageLoading = false;
-let refreshCodexUsageTimer = null;
-let codexUsageRenderTimer = null;
-let codexUsageRenderSignature = "";
-let latestClaudeUsage = null;
-let claudeUsageError = null;
-let claudeUsageLoading = false;
-let refreshClaudeUsageTimer = null;
-let claudeUsageRenderTimer = null;
-let claudeUsageRenderSignature = "";
-let latestSubagents = null;
-let subagentsError = null;
-let subagentsLoading = false;
-let subagentsRefreshQueued = false;
-let subagentsRefreshPromise = null;
-let subagentsClearingFinished = false;
+const activityUsage = createActivityUsageController({
+  document,
+  nodes: elements,
+  api,
+  getFooterPayload: () => parseGitFooterWebuiPayload(),
+});
+let subagentOverviewViewsChanged = false;
+const activityAgents = createActivityAgentsController({
+  api,
+  getVisibility: () => document.visibilityState,
+  getAutoClear: () => subagentAutoClearEnabled,
+  finishedSelections: finishedSubagentRunSelections,
+  canCancel: subagentRunCanCancel,
+  canDismiss: subagentRunCanDismiss,
+  isAttachedProjection: subagentRunIsAttachedProjection,
+  agentCount: run => subagentRunAgents(run).length,
+  onOverview(data) {
+    pruneDismissedSubagentGateKeys(data?.tabs, dismissedSubagentGateKeys);
+    subagentOverviewViewsChanged = syncSubagentTerminalViewsFromOverview() || subagentOverviewViewsChanged;
+    subagentOverviewViewsChanged = materializeRetainedSubagentTerminalViews() || subagentOverviewViewsChanged;
+  },
+  onRefreshSettled() {
+    if (subagentOverlaySelection?.tabId === activeTabId) renderWidgets();
+    if (activeSubagentTerminalId) {
+      renderSubagentTerminalView();
+      scheduleSubagentTerminalRefresh();
+    }
+    if (subagentOverviewViewsChanged) renderTabs();
+    subagentOverviewViewsChanged = false;
+  },
+  onChange() { renderSubagents(); syncSubagentCancelSubmitting(); if (shellPreferenceState.value.overviewOpen) scheduleFocusedShellRender(); },
+  onEvent: addEvent,
+  onCancelStatus: setSubagentCancelStatus,
+  onCancelClosed(selection) {
+    if (activityAgents.getSnapshot().cancelSelection === selection && elements.subagentCancelDialog?.open) elements.subagentCancelDialog.close();
+  },
+});
 let subagentAutoClearEnabled = false;
-let refreshSubagentsTimer = null;
 const dismissedSubagentGateKeys = new Set();
 const collapsedSubagentWorkflowRunKeys = new Set();
 let subagentOverlaySelection = null;
@@ -1218,8 +1360,6 @@ let subagentOverlayLoading = false;
 let subagentOverlayRefreshTimer = null;
 let subagentOverlayRequestSerial = 0;
 let subagentOpenMode = "overlay";
-let subagentCancelSelection = null;
-let subagentCancelSubmitting = false;
 const subagentTerminalViews = new Map();
 const subagentTerminalRestoredParentTabs = new Set();
 let activeSubagentTerminalId = null;
@@ -1253,8 +1393,12 @@ let updateStatusRefreshTimer = null;
 let updateNotificationHideTimer = null;
 let componentUpdatePollTimer = null;
 let componentUpdateStartInProgress = false;
-const observedNativeJobs = { pi: null, webui: null };
-const uncertainApplyJobs = { pi: null, webui: null };
+let componentUpdateStatusEpoch = 0;
+let sidebarUpdateMenu = null;
+let sidebarUpdateError = "";
+let sidebarUpdateTarget = null;
+const observedNativeJobs = { all: null, pi: null, webui: null };
+const uncertainApplyJobs = { all: null, pi: null, webui: null };
 let nativeJobPollError = "";
 let backendOfflineNoticeShown = false;
 let latestMessages = [];
@@ -1311,8 +1455,10 @@ let chatPausedScrollRestoreUntil = 0;
 let chatLastTouchClientY = null;
 let mobileFooterExpanded = false;
 let footerModelPickerOpen = false;
+let footerModelPickerOpener = "composer";
 let footerModelApplyInFlight = false;
 let footerThinkingPickerOpen = false;
+let footerThinkingPickerFocusTarget = null;
 let footerAutoCompactionToggleInFlight = false;
 let footerBranchPickerOpen = false;
 let footerBranchPickerState = { loading: false, error: "", branches: [], current: "", root: "", repoRoot: "", currentWorktreePath: "", defaultWorktreesRoot: "", worktrees: [], occupiedBranches: [], switching: "", switchingKey: "", tabId: null };
@@ -1324,16 +1470,39 @@ let footerScopedModelPointerDrag = null;
 let footerScopedModelSuppressClickUntil = 0;
 let publishMenuOpen = false;
 let maxVisualViewportHeight = 0;
+let visualViewportPixelRatio = window.devicePixelRatio || 1;
 let abortRequestInFlight = false;
 let userBashByTab = new Map();
 let userBashQueuesByTab = new Map();
 let latestQueuedMessagesByTab = new Map();
-let followUpQueueOpen = false;
-const followUpQueueMutationsInFlightByTab = new Set();
-let followUpQueueStatus = { text: "", level: "" };
-let followUpQueueRestoreFocus = null;
-let followUpQueueDrag = null;
-let followUpQueueSuppressBlurFor = null;
+const activityQueue = createActivityQueueController({
+  document, nodes: elements, api,
+  getContext: (tabId = activeTabId) => projectTargetFromContext(activeTabContext(tabId)),
+  isCurrent: isCurrentProjectTarget,
+  isAlive: isAliveProjectTarget,
+  getSnapshot: queuedSnapshotForTab,
+  setSnapshot: (tabId, snapshot) => latestQueuedMessagesByTab.set(tabId, snapshot),
+  onBeforeOpen() {
+    setComposerActionsOpen(false);
+    setPublishMenuOpen(false);
+    setNativeCommandMenuOpen(false);
+    setAppRunnerMenuOpen(false);
+    setOptionsMenuOpen(false);
+    setConversationVoiceMenuOpen(false);
+    setBusyPromptBehaviorMenuOpen(false);
+    closeDraftWorkspacePicker();
+  },
+  onAfterClose: scheduleDeferredUiFlushAfterDropdownClose,
+  onProjectionChange() {
+    updateStickyUserPromptButton();
+    if (mobilePhoneExperienceInstalled && isMobileShellV2Active()) renderMobilePhoneExperience();
+  },
+  onEvent: addEvent,
+  deferRender: deferUiRenderDuringPointerActivation,
+  captureContinuity: captureScopedControlContinuity,
+  restoreContinuity: restoreScopedControlContinuity,
+  isFileDrag,
+});
 let loadedPromptList = null;
 let promptListRunning = false;
 let workspaceDashboardCollapsed = false;
@@ -1356,7 +1525,6 @@ let abortLongPressReleasePending = false;
 let abortLongPressHandled = false;
 let escapeAbortHoldSuppressesDoubleEscape = false;
 let suppressEmptyPromptEscapeUntil = 0;
-const dialogQueue = [];
 const SIDE_PANEL_STORAGE_KEY = "pi-webui-side-panel-collapsed";
 const INTERFACE_DENSITY_STORAGE_KEY = "pi-webui-interface-density";
 const SIDE_PANEL_SECTION_STORAGE_KEY = "pi-webui-side-panel-sections-collapsed";
@@ -1551,7 +1719,7 @@ let themeCustomizerState = null;
 const TERMINAL_TABS_LAYOUTS = new Set(["top", "left"]);
 const TERMINAL_TABS_LAYOUT_LABELS = { top: "Top bar", left: "Sidebar" };
 const SUBAGENT_OPEN_MODES = new Set(["overlay", "tab"]);
-const SUBAGENT_OPEN_MODE_LABELS = { overlay: "Overlay", tab: "Tab / terminal" };
+const SUBAGENT_OPEN_MODE_LABELS = { overlay: "Overlay", tab: "Thread view" };
 const BUSY_PROMPT_BEHAVIOR_VALUES = new Set(["followUp", "steer"]);
 const BUSY_PROMPT_BEHAVIOR_LABELS = { followUp: "Follow-up", steer: "Steer" };
 const SKILL_USAGE_LIMIT_PER_TAB = 32;
@@ -1563,13 +1731,6 @@ const STICKY_USER_PROMPT_TOP_GAP_PX = 12;
 const CHAT_FOLLOW_SETTLE_DELAY_MS = 80;
 const CHAT_PROGRAMMATIC_SCROLL_GRACE_MS = 500;
 const CHAT_USER_SCROLL_INTENT_MS = 700;
-const CODEX_USAGE_REFRESH_MS = 5 * 60 * 1000;
-const CODEX_USAGE_RENDER_TICK_MS = 30 * 1000;
-const CLAUDE_USAGE_REFRESH_MS = 5 * 60 * 1000;
-const CLAUDE_USAGE_RENDER_TICK_MS = 30 * 1000;
-const SUBAGENTS_ACTIVE_REFRESH_MS = 1500;
-const SUBAGENTS_IDLE_REFRESH_MS = 4000;
-const SUBAGENTS_HIDDEN_REFRESH_MS = 10_000;
 const SUBAGENT_OVERLAY_REFRESH_MS = 1000;
 const UPDATE_STATUS_REFRESH_MS = 6 * 60 * 60 * 1000;
 const COMPONENT_UPDATE_POLL_MS = 1000;
@@ -1605,6 +1766,31 @@ const sidePanelOverlayMedia = window.matchMedia?.(SIDE_PANEL_OVERLAY_QUERY) || m
 const colorSchemeMedia = window.matchMedia?.("(prefers-color-scheme: dark)") || null;
 const initialUrlParams = new URLSearchParams(window.location.search);
 const embeddedSplitMode = initialUrlParams.get("embed") === "split";
+const forceClassicShell = initialUrlParams.get("shell") === "classic";
+let shellPreferenceRecord = (() => {
+  try { return readShellPreferences(window.localStorage); }
+  catch { return readShellPreferences(null); }
+})();
+let shellRolloutCohort = null;
+let shellPreferenceState = { ...shellPreferenceRecord, value: effectiveShellPreferences(shellPreferenceRecord) };
+const sessionShelfState = createSessionShelfState({ storage: (() => {
+  try { return window.localStorage; } catch { return null; }
+})() });
+let sessionShelves = null;
+let renderedSessionShelves = false;
+let settledSessionIds = new Set();
+let focusedShell = null;
+let focusedComposerDisclosure = null;
+let settingsWorkspace = null;
+let settingsResourcesTarget = null;
+let pendingSettingsReveal = null;
+let settingsVoiceTarget = null;
+const focusedFeatureRecords = [];
+const focusedWidgetPlacements = new Map();
+let focusedAgentWidgetHost = null;
+let focusedShellRenderPending = false;
+let focusedShellState = { destination: "conversation", inspector: null };
+const shellHistory = createShellHistory({ window, onPopState: restoreShellNavigation });
 document.body.classList.toggle("embedded-split", embeddedSplitMode);
 
 function readMobileShellPreference() {
@@ -1639,7 +1825,14 @@ let mobileShellState = createMobileShellState({
 });
 
 function isMobileShellV2Active() {
-  return isMobileShellV2Enabled(mobileShellState.featureMode, mobileShellState.viewportMode, mobileShellState.tabletFeatureMode);
+  const mode = resolveShellMode({
+    recovery: forceClassicShell,
+    viewportMode: mobileShellState.viewportMode,
+    desktopLayout: shellPreferenceState.value.desktopLayout,
+    phoneMode: mobileShellState.featureMode,
+    tabletMode: mobileShellState.tabletFeatureMode,
+  });
+  return mode === "mobile-v2" || mode === "tablet-v2";
 }
 
 function isTabletShellV2Active() {
@@ -1648,9 +1841,9 @@ function isTabletShellV2Active() {
 
 function syncMobileShellRoot() {
   const root = document.documentElement;
-  if (mobileShellState.featureMode === "legacy") root.removeAttribute("data-mobile-shell");
+  if (forceClassicShell || mobileShellState.featureMode === "legacy") root.removeAttribute("data-mobile-shell");
   else root.dataset.mobileShell = "v2";
-  if (mobileShellState.tabletFeatureMode === "legacy") root.removeAttribute("data-tablet-shell");
+  if (forceClassicShell || mobileShellState.tabletFeatureMode === "legacy") root.removeAttribute("data-tablet-shell");
   else root.dataset.tabletShell = "v2";
   root.dataset.mobileShellRoute = mobileShellState.route;
 }
@@ -1658,7 +1851,9 @@ function syncMobileShellRoot() {
 let mobilePhoneExperienceInstalled = false;
 let mobilePresentation = "essential";
 let mobileProjectTopic = "files";
+const canonicalViewHost = createViewHost({ document });
 let mobileCanonicalMount = null;
+let responsiveFieldFocus = null;
 let mobileWidgetAreaMount = null;
 let mobileLifecycleSignature = "";
 let mobileLifecycleInitialized = false;
@@ -1725,13 +1920,13 @@ function persistMobileContinuityState() {
   clearTimeout(mobileContinuityPersistTimer);
   mobileContinuityPersistTimer = null;
   if (!isMobileShellV2Active()) return;
-  if (activeTabId) tabDrafts.set(activeTabId, elements.promptInput?.value || "");
+  if (activeTabId) composerStore.setDraft(activeTabId, elements.promptInput?.value || "");
   const liveIds = new Set(tabs.map((tab) => tab.id));
   const orderedIds = [activeTabId, ...tabs.map((tab) => tab.id)].filter((id, index, values) => id && liveIds.has(id) && values.indexOf(id) === index).slice(0, MOBILE_CONTINUITY_MAX_SESSIONS);
   const drafts = {};
   const attachments = {};
   for (const tabId of orderedIds) {
-    const draft = String(tabDrafts.get(tabId) || "");
+    const draft = String(composerStore.getDraft(tabId) || "");
     if (draft) drafts[tabId] = draft.slice(0, 200_000);
     const metadata = attachmentsForTab(tabId).map(mobileAttachmentMetadata).slice(0, ATTACHMENT_MAX_FILES);
     if (metadata.length) attachments[tabId] = metadata;
@@ -1766,11 +1961,11 @@ function persistDesktopDrafts() {
   clearTimeout(desktopDraftPersistTimer);
   desktopDraftPersistTimer = null;
   if (isMobileShellV2Active()) return;
-  if (activeTabId && elements.promptInput) tabDrafts.set(activeTabId, elements.promptInput.value || "");
+  if (activeTabId && elements.promptInput) composerStore.setDraft(activeTabId, elements.promptInput.value || "");
   const liveIds = new Set(tabs.map((tab) => tab.id));
   const drafts = {};
   let count = 0;
-  for (const [tabId, draft] of tabDrafts) {
+  for (const [tabId, draft] of composerStore.draftEntries()) {
     if (!liveIds.has(tabId) || !draft || count >= DESKTOP_DRAFT_MAX_TABS) continue;
     drafts[tabId] = String(draft).slice(0, 200_000);
     count += 1;
@@ -1799,7 +1994,7 @@ function restoreDesktopDrafts() {
   if (!stored || stored.v !== 1 || !stored.drafts || typeof stored.drafts !== "object") return;
   const liveIds = new Set(tabs.map((tab) => tab.id));
   for (const [tabId, draft] of Object.entries(stored.drafts)) {
-    if (liveIds.has(tabId) && !tabDrafts.get(tabId) && typeof draft === "string" && draft) tabDrafts.set(tabId, draft);
+    if (liveIds.has(tabId) && !composerStore.getDraft(tabId) && typeof draft === "string" && draft) composerStore.setDraft(tabId, draft);
   }
 }
 
@@ -1808,10 +2003,10 @@ function restoreMobileContinuityState() {
   if (!stored) return;
   const liveIds = new Set(tabs.map((tab) => tab.id));
   for (const [tabId, draft] of Object.entries(stored.drafts || {})) {
-    if (liveIds.has(tabId) && !tabDrafts.has(tabId) && typeof draft === "string") tabDrafts.set(tabId, draft);
+    if (liveIds.has(tabId) && !composerStore.hasDraft(tabId) && typeof draft === "string") composerStore.setDraft(tabId, draft);
   }
   for (const [tabId, metadata] of Object.entries(stored.attachments || {})) {
-    if (!liveIds.has(tabId) || tabAttachments.has(tabId) || !Array.isArray(metadata)) continue;
+    if (!liveIds.has(tabId) || composerStore.hasAttachments(tabId) || !Array.isArray(metadata)) continue;
     const restored = metadata.slice(0, ATTACHMENT_MAX_FILES).map((item, index) => ({
       id: `restored-${index}-${Date.now()}`,
       ...mobileAttachmentMetadata(item),
@@ -1819,7 +2014,7 @@ function restoreMobileContinuityState() {
       requiresReselect: true,
       file: null,
     }));
-    if (restored.length) tabAttachments.set(tabId, restored);
+    if (restored.length) composerStore.setAttachments(tabId, restored);
   }
   if (!initialUrlParams.has("mobileRoute") && !pendingMobileNavigationTarget && ["chat", "sessions", "activity", "project"].includes(stored.route)) {
     mobileShellState = reduceMobileShellState(mobileShellState, { type: "route", route: stored.route, replace: true });
@@ -1889,25 +2084,24 @@ function mobileCanonicalUnmount() {
     record.section.hidden = record.sectionHidden;
     record.section.className = record.sectionClassName;
     record.button?.setAttribute("aria-expanded", record.ariaExpanded);
-    if (record.nextSibling?.parentNode === record.parent) record.parent.insertBefore(record.content, record.nextSibling);
-    else record.parent.append(record.content);
+    canonicalViewHost.restore(record.content);
   }
   mobileCanonicalMount = null;
 }
 
 function mobileWidgetAreaUnmount() {
   if (!mobileWidgetAreaMount) return;
-  const { node, parent, nextSibling } = mobileWidgetAreaMount;
-  if (nextSibling?.parentNode === parent) parent.insertBefore(node, nextSibling);
-  else parent.append(node);
+  canonicalViewHost.restore(mobileWidgetAreaMount);
   mobileWidgetAreaMount = null;
 }
 
 function mobileWidgetAreaMountContent(host, prefix) {
   const node = elements.widgetArea;
   if (!host || !node) return;
-  if (!mobileWidgetAreaMount) mobileWidgetAreaMount = { node, parent: node.parentNode, nextSibling: node.nextSibling };
-  host.replaceChildren(prefix, node);
+  mobileWidgetAreaMount = node;
+  canonicalViewHost.move(node, host);
+  for (const child of [...host.childNodes]) if (child !== node) child.remove();
+  host.insertBefore(prefix, node);
 }
 
 function mobileCanonicalMountContent(host, contentIds, key) {
@@ -1923,8 +2117,6 @@ function mobileCanonicalMountContent(host, contentIds, key) {
     const button = section.querySelector("[data-side-panel-section-toggle]");
     records.push({
       content,
-      parent: content.parentNode,
-      nextSibling: content.nextSibling,
       contentHidden: content.hidden,
       section,
       sectionHidden: section.hidden,
@@ -1936,7 +2128,7 @@ function mobileCanonicalMountContent(host, contentIds, key) {
     section.classList.remove("collapsed");
     content.hidden = false;
     button?.setAttribute("aria-expanded", "true");
-    host.append(content);
+    canonicalViewHost.move(content, host);
   }
   mobileCanonicalMount = { host, key, records };
 }
@@ -1988,9 +2180,612 @@ function mobileSwitchToTab(tabId, { route = "chat", focus = false } = {}) {
   }).catch((error) => addEvent(error.message || String(error), "error"));
 }
 
-function mobileShellHistoryState() {
-  const { route, surface, surfacePage, routeHistory } = mobileShellState;
+function isFocusedShellRequested() {
+  return !embeddedSplitMode && resolveShellMode({
+    recovery: forceClassicShell,
+    viewportMode: mobileShellState.viewportMode,
+    desktopLayout: shellPreferenceState.value.desktopLayout,
+    phoneMode: mobileShellState.featureMode,
+    tabletMode: mobileShellState.tabletFeatureMode,
+  }) === "focused";
+}
+
+function scheduleFocusedShellRender() {
+  if (!focusedShell || focusedShellRenderPending) return;
+  focusedShellRenderPending = true;
+  queueMicrotask(() => { focusedShellRenderPending = false; renderFocusedShell(); });
+}
+
+function focusedSectionDestination(id) {
+  if (["controls", "optional-features"].includes(id)) return "settings";
+  if (["files", "git", "runners", "release", "artifacts"].includes(id)) return "project";
+  return "activity";
+}
+
+function focusedInspectorRecords() {
+  return [...sidePanelSectionRecords(), ...focusedFeatureRecords];
+}
+
+function initializeFocusedFeatureRecords() {
+  const parking = make("div");
+  parking.id = "focusedFeatureParking";
+  parking.hidden = true;
+  document.body.append(parking);
+  const content = make("section", "focused-artifacts-host");
+  content.append(make("p", "muted focused-artifact-empty", "Open a document artifact from a message to inspect its pages here."), projectArtifacts.element);
+  parking.append(content);
+  focusedFeatureRecords.push({ id: "artifacts", label: "Documents", content });
+  for (const [id, label, empty] of [
+    ["runners", "Runners", "No app runner is active. Choose a detected command above, or open runner help to configure one."],
+    ["release", "Release", "No release is active. Available release commands appear above; configure missing companions in Settings."],
+    ["progress", "Progress", "No workflow or task progress is active for this session."],
+    ["conversations", "Conversations", "No agent conversation or side question is active for this session."],
+    ["extensions", "Extensions", "No extension widgets are active for this session."],
+  ]) {
+    const content = make("section", "focused-feature-host");
+    content.dataset.featureHost = id;
+    const controls = make("div", "focused-feature-controls");
+    const placeholder = make("p", "muted focused-feature-empty", empty);
+    const widgets = make("div", "focused-feature-widgets");
+    content.append(controls, placeholder, widgets);
+    parking.append(content);
+    focusedFeatureRecords.push({ id, label, content, controls, placeholder, widgets });
+  }
+  focusedAgentWidgetHost = make("div", "focused-feature-widgets");
+  sidePanelSectionRecords().find(record => record.id === "subagents")?.content.append(focusedAgentWidgetHost);
+}
+
+function renderIntercomActivityLinks() {
+  const record = focusedFeatureRecords.find(item => item.id === "conversations");
+  if (!record) return;
+  const target = projectTargetFromContext();
+  const summaries = activityIntercom.getSummaries(target.tabId);
+  const existing = new Map([...record.controls.querySelectorAll("[data-conversation-id]")].map(node => [node.dataset.conversationId, node]));
+  const retained = new Set();
+  for (const summary of summaries) {
+    let button = existing.get(summary.id);
+    if (button?.dataset.sessionOwner !== `${target.tabId}:${target.lifetime?.revision}`) {
+      button?.remove();
+      button = null;
+    }
+    if (!button) {
+      button = make("button", "focused-conversation-link");
+      button.type = "button";
+      button.dataset.conversationId = summary.id;
+      button.dataset.sessionOwner = `${target.tabId}:${target.lifetime?.revision}`;
+      button.setAttribute("aria-haspopup", "dialog");
+      button.setAttribute("aria-controls", "intercomConversationDialog");
+      button.addEventListener("click", () => {
+        if (isAliveProjectTarget(target) && target.tabId === activeTabId) activityIntercom.open(summary.id);
+      });
+      record.controls.append(button);
+    }
+    const label = `${summary.participants.peer.name} · ${summary.messageCount} message${summary.messageCount === 1 ? "" : "s"}`;
+    if (button.textContent !== label) button.textContent = label;
+    retained.add(button);
+  }
+  for (const button of existing.values()) if (!retained.has(button)) button.remove();
+  record.placeholder.hidden = summaries.length > 0 || record.widgets.childElementCount > 0;
+}
+
+function featureWidgetRoots() {
+  return [elements.widgetArea, focusedAgentWidgetHost, ...focusedFeatureRecords.map(record => record.widgets)].filter(Boolean);
+}
+
+function featureWidgetElements(selector) {
+  return featureWidgetRoots().flatMap(root => [...root.querySelectorAll(selector)]);
+}
+
+function appendFeatureWidget(node, destination) {
+  if (!node) return;
+  elements.widgetArea.append(node);
+  focusedWidgetPlacements.set(node, destination);
+}
+
+function visibleFeatureWidgetDestination() {
+  if (!focusedShell?.active) return null;
+  return ["project", "activity"].includes(focusedShellState.destination) ? focusedShell.inspector : "";
+}
+
+function restoreFocusedWidgetsForRender(destination = null) {
+  for (const [node, owner] of focusedWidgetPlacements) {
+    if (destination !== null && owner !== destination) continue;
+    canonicalViewHost.restore(node);
+    node.remove();
+    focusedWidgetPlacements.delete(node);
+  }
+}
+
+function syncFocusedWidgetPlacement() {
+  const enabled = focusedShell?.active === true;
+  for (const [node, id] of focusedWidgetPlacements) {
+    const host = id === "subagents" ? focusedAgentWidgetHost : focusedFeatureRecords.find(record => record.id === id)?.widgets;
+    if (enabled && host) canonicalViewHost.move(node, host);
+    else canonicalViewHost.restore(node);
+  }
+  for (const record of focusedFeatureRecords) {
+    if (record.placeholder) record.placeholder.hidden = record.widgets.childElementCount > 0 || (record.id === "conversations" && record.controls.childElementCount > 0);
+  }
+  for (const [id, nodes] of [["runners", [elements.appRunnerMenuPanel, elements.appRunnerInfoButton]], ["release", [elements.publishMenu]]]) {
+    const host = focusedFeatureRecords.find(record => record.id === id)?.controls;
+    for (const node of nodes) {
+      if (!node) continue;
+      const composerMenuOpen = (node === elements.publishMenu && publishMenuOpen)
+        || (node === elements.appRunnerMenuPanel && appRunnerMenuOpen);
+      if (enabled && host && !composerMenuOpen) canonicalViewHost.move(node, host);
+      else canonicalViewHost.restore(node);
+    }
+  }
+}
+
+function focusedInspectorTopics(destination) {
+  const labels = { git: "Changes", subagents: "Agents", queue: "Queues", "codex-usage": "Codex usage", "claude-usage": "Claude usage" };
+  const order = ["files", "git", "runners", "release", "artifacts", "subagents", "queue", "progress", "conversations", "extensions", "events", "codex-usage", "claude-usage", "session", "sampling", "commands"];
+  return focusedInspectorRecords().filter(record => focusedSectionDestination(record.id) === destination)
+    .sort((left, right) => order.indexOf(left.id) - order.indexOf(right.id))
+    .map(record => ({ id: record.id, label: labels[record.id] || record.label || record.button?.querySelector(".side-panel-section-label")?.textContent || record.id }));
+}
+
+let renderedFeatureWidgetDestination = null;
+
+function focusedAttentionSnapshot() {
+  const items = tabs.flatMap(tab => {
+    const state = tabIndicator(tab).state;
+    if (!["blocked", "working", "done"].includes(state)) return [];
+    const decisionCount = tabPendingBlockerCount(tab);
+    return [{ id: `tab:${tab.id}`, tabId: tab.id, title: threadDisplayTitle(tab.title) || "Untitled session", state, decisionCount,
+      detail: state === "blocked" ? `${decisionCount} decision${decisionCount === 1 ? "" : "s"} waiting · ${tab.cwd || ""}`
+        : state === "done" ? `Finished since last viewed · ${tab.cwd || ""}` : `Pi is running · ${tab.cwd || ""}`,
+      target: { lifetime: sessionContext.captureLifetime(tab.id), cwd: tab.cwd || "", completionSerial: activityForTab(tab).completionSerial },
+    }];
+  });
+  return { items };
+}
+
+async function openFocusedAttentionItem(item) {
+  const tab = tabs.find(tab => tab.id === item.tabId);
+  const targetValid = tab && sessionContext.isLifetimeCurrent(item.target?.lifetime) && (tab.cwd || "") === item.target.cwd;
+  const current = focusedAttentionSnapshot().items.find(candidate => candidate.id === item.id && candidate.state === item.state);
+  if (!targetValid || !current || (item.state === "done" && current.target.completionSerial !== item.target.completionSerial)) {
+    focusedShell.closeAttention();
+    addEvent("That activity changed. Open Attention again to see its current state.", "warn");
+    return;
+  }
+  focusedShell.closeAttention();
+  navigateFocusedShell("conversation", null);
+  try {
+    if (item.tabId !== activeTabId) await switchTab(item.tabId);
+    if (activeTabId !== item.tabId || !sessionContext.isLifetimeCurrent(item.target.lifetime)) return;
+    if (item.state === "blocked") {
+      // Switching tabs attaches its event stream; pending requests replay there.
+      // Do not synthesize a decision from metadata that contains only a count.
+      if (!extensionRequests.active) showNextDialog();
+      if (!elements.dialog.open && tabPendingBlockerCount(tabs.find(tab => tab.id === item.tabId)) === 0) {
+        addEvent("This session no longer needs a decision.", "info");
+      }
+    }
+  } catch (error) { addEvent(error.message || String(error), "error"); }
+}
+
+function focusedOverviewSnapshot() {
+  if (!shellPreferenceState.value.overviewOpen || !isFocusedShellRequested() || ["home", "settings"].includes(focusedShellState.destination)) return { open: false };
+  const tab = activeTab();
+  const target = shellActionTarget();
+  const payload = parseGitFooterWebuiPayload();
+  const workspace = normalizeGitWorkspaceInfo(tab?.gitWorkspace);
+  const branch = payload?.meta?.find(chip => chip.key === "git");
+  const changes = payload?.meta?.find(chip => chip.key === "changes");
+  const runner = tabAppRunnerRun(tab);
+  const agents = activityAgents.getSnapshot();
+  const groups = agents.data ? subagentOverviewGroups(agents.data).filter(group => group.groupKind === "tab" && group.tabId === tab?.id) : [];
+  const agentCount = groups.reduce((sum, group) => sum + group.agentCount, 0);
+  const runningAgents = groups.reduce((sum, group) => sum + group.runningAgents, 0);
+  const agentCapability = agents.data?.tabs?.find(entry => entry.tabId === tab?.id)?.available;
+  const agentValue = agentCount > 0 || agentCapability === true
+    ? `${runningAgents} running · ${agentCount} total`
+    : agentCapability === false ? "Reporting unavailable" : "Not loaded";
+  const agentDetail = agents.error
+    ? "Latest refresh failed; any displayed counts are from the previous snapshot. Open Agents to retry."
+    : agentCapability === false && agentCount === 0 ? "Agent reporting is unavailable for this session." : "";
+  const context = contextUsageSnapshot();
+  const usage = payload?.providerUsage;
+  const usageAction = usage?.provider === "anthropic" ? "view:claude-usage" : "view:codex-usage";
+  const actions = new Map(focusedToolsActions().map(action => [action.id, action]));
+  const item = (id, label, value, actionId, extra = {}) => {
+    const action = actions.get(actionId);
+    const availability = action && checkActionTarget({ ...action, scope: "project", target }, target);
+    return { id, label, value, ...extra, ...(actionId ? {
+      actionId, disabled: !availability?.ok,
+      reason: availability?.reason || (!action ? "This action is unavailable." : ""),
+    } : {}) };
+  };
+  const usageItems = [item("context", "Context", contextUsageDisplay(context), "view:session", {
+    detail: contextUsageDetail(context), ...(context?.percent != null ? { progress: context.percent } : {}),
+  })];
+  for (const key of ["primary", "secondary"]) {
+    const window = usage?.[key];
+    if (window) usageItems.push(item(`usage-${key}`, window.label, `${window.usedPercent.toFixed(0)}% used`, usageAction, {
+      progress: window.usedPercent, detail: `${usage.provider} · captured ${new Date(usage.capturedAt).toLocaleTimeString()}`,
+    }));
+  }
+  if (!usage?.primary && !usage?.secondary) usageItems.push(item("usage-unknown", "Provider limits", "Not loaded", null));
+  return {
+    open: true, target, title: threadDisplayTitle(tab?.title) || "No active session", context: tab?.cwd || "Choose a session to inspect its workspace.",
+    sections: [
+      { id: "workspace", label: "Workspace", items: [
+        item("folder", "Folder", tab?.cwd || "Not selected", "view:files"),
+        item("branch", "Branch", cleanStatusText(branch?.value) || workspace?.branch || "Not available", "view:git"),
+        item("changes", "Changes", cleanStatusText(changes?.value) || "Open Changes to inspect", "view:git"),
+      ] },
+      { id: "work", label: "Work", items: [
+        item("session", "Session", tab ? tabIndicator(tab).label : "No active session", "view:session"),
+        item("runner", "Runner", runner ? cleanStatusText(runner.label || runner.displayCommand || runner.command || "App runner") : "No active runner", "view:runners", { detail: runner?.status || "" }),
+        item("agents", "Agents", agentValue, "view:subagents", { detail: agentDetail }),
+        item("queue", "Queue", `${Number(currentState?.pendingMessageCount || 0) || 0} pending`, "view:queue"),
+      ] },
+      { id: "usage", label: "Usage", items: usageItems },
+    ],
+  };
+}
+
+function invokeOverviewAction(actionId, target) {
+  const availability = checkActionTarget({ scope: "project", target }, shellActionTarget());
+  if (!availability.ok) { addEvent(availability.reason, "warn"); return; }
+  const action = focusedToolsActions().find(candidate => candidate.id === actionId);
+  if (action) return invokeFocusedTool({ ...action, target });
+}
+
+function renderFocusedShell() {
+  if (!focusedShell) return;
+  const wasActive = focusedShell.active;
+  const previousInspector = focusedShell.inspector;
+  const active = activeTab();
+  const record = focusedInspectorRecords().find(({ id }) => id === focusedShellState.inspector);
+  focusedShell.update({
+    ...shellPreferenceState.value,
+    ...focusedShellState,
+    enabled: isFocusedShellRequested(),
+    overviewOpen: !!shellPreferenceState.value.overviewOpen && !["home", "settings"].includes(focusedShellState.destination),
+    inspectorOpen: !!record && !["home", "settings"].includes(focusedShellState.destination),
+    inspectorTitle: record?.label || record?.button?.querySelector(".side-panel-section-label")?.textContent || "",
+    inspectorTopics: record && focusedShellState.destination !== "settings" ? focusedInspectorTopics(focusedShellState.destination) : [],
+    title: threadDisplayTitle(active?.title) || "Start a conversation",
+    context: !active ? (activeDraftCwd() ? normalizeDisplayPath(activeDraftCwd()) : "No Project") : active.workspaceKind === "no-project" ? "No Project" : active.cwd || "",
+    attentionCount: focusedAttentionSnapshot().items.filter(item => item.state === "blocked").reduce((sum, item) => sum + item.decisionCount, 0),
+    finishedCount: focusedAttentionSnapshot().items.filter(item => item.state === "done").length,
+    homeCollapsed: workspaceDashboardCollapsed,
+    overview: focusedOverviewSnapshot(),
+    composer: {
+      runActive: isRunActive(), behavior: busyPromptBehavior,
+      modelLabel: shortModelLabel(currentState?.model), effortLabel: footerThinkingDisplay(),
+      modelDisabled: !active?.running, effortDisabled: !active?.running || !currentState?.model,
+      modelReason: "Start a session to choose a model.", effortReason: "Wait for the session model to load.",
+    },
+  });
+  syncFocusedComposerDisclosure();
+  settingsWorkspace?.update({
+    enabled: focusedShell.active, destination: focusedShellState.destination,
+    category: settingsCategory(focusedShellState.inspector), target: shellActionTarget(),
+    actions: focusedToolsActions(),
+    features: OPTIONAL_FEATURES.map(feature => ({ ...feature, description: `${feature.description} ${optionalFeatureStatus(feature.id).detail || ""}` })),
+  });
+  const resourcesVisible = focusedShell.active && focusedShellState.destination === "settings" && settingsCategory(focusedShellState.inspector) === "resources";
+  if (resourcesVisible && (!settingsResourcesTarget || !isCurrentSettingsTarget(settingsResourcesTarget))) {
+    const target = shellActionTarget();
+    settingsResourcesTarget = target;
+    ensureSamplingParametersLoaded();
+    void refreshCodexFastMode(activeTabContext(), { readOnly: true }).then(() => {
+      if (settingsResourcesTarget === target && isCurrentSettingsTarget(target)) renderFocusedShell();
+    }).catch(error => {
+      if (isCurrentSettingsTarget(target)) addEvent(error.message || String(error), "error");
+    });
+  } else if (!resourcesVisible) settingsResourcesTarget = null;
+  if (elements.appRunnerInfoDialog?.open && !isCurrentAppRunnerInfoTarget(appRunnerInfoTarget)) renderAppRunnerInfoDialog();
+  if (renderedSessionShelves !== usesSessionShelves()) scheduleTabsRender();
+  syncConversationVoicePanelSemantics();
+  const voiceTarget = focusedShell.active && focusedShellState.destination === "settings" && settingsCategory(focusedShellState.inspector) === "voice" ? shellActionTarget() : null;
+  if (voiceTarget && (!settingsVoiceTarget || !isCurrentSettingsTarget(settingsVoiceTarget))) {
+    settingsVoiceTarget = voiceTarget;
+    renderConversationVoicePanelNotice("Loading voices…");
+    void loadConversationVoices(activeTabContext());
+  } else if (!voiceTarget) settingsVoiceTarget = null;
+  if (focusedShell.active && focusedShellState.destination === "settings" && pendingSettingsReveal) {
+    const entry = settingsWorkspace.reveal(pendingSettingsReveal);
+    if (entry) pendingSettingsReveal = null;
+  }
+  syncDocumentArtifactHost();
+  syncFocusedWidgetPlacement();
+  const widgetDestination = visibleFeatureWidgetDestination();
+  if (wasActive !== focusedShell.active || renderedFeatureWidgetDestination !== widgetDestination) {
+    renderedFeatureWidgetDestination = widgetDestination;
+    renderWidgets();
+  }
+  renderIntercomActivityLinks();
+  syncUsageVisibility();
+  if (wasActive !== focusedShell.active) {
+    syncMobileComposerDisclosureLayout();
+    setComposerActionsOpen(false);
+    composerModeRenderSignature = "";
+    updateComposerModeButtons();
+  }
+  if (focusedShell.active && focusedShell.inspector !== previousInspector) {
+    if (focusedShell.inspector === "git") renderGitPanel();
+    if (focusedShell.inspector === "runners") {
+      const target = activeTabContext();
+      void refreshAppRunners(target).catch(error => {
+        if (isCurrentTabContext(target)) addEvent(error.message || String(error), "error");
+      });
+    }
+    if (focusedShell.inspector === "events") clearUnreadEvents();
+  }
+}
+
+function applyShellRolloutCohort(cohort) {
+  shellRolloutCohort = cohort === "fresh" || cohort === "established" ? cohort : null;
+  const value = effectiveShellPreferences(shellPreferenceRecord, shellRolloutCohort);
+  if (JSON.stringify(value) === JSON.stringify(shellPreferenceState.value)) return;
+  shellPreferenceState = { ...shellPreferenceRecord, value };
+  $("#desktopShellSelect").value = value.desktopLayout;
+  $("#focusedNavigationSelect").value = value.navigation || "left";
+  renderFocusedShell();
+}
+
+function saveFocusedShellPreferences(patch) {
+  const value = { ...shellPreferenceState.value, ...patch };
+  let result;
+  try { result = writeShellPreferences(window.localStorage, value); }
+  catch { result = { ok: false, reason: "unavailable" }; }
+  if (!result.ok) {
+    addEvent(`Desktop layout could not be saved (${result.reason}). Your current layout is unchanged.`, "error");
+    $("#desktopShellSelect").value = shellPreferenceState.value.desktopLayout;
+    return false;
+  }
+  shellPreferenceRecord = { status: "valid", value };
+  shellPreferenceState = { ...shellPreferenceRecord, value: effectiveShellPreferences(shellPreferenceRecord, shellRolloutCohort) };
+  $("#desktopShellSelect").value = value.desktopLayout;
+  $("#focusedNavigationSelect").value = value.navigation || "left";
+  renderFocusedShell();
+  return true;
+}
+
+function settingsCategory(inspector) {
+  const id = typeof inspector === "string" && inspector.startsWith("settings:") ? inspector.slice(9) : "";
+  return SETTINGS_CATEGORIES.some(category => category.id === id) ? id : "appearance";
+}
+
+function normalizeFocusedNavigation(state) {
+  let { destination, inspector } = state || {};
+  if (!["conversation", "home", "project", "activity", "settings"].includes(destination)) return { destination: "conversation", inspector: null };
+  if (destination === "settings") {
+    const category = settingsCategory(inspector);
+    const categoryKnown = inspector === `settings:${category}`;
+    const entry = categoryKnown && (settingsWorkspace?.getEntries().find(entry => entry.id === state.setting && entry.category === category)
+      || (category === "features" && OPTIONAL_FEATURES.some(feature => `feature:${feature.id}` === state.setting) ? { id: state.setting } : null));
+    return { destination, inspector: `settings:${category}`, ...(entry ? { setting: entry.id } : {}) };
+  }
+  const known = focusedInspectorRecords().some(({ id }) => id === inspector);
+  if (known && !["home", "settings"].includes(destination)) destination = focusedSectionDestination(inspector);
+  return { destination, inspector: known ? inspector : destination === "project" ? "files" : destination === "activity" ? "subagents" : null };
+}
+
+function focusedNavigationUrl(state) {
+  const url = new URL(window.location.href);
+  url.searchParams.set("view", state.destination);
+  for (const key of ["inspector", "setting"]) {
+    if (state[key]) url.searchParams.set(key, state[key]);
+    else url.searchParams.delete(key);
+  }
+  return url.href;
+}
+
+function navigateFocusedShell(destination, inspector = undefined, { replace = false, setting = null } = {}) {
+  const next = normalizeFocusedNavigation({ destination, inspector, setting });
+  try { shellHistory.write({ state: { focusedShellState: next }, url: focusedNavigationUrl(next), replace }); }
+  catch (error) { addEvent(`Navigation could not be saved. ${error.message || error}`, "error"); return false; }
+  focusedShellState = next;
+  pendingSettingsReveal = next.setting || null;
+  if (next.setting) settingsWorkspace?.clearSearch();
+  renderFocusedShell();
+  return true;
+}
+
+function focusedNavigationFromSearch(search) {
+  const params = new URLSearchParams(search);
+  return normalizeFocusedNavigation({ destination: params.get("view"), inspector: params.get("inspector"), setting: params.get("setting") });
+}
+
+function restoreShellNavigation(event) {
+  restoreMobileNavigation(event);
+  focusedShellState = event.state?.focusedShellState
+    ? normalizeFocusedNavigation(event.state.focusedShellState)
+    : focusedNavigationFromSearch(window.location.search);
+  if (focusedShellState.destination === "settings") {
+    const url = focusedNavigationUrl(focusedShellState);
+    const stateChanged = JSON.stringify(event.state?.focusedShellState) !== JSON.stringify(focusedShellState);
+    if (stateChanged || url !== window.location.href) {
+      try { shellHistory.write({ state: { focusedShellState }, url, replace: true }); }
+      catch (error) { addEvent(`Recovered Settings navigation could not be saved. ${error.message || error}`, "error"); }
+    }
+  }
+  pendingSettingsReveal = focusedShellState.setting || null;
+  if (focusedShellState.setting) settingsWorkspace?.clearSearch();
+  renderFocusedShell();
+}
+
+function isCurrentSettingsTarget(target) {
+  const current = shellActionTarget();
+  return target?.tabId === current.tabId && target?.generation === current.generation && target?.sessionIdentity === current.sessionIdentity;
+}
+
+function invokeSettingsAction(actionId, target) {
+  if (!isCurrentSettingsTarget(target)) return;
+  const action = focusedToolsActions().find(action => action.id === actionId);
+  if (action) return invokeFocusedTool({ ...action, target });
+}
+
+function navigateSettings(category, setting, target) {
+  if (!isCurrentSettingsTarget(target)) return;
+  if (!navigateFocusedShell("settings", `settings:${category}`, { setting })) return;
+  settingsWorkspace.clearSearch();
+  const entry = settingsWorkspace.getEntries().find(entry => entry.id === setting);
+  if (entry?.actionId && entry.available) invokeSettingsAction(entry.actionId, target);
+}
+
+function focusedToolsActions() {
+  const context = shellActionTarget();
+  const sectionActions = focusedInspectorRecords().map(record => {
+    const destination = focusedSectionDestination(record.id);
+    return {
+      id: `view:${record.id}`, scope: "browser", category: destination === "settings" ? "Settings" : destination === "project" ? "Project" : destination === "conversation" ? "Session" : "Activity",
+      label: record.label || record.button?.querySelector(".side-panel-section-label")?.textContent || record.id,
+      description: `Open ${record.id.replaceAll("-", " ")} controls`, keywords: record.id, available: true,
+      run: () => navigateFocusedShell(destination, destination === "settings" ? `settings:${record.id === "optional-features" ? "features" : "appearance"}` : record.id),
+    };
+  });
+  const modelShortcuts = {
+    id: "view:model-shortcuts", scope: "session", target: context, category: "Models",
+    label: "Model shortcuts", description: "Open scoped models, advanced layout and model ordering",
+    keywords: "model picker scoped advanced reorder", available: !!context.tabId,
+    unavailableReason: "Choose a session first.",
+    run: () => {
+      if (!navigateFocusedShell("conversation", null)) return;
+      setFooterModelPickerOpen(true);
+      focusFooterModelPickerInitialOption();
+    },
+  };
+  const modelShortcutsLayout = {
+    ...modelShortcuts, id: "view:model-shortcuts-layout",
+    label: footerScopedModelLayout === "advanced" ? "Use simple model shortcuts" : "Use advanced model shortcuts",
+    description: "Switch between a flat list and provider columns; keep the saved model order",
+    run: () => {
+      if (!navigateFocusedShell("conversation", null)) return;
+      toggleFooterScopedModelLayout();
+      setFooterModelPickerOpen(true);
+      focusFooterModelPickerInitialOption();
+    },
+  };
+  const paletteActions = buildCommandPaletteItems();
+  const nativeLabels = new Set(paletteActions.filter(action => action.id.startsWith("native:")).map(action => action.label));
+  const distinctActions = paletteActions.filter(action => !action.id.startsWith("command:") || !nativeLabels.has(action.label));
+  return [...sectionActions, modelShortcuts, modelShortcutsLayout, ...distinctActions.map(action => ({
+    ...action,
+    category: action.kind === "Model" ? "Models" : action.kind === "Thread" ? "Sessions" : action.destination === "project" ? "Project" : action.destination === "settings" ? "Settings" : action.destination === "activity" ? "Activity" : "Session",
+    available: checkActionTarget(action, context).ok,
+    unavailableReason: checkActionTarget(action, context).reason || action.unavailableReason,
+  }))];
+}
+
+function focusedContextActions(category, actions) {
+  const ids = category === "Project"
+    ? ["view:files", "project:changes", "project:guided-git", "view:runners", "project:branch-worktree", "view:artifacts"]
+    : ["session:new", "native:resume", "native:fork", "native:tree", "conversation:search", "session:compact"];
+  return ids.map(id => actions.find(action => action.id === id)).filter(Boolean);
+}
+
+function focusedToolsSnapshot() {
+  const actions = focusedToolsActions();
+  const aliases = new Map(actions.filter(action => action.id.startsWith("native:") && action.label.startsWith("/"))
+    .map(action => [`command:${encodeURIComponent(action.label.slice(1))}`, action.id]));
+  const pinnedIds = [...new Set((shellPreferenceState.value.pinnedActions || []).map(id => aliases.get(id) || id))];
+  return { actions, pinnedIds, contextLabel: threadDisplayTitle(activeTab()?.title) || "No active session" };
+}
+
+async function invokeFocusedTool(captured) {
+  try {
+    const target = checkActionTarget(captured, shellActionTarget());
+    if (!target.ok) throw new Error(target.reason);
+    const current = focusedToolsActions().find(action => action.id === captured.id);
+    if (!current) throw new Error("This action is no longer available. Reopen All tools.");
+    const availability = checkActionTarget({ ...current, target: captured.target }, shellActionTarget());
+    if (!availability.ok) throw new Error(availability.reason);
+    const triggerButton = focusedShell.closeTools();
+    await current.run({ triggerButton });
+  } catch (error) { addEvent(error.message || String(error), "error"); }
+}
+
+function syncFocusedComposerDisclosure() {
+  if (focusedShell?.active && document.body.classList.contains("composer-actions-open")) {
+    for (const node of elements.composerActionsPanel.querySelectorAll('[data-tooltip]')) bindStyledTooltipEvents(node);
+  }
+  focusedComposerDisclosure?.update({
+    enabled: focusedShell?.active === true,
+    open: document.body.classList.contains("composer-actions-open"),
+    optionsOpen: optionsMenuOpen,
+  });
+}
+
+function initializeFocusedShell() {
+  focusedComposerDisclosure = createFocusedComposerDisclosure({
+    document, trigger: elements.composerActionsButton, panel: elements.composerActionsPanel,
+    optionsTrigger: elements.optionsMenuButton, optionsPanel: elements.optionsMenu,
+  });
+  initializeFocusedFeatureRecords();
+  settingsWorkspace = createSettingsWorkspace({ document, viewHost: canonicalViewHost, onNavigate: navigateSettings, onInvoke: invokeSettingsAction });
+  $("#focusedFeatureParking").append(settingsWorkspace.element);
+  const initial = focusedNavigationFromSearch(window.location.search);
+  try {
+    if (isFocusedShellRequested()) shellHistory.write({ state: { focusedShellState: initial }, url: focusedNavigationUrl(initial), replace: true });
+    focusedShellState = initial;
+    pendingSettingsReveal = initial.setting || null;
+  } catch (error) {
+    addEvent(`Initial navigation could not be saved. ${error.message || error}`, "error");
+  }
+  focusedShell = createFocusedShellAdapter({
+    document, viewHost: canonicalViewHost,
+    nodes: { ...elements, settingsRoot: settingsWorkspace.element, layout: $(".layout"), conversation: $(".workspace-column"), navigation: elements.terminalTabsShell, home: elements.workspaceDashboard, footer: $("[data-control-deck-shared-footer]"), versions: $(".side-panel-version-row") },
+    sections: focusedInspectorRecords(), onNavigate: navigateFocusedShell,
+    onHome: () => openNoProjectConversation(),
+    onPreferences: saveFocusedShellPreferences, onInvoke: invokeFocusedTool,
+    getTools: focusedToolsSnapshot, getContextActions: focusedContextActions,
+    getAttention: focusedAttentionSnapshot, onAttentionSelect: openFocusedAttentionItem,
+    onOverviewAction: invokeOverviewAction,
+    onBehaviorChange: setBusyPromptBehavior,
+    onModel: () => openNativeModelSelector(), onEffort: () => openNativeEffortSelector(),
+    onScopedModels: () => {
+      setFooterModelPickerOpen(!footerModelPickerOpen);
+      if (footerModelPickerOpen) focusFooterModelPickerInitialOption();
+    },
+  });
+  $("#desktopShellSelect").value = shellPreferenceState.value.desktopLayout;
+  $("#focusedNavigationSelect").value = shellPreferenceState.value.navigation || "left";
+  $("#desktopShellSelect").addEventListener("change", event => saveFocusedShellPreferences({ desktopLayout: event.target.value }));
+  $("#focusedNavigationSelect").addEventListener("change", event => saveFocusedShellPreferences({ navigation: event.target.value }));
+  if (forceClassicShell) $("#desktopShellStatus").textContent = "Classic recovery is active. Remove shell=classic from the address to use the saved layout.";
+  for (const button of elements.terminalTabsShell.querySelectorAll('.terminal-sidebar-actions button')) {
+    const tooltip = button.getAttribute('data-tooltip') || button.getAttribute('title');
+    if (tooltip) applyStyledTooltip(button, tooltip, { ariaLabel: false });
+  }
+  renderFocusedShell();
+}
+
+function restoreMobileNavigation(event) {
+  const state = event.state?.mobileShellState;
+  if (!event.state?.piMobileShellV2 || !state || !isMobileShellV2Active()) return;
+  const previousSurface = mobileShellState.surface;
+  let restored = createMobileShellState({ viewport: mobileShellViewport(), featureMode: mobileShellState.featureMode, tabletFeatureMode: mobileShellState.tabletFeatureMode, route: state.route });
+  restored = reduceMobileShellState({ ...restored, routeHistory: state.routeHistory }, {});
+  if (state.surface && state.surface !== "none") restored = reduceMobileShellState(restored, { type: "surface", surface: state.surface, page: state.surfacePage });
+  mobileShellState = restored;
+  syncMobileShellRoot();
+  renderMobilePhoneExperience({ focus: previousSurface === "none" });
+  if (previousSurface !== "none" && mobileShellState.surface === "none") restoreMobileSurfaceFocus();
+}
+
+function mobileShellHistoryState(state = mobileShellState) {
+  const { route, surface, surfacePage, routeHistory } = state;
   return { route, surface, surfacePage, routeHistory };
+}
+
+function commitMobileNavigation(next, { replace = false } = {}) {
+  try {
+    shellHistory.write({ state: { piMobileShellV2: true, mobileShellState: mobileShellHistoryState(next) }, replace });
+  } catch (error) {
+    addEvent(`Navigation could not be saved. Your current view is unchanged. ${error.message || String(error)}`, "error");
+    return false;
+  }
+  mobileShellState = next;
+  syncMobileShellRoot();
+  return true;
 }
 
 function mobileNavigate(route, { replace = false, focus = true } = {}) {
@@ -1998,10 +2793,7 @@ function mobileNavigate(route, { replace = false, focus = true } = {}) {
   const current = mobileShellState;
   const next = reduceMobileShellState(current, { type: "route", route, replace });
   if (next.route === current.route && current.surface === "none") return;
-  mobileShellState = next;
-  syncMobileShellRoot();
-  const method = replace ? "replaceState" : "pushState";
-  window.history[method]({ ...(history.state || {}), piMobileShellV2: true, mobileShellState: mobileShellHistoryState() }, "");
+  if (!commitMobileNavigation(next, { replace })) return;
   persistMobileContinuityState();
   renderMobilePhoneExperience({ focus });
 }
@@ -2012,23 +2804,21 @@ function mobileOpenSurface(surface, page = "root", { focus = true } = {}) {
   if (mobileShellState.surface === "none" && document.activeElement instanceof HTMLElement && !openSurface?.contains(document.activeElement)) {
     mobileSurfaceFocusReturn = document.activeElement;
   }
-  mobileShellState = reduceMobileShellState(mobileShellState, { type: "surface", surface, page });
-  syncMobileShellRoot();
-  window.history.pushState({ ...(history.state || {}), piMobileShellV2: true, mobileShellState: mobileShellHistoryState() }, "");
+  const next = reduceMobileShellState(mobileShellState, { type: "surface", surface, page });
+  if (!commitMobileNavigation(next)) return;
   renderMobilePhoneExperience({ focus });
 }
 
 function mobileSetSurfacePage(page) {
-  mobileShellState = reduceMobileShellState(mobileShellState, { type: "surface-page", page });
-  syncMobileShellRoot();
-  window.history.pushState({ ...(history.state || {}), piMobileShellV2: true, mobileShellState: mobileShellHistoryState() }, "");
+  const next = reduceMobileShellState(mobileShellState, { type: "surface-page", page });
+  if (!commitMobileNavigation(next)) return;
   renderMobilePhoneExperience({ focus: true });
 }
 
 function mobileBack() {
   if (!isMobileShellV2Active()) return false;
   if (mobileShellState.surface !== "none" || mobileShellState.routeHistory.length) {
-    window.history.back();
+    shellHistory.back();
     return true;
   }
   return false;
@@ -2045,7 +2835,7 @@ function mobileRenderSessions() {
     const priority = { blocked: 0, running: 1, failed: 2, completed: 3, idle: 4 };
     return (priority[mobileTabActivityState(a)] ?? 5) - (priority[mobileTabActivityState(b)] ?? 5);
   });
-  const visible = ordered.filter((tab) => !query || [tab.title, tab.cwd, tab.model, mobileTabCwdLabel(tab)].filter(Boolean).join(" ").toLocaleLowerCase().includes(query));
+  const visible = ordered.filter((tab) => !query || [tab.title, threadDisplayTitle(tab.title), tab.cwd, tab.model, mobileTabCwdLabel(tab)].filter(Boolean).join(" ").toLocaleLowerCase().includes(query));
   list.replaceChildren();
   if (!visible.length) {
     mobileSetText(status, tabs.length ? "No sessions match this search." : "No sessions are open. Start one in the current folder or choose a folder.");
@@ -2070,18 +2860,18 @@ function mobileRenderSessions() {
       const row = make("article", `mobile-session-row is-${state}${tab.id === activeTabId ? " is-active" : ""}`);
       const select = mobileButton("", "mobile-session-select", () => mobileSwitchToTab(tab.id, { focus: true }));
       select.setAttribute("aria-current", tab.id === activeTabId ? "page" : "false");
-      select.setAttribute("aria-label", `${tab.title || "Untitled session"}, ${state}${tab.id === activeTabId ? ", current session" : ""}`);
+      select.setAttribute("aria-label", `${threadDisplayTitle(tab.title) || "Untitled session"}, ${state}${tab.id === activeTabId ? ", current session" : ""}`);
       select.append(
         make("span", "mobile-state-glyph", state === "blocked" ? "!" : state === "running" ? "●" : state === "failed" ? "×" : state === "completed" ? "✓" : "○"),
         make("span", "mobile-session-copy", ""),
       );
       const copy = select.querySelector(".mobile-session-copy");
-      copy.append(make("strong", undefined, tab.title || "Untitled session"), make("span", "muted", `${mobileTabCwdLabel(tab)} · ${state}`));
+      copy.append(make("strong", undefined, threadDisplayTitle(tab.title) || "Untitled session"), make("span", "muted", `${mobileTabCwdLabel(tab)} · ${state}`));
       const more = mobileButton("Close", "mobile-row-action", (event) => {
         event.stopPropagation();
         void closeTerminalTab(tab.id);
       });
-      more.setAttribute("aria-label", `Close ${tab.title || "session"}`);
+      more.setAttribute("aria-label", `Close ${threadDisplayTitle(tab.title) || "session"}`);
       row.append(select, more);
       section.append(row);
     }
@@ -2116,7 +2906,7 @@ function mobileRenderActivity() {
     for (const item of items) {
       const { tab, state, itemKey, kind } = item;
       const row = make("article", `mobile-activity-item is-${state}`);
-      const heading = kind === "workflow" ? "Workflow run" : kind === "app" ? "App runner" : tab.title || "Untitled session";
+      const heading = kind === "workflow" ? "Workflow run" : kind === "app" ? "App runner" : threadDisplayTitle(tab.title) || "Untitled session";
       const detail = kind === "workflow" ? `${workflowRunningCountForTab(tab.id)} workflow run${workflowRunningCountForTab(tab.id) === 1 ? "" : "s"} active` : kind === "app" ? "App runner is active" : state === "blocked" ? `${tabPendingBlockerCount(tab)} decision${tabPendingBlockerCount(tab) === 1 ? "" : "s"} need attention` : `${mobileTabCwdLabel(tab)} · ${state}`;
       row.append(make("strong", undefined, heading), make("p", "muted", detail));
       const actions = make("div", "mobile-activity-actions");
@@ -2139,7 +2929,7 @@ function mobileRenderActivity() {
     }
     list.append(section);
   }
-  mobileSetText(status, total ? `${total} work item${total === 1 ? "" : "s"}; opening an item uses its existing tab, blocker, workflow, or app-runner action.` : "No current, failed, or recently completed work. Sessions stay available in Sessions.");
+  mobileSetText(status, total ? `${total} work item${total === 1 ? "" : "s"}; opening an item uses its existing thread, blocker, workflow, or app-runner action.` : "No current, failed, or recently completed work. Sessions stay available in Sessions.");
 }
 
 function mobileRenderProject() {
@@ -2361,7 +3151,7 @@ function mobileRenderActionSheet() {
       mobileButton("Queue", "mobile-more-topic", () => mobileSetSurfacePage("queue"), { continuityKey: "actions:queue" }),
     );
     if (isAbortAvailable()) root.append(mobileButton("Abort active run…", "danger mobile-abort-confirm", async () => {
-      const confirmed = await appConfirm({ title: "Abort active run?", summary: "Pi will be told to stop the active run. Any partial answer remains in the canonical transcript.", affected: "This active tab only", undoable: false, confirmLabel: "Abort run" });
+      const confirmed = await appConfirm({ title: "Abort active run?", summary: "Pi will be told to stop the active run. Any partial answer remains in the canonical transcript.", affected: "This active thread only", undoable: false, confirmLabel: "Abort run" });
       if (confirmed) abortActiveRun({ source: "mobile confirm" });
     }, { continuityKey: "actions:abort" }));
     return;
@@ -2426,12 +3216,12 @@ function syncMobileShellInteractivity() {
     else destination.removeAttribute("aria-hidden");
   }
   if (surface) {
-    if (surfaceOpen) {
-      surface.setAttribute("role", "dialog");
-      surface.setAttribute("aria-modal", "true");
+    if (surfaceOpen && !fileViewerOpen) {
+      activateDrawerModal(surface, mobileSurfaceFocusReturn, { close: mobileBack });
     } else {
-      surface.removeAttribute("role");
-      surface.removeAttribute("aria-modal");
+      // History owns the return target; viewport/file-viewer suspension must not
+      // focus the obscured More trigger or close its retained page.
+      deactivateDrawerModal(surface, { restoreFocus: false });
     }
   }
   if (elements.chat) {
@@ -2456,8 +3246,8 @@ function captureMobileSurfaceRenderFocus(surface) {
   const active = document.activeElement;
   const userDirected = Date.now() <= mobileSurfaceUserFocusIntentUntil;
   const targetKey = mobileSurfaceFocusKey(active);
-  if (active instanceof HTMLElement && targetKey && surface?.contains(active) && (!mobileSurfaceRenderFocus || active === mobileSurfaceRenderFocus.element || userDirected)) {
-    const domDraft = active.dataset.mobileDraftAuthority === "dom" && (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement);
+  const domDraft = active?.dataset?.mobileDraftAuthority === "dom" && (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement);
+  if (active instanceof HTMLElement && targetKey && surface?.contains(active) && (!mobileSurfaceRenderFocus || active === mobileSurfaceRenderFocus.element || userDirected || domDraft)) {
     mobileSurfaceRenderFocus = {
       element: active,
       targetKey,
@@ -2513,22 +3303,29 @@ function mobileRenderLifecycle() {
   }
   if (signature === mobileLifecycleSignature) return;
   mobileLifecycleSignature = signature;
-  const session = active?.title || "Current session";
+  const session = threadDisplayTitle(active?.title) || "Current session";
   announcer.textContent = offline ? "Pi Web UI is offline; your draft remains in the composer." : state === "blocked" ? `${session} needs your decision.` : state === "running" ? `${session} is running.` : state === "completed" ? `${session} completed.` : state === "failed" ? `${session} failed. Review the session for details.` : `${session} is idle.`;
 }
 
 function renderMobilePhoneExperience({ focus = false } = {}) {
+  if (focusedShell?.active && !isFocusedShellRequested()) renderFocusedShell();
+  scheduleFocusedShellRender();
   const shell = mobileShellElement("mobileShellV2");
   if (!shell) return;
   const active = isMobileShellV2Active();
-  shell.hidden = !active;
   if (!active) {
+    // Restore into an interactive Classic host before hiding the focused source.
+    syncMobileShellInteractivity();
+    if (mobileCanonicalMount || mobileWidgetAreaMount) {
+      setSidePanelCollapsed(isSidePanelOverlayView() ? true : readStoredSidePanelCollapsed() ?? false, { persist: false });
+    }
     mobileWidgetAreaUnmount();
     mobileCanonicalUnmount();
+    shell.hidden = true;
     document.documentElement.removeAttribute("data-mobile-presentation");
-    syncMobileShellInteractivity();
     return;
   }
+  shell.hidden = false;
   document.documentElement.dataset.mobilePresentation = mobilePresentation;
   const route = mobileShellState.route;
   const surface = mobileShellElement("mobileShellSurface");
@@ -2606,6 +3403,10 @@ function renderMobilePhoneExperience({ focus = false } = {}) {
 }
 
 function installMobilePhoneExperience() {
+  document.addEventListener("focusout", rememberResponsiveFieldFocus, true);
+  document.addEventListener("focusin", event => {
+    if (responsiveFieldFocus && event.target !== responsiveFieldFocus.node) responsiveFieldFocus = null;
+  }, true);
   mobilePhoneExperienceInstalled = true;
   mobilePresentation = readMobilePresentation();
   const shell = mobileShellElement("mobileShellV2");
@@ -2626,7 +3427,7 @@ function installMobilePhoneExperience() {
   mobileSurface?.addEventListener("pointerdown", noteMobileSurfaceFocusIntent, { capture: true });
   mobileSurface?.addEventListener("keydown", noteMobileSurfaceFocusIntent, { capture: true });
   mobileSurface?.addEventListener("focusin", () => {
-    if (Date.now() <= mobileSurfaceUserFocusIntentUntil) captureMobileSurfaceRenderFocus(mobileSurface);
+    captureMobileSurfaceRenderFocus(mobileSurface);
   });
   mobileSurface?.addEventListener("focusout", () => requestAnimationFrame(() => {
     if (mobileShellState.surface === "none" || Date.now() <= mobileSurfaceUserFocusIntentUntil || document.querySelector("dialog[open]") || document.body.classList.contains("file-viewer-open") || document.activeElement === mobileSurfaceRenderFocus?.element) return;
@@ -2639,9 +3440,9 @@ function installMobilePhoneExperience() {
   mobileShellElement("mobileSurfaceBackButton")?.addEventListener("click", mobileBack);
   mobileShellElement("mobileSessionsSearchInput")?.addEventListener("input", mobileRenderSessions);
   mobileShellElement("mobileSessionsCloseAllButton")?.addEventListener("click", () => elements.closeAllTabsButton?.click());
-  mobileShellElement("mobileNewCurrentDirectoryButton")?.addEventListener("click", () => createTerminalTab());
-  mobileShellElement("mobileNewDirectoryButton")?.addEventListener("click", () => createTerminalTabFromChosenDirectory());
-  mobileShellElement("mobileNewWorktreeButton")?.addEventListener("click", () => elements.newTabWorktreeButton?.click());
+  mobileShellElement("mobileNewCurrentDirectoryButton")?.addEventListener("click", (event) => openNewThreadPalette({ returnFocus: event.currentTarget }));
+  mobileShellElement("mobileNewDirectoryButton")?.addEventListener("click", (event) => browseNewThreadFolder({ returnFocus: event.currentTarget }));
+  mobileShellElement("mobileNewWorktreeButton")?.addEventListener("click", () => openBranchWorktreePicker());
   mobileShellElement("mobileResumeSessionButton")?.addEventListener("click", () => elements.optionsResumeButton?.click());
   mobileShellElement("mobileActivityRefreshButton")?.addEventListener("click", () => reconcileForegroundState("mobile activity").catch((error) => addEvent(error.message || String(error), "error")));
   const projectTopics = mobileShellElement("mobileProjectTopics");
@@ -2671,18 +3472,7 @@ function installMobilePhoneExperience() {
     event.preventDefault();
     mobileOpenSurface("actionSheet");
   });
-  window.addEventListener("popstate", (event) => {
-    const state = event.state?.mobileShellState;
-    if (!event.state?.piMobileShellV2 || !state || !isMobileShellV2Active()) return;
-    const previousSurface = mobileShellState.surface;
-    let restored = createMobileShellState({ viewport: mobileShellViewport(), featureMode: mobileShellState.featureMode, tabletFeatureMode: mobileShellState.tabletFeatureMode, route: state.route });
-    restored = reduceMobileShellState({ ...restored, routeHistory: state.routeHistory }, {});
-    if (state.surface && state.surface !== "none") restored = reduceMobileShellState(restored, { type: "surface", surface: state.surface, page: state.surfacePage });
-    mobileShellState = restored;
-    syncMobileShellRoot();
-    renderMobilePhoneExperience({ focus: previousSurface === "none" });
-    if (previousSurface !== "none" && mobileShellState.surface === "none") restoreMobileSurfaceFocus();
-  });
+
   document.addEventListener("keydown", (event) => {
     if (!isMobileShellV2Active() || event.key !== "Escape" || document.querySelector("dialog[open]")) return;
     if (mobileShellState.surface !== "none") {
@@ -2691,19 +3481,43 @@ function installMobilePhoneExperience() {
       mobileBack();
     }
   }, { capture: true });
-  history.replaceState({ ...(history.state || {}), piMobileShellV2: true, mobileShellState: mobileShellHistoryState() }, "");
+  commitMobileNavigation(mobileShellState, { replace: true });
   renderMobilePhoneExperience();
 }
 
+function rememberResponsiveFieldFocus(event) {
+  const node = event.target;
+  if (event.relatedTarget || !node?.closest?.(".side-panel-section-content") || typeof node.selectionStart !== "number") return;
+  const nextMode = createMobileShellState({ viewport: mobileShellViewport() }).viewportMode;
+  if (nextMode === mobileShellState.viewportMode) return;
+  // CSS can blur a field at a breakpoint before the media-query callback moves it.
+  responsiveFieldFocus = { node, selection: [node.selectionStart, node.selectionEnd, node.selectionDirection] };
+}
+
+function restoreResponsiveFieldFocus() {
+  const captured = responsiveFieldFocus;
+  responsiveFieldFocus = null;
+  if (!captured) return;
+  const { node, selection } = captured;
+  if (document.activeElement !== document.body && document.activeElement !== node) return;
+  if (!node.isConnected || node.closest("[hidden], [inert]") || !node.getClientRects().length || getComputedStyle(node).visibility !== "visible") return;
+  node.focus({ preventScroll: true });
+  node.setSelectionRange(...selection);
+}
+
 function applyMobileShellViewport() {
+  const viewport = mobileShellViewport();
+  const next = createMobileShellState({ viewport });
+  if (next.viewportMode === mobileShellState.viewportMode && next.posture === mobileShellState.posture) return;
   const wasActive = isMobileShellV2Active();
-  applyMobileShellEvent({ type: "viewport", viewport: mobileShellViewport() });
+  applyMobileShellEvent({ type: "viewport", viewport });
   if (wasActive !== isMobileShellV2Active() && isMobileShellV2Active()) {
     mobileFooterExpanded = false;
     elements.statusBar.removeAttribute("aria-label");
     deactivateDrawerModal(elements.statusBar, { restoreFocus: false });
     document.body.classList.remove("composer-actions-open", "footer-details-expanded", "mobile-tabs-expanded", "mobile-keyboard-open");
   }
+  restoreResponsiveFieldFocus();
 }
 
 function setMobileContinuityNotice(message = "", level = "info") {
@@ -2716,7 +3530,7 @@ function setMobileContinuityNotice(message = "", level = "info") {
 
 function mobileTargetBlockerExists(blockerId) {
   if (!blockerId) return true;
-  return String(activeDialog?.id || "") === blockerId || dialogQueue.some((request) => String(request?.id || "") === blockerId);
+  return extensionRequests.has(activeTabId, blockerId);
 }
 
 async function applyPendingMobileNavigationTarget() {
@@ -2777,15 +3591,38 @@ const releaseNpmOutputExpandedByTab = new Map();
 const workflowTerminalScrollByTab = new Map();
 const workflowSubprocessMinimizedByTab = new Set();
 const workflowOverlayMinimizedByTab = new Set();
-const appRunnerDataByTab = new Map();
+const appRunnerFormTargets = new WeakMap();
+const projectRunners = createProjectRunnersController({
+  api,
+  captureTarget: () => projectTargetFromContext(),
+  isTargetCurrent: isCurrentProjectTarget,
+  cleanStatusText,
+  onData: (tabId, data, { hasActiveRun }) => {
+    if (!hasActiveRun) return;
+    const tab = tabs.find(item => item.id === tabId);
+    if (tab) tab.appRunner = data.activeRun || null;
+  },
+  onRender: ({ tabs: repaintTabs }) => {
+    for (const input of document.querySelectorAll(".app-runner-stdin-input")) {
+      const target = appRunnerFormTargets.get(input.closest("form"));
+      if (target && isCurrentProjectTarget(target)) input.value = projectRunners.getInputDraft(target.tabId, input.dataset.runId);
+    }
+    renderAppRunnerControls();
+    renderWidgets();
+    if (repaintTabs) renderTabs();
+  },
+  addEvent,
+  onRefreshContext: target => {
+    scheduleRefreshMessages(120, target);
+    scheduleRefreshState(120, target);
+  },
+});
 const conversationModeByTab = new Map();
 const workflowModeByTab = new Map();
 const workflowModeTogglePendingByTab = new Set();
 const workflowInspectorByTab = new Map();
 const workflowInspectorSelectionByTab = new Map();
 const workflowInspectorMinimizedByTab = new Set();
-const appRunnerInputDraftByRun = new Map();
-const appRunnerContextLineDraftByRun = new Map();
 const scopedScrollContinuityByKey = new Map();
 const liveToolRuns = new Map();
 const liveToolCards = new Map();
@@ -2814,8 +3651,6 @@ const optionalFeatureAvailability = {
   codexFastMode: false,
   themeBundle: false,
 };
-const APP_RUNNER_CONTEXT_DEFAULT_LINES = 80;
-const APP_RUNNER_CONTEXT_MAX_LINES = 1000;
 const APP_RUNNER_SEARCH_PATH_LIMIT = 24;
 const OPTIONAL_FEATURES = [
   {
@@ -3512,6 +4347,7 @@ const gitFooterSyncInFlightByTab = new Set();
 let gitPullErrorText = "";
 let gitPullErrorContext = { code: "", tabId: null, syncValue: "", busy: false, requestId: 0 };
 const gitFooterPiCalibrationInFlightByTab = new Set();
+let gitFooterVisibilityTarget = null;
 let gitFooterVisibilityApplyInFlight = false;
 let gitFooterVisibilityDirty = false;
 
@@ -3723,8 +4559,8 @@ const GIT_WORKFLOW_CREATE_PR_TOOLTIP = [
   "2. Read dev/COMMIT/staged-branch-name.txt.",
   "3. Let you confirm or edit the generated branch name.",
   "4. Create or open a Git worktree for that branch instead of switching this checkout.",
-  "5. Copy staged changes and commit message files into the worktree, then switch to its tab.",
-  "6. Commit short, long, or typed input in the worktree tab.",
+  "5. Copy staged changes and commit message files into the worktree, then switch to its thread.",
+  "6. Commit short, long, or typed input in the worktree thread.",
   "7. Push and Create PR will push upstream, run /pr, let you review, then run gh pr create.",
 ].join("\n");
 const GIT_WORKFLOW_MANUAL_BRANCH_TOOLTIP = [
@@ -3733,8 +4569,8 @@ const GIT_WORKFLOW_MANUAL_BRANCH_TOOLTIP = [
   "2. Prefill a branch from the commit message if possible.",
   "3. Let you type or edit the type/feature-name branch name.",
   "4. Create or open a Git worktree for that branch instead of switching this checkout.",
-  "5. Copy staged changes and commit message files into the worktree, then switch to its tab.",
-  "6. Commit short, long, or typed input in the worktree tab.",
+  "5. Copy staged changes and commit message files into the worktree, then switch to its thread.",
+  "6. Commit short, long, or typed input in the worktree thread.",
   "7. Push and Create PR will push upstream, run /pr, let you review, then run gh pr create.",
 ].join("\n");
 const GIT_BRANCH_TYPE_SUGGESTIONS = ["feat", "fix", "change", "perf", "test", "chore", "refactor", "docs", "style", "build", "ci", "revert"];
@@ -3830,8 +4666,8 @@ function isInteractiveDropdownOpen() {
       || optionsMenuOpen
       || conversationVoiceMenuOpen
       || busyPromptBehaviorMenuOpen
-      || followUpQueueOpen
-      || newTabMenuOpen
+      || activityQueue.isOpen()
+      || draftWorkspacePicker !== null
       || isFooterPickerOpen()
       || elements.commandSuggest?.hidden === false
       || elements.modelSearchInput?.hidden === false
@@ -4214,12 +5050,12 @@ function reconcileControlDeckHosts() {
   const footerHost = activeShell === elements.sidePanelLeft
     ? elements.sidePanelLeft?.querySelector("[data-control-deck-footer-slot]")
     : elements.sidePanel;
-  if (sharedFooter && footerHost && sharedFooter.parentElement !== footerHost) footerHost.append(sharedFooter);
+  if (!focusedShell?.active && sharedFooter && footerHost && sharedFooter.parentElement !== footerHost) footerHost.append(sharedFooter);
   const versionRow = document.querySelector(".side-panel-version-row");
   const versionHost = activeShell === elements.sidePanelLeft
     ? elements.sidePanelLeft?.querySelector("[data-control-deck-version-slot]")
     : elements.sidePanel?.querySelector(".side-panel-heading");
-  if (versionRow && versionHost && versionRow.parentElement !== versionHost) versionHost.append(versionRow);
+  if (!focusedShell?.active && versionRow && versionHost && versionRow.parentElement !== versionHost) versionHost.append(versionRow);
   const editButton = elements.sidePanelEditButton;
   const editHost = activeShell === elements.sidePanelLeft
     ? elements.sidePanelLeft?.querySelector("[data-control-deck-edit-slot]")
@@ -4231,10 +5067,10 @@ function reconcileControlDeckHosts() {
     const label = `${placement[0].toUpperCase()}${placement.slice(1)}`;
     const statusText = sidebarPresentation
       ? placement === "right"
-        ? `${label} · Control Deck right, terminal/tabs left`
+        ? `${label} · Control Deck right, threads left`
         : placement === "left"
-          ? `${label} · Control Deck left, terminal/tabs right`
-          : `${label} · Control Deck on both sides, terminal/tabs right`
+          ? `${label} · Control Deck left, threads right`
+          : `${label} · Control Deck on both sides, threads right`
       : `${label} · saved in WebUI layout`;
     if (elements.controlDeckPlacementStatus.textContent !== statusText) elements.controlDeckPlacementStatus.textContent = statusText;
   }
@@ -4583,6 +5419,7 @@ function restoreSidePanelSectionVisibility() {
 function setSidePanelSectionCollapsed(record, collapsed, { persist = true } = {}) {
   record.section.classList.toggle("collapsed", collapsed);
   record.content.hidden = collapsed;
+  syncUsageVisibility();
   record.button.setAttribute("aria-expanded", collapsed ? "false" : "true");
   updateSidePanelSectionEditAffordance(record);
   if (!collapsed && record.id === "events") clearUnreadEvents();
@@ -5374,7 +6211,7 @@ function terminalTabsLayoutStatusText(layout = terminalTabsLayout) {
 function renderTerminalTabsLayoutControl() {
   const layout = normalizeTerminalTabsLayout(terminalTabsLayout);
   if (elements.terminalTabsLayoutSelect) elements.terminalTabsLayoutSelect.value = layout;
-  if (elements.terminalTabsLayoutStatus) elements.terminalTabsLayoutStatus.textContent = `${terminalTabsLayoutStatusText(layout)} · saved in this browser`;
+  if (elements.terminalTabsLayoutStatus) elements.terminalTabsLayoutStatus.textContent = `${terminalTabsLayoutStatusText(layout)} · saved in WebUI layout`;
 }
 
 function setTerminalTabsLayout(layout, { persist = true, announce = false } = {}) {
@@ -5386,7 +6223,7 @@ function setTerminalTabsLayout(layout, { persist = true, announce = false } = {}
   renderTerminalTabsLayoutControl();
   reconcileControlDeckHosts?.();
   requestAnimationFrame(syncTerminalTabsSidebarWidthForViewport);
-  if (announce) addEvent(`terminal tabs layout changed to ${terminalTabsLayoutStatusText(next).toLowerCase()}`);
+  if (announce) addEvent(`thread list layout changed to ${terminalTabsLayoutStatusText(next).toLowerCase()}`);
 }
 
 function restoreTerminalTabsLayoutSetting() {
@@ -5517,7 +6354,7 @@ function syncTerminalTabsSidebarWidthForViewport() {
     updateTerminalTabsSidebarResizeHandle();
     return;
   }
-  applyTerminalTabsSidebarWidth(readStoredTerminalTabsSidebarWidth() || currentTerminalTabsSidebarWidth());
+  applyTerminalTabsSidebarWidth(readStoredTerminalTabsSidebarWidth() || Math.min(304, Math.max(208, window.innerWidth * 0.18)));
 }
 
 function normalizeSubagentOpenMode(value) {
@@ -5581,7 +6418,7 @@ function setSubagentAutoClearEnabled(enabled, { persist = true, announce = false
   if (persist) persistSubagentAutoClearEnabled(subagentAutoClearEnabled);
   renderSubagents();
   if (announce) addEvent(`subagent auto-clear ${subagentAutoClearEnabled ? "enabled" : "disabled"}`, "info");
-  if (subagentAutoClearEnabled && !subagentsLoading && !subagentsClearingFinished && finishedSubagentRunSelections().length) {
+  if (subagentAutoClearEnabled && !activityAgents.getSnapshot().loading && !activityAgents.getSnapshot().clearingFinished && finishedSubagentRunSelections().length) {
     void clearFinishedSubagentRuns({ automatic: true });
   }
 }
@@ -5720,7 +6557,7 @@ function installLoadedWorkspaceGroups(groups, idMap = {}) {
 }
 
 function workspaceRestoreSummary(restoredCount, warnings) {
-  const restored = `${restoredCount} tab${restoredCount === 1 ? "" : "s"} restored`;
+  const restored = `${restoredCount} thread${restoredCount === 1 ? "" : "s"} restored`;
   if (!warnings.length) return restored;
   return `${restored}; ${warnings.length} warning${warnings.length === 1 ? "" : "s"}`;
 }
@@ -5744,7 +6581,7 @@ async function hydrateLoadedWorkspaceActiveTab(requestedTabId) {
 
 async function saveWebuiWorkspace({ triggerButton = elements.workspaceSaveButton } = {}) {
   if (!tabs.length) return;
-  const promptedName = await appPromptText({ title: "Save workspace", summary: "Captures all open tabs, sessions, groups, and the active tab.", defaultValue: workspaceDefaultName(), confirmLabel: "Save workspace" });
+  const promptedName = await appPromptText({ title: "Save workspace", summary: "Captures all open threads, sessions, groups, and the active thread.", defaultValue: workspaceDefaultName(), confirmLabel: "Save workspace" });
   if (promptedName === null) return;
   const body = {
     name: promptedName.trim() || workspaceDefaultName(),
@@ -5762,7 +6599,7 @@ async function saveWebuiWorkspace({ triggerButton = elements.workspaceSaveButton
       const overwrite = await appConfirm({
         title: "Overwrite saved workspace?",
         summary: `A workspace named “${body.name || workspaceDefaultName()}” already exists.`,
-        affected: "The existing saved workspace will be replaced with the current tabs and groups.",
+        affected: "The existing saved workspace will be replaced with the current threads and groups.",
         confirmLabel: "Overwrite",
       });
       if (!overwrite) return;
@@ -5772,7 +6609,7 @@ async function saveWebuiWorkspace({ triggerButton = elements.workspaceSaveButton
     setSavedWorkspaces(data.workspaces);
     const saved = data.workspace;
     const evicted = Array.isArray(data.evicted) ? data.evicted : [];
-    const message = `Saved workspace ${saved?.name || "workspace"} (${saved?.tabCount || tabs.length} tabs).`;
+    const message = `Saved workspace ${saved?.name || "workspace"} (${saved?.tabCount || tabs.length} threads).`;
     settleUndoToast(evicted.length ? `${message} Oldest saved workspace removed.` : message);
     addEvent(message, "success");
     if (evicted.length) addEvent(`Removed ${evicted.length} oldest saved workspace${evicted.length === 1 ? "" : "s"} to keep the saved-workspace limit.`, "warn");
@@ -5804,8 +6641,8 @@ function renderWorkspaceLoadDialog() {
   }
   if (!savedWorkspaces.length) {
     status.textContent = tabs.length
-      ? "No saved workspaces yet. Use Save workspace to capture the current tabs."
-      : "No saved workspaces yet. Open tabs, then use Save workspace.";
+      ? "No saved workspaces yet. Use Save workspace to capture the current threads."
+      : "No saved workspaces yet. Open threads, then use Save workspace.";
     return;
   }
   status.textContent = `${savedWorkspaces.length} saved workspace${savedWorkspaces.length === 1 ? "" : "s"} available.`;
@@ -5816,7 +6653,7 @@ function renderWorkspaceLoadDialog() {
     title.title = workspace.name;
     const detail = [
       formatDate(workspace.savedAt),
-      `${workspace.tabCount || 0} tab${workspace.tabCount === 1 ? "" : "s"}`,
+      `${workspace.tabCount || 0} thread${workspace.tabCount === 1 ? "" : "s"}`,
       workspace.groupCount ? `${workspace.groupCount} group${workspace.groupCount === 1 ? "" : "s"}` : "",
       Array.isArray(workspace.cwds) && workspace.cwds.length ? normalizeDisplayPath(workspace.cwds[0]) : "",
     ].filter(Boolean).join(" · ");
@@ -5890,7 +6727,7 @@ function finishWorkspaceReplacement(choice = null) {
 function workspaceReplacementTabRow(tab) {
   const indicator = tabIndicator(tab);
   const item = make("li", `workspace-replace-current-tab activity-${indicator.state}`);
-  const title = make("strong", "workspace-replace-current-tab-title", tab.title || "Untitled tab");
+  const title = make("strong", "workspace-replace-current-tab-title", threadDisplayTitle(tab.title) || "Untitled thread");
   const detail = [
     tab.id === activeTabId ? "Active" : "",
     indicator.label,
@@ -5923,10 +6760,10 @@ function chooseWorkspaceReplacement(workspace) {
   }
   if (activeWorkspaceReplacementResolve) finishWorkspaceReplacement(null);
   if (elements.workspaceReplaceTargetName) elements.workspaceReplaceTargetName.textContent = workspace?.name || "this workspace";
-  if (elements.workspaceReplaceCurrentTabsCount) elements.workspaceReplaceCurrentTabsCount.textContent = `${tabs.length} tab${tabs.length === 1 ? "" : "s"}`;
+  if (elements.workspaceReplaceCurrentTabsCount) elements.workspaceReplaceCurrentTabsCount.textContent = `${tabs.length} thread${tabs.length === 1 ? "" : "s"}`;
   elements.workspaceReplaceCurrentTabsList?.replaceChildren(...tabs.map(workspaceReplacementTabRow));
   if (elements.workspaceReplaceSaveName) elements.workspaceReplaceSaveName.value = workspaceDefaultName();
-  if (elements.workspaceReplaceDialogStatus) elements.workspaceReplaceDialogStatus.textContent = "Cancel leaves every current tab unchanged.";
+  if (elements.workspaceReplaceDialogStatus) elements.workspaceReplaceDialogStatus.textContent = "Cancel leaves every current thread unchanged.";
   return new Promise((resolve) => {
     activeWorkspaceReplacementResolve = resolve;
     dialog.showModal();
@@ -5937,13 +6774,13 @@ function chooseWorkspaceReplacement(workspace) {
 function retireClosedWorkspaceTabContexts(closedIds) {
   const closed = new Set(Array.isArray(closedIds) ? closedIds.filter((id) => typeof id === "string" && id) : []);
   if (!closed.size) return;
-  tabs = tabs.filter((tab) => !closed.has(tab.id));
+  applyAuthoritativeTabSnapshot(tabs.filter((tab) => !closed.has(tab.id)));
   syncTabMetadata(tabs);
   for (const id of closed) {
-    tabDrafts.delete(id);
     clearAttachments(id);
-    fileViewersByTab.delete(id);
-    fileViewerSelectionsByTab.delete(id);
+    composerStore.clearTab(id);
+    sessionContext.invalidate(id);
+    projectFiles.forgetTab(id);
     btwWidgetDismissedIdsByTab.delete(id);
     removeSubagentTerminalViewsForParent(id);
   }
@@ -5971,7 +6808,7 @@ async function loadWebuiWorkspace(workspaceId, { triggerButton = null } = {}) {
       const overwrite = await appConfirm({
         title: "Overwrite saved workspace?",
         summary: `A workspace named “${saveCurrent.name || workspaceDefaultName()}” already exists.`,
-        affected: "The existing saved workspace will be replaced before the current tabs are closed.",
+        affected: "The existing saved workspace will be replaced before the current threads are closed.",
         confirmLabel: "Overwrite & load",
       });
       if (!overwrite) return "cancelled";
@@ -5992,11 +6829,11 @@ async function loadWebuiWorkspace(workspaceId, { triggerButton = null } = {}) {
     await hydrateLoadedWorkspaceActiveTab(data.activeTabId);
     const warnings = Array.isArray(data.warnings) ? data.warnings : [];
     const restoredCount = Array.isArray(data.tabs) ? data.tabs.length : tabs.length;
-    const replacement = closedIds.length ? `Replaced ${closedIds.length} current tab${closedIds.length === 1 ? "" : "s"}; ` : "";
+    const replacement = closedIds.length ? `Replaced ${closedIds.length} current thread${closedIds.length === 1 ? "" : "s"}; ` : "";
     const message = `${replacement}${workspaceRestoreSummary(restoredCount, warnings)}`;
     settleUndoToast(message, { error: warnings.length > 0, timeoutMs: warnings.length ? 7000 : 3500 });
     addEvent(message, warnings.length ? "warn" : "success");
-    for (const warning of warnings) addEvent(`Workspace restore: ${warning.message || "A saved tab could not be fully restored."}`, "warn");
+    for (const warning of warnings) addEvent(`Workspace restore: ${warning.message || "A saved thread could not be fully restored."}`, "warn");
     return "loaded";
   } catch (error) {
     const message = `Could not load workspace: ${error.message || String(error)}`;
@@ -6013,7 +6850,7 @@ async function deleteWebuiWorkspace(workspace) {
   const confirmed = await appConfirm({
     title: "Delete saved workspace?",
     summary: `Delete “${workspace.name}” from the saved workspace list?`,
-    affected: "The saved tab constellation will be permanently removed; open tabs are unchanged.",
+    affected: "The saved thread constellation will be permanently removed; open threads are unchanged.",
     confirmLabel: "Delete",
   });
   if (!confirmed) return false;
@@ -6212,7 +7049,7 @@ function handleTerminalTabDrop(sourceTabId, target) {
   clearOpenTerminalTabGroup(null, { force: true });
   clearTerminalTabDragState();
   renderTabs();
-  addEvent(`added ${sourceTab.title || "tab"} to ${normalizeTerminalCustomGroupTitle(group.title).toLowerCase()}`, "info");
+  addEvent(`added ${threadDisplayTitle(sourceTab.title) || "thread"} to ${normalizeTerminalCustomGroupTitle(group.title).toLowerCase()}`, "info");
 }
 
 function removeLiveTranscriptBubble(bubble, key = "live-output") {
@@ -6559,7 +7396,7 @@ function renderSessionSkillTags(tabId = activeTabId) {
     tag.type = "button";
     tag.dataset.skillName = entry.name;
     tag.dataset.skillPath = skillPathForEntry(entry);
-    tag.title = `Open and edit skill ${entry.name} (${skillKindsLabel(entry)}) tracked in this tab/session.`;
+    tag.title = `Open and edit skill ${entry.name} (${skillKindsLabel(entry)}) tracked in this thread/session.`;
     tag.setAttribute("aria-label", `Open skill ${entry.name}`);
     tag.addEventListener("click", () => openSkillEditor(entry));
     container.append(tag);
@@ -6586,7 +7423,7 @@ function renderSessionSkillTags(tabId = activeTabId) {
     item.type = "button";
     item.dataset.skillName = entry.name;
     item.dataset.skillPath = skillPathForEntry(entry);
-    item.title = `Open and edit skill ${entry.name} (${skillKindsLabel(entry)}) tracked in this tab/session.`;
+    item.title = `Open and edit skill ${entry.name} (${skillKindsLabel(entry)}) tracked in this thread/session.`;
     item.setAttribute("aria-label", `Open skill ${entry.name}`);
     item.addEventListener("click", () => {
       setSessionSkillOverflowOpen(false);
@@ -6597,507 +7434,6 @@ function renderSessionSkillTags(tabId = activeTabId) {
   container.append(menu);
   container.hidden = false;
   scheduleSessionSkillTagLayout();
-}
-
-const INTERCOM_CONVERSATION_ID_PATTERN = /^conv_[A-Za-z0-9_-]{24}$/;
-const INTERCOM_MESSAGE_ID_PATTERN = /^msg_[A-Za-z0-9_-]{24}$/;
-const INTERCOM_DETAIL_REFRESH_MS = 5_000;
-const intercomMessageRenderSignatures = new WeakMap();
-
-function intercomBoundedString(value, maxLength = 240) {
-  if (typeof value !== "string") return "";
-  return value.trim().slice(0, maxLength);
-}
-
-function normalizeIntercomParticipant(value, fallback) {
-  const participant = value && typeof value === "object" && !Array.isArray(value) ? value : {};
-  const id = intercomBoundedString(participant.id, 240);
-  const name = intercomBoundedString(participant.name, 160);
-  return { id: id || null, name: name || id || fallback };
-}
-
-function intercomParticipantLabel(participant, fallback = "Agent") {
-  const normalized = normalizeIntercomParticipant(participant, fallback);
-  return normalized.id && normalized.id !== normalized.name ? `${normalized.name} (${normalized.id})` : normalized.name;
-}
-
-function normalizeIntercomConversationSummary(value) {
-  if (!value || typeof value !== "object" || !INTERCOM_CONVERSATION_ID_PATTERN.test(String(value.id || ""))) return null;
-  const participants = value.participants && typeof value.participants === "object" ? value.participants : {};
-  const messageCount = Number(value.messageCount);
-  return {
-    id: String(value.id),
-    participants: {
-      local: normalizeIntercomParticipant(participants.local, "Local agent"),
-      peer: normalizeIntercomParticipant(participants.peer, "Peer agent"),
-    },
-    messageCount: Number.isSafeInteger(messageCount) && messageCount >= 0 ? messageCount : 0,
-    lastMessageAt: typeof value.lastMessageAt === "string" ? value.lastMessageAt : null,
-    truncatedBefore: value.truncatedBefore === true,
-  };
-}
-
-function normalizeIntercomConversationDetail(value) {
-  const summary = normalizeIntercomConversationSummary(value);
-  if (!summary) return null;
-  const messages = [];
-  const seenMessageIds = new Set();
-  for (const candidate of Array.isArray(value.messages) ? value.messages.slice(-200) : []) {
-    const id = String(candidate?.id || "");
-    if (!candidate || typeof candidate !== "object" || !INTERCOM_MESSAGE_ID_PATTERN.test(id) || seenMessageIds.has(id)
-      || !["local", "peer"].includes(candidate.direction) || typeof candidate.text !== "string") continue;
-    seenMessageIds.add(id);
-    const timestamp = typeof candidate.timestamp === "string" && Number.isFinite(Date.parse(candidate.timestamp)) ? candidate.timestamp : null;
-    messages.push({
-      id,
-      direction: candidate.direction,
-      text: candidate.text.slice(0, 65_536),
-      timestamp,
-      truncatedText: candidate.truncatedText === true,
-    });
-  }
-  return { ...summary, messages };
-}
-
-function intercomConversationLabel(conversation) {
-  const local = intercomParticipantLabel(conversation?.participants?.local, "Local agent");
-  const peer = intercomParticipantLabel(conversation?.participants?.peer, "Peer agent");
-  return `${local} ↔ ${peer}`;
-}
-
-function intercomConversationSummarySignature(conversations) {
-  return JSON.stringify((conversations || []).map((conversation) => [
-    conversation.id,
-    intercomConversationLabel(conversation),
-    conversation.messageCount,
-    conversation.lastMessageAt,
-    conversation.truncatedBefore,
-  ]));
-}
-
-let intercomConversationTagLayoutFrame = 0;
-let intercomConversationTagResizeObserver = null;
-let intercomConversationOverflowOpen = false;
-
-function setIntercomConversationOverflowOpen(open, { focusMenu = false, restoreFocus = false } = {}) {
-  const container = elements.intercomConversationTags;
-  const overflow = container?.querySelector("button.composer-intercom-tag.overflow");
-  const menu = container?.querySelector(".composer-intercom-overflow-menu");
-  if (!container || !overflow || !menu) {
-    intercomConversationOverflowOpen = false;
-    return;
-  }
-
-  const availableItems = [...menu.querySelectorAll("button:not([hidden])")];
-  const expanded = Boolean(open && !overflow.hidden && availableItems.length);
-  intercomConversationOverflowOpen = expanded;
-  container.classList.toggle("overflow-open", expanded);
-  overflow.setAttribute("aria-expanded", expanded ? "true" : "false");
-  menu.hidden = !expanded;
-
-  if (expanded && focusMenu) availableItems[0]?.focus();
-  else if (!expanded && restoreFocus) overflow.focus();
-}
-
-function fitIntercomConversationTags() {
-  const container = elements.intercomConversationTags;
-  if (!container || container.hidden) return;
-  const tags = [...container.querySelectorAll(":scope > button.composer-intercom-tag:not(.overflow)")];
-  const overflow = container.querySelector("button.composer-intercom-tag.overflow");
-  const menuItems = [...container.querySelectorAll(".composer-intercom-overflow-menu-item")];
-  if (!tags.length || !overflow || menuItems.length !== tags.length) return;
-
-  const availableWidth = container.clientWidth;
-  if (availableWidth <= 0) return;
-
-  for (const tag of tags) tag.hidden = false;
-  overflow.hidden = false;
-
-  const containerStyle = getComputedStyle(container);
-  const gap = Number.parseFloat(containerStyle.columnGap || containerStyle.gap) || 0;
-  const tagWidths = tags.map((tag) => tag.getBoundingClientRect().width);
-  const overflowWidths = new Map();
-  const maxOverflowDigits = String(tags.length).length;
-  for (let digits = 1; digits <= maxOverflowDigits; digits += 1) {
-    overflow.textContent = `+${"0".repeat(digits)}`;
-    overflowWidths.set(digits, overflow.getBoundingClientRect().width);
-  }
-  let visibleCount = 0;
-
-  for (let count = tags.length; count >= 0; count -= 1) {
-    const hiddenCount = tags.length - count;
-    const itemCount = count + (hiddenCount ? 1 : 0);
-    const tagsWidth = tagWidths.slice(0, count).reduce((total, width) => total + width, 0);
-    const overflowWidth = hiddenCount ? overflowWidths.get(String(hiddenCount).length) || 0 : 0;
-    const requiredWidth = tagsWidth + overflowWidth + Math.max(0, itemCount - 1) * gap;
-    if (requiredWidth <= availableWidth + 0.5) {
-      visibleCount = count;
-      break;
-    }
-  }
-
-  tags.forEach((tag, index) => { tag.hidden = index >= visibleCount; });
-  menuItems.forEach((item, index) => { item.hidden = index < visibleCount; });
-  const hiddenCount = tags.length - visibleCount;
-  overflow.hidden = hiddenCount === 0;
-  if (hiddenCount) {
-    const label = `Show ${hiddenCount} more agent conversation${hiddenCount === 1 ? "" : "s"}`;
-    overflow.textContent = `+${hiddenCount}`;
-    overflow.title = `${label}.`;
-    overflow.setAttribute("aria-label", label);
-    if (intercomConversationOverflowOpen) setIntercomConversationOverflowOpen(true);
-  } else {
-    setIntercomConversationOverflowOpen(false);
-  }
-}
-
-function scheduleIntercomConversationTagLayout() {
-  if (intercomConversationTagLayoutFrame) return;
-  intercomConversationTagLayoutFrame = requestAnimationFrame(() => {
-    intercomConversationTagLayoutFrame = 0;
-    fitIntercomConversationTags();
-  });
-}
-
-function installIntercomConversationTagResizeHandling() {
-  const container = elements.intercomConversationTags;
-  if (!container) return;
-  if (typeof ResizeObserver === "function") {
-    intercomConversationTagResizeObserver = new ResizeObserver(scheduleIntercomConversationTagLayout);
-    intercomConversationTagResizeObserver.observe(container);
-    if (container.parentElement) intercomConversationTagResizeObserver.observe(container.parentElement);
-  } else {
-    window.addEventListener("resize", scheduleIntercomConversationTagLayout, { passive: true });
-  }
-  container.addEventListener("keydown", (event) => {
-    if (event.key !== "Escape" || !intercomConversationOverflowOpen) return;
-    event.preventDefault();
-    event.stopPropagation();
-    setIntercomConversationOverflowOpen(false, { restoreFocus: true });
-  });
-  container.addEventListener("focusout", () => {
-    queueMicrotask(() => {
-      if (intercomConversationOverflowOpen && !container.contains(document.activeElement)) setIntercomConversationOverflowOpen(false);
-    });
-  });
-  document.addEventListener("pointerdown", (event) => {
-    if (intercomConversationOverflowOpen && !container.contains(event.target)) setIntercomConversationOverflowOpen(false);
-  });
-}
-
-function updateIntercomConversationTag(tag, conversation) {
-  const label = intercomConversationLabel(conversation);
-  tag.setAttribute("aria-label", `Open agent conversation ${label}`);
-  tag.title = `${label} · ${conversation.messageCount} message${conversation.messageCount === 1 ? "" : "s"}`;
-  const visualSignature = JSON.stringify([label, conversation.messageCount]);
-  if (tag.dataset.intercomVisualSignature === visualSignature) return;
-  const children = [make("span", "composer-intercom-tag-icon", "↔"), make("span", "composer-intercom-tag-label", label)];
-  if (conversation.messageCount > 0) children.push(make("span", "composer-intercom-tag-count", String(conversation.messageCount)));
-  tag.replaceChildren(...children);
-  tag.dataset.intercomVisualSignature = visualSignature;
-}
-
-function renderIntercomConversationTags(tabId = activeTabId) {
-  const container = elements.intercomConversationTags;
-  if (!container) return;
-  const conversations = intercomConversationSummariesByTab.get(tabId) || [];
-  if (!conversations.length) {
-    intercomConversationOverflowOpen = false;
-    container.classList.remove("overflow-open");
-    container.replaceChildren();
-    container.hidden = true;
-    return;
-  }
-
-  let overflow = container.querySelector("button.composer-intercom-tag.overflow");
-  if (!overflow) {
-    overflow = make("button", "composer-intercom-tag overflow", `+${conversations.length}`);
-    overflow.type = "button";
-    overflow.hidden = true;
-    overflow.setAttribute("aria-haspopup", "dialog");
-    overflow.setAttribute("aria-expanded", "false");
-    overflow.setAttribute("aria-controls", "intercomConversationOverflowMenu");
-    overflow.addEventListener("click", () => {
-      const opening = !intercomConversationOverflowOpen;
-      setIntercomConversationOverflowOpen(opening, { focusMenu: opening });
-    });
-  }
-  let menu = container.querySelector(".composer-intercom-overflow-menu");
-  if (!menu) {
-    menu = make("div", "composer-intercom-overflow-menu");
-    menu.id = "intercomConversationOverflowMenu";
-    menu.hidden = true;
-    menu.setAttribute("role", "dialog");
-    menu.setAttribute("aria-label", "More agent conversations");
-  }
-  container.append(overflow, menu);
-
-  const existingTags = new Map([...container.querySelectorAll(":scope > .composer-intercom-tag[data-intercom-conversation-id]")]
-    .map((tag) => [tag.dataset.intercomConversationId, tag]));
-  const existingMenuItems = new Map([...menu.querySelectorAll(".composer-intercom-overflow-menu-item[data-intercom-conversation-id]")]
-    .map((tag) => [tag.dataset.intercomConversationId, tag]));
-  const orderedTags = [];
-  const orderedMenuItems = [];
-  const seenConversationIds = new Set();
-  for (const conversation of conversations) {
-    if (seenConversationIds.has(conversation.id)) continue;
-    seenConversationIds.add(conversation.id);
-    let tag = existingTags.get(conversation.id);
-    if (tag) existingTags.delete(conversation.id);
-    else {
-      tag = make("button", "composer-intercom-tag");
-      tag.type = "button";
-      tag.dataset.intercomConversationId = conversation.id;
-      tag.setAttribute("aria-haspopup", "dialog");
-      tag.setAttribute("aria-controls", "intercomConversationDialog");
-      tag.addEventListener("click", () => openIntercomConversation(tag.dataset.intercomConversationId));
-    }
-    updateIntercomConversationTag(tag, conversation);
-    orderedTags.push(tag);
-
-    let menuItem = existingMenuItems.get(conversation.id);
-    if (menuItem) existingMenuItems.delete(conversation.id);
-    else {
-      menuItem = make("button", "composer-intercom-tag composer-intercom-overflow-menu-item");
-      menuItem.type = "button";
-      menuItem.dataset.intercomConversationId = conversation.id;
-      menuItem.setAttribute("aria-haspopup", "dialog");
-      menuItem.setAttribute("aria-controls", "intercomConversationDialog");
-      menuItem.addEventListener("click", () => {
-        const conversationId = menuItem.dataset.intercomConversationId;
-        setIntercomConversationOverflowOpen(false);
-        overflow.focus();
-        openIntercomConversation(conversationId);
-      });
-    }
-    updateIntercomConversationTag(menuItem, conversation);
-    orderedMenuItems.push(menuItem);
-  }
-
-  for (const staleTag of existingTags.values()) staleTag.remove();
-  for (const staleItem of existingMenuItems.values()) staleItem.remove();
-  const currentTags = [...container.querySelectorAll(":scope > .composer-intercom-tag[data-intercom-conversation-id]")];
-  if (currentTags.length !== orderedTags.length || orderedTags.some((tag, index) => currentTags[index] !== tag)) {
-    for (const tag of orderedTags) container.insertBefore(tag, overflow);
-  }
-  const currentMenuItems = [...menu.querySelectorAll(":scope > .composer-intercom-overflow-menu-item")];
-  if (currentMenuItems.length !== orderedMenuItems.length || orderedMenuItems.some((tag, index) => currentMenuItems[index] !== tag)) {
-    for (const menuItem of orderedMenuItems) menu.append(menuItem);
-  }
-  container.append(overflow, menu);
-  container.hidden = false;
-  scheduleIntercomConversationTagLayout();
-}
-
-async function refreshIntercomConversationSummaries(tabContext = activeTabContext()) {
-  if (!tabContext.tabId) return;
-  const requestSerial = ++intercomSummaryRequestSerial;
-  const response = await api("/api/intercom/conversations", { tabId: tabContext.tabId });
-  if (requestSerial !== intercomSummaryRequestSerial || !isCurrentTabContext(tabContext)) return;
-  const seenConversationIds = new Set();
-  const conversations = [];
-  for (const value of Array.isArray(response.data?.conversations) ? response.data.conversations : []) {
-    const conversation = normalizeIntercomConversationSummary(value);
-    if (!conversation || seenConversationIds.has(conversation.id)) continue;
-    seenConversationIds.add(conversation.id);
-    conversations.push(conversation);
-  }
-  const previous = intercomConversationSummariesByTab.get(tabContext.tabId) || [];
-  intercomConversationSummariesByTab.set(tabContext.tabId, conversations);
-  if (intercomConversationSummarySignature(previous) !== intercomConversationSummarySignature(conversations) && !elements.intercomConversationDialog?.open) {
-    renderIntercomConversationTags(tabContext.tabId);
-  }
-  if (intercomConversationDialogState?.tabId === tabContext.tabId && !seenConversationIds.has(intercomConversationDialogState.conversationId)) {
-    closeIntercomConversationDialog({ restoreFocus: false });
-  }
-}
-
-function scheduleIntercomConversationRefresh(tabContext = activeTabContext(), delayMs = 180) {
-  clearTimeout(intercomSummaryRefreshTimer);
-  const scheduledContext = { ...tabContext };
-  intercomSummaryRefreshTimer = setTimeout(() => {
-    intercomSummaryRefreshTimer = null;
-    if (!isCurrentTabContext(scheduledContext)) return;
-    refreshIntercomConversationSummaries(scheduledContext).catch((error) => {
-      if (isCurrentTabContext(scheduledContext)) addEvent(`agent conversation refresh failed: ${error.message || String(error)}`, "warn");
-    });
-  }, delayMs);
-}
-
-function setIntercomConversationStatus(message = "", level = "") {
-  const status = elements.intercomConversationStatus;
-  if (!status) return;
-  status.textContent = message;
-  status.classList.toggle("error", level === "error");
-  status.classList.toggle("warn", level === "warn");
-}
-
-function formatIntercomMessageTime(value) {
-  const timestamp = Date.parse(value || "");
-  if (!Number.isFinite(timestamp)) return "";
-  return new Date(timestamp).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
-}
-
-function renderIntercomConversationMessage(article, message, conversation) {
-  const participant = message.direction === "local" ? conversation.participants.local : conversation.participants.peer;
-  const senderLabel = intercomParticipantLabel(participant, message.direction === "local" ? "Local agent" : "Peer agent");
-  const formattedTime = formatIntercomMessageTime(message.timestamp);
-  const signature = JSON.stringify([message.direction, senderLabel, message.text, message.timestamp, message.truncatedText]);
-  if (intercomMessageRenderSignatures.get(article) === signature) return;
-
-  article.className = `intercom-conversation-message ${message.direction}`;
-  article.dataset.intercomMessageId = message.id;
-  article.setAttribute("aria-label", `${senderLabel} message`);
-  const header = make("header", "intercom-conversation-message-header");
-  header.append(make("strong", "intercom-conversation-message-sender", senderLabel));
-  if (formattedTime) {
-    const time = make("time", "intercom-conversation-message-time", formattedTime);
-    time.dateTime = message.timestamp;
-    header.append(time);
-  }
-  const text = make("p", "intercom-conversation-message-text");
-  text.textContent = message.text;
-  const children = [header, text];
-  if (message.truncatedText) children.push(make("span", "intercom-conversation-truncated", "Message truncated"));
-  article.replaceChildren(...children);
-  intercomMessageRenderSignatures.set(article, signature);
-}
-
-function renderIntercomConversationDetail(conversation) {
-  const transcript = elements.intercomConversationTranscript;
-  if (!transcript || !conversation) return;
-  const state = intercomConversationDialogState;
-  const signature = JSON.stringify([
-    conversation.id,
-    conversation.truncatedBefore,
-    intercomConversationLabel(conversation),
-    conversation.messages.map((message) => [message.id, message.direction, message.text, message.timestamp, message.truncatedText]),
-  ]);
-  if (state?.detailSignature === signature) return;
-  if (state) state.detailSignature = signature;
-
-  const existingArticles = new Map([...transcript.querySelectorAll(":scope > .intercom-conversation-message[data-intercom-message-id]")]
-    .map((article) => [article.dataset.intercomMessageId, article]));
-  const shouldFollow = !existingArticles.size || transcript.scrollHeight - transcript.scrollTop - transcript.clientHeight < 80;
-  const previousScrollTop = transcript.scrollTop;
-  const anchor = shouldFollow ? null : [...existingArticles.values()]
-    .find((article) => article.offsetTop + article.offsetHeight > transcript.scrollTop);
-  const anchorOffset = anchor ? anchor.getBoundingClientRect().top - transcript.getBoundingClientRect().top : 0;
-  const orderedArticles = [];
-
-  for (const message of conversation.messages) {
-    let article = existingArticles.get(message.id);
-    if (article) existingArticles.delete(message.id);
-    else article = make("article", `intercom-conversation-message ${message.direction}`);
-    renderIntercomConversationMessage(article, message, conversation);
-    orderedArticles.push(article);
-  }
-  for (const staleArticle of existingArticles.values()) staleArticle.remove();
-  transcript.querySelector(":scope > .intercom-conversation-empty")?.remove();
-
-  let cursor = transcript.firstElementChild;
-  for (const article of orderedArticles) {
-    if (article === cursor) cursor = cursor.nextElementSibling;
-    else transcript.insertBefore(article, cursor);
-  }
-  if (!orderedArticles.length) transcript.append(make("p", "intercom-conversation-empty", "No messages are available in this conversation."));
-
-  requestAnimationFrame(() => {
-    if (state !== intercomConversationDialogState) return;
-    if (shouldFollow) transcript.scrollTop = transcript.scrollHeight;
-    else if (anchor?.isConnected) {
-      const currentAnchorOffset = anchor.getBoundingClientRect().top - transcript.getBoundingClientRect().top;
-      transcript.scrollTop += currentAnchorOffset - anchorOffset;
-    }
-    else transcript.scrollTop = previousScrollTop;
-  });
-}
-
-function updateIntercomSummaryFromDetail(conversation) {
-  const state = intercomConversationDialogState;
-  if (!state || !conversation) return;
-  const summaries = intercomConversationSummariesByTab.get(state.tabId) || [];
-  const index = summaries.findIndex((summary) => summary.id === conversation.id);
-  if (index < 0) return;
-  const next = [...summaries];
-  next[index] = { ...next[index], ...normalizeIntercomConversationSummary(conversation) };
-  intercomConversationSummariesByTab.set(state.tabId, next);
-}
-
-function scheduleIntercomConversationDetailRefresh() {
-  clearTimeout(intercomDetailRefreshTimer);
-  intercomDetailRefreshTimer = null;
-  const state = intercomConversationDialogState;
-  if (!state || !elements.intercomConversationDialog?.open) return;
-  intercomDetailRefreshTimer = setTimeout(() => {
-    intercomDetailRefreshTimer = null;
-    refreshIntercomConversationDetail({ announceLoading: false });
-  }, INTERCOM_DETAIL_REFRESH_MS);
-}
-
-async function refreshIntercomConversationDetail({ announceLoading = false } = {}) {
-  const state = intercomConversationDialogState;
-  if (!state || !elements.intercomConversationDialog?.open) return;
-  const requestSerial = ++intercomDetailRequestSerial;
-  if (announceLoading) setIntercomConversationStatus("Loading agent messages…");
-  try {
-    const path = `/api/intercom/conversations?conversation=${encodeURIComponent(state.conversationId)}`;
-    const response = await api(path, { tabId: state.tabId });
-    if (requestSerial !== intercomDetailRequestSerial || state !== intercomConversationDialogState || !isCurrentTabContext(state)) return;
-    const conversation = normalizeIntercomConversationDetail(response.data?.conversation);
-    if (!conversation || conversation.id !== state.conversationId) throw new Error("Agent conversation is unavailable.");
-    elements.intercomConversationTitle.textContent = intercomParticipantLabel(conversation.participants.peer, "Agent conversation");
-    elements.intercomConversationParticipants.textContent = intercomConversationLabel(conversation);
-    renderIntercomConversationDetail(conversation);
-    updateIntercomSummaryFromDetail(conversation);
-    const notices = [];
-    if (conversation.truncatedBefore) notices.push("Earlier messages are unavailable.");
-    if (conversation.messages.some((message) => message.truncatedText)) notices.push("One or more messages were truncated.");
-    setIntercomConversationStatus(notices.join(" "), notices.length ? "warn" : "");
-  } catch (error) {
-    if (requestSerial === intercomDetailRequestSerial && state === intercomConversationDialogState && isCurrentTabContext(state)) {
-      setIntercomConversationStatus(error.message || String(error), "error");
-    }
-  } finally {
-    if (requestSerial === intercomDetailRequestSerial && state === intercomConversationDialogState) scheduleIntercomConversationDetailRefresh();
-  }
-}
-
-function openIntercomConversation(conversationId) {
-  if (!activeTabId || !INTERCOM_CONVERSATION_ID_PATTERN.test(String(conversationId || "")) || !elements.intercomConversationDialog) return;
-  const summary = (intercomConversationSummariesByTab.get(activeTabId) || []).find((conversation) => conversation.id === conversationId);
-  if (!summary) return;
-  intercomDetailRequestSerial += 1;
-  clearTimeout(intercomDetailRefreshTimer);
-  intercomConversationDialogState = { ...activeTabContext(), conversationId, detailSignature: "" };
-  elements.intercomConversationTitle.textContent = intercomParticipantLabel(summary.participants.peer, "Agent conversation");
-  elements.intercomConversationParticipants.textContent = intercomConversationLabel(summary);
-  elements.intercomConversationTranscript.replaceChildren();
-  setIntercomConversationStatus("Loading agent messages…");
-  if (!elements.intercomConversationDialog.open) elements.intercomConversationDialog.showModal();
-  queueMicrotask(() => elements.intercomConversationCloseButton?.focus({ preventScroll: true }));
-  refreshIntercomConversationDetail({ announceLoading: false });
-}
-
-function resetIntercomConversationDialog() {
-  intercomDetailRequestSerial += 1;
-  clearTimeout(intercomDetailRefreshTimer);
-  intercomDetailRefreshTimer = null;
-  intercomConversationDialogState = null;
-  elements.intercomConversationTranscript?.replaceChildren();
-  if (elements.intercomConversationParticipants) elements.intercomConversationParticipants.textContent = "";
-  setIntercomConversationStatus("");
-  renderIntercomConversationTags(activeTabId);
-}
-
-function closeIntercomConversationDialog({ restoreFocus = true } = {}) {
-  const dialog = elements.intercomConversationDialog;
-  if (!dialog?.open) {
-    resetIntercomConversationDialog();
-    return;
-  }
-  if (!restoreFocus) modalSurfaceState.delete(dialog);
-  dialog.close();
 }
 
 function normalizeFeatureCategory(value) {
@@ -7449,7 +7785,7 @@ async function openSkillEditor(entry) {
     if (elements.skillEditorText) elements.skillEditorText.value = data.content || "";
     if (elements.skillEditorSaveButton) elements.skillEditorSaveButton.disabled = false;
     updateSkillEditorMeta(activeSkillEditor);
-    setSkillEditorStatus("Edit this SKILL.md, then save. Reload the tab if title/description metadata should refresh immediately.", "muted");
+    setSkillEditorStatus("Edit this SKILL.md, then save. Reload the thread if title/description metadata should refresh immediately.", "muted");
     queueMicrotask(() => elements.skillEditorText?.focus());
   } catch (error) {
     if (elements.skillEditorSaveButton) elements.skillEditorSaveButton.disabled = true;
@@ -7483,7 +7819,7 @@ async function saveSkillEditor() {
     trackSkillUsage(editor.tabId, savedName, "read", "skill-editor", { path: activeSkillEditor.path });
     if (elements.skillEditorTitle) elements.skillEditorTitle.textContent = `Edit skill: ${savedName}`;
     updateSkillEditorMeta(activeSkillEditor);
-    setSkillEditorStatus("Saved SKILL.md. Reload/restart affected tabs before relying on updated skill metadata or newly loaded instructions.", "ok");
+    setSkillEditorStatus("Saved SKILL.md. Reload/restart affected threads before relying on updated skill metadata or newly loaded instructions.", "ok");
   } catch (error) {
     setSkillEditorStatus(`Failed to save skill: ${error.message || String(error)}`, "error");
   } finally {
@@ -7509,7 +7845,7 @@ function renderBusyPromptBehaviorTag() {
 }
 
 function setBusyPromptBehaviorMenuOpen(open, { focusCurrent = false } = {}) {
-  if (open && followUpQueueOpen) setFollowUpQueueOpen(false);
+  if (open && activityQueue.isOpen()) setFollowUpQueueOpen(false);
   busyPromptBehaviorMenuOpen = !!open;
   elements.busyPromptBehaviorTag?.setAttribute("aria-expanded", busyPromptBehaviorMenuOpen ? "true" : "false");
   elements.busyPromptBehaviorTag?.classList.toggle("menu-open", busyPromptBehaviorMenuOpen);
@@ -7547,6 +7883,8 @@ function setBusyPromptBehavior(value, { persist = true } = {}) {
   webuiSettings = { ...webuiSettings, busyPromptBehavior: next };
   if (persist) persistBusyPromptBehavior(next);
   renderBusyPromptBehaviorTag();
+  scheduleComposerModeButtonsUpdate();
+  scheduleFocusedShellRender();
 }
 
 function restoreBusyPromptBehaviorSetting() {
@@ -7585,7 +7923,7 @@ function mobileComposerSecondaryNodes() {
     elements.btwButton,
     elements.conversationVoiceMenu,
     elements.conversationModeEndButton,
-  ].filter(Boolean);
+  ].filter(node => node && (!focusedShell?.active || node !== elements.followUpQueueTrigger));
 }
 
 function rememberMobileComposerOriginalPositions() {
@@ -7606,22 +7944,25 @@ function restoreMobileComposerOriginalPositions() {
 
 function syncMobileComposerDisclosureLayout() {
   rememberMobileComposerOriginalPositions();
-  const useMobileDisclosure = isMobileView() && !isMobileShellV2Active();
+  const useMobileDisclosure = (isMobileView() && !isMobileShellV2Active()) || focusedShell?.active === true;
   document.body.classList.toggle("mobile-composer-disclosure", useMobileDisclosure);
   if (!useMobileDisclosure) {
     restoreMobileComposerOriginalPositions();
     return;
   }
-  for (const node of mobileComposerSecondaryNodes()) elements.composerActionsPanel.append(node);
+  for (const node of mobileComposerSecondaryNodes()) {
+    if (focusedShell?.active && node === elements.conversationModeEndButton) continue;
+    elements.composerActionsPanel.append(node);
+  }
 }
 
 function setComposerActionsOpen(open, { restoreFocus = false } = {}) {
   if (isMobileShellV2Active()) return;
   syncMobileComposerDisclosureLayout();
-  const shouldOpen = open && isMobileView();
+  const shouldOpen = open && (isMobileView() || focusedShell?.active === true);
   if (shouldOpen) {
     composerActionsFocusReturn = document.activeElement instanceof HTMLElement ? document.activeElement : elements.composerActionsButton;
-    if (followUpQueueOpen) setFollowUpQueueOpen(false);
+    if (activityQueue.isOpen()) setFollowUpQueueOpen(false);
     setMobileTabsExpanded(false);
     setMobileFooterExpanded(false);
   }
@@ -7630,7 +7971,7 @@ function setComposerActionsOpen(open, { restoreFocus = false } = {}) {
   elements.composerActionsButton.textContent = shouldOpen ? "−" : "More";
   elements.composerActionsButton.setAttribute("aria-label", shouldOpen ? "Minimize more composer actions" : "Show more composer actions");
   elements.composerActionsButton.title = shouldOpen ? "Minimize more composer actions" : "Show more composer actions";
-  elements.composerActionsPanel.setAttribute("aria-hidden", shouldOpen || !isMobileView() ? "false" : "true");
+  elements.composerActionsPanel.setAttribute("aria-hidden", shouldOpen || (!isMobileView() && !focusedShell?.active) ? "false" : "true");
   if (!shouldOpen) {
     setPublishMenuOpen(false);
     setNativeCommandMenuOpen(false);
@@ -7641,6 +7982,7 @@ function setComposerActionsOpen(open, { restoreFocus = false } = {}) {
     composerActionsFocusReturn = null;
     if (focusReturn?.isConnected) requestAnimationFrame(() => focusReturn.focus({ preventScroll: true }));
   }
+  syncFocusedComposerDisclosure();
   scheduleMobileDropdownScrollBoundsUpdate();
   if (!shouldOpen) scheduleDeferredUiFlushAfterDropdownClose();
 }
@@ -7703,10 +8045,10 @@ function updateComposerModeButtons() {
   composerModeRenderSignature = nextSignature;
 
   const target = runActive ? elements.composerRow : elements.composerActionsPanel;
-  const before = runActive ? elements.abortButton : null;
+  const before = runActive && elements.abortButton.parentElement === target ? elements.abortButton : null;
   for (const button of [elements.steerButton, elements.followUpButton]) {
     if (button.parentElement !== target) target.insertBefore(button, before);
-    button.hidden = !runActive;
+    button.hidden = !runActive || focusedShell?.active === true;
     button.disabled = !runActive;
   }
   const abortHoldActive = isAbortLongPressActive();
@@ -7734,15 +8076,17 @@ function renderSendButtonMode(runActive = isRunActive()) {
   const button = elements.sendButton;
   if (!button) return;
   const behavior = normalizeBusyPromptBehavior(busyPromptBehavior);
-  const label = !runActive ? "Send" : behavior === "steer" ? "Steer" : "Queue";
+  const presentation = focusedShell?.active ? composerSubmissionPresentation({ runActive, behavior }) : null;
+  const label = presentation?.label || (!runActive ? "Send" : behavior === "steer" ? "Steer" : "Queue");
   const title = !runActive
     ? "Send prompt — Shift+F10 opens visibility options"
     : behavior === "steer"
       ? "Pi is running: Enter steers the active run with this text. Change the behavior via the tag above the prompt."
       : "Pi is running: Enter queues this text as a follow-up. Change the behavior via the tag above the prompt.";
   if (button.textContent !== label) button.textContent = label;
-  if (button.title !== title) button.title = title;
-  button.setAttribute("aria-label", runActive ? `${label} (Send while Pi is running)` : "Send");
+  const help = presentation?.description || title;
+  if (button.title !== help) button.title = help;
+  button.setAttribute("aria-label", presentation ? label : runActive ? `${label} (Send while Pi is running)` : "Send");
   button.classList.toggle("send-busy-mode", runActive);
 }
 
@@ -7763,7 +8107,7 @@ function isFooterPickerOpen() {
 function footerActivePickerTarget() {
   if (footerBranchPickerOpen) return elements.statusBar.querySelector(".footer-branch.footer-meta-action");
   if (footerThinkingPickerOpen) return elements.statusBar.querySelector(".footer-thinking.footer-meta-action");
-  if (footerModelPickerOpen) return elements.statusBar.querySelector(".footer-model.footer-meta-action, .footer-tui-model");
+  if (footerModelPickerOpen) return footerModelTrigger();
   return null;
 }
 
@@ -7858,10 +8202,7 @@ function setMobileTabsExpanded(expanded, { restoreFocus = false } = {}) {
   elements.terminalTabsToggleButton.setAttribute("aria-expanded", mobileTabsExpanded ? "true" : "false");
   if (mobileTabsExpanded) {
     activateDrawerModal(elements.terminalTabsShell, elements.terminalTabsToggleButton, {
-      close: () => {
-        setNewTabMenuOpen(false);
-        setMobileTabsExpanded(false, { restoreFocus: true });
-      },
+      close: () => setMobileTabsExpanded(false, { restoreFocus: true }),
     });
   } else {
     deactivateDrawerModal(elements.terminalTabsShell, { restoreFocus: false });
@@ -8153,76 +8494,12 @@ function chooseGitWorktreeBase(branch) {
   });
 }
 
-function handleDrawerModalKeydown(event) {
-  if (!activeDrawerModal || event.defaultPrevented) return;
-  if (event.key === "Escape") {
-    if (activeDrawerModal.surface === elements.terminalTabsShell && openTerminalTabGroupKey) {
-      event.preventDefault();
-      event.stopPropagation();
-      const openGroup = [...elements.tabBar.querySelectorAll(".terminal-tab-group")]
-        .find((group) => group.dataset.groupKey === openTerminalTabGroupKey);
-      clearOpenTerminalTabGroup(openTerminalTabGroupKey, { force: true });
-      openGroup?.querySelector(".terminal-tab-group-button")?.focus({ preventScroll: true });
-      return;
-    }
-    event.preventDefault();
-    activeDrawerModal.close?.();
-    return;
-  }
-  if (event.key !== "Tab") return;
-  const focusable = modalFocusableElements(activeDrawerModal.surface);
-  if (!focusable.length) {
-    event.preventDefault();
-    activeDrawerModal.surface.focus({ preventScroll: true });
-    return;
-  }
-  const first = focusable[0];
-  const last = focusable[focusable.length - 1];
-  if (!activeDrawerModal.surface.contains(document.activeElement)) {
-    event.preventDefault();
-    (event.shiftKey ? last : first).focus({ preventScroll: true });
-  } else if (event.shiftKey && document.activeElement === first) {
-    event.preventDefault();
-    last.focus({ preventScroll: true });
-  } else if (!event.shiftKey && document.activeElement === last) {
-    event.preventDefault();
-    first.focus({ preventScroll: true });
-  }
+function activateDrawerModal(surface, trigger, options = {}) {
+  drawerSurfaceCoordinator.activate(surface, trigger, options);
 }
 
-function activateDrawerModal(surface, trigger, { close } = {}) {
-  if (activeDrawerModal?.surface === surface) {
-    activeDrawerModal.trigger = trigger;
-    activeDrawerModal.close = close;
-    return;
-  }
-  activeDrawerModal = {
-    surface,
-    trigger,
-    close,
-    previousRole: surface.getAttribute("role"),
-    previousTabindex: surface.getAttribute("tabindex"),
-  };
-  surface.setAttribute("role", "dialog");
-  surface.setAttribute("aria-modal", "true");
-  surface.setAttribute("tabindex", "-1");
-  document.addEventListener("keydown", handleDrawerModalKeydown, true);
-}
-
-function deactivateDrawerModal(surface, { restoreFocus = true } = {}) {
-  if (activeDrawerModal?.surface !== surface) {
-    surface?.removeAttribute("aria-modal");
-    return;
-  }
-  const { trigger, previousRole, previousTabindex } = activeDrawerModal;
-  activeDrawerModal = null;
-  surface.removeAttribute("aria-modal");
-  if (previousRole === null) surface.removeAttribute("role");
-  else surface.setAttribute("role", previousRole);
-  if (previousTabindex === null) surface.removeAttribute("tabindex");
-  else surface.setAttribute("tabindex", previousTabindex);
-  document.removeEventListener("keydown", handleDrawerModalKeydown, true);
-  if (restoreFocus && trigger?.isConnected) queueMicrotask(() => trigger.focus({ preventScroll: true }));
+function deactivateDrawerModal(surface, options = {}) {
+  drawerSurfaceCoordinator.deactivate(surface, options);
 }
 
 function syncMobileSidePanelState(collapsed) {
@@ -8277,6 +8554,7 @@ function setSidePanelCollapsed(collapsed, { persist = true, focusPanel = false, 
   updateSidePanelResizeHandle(currentSidePanelWidth(targetSide), targetSide);
   reconcileControlDeckHosts();
   requestAnimationFrame(syncResizablePanelWidthsForViewport);
+  syncUsageVisibility();
   if (collapsed) closeSidePanelContextMenu({ returnFocus: false });
   if (focusPanel && !collapsed) (targetSide === "left" ? elements.toggleSidePanelLeftButton : elements.toggleSidePanelButton)?.focus?.({ preventScroll: true });
   if (!persist || presentation === "overlay") return;
@@ -8322,12 +8600,13 @@ function persistWorkspaceDashboardCollapsed(collapsed) {
 }
 
 function setWorkspaceDashboardCollapsed(collapsed, { persist = true } = {}) {
+  if (focusedShell?.active && persist) { navigateFocusedShell(collapsed ? "conversation" : "home"); return; }
   workspaceDashboardCollapsed = !!collapsed;
   if (elements.workspaceDashboard) elements.workspaceDashboard.hidden = workspaceDashboardCollapsed;
   if (elements.workspaceDashboardToggleButton) {
     elements.workspaceDashboardToggleButton.setAttribute("aria-expanded", workspaceDashboardCollapsed ? "false" : "true");
     const tooltip = workspaceDashboardCollapsed ? "Show workspace overview" : "Hide workspace overview";
-    const tooltipDetail = `${tooltip}:\n• Shows current tab, cwd, model, context, session, and queue.\n• Opens common workspace/session actions from one place.`;
+    const tooltipDetail = `${tooltip}:\n• Shows current thread, cwd, model, context, session, and queue.\n• Opens common workspace/session actions from one place.`;
     elements.workspaceDashboardToggleButton.removeAttribute("title");
     elements.workspaceDashboardToggleButton.setAttribute("aria-label", tooltip);
     elements.workspaceDashboardToggleButton.setAttribute("data-tooltip", tooltipDetail);
@@ -8410,10 +8689,19 @@ function updateVisualViewportVars() {
   const viewportHeight = viewport?.height || window.innerHeight || document.documentElement.clientHeight;
   const offsetTop = viewport?.offsetTop || 0;
   const layoutHeight = window.innerHeight || viewportHeight;
+  const pixelRatio = window.devicePixelRatio || 1;
+  // Native browser zoom changes CSS units without opening a software keyboard.
+  // Keep the retained height in the current units; keyboard-only shrink keeps DPR.
+  if (pixelRatio !== visualViewportPixelRatio) {
+    maxVisualViewportHeight *= visualViewportPixelRatio / pixelRatio;
+    visualViewportPixelRatio = pixelRatio;
+  }
   if (viewportHeight > maxVisualViewportHeight) maxVisualViewportHeight = viewportHeight;
   const keyboardInset = viewport ? Math.max(0, Math.round(layoutHeight - viewportHeight - offsetTop)) : 0;
   const promptFocused = document.activeElement === elements.promptInput;
-  const keyboardOpen = isMobileView() && promptFocused && (keyboardInset > 80 || maxVisualViewportHeight - viewportHeight > 120);
+  const keyboardComposerActive = promptFocused || (document.body.classList.contains("mobile-keyboard-open")
+    && elements.composer.contains(document.activeElement));
+  const keyboardOpen = isMobileView() && keyboardComposerActive && (keyboardInset > 80 || maxVisualViewportHeight - viewportHeight > 120);
   document.documentElement.style.setProperty("--visual-viewport-height", `${Math.round(viewportHeight)}px`);
   document.documentElement.style.setProperty("--visual-viewport-offset-top", `${Math.round(offsetTop)}px`);
   document.documentElement.style.setProperty("--keyboard-inset-bottom", `${keyboardInset}px`);
@@ -8432,7 +8720,11 @@ function updateVisualViewportVars() {
 
 function installViewportHandlers() {
   updateVisualViewportVars();
-  const update = () => updateVisualViewportVars();
+  const update = () => {
+    // Coarse-pointer media queries can stay matched through phone/tablet rotation.
+    applyMobileShellViewport();
+    updateVisualViewportVars();
+  };
   window.visualViewport?.addEventListener("resize", update, { passive: true });
   window.visualViewport?.addEventListener("scroll", update, { passive: true });
   window.addEventListener("resize", update, { passive: true });
@@ -8738,13 +9030,13 @@ async function submitEditRetry({ send = false } = {}) {
     const forkTabId = forkTab?.id || activeTabId;
     closeEditRetryDialog();
     if (send) {
-      addEvent("forked session in a new tab; sending edited prompt", "info");
+      addEvent("forked session in a new thread; sending edited prompt", "info");
       await sendPrompt("prompt", editedText, { targetTabId: forkTabId, throwOnError: true });
     } else {
       elements.promptInput.value = editedText;
       resizePromptInput();
       focusPromptInput({ defer: true });
-      addEvent("forked session in a new tab; edited prompt restored in composer", "info");
+      addEvent("forked session in a new thread; edited prompt restored in composer", "info");
     }
   } catch (error) {
     setEditRetryStatus(error.message || String(error), "error");
@@ -8951,12 +9243,13 @@ const inFlightGetRequests = new Map();
 async function api(path, { method = "GET", body, tabId = activeTabId, scoped = true, signal } = {}) {
   const url = scoped ? scopedApiPath(path, tabId) : path;
   if (method === "GET" && !signal) {
-    const pending = inFlightGetRequests.get(url);
+    const requestKey = scoped ? `${activeTabGeneration}:${url}` : url;
+    const pending = inFlightGetRequests.get(requestKey);
     if (pending) return pending;
     const request = apiUncached(url, { method, body, signal }).finally(() => {
-      if (inFlightGetRequests.get(url) === request) inFlightGetRequests.delete(url);
+      if (inFlightGetRequests.get(requestKey) === request) inFlightGetRequests.delete(requestKey);
     });
-    inFlightGetRequests.set(url, request);
+    inFlightGetRequests.set(requestKey, request);
     return request;
   }
   return apiUncached(url, { method, body, signal });
@@ -9228,7 +9521,7 @@ function renderUpdateNotification(status = latestUpdateStatus, { force = false }
   if (elements.updateNotificationTitle) elements.updateNotificationTitle.textContent = items.length === 1 ? `${items[0]} available` : "Pi updates available";
   if (elements.updateNotificationMessage) {
     const message = canRunUpdate
-      ? "Choose Pi or Web UI separately. Confirm the exact native command and installation before it runs."
+      ? "Choose Pi or Web UI to start its update."
       : "Updates must start locally, with no other update in progress. Open a version tag for status and recovery guidance.";
     elements.updateNotificationMessage.textContent = message;
   }
@@ -9256,11 +9549,15 @@ function renderUpdateNotification(status = latestUpdateStatus, { force = false }
 
 async function refreshUpdateStatus({ force = false, notify = true } = {}) {
   const path = force ? "/api/update-status?refresh=1" : "/api/update-status";
+  const epoch = componentUpdateStatusEpoch;
   const response = await api(path, { scoped: false });
+  if (epoch !== componentUpdateStatusEpoch) return latestUpdateStatus;
   latestUpdateStatus = response.data || null;
   for (const target of COMPONENT_UPDATE_TARGETS) {
     if (latestUpdateStatus?.nativeJobs && Object.hasOwn(latestUpdateStatus.nativeJobs, target)) {
-      if (latestUpdateStatus.nativeJobs[target] || !uncertainApplyJobs[target]) observedNativeJobs[target] = latestUpdateStatus.nativeJobs[target];
+      const incoming = latestUpdateStatus.nativeJobs[target];
+      const confirmedId = uncertainApplyJobs[target];
+      if (!confirmedId || incoming?.transactionId === confirmedId) observedNativeJobs[target] = incoming;
     }
   }
   if (latestUpdateStatus?.nativeJobs && !latestUpdateStatus.nativeJobDiscoveryError) nativeJobPollError = "";
@@ -9281,10 +9578,10 @@ function scheduleUpdateStatusRefresh() {
   }, UPDATE_STATUS_REFRESH_MS);
 }
 
-const COMPONENT_UPDATE_TARGETS = ["pi", "webui"];
+const COMPONENT_UPDATE_TARGETS = ["all", "pi", "webui"];
 
 function componentUpdateLabel(target) {
-  return target === "pi" ? "Pi" : "Web UI";
+  return target === "all" ? "Pi, extensions and Web UI" : target === "pi" ? "Pi" : "Web UI";
 }
 
 function componentUpdateJob(target) {
@@ -9305,6 +9602,7 @@ function componentUpdateTagState(target) {
   if (job?.phase === "unknown" || latestUpdateStatus?.nativeJobDiscoveryError || nativeJobPollError) return "unknown";
   if (job?.phase === "partial") return "partial";
   if (job?.phase === "failed") return "failed";
+  if (job?.phase === "unchanged") return "unchanged";
   if (job?.phase === "success") return "succeeded";
   if (nativeUpdateUnsettled(job)) return "running";
   if (latestUpdateStatus?.[target]?.updateAvailable) return "available";
@@ -9318,6 +9616,7 @@ function componentUpdateTagStateText(state) {
     case "partial": return "update partially succeeded";
     case "unknown": return "update status unknown";
     case "succeeded": return "update succeeded";
+    case "unchanged": return "already up to date";
     case "available": return "update available";
     default: return "";
   }
@@ -9337,31 +9636,36 @@ function componentUpdateStatusText(target) {
   const job = nativeUpdateJob(target);
   const pkg = latestUpdateStatus?.[target] || {};
   if (latestUpdateStatus?.nativeJobDiscoveryError || nativeJobPollError) {
-    return { text: `Update status cannot be verified: ${latestUpdateStatus?.nativeJobDiscoveryError || nativeJobPollError}. Do not retry until the host is checked.`, level: "error" };
+    return { text: `Update status cannot be verified: ${latestUpdateStatus?.nativeJobDiscoveryError || nativeJobPollError}. Refresh the status before starting another update.`, level: "error" };
   }
   if (!job && latestUpdateStatus?.updateInProgress) {
     return { text: "An update is in progress, but its job ID is not available. Do not retry until its status is known.", level: "warn" };
   }
   if (job) {
-    const id = `Job ${job.transactionId || "unknown"}`;
     const error = job.error ? ` ${String(job.error).slice(0, 600)}` : "";
     switch (job.phase) {
-      case "unknown": return { text: `${id}: completion is unknown.${error} Do not retry or restart; check the host and recover manually.`, level: "error" };
-      case "partial": return { text: `${id}: partial result. Some installations failed or were unverified.${error} Verified healthy active changes may have restarted; inspect each receipt before any retry.`, level: "warn" };
-      case "failed": return { text: `${id}: update failed or could not be verified.${error} Inspect receipts and installation health before retrying.`, level: "error" };
-      case "unchanged": return { text: `${id}: commands finished but no installation changed. No automatic restart was needed.`, level: "info" };
-      case "success": return { text: `${id}: changed installations verified. Any healthy changed active component was automatically restarted after idle; unchanged or separate PATH installations were not.`, level: "success" };
-      case "restart-authorized": return { text: `${id}: commands completed and healthy changed active components are waiting for idle before automatic restart.`, level: "warn" };
-      case "restart-in-progress": return { text: `${id}: automatic restart is in progress; reconnecting to the same job.`, level: "warn" };
-      case "restart-pending": return { text: `${id}: successor health and session restoration are not yet confirmed. Do not infer restart success.`, level: "warn" };
-      default: return { text: `${id}: ${job.phase || "status pending"}. Waiting for command completion and verification.`, level: "warn" };
+      case "unknown": return { text: `Update completion is unknown.${error} Check the command output on the host before retrying.`, level: "error" };
+      case "partial": return { text: `Partial result. Some commands failed.${error} Review the command results.${job.restartRequired === false ? "" : " Restart Web UI to load any completed updates."}`, level: "warn" };
+      case "failed": return { text: `Update failed.${error} Review the command results before retrying.`, level: "error" };
+      case "unchanged": return { text: `${label}: Already up to date. No restart is needed.`, level: "success" };
+      case "success": return { text: `Update commands completed. Restart Web UI to load the updated code.`, level: "success" };
+      case "restart-authorized": return { text: `Commands completed and healthy changed active components are waiting for idle before automatic restart.`, level: "warn" };
+      case "restart-in-progress": return { text: `Automatic restart is in progress; reconnecting to the same job.`, level: "warn" };
+      case "restart-pending": return { text: `Successor health and session restoration are not yet confirmed. Do not infer restart success.`, level: "warn" };
+      case "launching": return { text: `Starting ${label} update…`, level: "info" };
+      case "running": {
+        const progress = job.progress;
+        const step = progress ? `Step ${Math.min(progress.completedSteps + 1, progress.totalSteps)} of ${progress.totalSteps}` : "Running update command";
+        return { text: `${label}: ${step}${progress?.currentTargetId ? ` · ${progress.currentTargetId}` : ""}.`, level: "info" };
+      }
+      default: return { text: `${job.phase || "status pending"}. Waiting for command completion.`, level: "warn" };
     }
   }
   const current = formatWebuiVersion((target === "pi" ? pkg.pathInstallationVersion : pkg.currentVersion) || (target === "pi" ? piVersion : webuiVersion) || "");
   const latest = formatWebuiVersion(pkg.latestVersion || "");
   const availability = pkg.updateAvailable ? `${label} ${current || "current"} → ${latest || "new version"} is available.` : "";
-  const guidance = target === "pi" ? pkg.pathGuidance : (latestUpdateStatus?.webuiDev ? "Active source checkout stays unchanged; separately proven installations may be eligible." : "");
-  if (guidance) return { text: [availability, guidance].filter(Boolean).join(" "), level: "warn" };
+  const guidance = target === "webui" && latestUpdateStatus?.webuiDev ? "The source checkout stays unchanged. Installed npm copies can be updated." : "";
+  if (target === "webui" && guidance) return { text: [availability, guidance].filter(Boolean).join(" "), level: "info" };
   if (availability) return { text: availability, level: "info" };
   if (pkg.checked && latest) return { text: `${label} is up to date.`, level: "info" };
   if (pkg.skippedReason) return { text: `Update check skipped: ${pkg.skippedReason}.`, level: "info" };
@@ -9372,9 +9676,10 @@ function componentUpdateButtonState(target) {
   const label = componentUpdateLabel(target);
   const job = nativeUpdateJob(target);
   if (componentUpdateStartInProgress) return { disabled: true, label: "Starting…" };
+  const needsRecovery = COMPONENT_UPDATE_TARGETS.some((key) => nativeUpdateJob(key)?.phase === "unknown");
   if (nativeJobPollError || latestUpdateStatus?.nativeJobDiscoveryError || latestUpdateStatus?.canRunUpdate === false ||
       latestUpdateStatus?.updateInProgress || anyComponentUpdateRunning() || job?.phase === "unknown" ||
-      updateRequestInProgress) {
+      updateRequestInProgress || needsRecovery) {
     return { disabled: true, label: `Update ${label}` };
   }
   return { disabled: false, label: `Update ${label}` };
@@ -9398,7 +9703,8 @@ function renderComponentUpdatePanel(target, statusElement, buttonElement) {
       receipt.error ? `error: ${String(receipt.error).slice(0, 600)}` : "",
     ].filter(Boolean).join("\n"));
     const verification = (job?.verifiedTargets || []).map((item) => `${item.id}: verification ${item.status || "unproven"}`);
-    output.textContent = [...lines, ...verification].join("\n\n").slice(0, 8000);
+    const live = job?.phase === "running" ? [job.progress?.stdout, job.progress?.stderr].filter(Boolean) : [];
+    output.textContent = [...lines, ...verification, ...live].join("\n\n").slice(-8000);
     output.hidden = !output.textContent;
   }
   const buttonState = componentUpdateButtonState(target);
@@ -9406,7 +9712,66 @@ function renderComponentUpdatePanel(target, statusElement, buttonElement) {
   buttonElement.textContent = buttonState.label;
 }
 
+function renderSidebarUpdateMenu() {
+  if (!sidebarUpdateMenu) return;
+  const mostRecent = [...COMPONENT_UPDATE_TARGETS].filter((key) => nativeUpdateJob(key))
+    .sort((a, b) => Date.parse(nativeUpdateJob(b).finishedAt || nativeUpdateJob(b).plan?.createdAt || 0)
+      - Date.parse(nativeUpdateJob(a).finishedAt || nativeUpdateJob(a).plan?.createdAt || 0))[0];
+  const target = COMPONENT_UPDATE_TARGETS.find((key) => nativeUpdateJob(key)?.phase === "unknown")
+    || COMPONENT_UPDATE_TARGETS.find((key) => nativeUpdateUnsettled(nativeUpdateJob(key)))
+    || (sidebarUpdateTarget && nativeUpdateJob(sidebarUpdateTarget) ? sidebarUpdateTarget : mostRecent)
+    || sidebarUpdateTarget || "all";
+  const job = nativeUpdateJob(target);
+  const status = componentUpdateStatusText(target);
+  const readOnlyFailure = (job?.receipts || []).some((receipt) => receipt.status === "failed"
+    && /\bEROFS\b|read-only file system/i.test([receipt.stdout, receipt.stderr, receipt.error].filter(Boolean).join("\n")));
+  const summary = job?.phase === "partial" ? "Some commands completed; others failed."
+    : job?.phase === "failed" ? "The update command failed. See Details before retrying." : status.text;
+  const resultText = readOnlyFailure
+    ? `${summary} The installation is read-only. Run the update outside the preview or sandbox.` : summary;
+  let disabledReason = "";
+  if (componentUpdateButtonState(target).disabled) {
+    disabledReason = latestUpdateStatus?.canRunUpdate === false && !latestUpdateStatus?.updateInProgress && !job
+      ? "Updates can only be started from localhost."
+      : componentUpdateStartInProgress ? "Preparing an update."
+      : "Wait for the current update or resolve its reported status before starting another.";
+  }
+  sidebarUpdateMenu.update({
+    busy: componentUpdateStartInProgress || anyComponentUpdateRunning() || Boolean(latestUpdateStatus?.updateInProgress),
+    disabledReason,
+    statusText: sidebarUpdateError || resultText,
+    statusTone: sidebarUpdateError ? "error" : status.level,
+    progress: job ? {
+      ...job.progress,
+      jobId: job.transactionId,
+      steps: (job.plan?.targets || []).map((item) => ({
+        ...item,
+        receipt: (job.receipts || []).find((receipt) => receipt.id === item.id),
+      })),
+      state: nativeJobPollError || latestUpdateStatus?.nativeJobDiscoveryError ? "unknown" : job.phase,
+      label: componentUpdateLabel(target),
+      totalSteps: job.progress?.totalSteps ?? job.plan?.targets?.length ?? 1,
+      completedSteps: job.progress?.completedSteps ?? job.receipts?.length ?? 0,
+      startedAt: job.progress?.startedAt || job.startedAt,
+      stepStartedAt: job.progress?.stepStartedAt || job.startedAt,
+    } : null,
+  });
+}
+
+function initializeSidebarUpdateMenu() {
+  if (!elements.sidebarUpdateButton) return;
+  sidebarUpdateMenu = createSidebarUpdateMenu({ button: elements.sidebarUpdateButton, onSelect: startComponentUpdate });
+  elements.sidebarUpdateButton.addEventListener("click", () => {
+    refreshUpdateStatus({ notify: false }).catch((error) => {
+      nativeJobPollError = error.message || String(error);
+      renderSidebarUpdateMenu();
+    });
+  });
+  renderSidebarUpdateMenu();
+}
+
 function renderComponentUpdateDialogs() {
+  renderSidebarUpdateMenu();
   renderComponentUpdatePanel("pi", elements.piComponentUpdateStatus, elements.piComponentUpdateButton);
   const pkg = latestUpdateStatus?.webui || {};
   if (elements.webuiPackageCurrentVersion) {
@@ -9427,7 +9792,10 @@ function syncComponentUpdatePolling() {
           for (const target of COMPONENT_UPDATE_TARGETS) {
             const job = nativeUpdateJob(target);
             if (nativeUpdateUnsettled(job) && job.transactionId) {
-              observedNativeJobs[target] = (await api(`/api/update/transactions/${encodeURIComponent(job.transactionId)}`, { scoped: false })).data;
+              const incoming = (await api(`/api/update/transactions/${encodeURIComponent(job.transactionId)}`, { scoped: false })).data;
+              if (observedNativeJobs[target]?.transactionId === job.transactionId && incoming?.transactionId === job.transactionId) {
+                observedNativeJobs[target] = incoming;
+              }
             }
           }
           await refreshUpdateStatus({ notify: false });
@@ -9454,75 +9822,57 @@ function syncComponentUpdatePolling() {
   }
 }
 
-function componentUpdateConfirmationText(plan) {
-  const context = plan.context || {};
-  const active = plan.active || {};
-  const installations = (plan.targets || []).map((item) => [
-    `${item.id}: ${item.packageName} ${item.beforeVersion} at ${item.installedRoot}`,
-    `Affected root: ${item.effectRoot}`,
-    `Executable: ${item.command.command}`,
-    `Command argv: ${JSON.stringify(item.command.args)}`,
-  ].join("\n")).join("\n\n");
-  return [
-    `Update ${componentUpdateLabel(plan.requested)} with this exact plan?`,
-    `Active Pi: ${active.pi || "unknown"} at ${active.piRoot || "unknown"}.`,
-    plan.pathPi?.eligible
-      ? `Confirmed PATH Pi: ${plan.pathPi.version} at ${plan.pathPi.packageRoot}; executable ${plan.pathPi.executable}; CLI ${plan.pathPi.cli}. It may differ from active Pi.`
-      : `PATH Pi unproven: ${plan.pathPi?.guidance || "No verified PATH Pi version/root was returned; only confirmed commands below are eligible."}`,
-    `Active Web UI: ${active.webui || "unknown"} at ${active.webuiRoot || "unknown"}.`,
-    `Shell: ${context.shell || "unknown"}\nWorking directory: ${context.cwd || "unknown"}\nAgent directory: ${context.agentDir || "unknown"}\nNpm prefix: ${context.npmPrefix || "not applicable"}`,
-    installations,
-    plan.refusals?.length ? `Skipped/manual: ${plan.refusals.join(" · ")}` : "",
-    plan.warning || "Native package lifecycle scripts may run under your existing configuration; no automatic elevation or sandbox is provided.",
-    "Known affected work must be idle. Only changed, verified healthy active components restart automatically after all commands finish and work is idle. Native updates cannot be rolled back automatically.",
-    `Plan digest: ${plan.digest}`,
-  ].filter(Boolean).join("\n\n");
-}
-
 async function startComponentUpdate(target) {
   if (componentUpdateStartInProgress) return;
   const label = componentUpdateLabel(target);
   if (componentUpdateButtonState(target).disabled) return;
+  sidebarUpdateTarget = target;
+  sidebarUpdateError = "";
   componentUpdateStartInProgress = true;
   renderComponentUpdateDialogs();
   let plan;
   try {
     plan = (await api("/api/update/plan", { method: "POST", body: { targets: [target] }, scoped: false }))?.data?.plan;
   } catch (error) {
-    addEvent(error.message || String(error), "error");
+    sidebarUpdateError = error.message || String(error);
+    addEvent(sidebarUpdateError, "error");
     componentUpdateStartInProgress = false;
     renderComponentUpdateDialogs();
     return;
   }
   if (plan?.requested !== target || !plan.transactionId || !plan.digest || !Array.isArray(plan.targets) || !plan.targets.length) {
-    addEvent("Update preview is incomplete; no command was launched.", "error");
+    sidebarUpdateError = "Update preview is incomplete; no command was launched.";
+    addEvent(sidebarUpdateError, "error");
     componentUpdateStartInProgress = false;
     renderComponentUpdateDialogs();
     return;
   }
-  const confirmed = await appConfirmText(componentUpdateConfirmationText(plan), {
-    affected: plan.targets.map((item) => `${item.id}: ${item.installedRoot}`).join(" · "),
-    confirmLabel: `Run ${label} update`,
-    danger: false,
-  });
-  if (!confirmed) {
-    componentUpdateStartInProgress = false;
-    renderComponentUpdateDialogs();
-    return;
-  }
+  const startedAt = new Date().toISOString();
+  componentUpdateStatusEpoch++;
+  uncertainApplyJobs[target] = plan.transactionId;
+  const confirmedJob = { transactionId: plan.transactionId, plan, phase: "launching", startedAt,
+    receipts: [], verifiedTargets: [], progress: { totalSteps: plan.targets.length, completedSteps: 0, startedAt, stepStartedAt: startedAt } };
+  observedNativeJobs[target] = confirmedJob;
+  nativeJobPollError = "";
+  renderComponentUpdateDialogs();
   try {
     const response = await api("/api/update/apply", { method: "POST", body: { transactionId: plan.transactionId, planDigest: plan.digest }, scoped: false });
     if (response?.data?.transactionId !== plan.transactionId) throw new Error("Accepted job identity did not match the confirmed plan.");
+    componentUpdateStatusEpoch++;
     uncertainApplyJobs[target] = null;
-    observedNativeJobs[target] = { transactionId: plan.transactionId, plan, phase: response.data.phase, receipts: [], verifiedTargets: [] };
-    latestUpdateStatus = { ...(latestUpdateStatus || {}), updateInProgress: true };
-    addEvent(`${label} job ${plan.transactionId} launched; watching its durable status`, "info");
+    const current = observedNativeJobs[target]?.transactionId === plan.transactionId ? observedNativeJobs[target] : confirmedJob;
+    observedNativeJobs[target] = ["launching", "planned"].includes(current.phase) ? { ...current, phase: response.data.phase } : current;
+    latestUpdateStatus = { ...(latestUpdateStatus || {}), updateInProgress: Boolean(nativeUpdateUnsettled(observedNativeJobs[target])) };
+    addEvent(`${label} job ${plan.transactionId} launched; watching command progress`, "info");
   } catch (error) {
-    nativeJobPollError = error.message || String(error);
-    uncertainApplyJobs[target] = plan.transactionId;
-    observedNativeJobs[target] = { transactionId: plan.transactionId, plan, phase: "launching", receipts: [], verifiedTargets: [] };
-    latestUpdateStatus = { ...(latestUpdateStatus || {}), updateInProgress: true };
-    addEvent(`${label} launch was not confirmed: ${nativeJobPollError}. Checking job ${plan.transactionId} before any retry.`, "error");
+    componentUpdateStatusEpoch++;
+    const current = observedNativeJobs[target]?.transactionId === plan.transactionId ? observedNativeJobs[target] : confirmedJob;
+    const hasAuthoritativeResult = !["launching", "planned"].includes(current.phase);
+    nativeJobPollError = hasAuthoritativeResult ? "" : error.message || String(error);
+    uncertainApplyJobs[target] = hasAuthoritativeResult ? null : plan.transactionId;
+    observedNativeJobs[target] = hasAuthoritativeResult ? current : { ...confirmedJob, phase: "launching" };
+    latestUpdateStatus = { ...(latestUpdateStatus || {}), updateInProgress: Boolean(nativeUpdateUnsettled(observedNativeJobs[target])) };
+    addEvent(`${label} launch response failed: ${error.message || String(error)}. Checking job ${plan.transactionId} before any retry.`, "error");
   } finally {
     componentUpdateStartInProgress = false;
     renderComponentUpdateIndicators();
@@ -9642,13 +9992,12 @@ function isEditableTextAttachment(attachment) {
 }
 
 function attachmentsForTab(tabId = activeTabId) {
-  return tabId ? tabAttachments.get(tabId) || [] : [];
+  return tabId ? composerStore.getAttachments(tabId) || [] : [];
 }
 
 function ensureAttachmentsForTab(tabId = activeTabId) {
   if (!tabId) return [];
-  if (!tabAttachments.has(tabId)) tabAttachments.set(tabId, []);
-  return tabAttachments.get(tabId);
+  return composerStore.ensureAttachments(tabId);
 }
 
 function hasComposerPayload() {
@@ -9716,7 +10065,7 @@ function removeAttachment(id, tabId = activeTabId) {
   const [removed] = attachments.splice(index, 1);
   if (removed?.previewUrl) URL.revokeObjectURL(removed.previewUrl);
   if (activeTextAttachmentEditor?.tabId === tabId && activeTextAttachmentEditor?.attachmentId === id) closeTextAttachmentEditor({ force: true });
-  if (attachments.length === 0) tabAttachments.delete(tabId);
+  if (attachments.length === 0) composerStore.deleteAttachments(tabId);
   if (tabId === activeTabId) renderAttachmentTray();
   persistMobileContinuityState();
 }
@@ -9727,7 +10076,7 @@ function clearAttachments(tabId = activeTabId) {
     if (attachment.previewUrl) URL.revokeObjectURL(attachment.previewUrl);
   }
   if (activeTextAttachmentEditor?.tabId === tabId) closeTextAttachmentEditor({ force: true });
-  if (tabId) tabAttachments.delete(tabId);
+  if (tabId) composerStore.deleteAttachments(tabId);
   if (tabId === activeTabId) renderAttachmentTray();
   persistMobileContinuityState();
 }
@@ -9735,8 +10084,13 @@ function clearAttachments(tabId = activeTabId) {
 function addAttachmentFiles(fileList, source = "picker") {
   const files = Array.from(fileList || []).filter(Boolean);
   if (!files.length) return { added: 0, skipped: [] };
+  if (!activeTabId) {
+    const message = "Start a conversation before adding attachments. You can paste text directly into the composer.";
+    addEvent(message, "warn");
+    addTransientMessage({ role: "error", title: "attachments", content: message, level: "warn" });
+    return { added: 0, skipped: [message] };
+  }
   const attachments = ensureAttachmentsForTab();
-  if (!attachments.length && !activeTabId) return { added: 0, skipped: ["no active tab"] };
   if (attachments.some((attachment) => attachment.requiresReselect)) {
     attachments.splice(0, attachments.length, ...attachments.filter((attachment) => !attachment.requiresReselect));
   }
@@ -10594,13 +10948,14 @@ function setWorkflowOverlayMinimized(minimized) {
   const tabId = activeTabId;
   if (minimized) workflowOverlayMinimizedByTab.add(tabId);
   else workflowOverlayMinimizedByTab.delete(tabId);
+  if (!minimized && focusedShell?.active) navigateFocusedShell("activity", "progress");
   renderWidgets();
   renderWorkflowModeControls();
   requestAnimationFrame(() => {
     if (activeTabId !== tabId) return;
     const focusTarget = minimized
       ? elements.workflowOverlayOpenButton
-      : elements.widgetArea.querySelector(".workflow-overlay-close-button");
+      : featureWidgetElements(".workflow-overlay-close-button")[0];
     focusTarget?.focus({ preventScroll: true });
   });
 }
@@ -10622,9 +10977,9 @@ function renderWorkflowModeControls() {
     if (pending) elements.workflowModeButton.setAttribute("aria-busy", "true");
     else elements.workflowModeButton.removeAttribute("aria-busy");
     const tooltip = pending
-      ? "Updating JavaScript Workflow Mode for this Pi tab."
+      ? "Updating JavaScript Workflow Mode for this Pi thread."
       : commandName
-        ? `${active ? "Disable" : "Enable"} JavaScript Workflow Mode for this Pi tab via /${commandName} mode ${active ? "off" : "on"}.`
+        ? `${active ? "Disable" : "Enable"} JavaScript Workflow Mode for this Pi thread via /${commandName} mode ${active ? "off" : "on"}.`
         : "Workflow Mode is unavailable because the /workflow command is not loaded.";
     applyStyledTooltip(elements.workflowModeButton, tooltip, { ariaLabel: true, align: "end" });
   }
@@ -10635,7 +10990,7 @@ function renderWorkflowModeControls() {
     elements.workflowModeChip.disabled = !commandName || pending;
     elements.workflowModeChip.textContent = mode.phase === "running" ? "Workflow: running" : mode.behavior === "once" ? "Workflow: once" : "Workflow: on";
     elements.workflowModeChip.setAttribute("aria-pressed", "true");
-    elements.workflowModeChip.title = "Workflow Mode is active. Click to return this tab to normal Pi prompting.";
+    elements.workflowModeChip.title = "Workflow Mode is active. Click to return this thread to normal Pi prompting.";
     elements.workflowModeChip.setAttribute("aria-label", `${elements.workflowModeChip.textContent}. Click to disable Workflow Mode.`);
   }
 }
@@ -10667,7 +11022,7 @@ async function setWorkflowModeEnabled(enabled) {
       statusText: enabled ? "Workflow: on" : "",
       updatedAt: new Date().toISOString(),
     });
-    addEvent(enabled ? "Workflow Mode enabled for this tab." : "Workflow Mode disabled for this tab.", "info");
+    addEvent(enabled ? "Workflow Mode enabled for this thread." : "Workflow Mode disabled for this thread.", "info");
   } catch (error) {
     if (isCurrentTabContext(tabContext)) addEvent(error.message || String(error), "error");
   } finally {
@@ -10765,7 +11120,7 @@ let conversationVoicePending = null;
 // panel (hover/focus-within still work on desktop via CSS), so it also works
 // on touch devices where :hover never fires.
 function setConversationVoiceMenuOpen(open) {
-  if (open && followUpQueueOpen) setFollowUpQueueOpen(false);
+  if (open && activityQueue.isOpen()) setFollowUpQueueOpen(false);
   conversationVoiceMenuOpen = !!open;
   elements.conversationVoiceButton?.setAttribute("aria-expanded", conversationVoiceMenuOpen ? "true" : "false");
   elements.conversationVoiceButton?.classList.toggle("menu-open", conversationVoiceMenuOpen);
@@ -10803,7 +11158,7 @@ function renderConversationModeControls() {
     elements.optionsConversationModeButton.classList.toggle("active", active);
     elements.optionsConversationModeButton.querySelector("span").textContent = conversationModeButtonLabel(mode);
     const tooltip = commandName
-      ? `${active ? "End" : "Start"} Natural Conversation Mode for this Pi tab via /${commandName}. Safety is owned by @firstpick/pi-package-natural-conversation.`
+      ? `${active ? "End" : "Start"} Natural Conversation Mode for this Pi thread via /${commandName}. Safety is owned by @firstpick/pi-package-natural-conversation.`
       : conversationModeUnavailableText();
     applyStyledTooltip(elements.optionsConversationModeButton, tooltip, { ariaLabel: false, align: "end" });
     elements.optionsConversationModeButton.setAttribute("aria-pressed", active ? "true" : "false");
@@ -10814,7 +11169,7 @@ function renderConversationModeControls() {
     elements.conversationModeChip.textContent = conversationModeDisplayText(mode);
     elements.conversationModeChip.setAttribute("data-voice-state", active ? mode.uiState || "listening" : "off");
     const chipAction = mode.uiState === "paused" ? "Click to resume browser listening." : "Click to pause browser listening; use End conversation to leave the safe mode.";
-    elements.conversationModeChip.title = `Natural Conversation Mode is active in this tab (${voiceConversationProviderLabel()}). Thinking is forced off; tools are limited to ${mode.allowedTools.join(", ")}. ${chipAction}`;
+    elements.conversationModeChip.title = `Natural Conversation Mode is active in this thread (${voiceConversationProviderLabel()}). Thinking is forced off; tools are limited to ${mode.allowedTools.join(", ")}. ${chipAction}`;
     elements.conversationModeChip.setAttribute("aria-label", `Natural Conversation Mode ${mode.uiState || "listening"}. ${chipAction}`);
   }
 
@@ -10959,6 +11314,17 @@ function showConversationVoiceFeedback(message, level = "info") {
   addTransientMessage({ role: level === "error" ? "error" : "native", title: "/talk voice", content: text, level });
 }
 
+function syncConversationVoicePanelSemantics() {
+  const panel = elements.conversationVoiceMenuPanel;
+  if (!panel) return;
+  const inline = !!panel.closest('.settings-page[data-settings-category="voice"]');
+  panel.setAttribute("role", inline ? "group" : "menu");
+  for (const button of panel.querySelectorAll("button")) {
+    if (inline) button.removeAttribute("role");
+    else button.setAttribute("role", "menuitem");
+  }
+}
+
 function renderConversationVoicePanelNotice(message, level = "info") {
   const panel = elements.conversationVoiceMenuPanel;
   if (!panel) return;
@@ -10969,9 +11335,11 @@ function renderConversationVoicePanelNotice(message, level = "info") {
   notice.setAttribute("role", level === "error" ? "alert" : "status");
   notice.textContent = message;
   panel.appendChild(notice);
+  syncConversationVoicePanelSemantics();
 }
 
 function renderConversationVoiceOptions(data = conversationVoiceLastData) {
+  const target = projectTargetFromContext();
   const panel = elements.conversationVoiceMenuPanel;
   if (!panel) return;
   const source = data || conversationVoiceLastData || {};
@@ -10996,6 +11364,7 @@ function renderConversationVoiceOptions(data = conversationVoiceLastData) {
     empty.disabled = true;
     empty.textContent = "No Piper voices — run /talk setup";
     panel.appendChild(empty);
+    syncConversationVoicePanelSemantics();
     return;
   }
   for (const voice of voices) {
@@ -11028,7 +11397,7 @@ function renderConversationVoiceOptions(data = conversationVoiceLastData) {
     const chooseVoice = (event) => {
       event.preventDefault();
       event.stopPropagation();
-      void switchConversationVoice(voice.id);
+      if (panel.contains(item) && isCurrentProjectTarget(target)) void switchConversationVoice(voice.id);
     };
     item.addEventListener("pointerdown", (event) => {
       pointerActivated = true;
@@ -11045,18 +11414,20 @@ function renderConversationVoiceOptions(data = conversationVoiceLastData) {
     });
     panel.appendChild(item);
   }
+  syncConversationVoicePanelSemantics();
 }
 
 async function loadConversationVoices(tabContext = activeTabContext()) {
   if (!tabContext.tabId) return;
+  const target = projectTargetFromContext(tabContext);
   try {
     const response = await api("/api/conversation-voices", { tabId: tabContext.tabId });
-    if (!isCurrentTabContext(tabContext)) return;
+    if (!isCurrentProjectTarget(target)) return;
     conversationVoicesLoadedForTab = tabContext.tabId;
     conversationVoiceLastData = response.data;
     renderConversationVoiceOptions(response.data);
   } catch (error) {
-    if (isCurrentTabContext(tabContext)) {
+    if (isCurrentProjectTarget(target)) {
       conversationVoicesLoadedForTab = null;
       const message = `conversation voice list failed: ${error.message || String(error)}`;
       addEvent(message, "warn");
@@ -12057,7 +12428,7 @@ function closeThemeCustomizer({ restore = true } = {}) {
     return;
   }
   if (state.saving) {
-    setThemeCustomizerStatus("Wait for the theme save to finish before closing or switching tabs.", "warn");
+    setThemeCustomizerStatus("Wait for the theme save to finish before closing or switching threads.", "warn");
     return false;
   }
   const generation = state.generation;
@@ -12113,7 +12484,7 @@ async function openThemeCustomizer() {
   elements.themeCustomizerProjectOption.disabled = !projectTrusted;
   elements.themeCustomizerScope.value = source.custom ? source.scope : projectTrusted ? "project" : "global";
   elements.themeCustomizerScopeHint.textContent = projectTrusted
-    ? "Project saves use this active trusted tab’s .pi/themes directory; global saves use Pi’s agent themes directory."
+    ? "Project saves use this active trusted thread’s .pi/themes directory; global saves use Pi’s agent themes directory."
     : "This active project is not saved as trusted in Pi, so only Global themes is available.";
   elements.themeCustomizerSourceBadge.textContent = `${themeScopeLabel(source.scope)} source`;
   elements.themeCustomizerSourceBadge.className = `theme-scope-badge ${source.scope || "bundled"}`;
@@ -12152,7 +12523,7 @@ async function saveThemeCustomizer({ overwrite = false } = {}) {
   const state = themeCustomizerState;
   if (!state?.draftValid || !state.validTheme || state.saving) return;
   if (!isCurrentTabContext(state.tabContext)) {
-    setThemeCustomizerStatus("The active tab changed. Cancel and reopen Customize so the project destination is bound to the intended tab.", "warn");
+    setThemeCustomizerStatus("The active thread changed. Cancel and reopen Customize so the project destination is bound to the intended thread.", "warn");
     return;
   }
   const confirmation = state.overwrite;
@@ -12291,7 +12662,7 @@ function activeTab() {
 }
 
 function activeTabContext(tabId = activeTabId) {
-  return { tabId: tabId || null, generation: activeTabGeneration };
+  return sessionContext.capture(tabId);
 }
 
 function transcriptStreamOwner(tabId = activeTabId, generation = activeTabGeneration) {
@@ -12343,27 +12714,105 @@ function reconcileUnknownTranscriptEvidenceAtBarrier(event) {
 
 function setActiveTabId(tabId, { remember = false } = {}) {
   const nextTabId = tabId || null;
-  if (nextTabId !== activeTabId) {
-    activeTabGeneration += 1;
-    intercomSummaryRequestSerial += 1;
-    clearTimeout(intercomSummaryRefreshTimer);
-    intercomSummaryRefreshTimer = null;
-    closeIntercomConversationDialog({ restoreFocus: false });
+  if (nextTabId && draftConversations.activeId) draftConversations.select(null);
+  const tabChanged = nextTabId !== activeTabId;
+  if (tabChanged) {
     closeFeatureDecisionDialog({ restoreFocus: false });
     closeSessionSummaryOverlay({ restoreFocus: false });
   }
-  activeTabId = nextTabId;
+  const context = sessionContext.activate(nextTabId);
+  activeTabId = context.tabId;
+  activeTabGeneration = context.generation;
   renderMainOutputLoading();
+  if (activeTabId) threadActivationOrder.set(activeTabId, ++threadActivationSerial);
+  if (tabChanged) closeDraftWorkspacePicker();
   bindGitWorkflowToActiveTab();
-  renderIntercomConversationTags(nextTabId);
+  if (tabChanged) {
+    activityIntercom.activate(projectTargetFromContext());
+    activityQueue.activate();
+  }
+  else activityIntercom.renderTags(nextTabId);
+  renderIntercomActivityLinks();
   renderFeatureCategoryTag(nextTabId);
   renderSessionSummaryControls();
+  renderAppRunnerInfoDialog();
+  if (elements.gitFooterVisibilityDialog?.open) {
+    setGitFooterVisibilityBusy(gitFooterVisibilityApplyInFlight);
+    if (!isCurrentGitFooterVisibilityTarget(gitFooterVisibilityTarget)) setGitFooterVisibilityStatus("The session changed. Reopen Git-footer Visibility before applying changes.", "warn");
+  }
   if (remember) rememberActiveTab();
   return activeTabContext(nextTabId);
 }
 
+function projectTargetFromContext(context = activeTabContext()) {
+  return { ...context, lifetime: sessionContext.captureLifetime(context.tabId), cwd: tabs.find(tab => tab.id === context.tabId)?.cwd || "" };
+}
+
+function isAliveProjectTarget(target) {
+  return sessionContext.isLifetimeCurrent(target?.lifetime)
+    && tabs.some(tab => tab.id === target.tabId && (tab.cwd || "") === target.cwd);
+}
+
+function isCurrentProjectTarget(target) {
+  return isCurrentTabContext(target) && isAliveProjectTarget(target);
+}
+
 function isCurrentTabContext(context) {
-  return !!context && context.tabId === activeTabId && context.generation === activeTabGeneration;
+  return sessionContext.isCurrent(context);
+}
+
+function reconcileReplacedSession(context) {
+  activeTabGeneration = context.generation;
+  sessionShelfState.restore(context.tabId);
+  scheduleTabsRender();
+  activityIntercom.prune(tabs.filter(tab => tab.id !== context.tabId).map(tab => tab.id));
+  activityIntercom.activate(projectTargetFromContext(context));
+  latestQueuedMessagesByTab.delete(context.tabId);
+  activityQueue.activate();
+  renderIntercomActivityLinks();
+  retireSessionDialogs(context.tabId);
+  samplingParametersRequestSerial += 1;
+  samplingParametersLoading = false;
+  samplingParametersState = null;
+  samplingParametersStateTabId = null;
+  setSamplingParametersDraft(null, context.tabId);
+  renderSamplingParameters();
+  renderAppRunnerInfoDialog();
+  promptRoutingTabs.delete(context.tabId);
+  guidedGitLaunchPermits.clearTab(context.tabId);
+  clearRefreshTimers();
+  cancelNormalStreamRenders();
+  resetStreamBubble();
+  latestMessages = [];
+  latestMessagesSessionKey = "";
+  transientMessages = [];
+  liveToolRuns.clear();
+  tabMessagesCache.delete(context.tabId);
+  tabStatsCache.delete(context.tabId);
+  latestStats = null;
+  resetChatOutput();
+  connectEvents(context);
+  // Replacement invalidates in-flight refreshes; rebuild from the new session only.
+  queueMicrotask(() => {
+    if (isCurrentTabContext(context)) refreshAll(context).catch((error) => {
+      if (isCurrentTabContext(context)) addEvent(error.message || String(error), "error");
+    });
+  });
+}
+
+function observeSessionState(context, state) {
+  const observed = sessionContext.observeSession(context.tabId, state?.sessionId || state?.sessionFile);
+  if (observed.changed && context.tabId === activeTabId) reconcileReplacedSession(observed.context);
+  return observed.context;
+}
+
+function invalidateActiveSession(context) {
+  if (!isCurrentTabContext(context)) return null;
+  const replacement = sessionContext.invalidate(context.tabId);
+  currentState = null;
+  tabStateCache.delete(context.tabId);
+  reconcileReplacedSession(replacement);
+  return replacement;
 }
 
 function normalizeFileTreePath(value = "") {
@@ -12577,6 +13026,7 @@ function renderFileTree() {
   const focusSnapshot = captureScopedControlContinuity(root, continuityContextKey, fileTreeControlKey);
   const restoreFocus = () => restoreScopedControlContinuity(root, continuityContextKey, focusSnapshot, (key) => [...root.querySelectorAll(".file-tree-item[data-path]")].find((node) => fileTreeControlKey(node) === key));
   root.replaceChildren();
+  root.setAttribute("role", "group");
   updateFileTreeSearchControls();
   if (elements.fileTreeCwd) elements.fileTreeCwd.textContent = fileTreeState.root || latestWorkspace?.displayCwd || activeTab()?.cwd || "";
   const searchQuery = fileTreeState.searchQuery || fileTreeSearchQueryText();
@@ -12592,6 +13042,7 @@ function renderFileTree() {
       restoreFocus();
       return;
     }
+    root.setAttribute("role", "tree");
     const list = make("ul", "file-tree-list root search-results");
     list.setAttribute("role", "group");
     for (const entry of fileTreeState.searchEntries) appendFileSearchEntry(list, entry);
@@ -12606,6 +13057,7 @@ function renderFileTree() {
     restoreFocus();
     return;
   }
+  root.setAttribute("role", "tree");
   const list = make("ul", "file-tree-list root");
   list.setAttribute("role", "group");
   for (const entry of entries) appendFileTreeEntry(list, entry, 0);
@@ -13102,7 +13554,7 @@ function handleFileTreeKeydown(event) {
 }
 
 function currentFileViewerPath() {
-  return normalizeFileTreePath(activeFileViewer?.path || elements.fileViewerOpenDefaultButton?.dataset.path || "");
+  return normalizeFileTreePath(projectFiles.viewer?.path || elements.fileViewerOpenDefaultButton?.dataset.path || "");
 }
 
 async function openPathInDefaultEditor(path = currentFileViewerPath()) {
@@ -13342,28 +13794,12 @@ async function refreshFileTreeAfterOperation(paths = []) {
 }
 
 function updateActiveFileViewerAfterMove(sourcePath = "", destinationPath = "") {
-  if (!activeFileViewer) return;
-  const currentPath = normalizeFileTreePath(activeFileViewer.path || "");
-  const nextPath = remapFileTreePathAfterMove(currentPath, sourcePath, destinationPath);
-  if (!nextPath || nextPath === currentPath) return;
-  const language = fileLanguageForPath(nextPath);
-  activeFileViewer = {
-    ...activeFileViewer,
-    path: nextPath,
-    name: fileDisplayName(nextPath),
-    extension: fileExtensionForPath(nextPath),
-    language,
-    mode: activeFileViewer.mode === "preview" && language === "markdown" ? "preview" : "source",
-    // The open-time diff snapshot belongs to the previous path.
-    gitChanges: null,
-  };
-  if (fileViewerSelection) fileViewerSelection = { ...fileViewerSelection, path: nextPath, fileName: activeFileViewer.name };
-  cacheActiveFileViewerForTab();
-  updateFileViewerUi();
+  captureFileViewerEditorContinuity();
+  projectFiles.remapPath(sourcePath, destinationPath);
 }
 
 function closeActiveFileViewerIfDeleted(deletedPath = "") {
-  if (!activeFileViewer || !filePathWithinOrEqual(activeFileViewer.path, deletedPath)) return false;
+  if (!projectFiles.viewer || !filePathWithinOrEqual(projectFiles.viewer.path, deletedPath)) return false;
   closeFileViewer();
   return true;
 }
@@ -13376,7 +13812,7 @@ async function deleteFileTreeEntry(entry = fileContextMenuState?.entry) {
     return;
   }
   const typeLabel = fileOperationTypeLabel(entry);
-  const dirtyWarning = activeFileViewer?.dirty && filePathWithinOrEqual(activeFileViewer.path, sourcePath)
+  const dirtyWarning = projectFiles.viewer?.dirty && filePathWithinOrEqual(projectFiles.viewer.path, sourcePath)
     ? "\n\nThe currently open file has unsaved edits that will be discarded from the viewer."
     : "";
   const recursiveWarning = typeLabel === "directory" ? "\n\nThis permanently deletes the directory and all of its contents." : "";
@@ -13760,7 +14196,7 @@ const CONTROL_VISIBILITY_CATALOG = [
   { id: "workspace.save", group: "workspace", label: "Save workspace", selector: "#workspaceSaveButton" },
   { id: "workspace.command-palette", group: "workspace", label: "Command palette", selector: "#commandPaletteButton" },
   { id: "workspace.overview", group: "workspace", label: "Show workspace overview", selector: "#workspaceDashboardToggleButton" },
-  { id: "workspace.close-all-tabs", group: "workspace", label: "Close all tabs", selector: "#closeAllTabsButton" },
+  { id: "workspace.close-all-tabs", group: "workspace", label: "Close all threads", selector: "#closeAllTabsButton" },
   { id: "control-deck.sponsor", group: "control-deck", label: "Sponsor", selector: ".sponsor-link" },
   { id: "control-deck.open-issue", group: "control-deck", label: "Open Issue", selector: "#openIssueButton" },
   { id: "composer.new", group: "composer", label: "New", selector: '[data-composer-action-id="new"]' },
@@ -14370,7 +14806,7 @@ function applyDurableFileViewerWidth(value) {
   if (width < FILE_VIEWER_WIDTH_MIN_PX) return;
   writeDurableLayoutCache(FILE_VIEWER_WIDTH_STORAGE_KEY, String(width));
   restoreFileViewerWidthPreference();
-  if (activeFileViewer && !isSidePanelOverlayView()) applyFileViewerWidth(width);
+  if (projectFiles.viewer && !isSidePanelOverlayView()) applyFileViewerWidth(width);
 }
 
 function applyDurableUiLayoutField(field, value) {
@@ -14642,7 +15078,7 @@ function sidePanelMaxWidth(side = "right") {
   const gap = Number.parseFloat(layoutStyle?.columnGap || layoutStyle?.gap || "0") || 0;
   const horizontalPadding = (Number.parseFloat(layoutStyle?.paddingLeft || "0") || 0) + (Number.parseFloat(layoutStyle?.paddingRight || "0") || 0);
   const contentWidth = Math.max(0, layoutWidth - horizontalPadding);
-  const fileViewerVisible = !!activeFileViewer && elements.fileViewerPane && getComputedStyle(elements.fileViewerPane).display !== "none";
+  const fileViewerVisible = !!projectFiles.viewer && elements.fileViewerPane && getComputedStyle(elements.fileViewerPane).display !== "none";
   const fileViewerWidth = fileViewerVisible ? Math.max(FILE_VIEWER_WIDTH_MIN_PX, elements.fileViewerPane.getBoundingClientRect().width) : 0;
   const splitOpen = document.body.classList.contains("terminal-split-open");
   const terminalRailWidth = isControlDeckSidebarPresentation() ? Math.max(TERMINAL_TABS_SIDEBAR_WIDTH_MIN_PX, currentTerminalTabsSidebarWidth()) : 0;
@@ -14714,6 +15150,7 @@ async function restoreSidePanelWidthPreference() {
     // One non-blocking unscoped read hydrates both the width preference and the
     // durable layout after the synchronous local-cache startup pass.
     const response = await api("/api/interface-preferences", { scoped: false });
+    applyShellRolloutCohort(response.data?.shellRolloutCohort);
     applyDurableUiLayoutSnapshot(response.data, { generations: layoutGenerations, readEpoch });
     if (restoreRevision !== sidePanelWidthPreferenceRevision) return;
     const userWidth = Number(response.data?.preferences?.sidePanelWidth);
@@ -14769,7 +15206,7 @@ function handleSidePanelResizeKeydown(event) {
   const side = event.currentTarget === elements.sidePanelResizeHandleLeft ? "left" : "right";
   if (!controlDeckSideResizeAvailable(side)) return;
   const step = event.shiftKey ? 80 : 24;
-  const current = currentSidePanelWidth(side);
+  const current = controlDeckLayout.panelWidths?.[side] || currentSidePanelWidth(side);
   let next = current;
   if (event.key === "ArrowLeft") next = side === "left" ? current - step : current + step;
   else if (event.key === "ArrowRight") next = side === "left" ? current + step : current - step;
@@ -14841,7 +15278,7 @@ function currentFileViewerWidth() {
 function updateFileViewerResizeHandle(width = currentFileViewerWidth()) {
   const handle = elements.fileViewerResizeHandle;
   if (!handle) return;
-  const resizeAvailable = !!activeFileViewer && !isSidePanelOverlayView();
+  const resizeAvailable = !!projectFiles.viewer && !isSidePanelOverlayView();
   handle.hidden = !resizeAvailable;
   handle.setAttribute("aria-valuemin", String(FILE_VIEWER_WIDTH_MIN_PX));
   handle.setAttribute("aria-valuemax", String(fileViewerMaxWidth()));
@@ -14864,7 +15301,7 @@ function restoreFileViewerWidthPreference() {
 }
 
 function beginFileViewerResize(event) {
-  if (!activeFileViewer || isSidePanelOverlayView()) return;
+  if (!projectFiles.viewer || isSidePanelOverlayView()) return;
   if (event.button !== undefined && event.button !== 0) return;
   event.preventDefault();
   const startWidth = currentFileViewerWidth();
@@ -14897,7 +15334,7 @@ function finishFileViewerResize(event) {
 }
 
 function handleFileViewerResizeKeydown(event) {
-  if (!activeFileViewer || isSidePanelOverlayView()) return;
+  if (!projectFiles.viewer || isSidePanelOverlayView()) return;
   const step = event.shiftKey ? 80 : 24;
   const current = currentFileViewerWidth();
   let next = current;
@@ -14911,7 +15348,7 @@ function handleFileViewerResizeKeydown(event) {
 }
 
 function syncFileViewerWidthForViewport() {
-  if (!activeFileViewer) {
+  if (!projectFiles.viewer) {
     updateFileViewerResizeHandle();
     return;
   }
@@ -14951,21 +15388,11 @@ function fileViewerImageDataUrl(data = {}) {
 
 // Changes mode only exists for Git-originated opens. Image previews are
 // read-only, while text keeps the original Source/Markdown-Preview behavior.
-function resolveFileViewerMode(viewer) {
-  if (!viewer) return "source";
-  const hasChanges = !!viewer.gitChanges;
-  if (viewer.mode === "changes") return hasChanges ? "changes" : viewer.kind === "image" ? "image" : "source";
-  if (viewer.kind === "image") return "image";
-  if (viewer.sourceAvailable === false) return hasChanges ? "changes" : "source";
-  return viewer.mode === "preview" && viewer.language === "markdown" ? "preview" : "source";
-}
+
 
 function setFileViewerMode(mode = "source") {
-  if (!activeFileViewer) return;
-  const previousMode = activeFileViewer.mode;
-  activeFileViewer.mode = resolveFileViewerMode({ ...activeFileViewer, mode });
-  if (activeFileViewer.mode === "changes" && previousMode !== "changes") clearFileViewerSelection();
-  updateFileViewerUi();
+  captureFileViewerEditorContinuity();
+  projectFiles.setMode(mode);
   if (elements.fileViewerSearchBar && !elements.fileViewerSearchBar.hidden) {
     fileViewerSearchIndex = -1;
     runFileViewerSearch({ navigate: true });
@@ -14973,14 +15400,11 @@ function setFileViewerMode(mode = "source") {
 }
 
 function setFileViewerDirty(dirty) {
-  if (!activeFileViewer || activeFileViewer.readOnly) return;
-  activeFileViewer.dirty = !!dirty;
-  if (elements.fileViewerSaveButton) elements.fileViewerSaveButton.disabled = !activeFileViewer.dirty;
-  if (activeFileViewer.dirty) setFileViewerStatus("Unsaved file edits.", "warn");
+  projectFiles.setDirty(dirty);
 }
 
 function updateFileViewerUi() {
-  const open = !!activeFileViewer;
+  const open = !!projectFiles.viewer;
   document.body.classList.toggle("file-viewer-open", open);
   syncMobileShellInteractivity();
   if (elements.fileViewerPane) elements.fileViewerPane.hidden = !open;
@@ -14991,7 +15415,7 @@ function updateFileViewerUi() {
     return;
   }
   if (!isSidePanelOverlayView()) applyFileViewerWidth(currentFileViewerWidth());
-  const viewer = activeFileViewer;
+  const viewer = projectFiles.viewer;
   captureFileViewerEditorContinuity(viewer);
   const isMarkdown = viewer.language === "markdown";
   const isImage = viewer.kind === "image";
@@ -15076,7 +15500,7 @@ function fileViewerSearchQueryText() {
 }
 
 function fileViewerSearchSurface() {
-  const mode = resolveFileViewerMode(activeFileViewer);
+  const mode = resolveFileViewerMode(projectFiles.viewer);
   if (mode === "image") return null;
   if (mode === "preview") return elements.fileViewerPreview;
   if (mode === "changes") return elements.fileViewerChanges;
@@ -15085,7 +15509,7 @@ function fileViewerSearchSurface() {
 
 function fileViewerSearchText() {
   const surface = fileViewerSearchSurface();
-  if (surface === elements.fileViewerEditor) return String(surface?.value ?? activeFileViewer?.content ?? "");
+  if (surface === elements.fileViewerEditor) return String(surface?.value ?? projectFiles.viewer?.content ?? "");
   return String(surface?.textContent || "");
 }
 
@@ -15241,7 +15665,7 @@ function stepFileViewerSearch(step) {
 }
 
 function openFileViewerSearch() {
-  if (!activeFileViewer || activeFileViewer.kind === "image" || !elements.fileViewerSearchBar) return;
+  if (!projectFiles.viewer || projectFiles.viewer.kind === "image" || !elements.fileViewerSearchBar) return;
   closeChatSearch();
   const editor = fileViewerSearchSurface() === elements.fileViewerEditor ? elements.fileViewerEditor : null;
   const selectedText = editor && editor.selectionEnd > editor.selectionStart
@@ -15268,7 +15692,7 @@ function closeFileViewerSearch({ restoreFocus = true } = {}) {
   fileViewerSearchTruncated = false;
   updateFileViewerSearchCount();
   if (!restoreFocus) return;
-  const mode = resolveFileViewerMode(activeFileViewer);
+  const mode = resolveFileViewerMode(projectFiles.viewer);
   if (mode === "image") elements.fileViewerImage?.focus({ preventScroll: true });
   else if (mode === "preview") elements.fileViewerPreview?.focus({ preventScroll: true });
   else if (mode === "changes") elements.fileViewerChanges?.focus({ preventScroll: true });
@@ -15326,7 +15750,7 @@ function renderFileViewerChangesTruncation(snapshot) {
   return notice;
 }
 
-function renderFileViewerChanges(snapshot = activeFileViewer?.gitChanges) {
+function renderFileViewerChanges(snapshot = projectFiles.viewer?.gitChanges) {
   const container = elements.fileViewerChanges;
   if (!container) return;
   if (!snapshot) {
@@ -15345,13 +15769,13 @@ function renderFileViewerChanges(snapshot = activeFileViewer?.gitChanges) {
 }
 
 function clearFileViewerSelection() {
-  fileViewerSelection = null;
+  projectFiles.setSelection(null);
   renderFileViewerSelectionBar();
 }
 
 function selectedTextFromEditor() {
   const editor = elements.fileViewerEditor;
-  if (!editor || editor.hidden || !activeFileViewer) return null;
+  if (!editor || editor.hidden || !projectFiles.viewer) return null;
   const start = editor.selectionStart;
   const end = editor.selectionEnd;
   if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return null;
@@ -15384,19 +15808,19 @@ function fileSelectionContext(text, start, end, radius = FILE_VIEWER_CONTEXT_RAD
 }
 
 function updateFileViewerSelectionFromEditor() {
-  if (!activeFileViewer) return;
+  if (!projectFiles.viewer) return;
   const selected = selectedTextFromEditor();
   if (!selected || !selected.text.trim()) {
     clearFileViewerSelection();
     return;
   }
   const context = fileSelectionContext(elements.fileViewerEditor.value || "", selected.start, selected.end);
-  fileViewerSelection = { ...context, ...selected, path: activeFileViewer.path, fileName: activeFileViewer.name };
+  projectFiles.setSelection({ ...context, ...selected, path: projectFiles.viewer.path, fileName: projectFiles.viewer.name });
   renderFileViewerSelectionBar();
 }
 
 function updateFileViewerSelectionFromPreview() {
-  if (!activeFileViewer || elements.fileViewerPreview?.hidden) return;
+  if (!projectFiles.viewer || elements.fileViewerPreview?.hidden) return;
   const selection = window.getSelection?.();
   const preview = elements.fileViewerPreview;
   if (!preview || !selection?.anchorNode || !selection?.focusNode || !preview.contains(selection.anchorNode) || !preview.contains(selection.focusNode)) return;
@@ -15405,36 +15829,36 @@ function updateFileViewerSelectionFromPreview() {
     clearFileViewerSelection();
     return;
   }
-  const content = activeFileViewer.content || "";
+  const content = projectFiles.viewer.content || "";
   const start = Math.max(0, content.indexOf(text));
   const end = start >= 0 ? start + text.length : start;
   const context = start >= 0
     ? fileSelectionContext(content, start, end)
     : { startLine: 1, endLine: textLineCount(content), startColumn: 1, endColumn: 1, fromLine: 1, toLine: textLineCount(content), context: content.slice(0, 4000) };
-  fileViewerSelection = { ...context, start, end, text, path: activeFileViewer.path, fileName: activeFileViewer.name };
+  projectFiles.setSelection({ ...context, start, end, text, path: projectFiles.viewer.path, fileName: projectFiles.viewer.name });
   renderFileViewerSelectionBar();
 }
 
 function renderFileViewerSelectionBar() {
   if (!elements.fileSelectionBar) return;
-  const hasSelection = !!fileViewerSelection?.text;
+  const hasSelection = !!projectFiles.selection?.text;
   elements.fileSelectionBar.hidden = !hasSelection;
   if (!hasSelection) return;
-  const lineLabel = fileViewerSelection.startLine === fileViewerSelection.endLine
-    ? `line ${fileViewerSelection.startLine}`
-    : `lines ${fileViewerSelection.startLine}-${fileViewerSelection.endLine}`;
-  if (elements.fileSelectionSummary) elements.fileSelectionSummary.textContent = `${lineLabel} · ${fileViewerSelection.text.length} chars selected`;
+  const lineLabel = projectFiles.selection.startLine === projectFiles.selection.endLine
+    ? `line ${projectFiles.selection.startLine}`
+    : `lines ${projectFiles.selection.startLine}-${projectFiles.selection.endLine}`;
+  if (elements.fileSelectionSummary) elements.fileSelectionSummary.textContent = `${lineLabel} · ${projectFiles.selection.text.length} chars selected`;
 }
 
 function fileSelectionPrompt() {
-  if (!activeFileViewer || !fileViewerSelection?.text) return "";
+  if (!projectFiles.viewer || !projectFiles.selection?.text) return "";
   const comment = (elements.fileSelectionCommentInput?.value || "").trim();
-  const selection = fileViewerSelection;
+  const selection = projectFiles.selection;
   const range = selection.startLine === selection.endLine
     ? `line ${selection.startLine}, columns ${selection.startColumn}-${selection.endColumn}`
     : `lines ${selection.startLine}-${selection.endLine}`;
   return [
-    `File selection from ${activeFileViewer.path} (${range}).`,
+    `File selection from ${projectFiles.viewer.path} (${range}).`,
     comment ? `User comment: ${comment}` : "User comment: <none>",
     "",
     "Selected text:",
@@ -15464,10 +15888,10 @@ async function sendFileSelectionToSession() {
   }
 }
 
-function captureFileViewerEditorContinuity(viewer = activeFileViewer) {
+function captureFileViewerEditorContinuity(viewer = projectFiles.viewer) {
   const editor = elements.fileViewerEditor;
-  if (!viewer || !editor || editor.hidden || editor.dataset.fileViewerPath !== viewer.path) return;
-  viewer.editorContinuity = {
+  if (!viewer || !editor || editor.hidden || editor.dataset.fileViewerPath !== viewer.path || editor.value !== viewer.content) return;
+  projectFiles.cache(activeTabId, {
     path: viewer.path,
     content: viewer.content,
     selectionStart: editor.selectionStart ?? editor.value.length,
@@ -15476,10 +15900,10 @@ function captureFileViewerEditorContinuity(viewer = activeFileViewer) {
     scrollTop: editor.scrollTop,
     scrollLeft: editor.scrollLeft,
     focused: document.activeElement === editor,
-  };
+  });
 }
 
-function restoreFileViewerEditorContinuity(viewer = activeFileViewer) {
+function restoreFileViewerEditorContinuity(viewer = projectFiles.viewer) {
   const editor = elements.fileViewerEditor;
   const state = viewer?.editorContinuity;
   if (!editor || !state || state.path !== viewer.path || state.content !== viewer.content || editor.dataset.fileViewerPath !== viewer.path) return;
@@ -15499,18 +15923,17 @@ function restoreFileViewerEditorContinuity(viewer = activeFileViewer) {
 }
 
 function cacheActiveFileViewerForTab(tabId = activeTabId) {
-  if (!tabId) return;
   captureFileViewerEditorContinuity();
-  if (activeFileViewer) fileViewersByTab.set(tabId, activeFileViewer);
-  else fileViewersByTab.delete(tabId);
-  if (fileViewerSelection) fileViewerSelectionsByTab.set(tabId, fileViewerSelection);
-  else fileViewerSelectionsByTab.delete(tabId);
+  projectFiles.cache(tabId);
 }
 
 function resetFileViewerUi() {
-  fileViewerOpenRequestSerial += 1;
-  activeFileViewer = null;
-  clearFileViewerSelection();
+  projectFiles.resetActive();
+}
+
+function resetFileViewerDom() {
+  closeFileViewerSearch({ restoreFocus: false });
+  renderFileViewerSelectionBar();
   document.body.classList.remove("file-viewer-open");
   syncMobileShellInteractivity();
   updateFileViewerResizeHandle();
@@ -15536,207 +15959,45 @@ function resetFileViewerUi() {
 }
 
 function restoreFileViewerForActiveTab() {
-  activeFileViewer = activeTabId ? fileViewersByTab.get(activeTabId) || null : null;
-  fileViewerSelection = activeTabId ? fileViewerSelectionsByTab.get(activeTabId) || null : null;
-  updateFileViewerUi();
-  if (activeFileViewer?.dirty) setFileViewerStatus("Unsaved file edits.", "warn");
-  else if (activeFileViewer) setFileViewerStatus("Restored for this terminal.", "success");
+  projectFiles.activate(activeTabId);
 }
 
 function closeFileViewer() {
-  if (activeTabId) {
-    fileViewersByTab.delete(activeTabId);
-    fileViewerSelectionsByTab.delete(activeTabId);
+  projectFiles.close();
+}
+
+function handleProjectFileChange(reason) {
+  if (reason === "selection") { renderFileViewerSelectionBar(); return; }
+  if (reason === "continuity") return;
+  if (reason === "content") {
+    if (elements.fileViewerSaveButton) elements.fileViewerSaveButton.disabled = !projectFiles.viewer?.dirty || projectFiles.viewer?.readOnly === true;
+    return;
   }
-  resetFileViewerUi();
+  if (["reset", "close", "open", "activate"].includes(reason) || !projectFiles.viewer) resetFileViewerDom();
+  updateFileViewerUi();
 }
 
-// Side-panel Git categories are UI labels; the read API uses its own allowlist.
-const GIT_FILE_DIFF_CATEGORY_BY_PANEL = Object.freeze({
-  staged: "staged",
-  changes: "unstaged",
-  conflicted: "conflicted",
-  untracked: "untracked",
-});
-
-function gitFileDiffCategory(panelCategory = "") {
-  return GIT_FILE_DIFF_CATEGORY_BY_PANEL[String(panelCategory || "").trim()] || "";
+function openFileInViewer(path = "", options = {}) {
+  return projectFiles.open(path, options);
 }
 
-// The changes view is the bounded snapshot loaded when the file was opened;
-// reopening the Git row refreshes it. Failures become a visible viewer state
-// instead of a rejected open.
-async function loadGitFileChangesSnapshot(repoRelPath, category, tabId) {
-  const snapshot = { category, path: repoRelPath, label: "", command: "", diff: "", truncated: false, capBytes: 0, error: "" };
-  try {
-    const params = new URLSearchParams({ path: repoRelPath, category });
-    const response = await api(`/api/git-file-diff?${params.toString()}`, { tabId });
-    if (!response.ok) throw new Error(response.error || "Failed to load Git changes for this file");
-    const data = response.data || {};
-    return {
-      ...snapshot,
-      ...data,
-      category,
-      path: data.path || repoRelPath,
-      diff: String(data.diff || ""),
-      truncated: data.truncated === true,
-      capBytes: Number(data.capBytes) || 0,
-      contentError: data.error ? String(data.error) : "",
-      error: "",
-    };
-  } catch (error) {
-    return { ...snapshot, error: error.message || String(error) };
-  }
-}
-
-function gitFileChangesPlaceholder(category, repoRelPath, requestSerial) {
-  return { category, path: repoRelPath, label: "", command: "", diff: "", truncated: false, capBytes: 0, loading: true, requestSerial, error: "" };
-}
-
-async function applyGitFileChangesSnapshot(request, tabContext, viewerPath, requestSerial) {
-  const snapshot = await request;
-  const viewer = tabContext.tabId === activeTabId ? activeFileViewer : fileViewersByTab.get(tabContext.tabId);
-  if (!viewer?.gitChanges?.loading || viewer.path !== viewerPath || viewer.gitChanges.requestSerial !== requestSerial) return;
-  viewer.gitChanges = snapshot;
-  if (viewer === activeFileViewer) updateFileViewerUi();
-}
-
-async function openFileInViewer(path = "", { gitCategory = "", gitPath = "" } = {}) {
-  const normalized = normalizeFileTreePath(path);
-  if (!normalized) return;
-  if (activeFileViewer?.dirty && activeFileViewer.path !== normalized) {
-    if (!(await confirmDiscardEdits({ what: "unsaved file edits", target: activeFileViewer.path }))) return;
-  }
-  const openRequestSerial = ++fileViewerOpenRequestSerial;
-  const tabContext = activeTabContext();
-  fileTreeState.selectedPath = normalized;
-  renderFileTree();
-  setFileViewerStatus(`Opening ${normalized}…`);
-  const category = gitFileDiffCategory(gitCategory);
-  const changesPath = normalizeFileTreePath(gitPath) || normalized;
-  const changesRequestSerial = category ? ++fileViewerGitChangesRequestSerial : 0;
-  const changesRequest = category ? loadGitFileChangesSnapshot(changesPath, category, tabContext.tabId) : null;
-  try {
-    const response = await api(fileApiPath("/api/files/content", normalized), { tabId: tabContext.tabId });
-    if (!isCurrentTabContext(tabContext) || openRequestSerial !== fileViewerOpenRequestSerial) return;
-    const data = response.data || {};
-    const gitChanges = changesRequest ? gitFileChangesPlaceholder(category, changesPath, changesRequestSerial) : null;
-    const kind = data.kind === "image" ? "image" : "text";
-    const imageUrl = kind === "image" ? fileViewerImageDataUrl(data) : "";
-    if (kind === "image" && !imageUrl) throw new Error("Image preview data is invalid or unsupported");
-    activeFileViewer = {
-      path: normalizeFileTreePath(data.path || normalized),
-      name: data.name || fileDisplayName(normalized),
-      content: kind === "text" ? String(data.content || "") : "",
-      size: Number(data.size) || 0,
-      mtimeMs: Number(data.mtimeMs) || 0,
-      extension: data.extension || "",
-      language: kind === "text" ? data.language || "text" : "image",
-      kind,
-      mimeType: kind === "image" ? String(data.mimeType || "") : "",
-      imageUrl,
-      mode: gitChanges ? "changes" : kind === "image" ? "image" : data.language === "markdown" ? "preview" : "source",
-      dirty: false,
-      readOnly: kind === "image",
-      sourceAvailable: kind === "text",
-      gitChanges,
-    };
-    if (elements.fileViewerEditor) elements.fileViewerEditor.value = activeFileViewer.content;
-    clearFileViewerSelection();
-    cacheActiveFileViewerForTab();
-    updateFileViewerUi();
-    setFileViewerStatus(kind === "image" ? "Image opened in WebUI (read-only)." : "Opened in WebUI.", "success");
-    if (changesRequest) void applyGitFileChangesSnapshot(changesRequest, tabContext, activeFileViewer.path, changesRequestSerial);
-  } catch (error) {
-    const message = error.message || String(error);
-    // A deleted tracked file has no live source but still has a diff worth showing.
-    const gitChanges = changesRequest ? await changesRequest : null;
-    if (!isCurrentTabContext(tabContext) || openRequestSerial !== fileViewerOpenRequestSerial) return;
-    if (gitChanges && !gitChanges.error) {
-      activeFileViewer = {
-        path: normalized,
-        name: fileDisplayName(normalized),
-        content: "",
-        size: 0,
-        mtimeMs: 0,
-        extension: fileExtensionForPath(normalized),
-        language: fileLanguageForPath(normalized),
-        mode: "changes",
-        dirty: false,
-        readOnly: true,
-        sourceAvailable: false,
-        gitChanges,
-      };
-      if (elements.fileViewerEditor) elements.fileViewerEditor.value = "";
-      clearFileViewerSelection();
-      cacheActiveFileViewerForTab();
-      updateFileViewerUi();
-      setFileViewerStatus("File content unavailable; showing Git changes (read-only).", "warn");
-      return;
-    }
-    setFileViewerStatus(message, "error");
-    addEvent(`file open failed: ${message}`, "error");
-  }
-}
-
-async function openAurReviewReportInViewer(path = "", repoRoot = "") {
+function openAurReviewReportInViewer(path = "", repoRoot = "") {
   const normalized = aurReviewSafePath(path);
-  const expectedRepoRoot = String(repoRoot || "");
-  if (!normalized || !expectedRepoRoot) return;
-  const tabContext = activeTabContext();
-  setFileViewerStatus(`Opening ${normalized}…`);
-  try {
-    const params = new URLSearchParams({ path: normalized, repoRoot: expectedRepoRoot });
-    const response = await api(`/api/aur-review/report-content?${params.toString()}`, { tabId: tabContext.tabId });
-    if (!isCurrentTabContext(tabContext)) return;
-    const data = response.data || {};
-    activeFileViewer = {
-      path: normalizeFileTreePath(data.path || normalized),
-      name: data.name || fileDisplayName(normalized),
-      content: String(data.content || ""),
-      size: Number(data.size) || 0,
-      mtimeMs: Number(data.mtimeMs) || 0,
-      extension: data.extension || "",
-      language: data.language || "text",
-      mode: data.language === "markdown" ? "preview" : "source",
-      dirty: false,
-      readOnly: true,
-    };
-    if (elements.fileViewerEditor) elements.fileViewerEditor.value = activeFileViewer.content;
-    clearFileViewerSelection();
-    cacheActiveFileViewerForTab();
-    updateFileViewerUi();
-    setFileViewerStatus("Report opened in WebUI (read-only).", "success");
-  } catch (error) {
-    if (isCurrentTabContext(tabContext)) {
-      setFileViewerStatus(error.message || String(error), "error");
-      addEvent(`review report open failed: ${error.message || String(error)}`, "error");
-    }
-  }
+  if (!normalized || !repoRoot) return;
+  return projectFiles.openReport(normalized, String(repoRoot));
 }
 
 async function saveActiveFileViewer() {
-  if (!activeFileViewer || !elements.fileViewerEditor) return;
-  if (activeFileViewer.readOnly) {
-    setFileViewerStatus("This report is read-only.", "info");
-    return;
-  }
-  const tabContext = activeTabContext();
-  const content = elements.fileViewerEditor.value || "";
+  const viewer = projectFiles.viewer;
+  if (!viewer || !elements.fileViewerEditor) return;
+  const target = projectTargetFromContext();
   if (elements.fileViewerSaveButton) elements.fileViewerSaveButton.disabled = true;
-  setFileViewerStatus(`Saving ${activeFileViewer.path}…`);
   try {
-    const response = await api("/api/files/content", { method: "POST", body: { path: activeFileViewer.path, content, mtimeMs: activeFileViewer.mtimeMs }, tabId: tabContext.tabId });
-    if (!isCurrentTabContext(tabContext)) return;
-    const data = response.data || {};
-    activeFileViewer = { ...activeFileViewer, ...data, path: normalizeFileTreePath(data.path || activeFileViewer.path), content, dirty: false };
-    cacheActiveFileViewerForTab();
-    updateFileViewerUi();
-    await loadFileTreeDirectory(fileParentPath(activeFileViewer.path), { force: true });
-    setFileViewerStatus("Saved.", "success");
-  } catch (error) {
-    if (isCurrentTabContext(tabContext)) setFileViewerStatus(error.message || String(error), "error");
-    if (activeFileViewer && elements.fileViewerSaveButton) elements.fileViewerSaveButton.disabled = false;
+    return await projectFiles.save(elements.fileViewerEditor.value || "");
+  } finally {
+    if (isCurrentProjectTarget(target) && projectFiles.viewer === viewer && elements.fileViewerSaveButton) {
+      elements.fileViewerSaveButton.disabled = viewer.readOnly === true || !viewer.dirty;
+    }
   }
 }
 
@@ -15819,7 +16080,7 @@ function syncTabMetadata(nextTabs = []) {
       clearFeatureDecisionStateForTab(tabId);
       tabMessagesCache.delete(tabId);
       widgetsByTab.delete(tabId);
-      appRunnerDataByTab.delete(tabId);
+      projectRunners.forgetTab(tabId);
       conversationModeByTab.delete(tabId);
       workflowModeByTab.delete(tabId);
       workflowModeTogglePendingByTab.delete(tabId);
@@ -15846,10 +16107,18 @@ function syncTabMetadata(nextTabs = []) {
     if (!liveIds.has(tabId)) tabMessagesCache.delete(tabId);
   }
   pruneSkillUsageForKnownTabs(liveIds);
+  reconcileSessionShelves(nextTabs, { pruneMissing: true });
+}
+
+function applyAuthoritativeTabSnapshot(nextTabs) {
+  // A completed mutation is newer than every metadata request already in flight.
+  tabsRefreshSerial += 1;
+  tabs = nextTabs;
 }
 
 function applyTabMetadata(tab) {
   if (!tab?.id) return false;
+  tabsRefreshSerial += 1;
   const index = tabs.findIndex((item) => item.id === tab.id);
   if (index === -1) tabs.push(tab);
   else tabs[index] = { ...tabs[index], ...tab };
@@ -15870,12 +16139,27 @@ function applyResponseTab(response) {
 function syncResponseTabs(response) {
   const payload = response?.data || {};
   if (Array.isArray(payload.tabs)) {
-    tabs = payload.tabs;
+    applyAuthoritativeTabSnapshot(payload.tabs);
     syncTabMetadata(tabs);
   }
   const tab = response?.tab || payload.tab || null;
   if (tab) applyTabMetadata(tab);
   return tab;
+}
+
+async function followFreshConversationResponse(response, sourceContext) {
+  const nextTabId = response?.nextTabId || response?.data?.nextTabId;
+  if (!nextTabId) return false;
+  syncResponseTabs(response);
+  if (!tabs.some(tab => tab.id === nextTabId)) await refreshTabs();
+  if (isCurrentTabContext(sourceContext) && tabs.some(tab => tab.id === nextTabId)) {
+    await switchTab(nextTabId);
+    if (activeTabId === nextTabId) {
+      navigateFocusedShell("conversation", null);
+      focusPromptInput({ defer: true });
+    }
+  }
+  return true;
 }
 
 async function switchToResponseTab(response) {
@@ -15887,6 +16171,19 @@ async function switchToResponseTab(response) {
 function activityForTab(tab) {
   if (!tab?.id) return normalizeTabActivity();
   return tabActivities.get(tab.id) || setTabActivity(tab.id, tab.activity) || normalizeTabActivity();
+}
+
+/**
+ * Returns the label shown for a stored Pi conversation title.
+ * Older servers named default conversations "Terminal N"; those display as "Thread N".
+ * The stored title is never rewritten, so renames, workspaces, and saved sessions keep their data.
+ * @param {unknown} title stored conversation title
+ * @returns {string} display label, or "" when the title is empty or not a string
+ */
+function threadDisplayTitle(title) {
+  if (typeof title !== "string") return "";
+  const legacy = /^Terminal (\d+)$/.exec(title);
+  return legacy ? `Thread ${legacy[1]}` : title;
 }
 
 function tabIndicator(tab) {
@@ -15915,24 +16212,11 @@ function hasWorkingTab() {
 }
 
 function scheduleRefreshTabs(delay = 1500) {
-  clearTimeout(refreshTabsTimer);
-  refreshTabsTimer = setTimeout(() => {
-    refreshTabsTimer = null;
-    if (openTerminalTabGroupKey) {
-      scheduleRefreshTabs(600);
-      return;
-    }
-    refreshTabs().catch((error) => addEvent(error.message, "error"));
-  }, delay);
+  attentionScheduler.request(delay);
 }
 
 function syncTabPolling() {
-  if (hasWorkingTab()) {
-    if (!refreshTabsTimer) scheduleRefreshTabs();
-  } else {
-    clearTimeout(refreshTabsTimer);
-    refreshTabsTimer = null;
-  }
+  attentionScheduler.sync();
 }
 
 function markTabWorkingLocally(tabId = activeTabId, { runStarted = false } = {}) {
@@ -16097,18 +16381,55 @@ function updateDocumentTitle() {
     return;
   }
   const tab = activeTab();
-  document.title = tab ? `Pi Web UI · ${tab.title}` : "Pi Web UI";
+  document.title = tab ? `Pi Web UI · ${threadDisplayTitle(tab.title)}` : "Pi Web UI";
+}
+
+const draftConversations = createDraftConversations();
+const draftSubmissions = new Set();
+let draftNavigationRevision = 0;
+let reportedDraftStorageError = "";
+
+function reportDraftStorageError() {
+  const message = draftConversations.error;
+  if (message && message !== reportedDraftStorageError) {
+    addEvent(message, "error");
+  }
+  let status = document.getElementById("draftStorageStatus");
+  if (!status && message) {
+    status = make("p", "draft-storage-status");
+    status.id = "draftStorageStatus";
+    status.setAttribute("role", "status");
+    elements.composer.append(status);
+  }
+  if (status) {
+    status.textContent = message;
+    status.hidden = !message;
+  }
+  reportedDraftStorageError = message;
+}
+
+function saveClientDraft({ leaving = false } = {}) {
+  const id = draftConversations.activeId;
+  if (activeTabId || !id) return;
+  const text = elements.promptInput.value || "";
+  // The first send clears the composer at once. Until the thread exists, the
+  // stored draft keeps the submitted text so a failed start can restore it.
+  if (!draftSubmissions.has(id) || text.trim()) draftConversations.edit(id, text);
+  if (leaving && !elements.promptInput.value.trim() && !draftSubmissions.has(id)) draftConversations.remove(id);
+  else draftConversations.save(id);
+  reportDraftStorageError();
 }
 
 function saveActiveDraft() {
-  if (activeTabId) tabDrafts.set(activeTabId, elements.promptInput.value || "");
+  if (activeTabId) composerStore.setDraft(activeTabId, elements.promptInput.value || "");
+  else saveClientDraft({ leaving: true });
   persistMobileContinuityState();
   persistDesktopDrafts();
 }
 
 function restoreActiveDraft() {
   resetPromptHistoryNavigation();
-  elements.promptInput.value = activeTabId ? tabDrafts.get(activeTabId) || "" : "";
+  elements.promptInput.value = activeTabId ? composerStore.getDraft(activeTabId) || "" : draftConversations.get(draftConversations.activeId)?.text || "";
   resizePromptInput();
   renderCommandSuggestions();
   renderAttachmentTray();
@@ -16139,8 +16460,7 @@ function clearRefreshTimers() {
 }
 
 function cancelPendingDialogs() {
-  const pending = activeDialog ? [activeDialog] : [];
-  pending.push(...dialogQueue.splice(0));
+  const pending = extensionRequests.clear();
   for (const request of pending) {
     if (!request?.id || !EXTENSION_UI_BLOCKING_METHODS.has(request.method)) continue;
     api("/api/extension-ui-response", {
@@ -16149,7 +16469,6 @@ function cancelPendingDialogs() {
       tabId: request.tabId || activeTabId,
     }).catch((error) => console.warn("failed to cancel stale extension dialog", error));
   }
-  activeDialog = null;
   activeDialogCancel = null;
   if (elements.dialog.open) elements.dialog.close();
 }
@@ -16260,10 +16579,9 @@ function cachedStateForTabSwitch(tabId = activeTabId) {
   };
 }
 
-function resetActiveTabUi() {
+function resetActiveTabUi({ preserveFileTree = false } = {}) {
   clearRefreshTimers();
-  eventSource?.close();
-  eventSource = null;
+  sessionEvents.close();
   setControlsPendingModel("");
   setControlsPendingThinking("");
   currentState = cachedStateForTabSwitch(activeTabId);
@@ -16276,7 +16594,7 @@ function resetActiveTabUi() {
   latestMessages = [];
   latestMessagesSessionKey = "";
   resetFileViewerUi();
-  resetFileTreeState();
+  if (!preserveFileTree) resetFileTreeState();
   restoreFileViewerForActiveTab();
   clearRunIndicatorActivity({ render: false });
   if (currentState) syncRunIndicatorFromState(currentState);
@@ -16317,7 +16635,7 @@ function resetActiveTabUi() {
   renderGitWorkflow();
   // renderMessages() is transcript-only, so tab-level chrome is rendered here
   // explicitly whether or not a cached transcript was restored.
-  restoreCachedMessagesForActiveTab();
+  if (!restoreCachedMessagesForActiveTab() && !activeTabId) renderMessages([]);
   renderFooter();
   renderFeedbackTray();
   restoreComposerActionSlotLayout();
@@ -16408,6 +16726,7 @@ function terminalDisplayGroupDetail(group, fallback = "group") {
 }
 
 function gitPanelSectionExpanded() {
+  if (focusedShell?.active) return focusedShell.inspector === "git" && !["home", "settings"].includes(focusedShellState.destination);
   const section = elements.sidePanel?.querySelector('[data-side-panel-section="git"]');
   return Boolean(section && !section.hidden && !section.classList.contains("collapsed"));
 }
@@ -17061,6 +17380,14 @@ function renderGitPanel() {
   for (const key of [...gitPanelState.openFolders.keys()]) if (!liveRoots.has(key.split("\u0000", 1)[0])) gitPanelState.openFolders.delete(key);
   const liveCardKeys = new Set(cards.filter((card) => card.root).map((card) => card.key));
   if (gitPanelState.expandedCardKey && !liveCardKeys.has(gitPanelState.expandedCardKey)) gitPanelState.expandedCardKey = "";
+  for (const root of gitPanelState.focusedInitializedRoots) {
+    if (!liveRoots.has(root)) gitPanelState.focusedInitializedRoots.delete(root);
+  }
+  const activeCard = cards.find(card => card.root && card.candidates.some(candidate => candidate.tabId === activeTabId));
+  if (focusedShell?.active && activeCard && !gitPanelState.focusedInitializedRoots.has(activeCard.root)) {
+    gitPanelState.focusedInitializedRoots.add(activeCard.root);
+    if (!gitPanelState.expandedCardKey) gitPanelState.expandedCardKey = activeCard.key;
+  }
   closeGitPanelContextMenu({ returnFocus: false });
   const repositoryCount = cards.filter((card) => card.root).length;
   const discovering = [...gitPanelState.discovery.values()].some((entry) => entry.loading);
@@ -17101,7 +17428,7 @@ function renderGitPanel() {
   }
   if (elements.gitPanelStatus) {
     elements.gitPanelStatus.textContent = !groups.length
-      ? "No terminal tabs are open."
+      ? "No threads are open."
       : discovering
         ? "Discovering repositories…"
         : `${repositoryCount} Git ${repositoryCount === 1 ? "repository" : "repositories"} · ⋯ or right-click for actions`;
@@ -17112,10 +17439,7 @@ function renderGitPanel() {
 
 function tabAppRunnerRun(tab) {
   if (!tab?.id) return null;
-  const cached = appRunnerDataByTab.get(tab.id);
-  if (cached && Object.prototype.hasOwnProperty.call(cached, "activeRun")) return cached.activeRun || null;
-  if (Object.prototype.hasOwnProperty.call(tab, "appRunner")) return tab.appRunner || null;
-  return null;
+  return projectRunners.getData(tab.id).activeRun || tab.appRunner || null;
 }
 
 function tabAppRunnerRunningRun(tab) {
@@ -17146,7 +17470,7 @@ function tabWorkflowModeActive(tab) {
 }
 
 function terminalTabWorkspaceName(tab) {
-  return tabGroupTitle(tab?.cwd, "workspace");
+  return tab?.workspaceKind === "no-project" ? "No Project" : tabGroupTitle(tab?.cwd, "workspace");
 }
 
 function terminalTabMeta(tab, indicator) {
@@ -17193,7 +17517,7 @@ function terminalTabGroupRepresentedTab(groupTabs = []) {
 
 function terminalTabTooltip(tab) {
   const lines = [
-    `${tab?.title || "Terminal tab"} · ${tabIndicator(tab).label}`,
+    `${threadDisplayTitle(tab?.title) || "Thread"} · ${tabIndicator(tab).label}`,
     `Working folder: ${normalizeDisplayPath(tab?.cwd || "") || "Not set"}`,
   ];
   const git = terminalTabGitTooltip(tab);
@@ -17234,7 +17558,7 @@ function terminalTabGroupActiveTooltip(groupTabs = []) {
   return [
     appRunners ? `${appRunners} app runner${appRunners === 1 ? "" : "s"}` : "",
     voices ? `${voices} voice` : "",
-    workflowTabs ? `${workflowTabs} workflow tab${workflowTabs === 1 ? "" : "s"}` : "",
+    workflowTabs ? `${workflowTabs} workflow thread${workflowTabs === 1 ? "" : "s"}` : "",
     workflowRuns ? `${workflowRuns} workflow run${workflowRuns === 1 ? "" : "s"}` : "",
   ].filter(Boolean).join(" · ");
 }
@@ -17242,15 +17566,15 @@ function terminalTabGroupActiveTooltip(groupTabs = []) {
 function terminalTabGroupTooltip(group, groupTitle = terminalDisplayGroupTitle(group)) {
   const groupTabs = group?.tabs || [];
   const lines = [
-    `${groupTitle} · ${groupTabs.length} tab${groupTabs.length === 1 ? "" : "s"}`,
+    `${groupTitle} · ${groupTabs.length} thread${groupTabs.length === 1 ? "" : "s"}`,
     terminalTabGroupWorkspaceTooltip(group),
-    `Status: ${terminalTabGroupStatusTooltip(groupTabs) || "No tabs"}`,
+    `Status: ${terminalTabGroupStatusTooltip(groupTabs) || "No threads"}`,
   ];
   const active = terminalTabGroupActiveTooltip(groupTabs);
   if (active) lines.push(`Active: ${active}`);
   const prompt = terminalTabPromptTooltip(terminalTabGroupRepresentedTab(groupTabs));
   if (prompt) lines.push(prompt);
-  lines.push(isMobileView() ? "Tap to open group terminals" : "Click to switch · Drop tabs here to add");
+  lines.push(isMobileView() ? "Tap to open group threads" : "Click to switch · Drop threads here to add");
   return lines.join("\n");
 }
 
@@ -17277,14 +17601,14 @@ function createTerminalTabCwdAddMenu(tab) {
   const menu = make("div", "terminal-tab-cwd-add-menu");
   menu.setAttribute("role", "group");
   menu.setAttribute("aria-label", `Actions for ${cwdTitle}`);
-  const add = make("button", "terminal-tab-group-add terminal-tab-cwd-add", "+ Tab");
+  const add = make("button", "terminal-tab-group-add terminal-tab-cwd-add", "+ Thread");
   add.type = "button";
   add.draggable = false;
-  const addTooltip = `Add tab in ${cwdTitle}`;
+  const addTooltip = `Add thread in ${cwdTitle}`;
   applyStyledTooltip(add, addTooltip, { ariaLabel: addTooltip, targetKey: `terminal-tab:${tab.id}:add` });
   add.addEventListener("click", (event) => {
     event.stopPropagation();
-    void createTerminalTab(tab.cwd || currentDirectoryForNewTab(), { triggerButton: add });
+    void createTerminalTab(tab.cwd || currentDirectoryForNewTab(), { triggerButton: add, workspaceKind: tab.workspaceKind || "project" });
   });
   menu.append(add);
   return menu;
@@ -17307,25 +17631,23 @@ function renderTerminalTab(tab, { showCwdAdd = false } = {}) {
   button.draggable = false;
   button.setAttribute("role", "tab");
   button.setAttribute("aria-selected", isActive ? "true" : "false");
-  button.setAttribute("aria-label", `${tab.title}: ${indicator.label}${appRunnerLabel ? `, ${appRunnerLabel}` : ""}${conversationLabel}${workflowModeActive ? ", workflow mode active" : ""}${workflowCount ? `, ${workflowCount} workflow runs active` : ""}`);
+  button.setAttribute("aria-label", `${threadDisplayTitle(tab.title)}: ${indicator.label}${appRunnerLabel ? `, ${appRunnerLabel}` : ""}${conversationLabel}${workflowModeActive ? ", workflow mode active" : ""}${workflowCount ? `, ${workflowCount} workflow runs active` : ""}`);
   applyStyledTooltip(button, terminalTabTooltip(tab), { ariaLabel: false, align: "start", description: true, preserveInternalSpaces: true, variant: "workspace", targetKey: `terminal-tab:${tab.id}:switch` });
-  appendTerminalTabContent(button, { title: tab.title, indicator, meta: terminalTabMeta(tab, indicator), appRunnerRun, conversationModeActive, workflowModeActive, workflowCount });
+  appendTerminalTabContent(button, { title: threadDisplayTitle(tab.title), indicator, meta: terminalTabMeta(tab, indicator), appRunnerRun, conversationModeActive, workflowModeActive, workflowCount });
   button.addEventListener("click", () => switchTab(tab.id));
   wrapper.append(button, createTerminalTabActions(tab));
   if (showCwdAdd) wrapper.append(createTerminalTabCwdAddMenu(tab));
 
-  if (tabs.length > 1) {
-    const close = make("button", "terminal-tab-close", "×");
-    close.type = "button";
-    close.draggable = false;
-    const closeTooltip = `Close ${tab.title}`;
-    applyStyledTooltip(close, closeTooltip, { ariaLabel: closeTooltip, targetKey: `terminal-tab:${tab.id}:close` });
-    close.addEventListener("click", (event) => {
-      event.stopPropagation();
-      closeTerminalTab(tab.id);
-    });
-    wrapper.append(close);
-  }
+  const close = make("button", "terminal-tab-close", "×");
+  close.type = "button";
+  close.draggable = false;
+  const closeTooltip = `Close ${threadDisplayTitle(tab.title)}`;
+  applyStyledTooltip(close, closeTooltip, { ariaLabel: closeTooltip, targetKey: `terminal-tab:${tab.id}:close` });
+  close.addEventListener("click", (event) => {
+    event.stopPropagation();
+    closeTerminalTab(tab.id);
+  });
+  wrapper.append(close);
 
   return wrapper;
 }
@@ -17347,27 +17669,25 @@ function renderTerminalTabGroupItem(tab, group) {
   button.draggable = false;
   button.setAttribute("role", "tab");
   button.setAttribute("aria-selected", isActive ? "true" : "false");
-  button.setAttribute("aria-label", `${tab.title}: ${indicator.label}${appRunnerLabel ? `, ${appRunnerLabel}` : ""}${conversationLabel}${workflowModeActive ? ", workflow mode active" : ""}${workflowCount ? `, ${workflowCount} workflow runs active` : ""}`);
+  button.setAttribute("aria-label", `${threadDisplayTitle(tab.title)}: ${indicator.label}${appRunnerLabel ? `, ${appRunnerLabel}` : ""}${conversationLabel}${workflowModeActive ? ", workflow mode active" : ""}${workflowCount ? `, ${workflowCount} workflow runs active` : ""}`);
   applyStyledTooltip(button, terminalTabTooltip(tab), { ariaLabel: false, align: "start", description: true, preserveInternalSpaces: true, variant: "workspace", targetKey: `terminal-tab:${tab.id}:switch` });
-  appendTerminalTabContent(button, { title: tab.title, indicator, meta: terminalTabMeta(tab, indicator), appRunnerRun, conversationModeActive, workflowModeActive, workflowCount });
+  appendTerminalTabContent(button, { title: threadDisplayTitle(tab.title), indicator, meta: terminalTabMeta(tab, indicator), appRunnerRun, conversationModeActive, workflowModeActive, workflowCount });
   button.addEventListener("click", (event) => {
     event.stopPropagation();
     switchTab(tab.id);
   });
   item.append(button, createTerminalTabActions(tab));
 
-  if (tabs.length > 1) {
-    const close = make("button", "terminal-tab-close terminal-tab-group-item-close", "×");
-    close.type = "button";
-    close.draggable = false;
-    const closeTooltip = `Close ${tab.title}`;
-    applyStyledTooltip(close, closeTooltip, { ariaLabel: closeTooltip, targetKey: `terminal-tab:${tab.id}:close` });
-    close.addEventListener("click", (event) => {
-      event.stopPropagation();
-      closeTerminalTab(tab.id);
-    });
-    item.append(close);
-  }
+  const close = make("button", "terminal-tab-close terminal-tab-group-item-close", "×");
+  close.type = "button";
+  close.draggable = false;
+  const closeTooltip = `Close ${threadDisplayTitle(tab.title)}`;
+  applyStyledTooltip(close, closeTooltip, { ariaLabel: closeTooltip, targetKey: `terminal-tab:${tab.id}:close` });
+  close.addEventListener("click", (event) => {
+    event.stopPropagation();
+    closeTerminalTab(tab.id);
+  });
+  item.append(close);
 
   return item;
 }
@@ -17389,8 +17709,9 @@ function renderTerminalTabGroup(group, groupCount = 1) {
   const groupAppRunnerMeta = appRunnerCount > 1 ? `${appRunnerCount} app runners` : appRunnerRun ? "app runner" : "";
   const workflowCount = groupTabs.reduce((total, tab) => total + workflowRunningCountForTab(tab.id), 0);
   const workflowModeActive = groupTabs.some(tabWorkflowModeActive);
-  const groupTitle = terminalDisplayGroupTitle(group, activeGroupTab?.title || "group");
-  const activeTitle = activeGroupTab?.title || groupTitle;
+  const activeGroupTitle = threadDisplayTitle(activeGroupTab?.title);
+  const groupTitle = terminalDisplayGroupTitle(group, activeGroupTitle || "group");
+  const activeTitle = activeGroupTitle || groupTitle;
   const wrapper = make("div", `terminal-tab terminal-tab-group${group.custom ? " terminal-tab-custom-group" : ""} activity-${indicator.state}${isActive ? " active" : ""}${isStopped ? " stopped" : ""}${appRunnerRun ? " app-runner-running" : ""}${workflowModeActive ? " workflow-mode-running" : ""}${workflowCount ? " workflow-run-running" : ""}`);
   wrapper.dataset.groupKey = group.key;
   if (group.customGroupId) wrapper.dataset.customGroupId = group.customGroupId;
@@ -17401,7 +17722,7 @@ function renderTerminalTabGroup(group, groupCount = 1) {
   });
   wrapper.addEventListener("pointerleave", (event) => {
     if (event.pointerType === "touch") return;
-    clearOpenTerminalTabGroup(group.key);
+    clearOpenTerminalTabGroup(group.key, { preserveFocus: true });
   });
   wrapper.addEventListener("focusin", () => {
     if (!isMobileView()) setOpenTerminalTabGroup(group.key);
@@ -17409,7 +17730,7 @@ function renderTerminalTabGroup(group, groupCount = 1) {
   wrapper.addEventListener("focusout", () => {
     if (isMobileView()) return;
     setTimeout(() => {
-      if (!wrapper.contains(document.activeElement)) clearOpenTerminalTabGroup(group.key);
+      if (!wrapper.contains(document.activeElement)) clearOpenTerminalTabGroup(group.key, { preserveFocus: true });
     }, 0);
   });
   const button = make("button", "terminal-tab-button terminal-tab-group-button");
@@ -17419,7 +17740,7 @@ function renderTerminalTabGroup(group, groupCount = 1) {
   button.setAttribute("aria-selected", isActive ? "true" : "false");
   button.setAttribute("aria-haspopup", "true");
   button.setAttribute("aria-expanded", group.key === openTerminalTabGroupKey ? "true" : "false");
-  button.setAttribute("aria-label", `${groupTitle} ${group.custom ? "custom" : "cwd"} group: ${groupTabs.length} tabs, ${indicator.label}${appRunnerSummary ? `, ${appRunnerSummary}` : ""}${workflowModeActive ? ", workflow mode active" : ""}${workflowCount ? `, ${workflowCount} workflow runs active` : ""}. Active ${activeTitle}. ${isMobileView() ? "Toggle group terminal list" : "Switch to the active group terminal"}`);
+  button.setAttribute("aria-label", `${groupTitle} ${group.custom ? "custom" : "cwd"} group: ${groupTabs.length} threads, ${indicator.label}${appRunnerSummary ? `, ${appRunnerSummary}` : ""}${workflowModeActive ? ", workflow mode active" : ""}${workflowCount ? `, ${workflowCount} workflow runs active` : ""}. Active ${activeTitle}. ${isMobileView() ? "Toggle group thread list" : "Switch to the active group thread"}`);
   applyStyledTooltip(button, terminalTabGroupTooltip(group, groupTitle), { ariaLabel: false, description: true, placement: "right", preserveInternalSpaces: true, variant: "workspace", targetKey: `terminal-group:${group.key}:switch` });
   appendTerminalTabContent(button, { title: activeTitle, indicator, meta: `${groupTitle} · ${indicator.meta}${groupAppRunnerMeta ? ` · ${groupAppRunnerMeta}` : ""}${workflowModeActive ? " · workflow mode" : ""}${workflowCount ? ` · ${workflowCount} workflows` : ""}`, appRunnerRun, count: groupTabs.length, workflowModeActive, workflowCount, dropdown: true });
   button.addEventListener("click", () => {
@@ -17435,7 +17756,7 @@ function renderTerminalTabGroup(group, groupCount = 1) {
     const close = make("button", "terminal-tab-close terminal-tab-group-close", "×");
     close.type = "button";
     close.draggable = false;
-    const closeTooltip = `Close ${groupTitle} group`;
+    const closeTooltip = `Close ${groupTitle} group${group.shelfLabel ? ` sessions in ${group.shelfLabel}` : ""}`;
     applyStyledTooltip(close, closeTooltip, { ariaLabel: closeTooltip, targetKey: `terminal-group:${group.key}:close` });
     close.addEventListener("click", (event) => {
       event.stopPropagation();
@@ -17447,18 +17768,18 @@ function renderTerminalTabGroup(group, groupCount = 1) {
   const menu = make("div", "terminal-tab-group-menu");
   menu.id = `terminalTabGroupMenu${++terminalTabGroupMenuSerial}`;
   menu.setAttribute("role", "group");
-  menu.setAttribute("aria-label", `${groupTitle} tabs`);
+  menu.setAttribute("aria-label", `${groupTitle} threads`);
   button.setAttribute("aria-controls", menu.id);
   for (const tab of groupTabs) menu.append(renderTerminalTabGroupItem(tab, group));
 
-  const add = make("button", "terminal-tab-group-add", "+ Tab");
+  const add = make("button", "terminal-tab-group-add", "+ Thread");
   add.type = "button";
   add.draggable = false;
-  const addTooltip = `Add tab in ${groupTitle}`;
+  const addTooltip = `Add thread in ${groupTitle}`;
   applyStyledTooltip(add, addTooltip, { ariaLabel: addTooltip, targetKey: `terminal-group:${group.key}:add` });
   add.addEventListener("click", (event) => {
     event.stopPropagation();
-    createTerminalTab(activeGroupTab?.cwd || group.cwd || currentDirectoryForNewTab(), { triggerButton: add, customGroupId: group.customGroupId || null });
+    createTerminalTab(activeGroupTab?.cwd || group.cwd || currentDirectoryForNewTab(), { triggerButton: add, customGroupId: group.customGroupId || null, workspaceKind: activeGroupTab?.workspaceKind || "project" });
   });
   menu.append(add);
   wrapper.append(menu);
@@ -17485,25 +17806,17 @@ function toggleOpenTerminalTabGroup(groupKey) {
   else setOpenTerminalTabGroup(groupKey);
 }
 
-function clearOpenTerminalTabGroup(groupKey, { force = false } = {}) {
+function clearOpenTerminalTabGroup(groupKey, { force = false, preserveFocus = false } = {}) {
   if (!openTerminalTabGroupKey || (!force && openTerminalTabGroupKey !== groupKey)) return;
+  if (!force && preserveFocus && document.activeElement?.closest?.(".terminal-tab-group")?.dataset.groupKey === openTerminalTabGroupKey) return;
   openTerminalTabGroupKey = null;
   updateTerminalTabGroupOpenState();
   syncTabPolling();
 }
 
-function setNewTabMenuOpen(open) {
-  if (open && followUpQueueOpen) setFollowUpQueueOpen(false);
-  newTabMenuOpen = !!open;
-  elements.newTabButton?.setAttribute("aria-expanded", newTabMenuOpen ? "true" : "false");
-  elements.newTabButton?.classList.toggle("menu-open", newTabMenuOpen);
-  elements.newTabMenu?.classList.toggle("open", newTabMenuOpen);
-  if (!newTabMenuOpen) scheduleDeferredUiFlushAfterDropdownClose();
-}
-
 function initializeTerminalHeaderTooltips() {
-  applyStyledTooltip(elements.newTabButton, "Start a separate isolated Pi terminal", { ariaLabel: "Start a separate isolated Pi terminal" });
-  applyStyledTooltip(elements.closeAllTabsButton, "Close all terminal tabs", { ariaLabel: "Close all terminal tabs" });
+  applyStyledTooltip(elements.newTabButton, "New thread:\n• Choose a folder, No project, or a branch worktree.\n• Nothing starts until you send the first message.", { ariaLabel: "New thread" });
+  applyStyledTooltip(elements.closeAllTabsButton, "Close all threads", { ariaLabel: "Close all threads" });
 }
 
 function initializeControlSettingTooltips() {
@@ -17529,32 +17842,6 @@ function initializeControlSettingTooltips() {
   });
 }
 
-function openNewTabMenu() {
-  setPublishMenuOpen(false);
-  setNativeCommandMenuOpen(false);
-  setAppRunnerMenuOpen(false);
-  setOptionsMenuOpen(false);
-  setNewTabMenuOpen(true);
-}
-
-function newTabMenuItems() {
-  return [elements.newTabCurrentDirectoryButton, elements.newTabChooseDirectoryButton, elements.newTabWorktreeButton].filter(Boolean);
-}
-
-function focusNewTabMenuItem(direction = "first") {
-  const items = newTabMenuItems();
-  const item = direction === "last" ? items.at(-1) : items[0];
-  item?.focus({ preventScroll: true });
-}
-
-function moveNewTabMenuFocus(delta) {
-  const items = newTabMenuItems();
-  if (!items.length) return;
-  const currentIndex = Math.max(0, items.indexOf(document.activeElement));
-  const nextIndex = (currentIndex + delta + items.length) % items.length;
-  items[nextIndex].focus({ preventScroll: true });
-}
-
 function scheduleTabsRender() {
   if (tabsRenderFrame !== null) return;
   const flush = () => {
@@ -17565,10 +17852,164 @@ function scheduleTabsRender() {
   else tabsRenderFrame = setTimeout(flush, 0);
 }
 
+function usesSessionShelves() {
+  return Boolean(focusedShell?.active && (shellPreferenceState.value.navigation || "left") === "left");
+}
+
+function sessionShelfRecord(tab) {
+  const indicator = tabIndicator(tab);
+  return {
+    id: tab.id,
+    identity: JSON.stringify([tab.createdAt || "", tab.sessionFile || ""]),
+    state: tabPendingBlockerCount(tab) > 0 ? "input"
+      : indicator.state === "working" || tabAppRunnerRunningRun(tab) || workflowRunningCountForTab(tab.id) > 0 ? "working"
+      : indicator.state === "done" ? "done" : "idle",
+    completionSerial: activityForTab(tab).completionSerial,
+  };
+}
+
+function reconcileSessionShelves(catalog = tabs, options) {
+  const projection = sessionShelfState.reconcile(catalog.map(sessionShelfRecord), options);
+  settledSessionIds = new Set(projection.settled.map(record => record.id));
+  return projection;
+}
+
+function sessionShelfHeader(section) {
+  return sessionShelves?.element.querySelector(`[data-session-shelf-toggle="${section}"]`);
+}
+
+function reportSessionShelfResult(result) {
+  if (result.ok) return;
+  const messages = {
+    working: "Finish the current work before settling this session.",
+    input: "Respond to the pending input before settling this session.",
+    limit: "The Settled section is full. Restore a session before settling another.",
+    unavailable: "Sidebar changes apply for this page, but browser storage could not save them.",
+    "invalid-storage": "Saved sidebar preferences could not be read. Changes apply for this page only.",
+    "future-storage": "Saved sidebar preferences belong to a newer version. Changes apply for this page only.",
+  };
+  addEvent(messages[result.reason] || "The session changed. Choose the sidebar action again.", "error");
+}
+
+function createTerminalTabSettlementButton(tab) {
+  const settled = settledSessionIds.has(tab.id);
+  const record = sessionShelfRecord(tab);
+  const lifetime = sessionContext.captureLifetime(tab.id);
+  const button = make("button", "terminal-tab-settlement-button", settled ? "↥" : "✓");
+  button.type = "button";
+  button.draggable = false;
+  button.dataset.settlementAction = settled ? "restore" : "settle";
+  const unavailable = !settled && ["input", "working"].includes(record.state);
+  button.disabled = unavailable;
+  const label = `${settled ? "Restore" : "Settle"} ${threadDisplayTitle(tab.title) || "session"}`;
+  applyStyledTooltip(button, unavailable
+    ? `Finish the current work or respond to pending input before settling ${threadDisplayTitle(tab.title) || "this session"}.`
+    : `${label}. ${settled ? "Return to Inbox." : "Move to Settled without closing or stopping it."}`,
+    { ariaLabel: label, targetKey: `terminal-tab:${tab.id}:settlement` });
+  button.addEventListener("click", event => {
+    event.stopPropagation();
+    const current = tabs.find(item => item.id === tab.id);
+    const latest = current ? sessionShelfRecord(current) : null;
+    if (!latest || !sessionContext.isLifetimeCurrent(lifetime) || latest.identity !== record.identity
+      || (!settled && latest.completionSerial !== record.completionSerial)) {
+      addEvent("This session changed. Choose Settle or Restore again.", "error");
+      return;
+    }
+    // Reconcile first: an old Restore control must never settle a newly woken session.
+    reconcileSessionShelves();
+    const result = settled ? sessionShelfState.restore(tab.id) : sessionShelfState.settle(sessionShelfRecord(current));
+    reportSessionShelfResult(result);
+    renderTabs();
+    sessionShelfHeader(settled ? "inbox" : "settled")?.focus();
+  });
+  return button;
+}
+
+function renderClientDraft(draft) {
+  const selected = !activeTabId && draftConversations.activeId === draft.id;
+  const row = make("div", `terminal-tab terminal-tab-draft${selected ? " active" : ""}`);
+  row.dataset.draftId = draft.id;
+  const title = draft.text.trim().split(/\r?\n/)[0].slice(0, 60) || "Untitled draft";
+  const button = make("button", "terminal-tab-button");
+  button.type = "button";
+  button.setAttribute("role", "tab");
+  button.setAttribute("aria-selected", String(selected));
+  button.setAttribute("aria-label", `Draft: ${title}`);
+  button.append(make("span", "terminal-tab-title", title), make("span", "terminal-tab-meta", "Draft · browser only"));
+  button.addEventListener("click", () => openClientDraft(draft.id));
+  const close = make("button", "terminal-tab-close", "×");
+  close.type = "button";
+  close.setAttribute("aria-label", `Close draft: ${title}`);
+  close.addEventListener("click", () => {
+    const isSelected = !activeTabId && draftConversations.activeId === draft.id;
+    draftConversations.remove(draft.id);
+    if (isSelected) {
+      elements.promptInput.value = "";
+      void openClientDraft();
+    } else {
+      reportDraftStorageError();
+      renderTabs();
+    }
+  });
+  row.append(button, close);
+  return row;
+}
+
+function renderSessionShelves(groups, subagentGroups, projection) {
+  if (!sessionShelves) sessionShelves = createSessionShelves({ document, onToggle(section, expanded) {
+    const result = sessionShelfState.setExpanded(section, expanded);
+    reportSessionShelfResult(result);
+    renderTabs();
+    sessionShelfHeader(section)?.focus();
+  } });
+  const counts = {};
+  const groupKeys = new Set();
+  for (const section of ["inbox", "working", "settled"]) {
+    const slot = sessionShelves.slots[section];
+    const ids = new Set(projection[section].map(record => record.id));
+    slot.replaceChildren();
+    counts[section] = ids.size;
+    if (section === "inbox") {
+      const drafts = draftConversations.list();
+      counts[section] += drafts.length;
+      slot.append(...drafts.map(renderClientDraft));
+    }
+    for (const group of groups) {
+      const members = group.tabs.filter(tab => ids.has(tab.id));
+      if (!members.length) continue;
+      const fragment = { ...group, key: `${section}:${group.key}`, tabs: members, shelfLabel: section === "inbox" ? "Inbox" : section === "working" ? "Working" : "Settled" };
+      if (shouldRenderTerminalTabGroup(group, groups.length)) {
+        groupKeys.add(fragment.key);
+        slot.append(renderTerminalTabGroup(fragment, groups.length));
+      } else {
+        for (const tab of members) slot.append(renderTerminalTab(tab, { showCwdAdd: groups.length > 1 && Boolean(group.cwd) }));
+      }
+    }
+    for (const group of subagentGroups) {
+      const views = group.views.filter(view => section === (subagentTerminalViewIsRunning(view) ? "working" : "inbox"));
+      counts[section] += views.length;
+      if (views.length > 1) {
+        const fragment = { ...group, key: `${section}:${group.key}`, views };
+        groupKeys.add(fragment.key);
+        slot.append(renderSubagentTerminalTabGroup(fragment));
+      } else if (views.length) slot.append(renderSubagentTerminalTab(views[0]));
+    }
+  }
+  sessionShelves.update({ counts, expanded: projection.expanded });
+  elements.tabBar.append(elements.newTabMenu, sessionShelves.element);
+  return groupKeys;
+}
+
 function terminalTabControlKey(node) {
+  if (node?.dataset?.sessionShelfToggle) return `session-shelf:${node.dataset.sessionShelfToggle}`;
+  const draftId = node?.closest?.("[data-draft-id]")?.dataset?.draftId;
+  if (draftId) return `client-${draftId}:${node.classList.contains("terminal-tab-close") ? "close" : "switch"}`;
+  const viewId = node?.closest?.("[data-subagent-view-id]")?.dataset?.subagentViewId;
+  if (viewId) return `subagent-view:${viewId}:${node.classList.contains("terminal-tab-close") ? "close" : "switch"}`;
   if (node?.id && elements.newTabMenu?.contains(node)) return `terminal-new-tab:${node.id}`;
   const tabId = node?.closest?.("[data-tab-id]")?.dataset?.tabId;
   if (tabId) {
+    if (node.classList.contains("terminal-tab-settlement-button")) return `terminal-tab:${tabId}:settlement`;
     if (node.classList.contains("terminal-tab-close")) return `terminal-tab:${tabId}:close`;
     if (node.classList.contains("terminal-tab-split-button")) return `terminal-tab:${tabId}:split`;
     if (node.classList.contains("terminal-tab-summary-button")) return `terminal-tab:${tabId}:summary`;
@@ -17584,51 +18025,95 @@ function terminalTabControlKey(node) {
 }
 
 function renderTabs() {
+  scheduleFocusedShellRender();
   if (deferUiRenderDuringPointerActivation("tabs", renderTabs)) return;
-  const continuityContextKey = `${activeTabId || ""}:${activeTabGeneration}:${activeSubagentTerminalId || ""}`;
+  const continuityContextKey = `${activeTabId || draftConversations.activeId || ""}:${activeTabGeneration}:${activeSubagentTerminalId || ""}`;
   const focusSnapshot = captureScopedControlContinuity(elements.tabBar, continuityContextKey, terminalTabControlKey);
   const tooltipSnapshot = captureTooltipContinuity(elements.tabBar);
   const activeSubagent = activeSubagentTerminalView();
   const active = activeSubagent || activeTab();
   const activeIndicator = activeSubagent ? { glyph: "◉", label: "Subagent view" } : active ? tabIndicator(active) : null;
-  const activeTitle = activeSubagent ? subagentTerminalViewTitle(activeSubagent) : active?.title;
+  const activeTitle = activeSubagent ? subagentTerminalViewTitle(activeSubagent) : threadDisplayTitle(active?.title);
   const totalTabCount = tabs.length + subagentTerminalViews.size;
-  elements.terminalTabsToggleButton.textContent = active ? `${activeIndicator.glyph} ${activeTitle}${totalTabCount > 1 ? ` · ${totalTabCount}` : ""}` : "Tabs";
-  const toggleTooltip = active ? `Show terminal tabs · active: ${activeTitle} · ${activeIndicator.label}` : "Show terminal tabs";
+  elements.terminalTabsToggleButton.textContent = active ? `${activeIndicator.glyph} ${activeTitle}${totalTabCount > 1 ? ` · ${totalTabCount}` : ""}` : "Threads";
+  const toggleTooltip = active ? `Show threads · active: ${activeTitle} · ${activeIndicator.label}` : "Show threads";
   applyStyledTooltip(elements.terminalTabsToggleButton, toggleTooltip, { ariaLabel: toggleTooltip, targetKey: "terminal-tabs-toggle" });
   if (footerTooltipTarget && elements.tabBar.contains(footerTooltipTarget) && !tooltipSnapshot) hideFooterTooltip();
+  const previousScrollTop = elements.tabBar.scrollTop;
+  const previousShelfScrollTop = sessionShelves?.element.scrollTop || 0;
+  const previousShelfFocusOffset = focusSnapshot && sessionShelves?.element.contains(document.activeElement)
+    ? document.activeElement.getBoundingClientRect().top - sessionShelves.element.getBoundingClientRect().top + previousShelfScrollTop
+    : null;
   elements.tabBar.replaceChildren();
+  const shelfProjection = reconcileSessionShelves();
+  renderedSessionShelves = usesSessionShelves();
+  elements.tabBar.classList.toggle("has-session-shelves", renderedSessionShelves);
   elements.tabBar.dataset.tabCount = String(totalTabCount);
   elements.tabBar.classList.toggle("terminal-tabs-dense", totalTabCount >= 10);
   const groups = tabCwdGroups();
   const subagentGroups = subagentTerminalViewGroups();
-  const renderedGroupKeys = new Set([
-    ...groups.filter((group) => shouldRenderTerminalTabGroup(group, groups.length)).map((group) => group.key),
-    ...subagentGroups.filter((group) => group.views.length > 1).map((group) => group.key),
-  ]);
+  let renderedGroupKeys;
+  if (renderedSessionShelves) {
+    renderedGroupKeys = renderSessionShelves(groups, subagentGroups, shelfProjection);
+  } else {
+    renderedGroupKeys = new Set([
+      ...groups.filter((group) => shouldRenderTerminalTabGroup(group, groups.length)).map((group) => group.key),
+      ...subagentGroups.filter((group) => group.views.length > 1).map((group) => group.key),
+    ]);
+    for (const group of groups) {
+      if (shouldRenderTerminalTabGroup(group, groups.length)) {
+        elements.tabBar.append(renderTerminalTabGroup(group, groups.length));
+      } else {
+        const showCwdAdd = groups.length > 1 && group.tabs.length === 1 && Boolean(group.cwd);
+        for (const tab of group.tabs) elements.tabBar.append(renderTerminalTab(tab, { showCwdAdd }));
+      }
+    }
+    for (const group of subagentGroups) {
+      if (group.views.length > 1) elements.tabBar.append(renderSubagentTerminalTabGroup(group));
+      else elements.tabBar.append(renderSubagentTerminalTab(group.views[0]));
+    }
+    elements.tabBar.append(...draftConversations.list().map(renderClientDraft));
+    elements.tabBar.append(elements.newTabMenu);
+  }
   if (openTerminalTabGroupKey && !renderedGroupKeys.has(openTerminalTabGroupKey)) openTerminalTabGroupKey = null;
-  for (const group of groups) {
-    if (shouldRenderTerminalTabGroup(group, groups.length)) {
-      elements.tabBar.append(renderTerminalTabGroup(group, groups.length));
-    } else {
-      const showCwdAdd = groups.length > 1 && group.tabs.length === 1 && Boolean(group.cwd);
-      for (const tab of group.tabs) elements.tabBar.append(renderTerminalTab(tab, { showCwdAdd }));
+  // Rows combine selection with separate actions. Own only their selection
+  // controls in the tablist so assistive technology does not treat actions as tabs.
+  const tabList = make("div");
+  tabList.setAttribute("role", "tablist");
+  tabList.setAttribute("aria-label", "Pi threads");
+  tabList.style.display = "contents";
+  const tabControls = [...elements.tabBar.querySelectorAll('[role="tab"]')];
+  tabControls.forEach((control, index) => { control.id = `terminalTabOption${index}`; });
+  tabList.setAttribute("aria-owns", tabControls.map((control) => control.id).join(" "));
+  tabList.hidden = tabControls.length === 0;
+  elements.tabBar.prepend(tabList);
+  restoreScopedControlContinuity(elements.tabBar, continuityContextKey, focusSnapshot, (key) => [...elements.tabBar.querySelectorAll("button")].find((node) => terminalTabControlKey(node) === key));
+  elements.tabBar.scrollTop = previousScrollTop;
+  if (sessionShelves && renderedSessionShelves) {
+    sessionShelves.element.scrollTop = previousShelfScrollTop;
+    const focused = document.activeElement;
+    if (focusSnapshot && sessionShelves.element.contains(focused)) {
+      const bounds = sessionShelves.element.getBoundingClientRect();
+      const target = focused.getBoundingClientRect();
+      const moved = previousShelfFocusOffset !== null
+        && Math.abs(target.top - bounds.top + sessionShelves.element.scrollTop - previousShelfFocusOffset) > 1;
+      // Preserve deliberate wheel scrolling; reveal only controls displaced by rendering.
+      // Leave room for the focus outline and fractional layout rounding.
+      if (moved && target.top < bounds.top + 2) {
+        sessionShelves.element.scrollTop -= Math.ceil(bounds.top + 2 - target.top);
+      } else if (moved && target.bottom > bounds.bottom - 2) {
+        sessionShelves.element.scrollTop += Math.ceil(target.bottom - bounds.bottom + 2);
+      }
     }
   }
-  for (const group of subagentGroups) {
-    if (group.views.length > 1) elements.tabBar.append(renderSubagentTerminalTabGroup(group));
-    else elements.tabBar.append(renderSubagentTerminalTab(group.views[0]));
-  }
-  elements.tabBar.append(elements.newTabMenu);
-  restoreScopedControlContinuity(elements.tabBar, continuityContextKey, focusSnapshot, (key) => [...elements.tabBar.querySelectorAll("button")].find((node) => terminalTabControlKey(node) === key));
   restoreTooltipContinuity(elements.tabBar, tooltipSnapshot);
   elements.closeAllTabsButton.disabled = tabs.length === 0;
   if (elements.workspaceSaveButton) {
     const canSave = tabs.length > 0;
     elements.workspaceSaveButton.disabled = !canSave;
     applyStyledTooltip(elements.workspaceSaveButton, canSave
-      ? "Save workspace:\n• Captures all open tabs, sessions, order, custom groups, and the active tab."
-      : "Save workspace is available after you open a tab.", { ariaLabel: canSave ? "Save workspace" : "Save workspace (no open tabs)", floating: false });
+      ? "Save workspace:\n• Captures all open threads, sessions, order, custom groups, and the active thread."
+      : "Save workspace is available after you open a thread.", { ariaLabel: canSave ? "Save workspace" : "Save workspace (no open threads)" });
   }
   updateTerminalTabGroupOpenState();
   reconcileTerminalSplitState();
@@ -17679,6 +18164,8 @@ function tabsRenderSnapshotSignature(tabList = []) {
           : tab?.running ? "idle" : "stopped";
     return {
       id: tab?.id || "",
+      createdAt: tab?.createdAt || "",
+      sessionFile: tab?.sessionFile || "",
       index: Number(tab?.index) || 0,
       title: tab?.title || "",
       titleSource: tab?.titleSource || "",
@@ -17710,12 +18197,14 @@ function tabsRenderSnapshotSignature(tabList = []) {
   }));
 }
 
-async function refreshTabs({ selectStored = false } = {}) {
+async function refreshTabs({ selectStored = false, signal } = {}) {
+  const serial = ++tabsRefreshSerial;
   const previousTabs = tabs;
   const previousTabsSignature = tabsSnapshotSignature(previousTabs);
   const previousTabsRenderSignature = tabsRenderSnapshotSignature(previousTabs);
   const previousActiveTabId = activeTabId;
-  const response = await api("/api/tabs", { scoped: false });
+  const response = await api("/api/tabs", { scoped: false, signal });
+  if (signal?.aborted || serial !== tabsRefreshSerial) return tabs;
   const nextTabs = response.data?.tabs || [];
   const tabsChanged = previousTabsSignature !== tabsSnapshotSignature(nextTabs);
   const tabsRenderChanged = previousTabsRenderSignature !== tabsRenderSnapshotSignature(nextTabs);
@@ -17723,9 +18212,7 @@ async function refreshTabs({ selectStored = false } = {}) {
     tabs = nextTabs;
     syncTabMetadata(tabs);
     const liveParentTabIds = new Set(tabs.map((tab) => tab.id));
-    for (const tabId of intercomConversationSummariesByTab.keys()) {
-      if (!liveParentTabIds.has(tabId)) intercomConversationSummariesByTab.delete(tabId);
-    }
+    activityIntercom.prune(liveParentTabIds);
     for (const view of [...subagentTerminalViews.values()]) {
       if (!liveParentTabIds.has(view.parentTabId)) removeSubagentTerminalViewsForParent(view.parentTabId);
     }
@@ -17734,7 +18221,7 @@ async function refreshTabs({ selectStored = false } = {}) {
   }
   const requested = selectStored ? requestedTabIdFromUrl() : null;
   const stored = selectStored ? restoreStoredTabId() : null;
-  if (!activeTabId || !tabs.some((tab) => tab.id === activeTabId)) {
+  if ((!activeTabId && !draftConversations.activeId) || (activeTabId && !tabs.some((tab) => tab.id === activeTabId)) || (selectStored && requested && tabs.some(tab => tab.id === requested))) {
     setActiveTabId((requested && tabs.some((tab) => tab.id === requested) ? requested : stored && tabs.some((tab) => tab.id === stored) ? stored : tabs[0]?.id) || null, { remember: true });
   }
   rememberServerStartCwd(tabs.find((tab) => tab.id === activeTabId)?.cwd || tabs[0]?.cwd);
@@ -17759,14 +18246,14 @@ async function switchTab(tabId) {
     return;
   }
   if (themeCustomizerState?.saving) {
-    setThemeCustomizerStatus("Wait for the theme save to finish before switching tabs.", "warn");
+    setThemeCustomizerStatus("Wait for the theme save to finish before switching threads.", "warn");
     return;
   }
   if (activeSubagentTerminalId) deactivateSubagentTerminalView({ render: false });
   if (themeCustomizerState) closeThemeCustomizer({ restore: true });
   clearOpenTerminalTabGroup(null, { force: true });
   setFollowUpQueueOpen(false);
-  setFollowUpQueueStatus("");
+  activityQueue.setStatus("");
   setMobileTabsExpanded(false);
   footerModelPickerOpen = false;
   footerThinkingPickerOpen = false;
@@ -17774,6 +18261,7 @@ async function switchTab(tabId) {
   footerBranchPickerRequestSerial += 1;
   if (tabId === splitTabId) closeTerminalSplitView();
   saveActiveDraft();
+  draftNavigationRevision += 1;
   cacheMessagesForTab(activeTabId);
   cacheWidgetsForTab(activeTabId);
   cacheActiveFileViewerForTab(activeTabId);
@@ -17823,8 +18311,8 @@ function updateTerminalSplitControls(canShowSplit, splitTab = terminalSplitTab()
     button.setAttribute("aria-pressed", isOpenSplit ? "true" : "false");
     button.dataset.splitState = isOpenSplit ? "unsplit" : "split";
     const label = isOpenSplit
-      ? `Close split view for ${tab?.title || "Pi terminal"}`
-      : `Split ${tab?.title || "Pi terminal"} to the right`;
+      ? `Close split view for ${threadDisplayTitle(tab?.title) || "Pi thread"}`
+      : `Split ${threadDisplayTitle(tab?.title) || "Pi thread"} to the right`;
     applyStyledTooltip(button, label, { ariaLabel: label, targetKey: tabId ? `terminal-tab:${tabId}:split` : "" });
   });
 }
@@ -17832,13 +18320,13 @@ function updateTerminalSplitControls(canShowSplit, splitTab = terminalSplitTab()
 function updateTerminalSplitUi() {
   const tab = terminalSplitTab();
   const overlayDrawerOpen = isControlDeckOverlayPresentation() && !document.body.classList.contains("side-panel-collapsed");
-  const canShowSplit = !!tab && !embeddedSplitMode && !overlayDrawerOpen;
+  const canShowSplit = !!tab && !embeddedSplitMode && !overlayDrawerOpen && window.innerWidth > 1050;
   document.body.classList.toggle("terminal-split-open", canShowSplit);
   if (elements.terminalSplitShell) elements.terminalSplitShell.hidden = !canShowSplit;
   scheduleControlDeckPresentationReconciliation();
   updateTerminalSplitControls(canShowSplit, tab);
   if (!canShowSplit) return;
-  if (elements.terminalSplitTitle) elements.terminalSplitTitle.textContent = tab.title || "Split terminal";
+  if (elements.terminalSplitTitle) elements.terminalSplitTitle.textContent = threadDisplayTitle(tab.title) || "Split thread";
   if (elements.terminalSplitMeta) elements.terminalSplitMeta.textContent = [tab.running ? `pid ${tab.pid || "starting"}` : "stopped", normalizeDisplayPath(tab.cwd || "")].filter(Boolean).join(" · ");
   if (elements.terminalSplitFrame && elements.terminalSplitFrame.dataset.tabId !== tab.id) {
     elements.terminalSplitFrame.dataset.tabId = tab.id;
@@ -17880,21 +18368,20 @@ async function splitTerminalTab(tabId, { triggerButton = null } = {}) {
   if (splitTabId) closeTerminalSplitView();
   let resolvedCwd = sourceTab.cwd || latestWorkspace?.cwd || currentDirectoryForNewTab();
   setMobileTabsExpanded(false);
-  setNewTabMenuOpen(false);
   if (!resolvedCwd) {
-    resolvedCwd = await pickCwd(sourceTab, "", { title: "Choose CWD for split terminal" });
+    resolvedCwd = await pickCwd(sourceTab, "", { title: "Choose a folder for split session" });
     if (!resolvedCwd) return;
   }
   if (triggerButton) triggerButton.disabled = true;
   try {
-    const response = await api("/api/tabs", { method: "POST", body: { cwd: resolvedCwd }, scoped: false });
-    tabs = response.data?.tabs || tabs;
+    const response = await api("/api/tabs", { method: "POST", body: sourceTab.workspaceKind === "no-project" ? { workspaceKind: "no-project" } : { cwd: resolvedCwd }, scoped: false });
+    applyAuthoritativeTabSnapshot(response.data?.tabs || tabs);
     syncTabMetadata(tabs);
     const tab = response.data?.tab;
     if (tab?.id) {
       setTerminalSplitTab(tab.id);
       renderTabs();
-      addEvent(`split ${sourceTab.title || "terminal"} into independent ${tab.title}`, "info");
+      addEvent(`split ${threadDisplayTitle(sourceTab.title) || "thread"} into independent ${threadDisplayTitle(tab.title)}`, "info");
     }
   } catch (error) {
     addEvent(error.message, "error");
@@ -17904,27 +18391,73 @@ async function splitTerminalTab(tabId, { triggerButton = null } = {}) {
   }
 }
 
-async function createTerminalTab(cwd = currentDirectoryForNewTab(), { triggerButton = elements.newTabButton, customGroupId = null } = {}) {
+async function openClientDraft(id = null) {
+  if (id && !draftConversations.get(id)) return;
+  if (id && !activeTabId && draftConversations.activeId === id) {
+    navigateFocusedShell("conversation", null);
+    focusPromptInput({ defer: true });
+    return;
+  }
+  if (themeCustomizerState?.saving) {
+    setThemeCustomizerStatus("Wait for the theme save to finish before switching conversations.", "warn");
+    return;
+  }
+  if (activeSubagentTerminalId) deactivateSubagentTerminalView({ render: false });
+  if (themeCustomizerState) closeThemeCustomizer({ restore: true });
+  saveActiveDraft();
+  cacheMessagesForTab(activeTabId);
+  cacheWidgetsForTab(activeTabId);
+  cacheActiveFileViewerForTab(activeTabId);
+  if (activeTabId && currentState) tabStateCache.set(activeTabId, currentState);
+  if (activeTabId && latestStats) tabStatsCache.set(activeTabId, latestStats);
+  if (activeTabId && latestWorkspace) tabWorkspaceCache.set(activeTabId, latestWorkspace);
+  clearOpenTerminalTabGroup(null, { force: true });
+  setFollowUpQueueOpen(false);
   setMobileTabsExpanded(false);
-  setNewTabMenuOpen(false);
+  closeDraftWorkspacePicker();
+  closeTerminalSplitView();
+  if (voiceConversation) stopVoiceConversationLoop();
+  draftNavigationRevision += 1;
+  draftConversations.select(id || draftConversations.create());
+  setActiveTabId(null);
+  resetActiveTabUi();
+  renderTabs();
+  restoreActiveDraft();
+  navigateFocusedShell("conversation", null);
+  reportDraftStorageError();
+  focusPromptInput({ defer: true });
+}
+
+async function openNoProjectConversation() {
+  await openClientDraft();
+}
+
+async function createTerminalTab(cwd, { triggerButton = elements.newTabButton, customGroupId = null, workspaceKind = cwd === undefined && activeTab()?.workspaceKind === "no-project" ? "no-project" : "project", activate = true } = {}) {
+  const sourceContext = activeTabContext();
+  setMobileTabsExpanded(false);
   const resolvedCwd = cwd || currentDirectoryForNewTab();
-  if (!resolvedCwd && tabs.length === 0) {
+  if (workspaceKind !== "no-project" && !resolvedCwd && tabs.length === 0) {
     await createTerminalTabFromChosenDirectory({ triggerButton });
     return;
   }
   const disabledButtons = new Set([elements.newTabButton, triggerButton].filter(Boolean));
   for (const button of disabledButtons) button.disabled = true;
   try {
-    const response = await api("/api/tabs", { method: "POST", body: { cwd: resolvedCwd }, scoped: false });
-    tabs = response.data?.tabs || tabs;
-    syncTabMetadata(tabs);
+    const response = await api("/api/tabs", { method: "POST", body: workspaceKind === "no-project" ? { workspaceKind } : { cwd: resolvedCwd }, scoped: false });
     const tab = response.data?.tab;
+    // A background first submission can finish after another creation. Its
+    // older snapshot must not retire the session or draft now being edited.
+    applyAuthoritativeTabSnapshot(!activate && tab?.id
+      ? [...tabs.filter(item => item.id !== tab.id), tab]
+      : response.data?.tabs || tabs);
+    syncTabMetadata(tabs);
     if (tab?.id && customGroupId && terminalCustomGroups.has(customGroupId)) addTabsToTerminalCustomGroup(customGroupId, [tab.id]);
     renderTabs();
     if (tab?.id) {
-      await switchTab(tab.id);
-      addEvent(`created isolated terminal ${tab.title}`, "info");
+      if (activate && (workspaceKind !== "no-project" || isCurrentTabContext(sourceContext))) await switchTab(tab.id);
+      addEvent(`created thread ${threadDisplayTitle(tab.title)}`, "info");
     }
+    return tab;
   } catch (error) {
     addEvent(error.message, "error");
   } finally {
@@ -17932,25 +18465,388 @@ async function createTerminalTab(cwd = currentDirectoryForNewTab(), { triggerBut
   }
 }
 
-async function createTerminalTabFromChosenDirectory({ triggerButton = elements.newTabChooseDirectoryButton } = {}) {
+async function createTerminalTabFromChosenDirectory({ triggerButton = null } = {}) {
   const sourceTab = activeTab();
   const initialCwd = currentDirectoryForNewTab();
   setMobileTabsExpanded(false);
-  setNewTabMenuOpen(false);
-  const cwd = await pickCwd(sourceTab || { id: "new-tab", title: "new tab" }, initialCwd, { title: "Choose CWD for new tab" });
+  const returnFocus = triggerButton || elements.newTabButton;
+  const cwd = await pickCwd(sourceTab || { id: "new-tab", title: "new thread" }, initialCwd, { title: "Choose a folder for new session", returnFocus });
   if (!cwd) return;
   await createTerminalTab(cwd, { triggerButton });
 }
 
-async function createFirstTerminalTabFromChosenDirectory() {
-  if (firstTerminalCwdPromptShown || tabs.length > 0) return;
-  firstTerminalCwdPromptShown = true;
-  const cwd = await pickCwd({ id: "first-terminal", title: "first terminal" }, "", { title: "Choose CWD for first terminal" });
-  if (!cwd) {
-    addEvent("choose a CWD to start the first terminal", "warn");
+/** Folder of the visible browser draft, or "" on a real thread or a No Project draft. */
+function activeDraftCwd() {
+  return activeTabId ? "" : draftConversations.get(draftConversations.activeId)?.cwd || "";
+}
+
+/**
+ * Sets or clears (empty `cwd`) the folder of one browser draft and refreshes
+ * its visible empty state. Returns false when the draft is gone or its first
+ * prompt is already creating the thread, because that thread keeps the folder
+ * captured at send time.
+ */
+function setClientDraftWorkspace(draftId, cwd) {
+  if (draftSubmissions.has(draftId) || !draftConversations.get(draftId)) return false;
+  try {
+    draftConversations.setCwd(draftId, cwd);
+    reportDraftStorageError();
+    renderTabs();
+    if (!activeTabId && draftConversations.activeId === draftId) {
+      elements.chat.querySelector(".empty-start-state")?.remove();
+      renderEmptyStartState();
+      renderFooter();
+    }
+    return true;
+  } catch (error) {
+    addEvent(error.message, "error");
+    return false;
+  }
+}
+
+/** Chooses the active draft's folder, with the folder picker when `cwd` is omitted. Returns whether the draft changed. */
+async function chooseClientDraftWorkspace({ cwd, triggerButton } = {}) {
+  if (activeTabId) return false;
+  const draftId = draftConversations.activeId || draftConversations.create();
+  if (draftSubmissions.has(draftId)) return false;
+  const initialCwd = draftConversations.get(draftId)?.cwd || "";
+  const selectedCwd = cwd || await pickCwd(null, initialCwd, { title: "Choose a workspace for this draft", returnFocus: triggerButton });
+  // Selection belongs to the opening draft, even if navigation or first send
+  // finishes while the picker is open. A promoted draft no longer owns a cwd.
+  if (!selectedCwd) return false;
+  return setClientDraftWorkspace(draftId, selectedCwd);
+}
+
+function threadFolder(tab) {
+  if (!tab || tab.workspaceKind === "no-project") return "";
+  const workspace = tab.id === activeTabId ? latestWorkspace : tabWorkspaceCache.get(tab.id);
+  return workspace?.cwd || tab.cwd || "";
+}
+
+/** Current, pinned and recent folder sources for `buildWorkspaceChoices`. On a draft, the last active thread's folder is current. */
+function workspaceChoiceSources() {
+  const recentTabs = tabs
+    .map((tab, index) => ({ tab, index }))
+    .sort((a, b) => (threadActivationOrder.get(b.tab.id) || 0) - (threadActivationOrder.get(a.tab.id) || 0) || b.index - a.index)
+    .map(({ tab }) => tab);
+  const recent = recentTabs.map(threadFolder).filter(Boolean);
+  return { currentCwd: activeTabId ? threadFolder(activeTab()) : recent[0] || "", pinned: pathFastPicks, recent };
+}
+
+/** The active draft when it is blank and idle, so a new-thread choice reuses it instead of adding another draft. */
+function reusableBlankDraftId() {
+  const id = draftConversations.activeId;
+  if (activeTabId || !id || draftSubmissions.has(id) || elements.promptInput.value.trim() || !draftConversations.get(id)) return null;
+  return id;
+}
+
+/** Shows an empty draft with `cwd` ("" for No project). Nothing is created on the server until its first prompt. */
+async function openThreadDraft({ cwd = "" } = {}) {
+  const reusable = reusableBlankDraftId();
+  const previous = draftConversations.activeId;
+  const opening = openClientDraft(reusable);
+  // openClientDraft selects its draft before its first await. Capture that
+  // identity now: navigation during the await must not receive this folder.
+  const draftId = draftConversations.activeId;
+  await opening;
+  // openClientDraft declines while a theme save is pending; never retarget the draft that was already open.
+  if (!draftId || (!reusable && draftId === previous)) return;
+  setClientDraftWorkspace(draftId, cwd);
+  if (!activeTabId && draftConversations.activeId === draftId) mobileNavigate("chat", { focus: false });
+}
+
+async function browseNewThreadFolder({ returnFocus = elements.newTabButton } = {}) {
+  const reusable = reusableBlankDraftId();
+  if (reusable) {
+    const changed = await chooseClientDraftWorkspace({ triggerButton: returnFocus });
+    if (changed && !activeTabId && draftConversations.activeId === reusable) {
+      await openClientDraft(reusable);
+      if (!activeTabId && draftConversations.activeId === reusable) mobileNavigate("chat", { focus: false });
+    }
     return;
   }
-  await createTerminalTab(cwd, { triggerButton: null });
+  const source = { context: activeTabContext(), navigation: focusedShellState, draftNavigation: draftNavigationRevision };
+  const cwd = await pickCwd(activeTab() || { id: "new-tab", title: "new thread" }, workspaceChoiceSources().currentCwd, { title: "Choose a folder for new session", returnFocus });
+  // Without an opening draft, a late choice must not pull the user away from
+  // where they navigated while the picker was open.
+  if (!cwd || !isCurrentTabContext(source.context) || focusedShellState !== source.navigation || draftNavigationRevision !== source.draftNavigation) return;
+  await openThreadDraft({ cwd });
+}
+
+/**
+ * Applies list keys to a workspace choice state ({ choices, index }): arrows
+ * wrap, Home/End jump. Returns the highlighted choice (or null) on Enter and
+ * undefined for every other key.
+ */
+function handleWorkspaceChoiceKey(event, state, render) {
+  const count = state.choices.length;
+  let next;
+  if (event.key === "ArrowDown") next = count ? (state.index + 1) % count : 0;
+  else if (event.key === "ArrowUp") next = count ? (state.index - 1 + count) % count : 0;
+  else if (event.key === "Home") next = 0;
+  else if (event.key === "End") next = Math.max(0, count - 1);
+  else if (event.key === "Enter") {
+    event.preventDefault();
+    return state.choices[state.index] || null;
+  } else return undefined;
+  event.preventDefault();
+  state.index = next;
+  render();
+  return undefined;
+}
+
+function renderWorkspaceChoiceList({ list, input, state, idPrefix, compact, onChoose }) {
+  list.replaceChildren();
+  if (!state.choices.length) {
+    list.append(make("div", compact ? "footer-model-picker-source" : "command-palette-empty muted", "No matching folders."));
+    input.removeAttribute("aria-activedescendant");
+    return;
+  }
+  state.choices.forEach((choice, index) => {
+    const active = index === state.index;
+    const option = make("button", `${compact ? "footer-model-option" : "command-palette-item"}${active ? " active" : ""}`);
+    option.type = "button";
+    option.tabIndex = -1;
+    option.id = `${idPrefix}-${index}`;
+    option.dataset.workspaceChoice = choice.id;
+    option.setAttribute("role", "option");
+    option.setAttribute("aria-selected", String(active));
+    if (choice.kind === "folder") option.title = choice.path;
+    if (compact) {
+      option.append(
+        make("span", "footer-model-option-main", choice.selected ? `${choice.label} · selected` : choice.label),
+        make("span", "footer-model-option-name", `${choice.tag} · ${choice.path}`),
+      );
+    } else {
+      option.append(
+        make("span", "command-palette-item-kind", choice.tag),
+        make("span", "command-palette-item-label", choice.label),
+        make("span", "command-palette-item-description", choice.path),
+      );
+    }
+    // Keep focus in the search field so the combobox keeps keyboard ownership.
+    option.addEventListener("pointerdown", (event) => event.preventDefault());
+    option.addEventListener("click", () => onChoose(choice));
+    list.append(option);
+  });
+  const active = list.children[state.index];
+  input.setAttribute("aria-activedescendant", active.id);
+  active.scrollIntoView({ block: "nearest" });
+}
+
+function renderNewThreadPalette() {
+  const state = newThreadPaletteState;
+  state.choices = filterWorkspaceChoices(buildWorkspaceChoices({ ...workspaceChoiceSources(), includeWorktree: true }), elements.newThreadInput.value);
+  if (state.index >= state.choices.length) state.index = 0;
+  renderWorkspaceChoiceList({ list: elements.newThreadList, input: elements.newThreadInput, state, idPrefix: "new-thread-option", compact: false, onChoose: chooseNewThreadPaletteEntry });
+}
+
+function openNewThreadPalette({ returnFocus = document.activeElement } = {}) {
+  const dialog = elements.newThreadDialog;
+  if (!dialog) return;
+  closeCommandPalette();
+  closeDraftWorkspacePicker();
+  setComposerActionsOpen(false);
+  setPublishMenuOpen(false);
+  setNativeCommandMenuOpen(false);
+  setAppRunnerMenuOpen(false);
+  setOptionsMenuOpen(false);
+  setMobileTabsExpanded(false);
+  Object.assign(newThreadPaletteState, { index: 0, returnFocus, restoreFocus: true });
+  elements.newThreadInput.value = "";
+  renderNewThreadPalette();
+  if (!dialog.open) dialog.showModal();
+  elements.newThreadInput.focus({ preventScroll: true });
+  // Pinned folders load lazily; list them as soon as the first load finishes.
+  initializeFastPicks()
+    .then(() => { if (dialog.open) renderNewThreadPalette(); })
+    .catch((error) => addEvent(`failed to load pinned folders: ${error.message}`, "error"));
+}
+
+function closeNewThreadPalette({ restoreFocus = true } = {}) {
+  newThreadPaletteState.restoreFocus = restoreFocus;
+  if (elements.newThreadDialog?.open) elements.newThreadDialog.close();
+}
+
+function restoreNewThreadPaletteFocus() {
+  const { returnFocus, restoreFocus } = newThreadPaletteState;
+  newThreadPaletteState.returnFocus = null;
+  if (!restoreFocus) return;
+  const focusable = (node) => node?.isConnected && node.getClientRects().length && !node.disabled;
+  // Opening the palette closed the phone thread drawer; return to the toggle that opened it.
+  const drawerToggle = elements.terminalTabsShell?.contains(returnFocus) ? elements.terminalTabsToggleButton : null;
+  const target = [returnFocus, drawerToggle].find(focusable);
+  if (target) target.focus({ preventScroll: true });
+  else focusPromptInput();
+}
+
+async function chooseNewThreadPaletteEntry(choice) {
+  if (!choice) return;
+  const { returnFocus } = newThreadPaletteState;
+  closeNewThreadPalette({ restoreFocus: false });
+  if (choice.kind === "worktree") openBranchWorktreePicker();
+  else if (choice.kind === "browse") await browseNewThreadFolder({ returnFocus });
+  else await openThreadDraft({ cwd: choice.kind === "folder" ? choice.cwd : "" });
+}
+
+function renderDraftWorkspaceButton(value) {
+  const holder = make("strong");
+  const button = make("button", "empty-start-workspace-button", value);
+  button.type = "button";
+  button.setAttribute("aria-haspopup", "listbox");
+  button.setAttribute("aria-expanded", "false");
+  button.setAttribute("aria-label", `Workspace: ${value}. Change the folder for this draft`);
+  button.title = "Change the folder for this draft";
+  button.addEventListener("click", () => {
+    if (draftWorkspacePicker?.trigger === button) closeDraftWorkspacePicker({ restoreFocus: true });
+    else openDraftWorkspacePicker(button);
+  });
+  button.addEventListener("keydown", (event) => {
+    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+    event.preventDefault();
+    if (draftWorkspacePicker?.trigger !== button) openDraftWorkspacePicker(button);
+  });
+  holder.append(button);
+  return holder;
+}
+
+function renderDraftWorkspacePicker() {
+  const picker = draftWorkspacePicker;
+  if (!picker) return;
+  const selectedCwd = draftConversations.get(picker.draftId)?.cwd || "";
+  picker.choices = filterWorkspaceChoices(buildWorkspaceChoices({ ...workspaceChoiceSources(), selectedCwd }), picker.input.value);
+  if (picker.index >= picker.choices.length) picker.index = 0;
+  renderWorkspaceChoiceList({ list: picker.list, input: picker.input, state: picker, idPrefix: "draft-workspace-option", compact: true, onChoose: chooseDraftWorkspacePickerEntry });
+}
+
+/** Places the dropdown in the viewport next to its trigger; fixed top-layer positioning keeps chat scroll containers from clipping it. */
+function positionDraftWorkspacePicker(event) {
+  const picker = draftWorkspacePicker;
+  if (!picker) return;
+  if (event?.type === "scroll" && picker.element.contains(event.target)) return;
+  if (!picker.trigger.isConnected) {
+    closeDraftWorkspacePicker();
+    return;
+  }
+  const margin = 8;
+  const gap = 4;
+  const trigger = picker.trigger.getBoundingClientRect();
+  const viewportWidth = document.documentElement.clientWidth;
+  const viewportHeight = document.documentElement.clientHeight;
+  const width = Math.min(352, viewportWidth - margin * 2);
+  const below = viewportHeight - trigger.bottom - gap - margin;
+  const above = trigger.top - gap - margin;
+  const style = picker.element.style;
+  style.setProperty("--draft-workspace-picker-width", `${width}px`);
+  style.setProperty("--draft-workspace-picker-max-height", `${viewportHeight - margin * 2}px`);
+  const naturalHeight = picker.element.getBoundingClientRect().height;
+  const openBelow = naturalHeight <= below || below >= above;
+  const maxHeight = Math.max(120, openBelow ? below : above);
+  style.setProperty("--draft-workspace-picker-max-height", `${maxHeight}px`);
+  const height = Math.min(naturalHeight, maxHeight);
+  style.setProperty("--draft-workspace-picker-left", `${Math.max(margin, Math.min(trigger.left, viewportWidth - width - margin))}px`);
+  style.setProperty("--draft-workspace-picker-top", `${Math.max(margin, openBelow ? trigger.bottom + gap : trigger.top - gap - height)}px`);
+}
+
+function openDraftWorkspacePicker(trigger) {
+  closeDraftWorkspacePicker();
+  const draftId = draftConversations.activeId;
+  if (activeTabId || !draftId) return;
+  setComposerActionsOpen(false);
+  setPublishMenuOpen(false);
+  setNativeCommandMenuOpen(false);
+  setAppRunnerMenuOpen(false);
+  setOptionsMenuOpen(false);
+  const element = make("div", "footer-model-picker draft-workspace-picker");
+  element.setAttribute("popover", "manual");
+  element.setAttribute("role", "dialog");
+  element.setAttribute("aria-label", "Choose a folder for this draft");
+  const input = make("input", "dialog-input draft-workspace-picker-input");
+  Object.assign(input, { type: "search", autocomplete: "off", spellcheck: false, placeholder: "Search folders…" });
+  const list = make("div", "draft-workspace-picker-list");
+  list.id = "draftWorkspacePickerList";
+  list.setAttribute("role", "listbox");
+  list.setAttribute("aria-label", "Folders for this draft");
+  for (const [name, value] of [["role", "combobox"], ["aria-autocomplete", "list"], ["aria-expanded", "true"], ["aria-controls", list.id], ["aria-label", "Search folders for this draft"]]) input.setAttribute(name, value);
+  element.append(
+    make("div", "footer-model-picker-title", "Folder for this draft"),
+    input,
+    list,
+    make("div", "footer-model-picker-source", "↑↓ Navigate · Enter Select · Esc Close"),
+  );
+  document.body.append(element);
+  draftWorkspacePicker = { element, input, list, trigger, draftId, choices: [], index: 0 };
+  renderDraftWorkspacePicker();
+  draftWorkspacePicker.index = Math.max(0, draftWorkspacePicker.choices.findIndex((choice) => choice.selected));
+  renderDraftWorkspacePicker();
+  trigger.setAttribute("aria-expanded", "true");
+  trigger.setAttribute("aria-controls", list.id);
+  element.showPopover?.();
+  positionDraftWorkspacePicker();
+  window.addEventListener("resize", positionDraftWorkspacePicker);
+  window.addEventListener("scroll", positionDraftWorkspacePicker, true);
+  input.addEventListener("input", () => {
+    if (!draftWorkspacePicker) return;
+    draftWorkspacePicker.index = 0;
+    renderDraftWorkspacePicker();
+  });
+  input.addEventListener("keydown", (event) => {
+    if (!draftWorkspacePicker) return;
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      closeDraftWorkspacePicker({ restoreFocus: true });
+      return;
+    }
+    const choice = handleWorkspaceChoiceKey(event, draftWorkspacePicker, renderDraftWorkspacePicker);
+    if (choice !== undefined) void chooseDraftWorkspacePickerEntry(choice);
+  });
+  element.addEventListener("focusout", () => setTimeout(() => {
+    const focused = document.activeElement;
+    // Focus on the trigger means a toggle click is in progress; its handler closes the picker.
+    if (draftWorkspacePicker?.element === element && !element.contains(focused) && focused !== draftWorkspacePicker.trigger) closeDraftWorkspacePicker();
+  }, 0));
+  input.focus({ preventScroll: true });
+  initializeFastPicks()
+    .then(() => { if (draftWorkspacePicker?.element === element) renderDraftWorkspacePicker(); })
+    .catch((error) => addEvent(`failed to load pinned folders: ${error.message}`, "error"));
+}
+
+function closeDraftWorkspacePicker({ restoreFocus = false } = {}) {
+  const picker = draftWorkspacePicker;
+  if (!picker) return;
+  draftWorkspacePicker = null;
+  window.removeEventListener("resize", positionDraftWorkspacePicker);
+  window.removeEventListener("scroll", positionDraftWorkspacePicker, true);
+  picker.trigger.setAttribute("aria-expanded", "false");
+  picker.trigger.removeAttribute("aria-controls");
+  picker.element.remove();
+  if (restoreFocus) focusDraftWorkspaceTrigger(picker.trigger);
+  scheduleDeferredUiFlushAfterDropdownClose();
+}
+
+/** Focuses the card's folder button, or its replacement after the empty state re-rendered. */
+function focusDraftWorkspaceTrigger(trigger) {
+  const target = trigger?.isConnected ? trigger : elements.chat.querySelector(".empty-start-workspace-button");
+  target?.focus({ preventScroll: true });
+}
+
+async function chooseDraftWorkspacePickerEntry(choice) {
+  const picker = draftWorkspacePicker;
+  if (!picker || !choice) return;
+  closeDraftWorkspacePicker();
+  if (choice.kind === "browse") {
+    const changed = await chooseClientDraftWorkspace({ triggerButton: picker.trigger });
+    // A changed folder re-renders the card and drops the original trigger.
+    if (changed && !activeTabId && draftConversations.activeId === picker.draftId) focusDraftWorkspaceTrigger(picker.trigger);
+    return;
+  }
+  if (draftSubmissions.has(picker.draftId)) {
+    addEvent("The first message is already starting this thread; its folder stays unchanged.", "warn");
+  } else {
+    setClientDraftWorkspace(picker.draftId, choice.kind === "folder" ? choice.cwd : "");
+  }
+  focusDraftWorkspaceTrigger(picker.trigger);
 }
 
 function tabHasActiveAgent(tab) {
@@ -17975,25 +18871,25 @@ function shouldOpenCwdChangeInNewTab(tab) {
 
 async function confirmCloseTerminalTabs(targetTabs, label) {
   const count = targetTabs.length;
-  const noun = count === 1 ? "tab" : "tabs";
+  const noun = count === 1 ? "thread" : "threads";
   const activeAgentTabs = targetTabs.filter(tabHasActiveAgent);
-  const tabList = targetTabs.map((tab) => `- ${tab.title}`).join("\n");
-  const activeList = activeAgentTabs.map((tab) => `- ${tab.title} (${tabIndicator(tab).label})`).join("\n");
+  const tabList = targetTabs.map((tab) => `- ${threadDisplayTitle(tab.title)}`).join("\n");
+  const activeList = activeAgentTabs.map((tab) => `- ${threadDisplayTitle(tab.title)} (${tabIndicator(tab).label})`).join("\n");
   const base = [
-    `Close ${label || `${count} terminal ${noun}`}?`,
+    `Close ${label || `${count} ${noun}`}?`,
     "",
     `This terminates ${count === 1 ? "its isolated Pi process" : "their isolated Pi processes"}.`,
-    count > 1 ? `\nTabs to close:\n${tabList}` : "",
+    count > 1 ? `\nThreads to close:\n${tabList}` : "",
   ].filter(Boolean).join("\n");
   const warning = activeAgentTabs.length
-    ? `WARNING: ${activeAgentTabs.length} ${activeAgentTabs.length === 1 ? "tab has an agent" : "tabs have agents"} still running or waiting for input:\n${activeList}`
-    : "No agent work is currently running in these tabs.";
+    ? `WARNING: ${activeAgentTabs.length} ${activeAgentTabs.length === 1 ? "thread has an agent" : "threads have agents"} still running or waiting for input:\n${activeList}`
+    : "No agent work is currently running in these threads.";
   return appConfirm({
-    title: `Close ${count === 1 ? "tab" : `${count} tabs`}?`,
+    title: `Close ${count === 1 ? "thread" : `${count} threads`}?`,
     summary: `${base}\n\n${warning}`,
-    affected: tabList || label || `${count} terminal ${noun}`,
+    affected: tabList || label || `${count} ${noun}`,
     undoable: false,
-    confirmLabel: activeAgentTabs.length ? "Close and stop work" : count === 1 ? "Close tab" : "Close tabs",
+    confirmLabel: activeAgentTabs.length ? "Close and stop work" : count === 1 ? "Close thread" : "Close threads",
   });
 }
 
@@ -18004,13 +18900,13 @@ async function reopenClosedTerminalTab(tabId) {
   if (reopened) await switchTab(reopened);
 }
 
-async function closeTerminalTabs(tabIds, { label = "selected terminal tabs", allowEmpty = false } = {}) {
+async function closeTerminalTabs(tabIds, { label = "selected threads", allowEmpty = false, allowQuickClose = !allowEmpty } = {}) {
   const targetIds = [...new Set(tabIds.filter(Boolean))];
   const targetTabs = targetIds.map((id) => tabs.find((item) => item.id === id)).filter(Boolean);
   if (!targetTabs.length) return;
   // Closing one idle tab is routine and reversible (its session stays resumable), so it closes at
   // once with an Undo instead of a confirmation. Anything with running work still asks first.
-  const quickClose = targetTabs.length === 1 && !tabHasActiveAgent(targetTabs[0]) && !allowEmpty;
+  const quickClose = targetTabs.length === 1 && !tabHasActiveAgent(targetTabs[0]) && allowQuickClose;
   if (!quickClose && !(await confirmCloseTerminalTabs(targetTabs, label))) return;
 
   const closedActiveTab = targetTabs.some((tab) => tab.id === activeTabId);
@@ -18018,21 +18914,21 @@ async function closeTerminalTabs(tabIds, { label = "selected terminal tabs", all
   const fallbackTabId = tabs.find((item) => !targetIds.includes(item.id))?.id || null;
   for (const id of targetIds) closingTerminalTabIds.add(id);
   try {
-    if (closedActiveTab) eventSource?.close();
+    if (closedActiveTab) sessionEvents.close();
     const response = await api("/api/tabs/close", { method: "POST", body: { ids: targetIds, allowEmpty }, scoped: false });
     const closedIds = response.data?.closedIds || targetIds;
-    tabs = response.data?.tabs || tabs.filter((item) => !closedIds.includes(item.id));
+    applyAuthoritativeTabSnapshot(response.data?.tabs || tabs.filter((item) => !closedIds.includes(item.id)));
     syncTabMetadata(tabs);
     for (const id of closedIds) {
-      tabDrafts.delete(id);
       clearAttachments(id);
+      composerStore.clearTab(id);
+      sessionContext.invalidate(id);
       clearGitWorkflowForTab(id);
       clearFeatureDecisionStateForTab(id);
       commandCatalogsByTab.delete(id);
-      appRunnerDataByTab.delete(id);
+      projectRunners.forgetTab(id);
       tabMessagesCache.delete(id);
-      fileViewersByTab.delete(id);
-      fileViewerSelectionsByTab.delete(id);
+      projectFiles.forgetTab(id);
       btwWidgetDismissedIdsByTab.delete(id);
       removeSubagentTerminalViewsForParent(id);
     }
@@ -18040,7 +18936,7 @@ async function closeTerminalTabs(tabIds, { label = "selected terminal tabs", all
     clearOpenTerminalTabGroup(null, { force: true });
     if (!tabs.length) setWorkspaceDashboardCollapsed(false, { persist: false });
     if (quickClose && closedIds.length === 1) {
-      const closedTitle = targetTabs[0].title || "tab";
+      const closedTitle = threadDisplayTitle(targetTabs[0].title) || "thread";
       offerUndo({
         message: `Closed ${closedTitle}.`,
         undo: () => reopenClosedTerminalTab(closedIds[0]),
@@ -18048,7 +18944,9 @@ async function closeTerminalTabs(tabIds, { label = "selected terminal tabs", all
       });
     }
 
-    const activeTabNeedsFallback = closedIds.includes(activeTabId) || !tabs.some((item) => item.id === activeTabId);
+    const activeTabNeedsFallback = activeTabId
+      ? !tabs.some((item) => item.id === activeTabId)
+      : !draftConversations.activeId;
     if (activeTabNeedsFallback) {
       const sameCwdFallbackTabId = closedActiveCwd
         ? tabs.find((item) => !closedIds.includes(item.id) && item.cwd === closedActiveCwd)?.id || null
@@ -18058,6 +18956,7 @@ async function closeTerminalTabs(tabIds, { label = "selected terminal tabs", all
         : response.data?.activeTabId && tabs.some((item) => item.id === response.data.activeTabId)
           ? response.data.activeTabId
           : (fallbackTabId && tabs.some((item) => item.id === fallbackTabId) ? fallbackTabId : tabs[0]?.id)) || null, { remember: true });
+      if (!activeTabId && !draftConversations.activeId) draftConversations.select(draftConversations.create());
       resetActiveTabUi();
       renderTabs();
       restoreActiveDraft();
@@ -18070,8 +18969,9 @@ async function closeTerminalTabs(tabIds, { label = "selected terminal tabs", all
     } else {
       renderTabs();
     }
-    addEvent(`closed ${closedIds.length || targetTabs.length} terminal ${closedIds.length === 1 ? "tab" : "tabs"}`, "info");
+    addEvent(`closed ${closedIds.length || targetTabs.length} ${closedIds.length === 1 ? "thread" : "threads"}`, "info");
   } catch (error) {
+    if (closedActiveTab && targetIds.includes(activeTabId)) connectEvents(activeTabContext());
     addEvent(error.message, "error");
   } finally {
     for (const id of targetIds) closingTerminalTabIds.delete(id);
@@ -18081,19 +18981,20 @@ async function closeTerminalTabs(tabIds, { label = "selected terminal tabs", all
 async function closeTerminalTab(tabId) {
   const tab = tabs.find((item) => item.id === tabId);
   if (!tab) return;
-  await closeTerminalTabs([tabId], { label: tab.title });
+  await closeTerminalTabs([tabId], { label: threadDisplayTitle(tab.title), allowEmpty: true, allowQuickClose: true });
 }
 
 async function closeTerminalTabGroup(group) {
   const title = terminalDisplayGroupTitle(group, group.tabs[0]?.title || "group");
-  await closeTerminalTabs(group.tabs.map((tab) => tab.id), { label: `${title} group` });
+  await closeTerminalTabs(group.tabs.map((tab) => tab.id), { label: `${title} group${group.shelfLabel ? ` sessions in ${group.shelfLabel}` : ""}` });
 }
 
 async function closeAllTerminalTabs() {
-  await closeTerminalTabs(tabs.map((tab) => tab.id), { label: "all terminal tabs", allowEmpty: true });
+  await closeTerminalTabs(tabs.map((tab) => tab.id), { label: "all threads", allowEmpty: true });
 }
 
 async function initializeTabs() {
+  const previousProject = projectTargetFromContext();
   const loadedTabs = await refreshTabs({ selectStored: true });
   // Durable groups can arrive before the initial tab catalog. Rehydrate them
   // after tabs load so valid memberships are not filtered against an empty set.
@@ -18101,16 +19002,16 @@ async function initializeTabs() {
   syncTerminalCustomGroupsWithTabs(tabs, { persist: false });
   restoreMobileContinuityState();
   restoreDesktopDrafts();
-  resetActiveTabUi();
+  if (!activeTabId && !draftConversations.activeId) draftConversations.select(draftConversations.create());
+  resetActiveTabUi({ preserveFileTree: isCurrentProjectTarget(previousProject) });
   renderTabs();
   restoreActiveDraft();
+  reportDraftStorageError();
   if (!loadedTabs.length) {
-    setWorkspaceDashboardCollapsed(false, { persist: false });
-    const saved = await refreshSavedWorkspaces().catch((error) => {
+    refreshSavedWorkspaces().catch((error) => {
       addEvent(`Could not list saved workspaces: ${error.message || String(error)}`, "error");
-      return [];
     });
-    if (!saved.length) await createFirstTerminalTabFromChosenDirectory();
+    focusPromptInput({ defer: true });
     await refreshThemeCatalog(activeTabContext()).catch((error) => addEvent(`Custom theme catalog refresh failed: ${error.message || String(error)}`, "warn"));
     return;
   }
@@ -18259,149 +19160,11 @@ function toolLifecycleEventArguments(event, phase) {
   return args;
 }
 
-function normalizeEventDisplayMode(value) {
-  return value === "compact" ? "compact" : "detailed";
-}
-
-function readStoredEventDisplayMode() {
-  try {
-    return normalizeEventDisplayMode(localStorage.getItem(EVENT_DISPLAY_MODE_STORAGE_KEY));
-  } catch {
-    return "detailed";
-  }
-}
-
-function normalizeEventFilter(value) {
-  return EVENT_FILTER_VALUES.has(value) ? value : "all";
-}
-
-function readStoredEventFilter() {
-  try {
-    return normalizeEventFilter(localStorage.getItem(EVENT_FILTER_STORAGE_KEY));
-  } catch {
-    return "all";
-  }
-}
-
-function eventRowMatchesFilter(line, filter = eventFilter) {
-  if (!line?.classList?.contains("event") || filter === "all") return true;
-  if (filter === "errors") return line.dataset.eventLevel === "error";
-  if (filter === "warnings") return line.dataset.eventLevel === "warn";
-  if (filter === "tools") return ["start", "finish"].includes(line.dataset.eventToolPhase);
-  if (filter === "tree") return line.dataset.eventTreeAvailable === "true";
-  return true;
-}
-
-function applyEventFilter() {
-  const rows = [...(elements.eventLog?.children || [])].filter((line) => line.classList?.contains("event"));
-  let shown = 0;
-  for (const line of rows) {
-    const matches = eventRowMatchesFilter(line);
-    line.hidden = !matches;
-    if (matches) shown += 1;
-  }
-  const total = rows.length;
-  if (elements.eventFilterStatus) {
-    elements.eventFilterStatus.textContent = total === 0
-      ? "No events yet"
-      : eventFilter === "all"
-        ? `${total} event${total === 1 ? "" : "s"}`
-        : `${shown} of ${total}`;
-  }
-  if (elements.eventFilterEmpty) {
-    elements.eventFilterEmpty.hidden = total === 0 || shown > 0;
-    const label = elements.eventFilterSelect?.selectedOptions?.[0]?.textContent?.trim() || "this filter";
-    elements.eventFilterEmpty.textContent = `No events match ${label.toLowerCase()}.`;
-  }
-}
-
-function syncEventFilterUi() {
-  if (elements.eventFilterSelect) elements.eventFilterSelect.value = eventFilter;
-  applyEventFilter();
-}
-
-function setEventFilter(value, { persist = true } = {}) {
-  eventFilter = normalizeEventFilter(value);
-  syncEventFilterUi();
-  if (!persist) return;
-  try {
-    localStorage.setItem(EVENT_FILTER_STORAGE_KEY, eventFilter);
-  } catch {
-    // The filter remains active for this page when storage is unavailable.
-  }
-}
-
-function syncEventDisplayModeUi() {
-  if (elements.eventLog) elements.eventLog.dataset.displayMode = eventDisplayMode;
-  elements.eventDisplayDetailedAction?.setAttribute("aria-checked", String(eventDisplayMode === "detailed"));
-  elements.eventDisplayCompactAction?.setAttribute("aria-checked", String(eventDisplayMode === "compact"));
-}
-
-function setEventDisplayMode(value, { persist = true } = {}) {
-  eventDisplayMode = normalizeEventDisplayMode(value);
-  syncEventDisplayModeUi();
-  if (!persist) return;
-  try {
-    localStorage.setItem(EVENT_DISPLAY_MODE_STORAGE_KEY, eventDisplayMode);
-  } catch {
-    // Display mode remains active for this page when storage is unavailable.
-  }
-}
-
-function addEvent(message, level = "info", { toolCallId = "", toolEventPhase = "", details = [], notify = true, occurredAt = Date.now(), aggregateKey = "", aggregateIncrement = 1, aggregateSingular = "", aggregatePlural = "" } = {}) {
-  const stableAggregateKey = String(aggregateKey || "").trim();
-  const priorAggregate = stableAggregateKey
-    ? [...(elements.eventLog?.children || [])].find((candidate) => candidate.dataset.eventAggregateKey === stableAggregateKey)
-    : null;
-  const aggregateCount = stableAggregateKey
-    ? Math.max(0, Number.parseInt(priorAggregate?.dataset.eventAggregateCount || "0", 10) || 0) + Math.max(1, Math.trunc(Number(aggregateIncrement) || 1))
-    : 0;
-  const eventMessage = stableAggregateKey && aggregateSingular
-    ? `${message} ${aggregateCount} ${aggregateCount === 1 ? aggregateSingular : aggregatePlural || aggregateSingular}`
-    : String(message || "");
-  priorAggregate?.remove();
-  const line = make("button", `event ${level}`.trim());
-  line.type = "button";
-  line.dataset.eventLevel = String(level || "info").trim().toLowerCase() || "info";
-  line.dataset.chatEventTimestamp = String(occurredAt);
-  if (stableAggregateKey) {
-    line.dataset.eventAggregateKey = stableAggregateKey;
-    line.dataset.eventAggregateCount = String(aggregateCount);
-  }
-  const stableToolCallId = String(toolCallId || "").trim();
-  const toolLifecycle = ["start", "finish"].includes(toolEventPhase);
-  const treeEligible = stableToolCallId && toolLifecycle;
-  line.dataset.eventTreeAvailable = String(!!treeEligible);
-  if (stableToolCallId) line.dataset.chatToolCallId = stableToolCallId;
-  if (toolLifecycle) line.dataset.eventToolPhase = toolEventPhase;
-  line.setAttribute("aria-keyshortcuts", "ContextMenu Shift+F10");
-  const time = make("span", "event-time", `[${new Date(occurredAt).toLocaleTimeString()}]`);
-  const summary = make("span", "event-summary", eventMessage);
-  const main = make("span", "event-main");
-  main.append(time, summary);
-  line.append(main);
-  if (Array.isArray(details) && details.length) {
-    const meta = make("span", "event-details");
-    for (const detail of details) {
-      if (!detail?.label || !detail?.value) continue;
-      const item = make("span", `event-detail${detail.tone ? ` ${detail.tone}` : ""}`);
-      item.append(make("span", "event-detail-label", `${detail.label}:`), document.createTextNode(` ${detail.value}`));
-      meta.append(item);
-    }
-    if (meta.childElementCount) line.append(meta);
-  }
-  const accessibleText = line.textContent.trim();
-  line.title = `Jump to this event in the chat; open the context menu for display options${treeEligible ? " and Tree navigation" : ""}`;
-  line.setAttribute("aria-label", `${accessibleText}. Jump to this event in the chat. Context menu: display options${treeEligible ? " and Tree navigation" : ""}.`);
-  line.addEventListener("click", () => jumpToChatEvent(line));
-  elements.eventLog.prepend(line);
-  while (elements.eventLog.children.length > 120) elements.eventLog.lastElementChild?.remove();
-  applyEventFilter();
-  if (notify && (level === "error" || level === "warn")) {
-    showNoticeToast(eventMessage, level);
-    noteUnreadEvent();
-  }
-}
+function syncEventFilterUi() { activityEvents.syncUi(); }
+function syncEventDisplayModeUi() { activityEvents.syncUi(); }
+function setEventFilter(value, options) { activityEvents.setFilter(value, options); }
+function setEventDisplayMode(value, options) { activityEvents.setDisplayMode(value, options); }
+function addEvent(message, level, options) { activityEvents.add(message, level, options); }
 
 function closeEventTreeContextMenu({ returnFocus = true } = {}) {
   const trigger = eventTreeContextMenuState?.trigger;
@@ -18454,7 +19217,7 @@ function showEventTreeContextMenu(event, line = null) {
   const top = Math.min(Number(event.clientY) || 0, Math.max(8, window.innerHeight - rect.height - 8));
   menu.style.left = `${Math.max(8, left)}px`;
   menu.style.top = `${Math.max(8, top)}px`;
-  const displayAction = eventDisplayMode === "compact" ? elements.eventDisplayCompactAction : elements.eventDisplayDetailedAction;
+  const displayAction = activityEvents.getSnapshot().displayMode === "compact" ? elements.eventDisplayCompactAction : elements.eventDisplayDetailedAction;
   displayAction?.focus({ preventScroll: true });
 }
 
@@ -18587,33 +19350,25 @@ function eventsSectionRecord() {
   return sidePanelSectionRecords().find((record) => record.id === "events") || null;
 }
 
+function syncUsageVisibility() {
+  for (const [provider, box] of [["codex", elements.codexUsageBox], ["claude", elements.claudeUsageBox]]) {
+    activityUsage.setVisible(provider, !!box && !box.closest("[hidden], [inert]") && !!box.getClientRects().length && getComputedStyle(box).visibility !== "hidden");
+  }
+}
+
 function eventsSectionIsVisibleAndExpanded() {
-  const record = eventsSectionRecord();
-  if (!record || record.section.hidden || record.section.classList.contains("collapsed")) return false;
-  return !document.body.classList.contains("side-panel-collapsed") || document.body.classList.contains("control-deck-left");
+  const log = elements.eventLog;
+  return !!log?.getClientRects().length && !log.closest("[hidden], [inert]") && getComputedStyle(log).visibility !== "hidden";
 }
 
-function renderEventsUnreadBadge() {
-  const badge = elements.eventsUnreadBadge;
-  if (!badge) return;
-  badge.textContent = eventsUnreadCount > 99 ? "99+" : String(eventsUnreadCount);
-  badge.hidden = eventsUnreadCount === 0;
-  badge.setAttribute("aria-label", `${eventsUnreadCount} unread warning${eventsUnreadCount === 1 ? "" : "s"} or errors`);
-}
-
-function noteUnreadEvent() {
-  if (eventsSectionIsVisibleAndExpanded()) return;
-  eventsUnreadCount += 1;
-  renderEventsUnreadBadge();
-}
-
-function clearUnreadEvents() {
-  if (!eventsUnreadCount) return;
-  eventsUnreadCount = 0;
-  renderEventsUnreadBadge();
-}
+function clearUnreadEvents() { activityEvents.clearUnread(); }
 
 function revealSidePanelSectionById(id) {
+  if (focusedShell?.active) {
+    const destination = focusedSectionDestination(id);
+    navigateFocusedShell(destination, destination === "settings" ? null : id);
+    return;
+  }
   const record = sidePanelSectionRecords().find((entry) => entry.id === id);
   if (!record) return;
   if (record.section.hidden) setSidePanelSectionVisible(record, true);
@@ -18626,6 +19381,7 @@ function revealSidePanelSectionById(id) {
 }
 
 function revealEventsSection() {
+  if (focusedShell?.active) { navigateFocusedShell("activity", "events"); clearUnreadEvents(); return; }
   const record = eventsSectionRecord();
   if (!record) return;
   if (record.section.hidden) setSidePanelSectionVisible(record, true);
@@ -18661,7 +19417,7 @@ async function ensureBlockedTabNotificationPermission() {
   try {
     const permission = await Notification.requestPermission();
     if (permission === "granted") {
-      addEvent("browser notifications enabled for blocked tabs", "info");
+      addEvent("browser notifications enabled for blocked threads", "info");
       return true;
     }
   } catch (error) {
@@ -18691,7 +19447,7 @@ async function ensureAgentDoneNotificationPermission() {
 function noteBlockedTabNotificationFallback(reason) {
   if (blockedTabNotificationFallbackNoted) return;
   blockedTabNotificationFallbackNoted = true;
-  addEvent(`browser notifications unavailable for blocked tabs: ${reason}`, "warn");
+  addEvent(`browser notifications unavailable for blocked threads: ${reason}`, "warn");
 }
 
 function blockedTabNotificationDetail({ method, count } = {}) {
@@ -18769,7 +19525,7 @@ function notifyBlockedTab(tabOrId, { request = null, count } = {}) {
 
   const pendingCount = normalizePendingExtensionUiRequestCount(count ?? request?.pendingExtensionUiRequestCount ?? tabPendingBlockerCount(tab));
   const method = request?.method && EXTENSION_UI_BLOCKING_METHODS.has(request.method) ? request.method : "";
-  const tabTitle = tab?.title || request?.tabTitle || "terminal";
+  const tabTitle = threadDisplayTitle(tab?.title || request?.tabTitle) || "thread";
   const detail = blockedTabNotificationDetail({ method, count: pendingCount });
   const title = "Pi needs your response";
   const body = `${tabTitle} is blocked, ${detail}.`;
@@ -18883,7 +19639,7 @@ function notifyAgentDone(tabOrId, { activity = null, tabTitle = "" } = {}) {
   agentDoneNotificationKeys.add(key);
   if (isAutoRetryingTab(tabId)) return;
 
-  const displayTitle = tabTitle || tab?.title || "terminal";
+  const displayTitle = threadDisplayTitle(tabTitle || tab?.title) || "thread";
   const failed = normalizedActivity.status === "failed" || normalizedActivity.failed === true || tab?.failed === true;
   queueAgentDoneBrowserNotification({
     key,
@@ -19327,7 +20083,7 @@ async function runGitFooterPiCalibration(tabContext = activeTabContext()) {
 
   const commandName = resolveAvailableCommandName("calibrate", { rpcOnly: true });
   if (!commandName) {
-    addEvent("PI calibration unavailable: /calibrate is not loaded in this Pi tab.", "warn");
+    addEvent("PI calibration unavailable: /calibrate is not loaded in this Pi thread.", "warn");
     return;
   }
 
@@ -19439,6 +20195,7 @@ function ensureFooterTooltipNode() {
     footerTooltipNode = make("div", "footer-floating-tooltip");
     footerTooltipNode.id = "footerFloatingTooltip";
     footerTooltipNode.setAttribute("role", "tooltip");
+    if (typeof footerTooltipNode.showPopover === "function") footerTooltipNode.setAttribute("popover", "manual");
     footerTooltipNode.hidden = true;
     document.body.append(footerTooltipNode);
   }
@@ -19461,6 +20218,7 @@ function positionFooterTooltip(target) {
   const rect = target.getBoundingClientRect();
   const maxWidth = Math.max(96, Math.min(384, window.innerWidth - margin * 2));
   footerTooltipNode.style.maxWidth = `${maxWidth}px`;
+  footerTooltipNode.style.maxHeight = `${Math.max(0, window.innerHeight - margin * 2)}px`;
 
   const width = footerTooltipNode.offsetWidth;
   const height = footerTooltipNode.offsetHeight;
@@ -19480,7 +20238,7 @@ function positionFooterTooltip(target) {
     if (top < margin) top = rect.bottom + gap;
   }
   left = Math.min(Math.max(margin, left), Math.max(margin, window.innerWidth - margin - width));
-  top = Math.min(Math.max(margin, top), window.innerHeight - margin - height);
+  top = Math.min(Math.max(margin, top), Math.max(margin, window.innerHeight - margin - height));
 
   footerTooltipNode.style.left = `${Math.round(left)}px`;
   footerTooltipNode.style.top = `${Math.round(top)}px`;
@@ -19505,6 +20263,7 @@ function showFooterTooltip(target) {
   else delete tooltip.dataset.variant;
   tooltip.textContent = text;
   tooltip.hidden = false;
+  if (tooltip.hasAttribute("popover") && !tooltip.matches(":popover-open")) tooltip.showPopover();
   tooltip.classList.add("visible");
   positionFooterTooltip(target);
 }
@@ -19529,6 +20288,7 @@ function hideFooterTooltip(target) {
   if (target && target !== footerTooltipTarget) return;
   footerTooltipTarget = null;
   if (!footerTooltipNode) return;
+  if (footerTooltipNode.hasAttribute("popover") && footerTooltipNode.matches(":popover-open")) footerTooltipNode.hidePopover();
   footerTooltipNode.hidden = true;
   footerTooltipNode.classList.remove("visible");
   delete footerTooltipNode.dataset.variant;
@@ -19537,6 +20297,7 @@ function hideFooterTooltip(target) {
 function bindStyledTooltipEvents(node) {
   if (!node || node._styledTooltipBound) return;
   node._styledTooltipBound = true;
+  node.dataset.tooltipFloating = "true";
   node.addEventListener("pointerenter", (event) => {
     if (event.pointerType === "touch") return;
     scheduleFooterTooltip(node);
@@ -19744,15 +20505,15 @@ const GIT_FOOTER_TOOLTIP_COPY = {
   cost: "Estimated session cost. sub means subscription-backed provider; api means metered API usage.",
   context: "Context window pressure. Shows percent used over the model limit; auto means auto-compaction is enabled.",
   usage: "Provider subscription usage. Shows the used share of every available provider-reported rate window.",
-  cwd: "Active working directory for this Web UI tab.",
+  cwd: "Active working directory for this Web UI thread.",
   git: "Current Git branch. detached means HEAD is not on a branch; no repo means the cwd is outside a Git work tree.",
   "git-state": "Active Git operation or detached state. Finish or abort rebase/merge/cherry-pick/revert/bisect before normal commits.",
   sync: "Remote tracking divergence. ↑ means local commits to push; ↓ means remote commits to pull. Incoming-only Sync pulls from origin; outgoing Sync uses the confirmed push flow, including the guarded force-with-lease fallback when needed.",
-  changes: "Working tree and fetched remote summary. 🟢 staged, ✏️ modified unstaged, ➕ untracked, ⚠️ conflicted; ⬇️ means fetched remote commits to pull; 🔄/✓/⚠️ fetch shows the tab git fetch state; ✅ means no changes.",
+  changes: "Working tree and fetched remote summary. 🟢 staged, ✏️ modified unstaged, ➕ untracked, ⚠️ conflicted; ⬇️ means fetched remote commits to pull; 🔄/✓/⚠️ fetch shows the thread git fetch state; ✅ means no changes.",
   "git-extra": "Extra Git signals. 📦 stash, 🧩 dirty submodules, 🌳 worktrees, 🏷️ tag at HEAD, 🕒 last commit age, 🔓 signing mismatch.",
-  worktree: "Git worktree checkout for this tab. Use branch worktrees to work on branches in parallel without switching this checkout.",
-  model: "Scoped model for this tab.",
-  thinking: "Reasoning/thinking effort for this tab.",
+  worktree: "Git worktree checkout for this thread. Use branch worktrees to work on branches in parallel without switching this checkout.",
+  model: "Scoped model for this thread.",
+  thinking: "Reasoning/thinking effort for this thread.",
 };
 
 const GIT_FOOTER_VISIBILITY_GROUPS = Object.freeze([
@@ -19860,7 +20621,7 @@ const GIT_FOOTER_VISIBILITY_HINTS = Object.freeze({
   "webui-pi-calibration": "Click action on the PI card for calibration/probe commands.",
   "webui-context-auto-compaction": "Click action on context chips for auto-compaction.",
   "webui-branch-picker": "Click action on the git branch/worktree chips.",
-  "webui-git-init": "Git initialization affordance when a tab has no repository.",
+  "webui-git-init": "Git initialization affordance when a thread has no repository.",
   "webui-sync-push": "Compatibility visibility key for incoming pull and outgoing push actions on Sync chips.",
   "webui-changes-modal": "Click action opening the changes/conflicts modal.",
   "webui-git-tools-modal": "Click action opening extra git tools.",
@@ -19901,7 +20662,7 @@ function setGitFooterVisibilityStatus(message = "", level = "muted") {
 
 function setGitFooterVisibilityBusy(busy) {
   gitFooterVisibilityApplyInFlight = !!busy;
-  const commandAvailable = gitFooterVisibilityCommandAvailable();
+  const commandAvailable = gitFooterVisibilityCommandAvailable() && isCurrentGitFooterVisibilityTarget(gitFooterVisibilityTarget);
   for (const button of [elements.gitFooterVisibilityApplyButton, elements.gitFooterVisibilityResetButton]) {
     if (button) button.disabled = gitFooterVisibilityApplyInFlight || !commandAvailable;
   }
@@ -19967,15 +20728,21 @@ function readGitFooterVisibilitySelection() {
   return next;
 }
 
-async function runGitFooterVisibilityCommand(action, keys = []) {
-  const commandName = gitFooterVisibilityCommandName();
+function isCurrentGitFooterVisibilityTarget(target) {
+  return !!target && gitFooterVisibilityTarget === target && elements.gitFooterVisibilityDialog?.open && isCurrentProjectTarget(target);
+}
+
+async function runGitFooterVisibilityCommand(action, keys = [], target = gitFooterVisibilityTarget, { dialogOwned = true } = {}) {
+  if (!(dialogOwned ? isCurrentGitFooterVisibilityTarget(target) : target && isCurrentProjectTarget(target))) throw new Error("The session changed. Reopen Git-footer Visibility before applying changes.");
+  const commandName = target.commandName;
   if (!commandName) throw new Error(commandUnavailableMessage("git-footer-visibility"));
   const suffix = keys.length > 0 ? ` ${keys.join(" ")}` : "";
-  await sendPrompt("prompt", `/${commandName} ${action} webui${suffix}`, { targetTabId: activeTabId, throwOnError: true });
+  await sendPrompt("prompt", `/${commandName} ${action} webui${suffix}`, { targetTabId: target.tabId, throwOnError: true });
 }
 
 async function applyGitFooterVisibilityDialog() {
-  if (gitFooterVisibilityApplyInFlight) return;
+  const target = gitFooterVisibilityTarget;
+  if (gitFooterVisibilityApplyInFlight || !isCurrentGitFooterVisibilityTarget(target)) return;
   const current = currentGitFooterVisibilityState();
   const next = readGitFooterVisibilitySelection();
   const show = [];
@@ -19994,32 +20761,37 @@ async function applyGitFooterVisibilityDialog() {
   setGitFooterVisibilityBusy(true);
   setGitFooterVisibilityStatus("Applying WebUI footer visibility…", "muted");
   try {
-    if (hide.length) await runGitFooterVisibilityCommand("hide", hide);
-    if (show.length) await runGitFooterVisibilityCommand("show", show);
+    if (hide.length) await runGitFooterVisibilityCommand("hide", hide, target);
+    if (show.length) await runGitFooterVisibilityCommand("show", show, target);
+    if (!isCurrentGitFooterVisibilityTarget(target)) return;
     gitFooterVisibilityDirty = false;
     setGitFooterVisibilityStatus(`Saved ${hide.length + show.length} global WebUI footer visibility change${hide.length + show.length === 1 ? "" : "s"}.`, "success");
-    requestGitFooterWebuiPayload(activeTabContext(), { force: true, allowDuringRun: true });
+    requestGitFooterWebuiPayload(target, { force: true, allowDuringRun: true });
     renderFooter();
   } catch (error) {
+    if (!isCurrentGitFooterVisibilityTarget(target)) return;
     setGitFooterVisibilityStatus(error.message || String(error), "error");
   } finally {
-    setGitFooterVisibilityBusy(false);
+    if (gitFooterVisibilityTarget === target) setGitFooterVisibilityBusy(false);
   }
 }
 
 async function resetGitFooterVisibilityDialog() {
-  if (gitFooterVisibilityApplyInFlight) return;
+  const target = gitFooterVisibilityTarget;
+  if (gitFooterVisibilityApplyInFlight || !isCurrentGitFooterVisibilityTarget(target)) return;
   setGitFooterVisibilityBusy(true);
   setGitFooterVisibilityStatus("Resetting WebUI footer visibility…", "muted");
   try {
-    await runGitFooterVisibilityCommand("reset");
+    await runGitFooterVisibilityCommand("reset", [], target);
+    if (!isCurrentGitFooterVisibilityTarget(target)) return;
     gitFooterVisibilityDirty = false;
     setGitFooterVisibilityStatus("Removed the saved global WebUI footer visibility overrides.", "success");
-    requestGitFooterWebuiPayload(activeTabContext(), { force: true, allowDuringRun: true });
+    requestGitFooterWebuiPayload(target, { force: true, allowDuringRun: true });
   } catch (error) {
+    if (!isCurrentGitFooterVisibilityTarget(target)) return;
     setGitFooterVisibilityStatus(error.message || String(error), "error");
   } finally {
-    setGitFooterVisibilityBusy(false);
+    if (gitFooterVisibilityTarget === target) setGitFooterVisibilityBusy(false);
   }
 }
 
@@ -20035,13 +20807,16 @@ function openGitFooterVisibilityDialog() {
   setOptionsMenuOpen(false);
   closeGitFooterContextMenu({ returnFocus: false });
   hideFooterTooltip();
+  gitFooterVisibilityTarget = { ...projectTargetFromContext(), commandName: gitFooterVisibilityCommandName() };
+  gitFooterVisibilityApplyInFlight = false;
   gitFooterVisibilityDirty = false;
-  renderGitFooterVisibilityDialog();
   if (!elements.gitFooterVisibilityDialog.open) elements.gitFooterVisibilityDialog.showModal();
+  renderGitFooterVisibilityDialog();
   queueMicrotask(() => elements.gitFooterVisibilityBody?.querySelector("input")?.focus());
 }
 
 function closeGitFooterVisibilityDialog() {
+  gitFooterVisibilityTarget = null;
   gitFooterVisibilityDirty = false;
   gitFooterVisibilityApplyInFlight = false;
   if (elements.gitFooterVisibilityDialog?.open) elements.gitFooterVisibilityDialog.close();
@@ -20107,11 +20882,14 @@ function bindGitFooterContextMenu(node, chip) {
 }
 
 async function disableGitFooterContextChip(key, label) {
+  const target = { ...projectTargetFromContext(), commandName: gitFooterVisibilityCommandName() };
   try {
-    await runGitFooterVisibilityCommand("hide", [key]);
+    await runGitFooterVisibilityCommand("hide", [key], target, { dialogOwned: false });
+    if (!isCurrentProjectTarget(target)) return;
     addEvent(`Disabled the ${label || key} Git footer box.`, "success");
-    requestGitFooterWebuiPayload(activeTabContext(), { force: true, allowDuringRun: true });
+    requestGitFooterWebuiPayload(target, { force: true, allowDuringRun: true });
   } catch (error) {
+    if (!isCurrentProjectTarget(target)) return;
     addEvent(error.message || String(error), "error");
   }
 }
@@ -20346,6 +21124,9 @@ function clearGitFooterWebuiPayloadCache() {
 
 function parseGitFooterWebuiPayload() {
   if (isOptionalFeatureDisabled("gitFooterStatus")) return null;
+  // A draft has no Pi session yet. The cached payload belongs to the last
+  // thread, and its cwd guard cannot reject it because a draft has no cwd here.
+  if (!activeTabId) return null;
 
   const livePayload = parseGitFooterWebuiPayloadRaw(statusEntries.get(GIT_FOOTER_WEBUI_STATUS_KEY));
   if (livePayload) return livePayload;
@@ -20448,7 +21229,7 @@ function renderTuiFooterLine({ cwd, cwdTitle, message = "", stats = [], model = 
   const line = make("div", "footer-line footer-line-tui");
   line.append(footerTuiItem(cwd || "loading…", "footer-tui-cwd", tab ? {
     onClick: changeActiveTabCwd,
-    title: cwdTitle || `Change cwd for ${tab.title}: ${cwd}`,
+    title: cwdTitle || `Change cwd for ${threadDisplayTitle(tab.title)}: ${cwd}`,
     middleTruncate: true,
   } : { title: cwdTitle, middleTruncate: true }));
   if (worktreeLabel) line.append(footerTuiItem(worktreeLabel, "footer-tui-worktree", { title: workspace?.worktreePath || worktreeLabel }));
@@ -20456,10 +21237,23 @@ function renderTuiFooterLine({ cwd, cwdTitle, message = "", stats = [], model = 
   for (const stat of stats.filter(Boolean)) line.append(footerTuiItem(stat, "footer-tui-stat"));
   if (model) {
     line.append(make("span", "footer-tui-spacer"));
-    line.append(footerTuiItem(model, "footer-tui-model", {
+    const modelButton = footerTuiItem(model, "footer-tui-model", {
       onClick: () => setFooterModelPickerOpen(!footerModelPickerOpen),
       title: `Change scoped model: ${model}`,
-    }));
+    });
+    modelButton.setAttribute("aria-haspopup", "listbox");
+    modelButton.setAttribute("aria-expanded", String(footerModelPickerOpen));
+    line.append(modelButton);
+    if (focusedShell?.active) {
+      const level = currentState?.pendingThinkingLevel || currentState?.thinkingLevel || "off";
+      const effort = footerTuiItem(`Effort: ${level}`, "footer-thinking footer-meta-action", {
+        onClick: () => setFooterThinkingPickerOpen(!footerThinkingPickerOpen),
+        title: "Change thinking effort for this session",
+      });
+      effort.setAttribute("aria-haspopup", "listbox");
+      effort.setAttribute("aria-expanded", String(footerThinkingPickerOpen));
+      line.append(effort);
+    }
   }
   return line;
 }
@@ -20538,6 +21332,10 @@ function renderGitFooterPayloadMetric(chip, payload) {
   const action = piAction || contextAction;
   options.title = gitFooterPayloadTooltip(chip, { action });
   const node = footerMetric(chip.icon || "•", chip.label, chip.value, chip.tone ? `tone-${chip.tone}` : "", options);
+  if (["model", "thinking"].includes(chip.key) && options.onClick) {
+    node.setAttribute("aria-haspopup", "listbox");
+    node.setAttribute("aria-expanded", String(chip.key === "model" ? footerModelPickerOpen : footerThinkingPickerOpen));
+  }
   if (chip.contextUsage) applyFooterContextUsage(node, chip.contextUsage);
   if (chip.usageWindows) applyFooterUsageWindows(node, chip.usageWindows);
   return bindGitFooterContextMenu(node, chip);
@@ -20670,7 +21468,7 @@ async function integrateGitPullDivergence(mode) {
   const { tabId, syncValue, requestId } = gitPullErrorContext;
   const targetTab = tabs.find((tab) => tab.id === tabId);
   const activeBranch = tabId === activeTabId ? gitFooterCurrentBranch() : "";
-  const target = activeBranch || targetTab?.title || targetTab?.cwd || "the selected branch";
+  const target = activeBranch || threadDisplayTitle(targetTab?.title) || targetTab?.cwd || "the selected branch";
   const merge = mode === "merge";
   const confirmed = await appConfirmText([
     `${merge ? "Merge upstream changes into" : "Rebase local commits onto the upstream of"} ${target}?`,
@@ -20773,7 +21571,7 @@ async function pushGitFooterSync(tabId = activeTabId, syncValue = "") {
   let recoverWithPullFirst = false;
   const tabContext = activeTabContext(tabId);
   const tab = tabs.find((item) => item.id === tabId);
-  const target = tab?.title || tab?.cwd || "this tab";
+  const target = threadDisplayTitle(tab?.title) || tab?.cwd || "this thread";
   hideFooterTooltip();
   const branch = gitFooterCurrentBranch();
   const protectedWarning = ["main", "master"].includes(branch)
@@ -20825,7 +21623,7 @@ function renderGitFooterPayloadMeta(chip, tab, payload) {
   let action = "";
   if (chip.key === "cwd" && tab && visible("webui-cwd-picker")) {
     options.onClick = changeActiveTabCwd;
-    action = `Click to change the working directory for ${tab.title}.`;
+    action = `Click to change the working directory for ${threadDisplayTitle(tab.title)}.`;
   } else if (chip.key === "git" && cleanFooterPayloadText(chip.value, "").toLowerCase() === "no repo" && visible("webui-git-init")) {
     options.onClick = () => startGitInitWorkflow();
     action = "No Git repository detected. Click to initialize a repo, create README.md, add origin, and push main.";
@@ -21317,13 +22115,13 @@ function gitFileViewerTarget(repoRelPath, root, candidates = []) {
 async function openGitFileInViewer(repoRelPath, { root = "", candidates = [], closeChanges = false, category = "" } = {}) {
   const target = gitFileViewerTarget(repoRelPath, root, candidates);
   if (!target) {
-    addEvent(`Cannot open ${repoRelPath}: it is outside the available tab working directories.`, "error");
+    addEvent(`Cannot open ${repoRelPath}: it is outside the available thread working directories.`, "error");
     return;
   }
   if (closeChanges) closeGitChangesDialog();
   if (target.tabId !== activeTabId) await switchTab(target.tabId);
   if (target.tabId !== activeTabId) {
-    addEvent(`Cannot open ${repoRelPath}: its terminal tab is no longer available.`, "error");
+    addEvent(`Cannot open ${repoRelPath}: its thread is no longer available.`, "error");
     return;
   }
   setSidePanelCollapsed(false);
@@ -21768,7 +22566,7 @@ function renderGitChangesDialog() {
     const commitData = data?.commit || commit;
     const base = commitView
       ? [commitData?.shortHash || String(commitData?.hash || "").slice(0, 12), commitData?.subject, data?.root].filter(Boolean).join(" · ") || "Commit diff"
-      : data?.root ? `${data.branch || "detached"} · ${data.root}` : "Current tab git diff";
+      : data?.root ? `${data.branch || "detached"} · ${data.root}` : "Current thread git diff";
     elements.gitChangesSubtitle.textContent = !commitView && data?.remote?.upstream ? `${base} · upstream ${data.remote.upstream}` : base;
   }
   if (elements.gitChangesRefreshButton) {
@@ -21849,6 +22647,7 @@ function renderGitChangesDialog() {
 }
 
 async function loadGitChangesDialog(tabContext = activeTabContext()) {
+  const target = captureGitToolsTarget(tabContext.tabId || activeTabId);
   const requestSerial = ++gitChangesRequestSerial;
   gitChangesUntrackedContentRequests.clear();
   if (gitChangesState.tabId !== (tabContext.tabId || activeTabId)) gitChangesCollapsedFiles.clear();
@@ -21859,7 +22658,7 @@ async function loadGitChangesDialog(tabContext = activeTabContext()) {
       api("/api/git-changes", { tabId: tabContext.tabId }),
       api("/api/git-operation", { tabId: tabContext.tabId }).catch(() => null),
     ]);
-    if (requestSerial !== gitChangesRequestSerial) return;
+    if (requestSerial !== gitChangesRequestSerial || !isCurrentGitToolsTarget(target)) return;
     if (!response.ok) throw new Error(response.error || "Failed to load git changes");
     gitChangesState = {
       ...gitChangesState,
@@ -21876,7 +22675,7 @@ async function loadGitChangesDialog(tabContext = activeTabContext()) {
       tabId: tabContext.tabId || activeTabId,
     };
   } catch (error) {
-    if (requestSerial !== gitChangesRequestSerial) return;
+    if (requestSerial !== gitChangesRequestSerial || !isCurrentGitToolsTarget(target)) return;
     gitChangesState = { ...gitChangesState, loading: false, error: error.message || String(error) };
   }
   renderGitChangesDialog();
@@ -21887,7 +22686,6 @@ function openGitChangesDialog(requestedTabId = activeTabId) {
   hideFooterTooltip();
   const tabId = typeof requestedTabId === "string" && requestedTabId ? requestedTabId : activeTabId;
   const tabContext = activeTabContext(tabId);
-  if (gitToolsState.tabId !== tabId) resetGitToolsState(tabId);
   gitChangesState = {
     ...gitChangesState,
     loading: true,
@@ -21907,6 +22705,7 @@ function openGitChangesDialog(requestedTabId = activeTabId) {
   };
   renderGitChangesDialog();
   if (!elements.gitChangesDialog.open) elements.gitChangesDialog.showModal();
+  resetGitToolsState(tabId);
   loadGitChangesDialog(tabContext).catch((error) => addEvent(error.message || String(error), "error"));
 }
 
@@ -21929,6 +22728,8 @@ async function loadGitCommitDialog(tabId, commit) {
 
 function openGitCommitDialog(tabId, commit) {
   if (!elements.gitChangesDialog || !tabId || !commit?.hash) return;
+  gitToolsDialogEpoch += 1;
+  projectGitTools.reset(null);
   hideFooterTooltip();
   gitChangesState = { ...gitChangesState, loading: true, pulling: false, fetching: false, error: "", message: "", data: null, operation: null, tabId, mode: "commit", commit };
   renderGitChangesDialog();
@@ -21988,6 +22789,8 @@ async function pullGitChangesDialog() {
 }
 
 function closeGitChangesDialog() {
+  gitToolsDialogEpoch += 1;
+  projectGitTools.reset(null);
   gitChangesRequestSerial += 1;
   gitChangesUntrackedContentRequests.clear();
   gitChangesState = { ...gitChangesState, loading: false, pulling: false, fetching: false };
@@ -22030,7 +22833,7 @@ function gitChangesFetchStateLines() {
   const lines = [];
   const chip = parseGitFooterWebuiPayload()?.meta?.find((item) => item.key === "changes");
   const extensionLine = String(chip?.title || "").split("\n").find((line) => /git fetch/i.test(line));
-  if (extensionLine) lines.push(`Tab fetch state: ${extensionLine.trim()}`);
+  if (extensionLine) lines.push(`Thread fetch state: ${extensionLine.trim()}`);
   const lastFetch = gitChangesState.lastFetch;
   if (lastFetch?.at) {
     const time = new Date(lastFetch.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
@@ -22144,30 +22947,35 @@ function renderGitConflictPreview(preview) {
   return make("pre", "git-conflict-preview", text);
 }
 
-async function runGitOperationRequest(url, body, successLabel) {
-  const tabId = gitChangesState.tabId || activeTabId;
-  gitToolsState.busy.add("operation");
-  renderGitChangesDialog();
+async function runGitOperationRequest(url, body, successLabel, token = projectGitTools.capture()) {
+  if (!projectGitTools.isCurrent(token) || projectGitTools.getState().busy.has("operation")) return;
+  const target = captureGitToolsTarget();
+  projectGitTools.setBusy("operation", true, token);
   try {
-    const response = await api(url, { method: "POST", body, tabId });
+    const response = await api(url, { method: "POST", body, tabId: target.tabId });
+    if (!projectGitTools.isCurrent(token)) return;
     if (!response.ok) throw new Error([response.error, response.hint].filter(Boolean).join("\n") || "git operation failed");
-    gitToolsState.busy.delete("operation");
+    projectGitTools.setBusy("operation", false, token);
     addEvent(`${successLabel}.`, "success");
-    await loadGitChangesDialog({ tabId });
+    await loadGitChangesDialog(target);
+    if (!projectGitTools.isCurrent(token)) return;
     gitChangesState = { ...gitChangesState, message: `${successLabel}.` };
     renderGitChangesDialog();
-    requestGitFooterWebuiPayload(activeTabContext(tabId), { force: true });
+    requestGitFooterWebuiPayload(target, { force: true });
   } catch (error) {
-    gitToolsState.busy.delete("operation");
+    if (!projectGitTools.isCurrent(token)) return;
+    projectGitTools.setBusy("operation", false, token);
     gitChangesState = { ...gitChangesState, error: error.message || String(error) };
     renderGitChangesDialog();
   }
 }
 
 function renderGitOperationPanel(operation) {
+  const token = projectGitTools.capture();
+  const runOperation = (url, body, label) => runGitOperationRequest(url, body, label, token);
   const kind = operation?.operation;
   if (!kind) return null;
-  const busy = gitToolsState.busy.has("operation") || gitToolsState.busy.has("conflict-agent") || gitChangesState.loading || gitChangesState.pulling || gitChangesState.fetching;
+  const busy = projectGitTools.getState().busy.has("operation") || projectGitTools.getState().busy.has("conflict-agent") || gitChangesState.loading || gitChangesState.pulling || gitChangesState.fetching;
   const conflicts = operation.conflicts || [];
   const panel = make("section", "git-operation-panel");
   const header = make("div", "git-operation-header");
@@ -22185,7 +22993,7 @@ function renderGitOperationPanel(operation) {
       button.type = "button";
       button.disabled = busy;
       button.title = `git bisect ${verdict}`;
-      button.addEventListener("click", () => runGitOperationRequest("/api/git-operation/bisect", { verdict }, `Marked the current revision as ${verdict}`));
+      button.addEventListener("click", () => runOperation("/api/git-operation/bisect", { verdict }, `Marked the current revision as ${verdict}`));
       row.append(button);
     }
     const reset = make("button", "git-operation-button danger", "Reset bisect");
@@ -22194,7 +23002,7 @@ function renderGitOperationPanel(operation) {
     reset.title = "git bisect reset";
     reset.addEventListener("click", async () => {
       if (!(await appConfirmText(`Reset the bisect session in ${operation.root}?\n\nCommand: git bisect reset\nThis returns to the pre-bisect checkout.`, { affected: operation.root, confirmLabel: "Reset bisect" }))) return;
-      runGitOperationRequest("/api/git-operation/bisect", { verdict: "reset", confirmed: true }, "Reset the bisect session");
+      runOperation("/api/git-operation/bisect", { verdict: "reset", confirmed: true }, "Reset the bisect session");
     });
     row.append(reset);
     panel.append(row);
@@ -22215,7 +23023,7 @@ function renderGitOperationPanel(operation) {
         {
           label: "Mark resolved",
           title: `git add -- ${conflict.path}`,
-          onClick: () => runGitOperationRequest("/api/git-operation/stage-file", { path: conflict.path }, `Marked ${conflict.path} as resolved`),
+          onClick: () => runOperation("/api/git-operation/stage-file", { path: conflict.path }, `Marked ${conflict.path} as resolved`),
         },
       ]);
       if (actions) summary.append(actions);
@@ -22240,23 +23048,25 @@ function renderGitOperationPanel(operation) {
     const resolveWithAgent = make("button", "git-operation-button primary", "Resolve with agent");
     resolveWithAgent.type = "button";
     resolveWithAgent.disabled = busy;
-    resolveWithAgent.title = `Open a new Pi tab in ${operation.root} and send it the ${kind} conflict context`;
+    resolveWithAgent.title = `Open a new Pi thread in ${operation.root} and send it the ${kind} conflict context`;
     resolveWithAgent.addEventListener("click", async () => {
       const sourceTabId = gitChangesState.tabId || activeTabId;
-      gitToolsState.busy.add("conflict-agent");
+      if (!projectGitTools.isCurrent(token)) return;
+      projectGitTools.setBusy("conflict-agent", true, token);
       renderGitChangesDialog();
       try {
         const response = await api("/api/git-operation/resolve-with-agent", { method: "POST", body: {}, tabId: sourceTabId });
+        if (!projectGitTools.isCurrent(token)) return;
         if (!response.ok) throw new Error(response.error || "Failed to open a conflict-resolution agent");
         closeGitChangesDialog();
         const targetTab = await switchToResponseTab(response);
-        addEvent(`Opened ${targetTab?.title || "a new Pi tab"} and sent the ${kind} conflict context.`, "success");
+        addEvent(`Opened ${threadDisplayTitle(targetTab?.title) || "a new Pi thread"} and sent the ${kind} conflict context.`, "success");
       } catch (error) {
+        if (!projectGitTools.isCurrent(token)) return;
         gitChangesState = { ...gitChangesState, error: error.message || String(error) };
         renderGitChangesDialog();
       } finally {
-        gitToolsState.busy.delete("conflict-agent");
-        if (elements.gitChangesDialog?.open) renderGitChangesDialog();
+        projectGitTools.setBusy("conflict-agent", false, token);
       }
     });
     row.append(resolveWithAgent);
@@ -22266,7 +23076,7 @@ function renderGitOperationPanel(operation) {
   cont.type = "button";
   cont.disabled = busy || operation.canContinue !== true;
   cont.title = operation.canContinue ? operation.commands?.continue || "" : "Resolve and stage every conflicted file first.";
-  cont.addEventListener("click", () => runGitOperationRequest("/api/git-operation/continue", {}, `Continued the ${kind}`));
+  cont.addEventListener("click", () => runOperation("/api/git-operation/continue", {}, `Continued the ${kind}`));
   row.append(cont);
 
   if (operation.canSkip) {
@@ -22276,7 +23086,7 @@ function renderGitOperationPanel(operation) {
     skip.title = operation.commands?.skip || "";
     skip.addEventListener("click", async () => {
       if (!(await appConfirmText(`Skip the current ${kind} step?\n\nCommand: ${operation.commands?.skip || `git ${kind} --skip`}\nThe skipped commit is left out of the result.`, { affected: operation.root, confirmLabel: `Skip ${kind} step` }))) return;
-      runGitOperationRequest("/api/git-operation/skip", {}, `Skipped the current ${kind} step`);
+      runOperation("/api/git-operation/skip", {}, `Skipped the current ${kind} step`);
     });
     row.append(skip);
   }
@@ -22295,7 +23105,7 @@ function renderGitOperationPanel(operation) {
       "",
       "This discards the in-progress operation state and returns to the pre-operation HEAD.",
     ].join("\n"), { affected: operation.root, confirmLabel: `Abort ${kind}` }))) return;
-    runGitOperationRequest("/api/git-operation/abort", { confirmed: true }, `Aborted the ${kind}`);
+    runOperation("/api/git-operation/abort", { confirmed: true }, `Aborted the ${kind}`);
   });
   row.append(abort);
   panel.append(row);
@@ -22319,7 +23129,7 @@ function renderGitDivergedBar(data) {
   };
   addButton("Merge upstream…", "", `git merge --no-edit ${remote.upstream || "@{upstream}"}`, () => integrateGitChangesDialog("merge"));
   addButton("Rebase onto upstream…", "", `git rebase ${remote.upstream || "@{upstream}"}`, () => integrateGitChangesDialog("rebase"));
-  addButton("Create integration worktree", "", "Open the branch picker to integrate in a separate worktree tab", () => {
+  addButton("Create integration worktree", "", "Open the branch picker to integrate in a separate worktree thread", () => {
     closeGitChangesDialog();
     openBranchWorktreePicker();
   });
@@ -22329,72 +23139,27 @@ function renderGitDivergedBar(data) {
 
 // ---- Git tools (stash, undo, worktrees, submodules, tags, signing) ----
 
-const GIT_TOOLS_SECTIONS = [
-  { key: "stash", title: "Stash", detail: "List, apply, pop, drop, or create stashes." },
-  { key: "undo", title: "Undo & recovery", detail: "Undo the last unpushed commit, amend its message, review recent HEAD history." },
-  { key: "worktrees", title: "Worktrees", detail: "Health, removal, and pruning of git worktrees." },
-  { key: "submodules", title: "Submodules", detail: "Status and recursive update." },
-  { key: "tags", title: "Tags", detail: "Recent tags and annotated tag creation." },
-  { key: "signing", title: "Signing", detail: "Commit signing configuration and diagnostics." },
-];
+function captureGitToolsTarget(tabId = gitChangesState.tabId || activeTabId) {
+  return { ...projectTargetFromContext(activeTabContext(tabId)), root: gitChangesState.data?.root || "", dialogEpoch: gitToolsDialogEpoch };
+}
 
-const GIT_TOOLS_ENDPOINTS = {
-  stash: "/api/git-stash",
-  undo: "/api/git-undo",
-  worktrees: "/api/git-worktrees",
-  submodules: "/api/git-submodules",
-  tags: "/api/git-tags",
-  signing: "/api/git-signing",
-};
+function isCurrentGitToolsTarget(target) {
+  return target?.dialogEpoch === gitToolsDialogEpoch && target.generation === activeTabGeneration
+    && sessionContext.isLifetimeCurrent(target.lifetime)
+    && tabs.some(tab => tab.id === target.tabId && (tab.cwd || "") === target.cwd);
+}
 
 function resetGitToolsState(tabId) {
-  gitToolsState = { tabId, openSections: new Set(), cache: {}, busy: new Set(), notice: {} };
+  gitToolsDialogEpoch += 1;
+  projectGitTools.reset(captureGitToolsTarget(tabId));
 }
 
-async function loadGitToolsSection(key, { force = false } = {}) {
-  const tabId = gitChangesState.tabId || activeTabId;
-  if (!force && gitToolsState.cache[key]) return;
-  if (gitToolsState.busy.has(`load:${key}`)) return;
-  gitToolsState.busy.add(`load:${key}`);
-  try {
-    const response = await api(GIT_TOOLS_ENDPOINTS[key], { tabId });
-    if (!response.ok) throw new Error(response.error || `Failed to load ${key}`);
-    gitToolsState.cache[key] = response.data;
-    if (key === "undo") {
-      const reflog = await api("/api/git-reflog", { tabId }).catch(() => null);
-      gitToolsState.cache.reflog = reflog?.ok ? reflog.data : null;
-    }
-    gitToolsState.notice[key] = "";
-  } catch (error) {
-    gitToolsState.notice[key] = error.message || String(error);
-  } finally {
-    gitToolsState.busy.delete(`load:${key}`);
-    renderGitChangesDialog();
-  }
+function loadGitToolsSection(key, options = {}) {
+  return projectGitTools.load(key, options);
 }
 
-async function runGitToolAction(sectionKey, { url, method = "POST", body, confirm, success, successMessage, refreshChanges = false }) {
-  const tabId = gitChangesState.tabId || activeTabId;
-  if (confirm && !(await appConfirmText(confirm, { affected: gitChangesState.data?.root || "the current repository", confirmLabel: success || "Continue" }))) return;
-  gitToolsState.busy.add(sectionKey);
-  renderGitChangesDialog();
-  try {
-    const response = await api(url, { method, body, tabId });
-    if (!response.ok) throw new Error([response.error, response.hint].filter(Boolean).join("\n") || "git action failed");
-    const finalMessage = (typeof successMessage === "function" ? successMessage(response) : "") || success;
-    gitToolsState.notice[sectionKey] = "";
-    gitToolsState.busy.delete(sectionKey);
-    addEvent(finalMessage, "success");
-    await loadGitToolsSection(sectionKey, { force: true });
-    if (refreshChanges) await loadGitChangesDialog({ tabId });
-    gitChangesState = { ...gitChangesState, message: finalMessage };
-    renderGitChangesDialog();
-    requestGitFooterWebuiPayload(activeTabContext(tabId), { force: true });
-  } catch (error) {
-    gitToolsState.busy.delete(sectionKey);
-    gitToolsState.notice[sectionKey] = error.message || String(error);
-    renderGitChangesDialog();
-  }
+function runGitToolAction(sectionKey, options, token = projectGitTools.capture()) {
+  return projectGitTools.run(sectionKey, options, token);
 }
 
 function gitToolsButton(label, { className = "", disabled = false, title = "" } = {}, handler) {
@@ -22402,13 +23167,17 @@ function gitToolsButton(label, { className = "", disabled = false, title = "" } 
   button.type = "button";
   button.disabled = disabled;
   if (title) button.title = title;
-  button.addEventListener("click", handler);
+  const token = projectGitTools.capture();
+  button.addEventListener("click", (event) => {
+    if (projectGitTools.isCurrent(token)) handler(event);
+  });
   return button;
 }
 
 // Apply/pop/drop always show the stash's --stat preview in the confirmation,
 // so no stash is modified sight-unseen.
-async function confirmGitStashActionWithPreview(stash, question) {
+async function confirmGitStashActionWithPreview(stash, question, token = projectGitTools.capture()) {
+  if (!projectGitTools.isCurrent(token)) return false;
   const tabId = gitChangesState.tabId || activeTabId;
   let statText = "";
   try {
@@ -22417,6 +23186,7 @@ async function confirmGitStashActionWithPreview(stash, question) {
   } catch {
     // Preview is best-effort; the confirmation still shows the stash subject.
   }
+  if (!projectGitTools.isCurrent(token)) return false;
   return appConfirmText([
     question,
     "",
@@ -22427,12 +23197,15 @@ async function confirmGitStashActionWithPreview(stash, question) {
 }
 
 function renderGitStashTools(body, data, busy) {
+  const token = projectGitTools.capture();
+  const runAction = (section, options) => runGitToolAction(section, options, token);
+  const confirmPreview = (stash, question) => confirmGitStashActionWithPreview(stash, question, token);
   const row = make("div", "git-operation-actions");
   row.append(
     gitToolsButton("Stash tracked changes", { disabled: busy, title: "git stash push" }, () =>
-      runGitToolAction("stash", { url: "/api/git-stash/save", body: {}, success: "Stashed tracked changes.", refreshChanges: true })),
+      runAction("stash", { url: "/api/git-stash/save", body: {}, success: "Stashed tracked changes.", refreshChanges: true })),
     gitToolsButton("Stash incl. untracked", { disabled: busy, title: "git stash push --include-untracked" }, () =>
-      runGitToolAction("stash", { url: "/api/git-stash/save", body: { includeUntracked: true }, success: "Stashed tracked and untracked changes.", refreshChanges: true })),
+      runAction("stash", { url: "/api/git-stash/save", body: { includeUntracked: true }, success: "Stashed tracked and untracked changes.", refreshChanges: true })),
   );
   body.append(row);
   const stashes = data.stashes || [];
@@ -22448,34 +23221,35 @@ function renderGitStashTools(body, data, busy) {
       {
         label: "Apply",
         title: `git stash apply ${stash.ref}`,
-        onClick: () => confirmGitStashActionWithPreview(stash, `Apply ${stash.ref} to the working tree?`).then((confirmed) => {
-          if (confirmed) runGitToolAction("stash", { url: "/api/git-stash/apply", body: { ref: stash.ref }, success: `Applied ${stash.ref}.`, refreshChanges: true });
+        onClick: () => confirmPreview(stash, `Apply ${stash.ref} to the working tree?`).then((confirmed) => {
+          if (confirmed) runAction("stash", { url: "/api/git-stash/apply", body: { ref: stash.ref }, success: `Applied ${stash.ref}.`, refreshChanges: true });
         }),
       },
       {
         label: "Pop",
         title: `git stash pop ${stash.ref}`,
-        onClick: () => confirmGitStashActionWithPreview(stash, `Pop ${stash.ref}? This applies the stash and removes the entry on success.`).then((confirmed) => {
-          if (confirmed) runGitToolAction("stash", { url: "/api/git-stash/pop", body: { ref: stash.ref }, success: `Popped ${stash.ref}.`, refreshChanges: true });
+        onClick: () => confirmPreview(stash, `Pop ${stash.ref}? This applies the stash and removes the entry on success.`).then((confirmed) => {
+          if (confirmed) runAction("stash", { url: "/api/git-stash/pop", body: { ref: stash.ref }, success: `Popped ${stash.ref}.`, refreshChanges: true });
         }),
       },
       {
         label: "Drop",
         className: "danger",
         title: `git stash drop ${stash.ref}`,
-        onClick: () => confirmGitStashActionWithPreview(stash, `Drop ${stash.ref}? This permanently deletes the stash entry.`).then((confirmed) => {
-          if (confirmed) runGitToolAction("stash", { url: "/api/git-stash/drop", body: { ref: stash.ref, confirmed: true }, success: `Dropped ${stash.ref}.` });
+        onClick: () => confirmPreview(stash, `Drop ${stash.ref}? This permanently deletes the stash entry.`).then((confirmed) => {
+          if (confirmed) runAction("stash", { url: "/api/git-stash/drop", body: { ref: stash.ref, confirmed: true }, success: `Dropped ${stash.ref}.` });
         }),
       },
     ]);
     if (actions) summary.append(actions);
     item.append(summary);
     item.addEventListener("toggle", async () => {
-      if (!item.open || item.dataset.previewLoaded) return;
+      if (!item.isConnected || !projectGitTools.isCurrent(token) || !item.open || item.dataset.previewLoaded) return;
       item.dataset.previewLoaded = "1";
       const placeholder = make("pre", "git-conflict-preview muted", "Loading stash preview…");
       item.append(placeholder);
       const preview = await api(`/api/git-stash/show?ref=${encodeURIComponent(stash.ref)}`, { tabId: gitChangesState.tabId || activeTabId }).catch(() => null);
+      if (!projectGitTools.isCurrent(token)) return;
       const text = preview?.ok ? [preview.data?.stat, preview.data?.patch].filter(Boolean).join("\n\n") : "Preview unavailable.";
       placeholder.textContent = text || "Empty stash preview.";
       placeholder.classList.toggle("muted", !preview?.ok);
@@ -22486,13 +23260,15 @@ function renderGitStashTools(body, data, busy) {
 }
 
 function renderGitUndoTools(body, data, busy) {
+  const token = projectGitTools.capture();
+  const runAction = (section, options) => runGitToolAction(section, options, token);
   const last = data.lastCommit;
   body.append(make("div", "git-tools-note", last ? `Last commit: ${last.hash} ${last.subject}` : "No commits yet."));
   const row = make("div", "git-operation-actions");
   row.append(gitToolsButton(
     "Undo last commit (keep changes)",
     { disabled: busy || !data.canUndoLastCommit, title: data.canUndoLastCommit ? "git reset --soft HEAD~1" : "Requires an unpushed commit with a parent and no operation in progress." },
-    () => runGitToolAction("undo", {
+    () => runAction("undo", {
       url: "/api/git-undo/last-commit",
       body: { confirmed: true },
       confirm: [
@@ -22516,8 +23292,8 @@ function renderGitUndoTools(body, data, busy) {
     { disabled: busy || !data.canAmendMessage, title: data.canAmendMessage ? "git commit --amend -m <message>" : "Requires an unpushed commit and an empty staging area." },
     async () => {
       const message = await appPromptText({ title: "Amend last commit message", summary: `git commit --amend -m <message> · current: ${last?.subject || ""}`, defaultValue: last?.subject || "", confirmLabel: "Amend", validate: (value) => (String(value || "").trim() ? "" : "A commit message is required.") });
-      if (!message || !message.trim()) return;
-      runGitToolAction("undo", {
+      if (!projectGitTools.isCurrent(token) || !message || !message.trim()) return;
+      runAction("undo", {
         url: "/api/git-undo/amend-message",
         body: { confirmed: true, message: message.trim() },
         confirm: `Rewrite the last commit message?\n\nOld: ${last?.subject || ""}\nNew: ${message.trim()}`,
@@ -22531,7 +23307,7 @@ function renderGitUndoTools(body, data, busy) {
     },
   ));
   body.append(row);
-  const reflog = gitToolsState.cache.reflog;
+  const reflog = projectGitTools.getState().cache.reflog;
   if (reflog?.entries?.length) {
     const details = make("details", "git-tools-item");
     details.append(make("summary", "git-tools-item-summary", `Recent HEAD history (${reflog.entries.length})`));
@@ -22543,6 +23319,8 @@ function renderGitUndoTools(body, data, busy) {
 }
 
 function renderGitWorktreeTools(body, data, busy) {
+  const token = projectGitTools.capture();
+  const runAction = (section, options) => runGitToolAction(section, options, token);
   const worktrees = data.worktrees || [];
   for (const worktree of worktrees) {
     const item = make("div", "git-tools-row");
@@ -22563,7 +23341,7 @@ function renderGitWorktreeTools(body, data, busy) {
           label: "Remove",
           className: "danger",
           title: `git worktree remove ${worktree.path}`,
-          onClick: () => runGitToolAction("worktrees", {
+          onClick: () => runAction("worktrees", {
             method: "DELETE",
             url: "/api/git-worktrees",
             body: { path: worktree.path, confirmed: true },
@@ -22571,7 +23349,7 @@ function renderGitWorktreeTools(body, data, busy) {
               `Remove worktree ${worktree.path}?`,
               "",
               `Branch: ${worktree.branch || "detached"}`,
-              "This deletes the checkout directory. Dirty worktrees and worktrees with open tabs are refused.",
+              "This deletes the checkout directory. Dirty worktrees and worktrees with open threads are refused.",
             ].join("\n"),
             success: `Removed worktree ${worktree.path}.`,
           }),
@@ -22586,6 +23364,7 @@ function renderGitWorktreeTools(body, data, busy) {
     const tabId = gitChangesState.tabId || activeTabId;
     try {
       const preview = await api("/api/git-worktrees/prune", { tabId });
+      if (!projectGitTools.isCurrent(token)) return;
       const previewData = preview?.data || preview || {};
       const output = String(previewData.output || "").trim();
       const prunable = previewData.prunable || [];
@@ -22594,15 +23373,14 @@ function renderGitWorktreeTools(body, data, busy) {
         return;
       }
       const lines = prunable.map((item) => `${item.path}${item.reason ? ` (${item.reason})` : ""}`).join("\n");
-      runGitToolAction("worktrees", {
+      runAction("worktrees", {
         url: "/api/git-worktrees/prune",
         body: { confirmed: true },
         confirm: `Prune stale worktree records?\n\nDry run:\n${output || lines || "(no output)"}\n\nThis removes administrative records for worktree directories that no longer exist.`,
         success: "Pruned stale worktree records.",
       });
     } catch (error) {
-      gitToolsState.notice.worktrees = error.message || String(error);
-      renderGitChangesDialog();
+      projectGitTools.setNotice("worktrees", error.message || String(error), token);
     }
   }));
   body.append(row);
@@ -22610,6 +23388,8 @@ function renderGitWorktreeTools(body, data, busy) {
 }
 
 function renderGitSubmoduleTools(body, data, busy) {
+  const token = projectGitTools.capture();
+  const runAction = (section, options) => runGitToolAction(section, options, token);
   if (!data.hasSubmodules) {
     body.append(make("div", "git-changes-empty", "This repository has no submodules."));
     return body;
@@ -22622,8 +23402,8 @@ function renderGitSubmoduleTools(body, data, busy) {
     );
     const actions = gitFileActionButtons([
       {
-        label: "Open tab",
-        title: "Open a Web UI tab rooted at this submodule",
+        label: "Open thread",
+        title: "Open a Web UI thread rooted at this submodule",
         onClick: () => {
           const root = String(data.root || "").replace(/\/+$/, "");
           closeGitChangesDialog();
@@ -22637,7 +23417,7 @@ function renderGitSubmoduleTools(body, data, busy) {
   }
   const row = make("div", "git-operation-actions");
   row.append(gitToolsButton("Update / init recursively…", { disabled: busy, title: "git submodule update --init --recursive" }, () =>
-    runGitToolAction("submodules", {
+    runAction("submodules", {
       url: "/api/git-submodules/update",
       body: { confirmed: true },
       confirm: "Run git submodule update --init --recursive?\n\nThis can check out new commits in every submodule and may take a while.",
@@ -22649,6 +23429,8 @@ function renderGitSubmoduleTools(body, data, busy) {
 }
 
 function renderGitTagTools(body, data, busy) {
+  const token = projectGitTools.capture();
+  const runAction = (section, options) => runGitToolAction(section, options, token);
   const tags = data.tags || [];
   if (!tags.length) body.append(make("div", "git-changes-empty", "No tags."));
   for (const tag of tags.slice(0, 15)) {
@@ -22662,12 +23444,13 @@ function renderGitTagTools(body, data, busy) {
   const row = make("div", "git-operation-actions");
   row.append(gitToolsButton("Create annotated tag…", { disabled: busy, title: "git tag -a <name> -m <message> (never pushed automatically)" }, async () => {
     const name = await appPromptText({ title: "Create annotated tag", summary: "git tag -a <name> -m <message> at HEAD. Tags are never pushed automatically.", placeholder: "v1.2.3", confirmLabel: "Next", validate: (value) => (String(value || "").trim() ? "" : "A tag name is required.") });
-    if (!name || !name.trim()) return;
+    if (!projectGitTools.isCurrent(token) || !name || !name.trim()) return;
     const message = await appPromptText({ title: `Tag message for ${name.trim()}`, defaultValue: name.trim(), confirmLabel: "Create tag" });
-    if (message === null) return;
-    runGitToolAction("tags", {
+    if (!projectGitTools.isCurrent(token) || message === null) return;
+    runAction("tags", {
       url: "/api/git-tags/create",
       body: { confirmed: true, name: name.trim(), message: (message || name).trim() },
+      confirmLabel: "Create tag",
       confirm: `Create annotated tag ${name.trim()} at HEAD?\n\nTags are not pushed automatically; push explicitly with: git push origin ${name.trim()}`,
       success: `Created tag ${name.trim()}.`,
     });
@@ -22695,10 +23478,10 @@ function renderGitSigningTools(body, data) {
 
 function renderGitToolsSectionBody(key) {
   const body = make("div", "git-tools-body");
-  const notice = gitToolsState.notice[key];
+  const notice = projectGitTools.getState().notice[key];
   if (notice) body.append(make("div", "git-changes-empty error", notice));
-  const data = gitToolsState.cache[key];
-  const busy = gitToolsState.busy.has(key) || gitToolsState.busy.has(`load:${key}`);
+  const data = projectGitTools.getState().cache[key];
+  const busy = projectGitTools.getState().busy.has(key) || projectGitTools.getState().busy.has(`load:${key}`);
   if (!data) {
     if (!notice) body.append(make("div", "git-changes-empty", "Loading…"));
     return body;
@@ -22727,19 +23510,21 @@ function renderGitToolsSection() {
   for (const section of GIT_TOOLS_SECTIONS) {
     const details = make("details", "git-tools-section");
     details.dataset.gitTools = section.key;
-    details.open = gitToolsState.openSections.has(section.key);
+    details.open = projectGitTools.getState().openSections.has(section.key);
     const summary = make("summary", "git-tools-summary");
     summary.append(make("span", "git-tools-title", section.title), make("span", "git-tools-detail", section.detail));
     details.append(summary);
     if (details.open) details.append(renderGitToolsSectionBody(section.key));
+    const token = projectGitTools.capture();
     details.addEventListener("toggle", () => {
+      if (!details.isConnected || !projectGitTools.isCurrent(token)) return;
       if (details.open) {
-        if (gitToolsState.openSections.has(section.key)) return;
-        gitToolsState.openSections.add(section.key);
+        if (projectGitTools.getState().openSections.has(section.key)) return;
+        projectGitTools.setSectionOpen(section.key, true, token);
         loadGitToolsSection(section.key);
         renderGitChangesDialog();
       } else {
-        gitToolsState.openSections.delete(section.key);
+        projectGitTools.setSectionOpen(section.key, false, token);
       }
     });
     wrapper.append(details);
@@ -22761,7 +23546,7 @@ function gitToolsSectionForExtraChip(value = "") {
 
 function openGitToolsFromFooter(section = "stash") {
   openGitChangesDialog();
-  gitToolsState.openSections.add(section);
+  projectGitTools.setSectionOpen(section, true);
   loadGitToolsSection(section);
   renderGitChangesDialog();
 }
@@ -22783,9 +23568,10 @@ function gitFooterFallbackMessage() {
 function renderMinimalFooter() {
   invalidateGitFooterRenderCache();
   const tab = activeTab();
-  const workspaceLabel = latestWorkspace?.displayCwd || (tab?.cwd ? normalizeDisplayPath(tab.cwd) : "loading…");
-  const modelLine = footerModelLine();
-  const footerMessage = gitFooterFallbackMessage();
+  const draftCwd = tab ? "" : activeDraftCwd();
+  const workspaceLabel = latestWorkspace?.displayCwd || (tab?.cwd ? normalizeDisplayPath(tab.cwd) : draftCwd ? normalizeDisplayPath(draftCwd) : "No Project");
+  const modelLine = tab ? footerModelLine() : "";
+  const footerMessage = tab ? gitFooterFallbackMessage() : "Ready for your first message";
 
   elements.statusBar.replaceChildren();
   elements.statusBar.classList.remove("statusbar-git-footer");
@@ -22793,7 +23579,7 @@ function renderMinimalFooter() {
   document.body.classList.toggle("footer-model-picker-open", isFooterPickerOpen());
   elements.statusBar.append(renderTuiFooterLine({
     cwd: workspaceLabel,
-    cwdTitle: tab ? `Change cwd for ${tab.title}: ${workspaceLabel}` : undefined,
+    cwdTitle: tab ? `Change cwd for ${threadDisplayTitle(tab.title)}: ${workspaceLabel}` : undefined,
     message: footerMessage,
     stats: fallbackFooterStats(),
     model: modelLine,
@@ -22850,7 +23636,9 @@ function appendContextMeterFill(meter, snapshot) {
 async function requestManualCompaction({ triggerButton = null } = {}) {
   const tabContext = activeTabContext();
   if (!tabContext.tabId) return;
+  if (currentState?.isCompacting || composerStore.isCompactionPending(tabContext.tabId)) return;
   const buttons = [...new Set([elements.compactButton, triggerButton].filter(Boolean))];
+  composerStore.beginCompaction(tabContext.tabId);
   try {
     for (const button of buttons) {
       button.disabled = true;
@@ -22878,6 +23666,7 @@ async function requestManualCompaction({ triggerButton = null } = {}) {
       addEvent(error.message, "error");
     }
   } finally {
+    composerStore.endCompaction(tabContext.tabId);
     if (isCurrentTabContext(tabContext)) {
       for (const button of buttons) {
         button.disabled = !!currentState?.isCompacting;
@@ -22928,7 +23717,7 @@ function renderContextMeter() {
   const compact = make("button", "context-meter-compact", currentState?.isCompacting ? "Compacting…" : "Compact now");
   compact.type = "button";
   compact.disabled = !!currentState?.isCompacting;
-  compact.title = "Manually compact this tab's conversation context";
+  compact.title = "Manually compact this thread's conversation context";
   compact.addEventListener("click", () => requestManualCompaction({ triggerButton: compact }));
   const auto = make("button", "context-meter-auto", autoCompactionEnabled ? "Auto on" : "Auto off");
   auto.type = "button";
@@ -23019,7 +23808,7 @@ function renderWorkspaceDashboard() {
   if (!root) return;
   const tab = activeTab();
   const snapshot = contextUsageSnapshot();
-  const workspaceLabel = latestWorkspace?.displayCwd || (tab?.cwd ? normalizeDisplayPath(tab.cwd) : "Choose or create a tab to start");
+  const workspaceLabel = latestWorkspace?.displayCwd || (tab?.cwd ? normalizeDisplayPath(tab.cwd) : "Choose or create a thread to start");
   const workspaceInfo = normalizeGitWorkspaceInfo(tab?.gitWorkspace);
   const worktreeLabel = gitWorkspaceBadgeLabel(workspaceInfo);
   const queueCount = Number(currentState?.pendingMessageCount || 0) || 0;
@@ -23032,7 +23821,7 @@ function renderWorkspaceDashboard() {
   // changed. Extension status pushes during streaming would otherwise rebuild
   // every workspace button on each token, causing flicker.
   const signature = JSON.stringify({
-    title: tab?.title || "Pi Web UI",
+    title: threadDisplayTitle(tab?.title) || "Pi Web UI",
     workspaceLabel,
     gitWorkspace: workspaceInfo ? {
       branch: workspaceInfo.branch,
@@ -23052,7 +23841,7 @@ function renderWorkspaceDashboard() {
     session: sessionSummary,
     hasSession: !!(currentState?.sessionId || currentState?.sessionName),
     activeTabId,
-    tabs: tabs.slice(0, 8).map((item) => ({ id: item.id, title: item.title, indicator: tabIndicator(item), active: item.id === activeTabId, cwd: item.cwd ? normalizeDisplayPath(item.cwd) : "" })),
+    tabs: tabs.slice(0, 8).map((item) => ({ id: item.id, title: threadDisplayTitle(item.title), indicator: tabIndicator(item), active: item.id === activeTabId, cwd: item.cwd ? normalizeDisplayPath(item.cwd) : "" })),
     overflow: tabs.length > 8 ? tabs.length - 8 : 0,
     savedWorkspaces: !tabs.length ? savedWorkspaces.map((workspace) => ({ id: workspace.id, name: workspace.name, savedAt: workspace.savedAt, tabCount: workspace.tabCount, groupCount: workspace.groupCount, cwds: workspace.cwds })) : [],
     savedWorkspacesLoading,
@@ -23064,8 +23853,9 @@ function renderWorkspaceDashboard() {
 
   const header = make("div", "workspace-dashboard-header");
   const title = make("div", "workspace-dashboard-title");
-  const heading = make("h2", undefined, tab?.title || "Pi Web UI");
-  heading.title = tab?.title || "Pi Web UI";
+  const headingText = threadDisplayTitle(tab?.title) || "Pi Web UI";
+  const heading = make("h2", undefined, headingText);
+  heading.title = headingText;
   const cwd = make("p", "workspace-dashboard-cwd muted", workspaceLabel);
   cwd.title = workspaceLabel;
   const meta = make("div", "workspace-dashboard-title-meta");
@@ -23083,7 +23873,7 @@ function renderWorkspaceDashboard() {
     meta.append(worktreeChip);
   }
   meta.append(
-    make("span", "workspace-dashboard-chip", `${tabs.length} tab${tabs.length === 1 ? "" : "s"}`),
+    make("span", "workspace-dashboard-chip", `${tabs.length} thread${tabs.length === 1 ? "" : "s"}`),
     make("span", `workspace-dashboard-chip ${queueCount ? "attention" : ""}`.trim(), queueCount ? `${queueCount} queued` : "queue clear"),
   );
   const summary = make("div", "workspace-dashboard-summary-row");
@@ -23094,7 +23884,7 @@ function renderWorkspaceDashboard() {
   const actions = make("div", "workspace-dashboard-actions");
   actions.append(
     dashboardAction("Command palette", () => openCommandPalette(), "primary"),
-    dashboardAction("New tab", () => createTerminalTab()),
+    dashboardAction("New thread", (event) => openNewThreadPalette({ returnFocus: event?.currentTarget })),
   );
   if (tabs.length) {
     actions.append(
@@ -23133,8 +23923,8 @@ function renderWorkspaceDashboard() {
   const tabsPanel = make("div", "workspace-dashboard-tabs");
   const tabsHeader = make("div", "workspace-dashboard-tabs-header");
   tabsHeader.append(
-    make("span", "workspace-dashboard-tabs-title", `Open tabs (${tabs.length})`),
-    make("span", "workspace-dashboard-tabs-hint", tabs.length ? "Click a tab to switch" : "No tabs yet"),
+    make("span", "workspace-dashboard-tabs-title", `Open threads (${tabs.length})`),
+    make("span", "workspace-dashboard-tabs-hint", tabs.length ? "Click a thread to switch" : "No threads yet"),
   );
   tabsPanel.append(tabsHeader);
   const tabList = make("div", "workspace-dashboard-tab-list");
@@ -23142,12 +23932,12 @@ function renderWorkspaceDashboard() {
     const indicator = tabIndicator(item);
     const button = make("button", `workspace-dashboard-tab activity-${indicator.state}${item.id === activeTabId ? " active" : ""}`);
     button.type = "button";
-    button.title = `${item.title} · ${indicator.label}${item.cwd ? ` · ${normalizeDisplayPath(item.cwd)}` : ""}`;
-    button.append(make("span", "workspace-dashboard-tab-dot", indicator.glyph), make("span", "workspace-dashboard-tab-label", item.title));
+    button.title = `${threadDisplayTitle(item.title)} · ${indicator.label}${item.cwd ? ` · ${normalizeDisplayPath(item.cwd)}` : ""}`;
+    button.append(make("span", "workspace-dashboard-tab-dot", indicator.glyph), make("span", "workspace-dashboard-tab-label", threadDisplayTitle(item.title)));
     button.addEventListener("click", () => switchTab(item.id));
     tabList.append(button);
   }
-  if (!tabs.length) tabList.append(make("span", "workspace-dashboard-tab-empty", "Create a tab to start a workspace."));
+  if (!tabs.length) tabList.append(make("span", "workspace-dashboard-tab-empty", "Create a thread to start a workspace."));
   if (tabs.length > 8) tabList.append(make("span", "workspace-dashboard-tab-more", `+${tabs.length - 8} more`));
   tabsPanel.append(tabList);
 
@@ -23165,7 +23955,7 @@ function renderSavedWorkspacePicker() {
   const heading = make("div", "workspace-saved-workspaces-heading");
   heading.append(
     make("span", "workspace-dashboard-kicker", "Saved workspaces"),
-    make("span", "workspace-saved-workspaces-hint", "Load a complete saved tab constellation"),
+    make("span", "workspace-saved-workspaces-hint", "Load a complete saved thread constellation"),
   );
   panel.append(heading);
   if (savedWorkspacesLoading) {
@@ -23184,7 +23974,7 @@ function renderSavedWorkspacePicker() {
     return panel;
   }
   if (!savedWorkspaces.length) {
-    panel.append(make("p", "workspace-saved-workspaces-empty muted", "No saved workspaces yet. Open tabs, then use Save workspace."));
+    panel.append(make("p", "workspace-saved-workspaces-empty muted", "No saved workspaces yet. Open threads, then use Save workspace."));
     return panel;
   }
   const list = make("div", "workspace-saved-workspaces-list");
@@ -23195,7 +23985,7 @@ function renderSavedWorkspacePicker() {
     title.title = workspace.name;
     const detail = [
       formatDate(workspace.savedAt),
-      `${workspace.tabCount || 0} tab${workspace.tabCount === 1 ? "" : "s"}`,
+      `${workspace.tabCount || 0} thread${workspace.tabCount === 1 ? "" : "s"}`,
       workspace.groupCount ? `${workspace.groupCount} group${workspace.groupCount === 1 ? "" : "s"}` : "",
       Array.isArray(workspace.cwds) && workspace.cwds.length ? normalizeDisplayPath(workspace.cwds[0]) : "",
     ].filter(Boolean).join(" · ");
@@ -23219,6 +24009,9 @@ function renderSavedWorkspacePicker() {
 
 function setFooterModelPickerOpen(open, { restoreFocus = false } = {}) {
   const wasOpen = footerModelPickerOpen;
+  if (open && !wasOpen) {
+    footerModelPickerOpener = document.activeElement?.matches?.(".footer-model.footer-meta-action, .footer-tui-model") ? "footer" : "composer";
+  }
   footerModelPickerOpen = !!open;
   if (footerModelPickerOpen) {
     footerThinkingPickerOpen = false;
@@ -23241,9 +24034,10 @@ function setFooterModelPickerOpen(open, { restoreFocus = false } = {}) {
   }
 }
 
-function setFooterThinkingPickerOpen(open) {
+function setFooterThinkingPickerOpen(open, { restoreFocus = false } = {}) {
   const wasOpen = footerThinkingPickerOpen;
   footerThinkingPickerOpen = !!open;
+  footerThinkingPickerFocusTarget = footerThinkingPickerOpen ? activeTabContext() : null;
   if (footerThinkingPickerOpen) {
     footerModelPickerOpen = false;
     footerBranchPickerOpen = false;
@@ -23258,7 +24052,10 @@ function setFooterThinkingPickerOpen(open) {
   document.body.classList.toggle("footer-model-picker-open", isFooterPickerOpen());
   renderFooter();
   updateFooterModelPickerPosition();
-  if (wasOpen && !footerThinkingPickerOpen) scheduleDeferredUiFlushAfterDropdownClose();
+  if (wasOpen && !footerThinkingPickerOpen) {
+    scheduleDeferredUiFlushAfterDropdownClose();
+    if (restoreFocus) queueMicrotask(() => elements.statusBar.querySelector(".footer-thinking.footer-meta-action")?.focus({ preventScroll: true }));
+  }
 }
 
 function footerGitBranchKey(item = {}) {
@@ -23444,7 +24241,7 @@ function footerBranchActiveAgentTabs(tabContext = activeTabContext()) {
 function footerBranchAgentWarningLines(tabContext = activeTabContext()) {
   const busyTabs = footerBranchActiveAgentTabs(tabContext);
   if (!busyTabs.length) return [];
-  const list = busyTabs.slice(0, 4).map((tab) => `- ${tab.title || tab.id}`).join("\n");
+  const list = busyTabs.slice(0, 4).map((tab) => `- ${threadDisplayTitle(tab.title) || tab.id}`).join("\n");
   const extra = busyTabs.length > 4 ? `\n- … +${busyTabs.length - 4} more` : "";
   return [
     "",
@@ -23480,7 +24277,7 @@ async function confirmFooterGitBranchAction(branch, { create = false, requireCon
   const message = [
     `${action}: ${branchName}?`,
     "",
-    `Repository: ${footerBranchPickerState.root || currentGitFooterCacheCwd(tabContext.tabId) || "current tab"}`,
+    `Repository: ${footerBranchPickerState.root || currentGitFooterCacheCwd(tabContext.tabId) || "current thread"}`,
     ...(trackedRemoteRef ? [`Remote ref: ${trackedRemoteRef}`, `Command: git switch --track -c ${branchName} ${trackedRemoteRef}`] : []),
     ...dirtyLines,
     ...warningLines,
@@ -23498,12 +24295,12 @@ async function confirmFooterGitWorktreeAction(branch, { path = "", create = fals
   const message = [
     `${create ? "Create" : "Open"} branch worktree: ${branchName || targetPath}?`,
     "",
-    `Repository: ${footerBranchPickerState.repoRoot || footerBranchPickerState.root || currentGitFooterCacheCwd() || "current tab"}`,
+    `Repository: ${footerBranchPickerState.repoRoot || footerBranchPickerState.root || currentGitFooterCacheCwd() || "current thread"}`,
     ...(trackedRemoteRef ? [`Remote ref: ${trackedRemoteRef}`, `Creates local branch ${branchName} tracking ${trackedRemoteRef}.`] : []),
     targetPath ? `Worktree: ${targetPath}` : `Default location: ${footerBranchPickerState.defaultWorktreesRoot || "repo sibling .worktrees directory"}`,
     "",
-    "This creates a separate checkout without changing this tab's branch.",
-    "After creation, you can choose whether to open it in a separate Pi tab and switch to it.",
+    "This creates a separate checkout without changing this thread's branch.",
+    "After creation, you can choose whether to open it in a separate Pi thread and switch to it.",
     "Ignored dependencies such as node_modules or .venv are not copied; bootstrap them manually if needed.",
     "",
     "Continue?",
@@ -23585,8 +24382,8 @@ function footerBranchCreateTooltip(branchName = footerBranchCreateName(), state 
     "",
     "What happens:",
     "• asks whether to base the new branch on origin/main (default) or this workspace's current HEAD",
-    "• creates the worktree, then asks whether to open and switch to it in a separate Pi tab",
-    "• does not switch this tab's branch, commit, push, or delete anything",
+    "• creates the worktree, then asks whether to open and switch to it in a separate Pi thread",
+    "• does not switch this thread's branch, commit, push, or delete anything",
     "",
     "Tip: ignored dependencies such as node_modules or .venv are not copied.",
   ].join("\n");
@@ -23607,7 +24404,7 @@ async function openWorktreeResponseTab(response, { branchName = "", action = "op
   if (!response.ok) throw new Error(response.error || `Failed to ${action} branch worktree`);
   const payload = response.data || {};
   if (Array.isArray(payload.tabs)) {
-    tabs = payload.tabs;
+    applyAuthoritativeTabSnapshot(payload.tabs);
     syncTabMetadata(tabs);
   }
   if (payload.tab) applyTabMetadata(payload.tab);
@@ -23633,7 +24430,7 @@ async function confirmSwitchToCreatedFooterGitWorktree(payload = {}, branchName 
   if (!worktreePath) return false;
   return appConfirm({
     title: "Switch to new worktree?",
-    summary: `The${branch ? ` ${branch}` : ""} worktree was created. Open it in a separate Pi tab and switch to it now? The worktree remains available if you stay here.`,
+    summary: `The${branch ? ` ${branch}` : ""} worktree was created. Open it in a separate Pi thread and switch to it now? The worktree remains available if you stay here.`,
     affected: normalizeDisplayPath(worktreePath),
     undoable: true,
     confirmLabel: "Switch to worktree",
@@ -23796,7 +24593,7 @@ function renderFooterBranchCreateForm(state = footerBranchPickerState) {
   nameInput.spellcheck = false;
   nameInput.setAttribute("aria-label", "New branch name");
 
-  const submitButton = make("button", "footer-branch-create-submit", state.switching ? "Opening…" : "Open worktree tab");
+  const submitButton = make("button", "footer-branch-create-submit", state.switching ? "Opening…" : "Open worktree thread");
   submitButton.type = "submit";
 
   const preview = make("div", "footer-branch-create-preview");
@@ -23873,8 +24670,8 @@ function footerBranchOptionDetail(branch, state, { selected, worktreePath } = {}
   if (state.switchingKey ? state.switchingKey === branch.key : state.switching === footerBranchOptionLabel(branch)) return "opening…";
   if (selected) return branch.worktreeCurrent ? "current branch in this worktree" : "current branch";
   if (branch.remote) return `remote-only · creates local branch ${branch.name} tracking ${branch.remoteRef}`;
-  if (worktreePath) return branch.mainWorktree ? "checked out in main worktree · open tab" : "checked out in another worktree · open tab";
-  return "open branch in a new worktree tab";
+  if (worktreePath) return branch.mainWorktree ? "checked out in main worktree · open thread" : "checked out in another worktree · open thread";
+  return "open branch in a new worktree thread";
 }
 
 function openFooterBranchOption(branch, state = footerBranchPickerState) {
@@ -23925,8 +24722,8 @@ function renderFooterBranchOption(branch, state = footerBranchPickerState) {
   primary.title = selected
     ? `Current branch: ${branch.name}`
     : branch.remote
-      ? `Remote-only branch ${branch.remoteRef}: create local branch ${branch.name} tracking it and open a new Git worktree tab`
-      : worktreePath ? `Open existing worktree: ${worktreePath}` : `Open ${branch.name} in a new Git worktree tab`;
+      ? `Remote-only branch ${branch.remoteRef}: create local branch ${branch.name} tracking it and open a new Git worktree thread`
+      : worktreePath ? `Open existing worktree: ${worktreePath}` : `Open ${branch.name} in a new Git worktree thread`;
   primary.append(
     make("span", "footer-model-option-main", footerBranchOptionLabel(branch)),
     make("span", "footer-model-option-name", footerBranchOptionDetail(branch, state, { selected, worktreePath })),
@@ -23962,7 +24759,7 @@ async function removeFooterGitWorktree(worktree, tabContext = activeTabContext()
     "",
     `Branch: ${worktree.branch || "detached"}`,
     "Command: git worktree remove",
-    "This deletes the checkout directory. Dirty worktrees and worktrees with open tabs are refused.",
+    "This deletes the checkout directory. Dirty worktrees and worktrees with open threads are refused.",
   ].join("\n"), { affected: worktree.path, confirmLabel: "Remove worktree" }))) return;
   footerBranchPickerState = { ...footerBranchPickerState, loading: true, error: "" };
   renderFooter();
@@ -24045,7 +24842,6 @@ function renderFooterWorktreeList(state = footerBranchPickerState) {
 }
 
 function openBranchWorktreePicker() {
-  setNewTabMenuOpen(false);
   setMobileTabsExpanded(false);
   setComposerActionsOpen(false);
   setFooterBranchPickerOpen(true);
@@ -24385,9 +25181,14 @@ async function applyFooterModel(model) {
   }
 }
 
+function footerModelTrigger() {
+  if (focusedShell?.active && footerModelPickerOpener !== "footer") return focusedShell.modelTrigger;
+  return elements.statusBar.querySelector(".footer-model.footer-meta-action, .footer-tui-model");
+}
+
 function focusFooterModelTrigger() {
   queueMicrotask(() => {
-    const trigger = elements.statusBar.querySelector(".footer-model.footer-meta-action, .footer-tui-model");
+    const trigger = footerModelTrigger();
     trigger?.focus({ preventScroll: true });
   });
 }
@@ -24606,13 +25407,14 @@ function renderFooterThinkingPicker() {
   picker.setAttribute("role", "listbox");
   picker.setAttribute("aria-label", "Thinking effort");
   picker.append(make("div", "footer-model-picker-title", "Thinking effort"));
-  picker.append(make("div", "footer-model-picker-source", "Applies to this Pi tab."));
+  picker.append(make("div", "footer-model-picker-source", "Applies to this Pi thread."));
   const current = currentState?.pendingThinkingLevel || currentState?.thinkingLevel || "off";
   for (const level of footerThinkingLevels()) {
     const selected = current === level;
     const supported = thinkingLevelSupportedByActiveModel(level);
     const button = make("button", `footer-model-option${selected ? " active" : ""}${supported ? "" : " unsupported"}`);
     button.type = "button";
+    button.dataset.footerThinkingLevel = level;
     button.setAttribute("role", "option");
     button.setAttribute("aria-selected", selected ? "true" : "false");
     button.title = supported ? `Set thinking effort to ${level}` : `${level} is not supported by the active model`;
@@ -24672,7 +25474,7 @@ function updateCreateDirectoryControls() {
   const canCreate = canEdit && !!pathPickerCreateName();
   elements.pathPickerCreateNameInput.disabled = !canEdit;
   elements.pathPickerCreateButton.disabled = !canCreate;
-  elements.pathPickerCreateButton.textContent = busy ? "Creating…" : "Create directory";
+  elements.pathPickerCreateButton.textContent = busy ? "Creating…" : "Create folder";
 }
 
 function pathPickerSearchQuery() {
@@ -24702,6 +25504,7 @@ function renderPathPickerDirectoryList() {
   pathPickerState.filteredDirectories = matches;
   updatePathPickerSearchControls();
   elements.pathPickerList.replaceChildren();
+  elements.pathPickerList.setAttribute("role", matches.length ? "listbox" : "group");
 
   if (query) {
     elements.pathPickerSearchStatus.textContent = matches.length === directories.length
@@ -24878,7 +25681,7 @@ function renderPathPicker(data) {
   elements.pathPickerCurrent.textContent = pathPickerState.displayCwd;
   elements.pathPickerCurrent.title = pathPickerState.cwd || pathPickerState.displayCwd;
   elements.pathPickerChooseButton.disabled = !pathPickerState.selectable || !pathPickerState.cwd;
-  elements.pathPickerChooseButton.textContent = "Use this directory";
+  elements.pathPickerChooseButton.textContent = "Choose this folder";
   elements.pathPickerPathInput.value = "";
   elements.pathPickerCreateNameInput.value = "";
   elements.pathPickerSearchInput.value = "";
@@ -24892,15 +25695,17 @@ function renderPathPicker(data) {
     elements.pathPickerRoots.append(pathPickerButton("↑ Parent", data.parent, () => loadPathPickerDirectory(data.parent, { focusAfterLoad: true }), "path-picker-root-button"));
   }
   for (const root of data.roots || []) {
-    elements.pathPickerRoots.append(pathPickerButton(root.label, root.cwd, () => loadPathPickerDirectory(root.cwd, { focusAfterLoad: true }), "path-picker-root-button"));
+    const label = root.label === "Tab" ? "Current session" : root.label === "Default" ? "Default folder" : root.label;
+    elements.pathPickerRoots.append(pathPickerButton(label, root.cwd, () => loadPathPickerDirectory(root.cwd, { focusAfterLoad: true }), "path-picker-root-button"));
   }
 
   renderPathPickerDirectoryList();
 }
 
 async function loadPathPickerDirectory(cwd, { focusAfterLoad = false } = {}) {
-  if (!pathPickerState) return;
-  const requestId = ++pathPickerState.requestId;
+  const state = pathPickerState;
+  if (!state) return;
+  const requestId = ++state.requestId;
   pathPickerState.loading = true;
   elements.pathPickerAddFastPickButton.disabled = true;
   elements.pathPickerChooseButton.disabled = true;
@@ -24913,12 +25718,13 @@ async function loadPathPickerDirectory(cwd, { focusAfterLoad = false } = {}) {
 
   try {
     const query = cwd ? `?path=${encodeURIComponent(cwd)}` : "";
-    const response = await api(`/api/directories${query}`);
-    if (!pathPickerState || pathPickerState.requestId !== requestId) return;
+    // A reopened picker must not share an in-flight response from its predecessor.
+    const response = await api(`/api/directories${query}`, { signal: state.requestController.signal });
+    if (pathPickerState !== state || state.requestId !== requestId) return;
     renderPathPicker(response.data || {});
     if (focusAfterLoad) elements.pathPickerSearchInput.focus({ preventScroll: true });
   } catch (error) {
-    if (!pathPickerState || pathPickerState.requestId !== requestId) return;
+    if (pathPickerState !== state || state.requestId !== requestId) return;
     pathPickerState.loading = false;
     elements.pathPickerChooseButton.disabled = !pathPickerState.selectable || !pathPickerState.cwd;
     elements.pathPickerCurrent.textContent = pathPickerState.displayCwd || pathPickerState.cwd || "Unable to load directory";
@@ -24967,11 +25773,23 @@ function closePathPicker(cwd) {
   const state = pathPickerState;
   if (!state) return;
   pathPickerState = null;
+  state.requestController.abort();
   if (elements.pathPickerDialog.open) elements.pathPickerDialog.close();
+  // Native dialog cancellation can restore its previous focus after close().
+  if (!cwd) setTimeout(() => {
+    const focused = document.activeElement;
+    const returnFocus = state.returnFocusKey
+      ? [...elements.statusBar.querySelectorAll("button")].find(node => footerControlKey(node) === state.returnFocusKey)
+      : state.returnFocus;
+    if (pathPickerState || activeTabId !== state.activeTabId || activeTabGeneration !== state.activeTabGeneration || location.href !== state.location || focusedShellState.destination !== state.destination || mobileShellState.route !== state.mobileRoute || document.querySelector(":modal")) return;
+    if (focused !== document.body && focused !== state.previousFocus && focused !== state.returnFocus && focused !== returnFocus && !elements.pathPickerDialog.contains(focused)) return;
+    if (!returnFocus?.isConnected || !returnFocus.getClientRects().length || returnFocus.disabled) return;
+    returnFocus.focus({ preventScroll: true });
+  }, 0);
   state.resolve(cwd || null);
 }
 
-function pickCwd(tab, initialCwd, { title } = {}) {
+function pickCwd(tab, initialCwd, { title, returnFocus = document.activeElement } = {}) {
   if (pathPickerState) {
     addEvent("working-directory picker is already open", "warn");
     elements.pathPickerDialog.focus();
@@ -24980,9 +25798,17 @@ function pickCwd(tab, initialCwd, { title } = {}) {
   }
 
   return new Promise((resolve) => {
-    const pickerTab = tab || { id: "path-picker", title: "tab" };
-    pathPickerState = { tabId: pickerTab.id, cwd: initialCwd, displayCwd: initialCwd, selectable: true, requestId: 0, loading: false, creatingDirectory: false, directories: [], filteredDirectories: [], resolve };
-    elements.pathPickerTitle.textContent = title || `Choose CWD for ${pickerTab.title}`;
+    const pickerTab = tab || { id: "path-picker", title: "thread" };
+    pathPickerState = {
+      tabId: pickerTab.id, activeTabId, activeTabGeneration,
+      returnFocus, returnFocusKey: elements.statusBar.contains(returnFocus) ? footerControlKey(returnFocus) : "",
+      previousFocus: document.activeElement, location: location.href,
+      destination: focusedShellState.destination, mobileRoute: mobileShellState.route,
+      requestController: new AbortController(), cwd: initialCwd, displayCwd: initialCwd,
+      selectable: true, requestId: 0, loading: false, creatingDirectory: false,
+      directories: [], filteredDirectories: [], resolve,
+    };
+    elements.pathPickerTitle.textContent = title || "Choose a folder";
     elements.pathPickerCurrent.textContent = "Loading…";
     elements.pathPickerPathInput.value = "";
     elements.pathPickerCreateNameInput.value = "";
@@ -25000,6 +25826,7 @@ function pickCwd(tab, initialCwd, { title } = {}) {
     initializeFastPicks().catch((error) => addEvent(`failed to initialize path fast picks: ${error.message}`, "error"));
     elements.pathPickerDialog.showModal();
     loadPathPickerDirectory(initialCwd);
+    elements.pathPickerCancelButton.focus({ preventScroll: true });
   });
 }
 
@@ -25017,15 +25844,15 @@ async function changeActiveTabCwd() {
     return;
   }
 
-  if (!(await appConfirmText(`Restart ${tab.title} in:\n${cwd}\n\nCurrent in-flight work in this tab will be stopped. The conversation continues in the new directory.`, { affected: tab.title, confirmLabel: "Change working folder" }))) return;
-  if (activeFileViewer?.dirty && !(await confirmDiscardEdits({ what: "unsaved file edits", target: activeFileViewer.path }))) return;
+  if (!(await appConfirmText(`Restart ${threadDisplayTitle(tab.title)} in:\n${cwd}\n\nCurrent in-flight work in this thread will be stopped. The conversation continues in the new directory.`, { affected: threadDisplayTitle(tab.title), confirmLabel: "Change working folder" }))) return;
+  if (projectFiles.viewer?.dirty && !(await confirmDiscardEdits({ what: "unsaved file edits", target: projectFiles.viewer.path }))) return;
 
   saveActiveDraft();
   if (isCurrentTabContext(tabContext)) {
     addTransientMessage({
       role: "native",
       title: "Changing working folder…",
-      content: `Restarting ${tab.title} in ${cwd}. This can take a few seconds.`,
+      content: `Restarting ${threadDisplayTitle(tab.title)} in ${cwd}. This can take a few seconds.`,
       level: "info",
     });
   }
@@ -25033,13 +25860,13 @@ async function changeActiveTabCwd() {
   try {
     response = await api(`/api/tabs/${encodeURIComponent(tab.id)}`, { method: "PATCH", body: { cwd }, scoped: false });
   } catch (error) {
-    const message = `Could not change ${tab.title} to ${cwd}. The existing working folder was kept.\n\n${error.message || String(error)}`;
+    const message = `Could not change ${threadDisplayTitle(tab.title)} to ${cwd}. The existing working folder was kept.\n\n${error.message || String(error)}`;
     if (isCurrentTabContext(tabContext)) surfaceRuntimeDiagnostic("Working folder change failed", message);
-    else addEvent(`working folder change failed for ${tab.title}: ${error.message || String(error)}`, "error");
+    else addEvent(`working folder change failed for ${threadDisplayTitle(tab.title)}: ${error.message || String(error)}`, "error");
     return;
   }
 
-  tabs = response.data?.tabs || tabs;
+  applyAuthoritativeTabSnapshot(response.data?.tabs || tabs);
   syncTabMetadata(tabs);
   const changedTabId = response.data?.tab?.id || tab.id;
   const changedCwd = response.data?.tab?.cwd || cwd;
@@ -25047,7 +25874,7 @@ async function changeActiveTabCwd() {
   clearGitFooterPayloadState(changedTabId);
   if (!isCurrentTabContext(tabContext)) {
     renderTabs();
-    addEvent(response.data?.changed === false ? `cwd unchanged: ${changedCwd}` : `changed ${tab.title} cwd to ${changedCwd}`, "info");
+    addEvent(response.data?.changed === false ? `cwd unchanged: ${changedCwd}` : `changed ${threadDisplayTitle(tab.title)} cwd to ${changedCwd}`, "info");
     return;
   }
 
@@ -25059,14 +25886,18 @@ async function changeActiveTabCwd() {
   connectEvents(nextContext);
   await refreshAll(nextContext);
   if (!isCurrentTabContext(nextContext)) return;
-  const successMessage = response.data?.changed === false ? `cwd unchanged: ${changedCwd}` : `changed ${tab.title} cwd to ${changedCwd}`;
+  const successMessage = response.data?.changed === false ? `cwd unchanged: ${changedCwd}` : `changed ${threadDisplayTitle(tab.title)} cwd to ${changedCwd}`;
   addEvent(successMessage, "info");
-  if (response.data?.changed !== false) addTransientMessage({ role: "native", title: "Working folder changed", content: `${tab.title} restarted in ${changedCwd}.`, level: "info" });
+  if (response.data?.changed !== false) addTransientMessage({ role: "native", title: "Working folder changed", content: `${threadDisplayTitle(tab.title)} restarted in ${changedCwd}.`, level: "info" });
 }
 
 function footerControlKey(node) {
   if (node?.id) return `footer:id:${node.id}`;
   if (node?.dataset?.footerModelKey) return `footer:model:${node.dataset.footerModelKey}`;
+  if (node?.dataset?.footerThinkingLevel) return `footer:thinking:${node.dataset.footerThinkingLevel}`;
+  if (node?.matches?.(".footer-tui-cwd")) return "footer:cwd";
+  if (node?.matches?.(".footer-model.footer-meta-action, .footer-tui-model")) return "footer:model-trigger";
+  if (node?.matches?.(".footer-thinking.footer-meta-action")) return "footer:thinking-trigger";
   return "";
 }
 
@@ -25080,8 +25911,18 @@ function renderFooter() {
   else renderMinimalFooter();
   if (!tooltipSnapshot && footerTooltipTarget && !footerTooltipTarget.isConnected) hideFooterTooltip();
   restoreScopedControlContinuity(elements.statusBar, continuityContextKey, focusSnapshot, (key) => [...elements.statusBar.querySelectorAll("input, textarea, select, button")].find((node) => footerControlKey(node) === key));
+  focusedShell?.modelTrigger?.setAttribute("aria-expanded", String(footerModelPickerOpen));
   syncAdvancedFooterModelRovingTabStop();
+  if (footerThinkingPickerFocusTarget) {
+    if (footerThinkingPickerOpen && isCurrentTabContext(footerThinkingPickerFocusTarget)) {
+      const option = elements.statusBar.querySelector('.footer-thinking-picker [aria-selected="true"]:not(:disabled)')
+        || elements.statusBar.querySelector('.footer-thinking-picker button:not(:disabled)');
+      option?.focus({ preventScroll: true });
+    }
+    footerThinkingPickerFocusTarget = null;
+  }
   restoreTooltipContinuity(elements.statusBar, tooltipSnapshot);
+  if (shellPreferenceState.value.overviewOpen) scheduleFocusedShellRender();
 }
 
 function scheduleRefreshMessages(delay = 120, tabContext = activeTabContext()) {
@@ -25160,8 +26001,8 @@ function flushSemanticReconcile() {
     // is tab-scoped and may run after the user has switched away.
     if (dirty.workflow) reconcileGitWorkflowContinuation(tabContext.tabId);
     if (dirty.usage) {
-      scheduleRefreshCodexUsage(2200);
-      scheduleRefreshClaudeUsage(2200);
+      activityUsage.scheduleCodex(2200);
+      activityUsage.scheduleClaude(2200);
     }
 
     // DOM and active-session fetches are valid only for the still-current tab
@@ -25196,233 +26037,6 @@ function reconcileGitWorkflowContinuation(workflowTabId = activeTabId) {
   }
 }
 
-function formatCodexPlanType(value) {
-  const text = String(value || "").trim();
-  if (!text) return "unknown plan";
-  const normalized = text.replace(/[\s_-]+/g, "").toLowerCase();
-  if (normalized === "prolite") return "Usage";
-  return text.replace(/[_-]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
-
-function formatCodexPercent(value) {
-  const number = Number(value);
-  return Number.isFinite(number) ? `${Math.max(0, Math.min(100, Math.round(number)))}%` : "—";
-}
-
-function codexWindowDurationMinutes(window) {
-  const minutes = Number(window?.windowDurationMins);
-  if (Number.isFinite(minutes) && minutes > 0) return minutes;
-  const seconds = Number(window?.windowDurationSeconds);
-  return Number.isFinite(seconds) && seconds > 0 ? seconds / 60 : null;
-}
-
-function formatCodexWindowDuration(window) {
-  const minutes = codexWindowDurationMinutes(window);
-  if (!minutes) return "window";
-  if (minutes >= 280 && minutes <= 320) return "5h window";
-  if (minutes >= 9500 && minutes <= 10550) return "weekly window";
-  if (minutes >= 60 * 24) {
-    const days = minutes / (60 * 24);
-    return `${days >= 10 ? Math.round(days) : Number(days.toFixed(1))}d window`;
-  }
-  if (minutes >= 60) {
-    const hours = minutes / 60;
-    return `${Number.isInteger(hours) ? hours : Number(hours.toFixed(1))}h window`;
-  }
-  return `${Math.round(minutes)}m window`;
-}
-
-function formatDurationParts(milliseconds) {
-  if (!Number.isFinite(Number(milliseconds))) return "now";
-  const totalMinutes = Math.max(0, Math.ceil(Number(milliseconds) / 60000));
-  if (totalMinutes <= 1) return "<1m";
-  if (totalMinutes < 60) return `${totalMinutes}m`;
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
-  if (hours < 48) return minutes ? `${hours}h ${minutes}m` : `${hours}h`;
-  const days = Math.floor(hours / 24);
-  const remHours = hours % 24;
-  return remHours ? `${days}d ${remHours}h` : `${days}d`;
-}
-
-function codexWindowResetDate(window) {
-  const resetAt = window?.resetsAt ? new Date(window.resetsAt) : null;
-  if (resetAt && Number.isFinite(resetAt.getTime())) return resetAt;
-  const resetAfterSeconds = Number(window?.resetAfterSeconds);
-  if (Number.isFinite(resetAfterSeconds) && resetAfterSeconds >= 0) return new Date(Date.now() + resetAfterSeconds * 1000);
-  return null;
-}
-
-function formatCodexReset(window) {
-  const resetDate = codexWindowResetDate(window);
-  if (!resetDate) return "reset unknown";
-  const diff = resetDate.getTime() - Date.now();
-  if (diff <= 0) return "resetting now";
-  return `resets in ${formatDurationParts(diff)}`;
-}
-
-function codexSnapshotName(snapshot) {
-  return snapshot?.limitName || snapshot?.limitId || "codex";
-}
-
-function codexUsageBuckets(data) {
-  const buckets = [];
-  const selected = data?.selected || data?.rateLimits || null;
-  const snapshots = Array.isArray(data?.snapshots) ? data.snapshots : selected ? [selected] : [];
-  const selectedKey = selected?.limitId || selected?.limitName || "codex";
-  const pushWindow = (snapshot, kind, window, { prefix } = {}) => {
-    if (!window) return;
-    const durationLabel = formatCodexWindowDuration(window);
-    const baseLabel = kind === "secondary" && durationLabel === "window" ? "secondary window" : durationLabel;
-    buckets.push({
-      key: `${snapshot?.limitId || snapshot?.limitName || buckets.length}-${kind}`,
-      label: prefix ? `${prefix} · ${baseLabel}` : baseLabel,
-      window,
-    });
-  };
-
-  if (selected) {
-    pushWindow(selected, "primary", selected.primary);
-    pushWindow(selected, "secondary", selected.secondary);
-  }
-  for (const snapshot of snapshots) {
-    const key = snapshot?.limitId || snapshot?.limitName;
-    if (!snapshot || snapshot === selected || key === selectedKey) continue;
-    const name = codexSnapshotName(snapshot);
-    pushWindow(snapshot, "primary", snapshot.primary, { prefix: name });
-    pushWindow(snapshot, "secondary", snapshot.secondary, { prefix: name });
-  }
-  return buckets.slice(0, 6);
-}
-
-function codexUsageStructureSignature() {
-  if (!latestCodexUsage) return JSON.stringify({ state: codexUsageLoading ? "loading" : codexUsageError ? "error" : "empty", error: codexUsageError?.message || String(codexUsageError || "") });
-  return JSON.stringify({
-    state: "data",
-    plan: formatCodexPlanType(latestCodexUsage.planType),
-    source: latestCodexUsage.source || "",
-    sourceNotice: latestCodexUsage.sourceNotice || "",
-    buckets: codexUsageBuckets(latestCodexUsage).map((bucket) => [bucket.key, bucket.label]),
-    rateLimitReachedType: latestCodexUsage.rateLimitReachedType || "",
-    error: codexUsageError?.message || String(codexUsageError || ""),
-  });
-}
-
-function updateCodexUsageValues(box, buckets) {
-  if (!latestCodexUsage || !box.querySelector(".codex-usage-summary")) return false;
-  const fetched = box.querySelector(".codex-usage-fetched");
-  if (fetched) fetched.textContent = latestCodexUsage.fetchedAt ? `updated ${formatDurationParts(Date.now() - new Date(latestCodexUsage.fetchedAt).getTime())} ago` : "updated now";
-  const rendered = [...box.querySelectorAll(".codex-usage-bucket[data-codex-usage-key]")];
-  if (rendered.length !== buckets.length) return false;
-  for (const bucket of buckets) {
-    const item = rendered.find((node) => node.dataset.codexUsageKey === bucket.key);
-    if (!item) return false;
-    const usedPercent = Number(bucket.window?.usedPercent);
-    const fillPercent = Number.isFinite(usedPercent) ? Math.max(0, Math.min(100, usedPercent)) : 0;
-    const percent = item.querySelector(".codex-usage-percent");
-    const fill = item.querySelector(".codex-usage-meter-fill");
-    const reset = item.querySelector(".codex-usage-reset");
-    if (!percent || !fill || !reset) return false;
-    percent.textContent = formatCodexPercent(usedPercent);
-    fill.style.width = `${fillPercent}%`;
-    reset.textContent = formatCodexReset(bucket.window);
-  }
-  return true;
-}
-
-function renderCodexUsage() {
-  const box = elements.codexUsageBox;
-  if (!box) return;
-  if (elements.refreshCodexUsageButton) {
-    elements.refreshCodexUsageButton.disabled = codexUsageLoading;
-    elements.refreshCodexUsageButton.textContent = codexUsageLoading ? "Refreshing…" : "Refresh usage";
-  }
-
-  const buckets = codexUsageBuckets(latestCodexUsage);
-  const structureSignature = codexUsageStructureSignature();
-  if (structureSignature === codexUsageRenderSignature && updateCodexUsageValues(box, buckets)) {
-    box.classList.toggle("muted", !latestCodexUsage);
-    return;
-  }
-  codexUsageRenderSignature = structureSignature;
-  box.replaceChildren();
-  box.classList.toggle("muted", !latestCodexUsage);
-
-  if (!latestCodexUsage && codexUsageLoading) {
-    box.textContent = "Checking Codex usage…";
-    return;
-  }
-  if (!latestCodexUsage && codexUsageError) {
-    const title = make("div", "codex-usage-unavailable", "Usage unavailable");
-    const detail = make("div", "codex-usage-detail", codexUsageError.message || String(codexUsageError));
-    box.append(title, detail);
-    return;
-  }
-  if (!latestCodexUsage) {
-    box.textContent = "Codex usage has not loaded yet.";
-    return;
-  }
-
-  const header = make("div", "codex-usage-summary");
-  header.append(
-    make("span", "codex-usage-plan", formatCodexPlanType(latestCodexUsage.planType)),
-    make("span", "codex-usage-fetched", latestCodexUsage.fetchedAt ? `updated ${formatDurationParts(Date.now() - new Date(latestCodexUsage.fetchedAt).getTime())} ago` : "updated now"),
-  );
-  box.append(header);
-  if (latestCodexUsage.source === "codex-cli") {
-    box.append(make("div", "codex-usage-detail", "Source: Codex CLI account. Its login is separate from Pi; these limits may differ from Pi's ChatGPT-plan allowance."));
-  } else {
-    box.append(make("div", "codex-usage-detail", "Source: Pi's legacy Codex login."));
-  }
-  if (latestCodexUsage.sourceNotice) box.append(make("div", "codex-usage-detail", latestCodexUsage.sourceNotice));
-
-  if (buckets.length === 0) {
-    box.append(make("div", "codex-usage-detail", "No Codex rate-limit windows were returned."));
-  } else {
-    for (const bucket of buckets) {
-      const usedPercent = Number(bucket.window?.usedPercent);
-      const fillPercent = Number.isFinite(usedPercent) ? Math.max(0, Math.min(100, usedPercent)) : 0;
-      const item = make("div", "codex-usage-bucket");
-      item.dataset.codexUsageKey = bucket.key;
-      const row = make("div", "codex-usage-row");
-      row.append(
-        make("span", "codex-usage-label", bucket.label),
-        make("strong", "codex-usage-percent", formatCodexPercent(bucket.window?.usedPercent)),
-      );
-      const meter = make("div", "codex-usage-meter");
-      const fill = make("span", "codex-usage-meter-fill");
-      fill.style.width = `${fillPercent}%`;
-      meter.append(fill);
-      item.append(row, meter, make("div", "codex-usage-reset", formatCodexReset(bucket.window)));
-      box.append(item);
-    }
-  }
-
-  if (latestCodexUsage.rateLimitReachedType) {
-    box.append(make("div", "codex-usage-warning", `Limit status: ${latestCodexUsage.rateLimitReachedType}`));
-  }
-  if (codexUsageError) {
-    box.append(make("div", "codex-usage-detail", `Latest refresh failed: ${codexUsageError.message || codexUsageError}`));
-  }
-}
-
-async function refreshCodexUsage({ forceAuthRefresh = false } = {}) {
-  if (codexUsageLoading) return;
-  codexUsageLoading = true;
-  renderCodexUsage();
-  try {
-    const suffix = forceAuthRefresh ? "?refresh=1" : "";
-    const response = await api(`/api/codex-usage${suffix}`, { scoped: false });
-    latestCodexUsage = response.data || null;
-    codexUsageError = null;
-  } catch (error) {
-    codexUsageError = error;
-  } finally {
-    codexUsageLoading = false;
-    renderCodexUsage();
-  }
-}
-
 // Codex subscription Fast mode is owned by the optional pi-extension-codex-fast-mode package. The
 // browser only reads the sanitized tab-scoped server snapshot and asks the server to run the
 // package-owned /fast-mode command; it never sees ChatGPT credentials or request payloads.
@@ -25445,14 +26059,14 @@ function codexFastModeStatusText() {
   if (!isOptionalFeatureEnabled("codexFastMode")) return optionalFeatureUnavailableMessage("codexFastMode");
   if (!codexFastModeLoaded) return "Checking…";
   if (!codexFastModeState.available) return codexFastModeState.unavailableReason || optionalFeatureUnavailableMessage("codexFastMode");
-  if (!codexFastModeState.statusKnown) return "Status unknown · This tab";
+  if (!codexFastModeState.statusKnown) return "Status unknown · This thread";
   const label = codexSpeedModeLabel(codexFastModeState.mode);
   if (codexFastModeState.busy) return `${label} · Busy`;
   const eligible = codexFastModeState.mode === "ultrafast" ? codexFastModeState.ultrafastModelEligible : codexFastModeState.modelEligible;
   if (codexFastModeState.enabled && codexFastModeState.model && !eligible) {
     return `${label} · Inactive for current model`;
   }
-  return `${label} · This tab`;
+  return `${label} · This thread`;
 }
 
 function renderCodexFastModeControl({ syncSelection = true } = {}) {
@@ -25520,7 +26134,7 @@ function applyCodexFastModeStatus(statusText) {
   return true;
 }
 
-async function refreshCodexFastMode(tabContext = activeTabContext()) {
+async function refreshCodexFastMode(tabContext = activeTabContext(), { readOnly = false } = {}) {
   if (!elements.codexFastModeSelect || !tabContext.tabId) return codexFastModeState;
   const featureEnabled = isOptionalFeatureEnabled("codexFastMode");
   try {
@@ -25528,8 +26142,8 @@ async function refreshCodexFastMode(tabContext = activeTabContext()) {
     let data = response.data || {};
     // Browser disable is global while extension state is session/branch local. Keep querying even
     // when hidden and disarm a restored branch before it can silently remain on.
-    if (!featureEnabled && data.available && !codexFastModeConfirmedOff(data)) {
-      if (data.busy) throw new Error("this tab is busy; Fast mode will be disarmed when it becomes idle");
+    if (!readOnly && !featureEnabled && data.available && !codexFastModeConfirmedOff(data)) {
+      if (data.busy) throw new Error("this thread is busy; Fast mode will be disarmed when it becomes idle");
       response = await api("/api/codex-fast-mode", { method: "PUT", body: { enabled: false }, tabId: tabContext.tabId });
       data = response.data || {};
       if (!codexFastModeConfirmedOff(data)) throw new Error("the extension did not confirm Fast mode off");
@@ -25565,7 +26179,7 @@ async function applyCodexFastMode() {
       const confirmed = await appConfirm({
         title: "Use Codex Ultrafast?",
         summary: "Ultrafast uses 8x Standard included usage or 6x purchased-credit/pay-as-you-go usage. It requires GPT-6 Astra and Pro $500 or eligible Enterprise/Edu access; workspace terms may differ.",
-        affected: "This tab's session branch. Future requests may cost more.",
+        affected: "This thread's session branch. Future requests may cost more.",
         undoable: true,
         confirmLabel: "Use Ultrafast",
       });
@@ -25583,7 +26197,8 @@ async function applyCodexFastMode() {
     addEvent(codexFastModeNotice, "error");
   } finally {
     codexFastModeBusy = false;
-    if (isCurrentTabContext(tabContext)) renderCodexFastModeControl();
+    renderCodexFastModeControl();
+    scheduleFocusedShellRender();
   }
 }
 
@@ -25599,257 +26214,18 @@ async function disableCodexFastModeIntegration() {
 
   for (const { tabId, data } of snapshots) {
     if (!data.available) {
-      if (data.statusKnown && data.enabled) throw new Error(`tab ${tabId} still reports Fast mode on but /fast-mode is unavailable`);
+      if (data.statusKnown && data.enabled) throw new Error(`thread ${tabId} still reports Fast mode on but /fast-mode is unavailable`);
       continue;
     }
-    if (data.busy && !codexFastModeConfirmedOff(data)) throw new Error(`tab ${tabId} is busy; wait for it to finish before disabling Codex Fast mode`);
+    if (data.busy && !codexFastModeConfirmedOff(data)) throw new Error(`thread ${tabId} is busy; wait for it to finish before disabling Codex Fast mode`);
   }
 
   for (const { tabId, data } of snapshots) {
     if (!data.available || codexFastModeConfirmedOff(data)) continue;
     const response = await api("/api/codex-fast-mode", { method: "PUT", body: { enabled: false }, tabId });
-    if (!codexFastModeConfirmedOff(response.data)) throw new Error(`tab ${tabId} did not confirm Codex Fast mode off`);
+    if (!codexFastModeConfirmedOff(response.data)) throw new Error(`thread ${tabId} did not confirm Codex Fast mode off`);
     if (tabId === activeTabId) applyCodexFastModeData(response.data);
   }
-}
-
-function scheduleRefreshCodexUsage(delay = CODEX_USAGE_REFRESH_MS) {
-  clearTimeout(refreshCodexUsageTimer);
-  refreshCodexUsageTimer = setTimeout(() => {
-    refreshCodexUsage().finally(() => scheduleRefreshCodexUsage());
-  }, delay);
-}
-
-function initializeCodexUsage() {
-  renderCodexUsage();
-  refreshCodexUsage().finally(() => scheduleRefreshCodexUsage());
-  clearInterval(codexUsageRenderTimer);
-  codexUsageRenderTimer = setInterval(renderCodexUsage, CODEX_USAGE_RENDER_TICK_MS);
-}
-
-function claudeUsageWindowFromProvider(window, capturedAt) {
-  if (!window) return null;
-  const resetAt = Number(window.resetAt);
-  const resetAfterSeconds = Number(window.resetAfterSeconds);
-  const resetsAt = Number.isFinite(resetAt) && resetAt >= 0
-    ? new Date(resetAt).toISOString()
-    : Number.isFinite(resetAfterSeconds) && resetAfterSeconds >= 0
-      ? new Date(capturedAt + resetAfterSeconds * 1000).toISOString()
-      : undefined;
-  return {
-    label: window.label || "Usage window",
-    usedPercent: window.usedPercent,
-    ...(Number.isFinite(window.windowMinutes) ? { windowMinutes: window.windowMinutes } : {}),
-    ...(resetsAt ? { resetsAt } : {}),
-  };
-}
-
-function claudeUsageFromGitFooterPayload(payload = parseGitFooterWebuiPayload()) {
-  const providerUsage = payload?.providerUsage;
-  if (providerUsage?.provider !== "anthropic") return null;
-  const capturedAt = Number(providerUsage.capturedAt);
-  if (!Number.isFinite(capturedAt) || capturedAt <= 0) return null;
-  const windows = [providerUsage.primary, providerUsage.secondary]
-    .map((window) => claudeUsageWindowFromProvider(window, capturedAt))
-    .filter(Boolean);
-  if (windows.length === 0) return null;
-  return {
-    available: true,
-    providerId: "claude-code",
-    source: "git-footer-status-provider-headers",
-    fetchedAt: new Date(capturedAt).toISOString(),
-    summary: "Live Anthropic subscription usage from provider response headers.",
-    windows,
-    activityTitle: "",
-    activity: [],
-    notes: [],
-  };
-}
-
-function syncClaudeUsageFromGitFooterPayload(payload = parseGitFooterWebuiPayload()) {
-  const usage = claudeUsageFromGitFooterPayload(payload);
-  if (!usage) return false;
-  latestClaudeUsage = usage;
-  claudeUsageError = null;
-  renderClaudeUsage();
-  return true;
-}
-
-function claudeUsageResetDate(window) {
-  const resetAt = window?.resetsAt ? new Date(window.resetsAt) : null;
-  if (resetAt && Number.isFinite(resetAt.getTime())) return resetAt;
-  const resetAfterSeconds = Number(window?.resetAfterSeconds);
-  if (Number.isFinite(resetAfterSeconds) && resetAfterSeconds >= 0) return new Date(Date.now() + resetAfterSeconds * 1000);
-  return null;
-}
-
-function formatClaudeUsageReset(window) {
-  const resetDate = claudeUsageResetDate(window);
-  if (resetDate) {
-    const diff = resetDate.getTime() - Date.now();
-    if (diff <= 0) return "resetting now";
-    return `resets in ${formatDurationParts(diff)}`;
-  }
-  return window?.resetText ? `resets ${window.resetText}` : "reset unknown";
-}
-
-function renderClaudeUsageWindow(box, window, key = "") {
-  const usedPercent = Number(window?.usedPercent);
-  const fillPercent = Number.isFinite(usedPercent) ? Math.max(0, Math.min(100, usedPercent)) : 0;
-  const item = make("div", "claude-usage-bucket");
-  if (key) item.dataset.claudeUsageKey = key;
-  const row = make("div", "claude-usage-row");
-  row.append(
-    make("span", "claude-usage-label", window?.label || "Usage window"),
-    make("strong", "claude-usage-percent", formatCodexPercent(usedPercent)),
-  );
-  const meter = make("div", "claude-usage-meter");
-  const fill = make("span", "claude-usage-meter-fill");
-  fill.style.width = `${fillPercent}%`;
-  meter.append(fill);
-  item.append(row, meter, make("div", "claude-usage-reset", formatClaudeUsageReset(window)));
-  box.append(item);
-}
-
-function renderClaudeUsageActivity(box, activity) {
-  if (!Array.isArray(activity) || activity.length === 0) return;
-  const title = make("div", "claude-usage-activity-title", latestClaudeUsage?.activityTitle || "What's contributing to your limits usage?");
-  box.append(title);
-  for (const item of activity.slice(0, 2)) {
-    const group = make("div", "claude-usage-activity-group");
-    const row = make("div", "claude-usage-row");
-    row.append(
-      make("span", "claude-usage-label", item.label || "Activity"),
-      make("span", "claude-usage-reset", `${Number(item.requests || 0)} requests · ${Number(item.sessions || 0)} sessions`),
-    );
-    group.append(row);
-    for (const detail of (Array.isArray(item.details) ? item.details : []).slice(0, 4)) {
-      group.append(make("div", "claude-usage-detail", detail?.text || String(detail || "")));
-    }
-    box.append(group);
-  }
-}
-
-function claudeUsageStructureSignature() {
-  if (!latestClaudeUsage) return JSON.stringify({ state: claudeUsageLoading ? "loading" : claudeUsageError ? "error" : "empty", error: claudeUsageError?.message || String(claudeUsageError || "") });
-  const windows = Array.isArray(latestClaudeUsage.windows) ? latestClaudeUsage.windows : [];
-  return JSON.stringify({
-    state: "data",
-    summary: latestClaudeUsage.summary || "",
-    windows: windows.slice(0, 6).map((window, index) => [String(window?.id || index), window?.label || "Usage window"]),
-    activityTitle: latestClaudeUsage.activityTitle || "",
-    activity: latestClaudeUsage.activity || [],
-    error: claudeUsageError?.message || String(claudeUsageError || ""),
-  });
-}
-
-function updateClaudeUsageValues(box, windows) {
-  if (!latestClaudeUsage || !box.querySelector(".claude-usage-summary")) return false;
-  const fetched = box.querySelector(".claude-usage-fetched");
-  if (fetched) fetched.textContent = latestClaudeUsage.fetchedAt ? `updated ${formatDurationParts(Date.now() - new Date(latestClaudeUsage.fetchedAt).getTime())} ago` : "updated now";
-  const rendered = [...box.querySelectorAll(".claude-usage-bucket[data-claude-usage-key]")];
-  if (rendered.length !== windows.length) return false;
-  for (const [index, window] of windows.entries()) {
-    const key = String(window?.id || index);
-    const item = rendered.find((node) => node.dataset.claudeUsageKey === key);
-    if (!item) return false;
-    const usedPercent = Number(window?.usedPercent);
-    const fillPercent = Number.isFinite(usedPercent) ? Math.max(0, Math.min(100, usedPercent)) : 0;
-    const percent = item.querySelector(".claude-usage-percent");
-    const fill = item.querySelector(".claude-usage-meter-fill");
-    const reset = item.querySelector(".claude-usage-reset");
-    if (!percent || !fill || !reset) return false;
-    percent.textContent = formatCodexPercent(usedPercent);
-    fill.style.width = `${fillPercent}%`;
-    reset.textContent = formatClaudeUsageReset(window);
-  }
-  return true;
-}
-
-function renderClaudeUsage() {
-  const box = elements.claudeUsageBox;
-  if (!box) return;
-  if (elements.refreshClaudeUsageButton) {
-    elements.refreshClaudeUsageButton.disabled = claudeUsageLoading;
-    elements.refreshClaudeUsageButton.textContent = claudeUsageLoading ? "Refreshing…" : "Refresh usage";
-  }
-
-  const windows = Array.isArray(latestClaudeUsage?.windows) ? latestClaudeUsage.windows.slice(0, 6) : [];
-  const structureSignature = claudeUsageStructureSignature();
-  if (structureSignature === claudeUsageRenderSignature && updateClaudeUsageValues(box, windows)) {
-    box.classList.toggle("muted", !latestClaudeUsage);
-    return;
-  }
-  claudeUsageRenderSignature = structureSignature;
-  box.replaceChildren();
-  box.classList.toggle("muted", !latestClaudeUsage);
-
-  if (!latestClaudeUsage && claudeUsageLoading) {
-    box.textContent = "Checking Claude usage…";
-    return;
-  }
-  if (!latestClaudeUsage && claudeUsageError) {
-    const title = make("div", "claude-usage-unavailable", "Usage unavailable");
-    const detail = make("div", "claude-usage-detail", claudeUsageError.message || String(claudeUsageError));
-    box.append(title, detail);
-    return;
-  }
-  if (!latestClaudeUsage) {
-    box.textContent = "Claude usage has not loaded yet.";
-    return;
-  }
-
-  const header = make("div", "claude-usage-summary");
-  header.append(
-    make("span", "claude-usage-plan", "Claude Code"),
-    make("span", "claude-usage-fetched", latestClaudeUsage.fetchedAt ? `updated ${formatDurationParts(Date.now() - new Date(latestClaudeUsage.fetchedAt).getTime())} ago` : "updated now"),
-  );
-  box.append(header);
-
-  if (latestClaudeUsage.summary) box.append(make("div", "claude-usage-detail", latestClaudeUsage.summary));
-  if (windows.length === 0) {
-    box.append(make("div", "claude-usage-detail", "No Claude usage windows were returned."));
-  } else {
-    for (const [index, window] of windows.entries()) renderClaudeUsageWindow(box, window, String(window?.id || index));
-  }
-
-  renderClaudeUsageActivity(box, latestClaudeUsage.activity);
-  if (claudeUsageError) {
-    box.append(make("div", "claude-usage-detail", `Latest refresh failed: ${claudeUsageError.message || claudeUsageError}`));
-  }
-}
-
-async function refreshClaudeUsage({ forceCli = false } = {}) {
-  if (!forceCli && syncClaudeUsageFromGitFooterPayload()) return;
-  if (claudeUsageLoading) return;
-  claudeUsageLoading = true;
-  renderClaudeUsage();
-  try {
-    const response = await api("/api/claude-usage", { scoped: false });
-    if (!forceCli && syncClaudeUsageFromGitFooterPayload()) return;
-    latestClaudeUsage = response.data || null;
-    claudeUsageError = null;
-  } catch (error) {
-    if (!forceCli && syncClaudeUsageFromGitFooterPayload()) return;
-    claudeUsageError = error;
-  } finally {
-    claudeUsageLoading = false;
-    renderClaudeUsage();
-  }
-}
-
-function scheduleRefreshClaudeUsage(delay = CLAUDE_USAGE_REFRESH_MS) {
-  clearTimeout(refreshClaudeUsageTimer);
-  refreshClaudeUsageTimer = setTimeout(() => {
-    refreshClaudeUsage().finally(() => scheduleRefreshClaudeUsage());
-  }, delay);
-}
-
-function initializeClaudeUsage() {
-  renderClaudeUsage();
-  refreshClaudeUsage().finally(() => scheduleRefreshClaudeUsage());
-  clearInterval(claudeUsageRenderTimer);
-  claudeUsageRenderTimer = setInterval(renderClaudeUsage, CLAUDE_USAGE_RENDER_TICK_MS);
 }
 
 const SUBAGENT_LAUNCHER_LABELS = Object.freeze({
@@ -25933,7 +26309,7 @@ function subagentCapabilities(run = {}, agent = null) {
   return agentCapabilities || runCapabilities || null;
 }
 
-function subagentOverviewGroups(data = latestSubagents) {
+function subagentOverviewGroups(data = activityAgents.getSnapshot().data) {
   const serverNow = Number(data?.updatedAt);
   const now = Number.isFinite(serverNow) ? serverNow : Date.now();
   if (Number(data?.version) === 2 && Array.isArray(data?.groups)) {
@@ -25950,7 +26326,7 @@ function subagentOverviewGroups(data = latestSubagents) {
         groupKind: group.kind,
         tabId: group.tabId || activeTabId || "external",
         tabIndex: group.tabIndex || legacy.tabIndex || index + 1,
-        tabTitle: group.title || legacy.tabTitle || (group.kind === "external" ? "External agents" : `Terminal ${index + 1}`),
+        tabTitle: threadDisplayTitle(group.title || legacy.tabTitle) || (group.kind === "external" ? "External agents" : `Thread ${index + 1}`),
         sessionName: group.cwdLabel || legacy.sessionName || "registered agents",
         available: true,
         gates,
@@ -26085,145 +26461,55 @@ function setSubagentCancelStatus(message = "", level = "muted") {
   elements.subagentCancelStatus.hidden = !message;
 }
 
-function setSubagentCancelSubmitting(submitting) {
-  subagentCancelSubmitting = !!submitting;
+function syncSubagentCancelSubmitting() {
+  const submitting = activityAgents.getSnapshot().cancelSubmitting;
   if (elements.subagentCancelSubmitButton) {
-    elements.subagentCancelSubmitButton.disabled = subagentCancelSubmitting;
-    elements.subagentCancelSubmitButton.textContent = subagentCancelSubmitting ? "Cancelling…" : "Cancel subagent";
+    elements.subagentCancelSubmitButton.disabled = submitting;
+    elements.subagentCancelSubmitButton.textContent = submitting ? "Cancelling…" : "Cancel subagent";
   }
-  if (elements.subagentCancelKeepRunningButton) elements.subagentCancelKeepRunningButton.disabled = subagentCancelSubmitting;
+  if (elements.subagentCancelKeepRunningButton) elements.subagentCancelKeepRunningButton.disabled = submitting;
 }
 
-function subagentCancelTargetLabel(selection = subagentCancelSelection) {
+function subagentCancelTargetLabel(selection = activityAgents.getSnapshot().cancelSelection) {
   if (!selection) return "subagent run";
   return `run ${selection.runId}`;
 }
 
 function openSubagentCancelDialog(tab, run, agent = null) {
-  if (!tab?.groupId || !run?.id || !subagentRunCanCancel(run, agent) || !elements.subagentCancelDialog) return;
-  const agentCount = subagentRunAgents(run).length;
-  subagentCancelSelection = {
-    groupId: tab.groupId,
-    tabId: tab.tabId,
-    runId: run.id,
-    agentId: agent?.instanceId || agent?.id || "",
-    agentCount,
-  };
+  if (!elements.subagentCancelDialog) return;
+  const selection = activityAgents.beginCancel(tab, run, agent);
+  if (!selection) return;
   if (elements.subagentCancelDialogSubtitle) {
-    const scope = agentCount > 1 ? ` and all ${agentCount} agents in it` : "";
-    elements.subagentCancelDialogSubtitle.textContent = `Cancel ${subagentCancelTargetLabel()}${scope}? The entire run will be stopped and the parent agent will be notified.`;
+    const scope = selection.agentCount > 1 ? ` and all ${selection.agentCount} agents in it` : "";
+    elements.subagentCancelDialogSubtitle.textContent = `Cancel ${subagentCancelTargetLabel(selection)}${scope}? The entire run will be stopped and the parent agent will be notified.`;
   }
   if (elements.subagentCancelReason) elements.subagentCancelReason.value = "";
   if (elements.subagentCancelNote) elements.subagentCancelNote.value = "";
-  setSubagentCancelStatus();
-  setSubagentCancelSubmitting(false);
   if (!elements.subagentCancelDialog.open) elements.subagentCancelDialog.showModal();
-  queueMicrotask(() => elements.subagentCancelReason?.focus());
+  queueMicrotask(() => {
+    if (activityAgents.getSnapshot().cancelSelection === selection && elements.subagentCancelDialog.open) elements.subagentCancelReason?.focus();
+  });
 }
 
 function closeSubagentCancelDialog() {
-  if (subagentCancelSubmitting) return;
+  if (activityAgents.getSnapshot().cancelSubmitting) return;
   if (elements.subagentCancelDialog?.open) elements.subagentCancelDialog.close();
 }
 
-async function submitSubagentCancel() {
-  const selection = subagentCancelSelection;
-  if (!selection || subagentCancelSubmitting) return;
-  const reason = String(elements.subagentCancelReason?.value || "").trim();
-  const note = String(elements.subagentCancelNote?.value || "").trim();
-  setSubagentCancelSubmitting(true);
-  setSubagentCancelStatus("Cancelling subagent…");
-  try {
-    await api("/api/subagents/cancel", {
-      method: "POST",
-      scoped: false,
-      body: {
-        group: selection.groupId,
-        runId: selection.runId,
-        ...(selection.agentId ? { agentId: selection.agentId } : {}),
-        ...(reason ? { reason } : {}),
-        ...(note ? { note } : {}),
-      },
-    });
-    if (elements.subagentCancelDialog?.open) elements.subagentCancelDialog.close();
-    addEvent(`cancelled ${subagentCancelTargetLabel(selection)}; the parent agent was notified`, "info");
-    await refreshSubagents();
-    scheduleRefreshSubagents();
-  } catch (error) {
-    const message = `subagent cancel failed: ${error.message || String(error)}`;
-    setSubagentCancelStatus(message, "error");
-    addEvent(message, "error");
-  } finally {
-    setSubagentCancelSubmitting(false);
-  }
+function submitSubagentCancel() {
+  return activityAgents.submitCancel({ reason: elements.subagentCancelReason?.value || "", note: elements.subagentCancelNote?.value || "" });
 }
 
-async function dismissSubagentRun(tab, run) {
-  if (!tab?.groupId || !run?.id || !subagentRunCanDismiss(run)) return;
-  const attachedProjection = subagentRunIsAttachedProjection(run);
-  try {
-    await api("/api/subagents/dismiss", {
-      method: "POST",
-      scoped: false,
-      body: { group: tab.groupId, runId: run.id },
-    });
-    addEvent(attachedProjection ? `detached persisted session projection ${run.id}` : `dismissed finished subagent run ${run.id}`, "info");
-    await refreshSubagents();
-    scheduleRefreshSubagents();
-  } catch (error) {
-    addEvent(`subagent dismiss failed: ${error.message || String(error)}`, "error");
-  }
-}
+function dismissSubagentRun(tab, run) { return activityAgents.dismiss(tab, run); }
 
-function finishedSubagentRunSelections(data = latestSubagents) {
+function finishedSubagentRunSelections(data = activityAgents.getSnapshot().data) {
   return subagentOverviewGroups(data).flatMap((tab) => tab.displayRuns
     .filter((run) => subagentRunIsTerminal(run) && subagentRunCanDismiss(run))
     .map((run) => ({ groupId: tab.groupId, runId: run.id }))
     .filter((selection) => selection.groupId && selection.runId));
 }
 
-async function clearFinishedSubagentRuns({ automatic = false } = {}) {
-  if (subagentsClearingFinished || subagentsLoading) return;
-  const selections = finishedSubagentRunSelections();
-  if (!selections.length) return;
-  clearTimeout(refreshSubagentsTimer);
-  subagentsClearingFinished = true;
-  renderSubagents();
-  let dismissed = 0;
-  const failures = [];
-  try {
-    for (const selection of selections) {
-      try {
-        await api("/api/subagents/dismiss", {
-          method: "POST",
-          scoped: false,
-          body: { group: selection.groupId, runId: selection.runId },
-        });
-        dismissed += 1;
-      } catch (error) {
-        failures.push(error);
-      }
-    }
-    await refreshSubagents();
-  } finally {
-    subagentsClearingFinished = false;
-    renderSubagents();
-    scheduleRefreshSubagents();
-  }
-  if (dismissed) {
-    if (automatic) {
-      addEvent("auto-cleared", "info", {
-        aggregateKey: "subagent-auto-clear",
-        aggregateIncrement: dismissed,
-        aggregateSingular: "finished subagent run",
-        aggregatePlural: "finished subagent runs",
-      });
-    } else {
-      addEvent(`cleared ${dismissed} finished subagent ${dismissed === 1 ? "run" : "runs"}`, "info");
-    }
-  }
-  if (failures.length) addEvent(`could not ${automatic ? "auto-clear" : "clear"} ${failures.length} finished subagent ${failures.length === 1 ? "run" : "runs"}`, "warn");
-}
+function clearFinishedSubagentRuns(options) { return activityAgents.clearFinished(options); }
 
 function subagentOverlayTranscriptMessages(data = subagentOverlayData) {
   const agent = data?.agent || subagentOverlaySelection?.agent || {};
@@ -26466,7 +26752,7 @@ function renderSubagentOverlayWidget() {
   if (subagentRunCanRefresh(selection.run, agent)) actions.append(refreshButton);
   actions.append(appRunnerActionButton("Close", closeSubagentOverlay, "subagent-overlay-close-action"));
   const details = [
-    `${selection.tab?.tabTitle || tab?.title || `Terminal ${selection.tabIndex || "?"}`} · run ${selection.runId}`,
+    `${threadDisplayTitle(selection.tab?.tabTitle || tab?.title) || `Thread ${selection.tabIndex || "?"}`} · run ${selection.runId}`,
     agent.currentPath ? `path: ${agent.currentPath}` : "",
     agent.activityState ? `activity: ${agent.activityState}` : "",
     agent.error ? `status warning: ${agent.error}` : "",
@@ -26536,6 +26822,7 @@ async function openSubagentOverlay(tab, run, agent) {
     subagentOverlayData = null;
     subagentOverlayError = "";
     subagentOverlayRequestSerial += 1;
+    if (focusedShell?.active) navigateFocusedShell("activity", "subagents");
     renderWidgets();
     await refreshSubagentOverlay();
     scheduleSubagentOverlayRefresh();
@@ -26669,7 +26956,7 @@ function renderSubagentTerminalView() {
   if (transcript.dataset.continuityScrollKey === scrollKey) rememberScopedScrollContinuity(transcript, scrollKey);
   else if (!scopedScrollContinuityByKey.has(scrollKey)) scopedScrollContinuityByKey.set(scrollKey, { mode: "follow-end", scrollTop: 0, scrollLeft: 0 });
   elements.subagentTerminalTitle.textContent = subagentTerminalViewTitle(view);
-  elements.subagentTerminalMeta.textContent = `${facts.join(" · ")} · parent ${parent?.title || view.parentTitle || "terminal"} · run ${view.runId}`;
+  elements.subagentTerminalMeta.textContent = `${facts.join(" · ")} · parent ${threadDisplayTitle(parent?.title || view.parentTitle) || "thread"} · run ${view.runId}`;
   renderSubagentTerminalCards(agent);
   transcript.replaceChildren();
   transcript.setAttribute("aria-live", running ? "polite" : "off");
@@ -26781,7 +27068,7 @@ function ensureSubagentTerminalView(tab, run, agent) {
     existing.tab = tab;
     existing.run = run;
     existing.agent = agent;
-    existing.parentTitle = tab.tabTitle;
+    existing.parentTitle = threadDisplayTitle(tab.tabTitle);
     if (run.gateAttempt) existing.gateAttempt = run.gateAttempt;
     return existing;
   }
@@ -26789,7 +27076,7 @@ function ensureSubagentTerminalView(tab, run, agent) {
     id,
     groupId: tab.groupId,
     parentTabId: tab.tabId,
-    parentTitle: tab.tabTitle,
+    parentTitle: threadDisplayTitle(tab.tabTitle),
     tabIndex: tab.tabIndex,
     tab,
     run,
@@ -26815,7 +27102,7 @@ async function openSubagentTerminal(tab, run, agent) {
   try {
     await activateSubagentTerminalView(view.id);
   } catch (error) {
-    addEvent(`could not open subagent terminal: ${error.message || String(error)}`, "error");
+    addEvent(`could not open subagent thread: ${error.message || String(error)}`, "error");
   }
 }
 
@@ -26885,7 +27172,7 @@ function syncSubagentTerminalViewsFromOverview() {
     const agent = (Array.isArray(run?.agents) ? run.agents : []).find((candidate) => candidate.id === view.agentId);
     if (tab) {
       view.tab = tab;
-      view.parentTitle = tab.tabTitle;
+      view.parentTitle = threadDisplayTitle(tab.tabTitle);
       changed = true;
     }
     if (run) {
@@ -26981,11 +27268,11 @@ function renderSubagentTerminalTab(view, { groupItem = false } = {}) {
   button.type = "button";
   button.setAttribute("role", "tab");
   button.setAttribute("aria-selected", active ? "true" : "false");
-  button.setAttribute("aria-label", `${subagentTerminalViewTitle(view)} subagent view, parent ${view.parentTitle || "terminal"}`);
+  button.setAttribute("aria-label", `${subagentTerminalViewTitle(view)} subagent view, parent ${view.parentTitle || "thread"}`);
   appendTerminalTabContent(button, {
     title: subagentTerminalViewTitle(view),
     indicator: { state: running ? "working" : "done" },
-    meta: ["Subagent", subagentSourceLabel(view.data?.source || view.run?.source), ...subagentExecutionFacts(view.data?.agent || view.agent), view.parentTitle || "parent terminal"].join(" · "),
+    meta: ["Subagent", subagentSourceLabel(view.data?.source || view.run?.source), ...subagentExecutionFacts(view.data?.agent || view.agent), view.parentTitle || "parent thread"].join(" · "),
     subagent: true,
   });
   button.addEventListener("click", (event) => {
@@ -27018,7 +27305,7 @@ function renderSubagentTerminalTabGroup(group) {
   });
   wrapper.addEventListener("pointerleave", (event) => {
     if (event.pointerType === "touch") return;
-    clearOpenTerminalTabGroup(group.key);
+    clearOpenTerminalTabGroup(group.key, { preserveFocus: true });
   });
   wrapper.addEventListener("focusin", () => {
     if (!isMobileView()) setOpenTerminalTabGroup(group.key);
@@ -27026,7 +27313,7 @@ function renderSubagentTerminalTabGroup(group) {
   wrapper.addEventListener("focusout", () => {
     if (isMobileView()) return;
     setTimeout(() => {
-      if (!wrapper.contains(document.activeElement)) clearOpenTerminalTabGroup(group.key);
+      if (!wrapper.contains(document.activeElement)) clearOpenTerminalTabGroup(group.key, { preserveFocus: true });
     }, 0);
   });
 
@@ -27136,9 +27423,9 @@ function renderSubagentAgent(tab, run, agent) {
     const open = make("span", "subagent-agent-open", "›");
     open.setAttribute("aria-hidden", "true");
     row.append(open);
-    const destination = subagentOpenMode === "tab" ? "subagent tab" : "output overlay";
+    const destination = subagentOpenMode === "tab" ? "subagent view" : "output overlay";
     row.title = `${name} · ${launcher} · ${status} · ${model} · ${thinking} · open ${destination}`;
-    row.setAttribute("aria-label", `Open ${destination} for ${name}, launched by ${launcher}, ${status}, model ${model}, reasoning ${thinking}, in ${tab?.tabTitle || `Terminal ${tab?.tabIndex || "?"}`}`);
+    row.setAttribute("aria-label", `Open ${destination} for ${name}, launched by ${launcher}, ${status}, model ${model}, reasoning ${thinking}, in ${threadDisplayTitle(tab?.tabTitle) || `Thread ${tab?.tabIndex || "?"}`}`);
     row.addEventListener("click", () => openSubagentOutput(tab, run, agent));
   } else {
     row.title = `${name} · ${launcher} · ${status} · output is unavailable from this provider`;
@@ -27220,7 +27507,7 @@ function renderSubagentGateAttempt(tab, attempt) {
   if (target) {
     row.type = "button";
     row.dataset.subagentContinuityKey = `gate:${tab?.tabId || ""}:${attempt?.runId || ""}:${target.agent?.id || ""}`;
-    const destination = subagentOpenMode === "tab" ? "subagent tab" : "output overlay";
+    const destination = subagentOpenMode === "tab" ? "subagent view" : "output overlay";
     row.title = `${title} · open ${destination}`;
     row.setAttribute("aria-label", `Open ${destination} for ${title}, ${attempt?.status || "unknown"}, ${attempt?.retrySafety || "may-write"}`);
     row.addEventListener("click", () => openSubagentGateAttemptOutput(tab, target, attempt));
@@ -27279,11 +27566,11 @@ function renderSubagentTabGroup(tab) {
   const header = make(isExternal ? "div" : "button", "subagent-tab-header");
   if (!isExternal) header.type = "button";
   header.dataset.subagentContinuityKey = `tab:${tab?.tabId || ""}`;
-  if (!isExternal) header.setAttribute("aria-label", `Open ${tab.tabTitle || `Terminal ${tab.tabIndex || ""}`}`);
+  if (!isExternal) header.setAttribute("aria-label", `Open ${threadDisplayTitle(tab.tabTitle) || `Thread ${tab.tabIndex || ""}`}`);
   const title = make("span", "subagent-tab-title");
   title.append(
-    make("strong", undefined, tab.tabTitle || `Terminal ${tab.tabIndex || "?"}`),
-    make("span", "subagent-tab-session", isExternal ? "Registered outside open WebUI tabs" : `Terminal ${tab.tabIndex || "?"} · ${subagentTabMeta(tab)}`),
+    make("strong", undefined, threadDisplayTitle(tab.tabTitle) || `Thread ${tab.tabIndex || "?"}`),
+    make("span", "subagent-tab-session", isExternal ? "Registered outside open WebUI threads" : `Thread ${tab.tabIndex || "?"} · ${subagentTabMeta(tab)}`),
   );
   const runs = (Array.isArray(tab.displayRuns) ? tab.displayRuns : ungatedSubagentRuns(tab))
     .slice()
@@ -27345,16 +27632,16 @@ function renderSubagents() {
       : "Auto-Clear is off: keep finished subagent runs until they are cleared manually";
   }
   if (elements.subagentsClearFinishedButton) {
-    elements.subagentsClearFinishedButton.disabled = subagentsLoading || subagentsClearingFinished || finishedRuns.length === 0;
-    elements.subagentsClearFinishedButton.textContent = subagentsClearingFinished ? "Clearing…" : "Clear finished";
+    elements.subagentsClearFinishedButton.disabled = activityAgents.getSnapshot().loading || activityAgents.getSnapshot().clearingFinished || finishedRuns.length === 0;
+    elements.subagentsClearFinishedButton.textContent = activityAgents.getSnapshot().clearingFinished ? "Clearing…" : "Clear finished";
     elements.subagentsClearFinishedButton.title = finishedRuns.length
       ? `Clear ${finishedRuns.length} finished subagent ${finishedRuns.length === 1 ? "run" : "runs"}`
       : "No finished subagent runs to clear";
   }
   if (elements.subagentsStatus) {
     elements.subagentsStatus.textContent = hasItems
-      ? [`${totalAgents} total`, `${runningAgents} running`, staleAgents ? `${staleAgents} stale` : "", Number(latestSubagents?.fleet?.omitted || 0) ? `${latestSubagents.fleet.omitted} active ${latestSubagents.fleet.omitted === 1 ? "child" : "children"} omitted upstream` : "", retainedRuns ? `${retainedRuns} retained ${retainedRuns === 1 ? "run" : "runs"}` : "", totalGates ? `${totalGates} retry ${totalGates === 1 ? "gate" : "gates"}` : "", `across ${activeTabs.length} ${activeTabs.length === 1 ? "group" : "groups"}`].filter(Boolean).join(" · ")
-      : subagentsLoading && !latestSubagents
+      ? [`${totalAgents} total`, `${runningAgents} running`, staleAgents ? `${staleAgents} stale` : "", Number(activityAgents.getSnapshot().data?.fleet?.omitted || 0) ? `${activityAgents.getSnapshot().data.fleet.omitted} active ${activityAgents.getSnapshot().data.fleet.omitted === 1 ? "child" : "children"} omitted upstream` : "", retainedRuns ? `${retainedRuns} retained ${retainedRuns === 1 ? "run" : "runs"}` : "", totalGates ? `${totalGates} retry ${totalGates === 1 ? "gate" : "gates"}` : "", `across ${activeTabs.length} ${activeTabs.length === 1 ? "group" : "groups"}`].filter(Boolean).join(" · ")
+      : activityAgents.getSnapshot().loading && !activityAgents.getSnapshot().data
         ? "Checking subagents and retry gates…"
         : "No running subagents, retained runs, or retry gates.";
   }
@@ -27363,80 +27650,18 @@ function renderSubagents() {
   box.classList.toggle("muted", !hasItems);
   box.classList.toggle("has-items", hasItems);
   if (!hasItems) {
-    box.append(make("div", "subagents-empty", subagentsError ? `Subagent status unavailable: ${subagentsError.message || subagentsError}` : "Managed and registered Pi agent runs will appear here, grouped by terminal or under External agents."));
+    box.append(make("div", "subagents-empty", activityAgents.getSnapshot().error ? `Subagent status unavailable: ${activityAgents.getSnapshot().error.message || activityAgents.getSnapshot().error}` : "Managed and registered Pi agent runs will appear here, grouped by thread or under External agents."));
     restoreFocus();
     return;
   }
   for (const tab of activeTabs) box.append(renderSubagentTabGroup(tab));
-  if (subagentsError) box.append(make("div", "subagents-stale muted", `Latest refresh failed: ${subagentsError.message || subagentsError}`));
+  if (activityAgents.getSnapshot().error) box.append(make("div", "subagents-stale muted", `Latest refresh failed: ${activityAgents.getSnapshot().error.message || activityAgents.getSnapshot().error}`));
   restoreFocus();
 }
 
-async function refreshSubagents() {
-  if (subagentsRefreshPromise) {
-    subagentsRefreshQueued = true;
-    return subagentsRefreshPromise;
-  }
-  let refreshed = false;
-  let subagentViewsChanged = false;
-  let materializedTerminalViews = false;
-  subagentsLoading = true;
-  renderSubagents();
-  let settleRefresh;
-  let rejectRefresh;
-  const refreshPromise = new Promise((resolve, reject) => {
-    settleRefresh = resolve;
-    rejectRefresh = reject;
-  });
-  subagentsRefreshPromise = refreshPromise;
-  (async () => {
-    try {
-      do {
-        subagentsRefreshQueued = false;
-        try {
-          const response = await api("/api/subagents", { scoped: false });
-          latestSubagents = response.data || null;
-          pruneDismissedSubagentGateKeys(latestSubagents?.tabs, dismissedSubagentGateKeys);
-          subagentViewsChanged = syncSubagentTerminalViewsFromOverview() || subagentViewsChanged;
-          materializedTerminalViews = materializeRetainedSubagentTerminalViews() || materializedTerminalViews;
-          subagentsError = null;
-          refreshed = true;
-        } catch (error) {
-          subagentsError = error;
-        }
-      } while (subagentsRefreshQueued);
-    } finally {
-      if (subagentsRefreshPromise === refreshPromise) subagentsRefreshPromise = null;
-      subagentsLoading = false;
-      renderSubagents();
-      if (subagentOverlaySelection?.tabId === activeTabId) renderWidgets();
-      if (activeSubagentTerminalId) {
-        renderSubagentTerminalView();
-        scheduleSubagentTerminalRefresh();
-      }
-      if (subagentViewsChanged || materializedTerminalViews) renderTabs();
-    }
-  })().then(settleRefresh, rejectRefresh);
-  await refreshPromise;
-  if (refreshed && subagentAutoClearEnabled && finishedSubagentRunSelections().length) {
-    await clearFinishedSubagentRuns({ automatic: true });
-  }
-}
-
-function scheduleRefreshSubagents(delay) {
-  clearTimeout(refreshSubagentsTimer);
-  const totalAgents = Number(latestSubagents?.runningAgents || 0);
-  const hasRunningGate = (Array.isArray(latestSubagents?.tabs) ? latestSubagents.tabs : []).some((tab) => (Array.isArray(tab?.gates) ? tab.gates : []).some((gate) => gate?.status === "running"));
-  const nextDelay = delay ?? (document.visibilityState === "hidden" ? SUBAGENTS_HIDDEN_REFRESH_MS : totalAgents > 0 || hasRunningGate ? SUBAGENTS_ACTIVE_REFRESH_MS : SUBAGENTS_IDLE_REFRESH_MS);
-  refreshSubagentsTimer = setTimeout(() => {
-    refreshSubagents().finally(() => scheduleRefreshSubagents());
-  }, nextDelay);
-}
-
-function initializeSubagents() {
-  renderSubagents();
-  refreshSubagents().finally(() => scheduleRefreshSubagents());
-}
+function refreshSubagents() { return activityAgents.refresh(); }
+function scheduleRefreshSubagents(delay) { activityAgents.schedule(delay); }
+function initializeSubagents() { activityAgents.start(); }
 
 function subagentLaunchSlotLimits() {
   return {
@@ -27659,10 +27884,10 @@ function renderSubagentLaunchSlots() {
         : dirty
           ? "Unsaved changes"
           : subagentLaunchSlotReloadRequired && activeConfigTab
-            ? "Saved · reload this tab"
+            ? "Saved · reload this thread"
             : config
               ? `${roleCount} roles · ${subagentLaunchSlotScope === "project" ? "project scope" : "user defaults"}`
-              : "Select a running Pi tab";
+              : "Select a running Pi thread";
   }
   if (elements.subagentLaunchSlots && (subagentLaunchSlotError || (subagentLaunchSlotReloadRequired && activeConfigTab))) {
     elements.subagentLaunchSlots.open = true;
@@ -27679,7 +27904,7 @@ function renderSubagentLaunchSlots() {
           ? `This project (${config.projectLabel || "current project"}) inherits your user defaults.`
           : `This project (${config.projectLabel || "current project"}) has its own launch-slot defaults.`
         : "User defaults apply to new projects unless that project has its own defaults."
-      : "Select a running Pi tab to load its available models.";
+      : "Select a running Pi thread to load its available models.";
   }
   if (elements.subagentLaunchSlotsInherit) {
     elements.subagentLaunchSlotsInherit.hidden = !(config && subagentLaunchSlotScope === "project" && !config.inherited);
@@ -27690,7 +27915,7 @@ function renderSubagentLaunchSlots() {
       ? "Loading agent models…"
       : config
         ? !activeConfigTab
-          ? "This unsaved draft belongs to a different tab. Switch back to save or reload it."
+          ? "This unsaved draft belongs to a different thread. Switch back to save or reload it."
           : subagentLaunchSlotScope === "project" && config.inherited
             ? "This project currently inherits user-default launch slots."
             : "Model assignments are saved separately from the live monitor."
@@ -27796,7 +28021,7 @@ function applySavedSubagentLaunchSlotConfig(data) {
 
 async function saveSubagentLaunchSlotConfig({ inherit = false } = {}) {
   if (!subagentLaunchSlotConfig || !subagentLaunchSlotConfigTabId || subagentLaunchSlotConfigTabId !== activeTabId) {
-    subagentLaunchSlotError = "Return to the tab that owns this launch-slot draft before saving.";
+    subagentLaunchSlotError = "Return to the thread that owns this launch-slot draft before saving.";
     renderSubagentLaunchSlots();
     return;
   }
@@ -27838,10 +28063,10 @@ async function reloadActiveTabForSubagentLaunchSlots() {
     await sendPrompt("prompt", "/reload", { targetTabId: activeTabId, throwOnError: true });
     subagentLaunchSlotReloadTabs.delete(activeTabId);
     subagentLaunchSlotReloadRequired = false;
-    setSubagentLaunchSlotAnnouncement("Active tab reloaded. Agent model guidance now applies to future launches.");
+    setSubagentLaunchSlotAnnouncement("Active thread reloaded. Agent model guidance now applies to future launches.");
     await loadSubagentLaunchSlotConfig();
   } catch (error) {
-    subagentLaunchSlotError = `Could not reload the active tab: ${error.message || String(error)}`;
+    subagentLaunchSlotError = `Could not reload the active thread: ${error.message || String(error)}`;
   } finally {
     subagentLaunchSlotSaving = false;
     renderSubagentLaunchSlots();
@@ -27977,6 +28202,7 @@ function samplingParametersSectionRecord() {
 }
 
 function samplingParametersSectionActive() {
+  if (focusedShell?.active) return focusedShellState.destination === "settings" && settingsCategory(focusedShellState.inspector) === "resources";
   const record = samplingParametersSectionRecord();
   return !!record && !record.section.hidden && !record.section.classList.contains("collapsed");
 }
@@ -27984,7 +28210,7 @@ function samplingParametersSectionActive() {
 function samplingParametersSupportText() {
   const state = samplingParametersStateTabId === activeTabId ? samplingParametersState : null;
   const support = state?.support;
-  if (!support) return samplingParametersLoading ? "Loading sampling support…" : "Select a running Pi tab to load sampling parameters.";
+  if (!support) return samplingParametersLoading ? "Loading sampling support…" : "Select a running Pi thread to load sampling parameters.";
   const modelLabel = support.model?.provider && support.model?.id ? `(${support.model.provider}) ${support.model.id}` : "unknown model";
   const apiLabel = support.api || "unknown API";
   if (support.supported) return `${modelLabel} · ${apiLabel} · ${support.message || "Sampling parameters apply to subsequent provider requests."}`;
@@ -28011,9 +28237,9 @@ function samplingParametersStatusText({ dirty, unsupported, validation, loadedFo
   if (samplingParametersError && feedbackCurrent) return samplingParametersError;
   if (samplingParametersBusy) return "Applying sampling parameters…";
   if (samplingParametersLoading) return "Loading session sampling parameters…";
-  if (!activeTabId) return "Select a running Pi tab to edit sampling parameters.";
+  if (!activeTabId) return "Select a running Pi thread to edit sampling parameters.";
   if (samplingParametersNotice && feedbackCurrent) return samplingParametersNotice;
-  if (!loadedForActiveTab) return "Sampling parameters are not loaded for this tab.";
+  if (!loadedForActiveTab) return "Sampling parameters are not loaded for this thread.";
   if (!validation.valid) return Object.values(validation.errors)[0] || "Correct invalid sampling values before applying.";
   if (unsupported) return "This model has no verified sampling parameters, so applying them is disabled.";
   if (dirty) return "Unsaved controls · Apply stores enabled values for this session only.";
@@ -28223,7 +28449,7 @@ function renderSamplingParameters() {
   if (elements.samplingParametersPreserved) {
     elements.samplingParametersPreserved.textContent = loadedForActiveTab
       ? summarizePreservedSamplingParameters(editableDraft.preservedUnknown).text
-      : samplingParametersLoading ? "Loading additional parameter state…" : "Additional parameter state is not loaded for this tab.";
+      : samplingParametersLoading ? "Loading additional parameter state…" : "Additional parameter state is not loaded for this thread.";
   }
   if (elements.applySamplingParametersButton) {
     elements.applySamplingParametersButton.disabled = samplingParametersBusy
@@ -28272,16 +28498,17 @@ async function loadSamplingParameters({ tabId = activeTabId, force = false } = {
   // Structured drafts are stored separately from loaded state, so a background
   // refresh can update support/default/hidden-key context without discarding edits.
   if (force) setSamplingParametersDraft(null, tabId);
+  const tabContext = activeTabContext(tabId);
   const requestSerial = ++samplingParametersRequestSerial;
   samplingParametersLoading = true;
   setSamplingParametersFeedback();
   renderSamplingParameters();
   try {
-    const response = await api(samplingParametersPath(tabId), { scoped: false });
-    if (requestSerial !== samplingParametersRequestSerial || tabId !== activeTabId) return;
+    const response = await api(samplingParametersPath(tabId), { scoped: false, signal: AbortSignal.timeout(15_000) });
+    if (requestSerial !== samplingParametersRequestSerial || !isCurrentTabContext(tabContext)) return;
     applySamplingParametersResponse(response.data, tabId);
   } catch (error) {
-    if (requestSerial !== samplingParametersRequestSerial || tabId !== activeTabId) return;
+    if (requestSerial !== samplingParametersRequestSerial || !isCurrentTabContext(tabContext)) return;
     setSamplingParametersFeedback({ error: `Could not load sampling parameters: ${error.message || String(error)}` });
   } finally {
     if (requestSerial === samplingParametersRequestSerial) {
@@ -28302,18 +28529,21 @@ function refreshSamplingParametersForTabContext(tabContext = activeTabContext())
 async function writeSamplingParameters(samplingParams, { successNotice }) {
   const tabId = activeTabId;
   if (!tabId) return;
+  const tabContext = activeTabContext(tabId);
+  const lifetime = sessionContext.captureLifetime(tabId);
   const requestSerial = ++samplingParametersRequestSerial;
   samplingParametersBusy = true;
   setSamplingParametersFeedback();
   renderSamplingParameters();
   try {
     const response = await api(samplingParametersPath(tabId), { method: "PUT", body: samplingParams, scoped: false });
+    if (!sessionContext.isLifetimeCurrent(lifetime)) return;
     setSamplingParametersDraft(null, tabId);
-    if (requestSerial !== samplingParametersRequestSerial || tabId !== activeTabId) return;
+    if (requestSerial !== samplingParametersRequestSerial || !isCurrentTabContext(tabContext)) return;
     applySamplingParametersResponse(response.data, tabId);
     setSamplingParametersFeedback({ notice: successNotice });
   } catch (error) {
-    if (requestSerial !== samplingParametersRequestSerial || tabId !== activeTabId) return;
+    if (requestSerial !== samplingParametersRequestSerial || !isCurrentTabContext(tabContext)) return;
     setSamplingParametersFeedback({ error: `Could not save sampling parameters: ${error.message || String(error)}` });
   } finally {
     // Writes are serialized by the busy guard. A tab/model refresh may supersede
@@ -28326,7 +28556,7 @@ async function writeSamplingParameters(samplingParams, { successNotice }) {
 async function applySamplingParameters() {
   if (!activeTabId || samplingParametersBusy) return;
   if (!samplingParametersState || samplingParametersStateTabId !== activeTabId) {
-    setSamplingParametersFeedback({ error: "Wait for this tab's sampling parameters to load before applying changes." });
+    setSamplingParametersFeedback({ error: "Wait for this thread's sampling parameters to load before applying changes." });
     renderSamplingParameters();
     return;
   }
@@ -28354,7 +28584,7 @@ async function applySamplingParameters() {
 async function resetSamplingParameters() {
   if (!activeTabId || samplingParametersBusy) return;
   if (!samplingParametersState || samplingParametersStateTabId !== activeTabId) {
-    setSamplingParametersFeedback({ error: "Wait for this tab's sampling parameters to load before resetting them." });
+    setSamplingParametersFeedback({ error: "Wait for this thread's sampling parameters to load before resetting them." });
     renderSamplingParameters();
     return;
   }
@@ -28426,6 +28656,7 @@ function splitSessionFilePath(sessionFile) {
 }
 
 function renderStatus() {
+  scheduleFocusedShellRender();
   if (deferUiRenderDuringPointerActivation("status", renderStatus)) return;
   const state = currentState;
   updateComposerModeButtons();
@@ -28884,83 +29115,14 @@ function syncLiveTodoProgressWidgetFromText(text, tabId = activeTabId) {
   return changed;
 }
 
-function parseTodoProgressWidget(lines) {
-  const cleanLines = lines.map(stripAnsi).map((line) => line.trim()).filter(Boolean);
-  const goalLine = cleanLines.find((line) => /^Goal\s*[:：]/i.test(line));
-  const goal = goalLine ? goalLine.replace(/^Goal\s*[:：]\s*/i, "").trim() : "";
-  const headerIndex = cleanLines.findIndex((line) => /^Todo\s+\d+\/\d+\s+done/i.test(line));
-  if (headerIndex === -1) return null;
-
-  const header = cleanLines[headerIndex];
-  const match = header.match(/^Todo\s+(\d+)\/(\d+)\s+done(?:,\s+(\d+)\s+partial)?/i);
-  if (!match) return null;
-
-  const items = [];
-  let footer = "";
-  for (const line of cleanLines.slice(headerIndex + 1)) {
-    const item = parseTodoProgressItemLine(line);
-    if (item) {
-      items.push(item);
-    } else if (/^Scroll\s+/i.test(line)) {
-      footer = line;
-    }
-  }
-
-  return {
-    goal,
-    done: Number.parseInt(match[1], 10) || 0,
-    total: Number.parseInt(match[2], 10) || items.length,
-    partial: Number.parseInt(match[3] || "0", 10) || 0,
-    items,
-    footer,
-  };
-}
+function parseTodoProgressWidget(lines) { return activityTodo.parse(lines); }
 
 function renderTodoProgressWidget(_key, lines) {
-  const todo = parseTodoProgressWidget(lines);
-  if (!todo) return null;
-
   const tabId = activeTabId || "default";
-  const node = make("details", "widget todo-widget");
-  node.open = todoProgressWidgetExpandedByTab.get(tabId) === true;
-  node.setAttribute("aria-label", "Todo progress");
-  node.addEventListener("toggle", () => {
-    todoProgressWidgetExpandedByTab.set(tabId, node.open);
+  return activityTodo.render(lines, {
+    expanded: todoProgressWidgetExpandedByTab.get(tabId) === true,
+    onExpandedChange(open) { todoProgressWidgetExpandedByTab.set(tabId, open); },
   });
-
-  const percent = todo.total > 0 ? Math.max(0, Math.min(100, (todo.done / todo.total) * 100)) : 0;
-  const summary = make("summary", "todo-widget-summary");
-  const header = make("div", "todo-widget-header");
-  header.append(
-    make("span", "todo-widget-toggle", "›"),
-    make("span", "todo-widget-title", "Todo progress"),
-    make("span", "todo-widget-count", `${todo.done}/${todo.total}`),
-    make("span", "todo-widget-meta", todo.partial ? `${todo.partial} partial` : "active"),
-  );
-
-  const progress = make("div", "todo-widget-progress");
-  const fill = make("span", "todo-widget-progress-fill");
-  fill.style.width = `${percent}%`;
-  progress.append(fill);
-  if (todo.goal) summary.append(make("div", "todo-widget-goal", `Goal: ${todo.goal}`));
-  summary.append(header, progress);
-
-  const body = make("div", "todo-widget-body");
-  const list = make("ol", "todo-widget-list");
-  for (const item of todo.items) {
-    const row = make("li", `todo-widget-item ${item.status}`);
-    row.append(
-      make("span", "todo-widget-marker", item.status === "done" ? "✓" : item.status === "partial" ? "–" : ""),
-      make("span", "todo-widget-text", item.text),
-    );
-    list.append(row);
-  }
-  if (todo.items.length) body.append(list);
-  if (todo.footer) body.append(make("div", "todo-widget-footer", todo.footer));
-
-  node.append(summary);
-  if (body.children.length) node.append(body);
-  return node;
 }
 
 function getWidgetLines(key) {
@@ -29362,7 +29524,7 @@ function workflowInspectorSetMinimized(minimized) {
   renderWidgets();
   requestAnimationFrame(() => {
     if (activeTabId !== tabId) return;
-    elements.widgetArea.querySelector(".workflow-inspector-minimize-button")?.focus({ preventScroll: true });
+    featureWidgetElements(".workflow-inspector-minimize-button")[0]?.focus({ preventScroll: true });
   });
 }
 
@@ -29585,7 +29747,7 @@ function workflowSubprocessSetMinimized(minimized) {
   renderWidgets();
   requestAnimationFrame(() => {
     if (activeTabId !== tabId) return;
-    elements.widgetArea.querySelector(".workflow-subprocess-minimize-button")?.focus({ preventScroll: true });
+    featureWidgetElements(".workflow-subprocess-minimize-button")[0]?.focus({ preventScroll: true });
   });
 }
 
@@ -29662,26 +29824,9 @@ function renderWorkflowSubprocessWidget() {
   return node;
 }
 
-function activeAppRunnerData() {
-  return activeTabId ? appRunnerDataByTab.get(activeTabId) || { runners: [], activeRun: null } : { runners: [], activeRun: null };
-}
+function activeAppRunnerData() { return projectRunners.getData(activeTabId); }
 
-function setAppRunnerData(tabId, data = {}) {
-  if (!tabId) return;
-  const previous = appRunnerDataByTab.get(tabId) || { runners: [], activeRun: null, customRunnerConfig: null };
-  const hasActiveRun = Object.prototype.hasOwnProperty.call(data, "activeRun");
-  const next = {
-    cwd: data.cwd || previous.cwd || "",
-    runners: Array.isArray(data.runners) ? data.runners : previous.runners || [],
-    customRunnerConfig: data.customRunnerConfig || previous.customRunnerConfig || null,
-    activeRun: hasActiveRun ? data.activeRun : previous.activeRun || null,
-  };
-  appRunnerDataByTab.set(tabId, next);
-  if (hasActiveRun) {
-    const tab = tabs.find((item) => item.id === tabId);
-    if (tab) tab.appRunner = next.activeRun || null;
-  }
-}
+function setAppRunnerData(tabId, data = {}) { return projectRunners.applyData(tabId, data); }
 
 function appRunnerIsRunning(run) {
   return run?.status === "running" || run?.stopping === true;
@@ -29711,114 +29856,40 @@ function appRunnerActionButton(label, handler, className = "") {
 }
 
 async function refreshAppRunners(tabContext = activeTabContext()) {
-  if (!tabContext.tabId) return;
-  const response = await api("/api/app-runners", { tabId: tabContext.tabId });
-  if (!isCurrentTabContext(tabContext)) return;
-  setAppRunnerData(tabContext.tabId, response.data || {});
-  renderAppRunnerControls();
-  renderWidgets();
+  const result = await projectRunners.refresh(projectTargetFromContext(tabContext));
+  if (result.reason === "error") throw result.error;
 }
 
-function appRunnerFailureState(runnerId, error, data = activeAppRunnerData()) {
-  const runners = Array.isArray(data.runners) ? data.runners : [];
-  const runner = runners.find((item) => item.id === runnerId) || {};
-  const message = cleanStatusText(error?.message || String(error) || "Unknown app runner error");
-  const command = runner.displayCommand || runner.shortDisplayCommand || runner.label || runnerId || "app runner";
-  const timestamp = new Date().toISOString();
-  return {
-    id: `start-error:${Date.now()}`,
-    runnerId,
-    kind: runner.kind || "custom",
-    label: runner.label || "App runner failed",
-    command: runner.command || "",
-    args: Array.isArray(runner.args) ? runner.args : [],
-    displayCommand: command,
-    cwd: data.cwd || "",
-    status: "error",
-    startedAt: timestamp,
-    endedAt: timestamp,
-    lineCount: 3,
-    lines: [`$ ${command}`, "# failed to start app runner", `# ${message}`],
-  };
-}
-
-async function runAppRunner(runnerId) {
-  const tabContext = activeTabContext();
-  if (!tabContext.tabId || !runnerId) return;
+async function runAppRunner(runnerId, target = projectTargetFromContext()) {
+  if (!isCurrentProjectTarget(target)) return;
+  if (focusedShell?.active) navigateFocusedShell("project", "runners");
   setComposerActionsOpen(false);
   setAppRunnerMenuOpen(false);
-  try {
-    const response = await api("/api/app-runner", { method: "POST", body: { runnerId }, tabId: tabContext.tabId });
-    if (!isCurrentTabContext(tabContext)) return;
-    setAppRunnerData(tabContext.tabId, response.data || {});
-    renderAppRunnerControls();
-    renderWidgets();
-    renderTabs();
-    const command = response.data?.activeRun?.displayCommand || "app runner";
-    addEvent(`started ${command}`, "info");
-  } catch (error) {
-    if (!isCurrentTabContext(tabContext)) return;
-    const message = cleanStatusText(error.message || String(error));
-    setAppRunnerData(tabContext.tabId, { activeRun: appRunnerFailureState(runnerId, error, activeAppRunnerData()) });
-    renderAppRunnerControls();
-    renderWidgets();
-    renderTabs();
-    addEvent(`app runner failed: ${message}`, "error");
-  }
+  return projectRunners.start(runnerId, target);
 }
 
 async function stopAppRunner() {
-  const tabContext = activeTabContext();
-  if (!tabContext.tabId) return;
-  try {
-    const response = await api("/api/app-runner/stop", { method: "POST", body: {}, tabId: tabContext.tabId });
-    if (!isCurrentTabContext(tabContext)) return;
-    setAppRunnerData(tabContext.tabId, response.data || {});
-    renderAppRunnerControls();
-    renderWidgets();
-    renderTabs();
-    addEvent("app runner stop requested", "warn");
-  } catch (error) {
-    if (isCurrentTabContext(tabContext)) addEvent(error.message || String(error), "error");
-  }
+  return projectRunners.stop(appRunnerInputDraftKey(activeAppRunnerData().activeRun));
 }
 
 async function clearAppRunner() {
-  const tabContext = activeTabContext();
-  if (!tabContext.tabId) return;
-  try {
-    const response = await api("/api/app-runner/clear", { method: "POST", body: {}, tabId: tabContext.tabId });
-    if (!isCurrentTabContext(tabContext)) return;
-    setAppRunnerData(tabContext.tabId, response.data || {});
-    renderAppRunnerControls();
-    renderWidgets();
-    renderTabs();
-  } catch (error) {
-    if (isCurrentTabContext(tabContext)) addEvent(error.message || String(error), "error");
-  }
+  return projectRunners.clear(appRunnerInputDraftKey(activeAppRunnerData().activeRun));
 }
 
 async function sendAppRunnerInput(run, form, { closeStdin = false } = {}) {
-  const tabContext = activeTabContext();
+  const target = appRunnerFormTargets.get(form);
   const input = form?.querySelector?.(".app-runner-stdin-input");
-  if (!tabContext.tabId || !input || !appRunnerIsRunning(run)) return;
-  const draftKey = appRunnerInputDraftKey(run);
+  if (!target || !isCurrentProjectTarget(target) || !input) return;
+  const runId = appRunnerInputDraftKey(run);
   const text = input.value || "";
+  projectRunners.setInputDraft(target.tabId, runId, text);
   const buttons = [...form.querySelectorAll("button")];
-  buttons.forEach((button) => { button.disabled = true; });
+  buttons.forEach(button => { button.disabled = true; });
   try {
-    const response = await api("/api/app-runner/input", { method: "POST", body: { text, newline: !closeStdin || Boolean(text), closeStdin }, tabId: tabContext.tabId });
-    if (!isCurrentTabContext(tabContext)) return;
-    appRunnerInputDraftByRun.set(draftKey, "");
-    input.value = "";
-    setAppRunnerData(tabContext.tabId, response.data || {});
-    renderAppRunnerControls();
-    renderWidgets();
-    addEvent(closeStdin ? "sent app runner EOF" : text ? "sent app runner input" : "sent app runner Enter", "info");
-  } catch (error) {
-    if (isCurrentTabContext(tabContext)) addEvent(`app runner input failed: ${error.message || String(error)}`, "error");
+    const result = await projectRunners.sendInput({ runId, text, closeStdin }, target);
+    if (result.success && result.inputDraftCleared && isCurrentProjectTarget(target) && input.isConnected && input.value === text) input.value = "";
   } finally {
-    buttons.forEach((button) => { button.disabled = false; });
+    buttons.forEach(button => { button.disabled = false; });
   }
 }
 
@@ -29836,47 +29907,26 @@ function appRunnerInputDraftKey(run) {
   return run?.id || run?.runnerId || "active";
 }
 
-function normalizeAppRunnerContextLineCount(value) {
-  const number = Number.parseInt(String(value ?? ""), 10);
-  if (!Number.isFinite(number)) return APP_RUNNER_CONTEXT_DEFAULT_LINES;
-  return Math.max(1, Math.min(APP_RUNNER_CONTEXT_MAX_LINES, number));
-}
-
-function appRunnerContextDraftKey(run) {
-  return appRunnerInputDraftKey(run);
-}
+function appRunnerContextDraftKey(run) { return appRunnerInputDraftKey(run); }
 
 async function transferAppRunnerOutputToContext(run, form) {
-  const tabContext = activeTabContext();
-  if (!tabContext.tabId || !run) return;
-  const key = appRunnerContextDraftKey(run);
+  const target = appRunnerFormTargets.get(form);
+  if (!target || !isCurrentProjectTarget(target)) return;
+  const runId = appRunnerContextDraftKey(run);
   const input = form?.querySelector?.(".app-runner-context-lines-input");
-  const lineCount = normalizeAppRunnerContextLineCount(input?.value || appRunnerContextLineDraftByRun.get(key) || APP_RUNNER_CONTEXT_DEFAULT_LINES);
+  const lineCount = normalizeAppRunnerContextLineCount(input?.value || projectRunners.getContextDraft(target.tabId, runId));
   if (input) input.value = String(lineCount);
-  appRunnerContextLineDraftByRun.set(key, String(lineCount));
   const buttons = [...(form?.querySelectorAll?.("button") || [])];
-  buttons.forEach((button) => { button.disabled = true; });
-  try {
-    const response = await api("/api/app-runner/context", { method: "POST", body: { lineCount }, tabId: tabContext.tabId });
-    if (!isCurrentTabContext(tabContext)) return;
-    const data = response.data || {};
-    if (data.activeRun) setAppRunnerData(tabContext.tabId, { activeRun: data.activeRun });
-    const deliveredAsSteer = data.delivery === "steer";
-    addEvent(deliveredAsSteer
-      ? `sent last ${data.lineCount || lineCount} app runner output lines as live steering context`
-      : `added last ${data.lineCount || lineCount} app runner output lines to agent context`, "info");
-    scheduleRefreshMessages(120, tabContext);
-    scheduleRefreshState(120, tabContext);
-  } catch (error) {
-    if (isCurrentTabContext(tabContext)) addEvent(`app runner context transfer failed: ${error.message || String(error)}`, "error");
-  } finally {
-    buttons.forEach((button) => { button.disabled = false; });
-  }
+  buttons.forEach(button => { button.disabled = true; });
+  try { await projectRunners.transferContext({ runId, lineCount }, target); }
+  finally { buttons.forEach(button => { button.disabled = false; }); }
 }
 
 function renderAppRunnerContextForm(run) {
   const key = appRunnerContextDraftKey(run);
   const form = make("form", "app-runner-context-form");
+  const target = projectTargetFromContext();
+  appRunnerFormTargets.set(form, target);
   form.dataset.runId = key;
   const label = make("label", "app-runner-context-lines-label");
   label.append(make("span", "", "Context lines"));
@@ -29886,10 +29936,10 @@ function renderAppRunnerContextForm(run) {
   input.max = String(APP_RUNNER_CONTEXT_MAX_LINES);
   input.step = "1";
   input.inputMode = "numeric";
-  input.value = String(normalizeAppRunnerContextLineCount(appRunnerContextLineDraftByRun.get(key) || APP_RUNNER_CONTEXT_DEFAULT_LINES));
+  input.value = String(normalizeAppRunnerContextLineCount(projectRunners.getContextDraft(activeTabId, key) || APP_RUNNER_CONTEXT_DEFAULT_LINES));
   input.setAttribute("aria-label", "Number of recent app runner output lines to add to agent context");
   input.addEventListener("input", () => {
-    appRunnerContextLineDraftByRun.set(key, String(normalizeAppRunnerContextLineCount(input.value)));
+    projectRunners.setContextDraft(target.tabId, key, input.value);
   });
   label.append(input);
   const transfer = make("button", "release-npm-action app-runner-context-action", "Add to context");
@@ -29905,7 +29955,7 @@ function renderAppRunnerContextForm(run) {
 
 function captureAppRunnerInputFocus() {
   const input = document.activeElement;
-  if (!input?.classList?.contains("app-runner-stdin-input") || !elements.widgetArea?.contains(input)) return null;
+  if (!input?.classList?.contains("app-runner-stdin-input") || !featureWidgetRoots().some(root => root.contains(input))) return null;
   return {
     source: input,
     context: activeTabContext(),
@@ -29922,10 +29972,10 @@ function captureAppRunnerInputFocus() {
 function restoreAppRunnerInputFocus(state) {
   if (!state?.runId || !isCurrentTabContext(state.context) || state.source?.isConnected) return;
   if (isMeaningfulConnectedFocus(document.activeElement)) return;
-  const input = [...elements.widgetArea.querySelectorAll(".app-runner-stdin-input")]
+  const input = featureWidgetElements(".app-runner-stdin-input")
     .find((candidate) => candidate.dataset.runId === state.runId);
   if (!input) return;
-  appRunnerInputDraftByRun.set(state.runId, state.value);
+  projectRunners.setInputDraft(state.context.tabId, state.runId, state.value);
   input.value = state.value;
   const selectionStart = Math.min(Math.max(0, state.selectionStart), input.value.length);
   const selectionEnd = Math.min(Math.max(0, state.selectionEnd), input.value.length);
@@ -29968,7 +30018,7 @@ const APP_RUNNER_SUPPORTED_ITEMS = [
   "Deno, make, just, and plain Node entry files",
 ];
 const APP_RUNNER_SUPPORTED_TOOLTIP = [
-  "No app runner detected for this tab cwd.",
+  "No app runner detected for this thread cwd.",
   "",
   "Currently supported:",
   ...APP_RUNNER_SUPPORTED_ITEMS.map((item) => `• ${item}`),
@@ -30049,8 +30099,8 @@ function appRunnerInputField({ id, label, value, placeholder = "", hint = "" }) 
   input.spellcheck = false;
   field.append(input);
   if (hint) field.append(make("small", "muted", hint));
-  input.addEventListener("input", () => updateAppRunnerCustomDraftFrom(field.closest(".app-runner-custom-form")));
-  input.addEventListener("keydown", (event) => {
+  addAppRunnerInfoListener(input, "input", () => updateAppRunnerCustomDraftFrom(field.closest(".app-runner-custom-form")));
+  addAppRunnerInfoListener(input, "keydown", (event) => {
     if (event.key !== "Enter") return;
     event.preventDefault();
     saveAppRunnerCustomRunner(field.closest(".app-runner-custom-form"));
@@ -30059,6 +30109,7 @@ function appRunnerInputField({ id, label, value, placeholder = "", hint = "" }) 
 }
 
 async function saveAppRunnerCustomRunner(form) {
+  if (!isCurrentAppRunnerInfoTarget(appRunnerInfoTarget) || !form?.isConnected) return;
   updateAppRunnerCustomDraftFrom(form);
   const payload = appRunnerCustomDraftPayload();
   if (!payload.path) {
@@ -30068,10 +30119,11 @@ async function saveAppRunnerCustomRunner(form) {
     addEvent("custom app runner path is required", "warn");
     return;
   }
-  const tabContext = activeTabContext();
+  const tabContext = appRunnerInfoTarget;
+  if (!isCurrentAppRunnerInfoTarget(tabContext)) return;
   try {
     const response = await api("/api/app-runner-config", { method: "POST", body: { runner: payload }, tabId: tabContext.tabId });
-    if (!isCurrentTabContext(tabContext)) return;
+    if (!isCurrentAppRunnerInfoTarget(tabContext)) return;
     setAppRunnerData(tabContext.tabId, response.data || {});
     resetAppRunnerCustomDraft({ clearFeedback: false });
     setAppRunnerCustomFeedback("success", "Saved custom app runner. It should now appear in the Run menu when available.");
@@ -30080,7 +30132,7 @@ async function saveAppRunnerCustomRunner(form) {
     renderAppRunnerInfoDialog();
     addEvent("saved custom app runner", "info");
   } catch (error) {
-    if (!isCurrentTabContext(tabContext)) return;
+    if (!isCurrentAppRunnerInfoTarget(tabContext)) return;
     const message = error.message || String(error);
     setAppRunnerCustomFeedback("error", `Custom app runner was not saved: ${message}`);
     renderAppRunnerInfoDialog();
@@ -30098,10 +30150,11 @@ async function deleteAppRunnerCustomRunner(runner = {}) {
     path: runner.path || "",
     args: appRunnerCustomArgsText(runner.args),
   };
-  const tabContext = activeTabContext();
+  const tabContext = appRunnerInfoTarget;
+  if (!isCurrentAppRunnerInfoTarget(tabContext)) return;
   try {
     const response = await api("/api/app-runner-config", { method: "DELETE", body: { id }, tabId: tabContext.tabId });
-    if (!isCurrentTabContext(tabContext)) return;
+    if (!isCurrentAppRunnerInfoTarget(tabContext)) return;
     setAppRunnerData(tabContext.tabId, response.data || {});
     if (appRunnerCustomDraft.id === id) resetAppRunnerCustomDraft({ clearFeedback: false });
     setAppRunnerCustomFeedback("success", "Deleted custom app runner.");
@@ -30112,8 +30165,9 @@ async function deleteAppRunnerCustomRunner(runner = {}) {
     offerUndo({
       message: `Deleted custom app runner “${runner.label || runner.path || id}”.`,
       undo: async () => {
+        if (!isAliveProjectTarget(tabContext)) return;
         const restored = await api("/api/app-runner-config", { method: "POST", body: { runner: restoreRunner }, tabId: tabContext.tabId });
-        if (isCurrentTabContext(tabContext)) {
+        if (isCurrentAppRunnerInfoTarget(tabContext)) {
           setAppRunnerData(tabContext.tabId, restored.data || {});
           setAppRunnerCustomFeedback("success", "Restored custom app runner.");
           renderAppRunnerControls();
@@ -30124,7 +30178,7 @@ async function deleteAppRunnerCustomRunner(runner = {}) {
       successMessage: `Restored custom app runner “${runner.label || runner.path || id}”.`,
     });
   } catch (error) {
-    if (!isCurrentTabContext(tabContext)) return;
+    if (!isCurrentAppRunnerInfoTarget(tabContext)) return;
     const message = error.message || String(error);
     setAppRunnerCustomFeedback("error", `Custom app runner was not deleted: ${message}`);
     renderAppRunnerInfoDialog();
@@ -30149,10 +30203,11 @@ function appRunnerSearchPathLabel(searchPath) {
 }
 
 async function saveAppRunnerSearchPaths(searchPaths, { successMessage = "Saved project discovery paths.", eventMessage = "saved app runner discovery paths", onSuccess = null } = {}) {
-  const tabContext = activeTabContext();
+  const tabContext = appRunnerInfoTarget;
+  if (!isCurrentAppRunnerInfoTarget(tabContext)) return;
   try {
     const response = await api("/api/app-runner-config", { method: "POST", body: { searchPaths }, tabId: tabContext.tabId });
-    if (!isCurrentTabContext(tabContext)) return false;
+    if (!isCurrentAppRunnerInfoTarget(tabContext)) return false;
     setAppRunnerData(tabContext.tabId, response.data || {});
     setAppRunnerSearchPathFeedback("success", successMessage);
     onSuccess?.(tabContext);
@@ -30162,7 +30217,7 @@ async function saveAppRunnerSearchPaths(searchPaths, { successMessage = "Saved p
     addEvent(eventMessage, "info");
     return true;
   } catch (error) {
-    if (!isCurrentTabContext(tabContext)) return false;
+    if (!isCurrentAppRunnerInfoTarget(tabContext)) return false;
     const message = error.message || String(error);
     setAppRunnerSearchPathFeedback("error", `Project discovery paths were not saved: ${message}`);
     renderAppRunnerInfoDialog();
@@ -30172,6 +30227,7 @@ async function saveAppRunnerSearchPaths(searchPaths, { successMessage = "Saved p
 }
 
 async function addAppRunnerSearchPath(container) {
+  if (!isCurrentAppRunnerInfoTarget(appRunnerInfoTarget) || !container?.isConnected) return;
   const input = container?.querySelector("#appRunnerSearchPathInput");
   if (input) appRunnerSearchPathDraft = input.value || "";
   const searchPath = normalizeAppRunnerSearchPathInput(appRunnerSearchPathDraft);
@@ -30208,7 +30264,8 @@ async function addAppRunnerSearchPath(container) {
 async function removeAppRunnerSearchPath(searchPath) {
   const current = activeAppRunnerSearchPaths();
   if (!current.includes(searchPath)) return;
-  const tabContext = activeTabContext();
+  const tabContext = appRunnerInfoTarget;
+  if (!isCurrentAppRunnerInfoTarget(tabContext)) return;
   const saved = await saveAppRunnerSearchPaths(current.filter((item) => item !== searchPath), {
     successMessage: `Removed ${appRunnerSearchPathLabel(searchPath)}.`,
     eventMessage: `removed app runner discovery path ${searchPath}`,
@@ -30217,8 +30274,9 @@ async function removeAppRunnerSearchPath(searchPath) {
   offerUndo({
     message: `Removed project discovery path “${appRunnerSearchPathLabel(searchPath)}”.`,
     undo: async () => {
+      if (!isAliveProjectTarget(tabContext)) return;
       const restored = await api("/api/app-runner-config", { method: "POST", body: { searchPaths: current }, tabId: tabContext.tabId });
-      if (!isCurrentTabContext(tabContext)) return;
+      if (!isCurrentAppRunnerInfoTarget(tabContext)) return;
       setAppRunnerData(tabContext.tabId, restored.data || {});
       setAppRunnerSearchPathFeedback("success", `Restored ${appRunnerSearchPathLabel(searchPath)}.`);
       renderAppRunnerControls();
@@ -30230,17 +30288,18 @@ async function removeAppRunnerSearchPath(searchPath) {
 }
 
 async function loadAppRunnerDirectoryBrowser(relativePath = "") {
-  const tabContext = activeTabContext();
+  const tabContext = appRunnerInfoTarget;
+  if (!isCurrentAppRunnerInfoTarget(tabContext)) return;
   const path = String(relativePath || "").replace(/^\.\/+/, "").replace(/\/+$/g, "");
   appRunnerDirectoryBrowserState = { open: true, loading: true, path, data: null, error: "" };
   renderAppRunnerInfoDialog();
   try {
     const response = await api(`/api/app-runner-files?path=${encodeURIComponent(path)}`, { tabId: tabContext.tabId });
-    if (!isCurrentTabContext(tabContext)) return;
+    if (!isCurrentAppRunnerInfoTarget(tabContext)) return;
     appRunnerDirectoryBrowserState = { open: true, loading: false, path, data: response.data || {}, error: "" };
     renderAppRunnerInfoDialog();
   } catch (error) {
-    if (!isCurrentTabContext(tabContext)) return;
+    if (!isCurrentAppRunnerInfoTarget(tabContext)) return;
     appRunnerDirectoryBrowserState = { open: true, loading: false, path, data: null, error: error.message || String(error) };
     renderAppRunnerInfoDialog();
   }
@@ -30274,10 +30333,10 @@ function renderAppRunnerDirectoryBrowser() {
   const use = make("button", "app-runner-directory-use", "Use this directory");
   use.type = "button";
   use.title = `Use ${appRunnerSearchPathLabel(currentDir)} as a project discovery path`;
-  use.addEventListener("click", () => chooseAppRunnerSearchPath(currentDir));
+  addAppRunnerInfoListener(use, "click", () => chooseAppRunnerSearchPath(currentDir));
   const close = make("button", "app-runner-file-browser-close", "Hide browser");
   close.type = "button";
-  close.addEventListener("click", () => {
+  addAppRunnerInfoListener(close, "click", () => {
     appRunnerDirectoryBrowserState = { open: false, loading: false, path: "", data: null, error: "" };
     renderAppRunnerInfoDialog();
   });
@@ -30286,20 +30345,20 @@ function renderAppRunnerDirectoryBrowser() {
   browser.append(header);
 
   const roots = make("div", "path-picker-roots app-runner-file-browser-roots");
-  if (data.parent !== null && data.parent !== undefined) roots.append(pathPickerButton("↑ Parent", data.parent || ".", () => loadAppRunnerDirectoryBrowser(data.parent || ""), "path-picker-root-button"));
-  roots.append(pathPickerButton("Project root", data.displayProjectRoot || "Project root", () => loadAppRunnerDirectoryBrowser(""), "path-picker-root-button"));
+  if (data.parent !== null && data.parent !== undefined) roots.append(appRunnerInfoPathButton("↑ Parent", data.parent || ".", () => loadAppRunnerDirectoryBrowser(data.parent || ""), "path-picker-root-button"));
+  roots.append(appRunnerInfoPathButton("Project root", data.displayProjectRoot || "Project root", () => loadAppRunnerDirectoryBrowser(""), "path-picker-root-button"));
   browser.append(roots);
 
   const list = make("div", "path-picker-list app-runner-file-browser-list");
   const directories = Array.isArray(data.directories) ? data.directories : [];
   for (const directory of directories) {
     const row = make("div", "app-runner-directory-row");
-    row.append(pathPickerButton(`${directory.name}/`, directory.path, () => loadAppRunnerDirectoryBrowser(directory.path), `path-picker-directory${directory.hidden ? " hidden-directory" : ""}`));
+    row.append(appRunnerInfoPathButton(`${directory.name}/`, directory.path, () => loadAppRunnerDirectoryBrowser(directory.path), `path-picker-directory${directory.hidden ? " hidden-directory" : ""}`));
     const choose = make("button", "app-runner-directory-choose", "Use");
     choose.type = "button";
     choose.title = `Use ${directory.path} as a project discovery path`;
     choose.setAttribute("aria-label", `Use ${directory.path} as a project discovery path`);
-    choose.addEventListener("click", () => chooseAppRunnerSearchPath(directory.path));
+    addAppRunnerInfoListener(choose, "click", () => chooseAppRunnerSearchPath(directory.path));
     row.append(choose);
     list.append(row);
   }
@@ -30337,7 +30396,7 @@ function renderAppRunnerSearchPathSection() {
       remove.type = "button";
       remove.title = `Stop scanning ${appRunnerSearchPathLabel(searchPath)}`;
       remove.setAttribute("aria-label", `Remove project discovery path ${appRunnerSearchPathLabel(searchPath)}`);
-      remove.addEventListener("click", () => removeAppRunnerSearchPath(searchPath));
+      addAppRunnerInfoListener(remove, "click", () => removeAppRunnerSearchPath(searchPath));
       actions.append(remove);
       row.append(details, actions);
       list.append(row);
@@ -30359,8 +30418,8 @@ function renderAppRunnerSearchPathSection() {
   input.setAttribute("aria-label", "Project-relative directory to scan for shell and Python scripts");
   field.append(input);
   field.append(make("small", "muted", `Use . for the project root. Up to ${APP_RUNNER_SEARCH_PATH_LIMIT} paths; absolute paths and .. segments are rejected.`));
-  input.addEventListener("input", () => { appRunnerSearchPathDraft = input.value; });
-  input.addEventListener("keydown", (event) => {
+  addAppRunnerInfoListener(input, "input", () => { appRunnerSearchPathDraft = input.value; });
+  addAppRunnerInfoListener(input, "keydown", (event) => {
     if (event.key !== "Enter") return;
     event.preventDefault();
     addAppRunnerSearchPath(form);
@@ -30370,7 +30429,7 @@ function renderAppRunnerSearchPathSection() {
   const browse = make("button", "app-runner-custom-browse", "Browse…");
   browse.type = "button";
   browse.title = "Browse project directories";
-  browse.addEventListener("click", () => loadAppRunnerDirectoryBrowser(normalizeAppRunnerSearchPathInput(appRunnerSearchPathDraft) === "." ? "" : normalizeAppRunnerSearchPathInput(appRunnerSearchPathDraft)));
+  addAppRunnerInfoListener(browse, "click", () => loadAppRunnerDirectoryBrowser(normalizeAppRunnerSearchPathInput(appRunnerSearchPathDraft) === "." ? "" : normalizeAppRunnerSearchPathInput(appRunnerSearchPathDraft)));
   pathRow.append(browse);
   form.append(pathRow);
 
@@ -30378,10 +30437,10 @@ function renderAppRunnerSearchPathSection() {
   const add = make("button", "primary", "Add path");
   add.id = "appRunnerSearchPathAddButton";
   add.type = "button";
-  add.addEventListener("click", () => addAppRunnerSearchPath(form));
+  addAppRunnerInfoListener(add, "click", () => addAppRunnerSearchPath(form));
   const clear = make("button", "", "Reset");
   clear.type = "button";
-  clear.addEventListener("click", () => {
+  addAppRunnerInfoListener(clear, "click", () => {
     appRunnerSearchPathDraft = "";
     appRunnerDirectoryBrowserState = { open: false, loading: false, path: "", data: null, error: "" };
     setAppRunnerSearchPathFeedback("", "");
@@ -30397,17 +30456,18 @@ function renderAppRunnerSearchPathSection() {
 }
 
 async function loadAppRunnerFileBrowser(relativePath = "") {
-  const tabContext = activeTabContext();
+  const tabContext = appRunnerInfoTarget;
+  if (!isCurrentAppRunnerInfoTarget(tabContext)) return;
   const path = String(relativePath || "").replace(/^\.\/+/, "").replace(/\/+$/g, "");
   appRunnerFileBrowserState = { open: true, loading: true, path, data: null, error: "" };
   renderAppRunnerInfoDialog();
   try {
     const response = await api(`/api/app-runner-files?path=${encodeURIComponent(path)}`, { tabId: tabContext.tabId });
-    if (!isCurrentTabContext(tabContext)) return;
+    if (!isCurrentAppRunnerInfoTarget(tabContext)) return;
     appRunnerFileBrowserState = { open: true, loading: false, path, data: response.data || {}, error: "" };
     renderAppRunnerInfoDialog();
   } catch (error) {
-    if (!isCurrentTabContext(tabContext)) return;
+    if (!isCurrentAppRunnerInfoTarget(tabContext)) return;
     appRunnerFileBrowserState = { open: true, loading: false, path, data: null, error: error.message || String(error) };
     renderAppRunnerInfoDialog();
   }
@@ -30429,7 +30489,7 @@ function renderAppRunnerFileBrowser() {
   header.append(make("strong", "", data.displayRelativeDir || "."));
   const close = make("button", "app-runner-file-browser-close", "Hide browser");
   close.type = "button";
-  close.addEventListener("click", () => {
+  addAppRunnerInfoListener(close, "click", () => {
     appRunnerFileBrowserState = { open: false, loading: false, path: "", data: null, error: "" };
     renderAppRunnerInfoDialog();
   });
@@ -30437,19 +30497,19 @@ function renderAppRunnerFileBrowser() {
   browser.append(header);
 
   const roots = make("div", "path-picker-roots app-runner-file-browser-roots");
-  if (data.parent !== null && data.parent !== undefined) roots.append(pathPickerButton("↑ Parent", data.parent || ".", () => loadAppRunnerFileBrowser(data.parent || ""), "path-picker-root-button"));
-  roots.append(pathPickerButton("Project root", data.displayProjectRoot || "Project root", () => loadAppRunnerFileBrowser(""), "path-picker-root-button"));
+  if (data.parent !== null && data.parent !== undefined) roots.append(appRunnerInfoPathButton("↑ Parent", data.parent || ".", () => loadAppRunnerFileBrowser(data.parent || ""), "path-picker-root-button"));
+  roots.append(appRunnerInfoPathButton("Project root", data.displayProjectRoot || "Project root", () => loadAppRunnerFileBrowser(""), "path-picker-root-button"));
   browser.append(roots);
 
   const list = make("div", "path-picker-list app-runner-file-browser-list");
   const directories = Array.isArray(data.directories) ? data.directories : [];
   const files = Array.isArray(data.files) ? data.files : [];
   for (const directory of directories) {
-    const button = pathPickerButton(`${directory.name}/`, directory.path, () => loadAppRunnerFileBrowser(directory.path), `path-picker-directory${directory.hidden ? " hidden-directory" : ""}`);
+    const button = appRunnerInfoPathButton(`${directory.name}/`, directory.path, () => loadAppRunnerFileBrowser(directory.path), `path-picker-directory${directory.hidden ? " hidden-directory" : ""}`);
     list.append(button);
   }
   for (const file of files) {
-    const button = pathPickerButton(file.name, file.path, () => {
+    const button = appRunnerInfoPathButton(file.name, file.path, () => {
       appRunnerCustomDraft.path = file.path;
       appRunnerFileBrowserState = { open: false, loading: false, path: "", data: null, error: "" };
       renderAppRunnerInfoDialog();
@@ -30484,14 +30544,14 @@ function renderAppRunnerCustomSection() {
       const actions = make("div", "app-runner-custom-item-actions");
       const edit = make("button", "", "Edit");
       edit.type = "button";
-      edit.addEventListener("click", () => {
+      addAppRunnerInfoListener(edit, "click", () => {
         appRunnerCustomDraft = { id: runner.id || "", label: runner.label || "", command: runner.command || "./", path: runner.path || "", args: appRunnerCustomArgsText(runner.args) };
         appRunnerFileBrowserState = { open: false, loading: false, path: "", data: null, error: "" };
         renderAppRunnerInfoDialog();
       });
       const remove = make("button", "danger", "Delete");
       remove.type = "button";
-      remove.addEventListener("click", () => deleteAppRunnerCustomRunner(runner));
+      addAppRunnerInfoListener(remove, "click", () => deleteAppRunnerCustomRunner(runner));
       actions.append(edit, remove);
       row.append(details, actions);
       existing.append(row);
@@ -30514,7 +30574,7 @@ function renderAppRunnerCustomSection() {
   pathRow.append(pathField.field);
   const browse = make("button", "app-runner-custom-browse", "Browse…");
   browse.type = "button";
-  browse.addEventListener("click", () => {
+  addAppRunnerInfoListener(browse, "click", () => {
     updateAppRunnerCustomDraftFrom(form);
     loadAppRunnerFileBrowser(appRunnerRelativeDir(appRunnerCustomDraft.path));
   });
@@ -30524,10 +30584,10 @@ function renderAppRunnerCustomSection() {
   const formActions = make("div", "app-runner-custom-form-actions");
   const save = make("button", "primary", appRunnerCustomDraft.id ? "Save changes" : "Add runner");
   save.type = "button";
-  save.addEventListener("click", () => saveAppRunnerCustomRunner(form));
+  addAppRunnerInfoListener(save, "click", () => saveAppRunnerCustomRunner(form));
   const reset = make("button", "", "Reset");
   reset.type = "button";
-  reset.addEventListener("click", () => { resetAppRunnerCustomDraft(); renderAppRunnerInfoDialog(); });
+  addAppRunnerInfoListener(reset, "click", () => { resetAppRunnerCustomDraft(); renderAppRunnerInfoDialog(); });
   formActions.append(save, reset);
   form.append(formActions);
   if (appRunnerCustomFeedback.message) form.append(make("div", `app-runner-custom-feedback ${appRunnerCustomFeedback.type || "info"}`, appRunnerCustomFeedback.message));
@@ -30562,10 +30622,11 @@ function renderAppRunnerControls() {
     ? `App runner already running: ${activeRun.displayCommand || activeRun.label || "runner"}`
     : runners.length
       ? "Run a detected app runner"
-      : "No app runners detected in this tab working directory";
-  button.dataset.tooltip = runners.length ? "App runners: run detected project commands in this tab's working directory." : APP_RUNNER_SUPPORTED_TOOLTIP;
+      : "No app runners detected in this thread working directory";
+  button.dataset.tooltip = runners.length ? "App runners: run detected project commands in this thread's working directory." : APP_RUNNER_SUPPORTED_TOOLTIP;
   button.setAttribute("aria-label", button.title);
-  if (!runners.length || running) setAppRunnerMenuOpen(false);
+  // Refreshing data must not cancel the click that requested this discovery.
+  if (!runners.length || running) setAppRunnerMenuOpen(false, { preserveOpeningIntent: true });
 
   panel.replaceChildren();
   for (const runner of runners) {
@@ -30575,7 +30636,9 @@ function renderAppRunnerControls() {
     const runnerDisplayCommand = runner.shortDisplayCommand || runner.displayCommand;
     const runnerSource = appRunnerSourceLabel(runner, runnerDisplayCommand);
     item.title = [runnerDisplayCommand, runnerSource, runner.description].filter(Boolean).join("\n");
-    item.addEventListener("click", () => runAppRunner(runner.id));
+    const target = projectTargetFromContext();
+    item.disabled = running;
+    item.addEventListener("click", () => runAppRunner(runner.id, target));
     const label = make("span", "app-runner-menu-item-label", runner.label || runnerDisplayCommand);
     const command = make("span", "app-runner-menu-item-command", runnerDisplayCommand);
     item.append(label, command);
@@ -30584,15 +30647,43 @@ function renderAppRunnerControls() {
   scheduleComposerActionSlotLayoutRestore();
 }
 
+function isCurrentAppRunnerInfoTarget(target) {
+  return !!target && appRunnerInfoTarget === target && elements.appRunnerInfoDialog?.open && isCurrentProjectTarget(target);
+}
+
+function addAppRunnerInfoListener(node, type, handler) {
+  const target = appRunnerInfoTarget;
+  node.addEventListener(type, event => {
+    if (!isCurrentAppRunnerInfoTarget(target) || !node.isConnected || !elements.appRunnerInfoBody.contains(node)) return;
+    handler(event);
+  });
+}
+
+function appRunnerInfoPathButton(label, title, handler, className) {
+  const target = appRunnerInfoTarget;
+  const button = pathPickerButton(label, title, event => {
+    if (isCurrentAppRunnerInfoTarget(target) && button.isConnected && elements.appRunnerInfoBody.contains(button)) handler(event);
+  }, className);
+  return button;
+}
+
 function renderAppRunnerInfoDialog() {
   const body = elements.appRunnerInfoBody;
-  if (!body) return;
+  if (!body || !elements.appRunnerInfoDialog?.open) return;
+  if (!isCurrentAppRunnerInfoTarget(appRunnerInfoTarget)) {
+    body.replaceChildren(make("p", "muted", "The session or project changed. Close and reopen Runner configuration for the current project."));
+    return;
+  }
+  if (appRunnerInfoLoading || appRunnerInfoError) {
+    body.replaceChildren(make("p", "muted", appRunnerInfoError || "Loading project runner configuration…"));
+    return;
+  }
   const data = activeAppRunnerData();
   const runners = Array.isArray(data.runners) ? data.runners : [];
   body.replaceChildren();
 
   const current = make("section", "app-runner-info-section");
-  current.append(make("h3", "", "Detected in this tab"));
+  current.append(make("h3", "", "Detected in this thread"));
   if (runners.length) {
     const list = make("ul", "app-runner-info-list app-runner-info-detected-list");
     for (const runner of runners) {
@@ -30609,18 +30700,18 @@ function renderAppRunnerInfoDialog() {
     }
     current.append(list);
   } else {
-    current.append(make("p", "muted", "No runners are currently detected for this tab working directory."));
+    current.append(make("p", "muted", "No runners are currently detected for this thread working directory."));
   }
 
   const how = make("section", "app-runner-info-section");
   how.append(make("h3", "", "How it works"));
   const howList = make("ul", "app-runner-info-list");
   for (const line of [
-    "Detection is scoped to the active terminal tab's current working directory.",
+    "Detection is scoped to the active thread's current working directory.",
     "Only commands/files that exist and runner binaries available on this system are shown.",
     "Starting a runner keeps live output pinned above the chat/terminal area.",
     "While a runner is active, the widget can send line-oriented stdin to interactive scripts.",
-    "Only one app runner can be active per tab; Close/Stop terminates the process/server.",
+    "Only one app runner can be active per thread; Close/Stop terminates the process/server.",
     "Project discovery paths are project-local, relative to the project root, and scanned one level deep only.",
   ]) howList.append(make("li", "", line));
   how.append(howList);
@@ -30634,11 +30725,34 @@ function renderAppRunnerInfoDialog() {
   body.append(current, renderAppRunnerSearchPathSection(), renderAppRunnerCustomSection(), how, supported);
 }
 
-function openAppRunnerInfoDialog() {
-  if (!elements.appRunnerInfoDialog) return;
-  renderAppRunnerInfoDialog();
+async function openAppRunnerInfoDialog() {
+  if (!elements.appRunnerInfoDialog || !activeTabId) return;
+  if (!appRunnerInfoTarget || !isCurrentProjectTarget(appRunnerInfoTarget)) {
+    resetAppRunnerCustomDraft();
+    appRunnerSearchPathDraft = "";
+    setAppRunnerSearchPathFeedback("", "");
+    appRunnerDirectoryBrowserState = { open: false, loading: false, path: "", data: null, error: "" };
+  }
+  const target = projectTargetFromContext();
+  appRunnerInfoTarget = target;
+  appRunnerInfoLoading = true;
+  appRunnerInfoError = "";
   setAppRunnerMenuOpen(false);
   if (!elements.appRunnerInfoDialog.open) elements.appRunnerInfoDialog.showModal();
+  renderAppRunnerInfoDialog();
+  try {
+    const response = await api("/api/app-runners", { tabId: target.tabId, signal: AbortSignal.timeout(15_000) });
+    if (!isCurrentAppRunnerInfoTarget(target)) return;
+    setAppRunnerData(target.tabId, response.data || {});
+  } catch (error) {
+    if (!isCurrentAppRunnerInfoTarget(target)) return;
+    appRunnerInfoError = error.message || String(error);
+  } finally {
+    if (isCurrentAppRunnerInfoTarget(target)) {
+      appRunnerInfoLoading = false;
+      renderAppRunnerInfoDialog();
+    }
+  }
 }
 
 function closeAppRunnerInfoDialog() {
@@ -30649,15 +30763,17 @@ function renderAppRunnerInputForm(run) {
   if (!appRunnerIsRunning(run)) return null;
   const key = appRunnerInputDraftKey(run);
   const form = make("form", "app-runner-stdin-form");
+  const target = projectTargetFromContext();
+  appRunnerFormTargets.set(form, target);
   form.dataset.runId = key;
   const input = make("textarea", "app-runner-stdin-input");
   input.rows = 1;
-  input.value = appRunnerInputDraftByRun.get(key) || "";
+  input.value = projectRunners.getInputDraft(activeTabId, key) || "";
   input.placeholder = run.stdinClosed ? "stdin is closed" : "Send stdin… Enter sends, Shift+Enter inserts a newline";
   input.disabled = run.stdinClosed === true;
   input.dataset.runId = key;
   input.setAttribute("aria-label", "Send input to app runner stdin");
-  input.addEventListener("input", () => { appRunnerInputDraftByRun.set(key, input.value); });
+  input.addEventListener("input", () => { projectRunners.setInputDraft(target.tabId, key, input.value); });
   input.addEventListener("keydown", (event) => {
     if (insertNumpadDecimal(event)) return;
     if (event.key !== "Enter" || event.shiftKey) return;
@@ -30688,7 +30804,7 @@ function patchAppRunnerWidgetInPlace(tabId, previousRun, nextRun) {
   if (!previousRun || !nextRun || previousRun.id !== nextRun.id) return false;
   if (appRunnerIsRunning(previousRun) !== appRunnerIsRunning(nextRun)) return false;
   if ((previousRun.status || "") !== (nextRun.status || "") || Boolean(previousRun.truncated) !== Boolean(nextRun.truncated)) return false;
-  const widget = elements.widgetArea?.querySelector(".app-runner-widget");
+  const widget = featureWidgetElements(".app-runner-widget")[0];
   const terminal = widget?.querySelector(".release-npm-terminal");
   if (!widget || !terminal) return false;
   const previousLines = appRunnerOutputLines(previousRun);
@@ -31896,7 +32012,7 @@ async function runStatsCalibration(mode) {
   if (!tabContext.tabId) return;
   const commandName = resolveAvailableCommandName("calibrate", { rpcOnly: true });
   if (!commandName) {
-    statsOverlayError = "Calibration command unavailable: /calibrate is not loaded in this Pi tab.";
+    statsOverlayError = "Calibration command unavailable: /calibrate is not loaded in this Pi thread.";
     renderStatsOverlay();
     return;
   }
@@ -32054,6 +32170,7 @@ function openBtwComposerWidget() {
   setNativeCommandMenuOpen(false);
   setAppRunnerMenuOpen(false);
   setOptionsMenuOpen(false);
+  if (focusedShell?.active) navigateFocusedShell("activity", "conversations");
   renderWidgets();
 }
 
@@ -32633,32 +32750,36 @@ function attachWorkflowOverlayCloseButton(widget) {
 function renderWidgets() {
   if (deferUiRenderDuringPointerActivation("widgets", renderWidgets)) return;
   const appRunnerInputFocus = captureAppRunnerInputFocus();
+  for (const root of featureWidgetRoots()) captureScopedScrollContinuity(root);
+  const destination = visibleFeatureWidgetDestination();
+  const visible = (id) => destination === null || destination === id;
+  restoreFocusedWidgetsForRender(destination);
   captureScopedScrollContinuity(elements.widgetArea);
-  elements.widgetArea.replaceChildren();
-  const releaseOutput = renderReleaseNpmOutputWidget();
-  if (releaseOutput) elements.widgetArea.append(releaseOutput);
-  const releaseLog = renderReleaseNpmLogWidget();
-  if (releaseLog) elements.widgetArea.append(releaseLog);
-  const releaseAurOutput = renderReleaseAurOutputWidget();
-  if (releaseAurOutput) elements.widgetArea.append(releaseAurOutput);
-  const releaseAurLog = renderReleaseAurLogWidget();
-  if (releaseAurLog) elements.widgetArea.append(releaseAurLog);
-  const aurReviewWidget = renderAurReviewWidget();
-  if (aurReviewWidget) elements.widgetArea.append(aurReviewWidget);
-  if (!workflowOverlayIsMinimized()) {
+  if (destination === null) elements.widgetArea.replaceChildren();
+  const releaseOutput = visible("release") ? renderReleaseNpmOutputWidget() : null;
+  if (releaseOutput) appendFeatureWidget(releaseOutput, "release");
+  const releaseLog = visible("release") ? renderReleaseNpmLogWidget() : null;
+  if (releaseLog) appendFeatureWidget(releaseLog, "release");
+  const releaseAurOutput = visible("release") ? renderReleaseAurOutputWidget() : null;
+  if (releaseAurOutput) appendFeatureWidget(releaseAurOutput, "release");
+  const releaseAurLog = visible("release") ? renderReleaseAurLogWidget() : null;
+  if (releaseAurLog) appendFeatureWidget(releaseAurLog, "release");
+  const aurReviewWidget = visible("release") ? renderAurReviewWidget() : null;
+  if (aurReviewWidget) appendFeatureWidget(aurReviewWidget, "release");
+  if (visible("progress") && !workflowOverlayIsMinimized()) {
     const workflowInspectorWidget = renderWorkflowInspectorWidget();
     const workflowSubprocessWidget = renderWorkflowSubprocessWidget();
     attachWorkflowOverlayCloseButton(workflowInspectorWidget || workflowSubprocessWidget);
-    if (workflowInspectorWidget) elements.widgetArea.append(workflowInspectorWidget);
-    if (workflowSubprocessWidget) elements.widgetArea.append(workflowSubprocessWidget);
+    if (workflowInspectorWidget) appendFeatureWidget(workflowInspectorWidget, "progress");
+    if (workflowSubprocessWidget) appendFeatureWidget(workflowSubprocessWidget, "progress");
   }
   renderWorkflowOverlayControls();
-  const appRunnerWidget = renderAppRunnerWidget();
-  if (appRunnerWidget) elements.widgetArea.append(appRunnerWidget);
-  const subagentWidget = renderSubagentOverlayWidgetSafely();
-  if (subagentWidget) elements.widgetArea.append(subagentWidget);
-  const btwWidget = renderBtwOutputWidget();
-  if (btwWidget) elements.widgetArea.append(btwWidget);
+  const appRunnerWidget = visible("runners") ? renderAppRunnerWidget() : null;
+  if (appRunnerWidget) appendFeatureWidget(appRunnerWidget, "runners");
+  const subagentWidget = visible("subagents") ? renderSubagentOverlayWidgetSafely() : null;
+  if (subagentWidget) appendFeatureWidget(subagentWidget, "subagents");
+  const btwWidget = visible("conversations") ? renderBtwOutputWidget() : null;
+  if (btwWidget) appendFeatureWidget(btwWidget, "conversations");
 
   for (const [key, value] of widgets) {
     // pi-subagents publishes this machine-readable status for native TUI
@@ -32672,17 +32793,20 @@ function renderWidgets() {
     if (widgetFeatureId && optionalFeatureWidgetHasSpecializedRenderer(key)) continue;
     const lines = Array.isArray(value.widgetLines) ? value.widgetLines : [];
     if (key === "pi-remote-webui") continue;
-    const specialized = key === "todo-progress" && isOptionalFeatureEnabled("todoProgressWidget") ? renderTodoProgressWidget(key, lines) : null;
+    const isTodo = key === "todo-progress" && isOptionalFeatureEnabled("todoProgressWidget");
+    if (!visible(isTodo ? "progress" : "extensions")) continue;
+    const specialized = isTodo ? renderTodoProgressWidget(key, lines) : null;
     if (specialized) {
-      elements.widgetArea.append(specialized);
+      appendFeatureWidget(specialized, "progress");
       continue;
     }
 
     const node = make("div", "widget");
     const cleanLines = lines.map(stripAnsi);
     node.textContent = `${key}\n${cleanLines.join("\n")}`;
-    elements.widgetArea.append(node);
+    appendFeatureWidget(node, "extensions");
   }
+  syncFocusedWidgetPlacement();
   restoreAppRunnerInputFocus(appRunnerInputFocus);
   if (mobilePhoneExperienceInstalled && isMobileShellV2Active()) renderMobilePhoneExperience();
 }
@@ -32948,28 +33072,29 @@ function gitInitFilesStatusSummary(status) {
 
 function configureGitFooterStatusSetup({ force = true } = {}) {
   const current = readGitFooterStatusSetup();
-  if (current.githubUsername && !force) return current;
+  if (current.githubUsername && !force) return { status: "configured", setup: current };
   const value = window.prompt("git-footer-status-setup: GitHub username for origin remotes", current.githubUsername || "");
-  if (value === null) return null;
+  if (value === null) return { status: "cancelled" };
   try {
     const setup = { githubUsername: cleanGitHubUsernameInput(value) };
     writeGitFooterStatusSetup(setup);
     addEvent(`git-footer-status-setup saved GitHub username ${setup.githubUsername}`, "success");
-    return setup;
+    return { status: "configured", setup };
   } catch (error) {
     addEvent(error.message || String(error), "error");
-    return null;
+    return { status: "invalid" };
   }
 }
 
 function ensureGitFooterStatusSetup() {
   const setup = readGitFooterStatusSetup();
   if (setup.githubUsername) return setup;
-  return configureGitFooterStatusSetup({ force: true });
+  return configureGitFooterStatusSetup({ force: true }).setup || null;
 }
 
 function defaultGitInitRepoName(tab = activeTab()) {
-  const cwd = latestWorkspace?.cwd || tab?.cwd || latestWorkspace?.displayCwd || "";
+  const workspace = tab?.id === activeTabId ? latestWorkspace : null;
+  const cwd = workspace?.cwd || tab?.cwd || workspace?.displayCwd || "";
   const lastPart = String(cwd).split(/[\\/]+/).filter(Boolean).pop() || "new-repo";
   try {
     return cleanGitHubRepoNameInput(lastPart);
@@ -33375,13 +33500,13 @@ function gitWorkflowHint() {
     case "add": return (gitWorkflow.preferences || gitWorkflowPreferences)?.stagingPolicy === "all"
       ? "Step 1: explicitly stage all changes with git add ."
       : "Step 1: review changes, stage only intended files, then accept the current staged set.";
-    case "reviewRequesting": return "Step 2: requesting a staged manual repository review in this tab. Cancel will request Pi abort.";
+    case "reviewRequesting": return "Step 2: requesting a staged manual repository review in this thread. Cancel will request Pi abort.";
     case "review": return "Step 2: inspect the staged Git diff and use the manual review card to approve or decline. Approval alone advances to commit-message generation.";
     case "generate": return "Step 3: run /git-staged-msg, or type a commit message and use Commit input.";
     case "generating": return "Pi is generating dev/COMMIT/staged-commit-short.txt and staged-commit-long.txt.";
     case "message": return gitWorkflow.prMode ? `Worktree branch ${gitWorkflow.prBranch || "created"}: choose short, long, or typed input before opening a PR.` : "Step 3/4: preview the native g-msg output, type a commit message if needed, commit here, or create a PR branch worktree first.";
     case "branchNaming": return "Pi is generating dev/COMMIT/staged-branch-name.txt for a PR branch worktree. Cancel will request Pi abort.";
-    case "branching": return "Creating or opening a branch worktree, copying staged changes, and switching to that tab before committing.";
+    case "branching": return "Creating or opening a branch worktree, copying staged changes, and switching to that thread before committing.";
     case "committing": return "Running native git commit with the selected message.";
     case "push": return gitWorkflow.prMode ? "Push the PR worktree branch, generate /pr, review the description, then create the pull request." : "Step 5: push the new commit to the configured remote.";
     case "pushing": return "Running git push. Cancel will request process termination.";
@@ -33398,7 +33523,7 @@ function gitWorkflowHint() {
 function renderGitInitWorkflowActions() {
   if (gitWorkflow.step === "initSetup") {
     addGitWorkflowAction("git-footer-status-setup", () => {
-      const setup = configureGitFooterStatusSetup({ force: true });
+      const { setup } = configureGitFooterStatusSetup({ force: true });
       if (!setup?.githubUsername) return;
       const repoName = gitWorkflow.repoName || defaultGitInitRepoName();
       const stack = gitWorkflow.stack || readStoredGitInitStack();
@@ -33434,7 +33559,7 @@ function renderGitInitWorkflowActions() {
   } else if (gitWorkflow.step === "remote") {
     addGitWorkflowAction("Add origin remote", () => addGitInitRemote(), "primary", false, GIT_INIT_REMOTE_TOOLTIP);
     addGitWorkflowAction("git-footer-status-setup", () => {
-      const setup = configureGitFooterStatusSetup({ force: true });
+      const { setup } = configureGitFooterStatusSetup({ force: true });
       if (!setup?.githubUsername) return;
       const repoName = gitWorkflow.repoName || defaultGitInitRepoName();
       const stack = gitWorkflow.stack || readStoredGitInitStack();
@@ -33655,7 +33780,7 @@ function guidedGitReviewAvailable(tabId = activeTabId) {
 }
 
 function guidedGitReviewUnavailableMessage() {
-  return "Manual staged review is still required, but aur-review is unavailable or disabled. Re-enable/install @firstpick/pi-extension-aur-review and reload this Pi/WebUI tab, then request a new review. No message, commit, worktree, or push action was performed.";
+  return "Manual staged review is still required, but aur-review is unavailable or disabled. Re-enable/install @firstpick/pi-extension-aur-review and reload this Pi/WebUI thread, then request a new review. No message, commit, worktree, or push action was performed.";
 }
 
 function guidedGitReviewCommand() {
@@ -33758,7 +33883,7 @@ async function requestGuidedGitReview(tabId = gitWorkflowActionTabId(), { output
     guidedReviewStatus: "requesting",
     guidedReviewRequestedAt: requestedAt,
     ...gitWorkflowActionDonePatch(workflow, "stage"),
-    output: `${output}\n\nRequesting a staged manual repository review in this tab…`,
+    output: `${output}\n\nRequesting a staged manual repository review in this thread…`,
   }, { tabId });
   try {
     await api("/api/prompt", { method: "POST", body: { message: resolveRpcSlashCommandMessage(guidedGitReviewCommand(), { tabId }) }, tabId, signal: AbortSignal.timeout(12_000) });
@@ -33853,7 +33978,7 @@ function reconcileGuidedGitReviewWidgetRemoval(tabId) {
 }
 
 function guidedGitNativeCommandUnavailable(commandName) {
-  return `Guided Git browser generation requires the /${commandName} extension command from @firstpick/pi-extension-git-guided-workflow in the originating tab. Same-named prompt templates are not used.`;
+  return `Guided Git browser generation requires the /${commandName} extension command from @firstpick/pi-extension-git-guided-workflow in the originating thread. Same-named prompt templates are not used.`;
 }
 
 function hasLoadedGuidedGitNativeCommand(commandName, tabId) {
@@ -33905,9 +34030,9 @@ function reportGuidedGitLaunchRefused(reason) {
     : reason === "streaming"
       ? "Pi is running"
       : reason === "pending"
-        ? "the tab has pending messages"
-        : "the tab state is not ready";
-  addEvent(`Guided Git was not started because ${detail}. Wait until the originating tab is idle with no pending messages, then start it again.`, "warn");
+        ? "the thread has pending messages"
+        : "the thread state is not ready";
+  addEvent(`Guided Git was not started because ${detail}. Wait until the originating thread is idle with no pending messages, then start it again.`, "warn");
 }
 
 function guidedGitLaunchAdmitted(tabId) {
@@ -33923,7 +34048,7 @@ async function launchGuidedGitWorkflow(tabId = activeTabId) {
   if (launchMode !== "extension") {
     addEvent(launchMode === "disabled"
       ? optionalFeatureUnavailableMessage("gitWorkflow")
-      : "Guided Git is unavailable: install @firstpick/pi-extension-git-guided-workflow and reload the Pi tab.", "warn");
+      : "Guided Git is unavailable: install @firstpick/pi-extension-git-guided-workflow and reload the Pi thread.", "warn");
     return;
   }
   const commandName = resolveAvailableCommandName("git-guided-workflow", { tabId, rpcOnly: true });
@@ -33976,7 +34101,7 @@ async function startGitWorkflow(tabId = activeTabId, { skipSetup = false, activa
     step: "add",
     process: "stage",
     busy: false,
-    output: `${gitWorkflowStagingReadyMessage(preferences)}\n\n${gitWorkflowConfiguredGenerationText(preferences)} The active tab model and effort are restored after generation.`,
+    output: `${gitWorkflowStagingReadyMessage(preferences)}\n\n${gitWorkflowConfiguredGenerationText(preferences)} The active thread model and effort are restored after generation.`,
     error: "",
     githubUsername: "",
     repoName: "",
@@ -34014,11 +34139,16 @@ async function startGitWorkflow(tabId = activeTabId, { skipSetup = false, activa
 
 async function startGitInitWorkflow(tabId = activeTabId) {
   if (!tabId) return;
+  const target = projectTargetFromContext(activeTabContext(tabId));
+  if (!isAliveProjectTarget(target)) return;
+  const repoName = defaultGitInitRepoName(tabs.find((tab) => tab.id === tabId));
   const workflow = gitWorkflowForTab(tabId);
+  const runId = workflow.runId;
   if (workflow.active && !["done", "cancelled", "error"].includes(workflow.step) && !(await appConfirmText("Restart the active git repository setup workflow?", { affected: "The active Git repository setup workflow", confirmLabel: "Restart setup" }))) return;
-  const setup = readGitFooterStatusSetup().githubUsername ? readGitFooterStatusSetup() : configureGitFooterStatusSetup({ force: true });
-  const githubUsername = setup?.githubUsername || "";
-  const repoName = defaultGitInitRepoName(tabs.find((tab) => tab.id === tabId) || activeTab());
+  if (!isAliveProjectTarget(target) || gitWorkflowForTab(tabId, { create: false }) !== workflow || workflow.runId !== runId) return;
+  const result = configureGitFooterStatusSetup({ force: false });
+  if (result.status === "cancelled") return;
+  const githubUsername = result.setup?.githubUsername || "";
   const stack = readStoredGitInitStack();
   workflow.runId += 1;
   setGitWorkflow({
@@ -34672,7 +34802,7 @@ async function loadGitWorkflowBranchName({ requireFresh = false, retries = 0, ru
 
 function syncGitWorkflowWorktreeTabs(result) {
   if (Array.isArray(result?.tabs)) {
-    tabs = result.tabs;
+    applyAuthoritativeTabSnapshot(result.tabs);
     syncTabMetadata(tabs);
   }
   if (result?.tab) applyTabMetadata(result.tab);
@@ -34687,7 +34817,7 @@ function gitWorkflowWorktreeOutput(result, branch) {
     : result?.openedExisting || result?.openedExistingTab
       ? "Existing worktree opened; review its current changes before committing."
       : "Source index was clean; no staged changes were copied.";
-  return `${formatGitCommandResult(result)}\n\nOpened PR branch worktree ${prBranch || branch} at ${normalizeDisplayPath(worktreePath)}. ${copied}\n\nChoose Commit short, Commit long, or Commit input to commit in this worktree tab.`;
+  return `${formatGitCommandResult(result)}\n\nOpened PR branch worktree ${prBranch || branch} at ${normalizeDisplayPath(worktreePath)}. ${copied}\n\nChoose Commit short, Commit long, or Commit input to commit in this worktree thread.`;
 }
 
 async function createGitPrBranchWithSuggestion(suggestion, tabId = gitWorkflowActionTabId(), expectedRunId) {
@@ -34774,11 +34904,11 @@ async function createGitPrBranchWithSuggestion(suggestion, tabId = gitWorkflowAc
       verificationConfirmed: false,
     };
     if (targetTabId !== tabId) {
-      setGitWorkflow({ step: "message", prMode: false, prBranch: "", branchName: prBranch || branch, busy: false, output: `${formatCommitMessagePreview(sourceWorkflow.message)}\n\nOpened PR branch worktree ${prBranch || branch} in ${result.tab?.title || "a new tab"}. Continue the commit and PR flow there; this checkout stayed on its current branch.` }, { tabId });
+      setGitWorkflow({ step: "message", prMode: false, prBranch: "", branchName: prBranch || branch, busy: false, output: `${formatCommitMessagePreview(sourceWorkflow.message)}\n\nOpened PR branch worktree ${prBranch || branch} in ${threadDisplayTitle(result.tab?.title) || "a new thread"}. Continue the commit and PR flow there; this checkout stayed on its current branch.` }, { tabId });
     }
     setGitWorkflow(nextState, { tabId: targetTabId });
     if (targetTabId !== tabId) await switchTab(targetTabId);
-    addEvent(`Opened PR branch worktree ${prBranch || branch}. Continue the guided Git workflow in its tab.`, "success");
+    addEvent(`Opened PR branch worktree ${prBranch || branch}. Continue the guided Git workflow in its thread.`, "success");
   } catch (error) {
     if (isCurrentGitWorkflowRun(runId, tabId)) {
       setGitWorkflow({ prMode: false, prBranch: "" }, { tabId });
@@ -35114,467 +35244,13 @@ function resumeGitWorkflowForActiveTab(tabContext = activeTabContext()) {
   }
 }
 
-function normalizeQueuedMessages(event) {
-  const normalize = (items) => (Array.isArray(items) ? items.map((item) => String(item || "")).filter((item) => item.trim()) : []);
-  const source = event?.source === "webui-compaction" ? "webui-compaction" : "pi-runtime";
-  return {
-    source,
-    revision: source === "webui-compaction" && Number.isSafeInteger(event?.revision) && event.revision >= 0 ? event.revision : undefined,
-    draining: source === "webui-compaction" && event?.draining === true,
-    steering: normalize(event?.steering),
-    followUp: normalize(event?.followUp),
-  };
-}
-
 function queuedSnapshotForTab(tabId = activeTabId) {
   return tabId ? latestQueuedMessagesByTab.get(tabId) || normalizeQueuedMessages({}) : normalizeQueuedMessages({});
 }
 
-function queueMessageCount(snapshot) {
-  return (snapshot?.steering?.length || 0) + (snapshot?.followUp?.length || 0);
-}
-
-function updateQueueHeaderBadge(total) {
-  if (!elements.queueCountBadge) return;
-  elements.queueCountBadge.hidden = total === 0;
-  elements.queueCountBadge.textContent = String(total);
-  elements.queueCountBadge.setAttribute("aria-label", `${total} queued message${total === 1 ? "" : "s"}`);
-}
-
-function queueSummaryPill(label, count, tone) {
-  const pill = make("span", `queue-summary-pill ${tone}`.trim());
-  pill.append(make("strong", undefined, String(count)), make("span", undefined, label));
-  return pill;
-}
-
-function followUpQueueMutationInFlight(tabId = activeTabId) {
-  return !!tabId && followUpQueueMutationsInFlightByTab.has(tabId);
-}
-
-function setFollowUpQueueStatus(text = "", level = "") {
-  followUpQueueStatus = { text, level };
-  if (!elements.followUpQueueStatus) return;
-  elements.followUpQueueStatus.textContent = text;
-  elements.followUpQueueStatus.className = `follow-up-queue-status${level ? ` ${level}` : ""}`;
-}
-
-function syncFollowUpQueueMutationControls() {
-  const tabId = activeTabId;
-  const locked = followUpQueueMutationInFlight(tabId);
-  const draining = queuedSnapshotForTab(tabId).draining;
-  elements.followUpQueueOverlay?.classList.toggle("is-busy", locked);
-  elements.followUpQueueOverlay?.classList.toggle("is-draining", draining);
-  for (const textarea of elements.followUpQueueRows?.querySelectorAll("textarea") || []) textarea.disabled = locked || draining;
-  for (const control of elements.followUpQueueRows?.querySelectorAll("[data-follow-up-queue-mutation-control]") || []) control.disabled = locked || draining || control.dataset.queueBoundary === "true";
-  for (const row of elements.followUpQueueRows?.querySelectorAll(".follow-up-queue-row") || []) row.draggable = false;
-  for (const handle of elements.followUpQueueRows?.querySelectorAll(".follow-up-queue-drag-handle") || []) handle.draggable = !locked && !draining;
-}
-
-function setFollowUpQueueMutationInFlight(tabId, inFlight) {
-  if (!tabId) return;
-  if (inFlight) followUpQueueMutationsInFlightByTab.add(tabId);
-  else followUpQueueMutationsInFlightByTab.delete(tabId);
-  if (tabId === activeTabId) syncFollowUpQueueMutationControls();
-}
-
-function preservedFocusedFollowUpQueueDraft(draft, followUps) {
-  if (!draft || !Array.isArray(followUps) || !Number.isSafeInteger(draft.index) || draft.index < 0) return null;
-  const authoritativeText = String(draft.authoritativeText ?? "");
-  const value = String(draft.value ?? "");
-  if (value === authoritativeText || followUps[draft.index] !== authoritativeText) return null;
-  const selectionStart = Math.max(0, Math.min(value.length, Number.isSafeInteger(draft.selectionStart) ? draft.selectionStart : value.length));
-  const selectionEnd = Math.max(selectionStart, Math.min(value.length, Number.isSafeInteger(draft.selectionEnd) ? draft.selectionEnd : selectionStart));
-  return { index: draft.index, value, selectionStart, selectionEnd };
-}
-
-function focusedFollowUpQueueDraft() {
-  const textarea = document.activeElement;
-  if (!textarea?.matches?.("textarea.follow-up-queue-textarea") || !elements.followUpQueueRows?.contains(textarea)) return null;
-  const index = Number(textarea.closest(".follow-up-queue-row")?.dataset.followUpIndex);
-  if (!Number.isSafeInteger(index) || index < 0) return null;
-  const authoritativeText = String(textarea.dataset.followUpQueueAuthoritativeText ?? "");
-  if (textarea.value === authoritativeText) return null;
-  return {
-    textarea,
-    index,
-    authoritativeText,
-    value: textarea.value,
-    selectionStart: textarea.selectionStart,
-    selectionEnd: textarea.selectionEnd,
-  };
-}
-
-function queueTabContext(tabId = activeTabId) {
-  const tab = tabs.find((item) => item.id === tabId);
-  return {
-    ...activeTabContext(tabId),
-    sessionFile: typeof tab?.sessionFile === "string" && tab.sessionFile ? tab.sessionFile : null,
-    startedAt: typeof tab?.startedAt === "string" && tab.startedAt ? tab.startedAt : null,
-  };
-}
-
-function queuedSnapshotTargetsCurrentTab(tabContext, currentTabId = activeTabId, currentTabs = tabs) {
-  if (!tabContext?.tabId || tabContext.tabId !== currentTabId || !Array.isArray(currentTabs)) return false;
-  const currentTab = currentTabs.find((tab) => tab?.id === tabContext.tabId);
-  if (!currentTab) return false;
-  const sessionFile = typeof tabContext.sessionFile === "string" && tabContext.sessionFile ? tabContext.sessionFile : null;
-  const currentSessionFile = typeof currentTab.sessionFile === "string" && currentTab.sessionFile ? currentTab.sessionFile : null;
-  if (sessionFile && currentSessionFile && sessionFile !== currentSessionFile) return false;
-  const startedAt = typeof tabContext.startedAt === "string" && tabContext.startedAt ? tabContext.startedAt : null;
-  const currentStartedAt = typeof currentTab.startedAt === "string" && currentTab.startedAt ? currentTab.startedAt : null;
-  return !(startedAt && currentStartedAt && startedAt !== currentStartedAt);
-}
-
-function setFollowUpQueueOpen(open, { restoreFocus = false } = {}) {
-  const snapshot = queuedSnapshotForTab();
-  const shouldOpen = !!open && snapshot.followUp.length > 0;
-  if (shouldOpen && !followUpQueueOpen) {
-    followUpQueueRestoreFocus = document.activeElement instanceof HTMLElement ? document.activeElement : elements.followUpQueueTrigger;
-    setComposerActionsOpen(false);
-    setPublishMenuOpen(false);
-    setNativeCommandMenuOpen(false);
-    setAppRunnerMenuOpen(false);
-    setOptionsMenuOpen(false);
-    setConversationVoiceMenuOpen(false);
-    setBusyPromptBehaviorMenuOpen(false);
-    setNewTabMenuOpen(false);
-  }
-  followUpQueueOpen = shouldOpen;
-  elements.followUpQueueTrigger?.setAttribute("aria-expanded", shouldOpen ? "true" : "false");
-  if (elements.followUpQueueOverlay) elements.followUpQueueOverlay.hidden = !shouldOpen;
-  if (!shouldOpen) {
-    followUpQueueDrag = null;
-    scheduleDeferredUiFlushAfterDropdownClose();
-    if (restoreFocus) {
-      const focusTarget = followUpQueueRestoreFocus?.isConnected ? followUpQueueRestoreFocus : elements.followUpQueueTrigger;
-      requestAnimationFrame(() => focusTarget?.focus({ preventScroll: true }));
-    }
-    followUpQueueRestoreFocus = null;
-    return;
-  }
-  renderFollowUpQueueOverlay();
-}
-
-function queueMutationBody(snapshot, operation) {
-  const body = {
-    source: snapshot.source,
-    kind: "followUp",
-    expected: { steering: [...snapshot.steering], followUp: [...snapshot.followUp] },
-    operation,
-  };
-  if (snapshot.source === "webui-compaction") body.revision = snapshot.revision;
-  return body;
-}
-
-function applyAuthoritativeQueuedSnapshot(tabContext, queue) {
-  if (!tabContext?.tabId || !queue) return;
-  const snapshot = normalizeQueuedMessages(queue);
-  latestQueuedMessagesByTab.set(tabContext.tabId, snapshot);
-  if (queuedSnapshotTargetsCurrentTab(tabContext)) renderQueue({ tabId: tabContext.tabId, ...snapshot });
-}
-
-async function mutateQueuedFollowUp(operation, tabId = activeTabId) {
-  if (!tabId || followUpQueueMutationInFlight(tabId)) return false;
-  const tabContext = queueTabContext(tabId);
-  const snapshot = queuedSnapshotForTab(tabId);
-  if (!snapshot.followUp.length || snapshot.draining) {
-    if (isCurrentTabContext(tabContext)) setFollowUpQueueStatus("Queue is draining; follow-ups can no longer be changed.", "warn");
-    return false;
-  }
-  setFollowUpQueueMutationInFlight(tabId, true);
-  if (isCurrentTabContext(tabContext)) {
-    const pendingStatus = operation.type === "edit"
-      ? "Saving queued follow-up…"
-      : operation.type === "delete"
-        ? "Removing queued follow-up…"
-        : "Reordering queued follow-ups…";
-    setFollowUpQueueStatus(pendingStatus);
-  }
-  try {
-    const response = await api("/api/queue/mutate", { method: "POST", body: queueMutationBody(snapshot, operation), tabId });
-    const result = response?.data || {};
-    if (result.queue) applyAuthoritativeQueuedSnapshot(tabContext, result.queue);
-    if (!result.mutated) {
-      if (isCurrentTabContext(tabContext)) setFollowUpQueueStatus("Queue changed before the update could be applied.", "warn");
-      return false;
-    }
-    if (isCurrentTabContext(tabContext)) {
-      const message = operation.type === "edit"
-        ? `Saved queued follow-up ${operation.index + 1}.`
-        : operation.type === "delete"
-          ? `Removed queued follow-up ${operation.index + 1}.`
-          : `Moved queued follow-up ${operation.from + 1} to position ${operation.to + 1}.`;
-      setFollowUpQueueStatus(message, "success");
-    }
-    return true;
-  } catch (error) {
-    const result = error?.data?.data || {};
-    if (result.queue) applyAuthoritativeQueuedSnapshot(tabContext, result.queue);
-    if (isCurrentTabContext(tabContext)) {
-      if (error?.statusCode === 409) setFollowUpQueueStatus(result.reason === "queue-draining" ? "Queue is draining; refreshed the authoritative queue." : "Queue changed elsewhere; refreshed the authoritative queue.", "warn");
-      else setFollowUpQueueStatus(error.message || "Unable to update the queued follow-up.", "error");
-    }
-    return false;
-  } finally {
-    setFollowUpQueueMutationInFlight(tabId, false);
-    if (isCurrentTabContext(tabContext)) renderFollowUpQueueOverlay();
-  }
-}
-
-function saveQueuedFollowUpText(index, expectedText, value) {
-  const text = String(value ?? "");
-  if (text === expectedText) return;
-  if (!text.trim()) {
-    setFollowUpQueueStatus("Queued follow-ups cannot be empty; restored the authoritative text.", "warn");
-    renderFollowUpQueueOverlay();
-    return;
-  }
-  void mutateQueuedFollowUp({ type: "edit", index, expectedText, text });
-}
-
-function clearFollowUpQueueDragVisuals() {
-  for (const row of elements.followUpQueueRows?.querySelectorAll(".follow-up-queue-row.is-dragging, .follow-up-queue-row.is-drop-target") || []) {
-    row.classList.remove("is-dragging", "is-drop-target");
-  }
-}
-
-function renderFollowUpQueueOverlay() {
-  if (deferUiRenderDuringPointerActivation("follow-up-queue", renderFollowUpQueueOverlay)) return;
-  const snapshot = queuedSnapshotForTab();
-  const followUps = snapshot.followUp;
-  const count = followUps.length;
-  const trigger = elements.followUpQueueTrigger;
-  if (trigger) {
-    trigger.hidden = count === 0;
-    trigger.setAttribute("aria-expanded", followUpQueueOpen && count ? "true" : "false");
-    trigger.setAttribute("aria-label", `${count} queued follow-up${count === 1 ? "" : "s"}`);
-  }
-  if (elements.followUpQueueTriggerCount) elements.followUpQueueTriggerCount.textContent = String(count);
-  if (elements.followUpQueueOverlayCount) elements.followUpQueueOverlayCount.textContent = String(count);
-  if (!count) {
-    if (followUpQueueOpen) setFollowUpQueueOpen(false);
-    if (elements.followUpQueueRows) elements.followUpQueueRows.replaceChildren();
-    return;
-  }
-  if (!followUpQueueOpen || !elements.followUpQueueRows) return;
-
-  const locked = followUpQueueMutationInFlight();
-  const unavailable = locked || snapshot.draining;
-  const focusedDraft = focusedFollowUpQueueDraft();
-  const preservedDraft = preservedFocusedFollowUpQueueDraft(focusedDraft, followUps);
-  const rows = followUps.map((item, index) => {
-    const row = make("article", "follow-up-queue-row");
-    row.dataset.followUpIndex = String(index);
-    row.draggable = false;
-    const dragHandle = make("span", "follow-up-queue-drag-handle", "⠿");
-    dragHandle.draggable = !unavailable;
-    dragHandle.setAttribute("aria-hidden", "true");
-    dragHandle.title = "Drag to reorder";
-    const textarea = make("textarea", "follow-up-queue-textarea");
-    const textareaDraft = preservedDraft?.index === index ? preservedDraft : null;
-    textarea.value = textareaDraft ? textareaDraft.value : item;
-    textarea.dataset.followUpQueueAuthoritativeText = item;
-    textarea.rows = Math.max(2, Math.min(6, item.split("\n").length + 1));
-    textarea.disabled = unavailable;
-    textarea.setAttribute("aria-label", `Queued follow-up ${index + 1}`);
-    textarea.dataset.followUpQueueMutationControl = "true";
-    textarea.addEventListener("blur", () => {
-      if (textarea === followUpQueueSuppressBlurFor) return;
-      saveQueuedFollowUpText(index, item, textarea.value);
-    });
-    textarea.addEventListener("keydown", (event) => {
-      if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key === "Enter") {
-        event.preventDefault();
-        saveQueuedFollowUpText(index, item, textarea.value);
-        return;
-      }
-      if (event.key !== "Escape") return;
-      event.preventDefault();
-      event.stopPropagation();
-      if (textarea.value !== item) {
-        textarea.value = item;
-        setFollowUpQueueStatus(`Restored queued follow-up ${index + 1}.`, "warn");
-      } else {
-        setFollowUpQueueOpen(false, { restoreFocus: true });
-      }
-    });
-    const controls = make("div", "follow-up-queue-row-controls");
-    const moveUp = make("button", "follow-up-queue-move-button", "↑");
-    moveUp.type = "button";
-    moveUp.dataset.followUpQueueMutationControl = "true";
-    moveUp.dataset.queueBoundary = index === 0 ? "true" : "false";
-    moveUp.disabled = unavailable || index === 0;
-    moveUp.title = `Move queued follow-up ${index + 1} up`;
-    moveUp.setAttribute("aria-label", `Move queued follow-up ${index + 1} up`);
-    moveUp.addEventListener("click", () => void mutateQueuedFollowUp({ type: "move", from: index, to: index - 1, expectedText: item }));
-    const moveDown = make("button", "follow-up-queue-move-button", "↓");
-    moveDown.type = "button";
-    moveDown.dataset.followUpQueueMutationControl = "true";
-    moveDown.dataset.queueBoundary = index === followUps.length - 1 ? "true" : "false";
-    moveDown.disabled = unavailable || index === followUps.length - 1;
-    moveDown.title = `Move queued follow-up ${index + 1} down`;
-    moveDown.setAttribute("aria-label", `Move queued follow-up ${index + 1} down`);
-    moveDown.addEventListener("click", () => void mutateQueuedFollowUp({ type: "move", from: index, to: index + 1, expectedText: item }));
-    const remove = make("button", "follow-up-queue-remove-button", "Remove");
-    remove.type = "button";
-    remove.dataset.followUpQueueMutationControl = "true";
-    remove.title = `Remove queued follow-up ${index + 1}`;
-    remove.setAttribute("aria-label", `Remove queued follow-up ${index + 1}`);
-    remove.addEventListener("pointerdown", () => { followUpQueueSuppressBlurFor = textarea; });
-    remove.addEventListener("pointercancel", () => {
-      if (followUpQueueSuppressBlurFor === textarea) followUpQueueSuppressBlurFor = null;
-    });
-    remove.addEventListener("click", () => {
-      if (followUpQueueSuppressBlurFor === textarea) followUpQueueSuppressBlurFor = null;
-      void removeQueuedFollowUpPrompt(index, item);
-    });
-    controls.append(moveUp, moveDown, remove);
-    row.append(dragHandle, textarea, controls);
-    row.addEventListener("dragstart", (event) => {
-      if (unavailable || event.target?.closest?.(".follow-up-queue-drag-handle") !== dragHandle) {
-        event.preventDefault();
-        return;
-      }
-      followUpQueueDrag = { tabId: activeTabId, index, expectedText: item };
-      event.dataTransfer?.setData("application/x-pi-webui-follow-up", JSON.stringify(followUpQueueDrag));
-      if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
-      row.classList.add("is-dragging");
-    });
-    row.addEventListener("dragover", (event) => {
-      if (!followUpQueueDrag || followUpQueueDrag.tabId !== activeTabId || unavailable || isFileDrag(event)) return;
-      event.preventDefault();
-      event.stopPropagation();
-      if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
-      clearFollowUpQueueDragVisuals();
-      row.classList.add("is-drop-target");
-    });
-    row.addEventListener("dragleave", (event) => {
-      if (!row.contains(event.relatedTarget)) row.classList.remove("is-drop-target");
-    });
-    row.addEventListener("drop", (event) => {
-      if (!followUpQueueDrag || followUpQueueDrag.tabId !== activeTabId || unavailable || isFileDrag(event)) return;
-      event.preventDefault();
-      event.stopPropagation();
-      const drag = followUpQueueDrag;
-      clearFollowUpQueueDragVisuals();
-      followUpQueueDrag = null;
-      if (drag.index !== index) void mutateQueuedFollowUp({ type: "move", from: drag.index, to: index, expectedText: drag.expectedText });
-    });
-    row.addEventListener("dragend", () => {
-      followUpQueueDrag = null;
-      clearFollowUpQueueDragVisuals();
-    });
-    return row;
-  });
-  followUpQueueSuppressBlurFor = focusedDraft?.textarea || null;
-  try {
-    elements.followUpQueueRows.replaceChildren(...rows);
-  } finally {
-    followUpQueueSuppressBlurFor = null;
-  }
-  if (preservedDraft && !unavailable) {
-    requestAnimationFrame(() => {
-      if (!followUpQueueOpen || activeTabId === null) return;
-      const activeElement = document.activeElement;
-      if (activeElement && activeElement !== document.body && activeElement !== document.documentElement) return;
-      const textarea = elements.followUpQueueRows?.querySelector(`.follow-up-queue-row[data-follow-up-index="${preservedDraft.index}"] textarea`);
-      if (!textarea) return;
-      textarea.focus({ preventScroll: true });
-      textarea.setSelectionRange(preservedDraft.selectionStart, preservedDraft.selectionEnd);
-    });
-  }
-  setFollowUpQueueStatus(followUpQueueStatus.text, followUpQueueStatus.level);
-  syncFollowUpQueueMutationControls();
-}
-
-async function removeQueuedFollowUpPrompt(index, message, tabId = activeTabId) {
-  if (!tabId) return false;
-  const tabContext = queueTabContext(tabId);
-  const removed = await mutateQueuedFollowUp({ type: "delete", index, expectedText: message }, tabId);
-  if (removed && isCurrentTabContext(tabContext)) addEvent(`removed queued follow-up #${index + 1}`);
-  return removed;
-}
-
-function renderQueueGroup(label, items, tone, { removable = false, tabId } = {}) {
-  const group = make("section", `queue-group ${tone}`.trim());
-  const heading = make("h3", "queue-group-title");
-  heading.append(make("span", undefined, label), make("span", "queue-group-count", String(items.length)));
-  const list = make("ol", "queue-list");
-  items.forEach((item, index) => {
-    const row = make("li", `queue-item${removable ? " can-remove" : ""}`);
-    row.append(make("span", "queue-item-number", `#${index + 1}`), make("div", "queue-item-text", item));
-    if (removable) {
-      const removeButton = make("button", "queue-remove-button", "Remove");
-      removeButton.type = "button";
-      removeButton.dataset.queueContinuityKey = `remove:${tabId || ""}:${index}:${item}`;
-      removeButton.title = `Remove queued follow-up #${index + 1}`;
-      removeButton.setAttribute("aria-label", `Remove queued follow-up #${index + 1}`);
-      removeButton.addEventListener("click", async () => {
-        removeButton.disabled = true;
-        removeButton.textContent = "Removing…";
-        const removed = await removeQueuedFollowUpPrompt(index, item, tabId);
-        if (!removed && removeButton.isConnected) {
-          removeButton.disabled = false;
-          removeButton.textContent = "Remove";
-        }
-      });
-      row.append(removeButton);
-    }
-    list.append(row);
-  });
-  group.append(heading, list);
-  return group;
-}
-
-function renderQueue(event) {
-  if (deferUiRenderDuringPointerActivation("queue", () => renderQueue(event))) return;
-  const snapshot = normalizeQueuedMessages(event);
-  const tabId = event?.tabId || activeTabId;
-  if (tabId) latestQueuedMessagesByTab.set(tabId, snapshot);
-  if (tabId && tabId !== activeTabId) return;
-  const continuityContextKey = `${tabId || activeTabId || ""}:${activeTabGeneration}:queue`;
-  const focusSnapshot = captureScopedControlContinuity(elements.queueBox, continuityContextKey, (node) => node?.dataset?.queueContinuityKey || "");
-  const scrollTop = elements.queueBox.scrollTop;
-  const scrollLeft = elements.queueBox.scrollLeft;
-  const restoreContinuity = () => {
-    restoreScopedControlContinuity(elements.queueBox, continuityContextKey, focusSnapshot, (key) => [...elements.queueBox.querySelectorAll("[data-queue-continuity-key]")]
-      .find((node) => node.dataset.queueContinuityKey === key));
-    elements.queueBox.scrollTop = scrollTop;
-    elements.queueBox.scrollLeft = scrollLeft;
-  };
-  const steering = snapshot.steering;
-  const followUp = snapshot.followUp;
-  const total = queueMessageCount(snapshot);
-  updateQueueHeaderBadge(total);
-  elements.queueBox.replaceChildren();
-  elements.queueBox.classList.toggle("muted", total === 0);
-  elements.queueBox.classList.toggle("has-items", total > 0);
-  if (total === 0) {
-    elements.queueBox.append(make("div", "queue-empty", "No queued messages."));
-    if (tabId === activeTabId) renderFollowUpQueueOverlay();
-    updateStickyUserPromptButton();
-    restoreContinuity();
-    return;
-  }
-
-  const summary = make("div", "queue-summary");
-  summary.append(make("strong", undefined, `${total} queued message${total === 1 ? "" : "s"}`));
-  const counts = make("div", "queue-summary-counts");
-  if (steering.length) counts.append(queueSummaryPill("steering", steering.length, "steering"));
-  if (followUp.length) counts.append(queueSummaryPill("follow-up", followUp.length, "follow-up"));
-  summary.append(counts);
-
-  elements.queueBox.append(summary);
-  if (steering.length) elements.queueBox.append(renderQueueGroup("Steering", steering, "steering", { tabId }));
-  if (followUp.length) elements.queueBox.append(renderQueueGroup("Follow-up", followUp, "follow-up", { removable: !snapshot.draining, tabId }));
-  elements.queueBox.append(make("div", "queue-hint", snapshot.source === "pi-runtime"
-    ? "Alt+Up restores this queue snapshot to the composer without clearing Pi's queue. Use Remove beside follow-ups to drop them from the queue."
-    : "Alt+Up restores this queue snapshot to the composer without clearing Pi's queue. Edit, reorder, or remove compaction-held follow-ups with the composer Queue control."));
-  if (tabId === activeTabId) renderFollowUpQueueOverlay();
-  updateStickyUserPromptButton();
-  if (mobilePhoneExperienceInstalled && isMobileShellV2Active()) renderMobilePhoneExperience();
-  restoreContinuity();
-}
+function setFollowUpQueueOpen(open, options) { activityQueue.setOpen(open, options); }
+function renderFollowUpQueueOverlay() { activityQueue.renderOverlay(); }
+function renderQueue(event) { activityQueue.ingest(event); }
 
 function queuedMessagesForComposer(tabId = activeTabId) {
   const snapshot = queuedSnapshotForTab(tabId);
@@ -35909,8 +35585,8 @@ async function runPromptList(prompts, { name = "Prompt list" } = {}) {
   }
   const targetTabId = activeTabId;
   if (!targetTabId) {
-    addEvent("cannot run prompt list without an active tab", "error");
-    setPromptListStatus("No active tab available.", "error");
+    addEvent("cannot run prompt list without an active thread", "error");
+    setPromptListStatus("No active thread available.", "error");
     return;
   }
   if (promptListRunning) return;
@@ -36044,10 +35720,10 @@ function configureMarkdownLink(link, href) {
   link.addEventListener("click", (event) => {
     event.preventDefault();
     const cwd = latestWorkspace?.cwd || activeTab()?.cwd || "";
-    const basePath = link.closest?.(".file-viewer-preview") && activeFileViewer ? fileParentPath(activeFileViewer.path) : "";
+    const basePath = link.closest?.(".file-viewer-preview") && projectFiles.viewer ? fileParentPath(projectFiles.viewer.path) : "";
     const workspacePath = markdownWorkspaceFilePath(href, cwd, basePath);
     if (!workspacePath) {
-      addEvent(`Cannot open Markdown link outside this tab's working directory: ${filePath}`, "error");
+      addEvent(`Cannot open Markdown link outside this thread's working directory: ${filePath}`, "error");
       return;
     }
     setSidePanelCollapsed(false);
@@ -37002,6 +36678,7 @@ function renderActionFeedbackControls(bubble, message, messageIndex) {
   const key = actionFeedbackKey(message, messageIndex);
   const selected = actionFeedbackByTab.get(activeTabId)?.get(key)?.reaction;
   const controls = make("div", "action-feedback-controls");
+  controls.setAttribute("role", "group");
   controls.setAttribute("aria-label", message?.role === "assistant" ? "Final output feedback" : "Action feedback");
   for (const [reaction, meta] of Object.entries(ACTION_FEEDBACK_REACTIONS)) {
     const button = make("button", `action-feedback-button feedback-${reaction}${selected === reaction ? " active" : ""}`, meta.icon);
@@ -37735,7 +37412,9 @@ function emptyStartAction({ title, description, symbol, className = "", onClick 
 function renderEmptyStartState() {
   if (elements.chat.querySelector(".empty-start-state")) return;
   const tab = activeTab();
-  const workspace = latestWorkspace?.displayCwd || (tab?.cwd ? normalizeDisplayPath(tab.cwd) : "");
+  const draftCwd = !tab ? activeDraftCwd() : "";
+  const noProject = !tab || tab.workspaceKind === "no-project";
+  const workspace = draftCwd ? normalizeDisplayPath(draftCwd) : noProject ? "No Project" : latestWorkspace?.displayCwd || (tab?.cwd ? normalizeDisplayPath(tab.cwd) : "");
   const workspaceInfo = normalizeGitWorkspaceInfo(tab?.gitWorkspace);
   const branch = workspaceInfo?.branch || "";
   const model = currentState?.model ? shortModelLabel(currentState.model) : "";
@@ -37747,23 +37426,38 @@ function renderEmptyStartState() {
   const mark = make("span", "empty-start-mark", "π");
   mark.setAttribute("aria-hidden", "true");
   const heading = make("div", "empty-start-heading");
-  const title = make("h1", undefined, "Choose where to work");
+  const title = make("h1", undefined, noProject ? "Start a conversation" : "Choose where to work");
   title.id = "emptyStartTitle";
-  heading.append(title, make("p", undefined, "Open a workspace, return to a session, or isolate branch work. To start here, just type below."));
+  const description = !tab
+    ? draftCwd
+      ? `Your first message starts a conversation in ${normalizeDisplayPath(draftCwd)}.`
+      : "No Project. Start typing below; your first message starts a conversation in its own folder for files and tools."
+    : noProject
+      ? "No Project. Start typing below; this conversation has its own folder for files and tools."
+      : "Open a workspace, return to a session, or isolate branch work. To start here, just type below.";
+  heading.append(title, make("p", undefined, description));
   intro.append(mark, heading);
 
   const actions = make("div", "empty-start-actions");
   actions.append(
+    ...(!noProject ? [emptyStartAction({
+      title: "No Project",
+      description: "Start a conversation in its own folder",
+      symbol: "π",
+      onClick: (button) => openNoProjectConversation({ triggerButton: button }),
+    })] : []),
     emptyStartAction({
       title: "Open workspace",
-      description: "Choose a folder for a new Pi tab",
+      description: tab ? "Choose a folder for a new Pi thread" : "Choose a folder for your first message",
       symbol: "+",
       className: "primary",
-      onClick: (button) => createTerminalTabFromChosenDirectory({ triggerButton: button }),
+      onClick: (button) => tab
+        ? createTerminalTabFromChosenDirectory({ triggerButton: button })
+        : chooseClientDraftWorkspace({ triggerButton: button }),
     }),
     emptyStartAction({
       title: "Load workspace",
-      description: "Restore a saved tab constellation",
+      description: "Restore a saved thread constellation",
       symbol: "⇱",
       onClick: (button) => openWorkspaceLoadPicker({ triggerButton: button }),
     }),
@@ -37793,7 +37487,9 @@ function renderEmptyStartState() {
       button.type = "button";
       button.title = `Open ${item.cwd}`;
       button.append(make("span", "empty-start-recent-icon", "▰"), make("span", "empty-start-recent-path", item.label), make("span", "empty-start-recent-arrow", "→"));
-      button.addEventListener("click", () => createTerminalTab(item.cwd, { triggerButton: button }));
+      button.addEventListener("click", () => tab
+        ? createTerminalTab(item.cwd, { triggerButton: button })
+        : chooseClientDraftWorkspace({ cwd: item.cwd, triggerButton: button }));
       recentList.append(button);
     }
     recent.append(recentHeading, recentList);
@@ -37803,13 +37499,14 @@ function renderEmptyStartState() {
   if (workspace) contextItems.push(["Workspace", workspace]);
   if (branch) contextItems.push(["Branch", branch]);
   if (model) contextItems.push(["Model", model]);
-  if (usage && !/^0(?:\.0+)?%/.test(usage)) contextItems.push(["Context", usage]);
+  if (tab && usage && !/^0(?:\.0+)?%/.test(usage)) contextItems.push(["Context", usage]);
   const context = contextItems.length ? make("footer", "empty-start-context") : null;
   if (context) {
     context.append(make("span", "empty-start-context-label", "Current"));
     for (const [label, value] of contextItems) {
       const item = make("span", "empty-start-context-item");
-      item.append(make("span", undefined, label), make("strong", undefined, value));
+      // Only a draft can change its folder here; a real thread keeps its cwd.
+      item.append(make("span", undefined, label), !tab && label === "Workspace" ? renderDraftWorkspaceButton(value) : make("strong", undefined, value));
       context.append(item);
     }
   }
@@ -38241,75 +37938,82 @@ function renderLsToolExecution(parent, tool) {
 }
 
 let documentArtifactDialog = null;
+let documentArtifactOpen = false;
+const projectArtifacts = createProjectArtifactController({
+  document, api,
+  captureTarget: projectTargetFromContext,
+  isTargetCurrent: isAliveProjectTarget,
+  onOpen({ target }) {
+    if (!isAliveProjectTarget(target) || target.tabId !== activeTabId) return false;
+    if (focusedShell?.active) {
+      navigateFocusedShell("project", "artifacts");
+      if (focusedShell.inspector !== "artifacts") return false;
+    }
+    documentArtifactOpen = true;
+    syncDocumentArtifactHost();
+    return true;
+  },
+  onClose() {
+    documentArtifactOpen = false;
+    if (documentArtifactDialog?.open) documentArtifactDialog.close();
+    syncDocumentArtifactHost();
+  },
+  onReference: addDocumentArtifactPageToComposer,
+  onError(error) { addEvent(`Document artifact: ${error.message || error}`, "error"); },
+});
 
-function addDocumentArtifactPageToComposer(artifact, pageNum) {
+function addDocumentArtifactPageToComposer(artifact, pageNum, target) {
+  if (!isAliveProjectTarget(target) || target.tabId !== activeTabId) return false;
   const reference = `[Document artifact ${artifact.id}${artifact.revisionId ? ` revision ${artifact.revisionId}` : ""}, page ${pageNum}]`;
   const current = elements.promptInput.value.trim();
   elements.promptInput.value = [current, reference].filter(Boolean).join("\n\n");
+  composerStore.setDraft(target.tabId, elements.promptInput.value);
   resizePromptInput();
   renderCommandSuggestions();
+  if (focusedShell?.active) navigateFocusedShell("conversation", null);
   focusPromptInput({ defer: true });
+  return true;
 }
 
 function ensureDocumentArtifactDialog() {
   if (documentArtifactDialog?.isConnected) return documentArtifactDialog;
   const dialog = make("dialog", "document-artifact-dialog");
+  dialog.setAttribute("aria-label", "Document artifact");
   dialog.addEventListener("click", (event) => { if (event.target === dialog) dialog.close(); });
+  dialog.addEventListener("close", () => {
+    const host = focusedFeatureRecords.find(record => record.id === "artifacts")?.content;
+    if (dialog.open || host?.parentElement !== dialog) return;
+    documentArtifactOpen = false;
+    projectArtifacts.close({ notify: false });
+    canonicalViewHost.restore(host);
+    syncDocumentArtifactHost();
+  });
   document.body.append(dialog);
   documentArtifactDialog = dialog;
   return dialog;
 }
 
-async function openDocumentArtifact(artifact) {
-  const dialog = ensureDocumentArtifactDialog();
-  dialog.replaceChildren(make("div", "document-artifact-loading", "Loading document artifact…"));
-  if (!dialog.open) dialog.showModal();
-  try {
-    const response = await api(artifact.manifestUrl);
-    const manifest = response.data || {}, pages = Array.isArray(manifest.pages) ? manifest.pages : [];
-    let pageIndex = 0, zoom = 1, rotation = 0;
-    const shell = make("section", "document-artifact-shell"), header = make("header", "document-artifact-header"), title = make("div", "document-artifact-title"), actions = make("div", "document-artifact-actions"), body = make("div", "document-artifact-body"), sidebar = make("aside", "document-artifact-sidebar"), stage = make("main", "document-artifact-stage"), image = make("img", "document-artifact-page"), toolbar = make("div", "document-artifact-toolbar"), meta = make("span", "document-artifact-meta"), search = make("input", "document-artifact-search"), semantic = make("details", "document-artifact-semantic");
-    title.append(make("strong", undefined, artifact.title || "Document"), make("span", "muted", `${artifact.pageCount || pages.length || 0} page${Number(artifact.pageCount || pages.length) === 1 ? "" : "s"} · ${manifest.renderer?.engine || "document artifact"}`));
-    const close = make("button", undefined, "Close"); close.type = "button"; close.addEventListener("click", () => dialog.close());
-    if (artifact.downloadUrl) { const download = make("a", "button-like", "Download"); download.href = artifact.downloadUrl; download.download = artifact.title || "document"; actions.append(download); }
-    actions.append(close); header.append(title, actions);
-    search.type = "search"; search.placeholder = "Search outline, comments, revisions, or metadata";
-    const previous = make("button", undefined, "Previous"), next = make("button", undefined, "Next"), zoomOut = make("button", undefined, "−"), zoomIn = make("button", undefined, "+"), fit = make("button", undefined, "Fit"), rotate = make("button", undefined, "Rotate"), send = make("button", undefined, "Send page to composer");
-    for (const button of [previous, next, zoomOut, zoomIn, fit, rotate, send]) button.type = "button";
-    const renderPage = () => {
-      const page = pages[pageIndex];
-      image.hidden = !page;
-      if (page) { image.src = page.imageUrl; image.alt = `Rendered page ${page.pageNum} of ${artifact.title || "document"}`; image.style.transform = `scale(${zoom}) rotate(${rotation}deg)`; meta.textContent = `Page ${page.pageNum} of ${artifact.pageCount || pages.length} · ${Math.round(zoom * 100)}% · ${rotation}°`; }
-      else meta.textContent = "No rendered pages are available";
-      previous.disabled = pageIndex <= 0; next.disabled = pageIndex >= pages.length - 1; send.disabled = !page;
-      for (const [index, button] of [...sidebar.querySelectorAll("button")].entries()) button.classList.toggle("active", index === pageIndex);
-    };
-    previous.addEventListener("click", () => { pageIndex = Math.max(0, pageIndex - 1); renderPage(); });
-    next.addEventListener("click", () => { pageIndex = Math.min(pages.length - 1, pageIndex + 1); renderPage(); });
-    zoomOut.addEventListener("click", () => { zoom = Math.max(0.25, zoom - 0.25); renderPage(); });
-    zoomIn.addEventListener("click", () => { zoom = Math.min(3, zoom + 0.25); renderPage(); });
-    fit.addEventListener("click", () => { zoom = 1; renderPage(); });
-    rotate.addEventListener("click", () => { rotation = (rotation + 90) % 360; renderPage(); });
-    send.addEventListener("click", () => { const page = pages[pageIndex]; if (page) { addDocumentArtifactPageToComposer(artifact, page.pageNum); dialog.close(); } });
-    toolbar.append(previous, next, zoomOut, zoomIn, fit, rotate, send, meta);
-    for (const [index, page] of pages.entries()) { const button = make("button", "document-artifact-thumbnail"); button.type = "button"; const thumb = make("img"); thumb.src = page.imageUrl; thumb.alt = ""; button.append(thumb, make("span", undefined, `Page ${page.pageNum}`)); button.addEventListener("click", () => { pageIndex = index; renderPage(); }); sidebar.append(button); }
-    const semanticData = { outline: manifest.outline || [], comments: manifest.comments || [], revisions: manifest.revisions || [], warnings: manifest.warnings || [], diff: manifest.diff || undefined, renderer: manifest.renderer || undefined };
-    semantic.append(make("summary", undefined, "Semantic structure, revisions, warnings, and diff"), make("pre", undefined, JSON.stringify(semanticData, null, 2)));
-    search.addEventListener("input", () => { const query = search.value.trim().toLocaleLowerCase(); semantic.hidden = !!query && !JSON.stringify(semanticData).toLocaleLowerCase().includes(query); if (query && semantic.hidden) search.setCustomValidity("No semantic match"); else search.setCustomValidity(""); });
-    stage.append(toolbar, search, image, semantic); body.append(sidebar, stage); shell.append(header, body); dialog.replaceChildren(shell); renderPage();
-  } catch (error) {
-    const close = make("button", undefined, "Close"); close.type = "button"; close.addEventListener("click", () => dialog.close());
-    dialog.replaceChildren(make("div", "document-artifact-error", `Document artifact is stale or unavailable: ${error.message || error}`), close);
+function syncDocumentArtifactHost() {
+  const host = focusedFeatureRecords.find(record => record.id === "artifacts")?.content;
+  if (!host) return;
+  host.querySelector(".focused-artifact-empty").hidden = documentArtifactOpen;
+  if (focusedShell?.active) {
+    if (host.parentElement === documentArtifactDialog) canonicalViewHost.restore(host);
+    if (documentArtifactDialog?.open) documentArtifactDialog.close();
+  } else if (documentArtifactOpen) {
+    const dialog = ensureDocumentArtifactDialog();
+    canonicalViewHost.move(host, dialog);
+    if (!dialog.open) dialog.showModal();
   }
 }
 
+function openDocumentArtifact(artifact) {
+  return projectArtifacts.open(artifact);
+}
+
 function appendDocumentArtifact(parent, artifact) {
-  if (artifact?.schema !== "pi.artifact/v1" || artifact?.kind !== "document") return;
-  const card = make("div", `document-artifact-card${artifact.unavailable ? " unavailable" : ""}`), text = make("div"), actions = make("div", "document-artifact-card-actions");
-  text.append(make("strong", undefined, artifact.title || "Document artifact"), make("span", "muted", artifact.unavailable ? "Preview unavailable" : `${artifact.pageCount || 0} page${Number(artifact.pageCount) === 1 ? "" : "s"}`));
-  if (!artifact.unavailable && artifact.manifestUrl) { const open = make("button", undefined, "Open viewer"); open.type = "button"; open.addEventListener("click", () => openDocumentArtifact(artifact)); actions.append(open); }
-  if (!artifact.unavailable && artifact.downloadUrl) { const download = make("a", "button-like", "Download"); download.href = artifact.downloadUrl; download.download = artifact.title || "document"; actions.append(download); }
-  card.append(text, actions); parent.append(card);
+  const card = projectArtifacts.renderCard(artifact);
+  if (card) parent.append(card);
 }
 
 function renderGenericToolExecution(parent, tool) {
@@ -40031,7 +39735,7 @@ function assistantFailureActions(tabId = activeTabId) {
       run: () => sendPrompt("prompt", entry.text, { targetTabId: tabId }),
     });
   }
-  actions.push({ label: "Change model…", title: "Choose another model for this tab (Ctrl/Cmd+L)", run: () => openNativeModelSelector() });
+  actions.push({ label: "Change model…", title: "Choose another model for this thread (Ctrl/Cmd+L)", run: () => openNativeModelSelector() });
   return actions;
 }
 
@@ -40087,7 +39791,7 @@ function addAbortTranscriptNotice({ activeRun = false, errorMessage = "" } = {})
     title: activeRun ? "Agent aborted" : "Abort requested",
     content: activeRun
       ? "⛔ Agent run aborted by user from the Web UI. Pi was told to stop; this transcript marks the run as aborted."
-      : "⛔ Abort requested from the Web UI, but no active agent run was visible in this tab.",
+      : "⛔ Abort requested from the Web UI, but no active agent run was visible in this thread.",
     level: activeRun ? "warn" : "info",
   });
 }
@@ -40260,7 +39964,7 @@ async function sendBtwQuestion(question, { clearComposerDraft = false } = {}) {
       hideCommandSuggestions();
       saveActiveDraft();
     } else {
-      tabDrafts.set(targetTabId, "");
+      composerStore.setDraft(targetTabId, "");
     }
   }
   return true;
@@ -40272,6 +39976,7 @@ async function sendBtwPromptFromButton() {
     openBtwComposerWidget();
     return;
   }
+  openBtwComposerWidget();
   await sendBtwQuestion(question, { clearComposerDraft: true });
 }
 
@@ -40309,18 +40014,20 @@ function clearComposerMenuDismissal(container) {
 
 function setPublishMenuOpen(open) {
   if (open && composerMenuDismissed(elements.publishButton?.parentElement)) return;
-  if (open && followUpQueueOpen) setFollowUpQueueOpen(false);
+  if (open && activityQueue.isOpen()) setFollowUpQueueOpen(false);
   publishMenuOpen = !!open;
   elements.publishButton.setAttribute("aria-expanded", publishMenuOpen ? "true" : "false");
   elements.publishButton.classList.toggle("menu-open", publishMenuOpen);
   elements.publishButton.parentElement?.classList.toggle("open", publishMenuOpen);
+  syncFocusedWidgetPlacement();
+  syncFocusedComposerDisclosure();
   scheduleMobileDropdownScrollBoundsUpdate();
   if (!publishMenuOpen) scheduleDeferredUiFlushAfterDropdownClose();
 }
 
 function setNativeCommandMenuOpen(open) {
   if (open && composerMenuDismissed(elements.nativeCommandMenuButton?.parentElement)) return;
-  if (open && followUpQueueOpen) setFollowUpQueueOpen(false);
+  if (open && activityQueue.isOpen()) setFollowUpQueueOpen(false);
   nativeCommandMenuOpen = !!open;
   elements.nativeCommandMenuButton.setAttribute("aria-expanded", nativeCommandMenuOpen ? "true" : "false");
   elements.nativeCommandMenuButton.classList.toggle("menu-open", nativeCommandMenuOpen);
@@ -40329,20 +40036,23 @@ function setNativeCommandMenuOpen(open) {
   if (!nativeCommandMenuOpen) scheduleDeferredUiFlushAfterDropdownClose();
 }
 
-function setAppRunnerMenuOpen(open) {
+function setAppRunnerMenuOpen(open, { preserveOpeningIntent = false } = {}) {
+  if (!open && !preserveOpeningIntent) appRunnerMenuIntent += 1;
   if (open && composerMenuDismissed(elements.appRunnerMenuButton?.parentElement)) return;
-  if (open && followUpQueueOpen) setFollowUpQueueOpen(false);
+  if (open && activityQueue.isOpen()) setFollowUpQueueOpen(false);
   appRunnerMenuOpen = !!open;
   elements.appRunnerMenuButton?.setAttribute("aria-expanded", appRunnerMenuOpen ? "true" : "false");
   elements.appRunnerMenuButton?.classList.toggle("menu-open", appRunnerMenuOpen);
   elements.appRunnerMenuButton?.parentElement?.classList.toggle("open", appRunnerMenuOpen);
+  syncFocusedWidgetPlacement();
+  syncFocusedComposerDisclosure();
   scheduleMobileDropdownScrollBoundsUpdate();
   if (!appRunnerMenuOpen) scheduleDeferredUiFlushAfterDropdownClose();
 }
 
 function setOptionsMenuOpen(open) {
   if (open && composerMenuDismissed(elements.optionsMenuButton?.parentElement)) return;
-  if (open && followUpQueueOpen) setFollowUpQueueOpen(false);
+  if (open && activityQueue.isOpen()) setFollowUpQueueOpen(false);
   optionsMenuOpen = !!open;
   elements.optionsMenuButton.setAttribute("aria-expanded", optionsMenuOpen ? "true" : "false");
   elements.optionsMenuButton.classList.toggle("menu-open", optionsMenuOpen);
@@ -40350,6 +40060,7 @@ function setOptionsMenuOpen(open) {
   if (optionsMenuOpen) syncOptionsSubmenuAvailability();
   else closeOptionsSubmenus();
   if (optionsMenuOpen) scheduleOptionsMenuLabelFit();
+  syncFocusedComposerDisclosure();
   scheduleMobileDropdownScrollBoundsUpdate();
   if (!optionsMenuOpen) scheduleDeferredUiFlushAfterDropdownClose();
 }
@@ -40470,11 +40181,58 @@ function scheduleOptionsMenuLabelFit() {
   });
 }
 
+/**
+ * The focused desktop conversation clips absolutely positioned flyouts, so
+ * there an open submenu is placed with fixed coordinates beside its trigger:
+ * right when it fits, otherwise left. Returns the side used, or "" when
+ * neither side fits and the panel should expand inline.
+ */
+function placeFocusedOptionsSubmenuFlyout(group, panel) {
+  clearOptionsSubmenuFlyout(panel);
+  if (document.documentElement.dataset.desktopShell !== "focused") return "";
+  if (!window.matchMedia?.("(hover: hover) and (pointer: fine)")?.matches) return "";
+  const trigger = optionsSubmenuTrigger(group) || group;
+  const anchor = trigger.getBoundingClientRect();
+  const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
+  const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+  const width = Math.min(anchor.width, OPTIONS_SUBMENU_FLYOUT_MAX_WIDTH_PX);
+  const fitsRight = anchor.right + OPTIONS_SUBMENU_FLYOUT_GAP_PX + width <= viewportWidth - OPTIONS_SUBMENU_FLYOUT_MARGIN_PX;
+  const fitsLeft = anchor.left - OPTIONS_SUBMENU_FLYOUT_GAP_PX - width >= OPTIONS_SUBMENU_FLYOUT_MARGIN_PX;
+  if (!width || (!fitsRight && !fitsLeft)) return "";
+  panel.classList.add(OPTIONS_SUBMENU_FLYOUT_CLASS);
+  const maxHeight = Math.max(0, viewportHeight - 2 * OPTIONS_SUBMENU_FLYOUT_MARGIN_PX);
+  const widthPx = `${width}px`;
+  Object.assign(panel.style, { top: "0px", left: "0px", width: widthPx, minWidth: widthPx, maxWidth: widthPx, maxHeight: `${maxHeight}px` });
+  // A transformed or filtered ancestor becomes the containing block for
+  // position: fixed, so measure where (0, 0) actually lands and offset from it.
+  const origin = panel.getBoundingClientRect();
+  // offsetHeight already honours max-height and includes the border.
+  const height = panel.offsetHeight;
+  const top = Math.max(OPTIONS_SUBMENU_FLYOUT_MARGIN_PX, Math.min(anchor.top, viewportHeight - OPTIONS_SUBMENU_FLYOUT_MARGIN_PX - height));
+  const left = fitsRight ? anchor.right + OPTIONS_SUBMENU_FLYOUT_GAP_PX : anchor.left - OPTIONS_SUBMENU_FLYOUT_GAP_PX - width;
+  Object.assign(panel.style, { top: `${top - origin.top}px`, left: `${left - origin.left}px` });
+  return fitsRight ? "right" : "left";
+}
+
+function clearOptionsSubmenuFlyout(panel) {
+  if (!panel?.classList.contains(OPTIONS_SUBMENU_FLYOUT_CLASS)) return;
+  panel.classList.remove(OPTIONS_SUBMENU_FLYOUT_CLASS);
+  for (const property of ["top", "left", "width", "minWidth", "maxWidth", "maxHeight"]) panel.style[property] = "";
+}
+
 function updateOptionsSubmenuPlacement(group) {
   const panel = optionsSubmenuPanel(group);
   if (!group || !panel) return;
   if (optionsSubmenuUsesDrillIn()) {
+    clearOptionsSubmenuFlyout(panel);
     group.classList.remove(OPTIONS_SUBMENU_LEFT_CLASS);
+    panel.classList.remove(OPTIONS_SUBMENU_LEFT_CLASS);
+    return;
+  }
+  const flyoutSide = placeFocusedOptionsSubmenuFlyout(group, panel);
+  if (flyoutSide) {
+    // The group's class moves the hover bridge to the flyout's side; the fixed panel ignores it.
+    group.classList.toggle(OPTIONS_SUBMENU_LEFT_CLASS, flyoutSide === "left");
     panel.classList.remove(OPTIONS_SUBMENU_LEFT_CLASS);
     return;
   }
@@ -40514,6 +40272,7 @@ function setOptionsSubmenuOpen(group, open, { focusFirstItem = false, restoreFoc
   else {
     group.classList.remove(OPTIONS_SUBMENU_LEFT_CLASS);
     panel?.classList.remove(OPTIONS_SUBMENU_LEFT_CLASS);
+    clearOptionsSubmenuFlyout(panel);
   }
   if (shouldOpen && focusFirstItem) focusOptionsMenuItem(optionsSubmenuItems(group)[0]);
   if (!shouldOpen && restoreFocus) focusOptionsMenuItem(trigger);
@@ -41132,7 +40891,7 @@ async function restartOptionalFeatureTab() {
     optionalFeatureRestartNotice = null;
     renderOptionalFeatureMigrationSurface();
   } catch (error) {
-    addEvent(`optional feature tab restart failed: ${error.message || String(error)}`, "error");
+    addEvent(`optional feature thread restart failed: ${error.message || String(error)}`, "error");
   }
 }
 
@@ -41247,11 +41006,11 @@ function renderOptionalFeatureMigrationSurface() {
   if (optionalFeatureRestartNotice) {
     const notice = make("div", "optional-feature-restart-notice");
     const noticeText = optionalFeatureRestartNotice.restartDeferred
-      ? "New optional features are ready. Restart is deferred because the affected tab was busy."
-      : "Restarted tab to load new features.";
+      ? "New optional features are ready. Restart is deferred because the affected thread was busy."
+      : "Restarted thread to load new features.";
     notice.append(make("span", undefined, noticeText));
     if (optionalFeatureRestartNotice.restartDeferred) {
-      notice.append(optionalFeatureMigrationAction("Restart tab", () => restartOptionalFeatureTab(), "primary"));
+      notice.append(optionalFeatureMigrationAction("Restart thread", () => restartOptionalFeatureTab(), "primary"));
     } else {
       notice.append(optionalFeatureMigrationAction("Dismiss", dismissOptionalFeatureMigrationCompletion));
     }
@@ -41602,8 +41361,8 @@ function optionalFeatureStatus(featureId) {
   if (detected && managedWithTools) return { label: "Enabled", className: "enabled", detail: doneDetail || `Tool access is enabled for the active Pi session${versionSuffix}`, command: installState?.command || "" };
   if (detected && !disabled) return { label: "Enabled", className: "enabled", detail: doneDetail || `Detected and enabled in Web UI${versionSuffix}`, command: installState?.command || "" };
   if (detected && disabled) return { label: "Disabled", className: "disabled", detail: `Detected, but disabled in Web UI${versionSuffix}` };
-  if (packageStatus?.locallyConfigured) return { label: "Available locally", className: "installed", detail: doneDetail || `Enabled as a top-level Pi resource; reload this tab if the capability is not detected yet${versionSuffix}` };
-  if (packageStatus?.installed && packageStatus?.configured) return { label: "Installed", className: "installed", detail: doneDetail || `Registered with Pi but not loaded in the active tab${versionSuffix}`, command: installState?.command || "" };
+  if (packageStatus?.locallyConfigured) return { label: "Available locally", className: "installed", detail: doneDetail || `Enabled as a top-level Pi resource; reload this thread if the capability is not detected yet${versionSuffix}` };
+  if (packageStatus?.installed && packageStatus?.configured) return { label: "Installed", className: "installed", detail: doneDetail || `Registered with Pi but not loaded in the active thread${versionSuffix}`, command: installState?.command || "" };
   if (packageStatus?.installed && !packageStatus?.configured) return {
     label: "Registration needed",
     className: "missing",
@@ -41660,6 +41419,30 @@ function renderOptionalFeaturePromptImpactBadge(feature) {
   return badge;
 }
 
+function optionalFeatureBatchDisplay(features, candidates) {
+  if (optionalFeaturePackageStatusError) return "Package status check failed. Retry and review individual features.";
+  if (!optionalFeaturePackageStatusesLoaded || optionalFeatureMigrationSnapshot.phase === "checking") return "Checking optional features…";
+  if (optionalFeatureBatchIsActive() || optionalFeatureInstallInProgress.size > 0) return "An installation is in progress.";
+
+  const candidateIds = new Set(candidates.map((feature) => feature.id));
+  const reasons = new Set();
+  for (const feature of features) {
+    const status = optionalFeaturePackageStatus(feature.id);
+    const install = optionalFeatureInstallState(feature.id);
+    if (install?.phase === "failed") reasons.add("failed installs");
+    if (isOptionalFeatureDisabled(feature.id) || status?.state === "disabled") reasons.add("disabled features");
+    else if (!status) reasons.add("unknown status");
+    else if (status.resourceConflict || status.state === "conflict") reasons.add("conflicts");
+    else if (status.updateAvailable || status.state === "update-available") reasons.add("updates");
+    else if (!candidateIds.has(feature.id) && status.installed && !status.configured && !status.locallyConfigured) reasons.add("registration needed");
+    else if (!candidateIds.has(feature.id) && !["registered", "local-resource"].includes(status.state)) reasons.add("unknown status");
+  }
+  const parts = [];
+  if (candidates.length) parts.push(`${candidates.length} eligible for bulk install`);
+  if (reasons.size) parts.push(`Review individual features: ${[...reasons].join(", ")}. Use Install on a card where available.`);
+  return parts.length ? parts.join(". ") : "All features are registered or available locally.";
+}
+
 function renderOptionalFeatureBatchToolbar() {
   const candidates = optionalFeatureBatchCandidates();
   const migratable = optionalFeatureMigrationCandidates();
@@ -41668,9 +41451,9 @@ function renderOptionalFeatureBatchToolbar() {
   const action = make("button", "optional-feature-batch-action", busy ? "Installing…" : "Install all");
   action.type = "button";
   action.disabled = busy || optionalFeatureInstallInProgress.size > 0 || !optionalFeaturePackageStatusesLoaded || candidates.length === 0 || !!optionalFeaturePackageStatusError;
-  action.setAttribute("aria-label", candidates.length
-    ? `Install all ${candidates.length} missing or unregistered optional features`
-    : "All optional features are installed and registered");
+  const availability = optionalFeatureBatchDisplay(OPTIONAL_FEATURES, candidates);
+  action.setAttribute("aria-label", `Install all optional features. ${availability}`);
+  action.title = availability;
   if (busy) action.setAttribute("aria-busy", "true");
   action.addEventListener("click", () => installOptionalFeatureBatch(OPTIONAL_FEATURES, { scopeLabel: "all optional features" }));
 
@@ -41685,14 +41468,11 @@ function renderOptionalFeatureBatchToolbar() {
   }
   actionGroup.append(action);
 
-  let summary = !optionalFeaturePackageStatusesLoaded
-    ? optionalFeaturePackageStatusError ? "Install availability unknown" : "Checking Pi package status…"
-    : candidates.length ? `${candidates.length} missing or unregistered` : "All installed and registered";
-  if (optionalFeatureMigrationSnapshot.phase === "checking") summary = "Checking optional features…";
+  let summary = availability;
   if (optionalFeatureBatchState?.phase === "running") {
     summary = optionalFeatureMigrationProgressText() || `Installing ${optionalFeatureBatchState.total} sequentially with Pi…`;
   } else if (["done", "failed"].includes(optionalFeatureBatchState?.phase)) {
-    summary = `Batch finished: ${optionalFeatureBatchState.succeeded} succeeded, ${optionalFeatureBatchState.failed} failed.`;
+    summary = `Batch finished: ${optionalFeatureBatchState.succeeded} succeeded, ${optionalFeatureBatchState.failed} failed. ${availability}`;
   }
   const status = make("div", `optional-feature-batch-status${optionalFeatureBatchState?.failed ? " warning" : ""}`, summary);
   status.setAttribute("role", "status");
@@ -41751,9 +41531,9 @@ function renderOptionalFeatureSection(section, features) {
   const installMissing = make("button", "optional-feature-section-install", optionalFeatureBatchIsActive() ? "Installing…" : "Install missing");
   installMissing.type = "button";
   installMissing.disabled = optionalFeatureBatchIsActive() || optionalFeatureInstallInProgress.size > 0 || !optionalFeaturePackageStatusesLoaded || candidates.length === 0 || !!optionalFeaturePackageStatusError;
-  installMissing.setAttribute("aria-label", candidates.length
-    ? `Install ${candidates.length} missing or unregistered features in ${section.label}`
-    : `All features in ${section.label} are installed and registered`);
+  const availability = optionalFeatureBatchDisplay(features, candidates);
+  installMissing.setAttribute("aria-label", `Install missing features in ${section.label}. ${availability}`);
+  installMissing.title = availability;
   if (optionalFeatureBatchIsActive()) installMissing.setAttribute("aria-busy", "true");
   installMissing.addEventListener("click", () => installOptionalFeatureBatch(features, { scopeLabel: section.label }));
   headerActions.append(make("span", "optional-feature-section-count", String(features.length)), installMissing);
@@ -41799,7 +41579,7 @@ async function setToolManagedOptionalFeatureEnabled(feature, enabled) {
     const current = await api("/api/tools?scope=session", { tabId: tabContext.tabId });
     if (!isCurrentTabContext(tabContext)) return;
     const tools = Array.isArray(current.data?.tools) ? current.data.tools : [];
-    if (!tools.some((tool) => tool?.name === toolName)) throw new Error(`${toolName} is not available in this Pi tab`);
+    if (!tools.some((tool) => tool?.name === toolName)) throw new Error(`${toolName} is not available in this Pi thread`);
     const enabledTools = new Set(tools.filter((tool) => tool?.enabled !== false).map((tool) => tool.name));
     if (enabled) enabledTools.add(toolName);
     else enabledTools.delete(toolName);
@@ -41835,6 +41615,7 @@ function renderOptionalFeatureRow(feature) {
   const row = make("div", `optional-feature-row ${status.className}`);
   const impact = optionalFeaturePromptImpact(feature);
   const tooltip = `${optionalFeatureTooltip(feature, status)}\nSystem prompt impact: ${impact.label}.`;
+  row.dataset.settingsFeature = feature.id;
   row.dataset.tooltip = tooltip;
   row.setAttribute("aria-label", tooltip.replace(/\s+/g, " "));
   if (installing || accessChanging) row.setAttribute("aria-busy", "true");
@@ -42088,7 +41869,7 @@ function syncRemoteWebuiControlVisibility(hasRemoteWebuiCommand = isOptionalFeat
 function commandUnavailableMessage(commandName) {
   const featureId = optionalFeatureIdForCommand(commandName);
   if (featureId) return optionalFeatureUnavailableMessage(featureId);
-  return `Command unavailable: /${commandName} is not loaded in the active Pi tab.`;
+  return `Command unavailable: /${commandName} is not loaded in the active Pi thread.`;
 }
 
 async function installOptionalFeature(featureId, { update = false } = {}) {
@@ -42146,7 +41927,7 @@ async function installOptionalFeature(featureId, { update = false } = {}) {
       actionLabel,
       startedAt,
       detail: "Pi finished; checking installation and registration status…",
-      hint: "Reload the active Pi tab to load newly registered resources.",
+      hint: "Reload the active Pi thread to load newly registered resources.",
       command,
       outputTail: "",
     });
@@ -42158,11 +41939,11 @@ async function installOptionalFeature(featureId, { update = false } = {}) {
       phase: "done",
       actionLabel,
       endedAt: Date.now(),
-      detail: response.data?.message || `${actionLabel} finished. Reload the active Pi tab to load newly registered resources.`,
+      detail: response.data?.message || `${actionLabel} finished. Reload the active Pi thread to load newly registered resources.`,
       hint: "Use Reload if this row still says Installed instead of Enabled.",
       command,
     });
-    if (await appConfirmText(`${feature.label} ${actionLabel.toLowerCase()} finished. Reload the active Pi tab now to load its resources?`, { affected: "The active Pi tab", confirmLabel: "Reload tab", danger: false })) {
+    if (await appConfirmText(`${feature.label} ${actionLabel.toLowerCase()} finished. Reload the active Pi thread now to load its resources?`, { affected: "The active Pi thread", confirmLabel: "Reload thread", danger: false })) {
       sendPrompt("prompt", "/reload");
     } else {
       const tabContext = activeTabContext();
@@ -42206,7 +41987,7 @@ async function installOptionalFeatureBatch(features, { scopeLabel = "optional fe
     "",
     "Pi can download code from npm and update its user package registration and package storage.",
     "The batch continues after individual failures and reports every result.",
-    "The affected tab restarts automatically only when idle; busy work is never interrupted.",
+    "The affected thread restarts automatically only when idle; busy work is never interrupted.",
     "",
     "Continue?",
   ].join("\n");
@@ -42308,7 +42089,7 @@ async function runOptionalFeatureBatch(candidates, {
           startedAt,
           endedAt: Date.now(),
           detail: data.message || "Installed and verified with Pi.",
-          hint: response.data?.restart?.autoRestarted ? "The affected tab restarted automatically." : "The server verified this package registration.",
+          hint: response.data?.restart?.autoRestarted ? "The affected thread restarted automatically." : "The server verified this package registration.",
           command,
           outputTail: "",
         });
@@ -42338,7 +42119,7 @@ async function runOptionalFeatureBatch(candidates, {
     const restart = response.data?.restart || {};
     if (restart.autoRestarted || restart.restartDeferred) {
       optionalFeatureRestartNotice = { ...restart, tabId: activeTabId };
-      addEvent(restart.autoRestarted ? "restarted tab to load new optional features" : "optional feature restart deferred because the tab is busy", restart.restartDeferred ? "warn" : "info");
+      addEvent(restart.autoRestarted ? "restarted thread to load new optional features" : "optional feature restart deferred because the thread is busy", restart.restartDeferred ? "warn" : "info");
     }
     await refreshOptionalFeaturePackageStatuses({ announce: true });
     addEvent(`optional feature batch finished: ${succeeded} succeeded, ${failed} failed`, failed ? "warn" : "info");
@@ -42475,7 +42256,8 @@ function normalizeSessionSummaryClientState(value, previous = null, { resetProje
 function sessionSummaryStateForTab(tabId = activeTabId) {
   if (!tabId) return null;
   const cached = sessionSummaryByTab.get(tabId);
-  if (cached) return cached;
+  const pending = sessionSummaryGenerationByTab.get(tabId);
+  if (cached) return pending && isAliveProjectTarget(pending) ? { ...cached, status: "generating" } : cached;
   const metadata = tabs.find((tab) => tab.id === tabId)?.sessionSummary;
   const normalized = normalizeSessionSummaryClientState(metadata);
   if (normalized) sessionSummaryByTab.set(tabId, normalized);
@@ -42498,7 +42280,7 @@ function createTerminalTabSplitButton(tab) {
   button.disabled = embeddedSplitMode || isSidePanelOverlayView();
   button.setAttribute("aria-pressed", isOpenSplit ? "true" : "false");
   button.dataset.splitState = isOpenSplit ? "unsplit" : "split";
-  const label = isOpenSplit ? `Close split view for ${tab.title || "Pi terminal"}` : `Split ${tab.title || "Pi terminal"} to the right`;
+  const label = isOpenSplit ? `Close split view for ${threadDisplayTitle(tab.title) || "Pi thread"}` : `Split ${threadDisplayTitle(tab.title) || "Pi thread"} to the right`;
   applyStyledTooltip(button, label, { ariaLabel: label, targetKey: `terminal-tab:${tab.id}:split` });
   const ns = "http://www.w3.org/2000/svg";
   const icon = document.createElementNS(ns, "svg");
@@ -42534,10 +42316,11 @@ function createTerminalTabSplitButton(tab) {
 function createTerminalTabActions(tab) {
   const actions = make("div", "terminal-tab-actions");
   actions.setAttribute("role", "group");
-  actions.setAttribute("aria-label", `Actions for ${tab.title || "Pi terminal"}`);
+  actions.setAttribute("aria-label", `Actions for ${threadDisplayTitle(tab.title) || "Pi thread"}`);
   actions.append(createTerminalTabSplitButton(tab));
   const summary = createTerminalTabSessionSummaryButton(tab);
   if (summary) actions.append(summary);
+  if (usesSessionShelves()) actions.append(createTerminalTabSettlementButton(tab));
   return actions;
 }
 
@@ -42551,7 +42334,7 @@ function createTerminalTabSessionSummaryButton(tab) {
   button.disabled = state?.status === "generating";
   button.setAttribute("aria-busy", state?.status === "generating" ? "true" : "false");
   button.setAttribute("aria-controls", "sessionSummaryOverlay");
-  const label = `${status} for ${tab.title || "Pi terminal"}`;
+  const label = `${status} for ${threadDisplayTitle(tab.title) || "Pi thread"}`;
   applyStyledTooltip(button, status, { ariaLabel: label, targetKey: `terminal-tab:${tab.id}:summary` });
   const ns = "http://www.w3.org/2000/svg";
   const icon = document.createElementNS(ns, "svg");
@@ -42623,7 +42406,7 @@ function renderSessionSummaryOverlay() {
   const tab = tabs.find((item) => item.id === sessionSummaryOverlayTabId);
   const state = sessionSummaryStateForTab(sessionSummaryOverlayTabId);
   elements.sessionSummaryOverlayTitle.textContent = state?.title || "Session summary";
-  elements.sessionSummaryOverlayMeta.textContent = `${tab?.title || "Pi terminal"}${state?.durable === false ? " · in-memory session" : ""}`;
+  elements.sessionSummaryOverlayMeta.textContent = `${threadDisplayTitle(tab?.title) || "Pi thread"}${state?.durable === false ? " · in-memory session" : ""}`;
   const generating = state?.status === "generating";
   const failed = state?.status === "failure";
   elements.sessionSummaryOverlayStatus.textContent = generating
@@ -42670,13 +42453,19 @@ function updateSessionSummaryForTab(tabId, value, { resetProjection = false } = 
   if (previous && tabsSnapshotSignature(previous) === tabsSnapshotSignature(normalized)) return previous;
   sessionSummaryByTab.set(tabId, normalized);
   renderSessionSummaryControls();
+  if (tabId !== activeTabId) scheduleTabsRender();
   if (sessionSummaryOverlayTabId === tabId) renderSessionSummaryOverlay();
   return normalized;
 }
 
 async function requestSessionSummaryGeneration(tabId, { refresh = false } = {}) {
+  const target = projectTargetFromContext(activeTabContext(tabId));
+  if (!isAliveProjectTarget(target)) return;
+  const pending = sessionSummaryGenerationByTab.get(tabId);
+  if (pending && isAliveProjectTarget(pending)) return;
   const previous = sessionSummaryStateForTab(tabId);
-  updateSessionSummaryForTab(tabId, {
+  sessionSummaryGenerationByTab.set(tabId, target);
+  const generatingState = updateSessionSummaryForTab(tabId, {
     version: SESSION_SUMMARY_PROTOCOL_VERSION,
     status: "generating",
     configured: true,
@@ -42687,10 +42476,12 @@ async function requestSessionSummaryGeneration(tabId, { refresh = false } = {}) 
   try {
     const signal = globalThis.AbortSignal?.timeout?.(SESSION_SUMMARY_REQUEST_TIMEOUT_MS);
     const response = await api("/api/session-summary/generate", { method: "POST", body: { refresh }, tabId, signal });
+    if (!isAliveProjectTarget(target)) return response;
     if (response.data?.summary) updateSessionSummaryForTab(tabId, response.data.summary);
     if (response.data?.tab) applyTabMetadata(response.data.tab);
     return response;
   } catch (error) {
+    if (!isAliveProjectTarget(target)) throw error;
     updateSessionSummaryForTab(tabId, {
       version: SESSION_SUMMARY_PROTOCOL_VERSION,
       status: "failure",
@@ -42701,6 +42492,16 @@ async function requestSessionSummaryGeneration(tabId, { refresh = false } = {}) 
       updatedAt: new Date().toISOString(),
     });
     throw error;
+  } finally {
+    if (sessionSummaryGenerationByTab.get(tabId) === target) {
+      sessionSummaryGenerationByTab.delete(tabId);
+      if (!isAliveProjectTarget(target) && sessionSummaryByTab.get(tabId) === generatingState) {
+        sessionSummaryByTab.delete(tabId);
+      }
+    }
+    renderSessionSummaryControls();
+    scheduleTabsRender();
+    if (sessionSummaryOverlayTabId === tabId) renderSessionSummaryOverlay();
   }
 }
 
@@ -42736,6 +42537,7 @@ function slashCommandName(message) {
 }
 
 function openNativeCommandDialog({ title, message = "", searchPlaceholder = "" } = {}) {
+  settingsResources.close();
   nativeCommandDialogGeneration += 1;
   const dialogGeneration = nativeCommandDialogGeneration;
   nativeCommandTabId ||= activeTabId;
@@ -42748,6 +42550,8 @@ function openNativeCommandDialog({ title, message = "", searchPlaceholder = "" }
   elements.nativeCommandSearch.disabled = false;
   elements.nativeCommandSearch.oninput = null;
   elements.nativeCommandBody.replaceChildren();
+  elements.nativeCommandBody.inert = false;
+  elements.nativeCommandBody.removeAttribute("aria-busy");
   elements.nativeCommandError.hidden = true;
   elements.nativeCommandError.textContent = "";
   elements.nativeCommandActions.replaceChildren();
@@ -42759,6 +42563,7 @@ function openNativeCommandDialog({ title, message = "", searchPlaceholder = "" }
 
 function closeNativeCommandDialog({ force = false } = {}) {
   if (nativeSettingsDirty && !force) {
+    const dialogGeneration = nativeCommandDialogGeneration;
     appConfirm({
       title: "Discard unsaved settings?",
       summary: "Your changes have not been applied.",
@@ -42766,12 +42571,13 @@ function closeNativeCommandDialog({ force = false } = {}) {
       undoable: false,
       confirmLabel: "Discard changes",
     }).then((confirmed) => {
-      if (!confirmed) return;
+      if (!confirmed || dialogGeneration !== nativeCommandDialogGeneration || !elements.nativeCommandDialog.open) return;
       nativeSettingsDirty = false;
       closeNativeCommandDialog({ force: true });
     });
     return;
   }
+  settingsResources.close();
   nativeCommandDialogGeneration += 1;
   if (elements.nativeCommandDialog.open) elements.nativeCommandDialog.close();
   elements.nativeCommandSearch.oninput = null;
@@ -42898,7 +42704,7 @@ function handleNativeSelectorSearchKeydown(event) {
   }
 }
 
-function renderNativeSelectorItems(items, { emptyText = "No choices.", onSelect, activeId, numbered = false } = {}) {
+function renderNativeSelectorItems(items, { emptyText = "No choices.", onSelect, activeId, numbered = false, grouped = false } = {}) {
   const query = elements.nativeCommandSearch.value.trim();
   const filtered = items.filter((item) => nativeSelectorMatches(item, query));
   elements.nativeCommandBody.replaceChildren();
@@ -42912,8 +42718,17 @@ function renderNativeSelectorItems(items, { emptyText = "No choices.", onSelect,
   list.setAttribute("role", "listbox");
   list.id = "nativeSelectorList";
   let lastGroup = null;
+  let groupHost = list;
   for (const [index, item] of filtered.entries()) {
-    if (item.group && item.group !== lastGroup && !item.badge) {
+    if (grouped && item.group !== lastGroup) {
+      groupHost = make("div", "native-model-provider");
+      groupHost.setAttribute("role", "group");
+      groupHost.setAttribute("aria-label", item.group);
+      const heading = make("div", "native-selector-group", item.group);
+      heading.setAttribute("role", "presentation");
+      groupHost.append(heading);
+      list.append(groupHost);
+    } else if (!grouped && item.group && item.group !== lastGroup && !item.badge) {
       const heading = make("div", "native-selector-group", item.group);
       heading.setAttribute("role", "presentation");
       list.append(heading);
@@ -42949,7 +42764,7 @@ function renderNativeSelectorItems(items, { emptyText = "No choices.", onSelect,
     button.append(title);
     if (item.description) button.append(detail);
     if (item.meta) button.append(meta);
-    list.append(button);
+    groupHost.append(button);
   }
   elements.nativeCommandBody.append(list);
   // Unfiltered: highlight (and reveal) the current choice; filtered: the best match on top.
@@ -42971,51 +42786,123 @@ function modelOptionLabel(model) {
   return `${model.provider}/${model.id}`;
 }
 
+function nativeSessionChoiceOwner(options) {
+  const tabContext = projectTargetFromContext();
+  nativeCommandTabId = tabContext.tabId;
+  const generation = openNativeCommandDialog(options);
+  let saving = false;
+  const ownsDialog = () => elements.nativeCommandDialog.open && generation === nativeCommandDialogGeneration;
+  const isCurrent = () => ownsDialog() && isCurrentProjectTarget(tabContext);
+  return {
+    tabContext, isCurrent,
+    async apply(path, body, onApplied) {
+      if (saving || !ownsDialog()) return;
+      if (!isCurrent()) {
+        setNativeCommandError("The session changed. Close this picker and open it again.");
+        return;
+      }
+      saving = true;
+      setNativeCommandError("");
+      elements.nativeCommandBody.setAttribute("aria-busy", "true");
+      elements.nativeCommandBody.inert = true;
+      elements.nativeCommandSearch.disabled = true;
+      try {
+        const response = await nativeCommandApi(path, { method: "POST", body, tabId: tabContext.tabId });
+        if (!isCurrent()) return;
+        onApplied(response.data);
+        closeNativeCommandDialog();
+        await refreshState(tabContext);
+      } catch (error) {
+        if (isCurrent()) setNativeCommandError(error.message || String(error));
+      } finally {
+        saving = false;
+        if (ownsDialog()) {
+          elements.nativeCommandBody.inert = false;
+          elements.nativeCommandBody.removeAttribute("aria-busy");
+          elements.nativeCommandSearch.disabled = false;
+        }
+      }
+    },
+  };
+}
+
 async function openNativeModelSelector() {
-  openNativeCommandDialog({ title: "/model", message: "Select the active model for this Pi tab.", searchPlaceholder: "Filter models…" });
+  const owner = nativeSessionChoiceOwner({
+    title: "Choose model",
+    message: "Applies to this session. Changing the model does not restart a response already in progress.",
+    searchPlaceholder: "Filter models…",
+  });
   renderNativeLoading("Loading models…");
   try {
-    const response = await nativeCommandApi("/api/models");
+    const response = await nativeCommandApi("/api/models", { tabId: owner.tabContext.tabId });
+    if (!owner.isCurrent()) return;
     const models = Array.isArray(response.data?.models) ? response.data.models : [];
     const activeId = currentState?.model ? `${currentState.model.provider}/${currentState.model.id}` : "";
-    const items = models.map((model) => ({
+    const items = groupModelCatalog(models).flatMap(({ provider, models }) => models.map((model) => ({
+      group: provider,
       id: modelOptionLabel(model),
       label: modelOptionLabel(model),
       description: model.name || model.description || "",
       meta: [
+        modelReleaseDate(model) ? `released ${modelReleaseDate(model)}` : "",
         model.contextWindow ? `context ${formatFooterTokenCount(model.contextWindow)}` : "",
         model.reasoning ? "reasoning" : "",
         Array.isArray(model.input) && model.input.includes("image") ? "images" : "",
       ].filter(Boolean).join(" · ") || model.provider,
-      group: model.provider,
       model,
       badge: modelOptionLabel(model) === activeId ? "current" : "",
-    }));
-    // The current model goes first so it is visible without scrolling through hundreds of rows.
-    items.sort((a, b) => (b.badge === "current") - (a.badge === "current"));
-    const render = () => renderNativeSelectorItems(items, {
-      emptyText: "No models match this filter.",
-      activeId,
-      onSelect: async (item) => {
-        setNativeCommandError("");
-        const tabContext = activeTabContext(nativeCommandTabId || activeTabId);
-        try {
-          const response = await nativeCommandApi("/api/model", { method: "POST", body: { provider: item.model.provider, modelId: item.model.id } });
-          applyOptimisticModelSelection(response.data || item.model, tabContext);
-          addTransientMessage({ role: "native", title: "/model", content: `Model set to ${item.label}.`, level: "info" });
-          closeNativeCommandDialog();
-          await refreshState(tabContext);
-        } catch (error) {
-          setNativeCommandError(error.message || String(error));
-        }
-      },
-    });
+    })));
+    const render = () => {
+      if (!owner.isCurrent()) return;
+      renderNativeSelectorItems(items, {
+        emptyText: "No models match this filter.", activeId, grouped: true,
+        onSelect: item => owner.apply("/api/model", { provider: item.model.provider, modelId: item.model.id }, data => {
+          setControlsPendingModel("");
+          applyOptimisticModelSelection(data || item.model, owner.tabContext);
+          addTransientMessage({ role: "native", title: "Model", content: `Model set to ${item.label}.`, level: "info" });
+        }),
+      });
+    };
     elements.nativeCommandSearch.oninput = render;
     render();
   } catch (error) {
+    if (!owner.isCurrent()) return;
     setNativeCommandError(error.message || String(error));
     elements.nativeCommandBody.replaceChildren();
+    addNativeCommandAction("Retry", openNativeModelSelector);
   }
+}
+
+function openNativeEffortSelector() {
+  const owner = nativeSessionChoiceOwner({
+    title: "Choose thinking effort",
+    message: "Applies to this session. While Pi is running or compacting, your choice is saved for the next prompt.",
+    searchPlaceholder: "Filter effort…",
+  });
+  const current = currentState?.thinkingLevel || "off";
+  const pending = currentState?.pendingThinkingLevel;
+  const items = footerThinkingLevels().map(level => ({
+    id: level, label: footerThinkingLevelLabel(level),
+    description: thinkingLevelSupportedByActiveModel(level) ? "" : "Not supported by the active model.",
+    disabled: !thinkingLevelSupportedByActiveModel(level),
+    badge: level === pending ? "next prompt" : level === current ? "current" : "",
+  }));
+  const render = () => {
+    if (!owner.isCurrent()) return;
+    renderNativeSelectorItems(items, {
+      emptyText: "No effort levels match this filter.", activeId: pending || current,
+      onSelect: item => owner.apply("/api/thinking", { level: item.id }, data => {
+        setControlsPendingThinking("");
+        applyOptimisticThinkingSelection(data, owner.tabContext);
+        const effective = data?.level || item.id;
+        const content = data?.pending ? `Effort ${effective} is saved for the next prompt.`
+          : `Thinking effort set to ${effective}${effective !== item.id ? `, the level supported by this model` : ""}.`;
+        addTransientMessage({ role: "native", title: "Thinking effort", content, level: "info" });
+      }),
+    });
+  };
+  elements.nativeCommandSearch.oninput = render;
+  render();
 }
 
 function openNativeThemeSelector() {
@@ -43059,7 +42946,7 @@ const APPEND_SYSTEM_DEFAULT_CHOICE_ID = "__pi-default-discovery__";
 async function openNativeAppendSystemSelector() {
   const dialogGeneration = openNativeCommandDialog({
     title: "/append-system",
-    message: "Choose one global APPEND_SYSTEM.md append prompt for WebUI-managed Pi tabs. The bounded scan uses the active tab folder and ~/.pi up to depth 10, follows file and folder links even outside those roots, and never shows file contents. New tabs and reloaded tabs use this choice.",
+    message: "Choose one global APPEND_SYSTEM.md append prompt for WebUI-managed Pi threads. The bounded scan uses the active thread folder and ~/.pi up to depth 10, follows file and folder links even outside those roots, and never shows file contents. New threads and reloaded threads use this choice.",
     searchPlaceholder: "Filter APPEND_SYSTEM.md files…",
   });
   const ownsNativeCommandDialog = () => dialogGeneration === nativeCommandDialogGeneration && elements.nativeCommandDialog.open;
@@ -43163,14 +43050,14 @@ async function openNativeAppendSystemSelector() {
 
 async function confirmAppendSystemRestart(tabId) {
   const confirmed = await appConfirmText(
-    "Restart the active Pi tab now to load the new append-system prompt?\n\nThe saved choice is global for WebUI tabs and already persists. Cancel keeps it for the next manual reload or new tab without restarting.",
-    { affected: "The active Pi tab", confirmLabel: "Restart tab", danger: false },
+    "Restart the active Pi thread now to load the new append-system prompt?\n\nThe saved choice is global for WebUI threads and already persists. Cancel keeps it for the next manual reload or new thread without restarting.",
+    { affected: "The active Pi thread", confirmLabel: "Restart thread", danger: false },
   );
   if (!confirmed) return;
   try {
     await sendPrompt("prompt", "/reload", { targetTabId: tabId, throwOnError: true });
   } catch (error) {
-    addEvent(`Append-system tab restart failed: ${error.message || String(error)}`, "error");
+    addEvent(`Append-system thread restart failed: ${error.message || String(error)}`, "error");
   }
 }
 
@@ -43182,7 +43069,7 @@ function normalizedSettingsBadge(badge) {
   if (!badge) return null;
   const normalized = typeof badge === "string" ? { label: badge, tone: "" } : { ...badge };
   const scopeLabels = {
-    now: "This tab",
+    now: "This thread",
     browser: "This browser",
     reload: "Global · reload",
     TUI: "Native TUI",
@@ -43397,14 +43284,14 @@ function collectNativeSettingsPayload(controls) {
 function nativeSettingsChangedMessage(response, reloadRequested) {
   const changed = response.data?.changed || [];
   const reloadRecommended = response.data?.reloadRecommended || [];
-  if (response.data?.reloaded) return `Settings updated and tab reloaded (${changed.length || 0} changed).`;
-  if (reloadRecommended.length) return `Settings updated. Reload tab to apply: ${reloadRecommended.join(", ")}.`;
+  if (response.data?.reloaded) return `Settings updated and thread reloaded (${changed.length || 0} changed).`;
+  if (reloadRecommended.length) return `Settings updated. Reload thread to apply: ${reloadRecommended.join(", ")}.`;
   if (reloadRequested) return `Settings updated. No reload-needed changes were detected.`;
   return `Settings updated${changed.length ? ` (${changed.length} changed)` : ""}.`;
 }
 
 async function openNativeSettingsDialog() {
-  openNativeCommandDialog({ title: "/settings", message: "Settings show their scope in plain language. Apply reloads the active tab only when a changed global field requires it." });
+  openNativeCommandDialog({ title: "/settings", message: "Settings show their scope in plain language. Apply reloads the active thread only when a changed global field requires it." });
   renderNativeLoading("Loading settings…");
   let settingsData;
   try {
@@ -43445,13 +43332,13 @@ async function openNativeSettingsDialog() {
     busyBehavior: nativeSettingSelect("Busy prompt behavior", busyPromptBehavior, [
       { value: "followUp", label: "follow-up" },
       { value: "steer", label: "steer" },
-    ], "When you submit a normal prompt while a tab is already busy.", { label: "browser", tone: "browser" }),
+    ], "When you submit a normal prompt while a thread is already busy.", { label: "browser", tone: "browser" }),
     density: nativeSettingSelect("Interface density", interfaceDensity, [
       { value: "comfortable", label: "Comfortable" },
       { value: "compact", label: "Compact" },
     ], "Compact reduces spacing while preserving the 12 px text floor.", { label: "browser", tone: "browser" }),
     thinkingOutput: nativeSettingToggle("Show thinking output", settings.hideThinkingBlock !== true, "Browser transcript visibility; also writes Pi's hide-thinking setting.", { label: "browser", tone: "browser" }),
-    doneNotifications: nativeSettingToggle("Agent done notifications", agentDoneNotificationsEnabled, "Active-client-only browser notification after background tab work completes or fails. Activity remains the fallback; this is not Web Push after every client closes.", { label: "browser", tone: "browser" }),
+    doneNotifications: nativeSettingToggle("Agent done notifications", agentDoneNotificationsEnabled, "Active-client-only browser notification after background thread work completes or fails. Activity remains the fallback; this is not Web Push after every client closes.", { label: "browser", tone: "browser" }),
     autocompleteMax: nativeSettingSelect("Autocomplete max items", settings.autocompleteMaxVisible ?? autocompleteMaxVisible, SETTINGS_AUTOCOMPLETE_OPTIONS, "Maximum visible slash/path suggestions.", { label: "browser", tone: "browser" }),
     doubleEscape: nativeSettingSelect("Double-escape action", settings.doubleEscapeAction || doubleEscapeAction, SETTINGS_DOUBLE_ESCAPE_OPTIONS, "Action when pressing Escape twice with an empty composer.", { label: "browser", tone: "browser" }),
     treeFilter: nativeSettingSelect("Tree filter mode", settings.treeFilterMode || treeFilterMode, SETTINGS_TREE_FILTER_OPTIONS, "Default filter when opening /tree.", { label: "browser", tone: "browser" }),
@@ -43516,7 +43403,7 @@ async function openNativeSettingsDialog() {
 
   const body = make("div", "native-settings-panel");
   body.append(
-    nativeSettingsNote("Scopes", "Each field says whether it affects this tab, this browser, global Pi settings, or the native TUI."),
+    nativeSettingsNote("Scopes", "Each field says whether it affects this thread, this browser, global Pi settings, or the native TUI."),
     remoteAccessSection,
     nativeSettingsSection("Runtime", "Model behavior and request transport.", [controls.thinking, controls.autoCompact, controls.steering, controls.followUp, controls.transport, controls.httpIdleTimeout], { open: true }),
     nativeSettingsSection("Browser workflow", "Local Web UI behavior, shared composer defaults, and server output processing.", [controls.busyBehavior, controls.density, controls.thinkingOutput, controls.doneNotifications, controls.autocompleteMax, controls.doubleEscape, controls.treeFilter, controls.outputMode], { open: true }),
@@ -43747,7 +43634,7 @@ async function openNativeSafetyGuardSetupDialog() {
       : !models.length
         ? "Unavailable: no authenticated Pi models are available. Run /login or configure a provider before enabling auto-review."
         : !selectedAvailable
-          ? "Unavailable: select one of the authenticated models from this active tab."
+          ? "Unavailable: select one of the authenticated models from this active thread."
           : `Ready: ${selectedModelKey} supports ${levels.join(", ")} thinking.`;
   };
   controls.autoReview.input.addEventListener("change", () => syncAutoReviewControls());
@@ -43821,7 +43708,7 @@ async function openNativeSafetyGuardSetupDialog() {
       const selectedModelKey = controls.autoReviewModel.select.value;
       const supportedLevels = thinkingLevelsForModel(selectedModelKey);
       if (submitted.autoReview.enabled && !models.some((model) => modelKey(model) === selectedModelKey)) {
-        throw new Error("Select an authenticated auto-review model from this active tab.");
+        throw new Error("Select an authenticated auto-review model from this active thread.");
       }
       if (submitted.autoReview.enabled && !supportedLevels.includes(submitted.autoReview.model.thinkingLevel)) {
         throw new Error(`${selectedModelKey} does not support thinking level ${submitted.autoReview.model.thinkingLevel}.`);
@@ -43855,25 +43742,30 @@ function gitWorkflowSetupModelKey(model) {
 }
 
 async function openNativeSessionSummarySetupDialog({ initialData = null, onSaved, tabId = activeTabId, focusReturnKey = "" } = {}) {
+  const target = projectTargetFromContext(activeTabContext(tabId));
+  if (!isCurrentProjectTarget(target)) return;
   nativeCommandTabId = tabId;
-  openNativeCommandDialog({
+  const dialogGeneration = openNativeCommandDialog({
     title: "/summary-setup",
     message: "Configure persistent background titles and Markdown summaries. Saving confirms the disclosure below, then immediately generates and opens the first summary.",
   });
+  const isCurrentSetup = () => isCurrentProjectTarget(target) && elements.nativeCommandDialog.open && nativeCommandDialogGeneration === dialogGeneration;
   renderNativeLoading("Loading session summary preferences and available models…");
 
   let data = initialData;
   if (!data) {
     try {
-      const response = await nativeCommandApi("/api/session-summary/preferences");
+      const response = await nativeCommandApi("/api/session-summary/preferences", { tabId, signal: AbortSignal.timeout(15_000) });
       data = response.data || {};
     } catch (error) {
+      if (!isCurrentSetup()) return;
       setNativeCommandError(error.message || String(error));
       elements.nativeCommandBody.replaceChildren();
       return;
     }
   }
 
+  if (!isCurrentSetup()) return;
   const preferences = data.preferences || {};
   const models = Array.isArray(data.models) ? data.models : [];
   if (!models.length) {
@@ -43893,7 +43785,7 @@ async function openNativeSessionSummarySetupDialog({ initialData = null, onSaved
     model: nativeSettingSelect("Summary model", initialModelKey, modelOptions, "Dedicated authenticated provider/model. No fallback is used.", { label: "required", tone: "safety" }),
     thinking: nativeSettingSelect("Reasoning effort", preferences.model?.thinkingLevel || "low", SETTINGS_THINKING_OPTIONS, "Only levels supported by the selected model are offered.", { label: "required", tone: "safety" }),
     automatic: nativeSettingToggle("Generate automatically", preferences.enabled === true, "After eligible settled turns; automatic updates remain silent.", { label: "cost", tone: "safety" }),
-    titleEnabled: nativeSettingToggle("Update generated titles", preferences.title?.enabled !== false, "Only default/automatic tab titles are eligible. Explicit names always win.", { label: "safe", tone: "safety" }),
+    titleEnabled: nativeSettingToggle("Update generated titles", preferences.title?.enabled !== false, "Only default/automatic thread titles are eligible. Explicit names always win.", { label: "safe", tone: "safety" }),
     cadence: nativeSettingSelect("Title update cadence", preferences.title?.minSettledTurns || 3, [1, 2, 3, 5, 10, 20].map((value) => ({ value: String(value), label: `${value} settled user turn${value === 1 ? "" : "s"}` })), "Minimum turns between changed generated titles after the first title.", { label: "saved", tone: "browser" }),
     injectLatest: nativeSettingToggle("Inject latest summary into main-agent context", preferences.context?.injectLatest === true, "Off by default. When enabled, exactly one latest active-branch summary is injected as reference-only data.", { label: "privacy", tone: "safety" }),
     titlePrompt: nativeSettingTextarea("Editable title prompt", preferences.prompts?.title, "Maximum 8 KiB. This text is untrusted data, not system authority.", { rows: 4, badge: { label: "prompt", tone: "browser" } }),
@@ -43936,13 +43828,14 @@ async function openNativeSessionSummarySetupDialog({ initialData = null, onSaved
     summaryPrompt: controls.summaryPrompt.textarea.value,
   });
   const initialSignature = signature();
-  const updateDirty = () => { nativeSettingsDirty = signature() !== initialSignature; };
+  const updateDirty = () => { if (isCurrentSetup()) nativeSettingsDirty = signature() !== initialSignature; };
   for (const control of [controls.model.select, controls.thinking.select, controls.automatic.input, controls.titleEnabled.input, controls.cadence.select, controls.injectLatest.input, controls.titlePrompt.textarea, controls.summaryPrompt.textarea]) {
     control.addEventListener("input", updateDirty);
     control.addEventListener("change", updateDirty);
   }
 
   const save = addNativeCommandAction("Save and generate", async () => {
+    if (!isCurrentSetup() || !save.isConnected || save.disabled) return;
     setNativeActionBusy(save, true, "Saving…");
     setNativeCommandError("");
     try {
@@ -43952,16 +43845,16 @@ async function openNativeSessionSummarySetupDialog({ initialData = null, onSaved
       const summaryPrompt = controls.summaryPrompt.textarea.value.trim();
       if (!titlePrompt || !summaryPrompt) throw new Error("Both editable prompts are required.");
       if (titlePrompt.length > SESSION_SUMMARY_PROMPT_MAX_CHARS || summaryPrompt.length > SESSION_SUMMARY_PROMPT_MAX_CHARS) throw new Error("Each editable prompt must not exceed 8 KiB.");
-      const targetTabId = nativeCommandTabId || tabId || activeTabId;
+      const targetTabId = tabId;
       const reviewed = await appConfirm({
         title: "Save session summary setup?",
         summary: `${disclosure.scope || "Selected active-branch text and tool names will be sent to the configured model."}\n\n${disclosure.cost || "Generation may incur provider usage."}`,
-        affected: "Global session-summary preferences and the selected tab's first generated summary",
+        affected: "Global session-summary preferences and the selected thread's first generated summary",
         undoable: false,
         confirmLabel: "Save and generate",
         danger: false,
       });
-      if (!reviewed) return;
+      if (!reviewed || !isCurrentSetup()) return;
       const response = await nativeCommandApi("/api/session-summary/preferences", {
         method: "PUT",
         tabId: targetTabId,
@@ -43977,6 +43870,7 @@ async function openNativeSessionSummarySetupDialog({ initialData = null, onSaved
           },
         },
       });
+      if (!isCurrentSetup()) return;
       updateSessionSummaryForTab(targetTabId, response.data?.summary || {
         version: SESSION_SUMMARY_PROTOCOL_VERSION,
         status: "idle",
@@ -43989,11 +43883,13 @@ async function openNativeSessionSummarySetupDialog({ initialData = null, onSaved
       closeNativeCommandDialog({ force: true });
       openSessionSummaryOverlay(targetTabId, { loading: true, focusReturnKey });
       await requestSessionSummaryGeneration(targetTabId, { refresh: true }).catch(() => {});
+      if (!isCurrentProjectTarget(target)) return;
       if (typeof onSaved === "function") await onSaved(response.data?.preferences);
     } catch (error) {
+      if (!isCurrentSetup()) return;
       setNativeCommandError(error.message || String(error));
     } finally {
-      setNativeActionBusy(save, false);
+      if (isCurrentSetup()) setNativeActionBusy(save, false);
     }
   }, "primary");
 }
@@ -44594,7 +44490,7 @@ async function openNativeForkSelector() {
 
 function openNativeCloneDialog() {
   openNativeCommandDialog({ title: "/clone", message: "Duplicate the current session at the current position." });
-  elements.nativeCommandBody.append(make("p", "native-command-note", "This creates a new forked session and switches this Web UI tab to it."));
+  elements.nativeCommandBody.append(make("p", "native-command-note", "This creates a new forked session and switches this Web UI thread to it."));
   elements.nativeCommandActions.replaceChildren();
   addNativeCommandAction("Cancel", closeNativeCommandDialog);
   const clone = addNativeCommandAction("Clone session", async () => {
@@ -44614,7 +44510,7 @@ function openNativeCloneDialog() {
 }
 
 function openNativeNameDialog() {
-  openNativeCommandDialog({ title: "/name", message: "Set the session and browser tab name." });
+  openNativeCommandDialog({ title: "/name", message: "Set the session and thread name." });
   const field = make("label", "native-settings-field");
   field.append(make("span", "native-settings-label", "Session name"));
   const input = make("input", "dialog-input");
@@ -44667,7 +44563,7 @@ async function openNativeResumeSelector(scope = "current", { query = "" } = {}) 
         closeNativeCommandDialog();
         if (resumedTab?.id) await switchTab(resumedTab.id);
         else await refreshAll();
-        addTransientMessage({ role: "native", title: "/resume", content: result.data?.message || "Resumed selected session in a new terminal tab.", level: "info" });
+        addTransientMessage({ role: "native", title: "/resume", content: result.data?.message || "Resumed selected session in a new thread.", level: "info" });
       } catch (error) {
         setNativeCommandError(error.message || String(error));
       }
@@ -44937,297 +44833,97 @@ function nativeResourceModelControl(models, modelIndex, { saving = false, onChan
   return control.field;
 }
 
-async function loadNativeResourceModels() {
-  const response = await nativeCommandApi("/api/models");
-  return (Array.isArray(response.data?.models) ? response.data.models : [])
-    .filter((model) => model?.provider && model?.id)
-    .sort((left, right) => `${left.provider}/${left.id}`.localeCompare(`${right.provider}/${right.id}`));
+function nativeResourceSelectionQuery(selection) {
+  const params = new URLSearchParams({ scope: selection.scope });
+  if (selection.scope === "model") {
+    params.set("provider", selection.provider);
+    params.set("modelId", selection.modelId);
+  }
+  return params.toString();
 }
 
-async function openNativeToolsSelector() {
-  openNativeCommandDialog({ title: "Tools Setup", message: "Enable or disable tool access for this session, or save a global or exact-model default.", searchPlaceholder: "Filter tools…" });
-  let tools = [];
-  let savingName = "";
-  let filter = "all";
-  let scope = "session";
-  let configured = false;
-  let models = [];
-  let modelIndex = 0;
+function isCurrentNativeResourceTarget(target) {
+  return elements.nativeCommandDialog.open && nativeCommandDialogGeneration === target?.dialogGeneration
+    && nativeCommandTabId === target.tabId && isCurrentProjectTarget(target);
+}
 
-  const modelQuery = () => scope === "model" && models[modelIndex]
-    ? `&provider=${encodeURIComponent(models[modelIndex].provider)}&modelId=${encodeURIComponent(models[modelIndex].id)}`
-    : "";
+function isCurrentNativeResourceSnapshot(snapshot) {
+  const current = settingsResources.getSnapshot();
+  return current.target === snapshot.target && current.selection === snapshot.selection
+    && current.kind === snapshot.kind && isCurrentNativeResourceTarget(snapshot.target);
+}
 
-  const load = async () => {
-    renderNativeLoading(`Loading ${scope === "global" ? "global tool defaults" : scope === "model" ? "model tool defaults" : "session tools"}…`);
-    try {
-      const response = await nativeCommandApi(`/api/tools?scope=${encodeURIComponent(scope)}${modelQuery()}`);
-      tools = Array.isArray(response.data?.tools) ? response.data.tools : [];
-      configured = response.data?.configured === true;
-      if (scope === "model" && Array.isArray(response.data?.models)) models = response.data.models;
-      render();
-    } catch (error) {
-      setNativeCommandError(error.message || String(error));
-      elements.nativeCommandBody.replaceChildren();
-    }
-  };
-
-  const applyModelScope = async () => {
-    if (!models.length) {
-      try {
-        models = await loadNativeResourceModels();
-      } catch (error) {
-        setNativeCommandError(error.message || String(error));
-        return false;
-      }
-    }
-    if (!models.length) {
-      setNativeCommandError("No authenticated Pi models are available for a model default.");
-      return false;
-    }
-    modelIndex = Math.min(Math.max(modelIndex, 0), models.length - 1);
-    return true;
-  };
-
-  const inheritSelection = async () => {
-    if (savingName) return;
-    savingName = "inherit";
-    setNativeCommandError("");
-    render();
-    try {
-      const body = { scope, inherit: true };
-      if (scope === "model" && models[modelIndex]) {
-        body.provider = models[modelIndex].provider;
-        body.modelId = models[modelIndex].id;
-      }
-      const response = await nativeCommandApi("/api/tools", { method: "POST", body });
-      tools = Array.isArray(response.data?.tools) ? response.data.tools : [];
-      configured = response.data?.configured === true;
-      const content = scope === "model"
-        ? `Tool default for ${body.provider}/${body.modelId} cleared. It now inherits the global or Pi runtime default.`
-        : scope === "global"
-          ? "Global tool default cleared. Unpinned active tools now follow the Pi runtime default; pinned tools are unchanged."
-          : "Tools for this session now follow the inherited model, global, or Pi runtime defaults.";
-      addTransientMessage({ role: "native", title: "/tools", content, level: "info" });
-    } catch (error) {
-      setNativeCommandError(error.message || String(error));
-    } finally {
-      savingName = "";
-      render();
-    }
-  };
-
-  const render = () => {
-    renderNativeResourceToggles(tools, {
-      savingName,
-      filter,
-      getResourceTag: nativeToolOriginTag,
-      onToggle: async (tool) => {
-        if (!tool || savingName) return;
-        const enabledTools = new Set(tools.filter((item) => item.enabled !== false).map((item) => item.name));
-        if (tool.enabled === false) enabledTools.add(tool.name);
-        else enabledTools.delete(tool.name);
-        savingName = tool.name;
-        setNativeCommandError("");
-        render();
-        try {
-          const body = { enabledTools: [...enabledTools], scope };
-          if (scope === "model" && models[modelIndex]) {
-            body.provider = models[modelIndex].provider;
-            body.modelId = models[modelIndex].id;
-          }
-          const response = await nativeCommandApi("/api/tools", { method: "POST", body });
-          tools = Array.isArray(response.data?.tools) ? response.data.tools : [];
-          configured = response.data?.configured === true;
-          const enabled = enabledTools.has(tool.name);
-          const content = scope === "model"
-            ? `Model default for tool ${tool.name} ${enabled ? "enabled" : "disabled"} (${body.provider}/${body.modelId}). Unpinned active tools update immediately when this model is active; pinned tools are unchanged.`
-            : scope === "global"
-              ? `Global default for tool ${tool.name} ${enabled ? "enabled" : "disabled"}. Unpinned active tools update immediately; pinned tools are unchanged.`
-              : `Tool ${tool.name} ${enabled ? "enabled" : "disabled"} for this session.`;
-          addTransientMessage({ role: "native", title: "/tools", content, level: "info" });
-        } catch (error) {
-          setNativeCommandError(error.message || String(error));
-        } finally {
-          savingName = "";
-          render();
-        }
+function renderNativeResourceSelector(snapshot = settingsResources.getSnapshot()) {
+  if (!snapshot.kind || !isCurrentNativeResourceTarget(snapshot.target)) return;
+  const { kind, selection, resources, models, configured, filter, loading, savingName, error } = snapshot;
+  const exactModelAvailable = selection.scope !== "model" || models.some(model => model.provider === selection.provider && model.id === selection.modelId);
+  const mutationBlocked = loading || !!savingName || !exactModelAvailable;
+  setNativeCommandError(error);
+  if (loading) renderNativeLoading(`Loading ${selection.scope} ${kind}…`);
+  else renderNativeResourceToggles(resources, {
+    savingName: mutationBlocked ? savingName || "unavailable" : "", filter,
+    getResourceTag: kind === "tools" ? nativeToolOriginTag : undefined,
+    onToggle: resource => { if (isCurrentNativeResourceSnapshot(snapshot)) settingsResources.toggle(resource.name); },
+  });
+  if (selection.scope === "model" && models.length) {
+    const modelIndex = models.findIndex(model => model.provider === selection.provider && model.id === selection.modelId);
+    const control = nativeResourceModelControl(models, modelIndex, {
+      saving: !!savingName,
+      onChange: index => {
+        const model = models[index];
+        if (model && isCurrentNativeResourceSnapshot(snapshot)) settingsResources.setModel({ provider: model.provider, modelId: model.id });
       },
     });
-    if (scope === "model" && models.length) {
-      elements.nativeCommandBody.prepend(nativeResourceModelControl(models, modelIndex, {
-        saving: !!savingName,
-        onChange: async (nextIndex) => {
-          if (nextIndex === modelIndex || savingName || !models[nextIndex]) return;
-          modelIndex = nextIndex;
-          await load();
-        },
-      }));
-    }
-    elements.nativeCommandBody.prepend(nativeResourceScopeControl(scope, {
-      configured,
-      saving: !!savingName,
-      onChange: async (nextScope) => {
-        if (nextScope === scope || savingName) return;
-        if (nextScope === "model" && !(await applyModelScope())) {
-          render();
-          return;
-        }
-        scope = nextScope;
-        await load();
-      },
-    }));
-    renderNativeResourceFilterActions(filter, (value) => { filter = value; }, render, [
-      { label: "Use inherited defaults", handler: inheritSelection, disabled: !!savingName },
-    ]);
-  };
-
-  elements.nativeCommandSearch.oninput = render;
-  await load();
+    if (modelIndex < 0) control.querySelector("select").selectedIndex = -1;
+    elements.nativeCommandBody.prepend(control);
+  }
+  elements.nativeCommandBody.prepend(nativeResourceScopeControl(selection.scope, {
+    configured, saving: !!savingName,
+    onChange: scope => { if (isCurrentNativeResourceSnapshot(snapshot)) settingsResources.setScope(scope); },
+  }));
+  renderNativeResourceFilterActions(filter, value => { if (isCurrentNativeResourceSnapshot(snapshot)) settingsResources.setFilter(value); }, () => {}, [
+    { label: "Use inherited defaults", handler: () => { if (isCurrentNativeResourceSnapshot(snapshot)) settingsResources.inherit(); }, disabled: mutationBlocked },
+  ]);
 }
 
-async function openNativeSkillsSelector() {
-  openNativeCommandDialog({ title: "Skills Setup", message: "Enable or disable skill invocation for this session, or save a global or exact-model default.", searchPlaceholder: "Filter skills…" });
-  let skills = [];
-  let savingName = "";
-  let filter = "all";
-  let scope = "session";
-  let configured = false;
-  let models = [];
-  let modelIndex = 0;
-
-  const modelQuery = () => scope === "model" && models[modelIndex]
-    ? `&provider=${encodeURIComponent(models[modelIndex].provider)}&modelId=${encodeURIComponent(models[modelIndex].id)}`
-    : "";
-
-  const load = async () => {
-    renderNativeLoading(`Loading ${scope === "global" ? "global skill defaults" : scope === "model" ? "model skill defaults" : "session skills"}…`);
-    try {
-      const response = await nativeCommandApi(`/api/skills?scope=${encodeURIComponent(scope)}${modelQuery()}`);
-      skills = Array.isArray(response.data?.skills) ? response.data.skills : [];
-      configured = response.data?.configured === true;
-      if (scope === "model" && Array.isArray(response.data?.models)) models = response.data.models;
-      render();
-    } catch (error) {
-      setNativeCommandError(error.message || String(error));
-      elements.nativeCommandBody.replaceChildren();
-    }
-  };
-
-  const applyModelScope = async () => {
-    if (!models.length) {
-      try {
-        models = await loadNativeResourceModels();
-      } catch (error) {
-        setNativeCommandError(error.message || String(error));
-        return false;
-      }
-    }
-    if (!models.length) {
-      setNativeCommandError("No authenticated Pi models are available for a model default.");
-      return false;
-    }
-    modelIndex = Math.min(Math.max(modelIndex, 0), models.length - 1);
-    return true;
-  };
-
-  const inheritSelection = async () => {
-    if (savingName) return;
-    savingName = "inherit";
-    setNativeCommandError("");
-    render();
-    try {
-      const body = { scope, inherit: true };
-      if (scope === "model" && models[modelIndex]) {
-        body.provider = models[modelIndex].provider;
-        body.modelId = models[modelIndex].id;
-      }
-      const response = await nativeCommandApi("/api/skills", { method: "POST", body });
-      skills = Array.isArray(response.data?.skills) ? response.data.skills : [];
-      configured = response.data?.configured === true;
-      const content = scope === "model"
-        ? `Skill default for ${body.provider}/${body.modelId} cleared. It now inherits the global or Pi runtime default.`
-        : scope === "global"
-          ? "Global skill default cleared. Unpinned active skills now follow the Pi runtime default; pinned skills are unchanged."
-          : "Skills for this session now follow the inherited model, global, or Pi runtime defaults.";
-      addTransientMessage({ role: "native", title: "/skills", content, level: "info" });
-      if (scope === "session") refreshCommands(activeTabContext()).catch((error) => addEvent(error.message || String(error), "error"));
-    } catch (error) {
-      setNativeCommandError(error.message || String(error));
-    } finally {
-      savingName = "";
-      render();
-    }
-  };
-
-  const render = () => {
-    renderNativeResourceToggles(skills, {
-      savingName,
-      filter,
-      onToggle: async (skill) => {
-        if (!skill || savingName) return;
-        const enabledSkills = new Set(skills.filter((item) => item.enabled !== false).map((item) => item.name));
-        if (skill.enabled === false) enabledSkills.add(skill.name);
-        else enabledSkills.delete(skill.name);
-        savingName = skill.name;
-        setNativeCommandError("");
-        render();
-        try {
-          const body = { enabledSkills: [...enabledSkills], scope };
-          if (scope === "model" && models[modelIndex]) {
-            body.provider = models[modelIndex].provider;
-            body.modelId = models[modelIndex].id;
-          }
-          const response = await nativeCommandApi("/api/skills", { method: "POST", body });
-          skills = Array.isArray(response.data?.skills) ? response.data.skills : [];
-          configured = response.data?.configured === true;
-          const enabled = enabledSkills.has(skill.name);
-          const content = scope === "model"
-            ? `Model default for skill ${skill.name} ${enabled ? "enabled" : "disabled"} (${body.provider}/${body.modelId}). Unpinned active skills update immediately when this model is active; pinned skills are unchanged.`
-            : scope === "global"
-              ? `Global default for skill ${skill.name} ${enabled ? "enabled" : "disabled"}. Unpinned active skills update immediately; pinned skills are unchanged.`
-              : `Skill ${skill.name} ${enabled ? "enabled" : "disabled"} for this session.`;
-          addTransientMessage({ role: "native", title: "/skills", content, level: "info" });
-          if (scope === "session") refreshCommands(activeTabContext()).catch((error) => addEvent(error.message || String(error), "error"));
-        } catch (error) {
-          setNativeCommandError(error.message || String(error));
-        } finally {
-          savingName = "";
-          render();
-        }
-      },
-    });
-    if (scope === "model" && models.length) {
-      elements.nativeCommandBody.prepend(nativeResourceModelControl(models, modelIndex, {
-        saving: !!savingName,
-        onChange: async (nextIndex) => {
-          if (nextIndex === modelIndex || savingName || !models[nextIndex]) return;
-          modelIndex = nextIndex;
-          await load();
-        },
-      }));
-    }
-    elements.nativeCommandBody.prepend(nativeResourceScopeControl(scope, {
-      configured,
-      saving: !!savingName,
-      onChange: async (nextScope) => {
-        if (nextScope === scope || savingName) return;
-        if (nextScope === "model" && !(await applyModelScope())) {
-          render();
-          return;
-        }
-        scope = nextScope;
-        await load();
-      },
-    }));
-    renderNativeResourceFilterActions(filter, (value) => { filter = value; }, render, [
-      { label: "Use inherited defaults", handler: inheritSelection, disabled: !!savingName },
-    ]);
-  };
-
-  elements.nativeCommandSearch.oninput = render;
-  await load();
+function announceNativeResourceMutation({ kind, target, selection, name, enabled, inherit }) {
+  if (!isCurrentNativeResourceTarget(target)) return;
+  const singular = kind === "tools" ? "tool" : "skill";
+  const title = kind === "tools" ? "Tool" : "Skill";
+  let content;
+  if (inherit) {
+    content = selection.scope === "model"
+      ? `${title} default for ${selection.provider}/${selection.modelId} cleared. It now inherits the global or Pi runtime default.`
+      : selection.scope === "global"
+        ? `Global ${singular} default cleared. Unpinned active ${kind} now follow the Pi runtime default; pinned ${kind} are unchanged.`
+        : `${title}s for this session now follow the inherited model, global, or Pi runtime defaults.`;
+  } else {
+    const change = `${singular} ${name} ${enabled ? "enabled" : "disabled"}`;
+    content = selection.scope === "model"
+      ? `Model default for ${change} (${selection.provider}/${selection.modelId}). Unpinned active ${kind} update immediately when this model is active; pinned ${kind} are unchanged.`
+      : selection.scope === "global"
+        ? `Global default for ${change}. Unpinned active ${kind} update immediately; pinned ${kind} are unchanged.`
+        : `${title} ${name} ${enabled ? "enabled" : "disabled"} for this session.`;
+  }
+  addTransientMessage({ role: "native", title: `/${kind}`, content, level: "info" });
+  if (kind === "skills" && selection.scope === "session") refreshCommands(target).catch(error => {
+    if (isCurrentNativeResourceTarget(target)) addEvent(error.message || String(error), "error");
+  });
 }
+
+async function openNativeResourceSelector(kind) {
+  const label = kind === "tools" ? "Tools" : "Skills";
+  const dialogGeneration = openNativeCommandDialog({
+    title: `${label} Setup`, message: `Enable or disable ${kind === "tools" ? "tool access" : "skill invocation"} for this session, or save a global or exact-model default.`,
+    searchPlaceholder: `Filter ${kind}…`,
+  });
+  const target = { ...projectTargetFromContext(activeTabContext(nativeCommandTabId)), dialogGeneration };
+  elements.nativeCommandSearch.oninput = () => renderNativeResourceSelector();
+  return settingsResources.open(kind, target);
+}
+
+async function openNativeToolsSelector() { return openNativeResourceSelector("tools"); }
+async function openNativeSkillsSelector() { return openNativeResourceSelector("skills"); }
 
 async function openNativeAuthSelector(mode) {
   const command = mode === "logout" ? "/logout" : "/login";
@@ -46154,6 +45850,7 @@ async function refreshState(tabContext = activeTabContext()) {
   if (!isCurrentTabContext(tabContext)) return;
   const previousState = currentState;
   currentState = response.data || null;
+  tabContext = observeSessionState(tabContext, currentState);
   if (currentState) tabStateCache.set(tabContext.tabId, currentState);
   else tabStateCache.delete(tabContext.tabId);
   if (latestMessages.length) {
@@ -47345,61 +47042,71 @@ async function refreshCommands(tabContext = activeTabContext()) {
   if (elements.commandPaletteDialog?.open) renderCommandPalette({ preserveScroll: true });
 }
 
-function paletteText(value) {
-  return String(value || "").toLowerCase();
-}
-
-function paletteItemMatches(item, query) {
-  const text = [item.label, item.description, item.kind, item.keywords].map(paletteText).join(" ");
-  return query.split(/\s+/).filter(Boolean).every((token) => text.includes(token));
-}
-
 function commandPaletteCoreItems() {
   const items = [
-    { kind: "Action", label: "New tab", description: "Start an isolated Pi terminal in the current directory", keywords: "workspace session", run: () => createTerminalTab() },
-    { kind: "Action", label: "Choose directory for new tab", description: "Pick a cwd before starting a tab", keywords: "cwd folder workspace", run: () => createTerminalTabFromChosenDirectory({ triggerButton: elements.commandPaletteButton }) },
-    { kind: "Git", label: "Branch worktree", description: "Create or open a Git worktree tab for parallel branch work", keywords: "git branch worktree parallel checkout", run: () => openBranchWorktreePicker() },
-    { kind: "Action", label: "New session", description: "Start a fresh session in the active tab", keywords: "/new clear", run: () => elements.newSessionButton.click() },
-    { kind: "Action", label: "Compact context", description: contextUsageDetail(), keywords: "/compact context window tokens", run: () => requestManualCompaction() },
-    { kind: "Action", label: footerAutoCompactionEnabled() ? "Disable auto-compaction" : "Enable auto-compaction", description: footerAutoCompactionToggleAction(), keywords: "context automatic", run: () => toggleFooterAutoCompaction() },
-    { kind: "Action", label: workspaceDashboardCollapsed ? "Show workspace dashboard" : "Hide workspace dashboard", description: "Toggle the launch/workspace overview", keywords: "home overview", run: () => setWorkspaceDashboardCollapsed(!workspaceDashboardCollapsed) },
-    { kind: "Action", label: document.body.classList.contains("side-panel-collapsed") ? "Show side panel" : "Hide side panel", description: "Toggle the Control Deck", keywords: "controls settings", run: () => setSidePanelCollapsed(!document.body.classList.contains("side-panel-collapsed"), { focusPanel: true }) },
-    { kind: "Action", label: "Change working directory", description: "Restart active tab in another cwd", keywords: "cwd folder workspace", run: () => changeActiveTabCwd() },
-    { kind: "Action", label: "Search transcript", description: "Open transcript search", keywords: "find", run: () => openChatSearch() },
-    { kind: "Pi", label: "/model", description: "Select the active model", keywords: "provider llm", run: () => runNativeCommandMenu("/model") },
-    { kind: "Pi", label: "/resume", description: "Resume a previous session", keywords: "sessions history", run: () => runNativeCommandMenu("/resume") },
-    { kind: "Pi", label: "/fork", description: "Fork from a previous user message", keywords: "branch edit retry", run: () => runNativeCommandMenu("/fork") },
-    { kind: "Pi", label: "/tree", description: "Navigate the session tree", keywords: "branch history", run: () => runNativeCommandMenu("/tree") },
-    { kind: "Pi", label: "/settings", description: "Open settings", keywords: "configuration", run: () => runNativeCommandMenu("/settings") },
-    { kind: "Pi", label: "/scoped-models", description: "Manage model cycling scope", keywords: "models cycle ctrl p", run: () => runNativeCommandMenu("/scoped-models") },
-    { kind: "Pi", label: "/tools", description: "Manage active tools", keywords: "capabilities", run: () => runNativeCommandMenu("/tools") },
-    { kind: "Pi", label: "/skills", description: "Manage active skills", keywords: "system prompt", run: () => runNativeCommandMenu("/skills") },
-    { kind: "Pi", label: "/append-system", description: "Choose the APPEND_SYSTEM.md append prompt", keywords: "append system prompt settings global", run: () => openNativeAppendSystemSelector() },
-    { kind: "Pi", label: "/theme", description: "Choose the Web UI theme", keywords: "dark light colors appearance", run: () => openNativeThemeSelector() },
-    { kind: "Git", label: "Guided Git workflow", description: "Stage, commit, push, or open a pull request step by step", keywords: "git commit push pr publish", run: () => launchGuidedGitWorkflow() },
-    { kind: "Git", label: "Git changes", description: "Review and stage local changes with diffs", keywords: "git diff stage unstage discard status", run: () => openGitChangesDialog() },
-    { kind: "Action", label: "Files panel", description: "Open the Files section of the Control Deck", keywords: "tree browse project explorer", run: () => revealSidePanelSectionById("files") },
-    { kind: "Action", label: "Git panel", description: "Open the Git section of the Control Deck", keywords: "repository status history", run: () => revealSidePanelSectionById("git") },
-    { kind: "Action", label: "Events log", description: "Open the Events section of the Control Deck", keywords: "errors warnings log diagnostics", run: () => revealEventsSection() },
-    { kind: "Action", label: thinkingOutputVisible ? "Hide thinking output" : "Show thinking output", description: "Toggle thinking cards in the transcript (Ctrl/Cmd+T in the composer)", keywords: "reasoning thinking toggle", run: () => setThinkingOutputVisible(!thinkingOutputVisible, { announce: true }) },
-    { kind: "Action", label: toolOutputGloballyExpanded ? "Collapse tool output" : "Expand tool output", description: "Toggle tool result cards (Ctrl/Cmd+O in the composer)", keywords: "tools results collapse expand", run: () => setToolOutputGloballyExpanded(!toolOutputGloballyExpanded, { announce: true }) },
-    { kind: "Action", label: "Show all controls", description: "Restore every hidden button and input tag", keywords: "visibility hidden restore controls buttons", run: () => showAllControls() },
-    { kind: "Action", label: "Reset control visibility", description: "Return hidden/visible controls to the defaults", keywords: "visibility defaults controls buttons", run: () => resetControlVisibilityDefaults() },
+    { id: "session:new-tab", scope: "server", destination: "conversation", kind: "Action", label: "New thread", description: "Choose a folder, No project, or a branch worktree; nothing starts until the first message", keywords: "workspace session folder project draft compose", run: () => openNewThreadPalette({ returnFocus: elements.newTabButton }) },
+    { id: "session:new-tab-directory", scope: "server", destination: "conversation", kind: "Action", label: "Choose directory for new thread", description: "Pick a cwd for a new thread draft", keywords: "cwd folder workspace browse", run: ({ triggerButton = elements.commandPaletteButton } = {}) => browseNewThreadFolder({ returnFocus: triggerButton }) },
+    { id: "project:branch-worktree", scope: "project", destination: "project", kind: "Git", label: "Branch worktree", description: "Create or open a Git worktree thread for parallel branch work", keywords: "git branch worktree parallel checkout", run: () => openBranchWorktreePicker() },
+    { id: "session:new", scope: "session", destination: "conversation", kind: "Action", label: "New session", description: "Start a fresh session in the active thread", keywords: "/new clear", run: () => elements.newSessionButton.click() },
+    { id: "session:compact", scope: "session", destination: "conversation", available: !currentState?.isCompacting && !composerStore.isCompactionPending(activeTabId), unavailableReason: "Context compaction is already running. Wait for it to finish.", kind: "Action", label: "Compact context", description: contextUsageDetail(), keywords: "/compact context window tokens", run: () => requestManualCompaction() },
+    { id: "session:auto-compaction", scope: "session", destination: "conversation", kind: "Action", label: footerAutoCompactionEnabled() ? "Disable auto-compaction" : "Enable auto-compaction", description: footerAutoCompactionToggleAction(), keywords: "context automatic", run: () => toggleFooterAutoCompaction() },
+    { id: "home:toggle", scope: "browser", destination: "home", kind: "Action", label: workspaceDashboardCollapsed ? "Show workspace dashboard" : "Hide workspace dashboard", description: "Toggle the launch/workspace overview", keywords: "home overview", run: () => setWorkspaceDashboardCollapsed(!workspaceDashboardCollapsed) },
+    { id: "layout:control-deck", scope: "browser", destination: "settings", kind: "Action", label: document.body.classList.contains("side-panel-collapsed") ? "Show side panel" : "Hide side panel", description: "Toggle the Control Deck", keywords: "controls settings", run: () => setSidePanelCollapsed(!document.body.classList.contains("side-panel-collapsed"), { focusPanel: true }) },
+    { id: "session:cwd", scope: "session", destination: "conversation", kind: "Action", label: "Change working directory", description: "Restart active thread in another cwd", keywords: "cwd folder workspace", run: () => changeActiveTabCwd() },
+    { id: "conversation:search", scope: "session", destination: "conversation", kind: "Action", label: "Search transcript", description: "Open transcript search", keywords: "find", run: () => openChatSearch() },
+    { id: "native:model", scope: "session", destination: "conversation", kind: "Pi", label: "/model", description: "Select the active model", keywords: "provider llm", run: () => runNativeCommandMenu("/model") },
+    { id: "native:effort", scope: "session", destination: "conversation", kind: "Pi", label: "Thinking effort", description: "Choose effort for this session; busy changes apply to the next prompt", keywords: "reasoning thinking level", run: () => openNativeEffortSelector() },
+    { id: "native:resume", scope: "project", destination: "conversation", kind: "Pi", label: "/resume", description: "Resume a previous session", keywords: "sessions history", run: () => runNativeCommandMenu("/resume") },
+    { id: "native:fork", scope: "session", destination: "conversation", kind: "Pi", label: "/fork", description: "Fork from a previous user message", keywords: "branch edit retry", run: () => runNativeCommandMenu("/fork") },
+    { id: "native:tree", scope: "session", destination: "conversation", kind: "Pi", label: "/tree", description: "Navigate the session tree", keywords: "branch history", run: () => runNativeCommandMenu("/tree") },
+    { id: "native:summary-setup", scope: "session", destination: "settings", kind: "Setup", label: "/summary-setup", description: "Configure summary models, prompts, titles and privacy; saving asks before generation", keywords: "summary preferences configuration", available: hasLoadedRpcCommand("summary-setup"), unavailableReason: commandUnavailableMessage("summary-setup"), run: () => runNativeCommandMenu("/summary-setup") },
+    { id: "settings:runner-configuration", scope: "project", destination: "settings", kind: "Setup", label: "Runner configuration", description: "Configure project discovery paths and custom runners", keywords: "project runners paths command args", run: () => openAppRunnerInfoDialog() },
+    { id: "settings:git-footer-visibility", scope: "session", destination: "settings", kind: "Setup", label: "Git-footer Visibility", description: "Choose the globally saved Git-footer fields", keywords: "footer visibility show hide", available: isOptionalFeatureEnabled("gitFooterStatus") && gitFooterVisibilityCommandAvailable(), unavailableReason: commandUnavailableMessage("git-footer-visibility"), run: () => openGitFooterVisibilityDialog() },
+    { id: "native:settings", scope: "session", destination: "settings", kind: "Pi", label: "/settings", description: "Open settings", keywords: "configuration", run: () => runNativeCommandMenu("/settings") },
+    { id: "native:scoped-models", scope: "session", destination: "settings", kind: "Pi", label: "/scoped-models", description: "Manage model cycling scope", keywords: "models cycle ctrl p", run: () => runNativeCommandMenu("/scoped-models") },
+    ...[["tools", "tuiToolsCommand"], ["skills", "tuiSkillsCommand"]].map(([kind, featureId]) => ({
+      id: `settings:${kind}-setup`, scope: "session", destination: "settings", kind: "Setup",
+      label: `${kind === "tools" ? "Tools" : "Skills"} Setup`, description: "Configure resource defaults, including when this companion is disabled", keywords: "resources defaults configuration",
+      available: optionalFeatureSetupAvailable(OPTIONAL_FEATURE_BY_ID.get(featureId)),
+      unavailableReason: `${kind === "tools" ? "Tools" : "Skills"} Setup is unavailable in this session. Check the companion in Settings → Features.`,
+      run: () => openOptionalFeatureSetup(OPTIONAL_FEATURE_BY_ID.get(featureId)),
+    })),
+    { id: "native:tools", scope: "session", destination: "settings", kind: "Pi", label: "/tools", description: "Manage active tools", keywords: "capabilities", run: () => runNativeCommandMenu("/tools") },
+    { id: "native:skills", scope: "session", destination: "settings", kind: "Pi", label: "/skills", description: "Manage active skills", keywords: "system prompt", run: () => runNativeCommandMenu("/skills") },
+    { id: "native:append-system", scope: "server", destination: "settings", kind: "Pi", label: "/append-system", description: "Choose the APPEND_SYSTEM.md append prompt", keywords: "append system prompt settings global", run: () => openNativeAppendSystemSelector() },
+    { id: "native:theme", scope: "browser", destination: "settings", kind: "Pi", label: "/theme", description: "Choose the Web UI theme", keywords: "dark light colors appearance", run: () => openNativeThemeSelector() },
+    { id: "project:guided-git", scope: "project", destination: "project", kind: "Git", label: "Guided Git workflow", description: "Stage, commit, push, or open a pull request step by step", keywords: "git commit push pr publish", run: () => launchGuidedGitWorkflow() },
+    { id: "project:changes", scope: "project", destination: "project", kind: "Git", label: "Git changes", description: "Review and stage local changes with diffs", keywords: "git diff stage unstage discard status", run: () => openGitChangesDialog() },
+    { id: "project:files", scope: "project", destination: "project", kind: "Action", label: "Files panel", description: "Open the Files section of the Control Deck", keywords: "tree browse project explorer", run: () => revealSidePanelSectionById("files") },
+    { id: "project:git", scope: "project", destination: "project", kind: "Action", label: "Git panel", description: "Open the Git section of the Control Deck", keywords: "repository status history", run: () => revealSidePanelSectionById("git") },
+    { id: "activity:events", scope: "browser", destination: "activity", kind: "Action", label: "Events log", description: "Open the Events section of the Control Deck", keywords: "errors warnings log diagnostics", run: () => revealEventsSection() },
+    { id: "conversation:thinking-visibility", scope: "browser", destination: "conversation", kind: "Action", label: thinkingOutputVisible ? "Hide thinking output" : "Show thinking output", description: "Toggle thinking cards in the transcript (Ctrl/Cmd+T in the composer)", keywords: "reasoning thinking toggle", run: () => setThinkingOutputVisible(!thinkingOutputVisible, { announce: true }) },
+    { id: "conversation:tool-output", scope: "browser", destination: "conversation", kind: "Action", label: toolOutputGloballyExpanded ? "Collapse tool output" : "Expand tool output", description: `${toolOutputGloballyExpanded ? "Expanded" : "Collapsed"}. Toggle tool result cards (Ctrl/Cmd+O in the composer)`, keywords: "tools results collapse expand", run: () => setToolOutputGloballyExpanded(!toolOutputGloballyExpanded, { announce: true }) },
+    { id: "native:login", scope: "session", destination: "settings", kind: "Pi", label: "Provider login", description: "Open provider sign-in guidance", keywords: "account authentication credentials", run: () => runNativeCommandMenu("/login") },
+    { id: "native:logout", scope: "session", destination: "settings", kind: "Pi", label: "Provider logout", description: "Review stored provider credentials before removal", keywords: "account authentication credentials", run: () => runNativeCommandMenu("/logout") },
+    { id: "settings:visibility", scope: "server", destination: "settings", kind: "Action", label: "Control visibility", description: "Choose which controls are shown", keywords: "hidden buttons recovery", run: () => openControlVisibilitySetupDialog() },
+    { id: "settings:show-controls", scope: "server", destination: "settings", kind: "Action", label: "Show all controls", description: "Restore every hidden button and input tag", keywords: "visibility hidden restore controls buttons", run: () => showAllControls() },
+    { id: "settings:reset-controls", scope: "server", destination: "settings", kind: "Action", label: "Reset control visibility", description: "Return hidden/visible controls to the defaults", keywords: "visibility defaults controls buttons", run: () => resetControlVisibilityDefaults() },
   ];
   if (tabs.length) {
-    items.push({ kind: "Workspace", label: "Workspace: Save", description: "Capture all open tabs, sessions, groups, and the active tab", keywords: "workspace snapshot save sessions groups", run: () => saveWebuiWorkspace({ triggerButton: elements.commandPaletteButton }) });
+    items.push({ id: "workspace:save", scope: "server", destination: "home", kind: "Workspace", label: "Workspace: Save", description: "Capture all open threads, sessions, groups, and the active thread", keywords: "workspace snapshot save sessions groups", run: () => saveWebuiWorkspace({ triggerButton: elements.commandPaletteButton }) });
   }
-  items.push({ kind: "Workspace", label: "Workspace: Load…", description: tabs.length ? "Choose a saved workspace and decide whether to save current tabs" : "Show saved workspaces to restore", keywords: "workspace restore saved sessions groups", run: () => openWorkspaceLoadPicker({ triggerButton: elements.commandPaletteButton }) });
-  if (isOptionalFeatureEnabled("statsCommand")) items.push({ kind: "Pi", label: "/stats-webui", description: "Open usage dashboard", keywords: "tokens cost budget", run: () => openStatsOverlay({ refresh: true }) });
+  items.push({ id: "workspace:load", scope: "server", destination: "home", kind: "Workspace", label: "Workspace: Load…", description: tabs.length ? "Choose a saved workspace and decide whether to save current threads" : "Show saved workspaces to restore", keywords: "workspace restore saved sessions groups", run: () => openWorkspaceLoadPicker({ triggerButton: elements.commandPaletteButton }) });
+  if (isOptionalFeatureEnabled("statsCommand")) items.push({ id: "native:stats", scope: "session", destination: "activity", kind: "Pi", label: "/stats-webui", description: "Open usage dashboard", keywords: "tokens cost budget", run: () => openStatsOverlay({ refresh: true }) });
   return items;
 }
+
 
 function commandPaletteTabItems() {
   return tabs.map((tab) => {
     const indicator = tabIndicator(tab);
     return {
-      kind: "Tab",
-      label: tab.id === activeTabId ? `Current tab: ${tab.title}` : `Switch to tab: ${tab.title}`,
+      id: `tab:${tab.id}`,
+      scope: "tab",
+      target: { tabId: tab.id },
+      destination: "conversation",
+      kind: "Thread",
+      label: tab.id === activeTabId ? `Current thread: ${threadDisplayTitle(tab.title)}` : `Switch to thread: ${threadDisplayTitle(tab.title)}`,
       description: `${indicator.label} · ${normalizeDisplayPath(tab.cwd || "")}`,
       keywords: `${tab.id} ${tab.cwd || ""}`,
       run: () => switchTab(tab.id),
@@ -47409,6 +47116,9 @@ function commandPaletteTabItems() {
 
 function commandPaletteModelItems() {
   return availableModels.map((model) => ({
+    id: `model:${encodeURIComponent(model.provider)}/${encodeURIComponent(model.id)}`,
+    scope: "session",
+    destination: "conversation",
     kind: "Model",
     label: `${model.provider}/${model.id}`,
     description: model.name || (model.contextWindow ? `context ${formatFooterTokenCount(model.contextWindow)}` : "Set active model"),
@@ -47426,6 +47136,9 @@ function commandPaletteModelItems() {
 
 function commandPaletteSlashItems() {
   return visibleCommands().slice(0, 140).map((command) => ({
+    id: `command:${encodeURIComponent(command.name)}`,
+    scope: "session",
+    destination: "conversation",
     kind: command.source || "Command",
     label: `/${command.name}`,
     description: command.description || "Run slash command",
@@ -47434,41 +47147,37 @@ function commandPaletteSlashItems() {
   }));
 }
 
+function invalidateShellSessionActions(tabId = activeTabId) {
+  if (tabId === activeTabId) shellActionSessionEpoch += 1;
+}
+
+function shellActionTarget() {
+  return {
+    ...activeTabContext(),
+    sessionIdentity: `${shellActionSessionEpoch}:${currentState?.sessionId || currentState?.sessionFile || ""}`,
+    cwd: tabs.find((tab) => tab.id === activeTabId)?.cwd || "",
+    liveTabIds: tabs.map((tab) => tab.id),
+  };
+}
+
 function buildCommandPaletteItems() {
+  const context = shellActionTarget();
   return [
     ...commandPaletteCoreItems(),
     ...commandPaletteTabItems(),
     ...commandPaletteModelItems(),
     ...commandPaletteSlashItems(),
-  ];
-}
-
-// Ranking: label prefix > label word-start > label contains > description/keywords only.
-// Ties keep catalog order (actions, tabs, models, commands), so results stay predictable.
-function paletteItemScore(item, query) {
-  const label = paletteText(item.label);
-  const tokens = query.split(/\s+/).filter(Boolean);
-  let score = 0;
-  for (const token of tokens) {
-    if (label.startsWith(token)) score += 40;
-    else if (label.replace(/^\//, "").startsWith(token)) score += 36;
-    else if (new RegExp(`(^|[\\s/_-])${token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`).test(label)) score += 24;
-    else if (label.includes(token)) score += 12;
-    else score += 1;
-  }
-  return score;
+  ].map((item) => {
+    if (item.scope !== "session" && item.scope !== "project") return item;
+    return {
+      ...item,
+      target: { tabId: context.tabId, generation: context.generation, sessionIdentity: context.sessionIdentity, ...(item.scope === "project" ? { cwd: context.cwd } : {}) },
+    };
+  });
 }
 
 function filteredCommandPaletteItems() {
-  const query = paletteText(elements.commandPaletteInput?.value || "").trim();
-  const items = buildCommandPaletteItems();
-  if (!query) return items.slice(0, 80);
-  return items
-    .map((item, index) => ({ item, index, score: paletteItemMatches(item, query) ? paletteItemScore(item, query) : -1 }))
-    .filter((entry) => entry.score >= 0)
-    .sort((a, b) => b.score - a.score || a.index - b.index)
-    .slice(0, 80)
-    .map((entry) => entry.item);
+  return filterActionItems(buildCommandPaletteItems(), elements.commandPaletteInput?.value || "");
 }
 
 function setCommandPaletteIndex(index) {
@@ -47491,7 +47200,9 @@ function renderCommandPaletteList({ preserveScroll = false } = {}) {
   commandPaletteItems.forEach((item, index) => {
     const button = make("button", `command-palette-item${index === commandPaletteIndex ? " active" : ""}`);
     button.type = "button";
-    button.id = `command-palette-option-${encodeURIComponent(`${item.kind}-${item.label}`).replace(/%/g, "-")}`;
+    button.id = `command-palette-option-${encodeURIComponent(item.id)}`;
+    button.dataset.actionId = item.id;
+    button.dataset.actionScope = item.scope;
     button.setAttribute("role", "option");
     button.setAttribute("aria-selected", index === commandPaletteIndex ? "true" : "false");
     button.addEventListener("click", () => executeCommandPaletteItem(item));
@@ -47518,6 +47229,7 @@ function renderCommandPalette({ preserveScroll = false } = {}) {
 }
 
 function openCommandPalette(initialQuery = "") {
+  if (focusedShell?.active) { focusedShell.openTools(undefined, undefined, initialQuery); return; }
   setComposerActionsOpen(false);
   setPublishMenuOpen(false);
   setNativeCommandMenuOpen(false);
@@ -47539,9 +47251,15 @@ function closeCommandPalette() {
 
 async function executeCommandPaletteItem(item = commandPaletteItems[commandPaletteIndex]) {
   if (!item) return;
-  closeCommandPalette();
   try {
-    await item.run?.();
+    const target = checkActionTarget(item, shellActionTarget());
+    if (!target.ok) throw new Error(target.reason);
+    const current = buildCommandPaletteItems().find((action) => action.id === item.id);
+    if (!current) throw new Error("This action is no longer available. Reopen the command palette to refresh its actions.");
+    const availability = checkActionTarget({ ...current, target: item.target }, shellActionTarget());
+    if (!availability.ok) throw new Error(availability.reason);
+    closeCommandPalette();
+    await current.run?.();
   } catch (error) {
     addEvent(error.message || String(error), "error");
   }
@@ -47576,7 +47294,7 @@ async function refreshAll(tabContext = activeTabContext()) {
   const results = await Promise.allSettled([
     refreshState(tabContext),
     refreshMessages(tabContext),
-    refreshIntercomConversationSummaries(tabContext),
+    activityIntercom.refreshSummaries(projectTargetFromContext(tabContext)),
     ...supplementalRefreshRequests(tabContext),
   ]);
   if (!isCurrentTabContext(tabContext)) return;
@@ -47605,7 +47323,7 @@ function scheduleForegroundSupplementalRefresh(tabContext) {
 
 function ensureActiveEventStream(tabContext = activeTabContext()) {
   if (!tabContext.tabId || !isCurrentTabContext(tabContext)) return;
-  if (!eventSource || eventSource.readyState === EventSource.CLOSED) connectEvents(tabContext);
+  if (!sessionEvents.source || sessionEvents.source.readyState === EventSource.CLOSED) connectEvents(tabContext);
 }
 
 async function reconcileForegroundState(reason = "resume") {
@@ -47801,7 +47519,7 @@ async function restartServer() {
   if (!(await appConfirm({
     title: "Restart Pi Web UI server?",
     summary: "Browser clients disconnect briefly while the server restarts.",
-    affected: "All connected browser clients and Pi tabs managed by this Web UI",
+    affected: "All connected browser clients and Pi threads managed by this Web UI",
     undoable: false,
     confirmLabel: "Restart server",
   }))) return;
@@ -47848,7 +47566,7 @@ async function stopServer() {
   if (!(await appConfirm({
     title: "Stop Pi Web UI server?",
     summary: "The Web UI becomes unavailable until the server is started again.",
-    affected: "All connected browser clients and Pi tabs managed by this Web UI",
+    affected: "All connected browser clients and Pi threads managed by this Web UI",
     undoable: false,
     confirmLabel: "Stop server",
   }))) return;
@@ -47988,7 +47706,7 @@ function clearComposerAfterUserBash({ usesPromptInput, targetTabId, tabContext }
     elements.promptInput.value = "";
     resizePromptInput();
   } else {
-    tabDrafts.set(targetTabId, "");
+    composerStore.setDraft(targetTabId, "");
   }
 }
 
@@ -48101,7 +47819,7 @@ async function sendUserBashCommand(parsed, { usesPromptInput = false, targetTabI
 
 function clearPromptInputForRouting({ usesPromptInput, targetTabId, tabContext }) {
   if (!usesPromptInput) return;
-  tabDrafts.set(targetTabId, "");
+  composerStore.setDraft(targetTabId, "");
   if (!isCurrentTabContext(tabContext)) return;
   elements.promptInput.value = "";
   resizePromptInput();
@@ -48114,10 +47832,10 @@ function restorePromptInputAfterRoutingError(message, { usesPromptInput, targetT
     if (elements.promptInput.value) return;
     elements.promptInput.value = message;
     resizePromptInput();
-    tabDrafts.set(targetTabId, message);
+    composerStore.setDraft(targetTabId, message);
     return;
   }
-  if (!tabDrafts.get(targetTabId)) tabDrafts.set(targetTabId, message);
+  if (!composerStore.getDraft(targetTabId)) composerStore.setDraft(targetTabId, message);
 }
 
 function createBrowserPromptRequestId() {
@@ -48151,7 +47869,7 @@ async function retryMobileFailedSend() {
     applyResponseTab(response);
     if (pending.tabId === activeTabId && elements.promptInput.value.trim() === pending.inputMessage.trim()) {
       elements.promptInput.value = "";
-      tabDrafts.set(pending.tabId, "");
+      composerStore.setDraft(pending.tabId, "");
       resizePromptInput();
     }
     clearAttachments(pending.tabId);
@@ -48176,14 +47894,134 @@ function discardMobileFailedSend() {
   recordMobileDiagnostic("failed send discarded");
 }
 
-async function sendPrompt(kind = "prompt", explicitMessage, { targetTabId = activeTabId, throwOnError = false, streamingBehavior } = {}) {
+/**
+ * Undoes the immediate first-send feedback after thread creation failed: the
+ * optimistic message goes away and the submitted text returns to its draft,
+ * followed by anything typed while the thread was starting.
+ */
+function restoreUnstartedDraftPrompt(draftId, inputMessage, optimisticPromptId) {
+  const draft = draftConversations.get(draftId);
+  const selected = !activeTabId && draftConversations.activeId === draftId;
+  if (selected) {
+    // Clear the indicator first: the transcript re-renders the start card
+    // only when no run indicator is active.
+    clearRunIndicatorActivity({ render: false });
+    discardOptimisticUserPrompt(optimisticPromptId);
+  }
+  if (!draft) return;
+  const newer = selected ? elements.promptInput.value : draft.text;
+  const recovered = newer.trim() && newer !== inputMessage && !newer.startsWith(`${inputMessage}\n\n`)
+    ? `${inputMessage}\n\n${newer}` : newer.trim() ? newer : inputMessage;
+  draftConversations.edit(draftId, recovered);
+  draftConversations.save(draftId);
+  reportDraftStorageError();
+  if (selected) {
+    elements.promptInput.value = recovered;
+    resizePromptInput();
+  }
+}
+
+async function sendEmptyStartPrompt(inputMessage) {
+  const sourceDraftId = draftConversations.activeId || draftConversations.create();
+  if (draftSubmissions.has(sourceDraftId)) return;
+  draftConversations.edit(sourceDraftId, inputMessage);
+  const sourceDraft = draftConversations.get(sourceDraftId);
+  const sourceDraftRevision = sourceDraft.revision;
+  const sourceCwd = sourceDraft.cwd;
+  const sourceContext = activeTabContext();
+  const sourceNavigation = focusedShellState;
+  const sourceDraftNavigation = draftNavigationRevision;
+  draftSubmissions.add(sourceDraftId);
+  saveClientDraft();
+  // Slash commands need the new session's command catalog before dispatch;
+  // plain prompts can be shown and sent as soon as the thread exists.
+  const needsSessionCatalog = inputMessage.trim().startsWith("/");
+  let startingPromptId = "";
+  if (!needsSessionCatalog) {
+    startingPromptId = appendOptimisticUserPrompt(inputMessage);
+    setRunIndicatorActivity("Starting Pi…");
+    elements.promptInput.value = "";
+    resizePromptInput();
+  }
+  try {
+    // Creation must not switch away from a destination chosen while it was pending.
+    const tab = await createTerminalTab(sourceCwd, { workspaceKind: sourceCwd ? "project" : "no-project", triggerButton: null, activate: false });
+    if (!tab?.id) {
+      if (startingPromptId) restoreUnstartedDraftPrompt(sourceDraftId, inputMessage, startingPromptId);
+      return;
+    }
+    const selected = !activeTabId && draftConversations.activeId === sourceDraftId;
+    if (selected) draftConversations.edit(sourceDraftId, elements.promptInput.value);
+    const draft = draftConversations.get(sourceDraftId);
+    const unchanged = draft?.text === inputMessage && draft.revision === sourceDraftRevision;
+    composerStore.setDraft(tab.id, draft && !unchanged ? draft.text : "");
+    // Retire only the submitted client identity. Other blank conversations and
+    // edits remain independent even when two creation responses cross.
+    draftConversations.remove(sourceDraftId);
+    if (selected) {
+      elements.promptInput.value = "";
+      if (!isCurrentTabContext(sourceContext) || focusedShellState !== sourceNavigation || draftNavigationRevision !== sourceDraftNavigation) {
+        draftConversations.select(draftConversations.create());
+      }
+    }
+    let switching = null;
+    if (selected && isCurrentTabContext(sourceContext) && focusedShellState === sourceNavigation && draftNavigationRevision === sourceDraftNavigation) {
+      // switchTab activates the thread synchronously, then loads its full UI.
+      // Only slash commands wait for that load before dispatch.
+      switching = switchTab(tab.id);
+      if (needsSessionCatalog) await switching;
+    } else {
+      renderTabs();
+      if (selected) restoreActiveDraft();
+    }
+    persistDesktopDrafts();
+    reportDraftStorageError();
+    const tabContext = activeTabContext(tab.id);
+    const retainSubmittedText = () => {
+      const newer = isCurrentTabContext(tabContext) ? elements.promptInput.value : composerStore.getDraft(tab.id);
+      const recovered = newer && newer !== inputMessage && !newer.startsWith(`${inputMessage}\n\n`)
+        ? `${inputMessage}\n\n${newer}` : newer || inputMessage;
+      composerStore.setDraft(tab.id, recovered);
+      if (isCurrentTabContext(tabContext)) restoreActiveDraft();
+      persistDesktopDrafts();
+    };
+    const opensSelector = NATIVE_SELECTOR_COMMANDS.has(slashCommandName(inputMessage))
+      || /^\/summary\s+refresh$/i.test(inputMessage.trim());
+    // Native selectors operate on the visible session. Keep a background
+    // command in its own draft instead of opening it for another session.
+    if (opensSelector && (!isCurrentTabContext(tabContext) || focusedShellState !== sourceNavigation)) {
+      retainSubmittedText();
+      addEvent(`Select ${threadDisplayTitle(tab.title) || "the new conversation"} to finish ${inputMessage.trim()}. Its command is saved in that conversation's draft.`, "info");
+      return;
+    }
+    try {
+      await sendPrompt("prompt", inputMessage, { targetTabId: tab.id, throwOnError: true, preserveWhitespace: true });
+    } catch (error) {
+      // A newer edit must not hide the failed submitted text. Keep both in
+      // the real session's composer so retry never allocates another terminal.
+      retainSubmittedText();
+      if (!isCurrentTabContext(tabContext)) addEvent(error.message || String(error), "error");
+    }
+    await switching;
+  } finally {
+    draftSubmissions.delete(sourceDraftId);
+    persistDesktopDrafts();
+  }
+}
+
+async function sendPrompt(kind = "prompt", explicitMessage, { targetTabId = activeTabId, throwOnError = false, streamingBehavior, preserveWhitespace = false } = {}) {
   const usesPromptInput = explicitMessage === undefined;
+  if (usesPromptInput && !activeTabId && draftSubmissions.has(draftConversations.activeId)) return;
   const rawMessage = usesPromptInput ? elements.promptInput.value : explicitMessage;
   const inputMessage = String(rawMessage || "");
   const originalMessage = inputMessage.trim();
-  if (!targetTabId) return;
+  if (!targetTabId) {
+    if (usesPromptInput && kind === "prompt" && originalMessage) await sendEmptyStartPrompt(inputMessage);
+    return;
+  }
   if (voiceConversationActiveFor(targetTabId)) voiceConversation.handleUserActivity();
   const tabContext = activeTabContext(targetTabId);
+  const lifetime = sessionContext.captureLifetime(targetTabId);
   const attachments = usesPromptInput ? [...attachmentsForTab(targetTabId)] : [];
   const unavailableAttachments = attachments.filter((attachment) => attachment.requiresReselect);
   if (unavailableAttachments.length) {
@@ -48193,6 +48031,7 @@ async function sendPrompt(kind = "prompt", explicitMessage, { targetTabId = acti
   }
   if (!originalMessage && attachments.length === 0) return;
   if (kind === "prompt" && attachments.length === 0 && await handleNativeSlashSelectorCommand(originalMessage, { usesPromptInput })) return;
+  if (!sessionContext.isLifetimeCurrent(lifetime)) return;
   const userBash = kind === "prompt" && attachments.length === 0 ? parseUserBashInput(originalMessage) : null;
   if (userBash) {
     await sendUserBashCommand(userBash, { usesPromptInput, targetTabId });
@@ -48208,7 +48047,7 @@ async function sendPrompt(kind = "prompt", explicitMessage, { targetTabId = acti
     if (!guidedGitLaunchAdmitted(targetTabId)) return;
     guidedGitLaunchId = createBrowserGuidedGitLaunchId();
     if (!guidedGitLaunchPermits.grant(targetTabId, guidedGitLaunchId)) {
-      addEvent("Guided Git activation is already pending for this tab.", "warn");
+      addEvent("Guided Git activation is already pending for this thread.", "warn");
       return;
     }
     guidedGitPermitGranted = true;
@@ -48234,11 +48073,12 @@ async function sendPrompt(kind = "prompt", explicitMessage, { targetTabId = acti
     }
   }
 
-  let message = originalMessage;
+  let message = preserveWhitespace && !originalMessage.startsWith("/") ? inputMessage : originalMessage;
   let dispatchedRequest = null;
   try {
     const prepared = attachments.length ? await prepareAttachmentsForPrompt(attachments, targetTabId) : { images: [], uploadedFiles: [], inlineImageIds: new Set() };
-    message = composeMessageWithAttachments(originalMessage, prepared.uploadedFiles, prepared.inlineImageIds);
+    if (!sessionContext.isLifetimeCurrent(lifetime)) return;
+    message = composeMessageWithAttachments(message, prepared.uploadedFiles, prepared.inlineImageIds);
     // Dispatch against the captured target tab, never the tab that happened
     // to become active while attachments/requests were resolving.
     if (kind === "prompt" && attachments.length === 0) message = resolveRpcSlashCommandMessage(message, { tabId: targetTabId });
@@ -48266,6 +48106,15 @@ async function sendPrompt(kind = "prompt", explicitMessage, { targetTabId = acti
       dispatchedRequest = { kind, body, tabId: targetTabId, inputMessage };
       response = await api("/api/prompt", { method: "POST", body, tabId: targetTabId });
     }
+    if (!sessionContext.isLifetimeCurrent(lifetime)) return;
+    if (response?.nextTabId || response?.data?.nextTabId) {
+      promptRoutingTabs.delete(targetTabId);
+      discardOptimisticUserPrompt(optimisticPromptId);
+      markTabIdleLocally(targetTabId);
+      if (isCurrentTabContext(tabContext)) clearRunIndicatorActivity();
+      await followFreshConversationResponse(response, tabContext);
+      return;
+    }
     applyResponseTab(response);
     // A successful RPC response ends prompt-routing ownership even when an
     // extension command handled the input without starting an agent turn.
@@ -48288,7 +48137,11 @@ async function sendPrompt(kind = "prompt", explicitMessage, { targetTabId = acti
     if (targetStillActive && response?.command === "native_slash_command") {
       applyNativeSlashCommandEffects(response, message, tabContext);
     }
-    if (usesPromptInput) clearAttachments(targetTabId);
+    if (usesPromptInput) {
+      for (const attachment of attachments) {
+        if (attachmentsForTab(targetTabId).includes(attachment)) removeAttachment(attachment.id, targetTabId);
+      }
+    }
     persistMobileContinuityState();
     if (targetStillActive) {
       hideCommandSuggestions();
@@ -48297,6 +48150,10 @@ async function sendPrompt(kind = "prompt", explicitMessage, { targetTabId = acti
       scheduleRefreshTabs(300);
     }
   } catch (error) {
+    if (!sessionContext.isLifetimeCurrent(lifetime)) {
+      if (throwOnError) throw error;
+      return;
+    }
     if (guidedGitPermitGranted) guidedGitLaunchPermits.clearTab(targetTabId);
     restorePromptInputAfterRoutingError(inputMessage, { usesPromptInput, targetTabId, tabContext });
     if (dispatchedRequest?.kind === "prompt" && dispatchedRequest.body?.requestId && error?.backendOffline === true && isMobileShellV2Active()) {
@@ -48319,26 +48176,27 @@ async function sendPrompt(kind = "prompt", explicitMessage, { targetTabId = acti
   }
 }
 
-function hasQueuedDialogRequest(id) {
-  if (!id) return false;
-  const key = String(id);
-  return String(activeDialog?.id || "") === key || dialogQueue.some((request) => String(request?.id || "") === key);
+function retireSessionDialogs(tabId) {
+  const requests = [extensionRequests.active, ...extensionRequests.pending()]
+    .filter((request) => request?.tabId === tabId);
+  const { activeRemoved } = extensionRequests.remove(tabId, requests.map((request) => request.id));
+  if (activeRemoved) {
+    activeDialogCancel = null;
+    if (elements.dialog.open) elements.dialog.close();
+  }
 }
 
-function removeQueuedDialogRequests(ids = []) {
-  const idSet = new Set(ids.map((id) => String(id)).filter(Boolean));
-  if (idSet.size === 0) return false;
-  for (let i = dialogQueue.length - 1; i >= 0; i -= 1) {
-    if (idSet.has(String(dialogQueue[i]?.id || ""))) dialogQueue.splice(i, 1);
-  }
-  if (activeDialog && idSet.has(String(activeDialog.id || ""))) {
-    if (elements.dialog.open) elements.dialog.close();
-    activeDialog = null;
-    activeDialogCancel = null;
-    showNextDialog();
-    return true;
-  }
-  return false;
+function hasQueuedDialogRequest(id, tabId = activeTabId) {
+  return !!id && extensionRequests.has(tabId, String(id));
+}
+
+function removeQueuedDialogRequests(ids = [], tabId = activeTabId) {
+  const { activeRemoved } = extensionRequests.remove(tabId, ids.map(String).filter(Boolean));
+  if (!activeRemoved) return false;
+  activeDialogCancel = null;
+  if (elements.dialog.open) elements.dialog.close();
+  showNextDialog();
+  return true;
 }
 
 function handleExtensionUiRequest(request) {
@@ -48373,7 +48231,7 @@ function handleExtensionUiRequest(request) {
             validPayload ? "ready" : "failed",
             validPayload ? "" : "Git footer returned invalid status data — refresh to retry",
           );
-          if (footerPayload) syncClaudeUsageFromGitFooterPayload(footerPayload);
+          if (footerPayload) activityUsage.syncFooter(footerPayload);
         }
       } else {
         statusEntries.delete(statusKey);
@@ -48457,7 +48315,7 @@ function handleExtensionUiRequest(request) {
     case "input":
     case "editor":
       if (isRemoteWebuiQrPopupLoading()) closeRemoteWebuiQrPopup();
-      if (hasQueuedDialogRequest(request.id)) return;
+      if (hasQueuedDialogRequest(request.id, request.tabId)) return;
       if (request.pendingExtensionUiRequestCount === undefined) {
         const tab = tabs.find((item) => item.id === request.tabId);
         if (setTabPendingBlockerCount(request.tabId, Math.max(1, tabPendingBlockerCount(tab) + 1))) renderTabs();
@@ -48465,7 +48323,7 @@ function handleExtensionUiRequest(request) {
       if (!request.replayed) notifyBlockedTab(request.tabId, { request, count: request.pendingExtensionUiRequestCount });
       if (request.replayed) addEvent(`recovered pending ${request.method} request`, "warn");
       setRunIndicatorActivity(`Waiting for your ${request.method} response…`);
-      dialogQueue.push(request);
+      extensionRequests.enqueue(request);
       showNextDialog();
       return;
     default:
@@ -48473,20 +48331,22 @@ function handleExtensionUiRequest(request) {
   }
 }
 
-async function sendDialogResponse(payload) {
+async function sendDialogResponse(payload, request = extensionRequests.active, lifetime = sessionContext.captureLifetime(payload.tabId || activeTabId)) {
+  if (!request || extensionRequests.active !== request || !sessionContext.isLifetimeCurrent(lifetime)) return;
   const { tabId = activeTabId, ...body } = payload;
   const tabContext = activeTabContext(tabId);
   const responseId = String(body.id || "");
   try {
     const response = await api("/api/extension-ui-response", { method: "POST", body, tabId });
+    if (extensionRequests.active !== request || !sessionContext.isLifetimeCurrent(lifetime)) return;
     if (!applyResponseTab(response) && decrementTabPendingBlockerCount(tabId)) renderTabs();
   } catch (error) {
     if (isCurrentTabContext(tabContext)) addEvent(error.message, "error");
   } finally {
     if (!isCurrentTabContext(tabContext)) return;
-    if (responseId && activeDialog && String(activeDialog.id || "") !== responseId) return;
+    if (extensionRequests.active !== request || !sessionContext.isLifetimeCurrent(lifetime)) return;
     if (elements.dialog.open) elements.dialog.close();
-    activeDialog = null;
+    extensionRequests.remove(tabId, [responseId || extensionRequests.active?.id || ""]);
     activeDialogCancel = null;
     if (runIndicatorIsActive()) {
       setRunIndicatorActivity("Continuing after your response…");
@@ -48500,15 +48360,15 @@ async function sendDialogResponse(payload) {
 }
 
 function cancelActiveExtensionDialog(event) {
-  if (!activeDialog || typeof activeDialogCancel !== "function") return false;
+  if (!extensionRequests.active || typeof activeDialogCancel !== "function") return false;
   event?.preventDefault?.();
   return activeDialogCancel();
 }
 
-function createDialogResponder(sendResponse) {
+function createDialogResponder(sendResponse, isCurrent = () => true) {
   let responseSent = false;
   return (response, onAccept) => {
-    if (responseSent) return false;
+    if (responseSent || !isCurrent()) return false;
     responseSent = true;
     onAccept?.();
     sendResponse(response);
@@ -48699,10 +48559,9 @@ function renderWorkflowScriptPreview(request, respondToDialog) {
 }
 
 function showNextDialog() {
-  if (activeDialog || dialogQueue.length === 0) return;
-  activeDialog = dialogQueue.shift();
+  const request = extensionRequests.takeNext();
+  if (!request) return;
   activeDialogCancel = null;
-  const request = activeDialog;
 
   const prompt = normalizeDialogPrompt(request);
   const detectedReleasePrompt = request.method === "select" ? releaseDialogPromptParts(prompt) : null;
@@ -48723,9 +48582,10 @@ function showNextDialog() {
   elements.dialogBody.replaceChildren();
   elements.dialogActions.replaceChildren();
 
+  const requestLifetime = sessionContext.captureLifetime(request.tabId);
   const respondToDialog = createDialogResponder((response) => {
-    sendDialogResponse({ type: "extension_ui_response", id: request.id, tabId: request.tabId, ...response });
-  });
+    sendDialogResponse({ type: "extension_ui_response", id: request.id, tabId: request.tabId, ...response }, request, requestLifetime);
+  }, () => extensionRequests.active === request && sessionContext.isLifetimeCurrent(requestLifetime));
   const cancel = () => respondToDialog({ cancelled: true });
   activeDialogCancel = cancel;
 
@@ -48880,7 +48740,7 @@ function scheduleSupervisorContinuityRefresh(event, { gap = false } = {}) {
 
   if (gap && !supervisorGapWarnings.has(key)) {
     supervisorGapWarnings.add(key);
-    addEvent("Buffered live output may be incomplete; refreshing tabs, state, and transcript from Pi.", "info");
+    addEvent("Buffered live output may be incomplete; refreshing threads, state, and transcript from Pi.", "info");
   }
   if (supervisorContinuityRefreshes.has(key)) return;
 
@@ -48956,11 +48816,9 @@ function beginForegroundTranscriptCatchUp() {
   backgroundReconnectSnapshotFresh = false;
   flushNormalStreamRenders("visibility-hidden");
   streamOutputController.cancel();
-  if (!eventSource) return;
+  if (!sessionEvents.source) return;
   eventStreamPausedForBackground = true;
-  const source = eventSource;
-  eventSource = null;
-  source.close();
+  sessionEvents.close();
 }
 
 function dispatchTranscriptStreamEvent(event) {
@@ -49001,12 +48859,12 @@ function handleEvent(event) {
   if (["webui_optional_feature_restart_completed", "webui_optional_feature_restart_deferred"].includes(event?.type)) {
     optionalFeatureRestartNotice = {
       tabId: event.tabId || activeTabId,
-      tabTitle: event.tabTitle || "terminal",
+      tabTitle: threadDisplayTitle(event.tabTitle) || "thread",
       autoRestarted: event.autoRestarted === true,
       restartDeferred: event.restartDeferred === true,
       reason: event.reason || "",
     };
-    addEvent(event.autoRestarted ? "restarted tab to load new optional features" : "optional feature restart deferred because the tab is busy", event.restartDeferred ? "warn" : "info");
+    addEvent(event.autoRestarted ? "restarted thread to load new optional features" : "optional feature restart deferred because the thread is busy", event.restartDeferred ? "warn" : "info");
     renderOptionalFeatureMigrationSurface();
     return;
   }
@@ -49023,7 +48881,7 @@ function handleEvent(event) {
     return;
   }
   const tabContext = activeTabContext(event.tabId || activeTabId);
-  if (["webui_connected", "agent_end", "message_end", "tool_execution_end"].includes(event.type)) scheduleIntercomConversationRefresh(tabContext);
+  if (["webui_connected", "agent_end", "message_end", "tool_execution_end"].includes(event.type)) activityIntercom.scheduleRefresh(projectTargetFromContext(tabContext));
   switch (event.type) {
     case "webui_connected": {
       const connectedTabId = event.tabId || activeTabId;
@@ -49041,7 +48899,7 @@ function handleEvent(event) {
         renderAppRunnerControls();
         renderWidgets();
       }
-      addEvent(`connected to ${event.tabTitle || "terminal"} for ${event.cwd}`);
+      addEvent(`connected to ${threadDisplayTitle(event.tabTitle) || "thread"} for ${event.cwd}`);
       if (event.supervisorReplayGap === true && !resumedWithFreshSnapshot) scheduleSupervisorContinuityRefresh(event, { gap: true });
       if (!resumedWithFreshSnapshot) scheduleForegroundReconcile("event stream reconnect", 0);
       break;
@@ -49058,7 +48916,7 @@ function handleEvent(event) {
       break;
     case "webui_tab_renamed":
       applyTabMetadata(event.tab || { id: event.tabId, title: event.tabTitle, activity: event.tabActivity });
-      addEvent(`${event.previousTabTitle || "terminal"} renamed to ${event.tabTitle || "terminal"}`);
+      addEvent(`${threadDisplayTitle(event.previousTabTitle) || "thread"} renamed to ${threadDisplayTitle(event.tabTitle) || "thread"}`);
       break;
     case "webui_recovery_opened":
       addEvent(`opened ${event.recoveryTabTitle || "recovery plan"}`);
@@ -49071,15 +48929,15 @@ function handleEvent(event) {
       refreshTabs().catch((error) => addEvent(error.message, "error"));
       break;
     case "webui_tab_restarting":
-      addEvent(`restarting ${event.tabTitle || "terminal"} in ${event.cwd}`);
+      addEvent(`restarting ${threadDisplayTitle(event.tabTitle) || "thread"} in ${event.cwd}`);
       break;
     case "webui_tab_reloading":
-      addEvent(`reloading ${event.tabTitle || "terminal"} native Pi resources`);
-      addTransientMessage({ role: "native", title: "/reload", content: `Reloading ${event.tabTitle || "terminal"} native Pi resources…`, level: "info" });
+      addEvent(`reloading ${threadDisplayTitle(event.tabTitle) || "thread"} native Pi resources`);
+      addTransientMessage({ role: "native", title: "/reload", content: `Reloading ${threadDisplayTitle(event.tabTitle) || "thread"} native Pi resources…`, level: "info" });
       break;
     case "webui_tab_reloaded":
-      addEvent(`${event.tabTitle || "terminal"} reloaded`);
-      addTransientMessage({ role: "native", title: "/reload", content: `${event.tabTitle || "terminal"} reloaded. Keybindings, extensions, skills, prompts, and themes were refreshed by restarting the RPC tab${event.sessionFile ? ` and resuming ${event.sessionFile}` : ""}.`, level: "info" });
+      addEvent(`${threadDisplayTitle(event.tabTitle) || "thread"} reloaded`);
+      addTransientMessage({ role: "native", title: "/reload", content: `${threadDisplayTitle(event.tabTitle) || "thread"} reloaded. Keybindings, extensions, skills, prompts, and themes were refreshed by restarting its Pi RPC process${event.sessionFile ? ` and resuming ${event.sessionFile}` : ""}.`, level: "info" });
       clearContextUsageUnknownAfterCompaction(event.tabId || activeTabId);
       statusEntries.clear();
       clearWidgetsForTab(event.tabId || activeTabId);
@@ -49099,20 +48957,20 @@ function handleEvent(event) {
       }, 500);
       break;
     case "webui_extension_ui_cancelled":
-      removeQueuedDialogRequests(event.ids || []);
+      removeQueuedDialogRequests(event.ids || [], event.tabId || activeTabId);
       addEvent(`cancelled ${event.ids?.length || 0} pending extension UI request(s)`, "warn");
       break;
     case "webui_extension_ui_resolved": {
-      const closedActiveDialog = removeQueuedDialogRequests([event.id]);
+      const closedActiveDialog = removeQueuedDialogRequests([event.id], event.tabId || activeTabId);
       if (closedActiveDialog) {
         addEvent("extension UI request resolved");
-        if (runIndicatorIsActive() && !activeDialog) setRunIndicatorActivity("Continuing after extension UI response…");
+        if (runIndicatorIsActive() && !extensionRequests.active) setRunIndicatorActivity("Continuing after extension UI response…");
       }
       break;
     }
     case "webui_app_runner_update": {
       const runTabId = event.tabId || activeTabId;
-      const previousRun = appRunnerDataByTab.get(runTabId)?.activeRun || null;
+      const previousRun = projectRunners.getData(runTabId)?.activeRun || null;
       setAppRunnerData(runTabId, { cwd: event.cwd, activeRun: event.activeRun });
       renderAppRunnerControls();
       // A chatty dev server sends several updates per second; append only the new lines to the
@@ -49130,7 +48988,7 @@ function handleEvent(event) {
       refreshFileTreeLive(tabContext).catch((error) => addEvent(error.message || String(error), "error"));
       break;
     case "webui_cwd_changed":
-      addEvent(`${event.tabTitle || "terminal"} cwd changed to ${event.cwd}`);
+      addEvent(`${threadDisplayTitle(event.tabTitle) || "thread"} cwd changed to ${event.cwd}`);
       setAppRunnerData(event.tabId || activeTabId, { cwd: event.cwd, activeRun: null, runners: [] });
       closeFileViewer();
       resetFileTreeState();
@@ -49372,6 +49230,7 @@ function handleEvent(event) {
       if (event.success === false) surfaceRuntimeDiagnostic(`${event.command || "Pi command"} failed`, event.error || "Unknown RPC command error.");
       else if (event.command === "get_state" && event.tabId === activeTabId) {
         currentState = event.data || currentState;
+        observeSessionState(tabContext, currentState);
         syncActiveTabActivityFromState(currentState);
         syncRunIndicatorFromState(currentState);
         renderStatus();
@@ -49384,6 +49243,8 @@ function handleEvent(event) {
           applyOptimisticThinkingSelection(event.data, tabContext);
         } else if (event.command === "new_session") {
           const tabId = event.tabId || activeTabId;
+          invalidateShellSessionActions(tabId);
+          invalidateActiveSession(tabContext);
           clearContextUsageUnknownAfterCompaction(tabId);
           forgetLastUserPrompt(tabId);
           resetGitWorkflowForTab(tabId);
@@ -49398,11 +49259,36 @@ function handleEvent(event) {
   }
 }
 
+function handleSessionStreamOpen(event, tabContext) {
+  if (!eventStreamPausedForBackground) refreshOptionalFeaturePackageStatuses().catch(() => {});
+  activityIntercom.scheduleRefresh(projectTargetFromContext(tabContext), 0);
+}
+
+function handleSessionStreamMessage(message, tabContext) {
+  try {
+    const event = JSON.parse(message.data);
+    if (!acceptSupervisorEvent(event, tabContext.tabId)) return;
+    handleEvent(event);
+  } catch (error) {
+    if (isCurrentTabContext(tabContext)) addEvent(error.message, "error");
+  }
+}
+
+function handleSessionStreamError() {
+  streamOutputController.flush();
+  flushNormalStreamRenders("disconnect");
+  streamOutputController.cancel();
+  fallbackStreamDerivedOutput("disconnect");
+  if (compactOutputActive()) compactLiveScheduler.flushNow();
+  addEvent("event stream disconnected; browser will retry", "warn");
+  fetch("/api/health", { cache: "no-store" }).catch((error) => setBackendOffline(true, error));
+}
+
 function connectEvents(tabContext = activeTabContext(), { requestedMode = "auto", fallbackAttempted = false } = {}) {
+  if (!isCurrentTabContext(tabContext)) return;
   flushNormalStreamRenders("reconnect");
   cancelNormalStreamRenders();
-  eventSource?.close();
-  eventSource = null;
+  sessionEvents.close();
   streamOutputController.cancel();
   fallbackStreamDerivedOutput("reconnect");
   resetCompactLiveOutput();
@@ -49410,39 +49296,13 @@ function connectEvents(tabContext = activeTabContext(), { requestedMode = "auto"
   outputModeAcknowledged = false;
   eventSourceOutputModeRequest = requestedMode === "normal" ? "normal" : "auto";
   eventSourceOutputModeFallbackAttempted = !!fallbackAttempted;
-  if (!tabContext.tabId || !isCurrentTabContext(tabContext)) return;
+  if (!tabContext.tabId) return;
   const parameters = new URLSearchParams({
     tab: tabContext.tabId,
     outputMode: eventSourceOutputModeRequest,
     outputModeProtocol: "1",
   });
-  const source = new EventSource(`/api/events?${parameters.toString()}`);
-  eventSource = source;
-  source.onopen = () => {
-    if (eventSource !== source || !isCurrentTabContext(tabContext)) return;
-    if (!eventStreamPausedForBackground) refreshOptionalFeaturePackageStatuses().catch(() => {});
-    scheduleIntercomConversationRefresh(tabContext, 0);
-  };
-  source.onmessage = (message) => {
-    if (eventSource !== source || !isCurrentTabContext(tabContext)) return;
-    try {
-      const event = JSON.parse(message.data);
-      if (!acceptSupervisorEvent(event, tabContext.tabId)) return;
-      handleEvent(event);
-    } catch (error) {
-      if (isCurrentTabContext(tabContext)) addEvent(error.message, "error");
-    }
-  };
-  source.onerror = () => {
-    if (eventSource !== source || !isCurrentTabContext(tabContext)) return;
-    streamOutputController.flush();
-    flushNormalStreamRenders("disconnect");
-    streamOutputController.cancel();
-    fallbackStreamDerivedOutput("disconnect");
-    if (compactOutputActive()) compactLiveScheduler.flushNow();
-    addEvent("event stream disconnected; browser will retry", "warn");
-    fetch("/api/health", { cache: "no-store" }).catch((error) => setBackendOffline(true, error));
-  };
+  sessionEvents.connect(`/api/events?${parameters.toString()}`, tabContext);
 }
 
 elements.copyServerCommandButton?.addEventListener("click", copyServerStartCommand);
@@ -49520,10 +49380,11 @@ elements.skillEditorDialog?.addEventListener("keydown", (event) => {
   if (!elements.skillEditorSaveButton?.disabled) saveSkillEditor();
 });
 elements.skillEditorDialog?.querySelector("form")?.addEventListener("submit", (event) => event.preventDefault());
-elements.intercomConversationDialog?.addEventListener("close", resetIntercomConversationDialog);
+elements.intercomConversationDialog?.addEventListener("close", () => {
+  if (!elements.intercomConversationDialog.open) activityIntercom.reset();
+});
 elements.intercomConversationDialog?.addEventListener("cancel", () => {
-  clearTimeout(intercomDetailRefreshTimer);
-  intercomDetailRefreshTimer = null;
+  activityIntercom.reset();
 });
 elements.featureCategoryTag?.addEventListener("click", openFeatureDecisionDialog);
 elements.featureDecisionDialog?.addEventListener("close", () => {
@@ -49538,7 +49399,7 @@ elements.composer.addEventListener("submit", (event) => {
 elements.mobileFailedSendRetryButton?.addEventListener("click", retryMobileFailedSend);
 elements.mobileFailedSendDiscardButton?.addEventListener("click", discardMobileFailedSend);
 elements.followUpQueueTrigger?.addEventListener("click", () => {
-  setFollowUpQueueOpen(!followUpQueueOpen);
+  setFollowUpQueueOpen(!activityQueue.isOpen());
 });
 elements.followUpQueueCloseButton?.addEventListener("click", () => setFollowUpQueueOpen(false, { restoreFocus: true }));
 elements.composerActionsButton.addEventListener("click", () => {
@@ -49612,48 +49473,35 @@ elements.tabBar?.addEventListener("keydown", (event) => {
       : (index + (event.key === "ArrowRight" ? 1 : -1) + tabsInStrip.length) % tabsInStrip.length;
   tabsInStrip[next]?.focus({ preventScroll: false });
 });
-elements.newTabButton.addEventListener("click", (event) => {
-  event.stopPropagation();
-  openNewTabMenu();
-});
-elements.newTabButton.addEventListener("keydown", (event) => {
-  if (event.key !== "ArrowDown" && event.key !== "ArrowUp" && event.key !== "Enter" && event.key !== " ") return;
+elements.newTabButton.addEventListener("click", () => openNewThreadPalette({ returnFocus: elements.newTabButton }));
+elements.newThreadDialog?.querySelector("form")?.addEventListener("submit", (event) => event.preventDefault());
+elements.newThreadDialog?.addEventListener("cancel", (event) => {
   event.preventDefault();
-  openNewTabMenu();
-  focusNewTabMenuItem(event.key === "ArrowUp" ? "last" : "first");
+  closeNewThreadPalette();
 });
-elements.newTabMenuPanel?.addEventListener("keydown", (event) => {
-  if (event.key === "Escape") {
+elements.newThreadDialog?.addEventListener("close", restoreNewThreadPaletteFocus);
+// Backdrop clicks target the dialog element itself; the bounds check keeps a
+// click on the dialog's own edge from counting as outside.
+elements.newThreadDialog?.addEventListener("click", (event) => {
+  const dialog = elements.newThreadDialog;
+  if (event.target !== dialog) return;
+  const box = dialog.getBoundingClientRect();
+  const inside = event.clientX >= box.left && event.clientX <= box.right && event.clientY >= box.top && event.clientY <= box.bottom;
+  if (!inside) closeNewThreadPalette();
+});
+elements.newThreadCloseButton?.addEventListener("click", () => closeNewThreadPalette());
+elements.newThreadInput?.addEventListener("input", () => {
+  newThreadPaletteState.index = 0;
+  renderNewThreadPalette();
+});
+elements.newThreadInput?.addEventListener("keydown", (event) => {
+  const choice = handleWorkspaceChoiceKey(event, newThreadPaletteState, renderNewThreadPalette);
+  if (choice !== undefined) void chooseNewThreadPaletteEntry(choice);
+  else if (event.key === "Escape") {
     event.preventDefault();
-    setNewTabMenuOpen(false);
-    elements.newTabButton.focus({ preventScroll: true });
-  } else if (event.key === "ArrowDown") {
-    event.preventDefault();
-    moveNewTabMenuFocus(1);
-  } else if (event.key === "ArrowUp") {
-    event.preventDefault();
-    moveNewTabMenuFocus(-1);
-  } else if (event.key === "Home") {
-    event.preventDefault();
-    focusNewTabMenuItem("first");
-  } else if (event.key === "End") {
-    event.preventDefault();
-    focusNewTabMenuItem("last");
+    closeNewThreadPalette();
   }
 });
-elements.newTabMenu?.addEventListener("pointerenter", () => openNewTabMenu());
-elements.newTabMenu?.addEventListener("pointerleave", () => {
-  if (!elements.newTabMenu?.contains(document.activeElement)) setNewTabMenuOpen(false);
-});
-elements.newTabMenu?.addEventListener("focusin", () => openNewTabMenu());
-elements.newTabMenu?.addEventListener("focusout", () => {
-  setTimeout(() => {
-    if (!elements.newTabMenu?.contains(document.activeElement)) setNewTabMenuOpen(false);
-  }, 0);
-});
-elements.newTabCurrentDirectoryButton?.addEventListener("click", () => createTerminalTab(currentDirectoryForNewTab(), { triggerButton: elements.newTabCurrentDirectoryButton }));
-elements.newTabChooseDirectoryButton?.addEventListener("click", () => createTerminalTabFromChosenDirectory({ triggerButton: elements.newTabChooseDirectoryButton }));
-elements.newTabWorktreeButton?.addEventListener("click", () => openBranchWorktreePicker());
 elements.workspaceSaveButton?.addEventListener("click", () => saveWebuiWorkspace());
 elements.terminalSplitCloseButton?.addEventListener("click", () => closeTerminalSplitView());
 elements.closeAllTabsButton.addEventListener("click", () => closeAllTerminalTabs());
@@ -49677,7 +49525,9 @@ publishMenuContainer?.addEventListener("pointerenter", () => {
   setOptionsMenuOpen(false);
   setPublishMenuOpen(true);
 });
-publishMenuContainer?.addEventListener("pointerleave", () => setPublishMenuOpen(false));
+publishMenuContainer?.addEventListener("pointerleave", () => {
+  if (!publishMenuContainer.contains(document.activeElement)) setPublishMenuOpen(false);
+});
 publishMenuContainer?.addEventListener("focusin", () => {
   setNativeCommandMenuOpen(false);
   setAppRunnerMenuOpen(false);
@@ -49723,18 +49573,22 @@ elements.appRunnerInfoButton?.addEventListener("click", (event) => {
 });
 elements.appRunnerInfoCloseButton?.addEventListener("click", closeAppRunnerInfoDialog);
 elements.appRunnerMenuButton?.addEventListener("click", async () => {
+  clearComposerMenuDismissal(elements.appRunnerMenuButton.parentElement);
   setPublishMenuOpen(false);
   setNativeCommandMenuOpen(false);
   setOptionsMenuOpen(false);
   setAppRunnerMenuOpen(false);
   const tabContext = activeTabContext();
+  const openingIntent = ++appRunnerMenuIntent;
+  const fromFocusedComposer = focusedShell?.active === true;
   try {
     await refreshAppRunners(tabContext);
-    if (!isCurrentTabContext(tabContext)) return;
+    if (!isCurrentTabContext(tabContext) || openingIntent !== appRunnerMenuIntent
+      || (fromFocusedComposer && (!focusedShell?.active || !document.body.classList.contains("composer-actions-open")))) return;
     if (appRunnerMenuCanOpen()) setAppRunnerMenuOpen(true);
     else if (!appRunnerIsRunning(activeAppRunnerData().activeRun)) openAppRunnerInfoDialog();
   } catch (error) {
-    if (isCurrentTabContext(tabContext)) addEvent(error.message || String(error), "error");
+    if (isCurrentTabContext(tabContext) && openingIntent === appRunnerMenuIntent) addEvent(error.message || String(error), "error");
   }
 });
 appRunnerMenuContainer?.addEventListener("pointerenter", () => {
@@ -49744,7 +49598,9 @@ appRunnerMenuContainer?.addEventListener("pointerenter", () => {
   setOptionsMenuOpen(false);
   setAppRunnerMenuOpen(true);
 });
-appRunnerMenuContainer?.addEventListener("pointerleave", () => setAppRunnerMenuOpen(false));
+appRunnerMenuContainer?.addEventListener("pointerleave", () => {
+  if (!appRunnerMenuContainer.contains(document.activeElement)) setAppRunnerMenuOpen(false);
+});
 appRunnerMenuContainer?.addEventListener("focusin", () => {
   if (elements.appRunnerMenuButton?.disabled || !appRunnerMenuCanOpen()) return;
   setPublishMenuOpen(false);
@@ -49874,6 +49730,8 @@ elements.gitFooterVisibilityResetButton?.addEventListener("click", () => resetGi
 elements.gitFooterVisibilityApplyButton?.addEventListener("click", () => applyGitFooterVisibilityDialog());
 elements.gitFooterVisibilityDialog?.querySelector("form")?.addEventListener("submit", (event) => event.preventDefault());
 elements.gitFooterVisibilityDialog?.addEventListener("close", () => {
+  if (elements.gitFooterVisibilityDialog.open) return;
+  gitFooterVisibilityTarget = null;
   gitFooterVisibilityDirty = false;
   gitFooterVisibilityApplyInFlight = false;
 });
@@ -49946,6 +49804,8 @@ elements.nativeCommandDialog.querySelector("form")?.addEventListener("submit", (
 });
 elements.nativeCommandSearch.addEventListener("keydown", handleNativeSelectorSearchKeydown);
 elements.nativeCommandDialog.addEventListener("close", () => {
+  if (elements.nativeCommandDialog.open) return;
+  settingsResources.close();
   nativeCommandDialogGeneration += 1;
   elements.nativeCommandSearch.oninput = null;
   nativeSettingsDirty = false;
@@ -49963,6 +49823,7 @@ elements.textPromptDialog?.addEventListener("cancel", (event) => {
   finishTextPrompt(null);
 });
 elements.textPromptDialog?.addEventListener("close", () => {
+  if (elements.textPromptDialog.open) return;
   if (activeTextPromptResolve) finishTextPrompt(null);
 });
 elements.confirmationCancelButton?.addEventListener("click", () => finishApplicationConfirmation(false));
@@ -50274,21 +50135,23 @@ elements.abortButton.addEventListener("click", (event) => {
 elements.newSessionButton.addEventListener("click", async () => {
   setComposerActionsOpen(false);
   const tabContext = activeTabContext();
+  const noProject = activeTab()?.workspaceKind === "no-project";
   if (!(await appConfirm({
     title: "Start a new Pi session?",
-    summary: "The active tab switches to a fresh conversation.",
-    affected: "The active tab; the previous session remains resumable.",
+    summary: noProject ? "Open a fresh No Project conversation in a new thread and folder." : "The active thread switches to a fresh conversation.",
+    affected: noProject ? "The current conversation and its files stay in the existing thread." : "The active thread; the previous session remains resumable.",
     undoable: false,
     confirmLabel: "Start new session",
   }))) return;
   try {
     const response = await api("/api/new-session", { method: "POST", body: {}, tabId: tabContext.tabId });
+    if (await followFreshConversationResponse(response, tabContext)) return;
+    invalidateShellSessionActions(tabContext.tabId);
     applyResponseTab(response);
     forgetLastUserPrompt(tabContext.tabId);
     resetGitWorkflowForTab(tabContext.tabId);
-    if (!isCurrentTabContext(tabContext)) return;
-    await refreshAll(tabContext);
-    if (isCurrentTabContext(tabContext)) focusPromptInput({ defer: true });
+    const replacement = invalidateActiveSession(tabContext);
+    if (replacement) focusPromptInput({ defer: true });
   } catch (error) {
     if (isCurrentTabContext(tabContext)) addEvent(error.message, "error");
   }
@@ -50542,7 +50405,7 @@ elements.subagentLaunchSlotsReload?.addEventListener("click", () => {
 });
 elements.subagentLaunchSlotsLater?.addEventListener("click", () => {
   subagentLaunchSlotReloadRequired = false;
-  setSubagentLaunchSlotAnnouncement("Agent models are saved. Reload this tab later before relying on them for future launches.");
+  setSubagentLaunchSlotAnnouncement("Agent models are saved. Reload this thread later before relying on them for future launches.");
   renderSubagentLaunchSlots();
 });
 elements.applySamplingParametersButton?.addEventListener("click", () => {
@@ -50577,12 +50440,10 @@ elements.subagentCancelDialog?.querySelector("form")?.addEventListener("submit",
   void submitSubagentCancel();
 });
 elements.subagentCancelDialog?.addEventListener("cancel", (event) => {
-  if (subagentCancelSubmitting) event.preventDefault();
+  if (activityAgents.getSnapshot().cancelSubmitting) event.preventDefault();
 });
 elements.subagentCancelDialog?.addEventListener("close", () => {
-  subagentCancelSelection = null;
-  setSubagentCancelSubmitting(false);
-  setSubagentCancelStatus();
+  if (!elements.subagentCancelDialog.open) activityAgents.resetCancel();
 });
 elements.piVersionButton?.addEventListener("click", () => {
   openPiReleaseNotes().catch((error) => addEvent(error.message || String(error), "error"));
@@ -50645,13 +50506,13 @@ document.addEventListener("pointerdown", (event) => {
   if (openTerminalTabGroupKey && !event.target?.closest?.(".terminal-tab-group")) {
     clearOpenTerminalTabGroup(openTerminalTabGroupKey);
   }
-  if (newTabMenuOpen && !event.target?.closest?.(".terminal-new-tab-menu")) {
-    setNewTabMenuOpen(false);
+  if (draftWorkspacePicker && !draftWorkspacePicker.element.contains(event.target) && !draftWorkspacePicker.trigger.contains(event.target)) {
+    closeDraftWorkspacePicker();
   }
   if (document.body.classList.contains("composer-actions-open") && !elements.composer.contains(event.target)) {
     setComposerActionsOpen(false);
   }
-  if (followUpQueueOpen && !event.target?.closest?.("#followUpQueueOverlay, #followUpQueueTrigger")) {
+  if (activityQueue.isOpen() && !event.target?.closest?.("#followUpQueueOverlay, #followUpQueueTrigger")) {
     setFollowUpQueueOpen(false, { restoreFocus: true });
   }
   if (publishMenuOpen && !event.target?.closest?.(".composer-publish-menu")) {
@@ -50673,7 +50534,6 @@ document.addEventListener("pointerdown", (event) => {
     setBusyPromptBehaviorMenuOpen(false);
   }
   if (document.body.classList.contains("mobile-tabs-expanded") && !elements.terminalTabsDrawerContent?.contains(event.target) && !elements.terminalTabsToggleButton.contains(event.target)) {
-    setNewTabMenuOpen(false);
     setMobileTabsExpanded(false, { restoreFocus: true });
   }
   if (isFooterPickerOpen() && !elements.statusBar.contains(event.target)) {
@@ -50699,7 +50559,7 @@ document.addEventListener("pointerdown", (event) => {
 }, { passive: true });
 document.addEventListener("pointermove", (event) => {
   if (openTerminalTabGroupKey && !event.target?.closest?.(".terminal-tab-group")) {
-    clearOpenTerminalTabGroup(openTerminalTabGroupKey);
+    clearOpenTerminalTabGroup(openTerminalTabGroupKey, { preserveFocus: true });
   }
   rememberPointerPosition(event);
 }, { passive: true });
@@ -50745,6 +50605,7 @@ function handleNativeAppShortcut(event) {
     return;
   }
   if (!ctrlOrMeta && event.altKey && key === "ArrowUp") {
+    if (event.target?.closest?.(".footer-model-option")) return;
     event.preventDefault();
     restoreQueuedMessagesToComposerFromShortcut();
     return;
@@ -50881,6 +50742,10 @@ function stepChatSearch(step) {
 
 function openChatSearch() {
   if (!elements.chatSearchBar) return;
+  if (focusedShell?.active && ["home", "settings"].includes(focusedShellState.destination)) {
+    navigateFocusedShell("conversation");
+    if (focusedShellState.destination !== "conversation") return;
+  }
   closeFileViewerSearch({ restoreFocus: false });
   const searchesAgentOutput = chatSearchRoot() === elements.subagentTerminalTranscript;
   elements.chatSearchInput.placeholder = searchesAgentOutput ? "Search agent output…" : "Search transcript…";
@@ -50935,13 +50800,14 @@ window.addEventListener("keydown", (event) => {
     // Inside a modal dialog (settings, palette, pickers) leave the browser's own find alone.
     if (document.querySelector("dialog[open]")) return;
     event.preventDefault();
-    if (activeFileViewer && elements.fileViewerPane?.contains(event.target)) openFileViewerSearch();
+    if (projectFiles.viewer && elements.fileViewerPane?.contains(event.target)) openFileViewerSearch();
     else openChatSearch();
   }
 });
 
 window.addEventListener("keydown", handleNativeAppShortcut, { capture: true });
 document.addEventListener("visibilitychange", () => {
+  syncTabPolling();
   if (document.visibilityState === "visible") {
     flushNormalStreamRenders("visibility-recovery");
     scheduleForegroundReconcile("visibility resume", 0);
@@ -51038,8 +50904,8 @@ window.addEventListener("resize", scheduleControlDeckPresentationReconciliation,
 window.addEventListener("keydown", (event) => {
   if (event.key !== "Escape") return;
   if (event.defaultPrevented) return;
-  if (elements.dialog?.open || elements.pathPickerDialog?.open || elements.gitChangesDialog?.open || elements.commandPaletteDialog?.open || elements.editRetryDialog?.open) return;
-  if (followUpQueueOpen) {
+  if (document.querySelector("dialog:modal")) return;
+  if (activityQueue.isOpen()) {
     event.preventDefault();
     setFollowUpQueueOpen(false, { restoreFocus: true });
     return;
@@ -51077,8 +50943,9 @@ window.addEventListener("keydown", (event) => {
     elements.busyPromptBehaviorTag?.focus({ preventScroll: true });
     return;
   }
-  if (newTabMenuOpen) {
-    setNewTabMenuOpen(false);
+  if (draftWorkspacePicker) {
+    event.preventDefault();
+    closeDraftWorkspacePicker({ restoreFocus: true });
     return;
   }
   if (document.body.classList.contains("composer-actions-open")) {
@@ -51086,13 +50953,13 @@ window.addEventListener("keydown", (event) => {
     return;
   }
   if (document.body.classList.contains("mobile-tabs-expanded")) {
-    setNewTabMenuOpen(false);
     setMobileTabsExpanded(false, { restoreFocus: true });
     return;
   }
   if (isFooterPickerOpen()) {
+    const restoreThinkingFocus = footerThinkingPickerOpen;
     setFooterModelPickerOpen(false, { restoreFocus: footerModelPickerOpen });
-    setFooterThinkingPickerOpen(false);
+    setFooterThinkingPickerOpen(false, { restoreFocus: restoreThinkingFocus });
     setFooterBranchPickerOpen(false);
     return;
   }
@@ -51169,15 +51036,18 @@ elements.gitChangesDialog?.addEventListener("cancel", (event) => {
   closeGitChangesDialog();
 });
 elements.gitChangesDialog?.addEventListener("close", () => {
+  if (elements.gitChangesDialog.open) return;
+  gitToolsDialogEpoch += 1;
+  projectGitTools.reset(null);
   gitChangesRequestSerial += 1;
   gitChangesState = { ...gitChangesState, loading: false, pulling: false };
 });
 
 elements.refreshCodexUsageButton?.addEventListener("click", () => {
-  refreshCodexUsage({ forceAuthRefresh: true }).finally(() => scheduleRefreshCodexUsage());
+  activityUsage.refreshCodex({ forceAuthRefresh: true }).finally(() => activityUsage.scheduleCodex());
 });
 elements.refreshClaudeUsageButton?.addEventListener("click", () => {
-  refreshClaudeUsage({ forceCli: true }).finally(() => scheduleRefreshClaudeUsage());
+  activityUsage.refreshClaude({ forceCli: true }).finally(() => activityUsage.scheduleClaude());
 });
 elements.fileTreeRefreshButton?.addEventListener("click", () => refreshFileTreeRoot().catch((error) => addEvent(error.message || String(error), "error")));
 elements.fileTreeRoot?.addEventListener("keydown", handleFileTreeKeydown);
@@ -51420,16 +51290,17 @@ elements.fileViewerResizeHandle?.addEventListener("pointerdown", beginFileViewer
 elements.fileViewerResizeHandle?.addEventListener("keydown", handleFileViewerResizeKeydown);
 elements.fileViewerSaveButton?.addEventListener("click", () => saveActiveFileViewer());
 elements.fileViewerCloseButton?.addEventListener("click", async () => {
-  if (activeFileViewer?.dirty && !(await confirmDiscardEdits({ what: "unsaved file edits", target: activeFileViewer.path }))) return;
+  if (projectFiles.viewer?.dirty && !(await confirmDiscardEdits({ what: "unsaved file edits", target: projectFiles.viewer.path }))) return;
   closeFileViewer();
 });
 // Reload/close with unsaved file edits or a non-empty composer asks first (browser-native prompt).
-window.addEventListener("pagehide", () => persistDesktopDrafts());
+window.addEventListener("pagehide", () => { saveClientDraft(); persistDesktopDrafts(); });
 window.addEventListener("beforeunload", (event) => {
+  saveClientDraft();
   persistDesktopDrafts();
   // Text drafts are persisted above; only unsaved file edits and file attachments would be lost.
   const attachmentsPending = activeTabId ? attachmentsForTab(activeTabId).some((attachment) => attachment?.file) : false;
-  if (!activeFileViewer?.dirty && !attachmentsPending) return;
+  if (!projectFiles.viewer?.dirty && !attachmentsPending) return;
   event.preventDefault();
   event.returnValue = "";
 });
@@ -51458,10 +51329,8 @@ elements.fileViewerSearchNextButton?.addEventListener("click", () => stepFileVie
 elements.fileViewerSearchCloseButton?.addEventListener("click", () => closeFileViewerSearch());
 elements.fileViewerEditor?.addEventListener("scroll", syncFileViewerSearchOverlayScroll);
 elements.fileViewerEditor?.addEventListener("input", () => {
-  if (!activeFileViewer) return;
-  activeFileViewer.content = elements.fileViewerEditor.value || "";
-  activeFileViewer.size = new Blob([activeFileViewer.content]).size;
-  setFileViewerDirty(true);
+  if (!projectFiles.viewer) return;
+  projectFiles.setContent(elements.fileViewerEditor.value || "");
   updateFileViewerSelectionFromEditor();
   if (elements.fileViewerSearchBar && !elements.fileViewerSearchBar.hidden) runFileViewerSearch();
 });
@@ -51477,7 +51346,7 @@ for (const eventName of ["keyup", "mouseup"]) {
   elements.fileViewerPreview?.addEventListener(eventName, () => setTimeout(updateFileViewerSelectionFromPreview, 0));
 }
 document.addEventListener("selectionchange", () => {
-  if (activeFileViewer && elements.fileViewerPreview && !elements.fileViewerPreview.hidden) updateFileViewerSelectionFromPreview();
+  if (projectFiles.viewer && elements.fileViewerPreview && !elements.fileViewerPreview.hidden) updateFileViewerSelectionFromPreview();
 });
 elements.fileSelectionSendButton?.addEventListener("click", () => sendFileSelectionToSession());
 elements.fileSelectionCommentInput?.addEventListener("keydown", (event) => {
@@ -51515,7 +51384,7 @@ elements.pathPickerDialog.addEventListener("cancel", (event) => {
   closePathPicker(null);
 });
 elements.pathPickerDialog.addEventListener("close", () => {
-  if (pathPickerState) closePathPicker(null);
+  if (pathPickerState && !elements.pathPickerDialog.open) closePathPicker(null);
 });
 
 if (elements.attachButton && elements.attachmentInput) {
@@ -51632,6 +51501,10 @@ elements.promptInput.addEventListener("keydown", (event) => {
 });
 
 elements.promptInput.addEventListener("input", () => {
+  if (!activeTabId && draftConversations.activeId) {
+    draftConversations.edit(draftConversations.activeId, elements.promptInput.value);
+    reportDraftStorageError();
+  }
   resetPromptHistoryNavigation();
   // Typed text always stays editable in the composer; only large pastes become attachments
   // (handleAttachmentPaste). Ripping a prompt out mid-typing was surprising and lossy.
@@ -51687,7 +51560,7 @@ restoreBusyPromptBehaviorSetting();
 syncMobileComposerDisclosureLayout();
 updateComposerModeButtons();
 installSessionSkillTagResizeHandling();
-installIntercomConversationTagResizeHandling();
+activityIntercom.install();
 updateOptionalFeatureAvailability();
 renderOptionalFeatureMigrationSurface();
 refreshOptionalFeaturePackageStatuses({ announce: true });
@@ -51722,11 +51595,12 @@ reconcileControlDeckHosts();
 setSidePanelSectionEditMode(false);
 bindSidePanelSectionToggles();
 restoreSidePanelState();
-initializeCodexUsage();
-initializeClaudeUsage();
+activityUsage.start();
+syncUsageVisibility();
 initializeSubagents();
 initializeSubagentLaunchSlots();
 initializeSamplingParameters();
+initializeSidebarUpdateMenu();
 initializeUpdateNotifications();
 bindMobileViewChanges();
 bindSidePanelOverlayViewChanges();
@@ -51750,6 +51624,7 @@ window.addEventListener("appinstalled", () => {
 });
 installMobileShellNavigationBridge();
 installMobilePhoneExperience();
+initializeFocusedShell();
 registerPwaServiceWorker();
 renderServerOfflinePanel();
 refreshSidebarOutputMode().catch((error) => addEvent(error.message || String(error), "error"));

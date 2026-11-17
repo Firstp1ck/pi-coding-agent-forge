@@ -26,7 +26,8 @@ import {
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const fakePi = path.join(root, "tests", "fixtures", "fake-pi.mjs");
-const work = await mkdtemp(path.join(tmpdir(), "pi-webui-rpc-supervisor-host-"));
+// Nested fixture owners must fit the Unix-domain socket pathname limit.
+const work = await mkdtemp(path.join(tmpdir(), "pi-rpc-"));
 const effectRoot = path.join(work, "effect");
 await mkdir(effectRoot);
 const agentDir = path.join(work, "agent");

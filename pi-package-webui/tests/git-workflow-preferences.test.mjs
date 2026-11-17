@@ -2,17 +2,25 @@ import assert from "node:assert/strict";
 import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import * as compatibility from "../lib/git-workflow-preferences.mjs";
+import * as preferenceValues from "../lib/git-workflow-preference-values.mjs";
 import {
   GIT_WORKFLOW_SETUP_VERSION,
   gitWorkflowPreferencesSummary,
   isGitWorkflowSetupComplete,
+  supportedGitWorkflowThinkingLevels,
+} from "../lib/git-workflow-preference-values.mjs";
+import {
   normalizeInterfacePreferences,
   readGitWorkflowPreferences,
   readWebuiSettings,
-  supportedGitWorkflowThinkingLevels,
   writeGitWorkflowPreferences,
   writeWebuiSettings,
 } from "../lib/git-workflow-preferences.mjs";
+
+for (const [name, value] of Object.entries(preferenceValues)) {
+  assert.equal(compatibility[name], value, `${name} must retain its identity through the compatibility path`);
+}
 
 assert.deepEqual(supportedGitWorkflowThinkingLevels({ reasoning: false }), ["off"]);
 assert.deepEqual(

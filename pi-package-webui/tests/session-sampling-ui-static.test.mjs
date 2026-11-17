@@ -57,10 +57,10 @@ assert.match(css, /\.sampling-parameter-control\.unsupported:hover:not\(\.sampli
 assert.match(css, /\.sampling-parameter-control\.unsupported:focus-visible:not\(\.sampling-tooltip-dismissed\) > \.sampling-parameter-unsupported-tooltip/, "keyboard focus should reveal dismissible unsupported reasons");
 assert.match(css, /\.sampling-parameter-unsupported-tooltip\.sampling-tooltip-below/, "bounded placement should support flipping below top-edge rows");
 assert.match(css, /pointer-events: auto;/, "a visible unsupported tooltip should remain pointer-hoverable");
-assert.match(serviceWorker, /const CACHE_NAME = "pi-webui-pwa-v156"/, "native-control assets should advance the cache identity");
+assert.match(serviceWorker, /const CACHE_NAME = "pi-webui-pwa-v200"/, "native-control assets should advance the cache identity");
 assert.match(serviceWorker, /"\/sampling-parameter-controls\.mjs"/, "the pure sampling module should be part of the offline app shell");
-assert.match(html, /styles\.css\?v=154/, "the changed stylesheet should have a new revision");
-assert.match(html, /app\.js\?v=185/, "the changed app module should have a new revision");
+assert.match(html, /styles\.css\?v=167/, "the changed stylesheet should have a new revision");
+assert.match(html, /app\.js\?v=220/, "the changed app module should have a new revision");
 
 // --- Browser state behavior -------------------------------------------------
 
@@ -131,7 +131,7 @@ let nextResponse = null;
 let nextError = null;
 let responseGate = null;
 const context = {
-  console,
+  console, AbortSignal,
   elements,
   SAMPLING_PARAMETER_CATALOG,
   buildSamplingParametersFromDraft: (draft) => buildSamplingParametersFromDraft(hostValue(draft, null)),
@@ -166,6 +166,12 @@ let samplingParametersFeedbackTabId = null;
 let samplingParametersRequestSerial = 0;
 let activeTabId = "tab-a";
 function activeTabContext(tabId = activeTabId) { return { tabId: tabId || null, generation: 0 }; }
+    function isCurrentTabContext(context) { return context.tabId === activeTabId && context.generation === 0; }
+    const focusedShell = null;
+    const sessionContext = {
+      captureLifetime: tabId => ({ tabId, generation: 0 }),
+      isLifetimeCurrent: target => target.generation === 0,
+    };
 ${samplingBlock}
 for (const [key, value] of Object.entries(globalThis.refsFromHost)) samplingParameterControlElements.set(key, value);
 globalThis.samplingHarness = {

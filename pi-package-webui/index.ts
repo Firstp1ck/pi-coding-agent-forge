@@ -34,6 +34,7 @@ type WebuiAddress = {
 };
 
 type StartWebuiOptions = WebuiAddress & {
+  cwd?: string;
   open: boolean;
   noSession: boolean;
   remoteAuth: boolean;
@@ -121,6 +122,11 @@ function parseStartWebuiArgs(args: string): StartWebuiOptions {
     }
     if (token === "--name") {
       options.name = takeValue(tokens, i, token);
+      i++;
+      continue;
+    }
+    if (token === "--cwd") {
+      options.cwd = takeValue(tokens, i, token);
       i++;
       continue;
     }
@@ -459,7 +465,8 @@ function waitForWebuiUrl(child: WebuiChild, timeoutMs = START_TIMEOUT_MS): Promi
 }
 
 async function startWebui(options: StartWebuiOptions, ctx: ExtensionCommandContext, restoreTabs: RestorableWebuiTab[] = []): Promise<string> {
-  const args = [webuiBin, "--host", options.host, "--port", String(options.port), "--cwd", ctx.cwd];
+  const args = [webuiBin, "--host", options.host, "--port", String(options.port)];
+  if (options.cwd) args.push("--cwd", options.cwd);
   if (options.noSession) args.push("--no-session");
   if (options.remoteAuth) args.push("--remote-auth");
   if (options.outputMode) args.push("--output-mode", options.outputMode);
@@ -709,8 +716,8 @@ function formatWebuiStatus(result: WebuiStatusFetchResult, requestedDetailed: bo
 
 function usage(): string {
   return [
-    "Usage: /webui-start [port] [--port N] [--no-open] [--no-session] [--remote-auth] [--output-mode normal|compact-v1] [--name NAME] [-- --model provider/model]",
-    "Starts the Pi Web UI companion server for the current cwd, prints the localhost URL, and opens it in your default browser.",
+    "Usage: /webui-start [port] [--port N] [--cwd PATH] [--no-open] [--no-session] [--remote-auth] [--output-mode normal|compact-v1] [--name NAME] [-- --model provider/model]",
+    "Starts the Pi Web UI companion server, prints the localhost URL, and opens it in your default browser. Starts empty unless tabs are restored or --cwd PATH selects a project.",
   ].join("\n");
 }
 

@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const [app, css, producer, parser] = await Promise.all([
+const [app, css, producer, parser, usage] = await Promise.all([
   readFile(new URL("../public/app.js", import.meta.url), "utf8"),
   readFile(new URL("../public/styles.css", import.meta.url), "utf8"),
   readFile(new URL("../../pi-extension-git-footer-status/index.ts", import.meta.url), "utf8"),
   readFile(new URL("../../pi-extension-git-footer-status/provider-usage.ts", import.meta.url), "utf8"),
+  readFile(new URL("../public/activity-usage-controller.mjs", import.meta.url), "utf8"),
 ]);
 
 const between = (source, start, end) => {
@@ -22,8 +23,8 @@ const applyUsage = between(app, "function applyFooterUsageWindows", "const FOOTE
 const shapeKey = between(app, "function gitFooterChipShapeKey", "function footerBranchPickerRenderKey");
 const inPlaceUpdate = between(app, "function updateGitFooterChipNodeValue", "let gitFooterRenderCache");
 const providerUsageNormalization = between(app, "function normalizeFooterProviderUsageWindow", "function currentGitFooterCacheCwd");
-const claudeUsageSync = between(app, "function claudeUsageWindowFromProvider", "function claudeUsageResetDate");
-const claudeUsageRefresh = between(app, "async function refreshClaudeUsage", "function scheduleRefreshClaudeUsage");
+const claudeUsageSync = between(usage, "function claudeUsageWindowFromProvider", "function claudeUsageResetDate");
+const claudeUsageRefresh = between(usage, "async function refreshClaude", "function schedule(provider");
 
 assert.match(parser, /x-codex-primary-window-minutes/, "Codex parser should read the primary window duration");
 assert.match(parser, /x-codex-secondary-window-minutes/, "Codex parser should read the secondary window duration");
@@ -43,10 +44,10 @@ assert.match(providerUsageNormalization, /normalizeFooterProviderUsageWindow\(va
 assert.match(app, /const providerUsage = normalizeFooterProviderUsage\(parsed\.providerUsage\);[\s\S]*\{ providerUsage \}/, "footer payload parsing should retain normalized provider usage metadata");
 assert.match(claudeUsageSync, /providerUsage\?\.provider !== "anthropic"[\s\S]*source: "git-footer-status-provider-headers"[\s\S]*windows/, "Claude Usage should consume the same live Anthropic header snapshot as the footer");
 assert.match(claudeUsageSync, /capturedAt \+ resetAfterSeconds \* 1000/, "relative reset times should be anchored to provider capture time instead of drifting on each render");
-assert.match(claudeUsageRefresh, /if \(!forceCli && syncClaudeUsageFromGitFooterPayload\(\)\) return;/, "scheduled Claude refreshes should prefer the live footer snapshot");
-assert.match(app, /if \(footerPayload\) syncClaudeUsageFromGitFooterPayload\(footerPayload\);/, "incoming footer status should update the Claude Usage panel immediately");
+assert.match(claudeUsageRefresh, /if \(!forceCli && syncFooter\(\)\) return;/, "scheduled Claude refreshes should prefer the live footer snapshot");
+assert.match(app, /if \(footerPayload\) activityUsage\.syncFooter\(footerPayload\);/, "incoming footer status should update the Claude Usage panel immediately");
 assert.match(app, /function applyOptimisticGitFooterBranch[\s\S]*payload\.providerUsage \? \{ providerUsage: payload\.providerUsage \}/, "optimistic branch updates should preserve the provider snapshot used by Claude Usage");
-assert.match(app, /refreshClaudeUsage\(\{ forceCli: true \}\)/, "the explicit Refresh usage button should retain the CLI fallback path");
+assert.match(app, /activityUsage\.refreshClaude\(\{ forceCli: true \}\)/, "the explicit Refresh usage button should retain the CLI fallback path");
 
 assert.match(usageNormalization, /value\.usageWindows\.primaryPercent/, "consumer should read structured primary metadata");
 assert.match(usageNormalization, /value\.usageWindows\.secondaryPercent/, "consumer should read structured secondary metadata");

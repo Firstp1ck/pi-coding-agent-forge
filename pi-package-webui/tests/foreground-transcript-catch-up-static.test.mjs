@@ -1,3 +1,4 @@
+import { createSessionEventStream } from "../public/platform-event-stream.mjs";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -34,7 +35,7 @@ assert.match(app, /let foregroundTranscriptCatchUpRequired = document\.visibilit
 const beginCatchUp = functionBody(app, "beginForegroundTranscriptCatchUp");
 assert.match(beginCatchUp, /foregroundTranscriptCatchUpRequired = true/);
 assert.match(beginCatchUp, /streamOutputController\.cancel\(\)/, "backgrounding should discard pending frame work rather than replaying it later");
-assert.match(beginCatchUp, /eventStreamPausedForBackground = true[\s\S]*?eventSource = null[\s\S]*?source\.close\(\)/, "backgrounding should close the EventSource so Chromium cannot retain and replay an SSE backlog");
+assert.match(beginCatchUp, /eventStreamPausedForBackground = true[\s\S]*?sessionEvents\.close\(\)/, "backgrounding should close the EventSource so Chromium cannot retain and replay an SSE backlog");
 
 const dispatch = functionBody(app, "dispatchTranscriptStreamEvent");
 assert.match(dispatch, /classifyTranscriptStreamEvent\(event\)/);
@@ -68,18 +69,20 @@ assert.match(
 assert.match(app, /case "webui_connected":[\s\S]*?resumedWithFreshSnapshot[\s\S]*?if \(!resumedWithFreshSnapshot\) scheduleForegroundReconcile/, "the deliberate reconnect must not immediately trigger a second full refresh");
 assert.match(app, /case "webui_supervisor_reconnected":[\s\S]*?foregroundReconnectSnapshotFreshUntil/, "initial supervisor replay must reuse the fresh foreground snapshot");
 
-const executeBeginCatchUp = new Function("eventSource", "streamOutputController", "flushNormalStreamRenders", `
+const executeBeginCatchUp = new Function("sessionEvents", "streamOutputController", "flushNormalStreamRenders", `
   let foregroundTranscriptCatchUpRequired = false;
   let backgroundReconnectSnapshotFresh = true;
   let eventStreamPausedForBackground = false;
   ${beginCatchUp}
-  return { foregroundTranscriptCatchUpRequired, backgroundReconnectSnapshotFresh, eventStreamPausedForBackground, eventSource };
+  return { foregroundTranscriptCatchUpRequired, backgroundReconnectSnapshotFresh, eventStreamPausedForBackground, eventSource: sessionEvents.source };
 `);
 let closeCount = 0;
 let cancelCount = 0;
 let normalRenderFlushCount = 0;
+const stream = createSessionEventStream({ createSource: () => ({ close() { closeCount += 1; } }), isCurrent: () => true });
+stream.connect("/events", {});
 const pausedState = executeBeginCatchUp(
-  { close() { closeCount += 1; } },
+  stream,
   { cancel() { cancelCount += 1; } },
   (reason) => {
     assert.equal(reason, "visibility-hidden");

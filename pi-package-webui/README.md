@@ -17,15 +17,17 @@ Pi Web UI keeps the normal Pi agent experience while giving you more room to man
 
 | Area | Highlights |
 | --- | --- |
-| **Sessions and workspaces** | Run several isolated Pi sessions, resume prior work in a new terminal without replacing the current one, switch projects, preserve per-tab drafts, add another tab directly from the tab strip, and create branch worktrees. |
+| **Sessions and workspaces** | Start a No Project conversation in its own folder, run several isolated Pi sessions, resume prior work in a new terminal without replacing the current one, switch projects, save unfinished No Project conversations as browser drafts, preserve per-tab drafts, add another tab directly from the tab strip, and create branch worktrees. Organize the compact sidebar into Inbox, Working, and Settled. |
 | **Live agent work** | Follow streaming Markdown with syntax highlighting for code blocks, grouped consecutive thinking, tool output, queues, todo progress, managed agent runs, and direct agent-to-agent conversations without leaving the browser. |
 | **Models and controls** | Change models and thinking effort, check Codex CLI subscription usage, manage scoped models, configure tools and skills, and use the command palette. |
 | **Files and prompts** | Upload or paste files and images, edit text attachments, use slash-command suggestions, browse project files, and reference project paths with `@`. |
 | **Git workflows** | Inspect changes, switch branches, review diffs, stage work, generate commit messages with an optional one-shot fallback model, push, and prepare pull requests through guided steps. |
-| **Project utilities** | Launch detected app runners, manage working directories, search files and transcripts, and customize themes. |
+| **Project utilities** | Inspect Project and Activity from one right panel, open a floating session overview, launch detected app runners, manage working directories, search files and transcripts, and customize themes. |
 | **Companion features** | Add stats, remote access, voice, `/btw`, richer Git status, themes, release tools, and other supported Pi packages. |
 | **Desktop and mobile** | Use a full desktop workspace with resizable left and right side panels, or a compact phone layout with touch-friendly navigation and controls. |
 | **Customizable controls** | Hide optional workspace, Control Deck, composer, workflow, attachment, and input-tag controls while keeping Send available. |
+
+In the compact layout, use **Inspector** in the conversation header to open Project or Activity. Use **Overview** for a floating summary of the current session and its work.
 
 ## Quick start
 
@@ -49,6 +51,8 @@ Restart Pi, then run:
 
 Open the printed address, usually <http://127.0.0.1:31415/>. The browser normally opens automatically.
 
+A fresh start shows **No Project** with no active session. Send your first message to start a conversation in its own folder, or choose a project. To start in a specific folder immediately, use `/webui-start --cwd /path/to/project`.
+
 Check the server at any time with:
 
 ```text
@@ -56,14 +60,36 @@ Check the server at any time with:
 /webui-status detailed
 ```
 
+### Choose your desktop layout
+
+Fresh installations start with the compact desktop layout when the Web UI can confirm there is no earlier Web UI state. Existing installations keep Classic until you choose **Controls → Interface → Desktop layout → Compact preview**. Use **Inspector** in the header for Project and Activity, and the lower-left rail for **Attention**, **All tools**, and **Settings**. All tools searches commands and panels; pin frequent actions there. The footer's **Model** and **Effort** controls open their pickers. **All tools → /model** opens the full model catalog; **Model shortcuts** opens your saved scoped models. In Settings, search or choose a category to open the original control or Setup dialog.
+
+Press **Pi** at the top left, or press the **New thread** (pencil) button and choose **No project**, to open an empty conversation. Its thread and folder are created when you send the first message. If you type and switch away, your text appears as a **Draft** in Inbox. Reopen it to continue, or close it to discard the text. Drafts cannot be settled. Existing sessions stay open; resuming one reuses its folder. From the empty screen, **Open workspace** or a recent folder chooses where your first prompt will run without opening a terminal. A saved Draft keeps both its text and selected folder.
+
+The **New thread** button opens a searchable folder list: the current folder, No project, pinned and recent folders, **Browse…** and **Branch worktree…**. Picking a folder opens an empty draft there; nothing starts until your first prompt. On the empty screen, click the **Workspace** value to switch the draft's folder from the same list. Branch worktree still creates its thread right away.
+
+In the folder picker, **Pinned folders** appears above **Current location**, and **Create a folder** appears above the folder list. Both sections start expanded and can be collapsed.
+
+The compact left sidebar keeps idle, finished, and input-waiting sessions in **Inbox**, with active work in **Working**. Choose **Settle** (✓) on a finished session to move it into **Settled**, collapsed by default. Expand it and choose **Restore** (↥) to bring a session back. New work or a request for input brings it back automatically. Settling does not close the session.
+
+In the compact layout, **Ctrl/Cmd+K** opens the same **All tools** search. Session and Project menus offer a short list of actions; **More actions** opens the full catalog. The **Attention** button separates decisions waiting for you, running sessions, and finished work. Select a decision to open its session's response dialog.
+
+Drag the right edge of the compact session sidebar or the left edge of the inspector to resize it. Open Settings with the gear beside Home at the bottom left.
+
+Select the model or effort in the footer to open its picker. The full model catalog groups models by provider, then sorts dated models newest first and undated models alphabetically. A choice applies to that session without a separate Apply button. While Pi is working, **During this run** chooses whether the single submission button steers the run or queues your message afterward. Enter follows that choice; Abort remains separate.
+
+**Project** groups Files, Changes, Runners, Releases, and Documents. **Activity** groups Agents, Queues, Progress, Conversations, Events, and provider usage. Use the inspector header to choose a section without scrolling sideways. Open a section when you need it; changing views keeps running work and unsaved drafts. A queue count beside the draft opens pending follow-ups for editing and reordering.
+
+Choose **Classic** in Settings to return. Your open sessions, drafts, and saved Classic arrangement remain available. Phone and tablet modes have separate preferences.
+
 ### Your first session
 
 1. Start the Web UI with `/webui-start`.
 2. Confirm the working directory in the footer or choose another project. You can paste or type a full path in the picker; on Windows, use a rooted drive path such as `C:/` or `D:/project`. From a drive root, choose **Parent** to open **This PC** and select another available drive.
 3. Select a model and thinking effort.
 4. Enter a prompt, attach context if needed, and follow the live response. The prompt grows to a bounded height, then scrolls vertically so every line stays reachable.
-5. Open the Control Deck for sessions, Git, app runners, themes, updates, and optional features. Under **Controls → Interface**, choose **Top bar** or **Sidebar** for terminal tabs, then choose **Right**, **Left**, or **Both** for the Control Deck. In **Sidebar**, **Both** is unavailable; choosing **Right** or **Left** swaps the Control Deck and terminal/tabs rails across the chat.
-6. On desktop, drag the workspace-facing edge of any visible Control Deck—or the terminal/tabs rail in **Sidebar**—to choose a comfortable width. In **Both**, resize the left and right Control Decks independently; widths return on your next visit.
+5. In the compact layout, use **Project**, **Activity**, **Settings**, or **All tools**. In Classic, open the Control Deck for sessions, Git, app runners, themes, updates, and optional features. Under **Controls → Interface**, choose **Top bar** or **Sidebar** for threads, then choose **Right**, **Left**, or **Both** for the Control Deck. In **Sidebar**, **Both** is unavailable; choosing **Right** or **Left** swaps the Control Deck and terminal/tabs rails across the chat.
+6. In Classic on desktop, drag the workspace-facing edge of any visible Control Deck—or the terminal/tabs rail in **Sidebar**—to choose a comfortable width. In **Both**, resize the left and right Control Decks independently; widths return on your next visit.
 
 The completed response replaces the live draft, including thinking the provider corrects or removes. On older Pi releases, tool arguments may appear only after the tool is identified, so Intercom content stays out of the main transcript.
 
@@ -82,6 +108,8 @@ Use **Agent models** in the Subagents panel to choose the default model and thin
 Independent Pi processes do not appear automatically. Start them through `pi-webui agent run`, attach a persisted session with `pi-webui agent attach`, or use a cooperating registration adapter. See [TECHNICAL.md](TECHNICAL.md#subagent-observability) for supported commands and limitations.
 
 When agents exchange direct Intercom messages or use native subagent-supervisor coordination, one compact tag per conversation appears beneath the composer. The tags start at the right edge and extend toward the middle, using up to half of the prompt width. Each tag has a bounded width. If they do not fit, WebUI keeps complete tags visible and replaces the rest with a **+X** tag. Select **+X** to open the remaining conversations above the composer. Long names still shorten with an ellipsis when one name exceeds the available space, while the full name remains available to assistive technology and on hover. Select a conversation to open a read-only chat view showing the two agent names or IDs and their messages. Generic Intercom transport calls and received Intercom records stay out of the main agent-output transcript, while attachments, tool output, and reasoning remain excluded from the chat view.
+
+If preview navigation gets in your way, add `?shell=classic` to the Web UI address to return to the standard layout without resetting your preferences. See [the technical reference](TECHNICAL.md) for the surrounding layout options.
 
 Useful shortcuts:
 
@@ -291,7 +319,7 @@ Choose a project immediately:
 pi-webui --cwd ~/src/my-project
 ```
 
-If you omit `--cwd`, the browser asks which project to open first.
+Without `--cwd`, a fresh start opens **No Project** with no active session. Type your first message to create a conversation in its own folder, or choose a project. Previously running or explicitly restored sessions remain available.
 
 ## Keep it private
 
@@ -302,7 +330,7 @@ Use the optional Remote Web UI package when you need trusted-LAN access and PIN 
 
 ## Technical details
 
-To update, select **Update Pi** or **Update Web UI** in the Control Deck. Read the preview of installations and commands, including skipped installations, before confirming. Only localhost can start an update. Finish work in affected tabs first; native package updates may run lifecycle scripts under your existing configuration and cannot be automatically rolled back. The small activity indicator and command results remain available after reconnect. If the status is unknown, check the host before trying again.
+Use the **Updates** button beside Settings to update **Pi and extensions + WebUI**, **WebUI only**, or **Pi only**. WebUI checks its Pi-managed and global npm installation locations and uses the matching update command. Selecting a scope starts the update immediately. A progress card shows the current step, elapsed time, and an estimated percentage while commands run. It says **Already up to date** when the commands explicitly report no changes. Open **Details** for command results, then **Back to progress** while running or **Back to result** when finished. Otherwise, restart WebUI after a successful update to load the updated code. Updates can only be started from localhost. Package scripts run under your existing configuration, and package updates cannot be automatically rolled back.
 
 > **Before downgrading:** stop the Web UI and back up `~/.pi/webui/settings.json`. Older releases do not understand the two-sided Control Deck layout and can overwrite it. Re-upgrade before restoring the backup.
 

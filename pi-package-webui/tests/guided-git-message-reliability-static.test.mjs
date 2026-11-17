@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+
+const gitGeneration = await readFile(new URL("../lib/server/git-generation.mjs", import.meta.url), "utf8");
+const gitMutations = await readFile(new URL("../lib/server/git-mutations.mjs", import.meta.url), "utf8");
 
 const testsDir = path.dirname(fileURLToPath(import.meta.url));
 const packageDir = path.resolve(testsDir, "..");
@@ -11,13 +15,13 @@ const [app, server, artifacts] = await Promise.all([
   readFile(path.join(packageDir, "lib", "git-message-artifacts.mjs"), "utf8"),
 ]);
 
-assert.match(server, /async function createGitWorkflowArtifactGeneration\(tab, generationId, kind\)[\s\S]*kind === "commit"[\s\S]*id: generationId[\s\S]*baseline: await readStableGitMessageArtifactPair\(commitMessagePaths\(cwd\)\)/, "commit generation must retain the shared server-owned ID and exact pre-primary baseline");
-assert.match(server, /function gitWorkflowMessageCwd\(root, cwd\)[\s\S]*suppliedCwd !== repositoryRoot[\s\S]*return repositoryRoot;/, "commit and branch artifacts must resolve at repository root after validating a nested tab cwd");
-assert.match(server, /generationId: record\.generationId/, "generation dispatch must return one server-owned correlation ID across every kind and both attempts");
-assert.match(server, /tab\.gitWorkflowArtifactGeneration = record\.artifactGeneration/, "the artifact generation record must be owned by the originating tab");
+assert.match(gitGeneration, /async function createGitWorkflowArtifactGeneration\(tab, generationId, kind\)[\s\S]*kind === "commit"[\s\S]*id: generationId[\s\S]*baseline: await readStableGitMessageArtifactPair\(commitMessagePaths\(cwd\)\)/, "commit generation must retain the shared server-owned ID and exact pre-primary baseline");
+assert.match(gitMutations, /function gitWorkflowMessageCwd\(root, cwd\)[\s\S]*suppliedCwd !== repositoryRoot[\s\S]*return repositoryRoot;/, "commit and branch artifacts must resolve at repository root after validating a nested tab cwd");
+assert.match(gitGeneration, /generationId: record\.generationId/, "generation dispatch must return one server-owned correlation ID across every kind and both attempts");
+assert.match(gitGeneration, /tab\.gitWorkflowArtifactGeneration = record\.artifactGeneration/, "the artifact generation record must be owned by the originating tab");
 assert.match(server, /case "\/api\/git-workflow\/message"[\s\S]*generationId[\s\S]*tab\?\.gitWorkflowArtifactGeneration/, "fresh message reads must resolve the correlated generation from the requested tab");
-assert.match(server, /readGitWorkflowMessages\(cwd, \{ generationId = "", generation = null \} = \{\}\)[\s\S]*generation\.cwd !== messageCwd[\s\S]*!generation\.terminal[\s\S]*running: true[\s\S]*!generation\.successful/, "message readiness must reject wrong identity and terminal failure while identifying an active attempt");
-assert.match(server, /gitMessageArtifactPairReadiness\(generation\.baseline, pair\)[\s\S]*GIT_WORKFLOW_MESSAGE_PAIR_SETTLE_MS[\s\S]*sameGitMessageArtifactPair\(pair, settledPair\)/, "the backend must require both changed artifacts and a stable settled pair");
+assert.match(gitMutations, /readGitWorkflowMessages\(cwd, \{ generationId = "", generation = null \} = \{\}\)[\s\S]*generation\.cwd !== messageCwd[\s\S]*!generation\.terminal[\s\S]*running: true[\s\S]*!generation\.successful/, "message readiness must reject wrong identity and terminal failure while identifying an active attempt");
+assert.match(gitMutations, /gitMessageArtifactPairReadiness\(generation\.baseline, pair\)[\s\S]*GIT_WORKFLOW_MESSAGE_PAIR_SETTLE_MS[\s\S]*sameGitMessageArtifactPair\(pair, settledPair\)/, "the backend must require both changed artifacts and a stable settled pair");
 assert.doesNotMatch(app, /newestMtime \+ 10000 < currentWorkflow\.messageRequestedAt/, "freshness must not use the previous wall-clock/mtime tolerance");
 
 assert.match(app, /const gitWorkflowMessageLoadsByTab = new Map\(\)/, "browser message loading must have tab-scoped single-flight ownership");

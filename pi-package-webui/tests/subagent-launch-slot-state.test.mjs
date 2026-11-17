@@ -15,7 +15,7 @@ assert.deepEqual(
 );
 assert.deepEqual(
   subagentLaunchSlotSaveState({ hasConfig: true, hasDraft: true, dirty: true, activeConfigTab: false }),
-  { disabled: true, reason: "Switch back to the tab where these changes were made to save them." },
+  { disabled: true, reason: "Switch back to the thread where these changes were made to save them." },
   "a dirty draft should explain that its owning tab must be active",
 );
 assert.deepEqual(
@@ -35,7 +35,7 @@ assert.deepEqual(
 );
 assert.deepEqual(
   subagentLaunchSlotSaveState(),
-  { disabled: true, reason: "Agent model configuration is not available for this tab." },
+  { disabled: true, reason: "Agent model configuration is not available for this thread." },
   "missing configuration should explain why saving is unavailable",
 );
 

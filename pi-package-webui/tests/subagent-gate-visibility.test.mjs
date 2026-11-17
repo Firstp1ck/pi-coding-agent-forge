@@ -74,7 +74,7 @@ assert.match(app, /from "\.\/subagent-gate-visibility\.mjs"/, "the browser shoul
 assert.match(app, /function subagentOverviewGroups[\s\S]*Number\(data\?\.version\) === 2[\s\S]*displayRuns: runs/, "the side panel should render canonical v2 runs without recounting gate references");
 assert.match(app, /const gates = visibleSubagentGates\(tab, dismissedSubagentGateKeys, now\);[\s\S]*const displayRuns = ungatedSubagentRuns\(tab\);[\s\S]*displayRuns,/, "the v1 fallback should retain gate-owned run filtering before deriving count-neutral workflow totals");
 assert.match(app, /function renderSubagentGate\(tab, gate\)[\s\S]*subagentGateIsTerminal\(gate\)[\s\S]*Hide finished retry gate[\s\S]*dismissedSubagentGateKeys\.add\(key\)[\s\S]*renderSubagents\(\)[\s\S]*event\.detail === 0[\s\S]*focusTarget\?\.focus/, "terminal gate cards should expose an accessible hide button and preserve keyboard focus after rerendering");
-assert.match(app, /pruneDismissedSubagentGateKeys\(latestSubagents\?\.tabs, dismissedSubagentGateKeys\)/, "polling should prune stale dismissal keys");
+assert.match(app, /pruneDismissedSubagentGateKeys\(data\?\.tabs, dismissedSubagentGateKeys\)/, "polling should prune stale dismissal keys");
 assert.match(css, /\.subagent-gate-actions[\s\S]*\.subagent-gate-close[\s\S]*min-width:\s*1\.45rem[\s\S]*background:\s*transparent[\s\S]*\.subagent-gate-close:hover,[\s\S]*\.subagent-gate-close:focus-visible/, "the close control should remain minimal, compact, and keyboard-visible");
 assert.match(serviceWorker, /"\/subagent-gate-visibility\.mjs"/, "the PWA app shell should cache the visibility module");
 assert.match(server, /STATIC_PUBLIC_FILE_EXTENSIONS[\s\S]*"\.mjs"/, "the server should serve typed visibility modules from the public asset boundary");

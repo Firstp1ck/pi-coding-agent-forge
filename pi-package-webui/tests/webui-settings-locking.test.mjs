@@ -14,11 +14,11 @@ import {
   webuiSettingsFile,
   withWebuiSettingsLock,
   writeWebuiSettings,
-} from "../lib/git-workflow-preferences.mjs";
+} from "../lib/server/settings-store.mjs";
 
 const execFileAsync = promisify(execFile);
 const root = await mkdtemp(path.join(tmpdir(), "pi-webui-settings-locking-"));
-const moduleUrl = pathToFileURL(path.join(import.meta.dirname, "..", "lib", "git-workflow-preferences.mjs")).href;
+const moduleUrl = pathToFileURL(path.join(import.meta.dirname, "..", "lib", "server", "settings-store.mjs")).href;
 
 try {
   assert.equal(webuiSettingsFile({}), path.join(homedir(), ".pi", "webui", "settings.json"));

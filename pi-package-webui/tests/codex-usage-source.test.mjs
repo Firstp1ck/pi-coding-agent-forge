@@ -117,18 +117,19 @@ test("the server gives a sanitized combined error when CLI and direct-flow Pi fa
 });
 
 test("the browser labels the usage account and redraws when source changes", async () => {
-  const source = await readFile(new URL("../public/app.js", import.meta.url), "utf8");
+  const source = await readFile(new URL("../public/activity-usage-controller.mjs", import.meta.url), "utf8");
   const signatureStart = source.indexOf("function codexUsageStructureSignature(");
   const signatureEnd = source.indexOf("function updateCodexUsageValues(", signatureStart);
   const renderStart = source.indexOf("function renderCodexUsage(");
-  const renderEnd = source.indexOf("async function refreshCodexUsage(", renderStart);
+  const renderEnd = source.indexOf("function renderClaudeUsageWindow(", renderStart);
   const nodes = [];
   let rebuilds = 0;
   const box = { replaceChildren: () => { nodes.length = 0; rebuilds++; }, classList: { toggle() {} }, append: (...items) => nodes.push(...items) };
   const context = vm.createContext({
     latestCodexUsage: { source: "codex-cli", planType: "plus" },
     codexUsageLoading: false, codexUsageError: null, codexUsageRenderSignature: "",
-    elements: { codexUsageBox: box },
+    nodes: { codexUsageBox: box },
+    disposed: false,
     formatCodexPlanType: (value) => value,
     codexUsageBuckets: () => [],
     updateCodexUsageValues: () => true,

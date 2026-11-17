@@ -16,7 +16,13 @@ import { REQUIRED_THEME_TOKENS, serializeTheme } from "../public/theme-contract.
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const serverScript = join(root, "bin", "pi-webui.mjs");
 const fakePi = join(root, "tests", "fixtures", "fake-pi.mjs");
-const port = 30000 + Math.floor(Math.random() * 20000);
+const portReservation = createServer();
+await new Promise((resolve, reject) => {
+  portReservation.once("error", reject);
+  portReservation.listen(0, "0.0.0.0", resolve);
+});
+portReservation.unref();
+const port = portReservation.address().port;
 const optionalFeatureFocus = process.env.PI_WEBUI_OPTIONAL_FEATURES_FOCUS === "1";
 
 function themeFixture(name, color = "#123456") {
@@ -37,12 +43,17 @@ function lanAddress() {
 }
 
 async function request(host, pathname, { method = "GET", body, headers = {}, timeoutMs = 5_000 } = {}) {
-  const response = await fetch(`http://${host}:${port}${pathname}`, {
-    method,
-    headers: body === undefined ? headers : { "Content-Type": "application/json", ...headers },
-    body: body === undefined ? undefined : JSON.stringify(body),
-    signal: AbortSignal.timeout(timeoutMs),
-  });
+  let response;
+  try {
+    response = await fetch(`http://${host}:${port}${pathname}`, {
+      method,
+      headers: body === undefined ? headers : { "Content-Type": "application/json", ...headers },
+      body: body === undefined ? undefined : JSON.stringify(body),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+  } catch (error) {
+    throw new Error(`HTTP fixture ${method} ${pathname} failed after a ${timeoutMs}ms request budget`, { cause: error });
+  }
   let payload;
   try {
     payload = await response.json();
@@ -277,6 +288,7 @@ for (const [producerId, status, updatedAt] of [
   }, { recordId: `${producerId}-record` });
 }
 
+await new Promise((resolve, reject) => portReservation.close(error => error ? reject(error) : resolve()));
 const child = spawn(process.execPath, [serverScript, "--cwd", cwd, "--host", "0.0.0.0", "--port", String(port), "--pi", fakePiCli], {
   stdio: ["ignore", "pipe", "pipe"],
   env: {
@@ -358,7 +370,7 @@ async function runOptionalFeatureFocus() {
 
   const manifest = JSON.parse(await readFile(path.join(root, "package.json"), "utf8"));
   assert.deepEqual(manifest.optionalDependencies, { "node-pty": "^1.1.0" });
-  assert.equal(manifest.dependencies?.["@firstpick/pi-utils"], "^0.2.5");
+  assert.equal(manifest.dependencies?.["@firstpick/pi-utils"], "^0.3.2");
   assert.equal(JSON.stringify(manifest.pi).includes("node_modules/@firstpick"), false);
 
   const initial = await request("127.0.0.1", "/api/optional-features");
@@ -1329,7 +1341,7 @@ try {
 
   const webuiManifest = JSON.parse(await readFile(path.join(root, "package.json"), "utf8"));
   assert.deepEqual(webuiManifest.optionalDependencies, { "node-pty": "^1.1.0" }, "node-pty should be the only optional dependency");
-  assert.equal(webuiManifest.dependencies?.["@firstpick/pi-utils"], "^0.2.5", "the required pi-utils runtime dependency must remain regular");
+  assert.equal(webuiManifest.dependencies?.["@firstpick/pi-utils"], "^0.3.2", "the required pi-utils runtime dependency must remain regular");
   assert.equal(JSON.stringify(webuiManifest.pi).includes("node_modules/@firstpick"), false, "the WebUI manifest must not claim optional companion resources");
 
   const optionalFeatures = await request("127.0.0.1", "/api/optional-features");

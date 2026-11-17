@@ -274,8 +274,8 @@ test("typed summary commands stay native, preserve failures, reset sessions, res
   await expect(page.locator("#sessionSummaryOverlayBody")).toContainText("Generate a summary to populate this view.");
 
   await page.locator("#newTabButton").evaluate((button) => button.click());
-  await page.locator("#newTabCurrentDirectoryButton").evaluate((button) => button.click());
-  await expect(page.locator("#tabBar [role=\"tab\"]")).toHaveCount(2);
+  await page.locator("#newThreadList [role=\"option\"]").first().evaluate((button) => button.click());
+  await expect(page.locator("#emptyStartTitle")).toHaveText("Start a conversation");
   await expect(page.locator("#sessionSummaryOverlay")).toBeHidden();
 });
 
@@ -296,15 +296,16 @@ test("inactive and grouped tab actions keep setup, generation, and busy state sc
   await expect(page.locator(".terminal-tab-summary-button")).toHaveCount(initialTabCount);
 
   const firstTabId = await page.locator(".terminal-tab[data-tab-id]").first().getAttribute("data-tab-id");
-  await page.locator("#newTabButton").evaluate((button) => button.click());
-  await page.locator("#newTabCurrentDirectoryButton").evaluate((button) => button.click());
+  // The new-thread palette only opens drafts, so create the idle second thread directly.
+  const created = await page.request.post(`${baseURL}/api/tabs`, { data: {} });
+  expect(created.ok()).toBe(true);
+  const createdTabId = (await created.json()).data.tab.id;
   const expectedTabCount = initialTabCount + 1;
-  await expect(page.locator(".terminal-tab[data-tab-id]")).toHaveCount(expectedTabCount);
-  await expect(page.locator(".terminal-tab-summary-button")).toHaveCount(expectedTabCount);
-
   await page.reload();
   await expect(page.locator(".terminal-tab[data-tab-id]")).toHaveCount(expectedTabCount);
   await expect(page.locator(".terminal-tab-summary-button")).toHaveCount(expectedTabCount);
+  await page.locator(`[data-tab-id="${createdTabId}"] .terminal-tab-button`).click();
+  await expect(page.locator(`[data-tab-id="${createdTabId}"]`)).toHaveClass(/active/);
 
   const activeTab = page.locator(".terminal-tab.active[data-tab-id]");
   const activeTabId = await activeTab.getAttribute("data-tab-id");
@@ -358,17 +359,19 @@ test("focus returns to a regenerated per-tab summary action after tab controls r
   await expect(summaryButton).toBeFocused();
 });
 
-test("each terminal tab stacks Split and Summary across one horizontally divided action slot", async ({ page }) => {
+test("each desktop terminal tab keeps adjacent accessible Split and Summary actions at tab height", async ({ page }) => {
   const requests = { get: 0, put: [], generate: [] };
   await installSummaryRoutes(page, requests, { configured: true });
   await page.goto(baseURL);
+  await expect(page.locator("#tabBar .terminal-tab-button").first()).toBeVisible();
 
   await expect(page.locator("#splitTabButton")).toHaveCount(0);
-  const initialTabCount = await page.locator("[data-tab-id] > .terminal-tab-actions").count();
   const activeGroup = page.locator(".terminal-tab-group.active");
   if (await activeGroup.count()) await activeGroup.hover();
   const activeActions = page.locator(".terminal-tab.active[data-tab-id] > .terminal-tab-actions, .terminal-tab-group.active .terminal-tab-group-item.active > .terminal-tab-actions");
   await expect(activeActions).toHaveCount(1);
+  const initialTabCount = await page.locator("[data-tab-id] > .terminal-tab-actions").count();
+  expect(initialTabCount).toBeGreaterThan(0);
   await expect(activeActions.locator(":scope > .terminal-tab-split-button")).toHaveCount(1);
   await expect(activeActions.locator(":scope > .terminal-tab-summary-button")).toHaveCount(1);
   const actionGeometry = await activeActions.evaluate((slot) => ({
@@ -380,11 +383,13 @@ test("each terminal tab stacks Split and Summary across one horizontally divided
     splitHeight: slot.querySelector(".terminal-tab-split-button")?.getBoundingClientRect().height || 0,
     summaryHeight: slot.querySelector(".terminal-tab-summary-button")?.getBoundingClientRect().height || 0,
   }));
-  expect(Math.abs(actionGeometry.splitWidth - actionGeometry.slotWidth)).toBeLessThanOrEqual(1);
-  expect(Math.abs(actionGeometry.summaryWidth - actionGeometry.slotWidth)).toBeLessThanOrEqual(1);
+  expect(actionGeometry.splitWidth).toBeGreaterThanOrEqual(24);
+  expect(actionGeometry.summaryWidth).toBeGreaterThanOrEqual(24);
+  expect(Math.abs(actionGeometry.splitWidth + actionGeometry.summaryWidth - actionGeometry.slotWidth)).toBeLessThanOrEqual(2);
   expect(Math.abs(actionGeometry.slotHeight - actionGeometry.tabHeight)).toBeLessThan(1);
   expect(Math.abs(actionGeometry.splitHeight - actionGeometry.summaryHeight)).toBeLessThan(1);
-  expect(Math.abs((actionGeometry.splitHeight + actionGeometry.summaryHeight) - actionGeometry.slotHeight)).toBeLessThan(2);
+  expect(Math.abs(actionGeometry.splitHeight - actionGeometry.slotHeight)).toBeLessThan(1);
+  expect(Math.abs(actionGeometry.summaryHeight - actionGeometry.slotHeight)).toBeLessThan(1);
 
   await activeActions.locator(":scope > .terminal-tab-split-button").click();
   await expect(page.locator("[data-tab-id] > .terminal-tab-actions")).toHaveCount(initialTabCount + 1);

@@ -20,7 +20,7 @@ assert.match(html, /id="subagentLaunchSlotsSave"[^>]*aria-describedby="subagentL
 assert.match(html, /id="subagentLaunchSlotsAnnouncer"[^>]*aria-live="polite"[^>]*aria-atomic="true"/, "slot changes should be announced accessibly");
 assert.match(app, /from "\.\/subagent-launch-slot-state\.mjs"/, "the browser should use the pure launch-slot state helper");
 assert.match(app, /const subagentLaunchSlotReloadTabs = new Set\(\)[\s\S]*subagentLaunchSlotReloadTabs\.add\(activeTabId\)[\s\S]*subagentLaunchSlotReloadTabs\.delete\(activeTabId\)/, "reload reminders should be tracked per tab until reload");
-assert.match(app, /subagentLaunchSlotsSummaryStatus\.textContent[\s\S]*"Unsaved changes"[\s\S]*"Saved · reload this tab"[\s\S]*subagentLaunchSlots\.open = true/, "the collapsed summary should surface state and reopen for errors or required reloads");
+assert.match(app, /subagentLaunchSlotsSummaryStatus\.textContent[\s\S]*"Unsaved changes"[\s\S]*"Saved · reload this thread"[\s\S]*subagentLaunchSlots\.open = true/, "the collapsed summary should surface state and reopen for errors or required reloads");
 assert.match(app, /const saveState = subagentLaunchSlotSaveState\([\s\S]*subagentLaunchSlotsSave\.disabled = saveState\.disabled[\s\S]*`Unsaved changes · \$\{saveState\.reason\}`/, "save eligibility and its adjacent explanation should come from one canonical state");
 assert.doesNotMatch(app, /`(?:Model|Thinking) · \$\{slotLabel\}`/, "visible field labels should stay compact while aria-labels retain slot context");
 assert.doesNotMatch(app, /make\("(?:p|span)", "subagent-launch-slot-(?:meta|id)"/, "redundant assignment summaries and internal slot IDs should stay out of the compact editor");

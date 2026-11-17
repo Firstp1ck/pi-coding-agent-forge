@@ -8,10 +8,13 @@ import { createRestoreFile, probeStartupRestore, readRestoreFileOnce } from "../
 const root = await mkdtemp(path.join(tmpdir(), "pi-webui-restore-"));
 try {
   const tabs = Array.from({ length: 130 }, (_, index) => ({ id: `tab-${index + 1}`, index: index + 1, title: `Tab ${index + 1}`, cwd: root, sessionFile: path.join(root, `${index + 1}.jsonl`) }));
+  Object.assign(tabs[0], { workspaceKind: "no-project", noProjectId: "bdd91e2a-1902-4b85-8c48-59b50592565d" });
   const handoff = await createRestoreFile(root, tabs);
   assert.equal(handoff.count, 130, "private restore handoff must support at least 125 tabs");
   const restored = await readRestoreFileOnce(handoff.file, root);
   assert.equal(restored.length, 130);
+  assert.equal(restored[0].workspaceKind, "no-project");
+  assert.equal(restored[0].noProjectId, tabs[0].noProjectId);
   assert.equal(restored[124].id, "tab-125");
   await assert.rejects(() => access(handoff.file), /ENOENT/, "restore handoff must be deleted after its first read");
 

@@ -23,9 +23,12 @@
 //   prompt and emit a generic Intercom tool stream with visible unrelated output.
 // - FAKE_PI_GUIDED_GIT_ACTIVATION=1: advertise the Guided Git extension and
 //   prompt companion, then emit its exact transient set/clear activation status.
+// - FAKE_PI_SESSION_OWNERSHIP=1: retain model choices and give each process its
+//   own session identity, or a stable identity for a normalized session path.
 import { createHash, randomUUID } from "node:crypto";
 import { createInterface } from "node:readline";
 import { appendFileSync } from "node:fs";
+import { resolve } from "node:path";
 import {
   BUILTIN_SAMPLING_APIS,
   filterSupportedSamplingParameters,
@@ -38,6 +41,11 @@ const sessionIndex = process.argv.indexOf("--session");
 const sessionFile = sessionIndex !== -1
   ? process.argv[sessionIndex + 1]
   : process.env.FAKE_PI_CONTINUITY_MODE === "1" ? process.env.FAKE_PI_CONTINUITY_SESSION_FILE || undefined : undefined;
+const sessionOwnershipEnabled = process.env.FAKE_PI_SESSION_OWNERSHIP === "1";
+let ownedSessionId = sessionOwnershipEnabled
+  ? `fake-session-${sessionFile ? createHash("sha256").update(resolve(sessionFile)).digest("hex") : randomUUID()}`
+  : "fake-session";
+let selectedModel = { provider: "fake", id: "fake-model" };
 
 let activeBash = 0;
 let peakBash = 0;
@@ -405,7 +413,7 @@ function handleIntercomLivePrompt(command, base) {
   return true;
 }
 
-function runContinuityDelayedStream() {
+function runContinuityDelayedStream({ holdOpen = false } = {}) {
   scriptedStreaming = true;
   const text = "continuity stream complete";
   const run = ++continuityRun;
@@ -421,7 +429,7 @@ function runContinuityDelayedStream() {
       appendDynamicMessage(message);
       emitScriptedEvent(tagged({ type: "message_end", continuityStep: "message-end", message }));
     } },
-    { afterMs: 80, run: () => emitScriptedEvent(tagged({ type: "agent_end", continuityStep: "end" })) },
+    { afterMs: holdOpen ? 30_000 : 80, run: () => emitScriptedEvent(tagged({ type: "agent_end", continuityStep: "end" })) },
     { afterMs: 10, run: () => {
       scriptedStreaming = false;
       emitScriptedEvent(tagged({ type: "agent_settled", continuityStep: "settled" }));
@@ -594,15 +602,28 @@ function handleMobileBlockerPrompt(command, base) {
   return true;
 }
 
+function handleActivityDecisionPrompt(command, base) {
+  if (String(command.message || "").trim() !== "fixture activity model decision") return false;
+  respond({ ...base, data: { output: "activity decision fixture accepted" } });
+  emitEvent({
+    type: "extension_ui_request",
+    id: "fixture-workflow-model-exception",
+    method: "select",
+    title: "Workflow model exception for fixture run",
+    options: ["Approve fixture model", "Reject fixture model"],
+  });
+  return true;
+}
+
 function handleContinuityPrompt(command, base) {
   if (!continuityModeEnabled) return false;
   const message = String(command.message || "").trim();
-  if (!["fixture continuity delayed stream", "fixture continuity delayed start", "fixture continuity confirmed before tool"].includes(message)) return false;
+  if (!["fixture continuity delayed stream", "fixture continuity held stream", "fixture continuity delayed start", "fixture continuity confirmed before tool"].includes(message)) return false;
   appendDynamicMessage({ role: "user", content: String(command.message), timestamp: Date.now() });
   respond({ ...base, data: { output: "fake continuity stream accepted", pid: process.pid } });
   if (message === "fixture continuity delayed start") runContinuityDelayedStart();
   else if (message === "fixture continuity confirmed before tool") runContinuityConfirmedBeforeTool();
-  else runContinuityDelayedStream();
+  else runContinuityDelayedStream({ holdOpen: message === "fixture continuity held stream" });
   return true;
 }
 
@@ -1230,7 +1251,7 @@ function emitSubagentFixtureStatus({ legacyOnly = false } = {}) {
       version: 1,
       instanceId: agent.id,
       runId: run.id,
-      parentSessionId: "fake-session",
+      parentSessionId: ownedSessionId,
       launcher: run.source === "workflow" ? "workflow" : "pi-subagents",
       provider: run.source === "workflow" ? "workflow-run" : "pi-subagents",
       origin: run.source,
@@ -1575,14 +1596,14 @@ rl.on("line", (line) => {
       respond({
         ...base,
         data: {
-          model: codexFixtureModel || { provider: "fake", id: "fake-model" },
+          model: codexFixtureModel || (sessionOwnershipEnabled ? selectedModel : { provider: "fake", id: "fake-model" }),
           thinkingLevel,
           isStreaming: scriptedStreaming || guidedGitStateMode === "streaming",
           isCompacting: guidedGitStateMode === "compacting",
           steeringMode: "one-at-a-time",
           followUpMode: "one-at-a-time",
           sessionFile,
-          sessionId: "fake-session",
+          sessionId: ownedSessionId,
           sessionName: "fake",
           autoCompactionEnabled: false,
           messageCount: 0,
@@ -1659,6 +1680,7 @@ rl.on("line", (line) => {
       if (handleCodexFastModePrompt(command, base)) return;
       if (handleTalkPrompt(command, base)) return;
       if (handleMobileBlockerPrompt(command, base)) return;
+      if (handleActivityDecisionPrompt(command, base)) return;
       if (handleTranscriptContinuityPrompt(command, base)) return;
       if (handleContinuityPrompt(command, base)) return;
       if (handleLargePayloadPrompt(command, base)) return;
@@ -1688,10 +1710,20 @@ rl.on("line", (line) => {
       return;
     case "set_model":
       if (command.modelId === "missing-model") respond({ ...base, success: false, error: "Model not found: fake/missing-model" });
-      else respond({ ...base, data: { provider: command.provider, id: command.modelId } });
+      else {
+        if (sessionOwnershipEnabled) selectedModel = { provider: command.provider, id: command.modelId };
+        respond({ ...base, data: { provider: command.provider, id: command.modelId } });
+      }
       return;
     case "get_available_models":
-      respond({ ...base, data: { models: [{ provider: "fake", id: "fake-model", name: "Fake Model" }] } });
+      respond({ ...base, data: { models: [
+        { provider: "fake", id: "fake-model", name: "Fake Model" },
+        ...(sessionOwnershipEnabled ? [{ provider: "fake", id: "fake-model-alt", name: "Fake Alternate Model" }] : []),
+      ] } });
+      return;
+    case "new_session":
+      if (sessionOwnershipEnabled) ownedSessionId = `fake-session-${randomUUID()}`;
+      respond({ ...base, data: {} });
       return;
     case "get_session_stats":
       respond({

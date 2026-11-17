@@ -7,7 +7,6 @@ import { createRequire } from "node:module";
 import { access, copyFile, lstat, mkdir, open, readFile, readdir, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
 import { homedir, networkInterfaces, platform, tmpdir } from "node:os";
 import path from "node:path";
-import { StringDecoder } from "node:string_decoder";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import { brotliCompress, brotliCompressSync, constants as zlibConstants, gzip, gzipSync } from "node:zlib";
@@ -32,7 +31,6 @@ import {
 import { CODEX_USAGE_DIRECT_TOKEN_MESSAGE, codexUsageLoginGuidance, resolveCodexUsageAuth } from "../lib/codex-usage-auth.mjs";
 import { readCodexCliUsage } from "../lib/codex-cli-usage.mjs";
 import { createCodexUsageReader } from "../lib/codex-usage-source.mjs";
-import { codexSpeedModeFromIntent, codexSpeedModeFromStatus } from "../public/codex-speed-mode.mjs";
 import { AgentRunIndex, canonicalAgentRunId, normalizeAgentInstance } from "../lib/agent-run-protocol.mjs";
 import { AgentRunRegistry } from "../lib/agent-run-registry.mjs";
 import { resolveScopedModelsFromPatterns } from "../lib/scoped-models.mjs";
@@ -50,6 +48,7 @@ import {
   listWebuiWorkspaces,
   saveWebuiWorkspace,
 } from "../lib/webui-workspaces.mjs";
+import { allocateNoProjectWorkspace, resolveNoProjectWorkspace, validateNoProjectCreateIntent, noProjectPiArgs } from "../lib/server/no-project-workspaces.mjs";
 import { nativeExportDownloadPayload } from "../lib/native-export-payload.mjs";
 import { discoverStartAttachRpcSupervisor } from "../lib/rpc-supervisor-client.mjs";
 import { deriveSupervisorRecoveryToken } from "../lib/rpc-supervisor-protocol.mjs";
@@ -62,8 +61,6 @@ import {
   validateSessionDelete,
 } from "../lib/session-actions.mjs";
 import { sweepStaleTempEntries } from "../lib/temp-artifacts.mjs";
-import { terminateProcessTree } from "../lib/process-tree.mjs";
-import { consumeAppRunnerTerminalChunk } from "../lib/app-runner-terminal.mjs";
 import { ThinkingStreamRecovery } from "../lib/thinking-stream-recovery.mjs";
 import {
   classifyGitPathFailure,
@@ -76,19 +73,33 @@ import {
   isWindowsDriveRoot,
   windowsDrivesPickerData,
 } from "../lib/windows-drive-roots.mjs";
+import { createPackageUpdates } from "../lib/package-updates.mjs";
 import { ComponentUpdateState, sanitizeComponentUpdateError, validateUpdateApplyRequest, validateUpdatePlanRequest } from "../lib/component-update-state.mjs";
 import { parseRuntimeVersion, resolveCanonicalPiRuntime, resolveWebuiRuntimeIdentity } from "../lib/update/resolver.mjs";
 import { resolveUpdatePathPi } from "../lib/update/path-pi.mjs";
 import { npmGlobalWebuiTarget, piUserWebuiTarget, selfUpdateCommand } from "../lib/update/native-targets.mjs";
 import { acknowledgeUpdateFence, affectedParticipants, assertEffectAdmission, createUpdateAdmissionCounter, effectLockForRoot, persistSharedJob, readSharedJob, registerUpdateParticipant, releaseEffectLocks, sharedUpdateRoot, unregisterUpdateParticipant } from "../lib/update/coordination.mjs";
 import { affectedActivePiDependency, createNativeUpdatePlan, inspectNativeJob, launchNativeUpdate, validateNativePlan } from "../lib/update/native-jobs.mjs";
-import { discoverNativeJobs, nativeJobBlocksUpdates, publicNativeJob } from "../lib/update/discovery.mjs";
+import { publicNativeJob } from "../lib/update/discovery.mjs";
 import { assertRestoredPiState, nativeUpdateOutcome } from "../lib/update/verification.mjs";
 import { frozenUpdateEnvironment, readUpdateContext } from "./pi-webui-update-context.mjs";
 import { packageOwnerRoot } from "../lib/update/package-layout.mjs";
 import { updateStatePaths } from "../lib/update/journal.mjs";
 import { createRestoreFile, listenWithRetry, probeStartupRestore, readRestoreFileOnce, sweepRestoreFiles } from "../lib/update/supervisor.mjs";
 import { OPTIONAL_FEATURE_BY_ID, OPTIONAL_FEATURE_CATALOG } from "../lib/optional-feature-catalog.mjs";
+import { createWorkspaceFilesService, FILE_VIEWER_BODY_LIMIT_BYTES } from "../lib/server/workspace-files.mjs";
+import { createExtensionUiRequestService } from "../lib/server/extension-ui-requests.mjs";
+import { createRpcTransportTypes } from "../lib/server/rpc-transports.mjs";
+import { createSseDelivery } from "../lib/server/sse-delivery.mjs";
+import { createHelperRequestService, WEBUI_HELPER_COMMAND } from "../lib/server/helper-requests.mjs";
+import { createConversationVoiceService, VOICE_AUDIO_JSON_BODY_LIMIT_BYTES } from "../lib/server/conversation-voice.mjs";
+import { createGitReadService } from "../lib/server/git-reads.mjs";
+import { createConversationModeService, NATURAL_CONVERSATION_FEATURE_ID } from "../lib/server/conversation-mode.mjs";
+import { createCodexFastModeService } from "../lib/server/codex-fast-mode.mjs";
+import { createGitGenerationService } from "../lib/server/git-generation.mjs";
+import { createGitMutationService, formatGitCommand } from "../lib/server/git-mutations.mjs";
+import { createGitWorktreeSessionService } from "../lib/server/git-worktree-sessions.mjs";
+import { createAppRunnerService } from "../lib/server/app-runners.mjs";
 import {
   OptionalFeatureAuditCoordinator,
   OptionalFeatureMigrationStore,
@@ -102,18 +113,23 @@ import {
   GIT_WORKFLOW_STAGING_POLICIES,
   GIT_WORKFLOW_THINKING_LEVELS,
   GIT_WORKFLOW_VERIFICATION_POLICIES,
-  WEBUI_SIDE_PANEL_WIDTH_MAX_PX,
-  WEBUI_SIDE_PANEL_WIDTH_MIN_PX,
   isGitWorkflowSetupComplete,
   mergeGitWorkflowPreferences,
   readGitWorkflowPreferences,
-  readWebuiSettings,
   supportedGitWorkflowThinkingLevels,
+  writeGitWorkflowPreferences,
+} from "../lib/git-workflow-preferences.mjs";
+import {
+  WEBUI_SIDE_PANEL_WIDTH_MAX_PX,
+  WEBUI_SIDE_PANEL_WIDTH_MIN_PX,
+  initializeWebuiShellRollout,
+  legacyWebuiSettingsFile,
+  validatedShellRolloutCohort,
+  readWebuiSettings,
   updateWebuiSettings,
   webuiSettingsFile,
-  writeGitWorkflowPreferences,
   writeWebuiSettings,
-} from "../lib/git-workflow-preferences.mjs";
+} from "../lib/server/settings-store.mjs";
 import {
   exactModelProfile,
   preserveUnavailableResourceNames,
@@ -140,8 +156,6 @@ import {
   validateSubagentLaunchSlotRoles,
 } from "../lib/subagent-launch-slots.mjs";
 import {
-  encodeBrowserSseEvent,
-  isOutputModeSemanticBarrier,
   negotiateOutputMode,
   normalizeOutputMode,
   OUTPUT_MODE_COMPACT_V1,
@@ -167,23 +181,13 @@ import {
   parseSlashCommand as parseNativeSlashCommand,
 } from "../lib/native-command-adapter.mjs";
 import {
-  WORKTREE_ERROR_CODES,
-  createGitWorktree,
   gitWorktreeErrorPayload,
   isGitLockFailure,
   listGitWorktrees,
-  openGitWorktree,
   pathInside,
-  pruneGitWorktrees,
-  removeGitWorktree,
 } from "../lib/git-worktrees.mjs";
 import { createGitLiveWatcher } from "../lib/git-live-watcher.mjs";
 import { createWorkspaceFilesLiveWatcher } from "../lib/workspace-files-live-watcher.mjs";
-import {
-  gitMessageArtifactPairReadiness,
-  readStableGitMessageArtifactPair,
-  sameGitMessageArtifactPair,
-} from "../lib/git-message-artifacts.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
@@ -213,9 +217,6 @@ const REQUEST_TIMEOUT_MS = 5 * 60 * 1000;
 // contract. A detached owner may legitimately outlive the HTTP server request.
 const RPC_SUPERVISOR_COMMAND_TIMEOUT_MAX_MS = 24 * 60 * 60 * 1000;
 const PROMPT_REQUEST_TIMEOUT_MS = Math.max(REQUEST_TIMEOUT_MS, Number.parseInt(process.env.PI_WEBUI_PROMPT_TIMEOUT_MS || "7200000", 10) || 7200000);
-const WEBUI_HELPER_TIMEOUT_MS = 8 * 1000;
-const WEBUI_HELPER_COMMAND = "webui-helper";
-const WEBUI_HELPER_RESPONSE_PREFIX = "__PI_WEBUI_HELPER_RESPONSE__:";
 const SAMPLING_PARAMS_HTTP_MAX_BYTES = 20 * 1024;
 const WEBUI_SUBAGENTS_STATUS_KEY = "webui-subagents";
 const WEBUI_SUBAGENTS_PAYLOAD_PREFIX = "PI_WEBUI_SUBAGENTS_V1 ";
@@ -270,37 +271,14 @@ const RECOVERY_BODY_LIMIT_BYTES = 256 * 1024;
 const RECOVERY_PROMPT_MAX_CHARS = 200_000;
 const RECOVERY_TITLE = "Anthropic compatibility recovery";
 const SKILL_FILE_BODY_LIMIT_BYTES = 2 * 1024 * 1024;
-const FILE_VIEWER_MAX_BYTES = 2 * 1024 * 1024;
-const FILE_VIEWER_BODY_LIMIT_BYTES = FILE_VIEWER_MAX_BYTES + 64 * 1024;
-const FILE_VIEWER_IMAGE_MIME_TYPES_BY_EXTENSION = Object.freeze({
-  ".png": "image/png",
-  ".jpg": "image/jpeg",
-  ".jpeg": "image/jpeg",
-  ".gif": "image/gif",
-  ".webp": "image/webp",
-  ".avif": "image/avif",
-});
-const FILE_TREE_MAX_ENTRIES = 1200;
-const FILE_TREE_ENTRY_STAT_CONCURRENCY = 32;
-const FILE_SEARCH_MAX_RESULTS = 200;
-const FILE_SEARCH_MAX_SCANNED = 12_000;
-const FILE_SEARCH_MAX_DEPTH = 8;
-const FILE_SEARCH_EXCLUDED_DIRS = new Set([".git", "node_modules"]);
 const PROMPT_BODY_LIMIT_BYTES = 24 * 1024 * 1024;
 const QUEUE_MUTATION_MAX_ITEMS = 512;
-const VOICE_AUDIO_BODY_LIMIT_BYTES = 24 * 1024 * 1024;
-const VOICE_AUDIO_JSON_BODY_LIMIT_BYTES = Math.ceil(VOICE_AUDIO_BODY_LIMIT_BYTES * 1.4) + 1024 * 1024;
-const VOICE_PROVIDER_TIMEOUT_MS = Math.max(1000, Number.parseInt(process.env.PI_VOICE_PROVIDER_TIMEOUT_MS || "120000", 10) || 120000);
-const VOICE_TTS_TEXT_MAX_CHARS = 12_000;
 const UPLOAD_BODY_LIMIT_BYTES = 96 * 1024 * 1024;
 const ATTACHMENT_UPLOAD_MAX_FILES = 12;
 const ATTACHMENT_UPLOAD_MAX_FILE_BYTES = 64 * 1024 * 1024;
 const ATTACHMENT_UPLOAD_MAX_TOTAL_BYTES = 64 * 1024 * 1024;
 const INLINE_IMAGE_MAX_BYTES = 8 * 1024 * 1024;
 const INLINE_IMAGE_TOTAL_MAX_BYTES = 16 * 1024 * 1024;
-// Keep enough headroom for base64-encoded inline images plus their RPC envelope.
-// Pi RPC output is JSONL, so this caps one physical line rather than a response.
-const PI_RPC_JSONL_LINE_MAX_BYTES = 32 * 1024 * 1024;
 const RPC_IMAGE_MIME_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
 const THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
 const SETTINGS_TRANSPORT_CHOICES = ["sse", "websocket", "websocket-cached", "auto"];
@@ -325,7 +303,6 @@ const SETTINGS_RELOAD_LABELS = new Map([
   ["enableSkillCommands", "Skill commands"],
 ]);
 const EVENT_HISTORY_LIMIT = 200;
-const EXTENSION_UI_BLOCKING_METHODS = new Set(["select", "confirm", "input", "editor"]);
 const STATUS_RPC_TIMEOUT_MS = 1_800;
 const FAST_PICK_LIMIT = 30;
 const PATH_SUGGESTION_LIMIT = 20;
@@ -390,39 +367,6 @@ const AUTO_TAB_TITLE_STOP_WORDS = new Set([
   "your",
 ]);
 
-const APP_RUNNER_CONFIG_FILE = ".pi-webui-runners.json";
-const APP_RUNNER_CUSTOM_LIMIT = 48;
-const APP_RUNNER_CUSTOM_ARG_LIMIT = 32;
-const APP_RUNNER_SEARCH_PATH_LIMIT = 24;
-const APP_RUNNER_SEARCH_PATH_MAX_CHARS = 4_096;
-const APP_RUNNER_FILE_PICKER_LIMIT = 500;
-const APP_RUNNER_DETECTION_TIMEOUT_MS = 1_200;
-const APP_RUNNER_COMMAND_CACHE_TTL_MS = 30_000;
-const APP_RUNNER_OUTPUT_LINE_LIMIT = 1_000;
-const APP_RUNNER_OUTPUT_MAX_CHARS = 240_000;
-const APP_RUNNER_INPUT_MAX_CHARS = 16_000;
-const APP_RUNNER_CONTEXT_DEFAULT_LINES = 80;
-const APP_RUNNER_CONTEXT_MAX_LINES = APP_RUNNER_OUTPUT_LINE_LIMIT;
-const APP_RUNNER_STOP_GRACE_MS = 2_500;
-const APP_RUNNER_PTY_DISABLED_VALUES = new Set(["0", "false", "no", "off"]);
-const APP_RUNNER_PTY_SCRIPT_CACHE_TTL_MS = 5 * 60 * 1000;
-const APP_RUNNER_PYTHON_ENTRIES = ["Main.py", "main.py", "src/main.py", "src/Main.py", "app.py", "src/app.py"];
-const APP_RUNNER_JS_ENTRIES = ["main.js", "src/main.js", "index.js", "src/index.js", "server.js", "src/server.js", "app.js", "src/app.js"];
-const APP_RUNNER_ZIG_ENTRIES = ["src/main.zig", "main.zig"];
-const APP_RUNNER_C_ENTRIES = ["main.c", "src/main.c"];
-const APP_RUNNER_CPP_ENTRIES = ["main.cpp", "src/main.cpp", "main.cc", "src/main.cc", "main.cxx", "src/main.cxx"];
-const APP_RUNNER_DOCKER_COMPOSE_FILES = ["compose.yaml", "compose.yml", "docker-compose.yaml", "docker-compose.yml"];
-const APP_RUNNER_SHELL_SCRIPT_DIRS = ["", "dev", "scripts", "dev/scripts"];
-const APP_RUNNER_SHELL_SCRIPT_LIMIT = 24;
-const APP_RUNNER_PYTHON_SCRIPT_LIMIT = 24;
-const APP_RUNNER_CONFIGURED_SCRIPT_SCAN_LIMIT = (APP_RUNNER_SHELL_SCRIPT_LIMIT + APP_RUNNER_PYTHON_SCRIPT_LIMIT) * 2;
-const APP_RUNNER_SHELL_EXTENSIONS = new Map([
-  [".sh", "bash"],
-  [".bash", "bash"],
-  [".zsh", "zsh"],
-  [".fish", "fish"],
-]);
-
 const MIME_TYPES = new Map([
   [".html", "text/html; charset=utf-8"],
   [".jsonl", "application/x-ndjson; charset=utf-8"],
@@ -463,7 +407,6 @@ const unavailableNative = (command, details = {}) => nativeCommandUnavailable(co
 function parseSlashCommand(message) {
   return parseNativeSlashCommand(message, NATIVE_SLASH_COMMAND_NAMES);
 }
-const NATURAL_CONVERSATION_FEATURE_ID = "naturalConversation";
 const OPTIONAL_FEATURE_PACKAGES = new Map(OPTIONAL_FEATURE_CATALOG.map(({ featureId, packageName }) => [featureId, packageName]));
 const OPTIONAL_FEATURE_PACKAGE_NAMES = new Set(OPTIONAL_FEATURE_PACKAGES.values());
 const WEBUI_RESOURCE_EXCLUDED_PACKAGES = new Set([WEBUI_PACKAGE]);
@@ -471,8 +414,6 @@ let optionalFeatureMigrationStore;
 let optionalFeatureAuditCoordinator;
 let optionalFeatureStartupReady = false;
 const UPDATE_PACKAGE_NAMES = [...CORE_UPDATE_PACKAGE_NAMES].sort();
-const NATURAL_CONVERSATION_STATUS_KEY = "natural-conversation";
-const NATURAL_CONVERSATION_COMMAND_NAMES = ["talk", "voice", "conversation"];
 const REPLAYABLE_CLEARED_EXTENSION_STATUS_KEYS = new Set(["feature-decision-output", "feature-category"]);
 const GUIDED_GIT_START_STATUS_KEY = "git-guided-workflow:webui-start";
 const GUIDED_GIT_START_PAYLOAD_TYPE = "firstpick.pi-extension-git-guided-workflow.start";
@@ -480,15 +421,6 @@ const GUIDED_GIT_START_PAYLOAD_VERSION = 1;
 const GUIDED_GIT_LAUNCH_TTL_MS = 15_000;
 const GUIDED_GIT_UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 const GUIDED_GIT_COMMAND_MESSAGE = /^\/git-guided-workflow(?::\d+)?$/u;
-// Codex subscription Fast mode is owned by the optional @firstpick/pi-extension-codex-fast-mode
-// package. The Web UI never inspects ChatGPT credentials or request payloads; it only mirrors the
-// extension-published status key and drives the package-owned /fast-mode command over RPC.
-const CODEX_FAST_MODE_FEATURE_ID = "codexFastMode";
-const CODEX_FAST_MODE_STATUS_KEY = "codex-fast-mode";
-const CODEX_FAST_MODE_COMMAND_NAME = "fast-mode";
-const CODEX_FAST_MODE_PROVIDER = "openai-codex";
-const CODEX_FAST_MODE_STATUS_TIMEOUT_MS = 1000;
-const CODEX_FAST_MODE_CREDIT_NOTICE = "Fast mode increases Codex usage; current rates depend on the model and billing plan. Ultrafast requires GPT-6 Astra and Pro $500 or eligible Enterprise/Edu access, using 8x Standard included usage or 6x purchased-credit/pay-as-you-go usage. Workspace terms may differ. Only subscription-backed openai-codex requests are changed; upstream eligibility stays authoritative.";
 const PACKAGE_NAME_CACHE = new Map();
 
 function usage() {
@@ -823,47 +755,6 @@ async function piReleaseNotes() {
   return piReleaseNotesCache;
 }
 
-const stderrMirrorFailureListeners = new Set();
-const stderrMirrorErrorHandlers = new WeakSet();
-
-function ensureStderrMirrorErrorHandler(stream) {
-  if (stderrMirrorErrorHandlers.has(stream)) return;
-  stderrMirrorErrorHandlers.add(stream);
-  stream.on("error", (error) => {
-    // Do not log from this handler: stderr is the failing sink and recursive
-    // diagnostics can otherwise terminate the process. Active writers report
-    // the failure through their normal Web UI event path instead.
-    for (const reportFailure of [...stderrMirrorFailureListeners]) reportFailure(error);
-  });
-}
-
-function mirrorPiStderr(text, onFailure) {
-  const stream = process.stderr;
-  let reported = false;
-  const reportFailure = (error) => {
-    if (reported) return;
-    reported = true;
-    stderrMirrorFailureListeners.delete(reportFailure);
-    onFailure(error);
-  };
-
-  if (!stream?.writable || stream.destroyed || stream.writableEnded) {
-    reportFailure(new Error("Web UI stderr sink is not writable"));
-    return;
-  }
-
-  ensureStderrMirrorErrorHandler(stream);
-  stderrMirrorFailureListeners.add(reportFailure);
-  try {
-    stream.write(text, (error) => {
-      stderrMirrorFailureListeners.delete(reportFailure);
-      if (error) reportFailure(error);
-    });
-  } catch (error) {
-    reportFailure(error);
-  }
-}
-
 let nativeAdmissionState = null;
 const nativeAdmittedWork = createUpdateAdmissionCounter();
 let startupProbeReady = false;
@@ -882,346 +773,6 @@ async function assertNativeRpcAdmission(command) {
   if (["get_state", "get_messages", "get_session_stats", "get_available_models", "get_commands"].includes(command?.type)) return;
   if (!nativeAdmissionState) throw new Error("Update admission is not initialized.");
   await assertEffectAdmission(nativeAdmissionState.root, nativeAdmissionState.participant.canonicalRoots);
-}
-
-class SupervisorPiRpcProcess {
-  constructor({ supervisor, tabId, displayCommand = "supervised Pi RPC", cwd, snapshot = {} }) {
-    this.supervisor = supervisor;
-    this.tabId = tabId;
-    this.displayCommand = displayCommand;
-    this.cwd = cwd;
-    this.startedAt = snapshot.startedAt || new Date().toISOString();
-    this.listeners = new Set();
-    this.metadataUpdate = Promise.resolve();
-    this.admissionTail = Promise.resolve();
-    this.applySnapshot(snapshot);
-  }
-
-  applySnapshot(snapshot = {}) {
-    this.startedAt = snapshot.startedAt || this.startedAt;
-    this.cwd = snapshot.metadata?.cwd || this.cwd;
-    const running = snapshot.running !== false;
-    this.child = {
-      pid: Number.isInteger(snapshot.pid) ? snapshot.pid : undefined,
-      exitCode: running ? null : 1,
-      signalCode: null,
-      killed: !running,
-    };
-  }
-
-  isRunning() {
-    return !!this.child && this.child.exitCode === null && this.child.signalCode === null;
-  }
-
-  onEvent(listener) {
-    this.listeners.add(listener);
-    return () => this.listeners.delete(listener);
-  }
-
-  emit(event) {
-    for (const listener of this.listeners) {
-      try {
-        listener(event);
-      } catch (error) {
-        console.error("webui listener failed:", error);
-      }
-    }
-  }
-
-  receiveSupervisorEvent(event) {
-    const payload = event?.payload;
-    if (!payload || typeof payload !== "object") return;
-    if (payload.type === "pi_process_start") {
-      this.child = { pid: payload.pid, exitCode: null, signalCode: null, killed: false };
-      this.startedAt = event.at || new Date().toISOString();
-    } else if (payload.type === "pi_process_exit") {
-      this.child = { ...(this.child || {}), exitCode: payload.code ?? 1, signalCode: payload.signal ?? null, killed: true };
-    } else if (payload.type === "pi_process_error" && !this.isRunning()) {
-      this.child = { ...(this.child || {}), exitCode: 1, signalCode: null, killed: true };
-    }
-    this.emit({
-      ...payload,
-      supervisorScopeId: event.scopeId,
-      supervisorEpoch: event.epoch,
-      supervisorSeq: event.seq,
-    });
-    if (payload.type === "pi_stderr" && payload.text) {
-      mirrorPiStderr(payload.text, (error) => this.emit({
-        type: "pi_stderr_sink_error",
-        error: `Pi RPC stderr could not be mirrored to the Web UI server log: ${sanitizeError(error)}`,
-      }));
-    }
-  }
-
-  // Reserve wrapper order before admission's filesystem await. Only dispatch
-  // holds the barrier: an RPC response may wait on a subsequent UI write.
-  dispatchInOrder(operation) {
-    const dispatch = this.admissionTail.catch(() => {}).then(operation);
-    this.admissionTail = dispatch.then(() => {}, () => {});
-    return dispatch;
-  }
-
-  async send(command, timeoutMs = REQUEST_TIMEOUT_MS) {
-    const response = await this.dispatchInOrder(async () => {
-      await assertNativeRpcAdmission(command);
-      const requestId = command?.id || randomUUID();
-      const boundedTimeoutMs = Math.min(Math.max(1, Number(timeoutMs) || REQUEST_TIMEOUT_MS), RPC_SUPERVISOR_COMMAND_TIMEOUT_MAX_MS);
-      return { response: this.supervisor.command(this.tabId, command, { requestId, timeoutMs: boundedTimeoutMs }) };
-    });
-    return response.response;
-  }
-
-  async writeRaw(command) {
-    return this.dispatchInOrder(async () => {
-      await assertNativeRpcAdmission(command);
-      return this.supervisor.write(this.tabId, command);
-    });
-  }
-
-  async replace({ child, metadata, displayCommand, restart }) {
-    const snapshot = await this.dispatchInOrder(async () => {
-      const request = { tabId: this.tabId, metadata, child };
-      return restart ? this.supervisor.replaceTabUnderUpdate({ ...request, restart }) : this.supervisor.replaceTab(request);
-    });
-    if (displayCommand) this.displayCommand = displayCommand;
-    this.applySnapshot(snapshot);
-    return snapshot;
-  }
-
-  updateMetadata(metadata) {
-    this.metadataUpdate = this.metadataUpdate.catch(() => {}).then(() => this.supervisor.updateTab(this.tabId, metadata));
-    return this.metadataUpdate;
-  }
-
-  async stop() {
-    return this.supervisor.closeTab(this.tabId);
-  }
-
-  dispose() {
-    this.listeners.clear();
-  }
-}
-
-class PiRpcProcess {
-  constructor({ command, args, displayCommand, cwd, env = process.env }) {
-    this.command = command;
-    this.args = args;
-    this.displayCommand = displayCommand;
-    this.cwd = cwd;
-    this.env = env;
-    this.child = undefined;
-    this.spawned = false;
-    this.pending = new Map();
-    this.listeners = new Set();
-    this.startedAt = new Date().toISOString();
-    this.stderrMirrorFailureReported = false;
-  }
-
-  reportStderrMirrorFailure(error) {
-    if (this.stderrMirrorFailureReported) return;
-    this.stderrMirrorFailureReported = true;
-    this.emit({
-      type: "pi_stderr_sink_error",
-      error: `Pi RPC stderr could not be mirrored to the Web UI server log: ${sanitizeError(error)}`,
-    });
-  }
-
-  start() {
-    this.spawned = false;
-    this.child = spawn(this.command, this.args, {
-      cwd: this.cwd,
-      env: this.env,
-      stdio: ["pipe", "pipe", "pipe"],
-      windowsHide: true,
-    });
-
-    const startup = new Promise((resolve, reject) => {
-      this.child.once("spawn", () => {
-        this.spawned = true;
-        this.emit({ type: "pi_process_start", pid: this.child.pid, cwd: this.cwd, command: this.displayCommand, args: this.args });
-        resolve();
-      });
-      this.child.on("error", (error) => {
-        this.spawned = false;
-        const message = sanitizeError(error);
-        this.emit({ type: "pi_process_error", error: message });
-        this.rejectAll(new Error(message));
-        reject(new Error(message));
-      });
-    });
-
-    this.child.on("exit", (code, signal) => {
-      this.emit({ type: "pi_process_exit", code, signal });
-      this.rejectAll(new Error(`Pi RPC process exited${code === null ? "" : ` with code ${code}`}${signal ? ` (${signal})` : ""}`));
-    });
-
-    this.attachJsonlReader(this.child.stdout, (line) => this.handleStdoutLine(line));
-    this.attachTextReader(this.child.stderr, (text) => {
-      if (text.length > 0) {
-        // Publish before attempting the optional terminal mirror so a closed
-        // stderr sink cannot hide Pi diagnostics from browser clients.
-        this.emit({ type: "pi_stderr", text });
-        mirrorPiStderr(text, (error) => this.reportStderrMirrorFailure(error));
-      }
-    });
-
-    return startup;
-  }
-
-  isRunning() {
-    return this.spawned && !!this.child && this.child.exitCode === null && !this.child.killed;
-  }
-
-  onEvent(listener) {
-    this.listeners.add(listener);
-    return () => this.listeners.delete(listener);
-  }
-
-  emit(event) {
-    for (const listener of this.listeners) {
-      try {
-        listener(event);
-      } catch (error) {
-        console.error("webui listener failed:", error);
-      }
-    }
-  }
-
-  attachJsonlReader(stream, onLine) {
-    const decoder = new StringDecoder("utf8");
-    let buffer = "";
-    let bufferBytes = 0;
-    let discardingOversizedLine = false;
-
-    const emitOversizedLine = () => this.emit({
-      type: "pi_stdout_line_too_large",
-      error: `Discarded a Pi RPC JSONL line larger than ${PI_RPC_JSONL_LINE_MAX_BYTES} bytes`,
-      maxBytes: PI_RPC_JSONL_LINE_MAX_BYTES,
-    });
-    const consume = (chunk) => {
-      let input = chunk;
-      while (input.length > 0) {
-        if (discardingOversizedLine) {
-          const newlineIndex = input.indexOf("\n");
-          if (newlineIndex === -1) return;
-          discardingOversizedLine = false;
-          input = input.slice(newlineIndex + 1);
-          continue;
-        }
-
-        const newlineIndex = input.indexOf("\n");
-        const segment = newlineIndex === -1 ? input : input.slice(0, newlineIndex);
-        const segmentBytes = Buffer.byteLength(segment);
-        if (bufferBytes + segmentBytes > PI_RPC_JSONL_LINE_MAX_BYTES) {
-          buffer = "";
-          bufferBytes = 0;
-          emitOversizedLine();
-          if (newlineIndex === -1) {
-            discardingOversizedLine = true;
-            return;
-          }
-          input = input.slice(newlineIndex + 1);
-          continue;
-        }
-
-        buffer += segment;
-        bufferBytes += segmentBytes;
-        if (newlineIndex === -1) return;
-        let line = buffer;
-        buffer = "";
-        bufferBytes = 0;
-        if (line.endsWith("\r")) line = line.slice(0, -1);
-        onLine(line);
-        input = input.slice(newlineIndex + 1);
-      }
-    };
-
-    stream.on("data", (chunk) => consume(typeof chunk === "string" ? chunk : decoder.write(chunk)));
-    stream.on("end", () => {
-      consume(decoder.end());
-      if (!discardingOversizedLine && buffer.length > 0) onLine(buffer.endsWith("\r") ? buffer.slice(0, -1) : buffer);
-    });
-  }
-
-  attachTextReader(stream, onText) {
-    const decoder = new StringDecoder("utf8");
-    stream.on("data", (chunk) => onText(typeof chunk === "string" ? chunk : decoder.write(chunk)));
-    stream.on("end", () => {
-      const tail = decoder.end();
-      if (tail) onText(tail);
-    });
-  }
-
-  handleStdoutLine(line) {
-    if (!line.trim()) return;
-
-    let event;
-    try {
-      event = JSON.parse(line);
-    } catch (error) {
-      this.emit({ type: "pi_stdout_parse_error", line, error: sanitizeError(error) });
-      return;
-    }
-
-    if (event?.type === "response" && event.id && this.pending.has(event.id)) {
-      const pending = this.pending.get(event.id);
-      this.pending.delete(event.id);
-      clearTimeout(pending.timeout);
-      pending.resolve(event);
-    }
-
-    this.emit(event);
-  }
-
-  send(command, timeoutMs = REQUEST_TIMEOUT_MS) {
-    if (!this.isRunning() || !this.child?.stdin) {
-      return Promise.reject(new Error("Pi RPC process is not running"));
-    }
-
-    const id = command.id || randomUUID();
-    const payload = { ...command, id };
-
-    return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        this.pending.delete(id);
-        reject(new Error(`Timed out waiting for RPC response to ${command.type}`));
-      }, timeoutMs);
-
-      this.pending.set(id, { resolve, reject, timeout });
-      this.writeRaw(payload).catch((error) => {
-        clearTimeout(timeout);
-        this.pending.delete(id);
-        reject(error);
-      });
-    });
-  }
-
-  async writeRaw(command) {
-    if (!this.isRunning() || !this.child?.stdin) {
-      throw new Error("Pi RPC process is not running");
-    }
-    await assertNativeRpcAdmission(command);
-    const line = `${JSON.stringify(command)}\n`;
-    if (!this.child.stdin.write(line)) {
-      await new Promise((resolve) => this.child.stdin.once("drain", resolve));
-    }
-  }
-
-  rejectAll(error) {
-    for (const [id, pending] of this.pending) {
-      clearTimeout(pending.timeout);
-      pending.reject(error);
-      this.pending.delete(id);
-    }
-  }
-
-  stop() {
-    if (!this.child || this.child.exitCode !== null) return;
-    this.child.kill("SIGTERM");
-    setTimeout(() => {
-      if (this.child && this.child.exitCode === null) this.child.kill("SIGKILL");
-    }, 3000).unref();
-  }
 }
 
 // JSON responses are compact and, when the client accepts it, compressed. Boot alone fetches
@@ -1463,100 +1014,12 @@ function sendRemoteAuthRequired(req, res, url) {
 // disconnects healthy Chromium EventSource streams as soon as a frame exceeds
 // roughly 16 KiB. Queue subsequent frames until "drain", with strict bounds so
 // a client that truly stops reading cannot grow server memory indefinitely.
-const SSE_BACKPRESSURE_MAX_PENDING_BYTES = 4 * 1024 * 1024;
-const SSE_BACKPRESSURE_MAX_PENDING_FRAMES = 256;
-const SSE_BACKPRESSURE_TIMEOUT_MS = 10_000;
 
-function clearSseBackpressureTimer(client) {
-  if (!client?.backpressureTimer) return;
-  clearTimeout(client.backpressureTimer);
-  client.backpressureTimer = undefined;
-}
 
-function evictSlowSseClient(client) {
-  if (!client || client.evicted) return;
-  client.evicted = true;
-  client.backpressured = false;
-  clearSseBackpressureTimer(client);
-  client.pendingFrames = [];
-  client.pendingFrameBytes = 0;
-  client.tab?.sseClients?.delete(client);
-  try {
-    // Complete the chunked response so Chromium can reconnect without
-    // ERR_INCOMPLETE_CHUNKED_ENCODING.
-    client.res?.end();
-  } catch {
-    // A closed browser socket needs no further cleanup.
-  }
-}
 
-function scheduleSseBackpressureTimeout(client) {
-  clearSseBackpressureTimer(client);
-  client.backpressureTimer = setTimeout(() => evictSlowSseClient(client), SSE_BACKPRESSURE_TIMEOUT_MS);
-  client.backpressureTimer.unref?.();
-}
 
-function flushSseClient(client) {
-  const res = client?.res;
-  if (!client || client.evicted) return;
-  if (!res || res.destroyed || res.writableEnded) {
-    evictSlowSseClient(client);
-    return;
-  }
-  client.backpressured = false;
-  clearSseBackpressureTimer(client);
-  while (client.pendingFrames?.length) {
-    const frame = client.pendingFrames.shift();
-    client.pendingFrameBytes -= Buffer.byteLength(frame);
-    try {
-      if (!res.write(frame)) {
-        client.backpressured = true;
-        scheduleSseBackpressureTimeout(client);
-        res.once("drain", () => flushSseClient(client));
-        return;
-      }
-    } catch {
-      evictSlowSseClient(client);
-      return;
-    }
-  }
-  client.pendingFrameBytes = 0;
-}
 
-function writeSseFrame(client, frame) {
-  const res = client?.res || client;
-  if (!res || res.destroyed || res.writableEnded || client?.evicted) return false;
-  if (client?.res && client.backpressured) {
-    const frameBytes = Buffer.byteLength(frame);
-    const pendingFrames = client.pendingFrames || (client.pendingFrames = []);
-    const pendingBytes = Number(client.pendingFrameBytes) || 0;
-    if (pendingFrames.length >= SSE_BACKPRESSURE_MAX_PENDING_FRAMES || pendingBytes + frameBytes > SSE_BACKPRESSURE_MAX_PENDING_BYTES) {
-      evictSlowSseClient(client);
-      return false;
-    }
-    pendingFrames.push(frame);
-    client.pendingFrameBytes = pendingBytes + frameBytes;
-    return true;
-  }
-  try {
-    if (!res.write(frame) && client?.res) {
-      client.backpressured = true;
-      scheduleSseBackpressureTimeout(client);
-      res.once("drain", () => flushSseClient(client));
-    }
-    // write() returning false still accepted this frame.
-    return true;
-  } catch {
-    if (client?.res) evictSlowSseClient(client);
-    return false;
-  }
-}
 
-function sendSse(client, event) {
-  const payload = encodeBrowserSseEvent(event, { outputMode: client?.activeMode || OUTPUT_MODE_NORMAL });
-  if (payload === undefined) return false;
-  return writeSseFrame(client, `data: ${payload}\n\n`);
-}
 
 function rpcSuccess(command, data = {}) {
   return { type: "response", command, success: true, data };
@@ -2396,7 +1859,7 @@ async function installOptionalFeaturePackage(featureId, cwd = options.cwd) {
     stdout: result.stdout,
     stderr: result.stderr,
     status: afterStatus,
-    message: `${operation} optional feature package ${packageName}${afterStatus.installedVersion ? ` at ${afterStatus.installedVersion}` : ""} with Pi. Reload the active Pi tab to load new resources.`,
+    message: `${operation} optional feature package ${packageName}${afterStatus.installedVersion ? ` at ${afterStatus.installedVersion}` : ""} with Pi. Reload the active Pi thread to load new resources.`,
   };
 }
 
@@ -3160,7 +2623,7 @@ async function triggerSessionSummary(tab, { refresh = false } = {}) {
   if (!preferences.configured) throw makeHttpError(409, "Session summary setup must be confirmed before generation.");
   const commands = await safeRpcData(tab, { type: "get_commands" }, STATUS_RPC_TIMEOUT_MS);
   const available = Array.isArray(commands.data?.commands) && commands.data.commands.some((command) => String(command?.name || "").replace(/:\d+$/, "") === "summary");
-  if (!commands.ok || !available) throw makeHttpError(409, "The /summary extension command is not loaded in this Pi tab. Reload the tab and retry.");
+  if (!commands.ok || !available) throw makeHttpError(409, "The /summary extension command is not loaded in this Pi thread. Reload the thread and retry.");
   tab.sessionSummary = {
     ...(tab.sessionSummary || {}),
     version: SESSION_SUMMARY_PROTOCOL_VERSION,
@@ -3194,402 +2657,6 @@ async function triggerSessionSummary(tab, { refresh = false } = {}) {
   }
 }
 
-function gitWorkflowGenerationProfileArgument(profile) {
-  const payload = Buffer.from(JSON.stringify({
-    version: 1,
-    provider: profile.provider,
-    modelId: profile.modelId,
-    thinkingLevel: profile.thinkingLevel,
-  }), "utf8").toString("base64url");
-  return `--firstpick-webui-generation-profile=${payload}`;
-}
-
-function gitWorkflowGenerationPrompt(kind, preferences, commandName, profile) {
-  const generationProfile = gitWorkflowGenerationProfileArgument(profile);
-  switch (kind) {
-    case "commit":
-      return `/${commandName} ${preferences.commit.language} ${preferences.commit.scope} ${generationProfile}`;
-    case "branch":
-      return `/${commandName} ${generationProfile}`;
-    case "pr":
-      return `/${commandName} ${preferences.commit.language} ${generationProfile}`;
-    default:
-      throw makeHttpError(400, "generation kind must be commit, branch, or pr");
-  }
-}
-
-function guidedGitNativeCommandBase(kind) {
-  if (kind === "commit") return "git-staged-msg";
-  if (kind === "branch") return "git-branch-name";
-  if (kind === "pr") return "pr";
-  throw makeHttpError(400, "generation kind must be commit, branch, or pr");
-}
-
-async function resolveGuidedGitNativeCommand(tab, kind) {
-  const baseName = guidedGitNativeCommandBase(kind);
-  const response = await safeRpcData(tab, { type: "get_commands" }, STATUS_RPC_TIMEOUT_MS);
-  const commands = Array.isArray(response.data?.commands) ? response.data.commands : [];
-  const command = commands.find((candidate) => candidate?.source === "extension" && candidate?.name === baseName)
-    || commands.find((candidate) => candidate?.source === "extension" && String(candidate?.name || "").replace(/:\d+$/, "") === baseName);
-  if (!response.ok || !command) {
-    throw makeHttpError(409, `Guided Git requires the /${baseName} extension command in this Pi tab. Same-named prompt templates are not used.`);
-  }
-  return String(command.name);
-}
-
-const GUIDED_GIT_PROVIDER_FAILURE_MARKER = "FIRSTPICK_GUIDED_GIT_PROVIDER_FAILURE";
-const GUIDED_GIT_NATIVE_COMMAND_ERROR_GRACE_MS = 500;
-
-function boundedGitWorkflowGenerationError(message, fallback = "Guided Git generation failed") {
-  const text = typeof message === "string" ? message : fallback;
-  return text.replace(/[\r\n]+/g, " ").trim().slice(0, 240) || fallback;
-}
-
-function isGuidedGitProviderGenerationFailure(error) {
-  return String(error?.message || error || "").includes(GUIDED_GIT_PROVIDER_FAILURE_MARKER);
-}
-
-function guidedGitNativeCommandErrorFromEvent(record, event) {
-  const commandName = String(record?.nativeCommandName || "");
-  if (event?.type !== "extension_error" || event.event !== "command" || !commandName || event.extensionPath !== `command:${commandName}`) return null;
-  const error = new Error(String(event.error || `/${commandName} failed`));
-  error.guidedGitProviderGenerationFailure = isGuidedGitProviderGenerationFailure(error);
-  return error;
-}
-
-function gitWorkflowGenerationCancellationError() {
-  const error = makeHttpError(409, "Guided Git generation was cancelled");
-  error.code = "GIT_WORKFLOW_CANCELLED";
-  return error;
-}
-
-function assertGitWorkflowGenerationOwnership(tab, record) {
-  if (tab.gitWorkflowGeneration !== record) throw new Error("Guided Git generation is no longer active");
-  if (record.cancelled) throw gitWorkflowGenerationCancellationError();
-}
-
-function attachGitWorkflowGenerationError(error, record) {
-  if (!error || typeof error !== "object" || !record?.generationId || !record.fallbackStarted || record.cancelled || record.processLost) return error;
-  error.gitWorkflowGeneration = {
-    generationId: record.generationId,
-    kind: record.kind,
-    fallbackUsed: record.fallbackStarted === true,
-    generation: publicGitWorkflowGenerationProfile(record.fallbackStarted && record.fallback ? record.fallback : record.primary),
-    primaryGeneration: publicGitWorkflowGenerationProfile(record.primary),
-  };
-  return error;
-}
-
-function gitWorkflowGenerationProfile(provider, modelId, thinkingLevel, models) {
-  const model = models.find((candidate) => candidate.provider === provider && candidate.id === modelId) || null;
-  return { provider, modelId, thinkingLevel, model };
-}
-
-function publicGitWorkflowGenerationProfile(profile) {
-  return {
-    provider: String(profile?.provider || ""),
-    modelId: String(profile?.modelId || ""),
-    thinkingLevel: String(profile?.thinkingLevel || ""),
-  };
-}
-
-async function createGitWorkflowArtifactGeneration(tab, generationId, kind) {
-  const createdAt = Date.now();
-  if (kind === "commit") {
-    // Keep generation dispatch compatible with tabs whose cwd has not become
-    // a repository yet; staging boundaries still verify the real Git root.
-    const root = await getGitRoot(tab.cwd).catch(() => path.resolve(tab.cwd));
-    const cwd = gitWorkflowMessageCwd(root, tab.cwd);
-    return {
-      id: generationId,
-      kind,
-      root,
-      cwd,
-      createdAt,
-      baseline: await readStableGitMessageArtifactPair(commitMessagePaths(cwd)),
-      terminal: false,
-      successful: false,
-    };
-  }
-  const baseline = kind === "branch"
-    ? await readGitWorkflowBranchName(tab.cwd).catch(() => null)
-    : await readGitWorkflowPrDescription(tab.cwd).catch(() => null);
-  return { id: generationId, kind, cwd: path.resolve(tab.cwd), createdAt, baseline, terminal: false, successful: false };
-}
-
-async function assertGuidedGitNativeArtifactUpdated(tab, record) {
-  const generation = record.artifactGeneration;
-  if (!generation) throw new Error("Guided Git generation has no artifact correlation record");
-  if (generation.kind === "commit") {
-    const pair = await readStableGitMessageArtifactPair(commitMessagePaths(generation.cwd));
-    const readiness = gitMessageArtifactPairReadiness(generation.baseline, pair);
-    if (!readiness.ready) throw new Error(readiness.reason || "Native commit generation did not update both message artifacts");
-    return;
-  }
-  const current = generation.kind === "branch"
-    ? await readGitWorkflowBranchName(tab.cwd)
-    : await readGitWorkflowPrDescription(tab.cwd);
-  if (generation.baseline
-    && current.path === generation.baseline.path
-    && current.mtimeMs === generation.baseline.mtimeMs
-    && current.ctimeMs === generation.baseline.ctimeMs
-    && current.ino === generation.baseline.ino) {
-    throw new Error(`Native ${generation.kind} generation did not update its correlated artifact`);
-  }
-}
-
-function emitGitWorkflowFallbackLifecycle(tab, record, phase) {
-  const event = {
-    type: `webui_git_workflow_generation_fallback_${phase}`,
-    tabId: tab.id,
-    tabTitle: tab.title,
-    generationId: record.generationId,
-    kind: record.kind,
-    generation: publicGitWorkflowGenerationProfile(record.fallback),
-    primaryGeneration: publicGitWorkflowGenerationProfile(record.primary),
-    ...(phase === "started"
-      ? { reason: boundedGitWorkflowGenerationError("The primary Git-writing model ended with an error.") }
-      : { error: boundedGitWorkflowGenerationError("The fallback Git-writing model ended with an error.") }),
-  };
-  const lifecycle = tab.gitWorkflowFallbackLifecycle;
-  if (lifecycle?.generationId === record.generationId) {
-    lifecycle.events = [...lifecycle.events.filter((item) => item.type !== event.type), event].slice(-2);
-  }
-  broadcastTabEvent(tab, event);
-}
-
-function replayGitWorkflowFallbackLifecycle(tab, client) {
-  const lifecycle = tab.gitWorkflowFallbackLifecycle;
-  for (const event of lifecycle?.events || []) sendSseToClient(client, { ...event, replayed: true });
-}
-
-async function finishGitWorkflowGeneration(tab, record, { successful }) {
-  if (tab.gitWorkflowGeneration !== record || record.finishing) return;
-  record.finishing = true;
-  const artifactGeneration = record.artifactGeneration;
-  if (artifactGeneration && tab.gitWorkflowArtifactGeneration === artifactGeneration) {
-    artifactGeneration.terminal = true;
-    artifactGeneration.successful = successful === true && !record.cancelled;
-  }
-  if (!successful && record.messageGeneration && tab.gitWorkflowMessageGeneration?.id === record.messageGeneration.id) {
-    tab.gitWorkflowMessageGeneration = record.previousMessageGeneration;
-  }
-  markTabIdle(tab);
-  if (tab.gitWorkflowGeneration === record) tab.gitWorkflowGeneration = null;
-}
-
-async function dispatchGitWorkflowGenerationAttempt(tab, record, profile, attempt) {
-  assertGitWorkflowGenerationOwnership(tab, record);
-  if (!tab.rpc?.isRunning?.()) throw new Error("Pi RPC process is not running");
-  if (!profile.model) throw new Error(`Configured ${attempt} Git-writing model is unavailable: ${profile.provider}/${profile.modelId}`);
-  if (!supportedGitWorkflowThinkingLevels(profile.model).includes(profile.thinkingLevel)) {
-    throw new Error(`Configured ${attempt} thinking level ${profile.thinkingLevel} is unavailable for ${profile.provider}/${profile.modelId}`);
-  }
-
-  record.attempt = attempt;
-  record.attemptRunStarted = false;
-  record.promptAccepted = false;
-  record.pendingSettlement = null;
-  record.nativeCommandError = null;
-  record.message = gitWorkflowGenerationPrompt(record.kind, record.preferences, record.nativeCommandName, profile);
-
-  assertGitWorkflowGenerationOwnership(tab, record);
-  markTabWorking(tab);
-  const response = await tab.rpc.send({ type: "prompt", message: record.message });
-  assertGitWorkflowGenerationOwnership(tab, record);
-  if (response.success === false) {
-    const error = new Error(response.error || "Guided Git generation prompt was rejected");
-    error.guidedGitProviderGenerationFailure = isGuidedGitProviderGenerationFailure(response.error);
-    throw error;
-  }
-  if (record.nativeCommandError) throw record.nativeCommandError;
-  record.promptAccepted = true;
-  const pendingSettlement = record.pendingSettlement;
-  if (pendingSettlement?.attempt === attempt) {
-    record.pendingSettlement = null;
-    void settleGitWorkflowGeneration(tab, record, pendingSettlement);
-  }
-  const result = {
-    accepted: true,
-    kind: record.kind,
-    message: record.message,
-    generationId: record.generationId,
-    generation: publicGitWorkflowGenerationProfile(profile),
-    fallbackUsed: attempt === "fallback",
-    primaryGeneration: publicGitWorkflowGenerationProfile(record.primary),
-  };
-  if (record.nativeGeneration) {
-    try {
-      await assertGuidedGitNativeArtifactUpdated(tab, record);
-    } catch (artifactError) {
-      if (!record.nativeCommandError) await delay(GUIDED_GIT_NATIVE_COMMAND_ERROR_GRACE_MS);
-      if (record.nativeCommandError) throw record.nativeCommandError;
-      throw artifactError;
-    }
-    assertGitWorkflowGenerationOwnership(tab, record);
-    await finishGitWorkflowGeneration(tab, record, { successful: true });
-  }
-  return result;
-}
-
-async function startGitWorkflowFallback(tab, record, primaryError) {
-  if (tab.gitWorkflowGeneration !== record || record.fallbackStarted || !record.fallback) return null;
-  if (record.cancelled || !tab.rpc?.isRunning?.() || primaryError?.guidedGitProviderGenerationFailure !== true) return null;
-  record.fallbackStarted = true;
-  record.attempt = "fallback";
-  record.attemptRunStarted = false;
-  record.promptAccepted = false;
-  console.error(`[guided-git] primary generation ${record.generationId} failed; starting fallback: ${sanitizeError(primaryError)}`);
-  emitGitWorkflowFallbackLifecycle(tab, record, "started");
-  try {
-    return await dispatchGitWorkflowGenerationAttempt(tab, record, record.fallback, "fallback");
-  } catch (error) {
-    if (!record.cancelled && tab.gitWorkflowGeneration === record) {
-      console.error(`[guided-git] fallback generation ${record.generationId} failed: ${sanitizeError(error)}`);
-      emitGitWorkflowFallbackLifecycle(tab, record, "failed");
-    }
-    await finishGitWorkflowGeneration(tab, record, { successful: false });
-    throw error;
-  }
-}
-
-async function settleGitWorkflowGeneration(tab, record, { failed, cancelled }) {
-  if (tab.gitWorkflowGeneration !== record || record.finishing) return;
-  if (cancelled) record.cancelled = true;
-  if (record.attempt === "primary" && failed && !record.cancelled && record.fallback) {
-    try {
-      await startGitWorkflowFallback(tab, record, "The primary Git-writing model ended with an error");
-    } catch {
-      // startGitWorkflowFallback emitted the bounded terminal lifecycle event.
-    }
-    return;
-  }
-  if (record.attempt === "fallback" && failed) {
-    emitGitWorkflowFallbackLifecycle(tab, record, "failed");
-  }
-  await finishGitWorkflowGeneration(tab, record, { successful: !failed && !record.cancelled });
-}
-
-function consumeGitWorkflowGenerationEvent(tab, event, { finalError = false } = {}) {
-  const record = tab.gitWorkflowGeneration;
-  if (!record || record.finishing) return;
-  const nativeCommandError = guidedGitNativeCommandErrorFromEvent(record, event);
-  if (nativeCommandError) {
-    record.nativeCommandError = nativeCommandError;
-    return;
-  }
-  if ((event?.type === "agent_end" || event?.type === "agent_settled") && event.aborted === true) record.cancelled = true;
-  if (event?.type === "agent_start") {
-    record.attemptRunStarted = true;
-    return;
-  }
-  if (event?.type !== "agent_settled" || !record.attemptRunStarted) return;
-  record.attemptRunStarted = false;
-  const settlement = { attempt: record.attempt, failed: finalError, cancelled: record.cancelled };
-  if (!record.promptAccepted) {
-    record.pendingSettlement = settlement;
-    return;
-  }
-  void settleGitWorkflowGeneration(tab, record, settlement);
-}
-
-async function startGitWorkflowGeneration(tab, body = {}) {
-  if (tab.gitWorkflowGeneration) throw makeHttpError(409, "A guided Git generation request is already active in this tab");
-  const kind = String(body.kind || "").trim();
-  if (!new Set(["commit", "branch", "pr"]).has(kind)) throw makeHttpError(400, "generation kind must be commit, branch, or pr");
-
-  // Reserve the tab synchronously before the first await. All preflight and
-  // profile transitions retain this exact object as their ownership token.
-  const record = {
-    generationId: randomUUID(),
-    kind,
-    message: "",
-    preferences: null,
-    previousMessageGeneration: tab.gitWorkflowMessageGeneration || null,
-    messageGeneration: null,
-    artifactGeneration: null,
-    primary: null,
-    fallback: null,
-    fallbackStarted: false,
-    cancelled: false,
-    finishing: false,
-    attempt: "primary",
-    attemptRunStarted: false,
-    promptAccepted: false,
-    pendingSettlement: null,
-    nativeCommandName: "",
-    nativeCommandError: null,
-    nativeGeneration: true,
-  };
-  tab.gitWorkflowGeneration = record;
-  tab.gitWorkflowFallbackLifecycle = { generationId: record.generationId, kind, events: [] };
-
-  try {
-    // Browser state is untrusted. When it claims an approved content token,
-    // verify the exact current index again at this server action boundary.
-    await assertExpectedStagedContentHash(tab, body);
-    assertGitWorkflowGenerationOwnership(tab, record);
-    const preferences = await readGitWorkflowPreferences();
-    assertGitWorkflowGenerationOwnership(tab, record);
-    if (!isGitWorkflowSetupComplete(preferences)) throw makeHttpError(409, "Run /git-workflow-setup or open Guided Git Setup before generating Git text");
-    record.preferences = preferences;
-    const nativeCommandName = await resolveGuidedGitNativeCommand(tab, kind);
-    assertGitWorkflowGenerationOwnership(tab, record);
-    record.nativeCommandName = nativeCommandName;
-
-    const state = await currentSessionState(tab);
-    assertGitWorkflowGenerationOwnership(tab, record);
-    if (stateIsBusyForSettings(state)) throw makeHttpError(409, "Wait for the current agent run to finish before generating Git text");
-    const models = await availableGitWorkflowModels(tab);
-    assertGitWorkflowGenerationOwnership(tab, record);
-    record.primary = gitWorkflowGenerationProfile(
-      preferences.generation.provider,
-      preferences.generation.modelId,
-      preferences.generation.thinkingLevel,
-      models,
-    );
-    const fallbackConfigured = !!preferences.generation.fallback?.provider
-      && !!preferences.generation.fallback?.modelId
-      && (preferences.generation.fallback.provider !== preferences.generation.provider
-        || preferences.generation.fallback.modelId !== preferences.generation.modelId);
-    record.fallback = fallbackConfigured
-      ? gitWorkflowGenerationProfile(
-          preferences.generation.fallback.provider,
-          preferences.generation.fallback.modelId,
-          preferences.generation.fallback.thinkingLevel,
-          models,
-        )
-      : null;
-
-    record.artifactGeneration = await createGitWorkflowArtifactGeneration(tab, record.generationId, kind);
-    record.messageGeneration = kind === "commit" ? record.artifactGeneration : null;
-    assertGitWorkflowGenerationOwnership(tab, record);
-    tab.gitWorkflowArtifactGeneration = record.artifactGeneration;
-    if (record.messageGeneration) tab.gitWorkflowMessageGeneration = record.messageGeneration;
-
-    try {
-      return await dispatchGitWorkflowGenerationAttempt(tab, record, record.primary, "primary");
-    } catch (primaryError) {
-      markTabIdle(tab);
-      if (record.fallback && !record.cancelled && tab.rpc?.isRunning?.() && primaryError?.guidedGitProviderGenerationFailure === true) {
-        try {
-          const fallbackResult = await startGitWorkflowFallback(tab, record, primaryError);
-          if (fallbackResult) return fallbackResult;
-        } catch (fallbackError) {
-          throw attachGitWorkflowGenerationError(fallbackError, record);
-        }
-      }
-      await finishGitWorkflowGeneration(tab, record, { successful: false });
-      throw attachGitWorkflowGenerationError(primaryError, record);
-    }
-  } catch (error) {
-    if (tab.gitWorkflowGeneration === record && !record.finishing) {
-      await finishGitWorkflowGeneration(tab, record, { successful: false });
-    }
-    throw error;
-  }
-}
-
 function parseCliScopedModelPatterns() {
   for (let index = 0; index < options.piArgs.length; index++) {
     const arg = options.piArgs[index];
@@ -3607,1593 +2674,6 @@ async function readJsonFileIfExists(filePath) {
     console.warn(`failed to read ${filePath}: ${sanitizeError(error)}`);
     return undefined;
   }
-}
-
-const appRunnerCommandAvailability = new Map();
-let appRunnerPtyScriptAvailability = { available: false, expiresAt: 0 };
-let appRunnerNodePtyPromise = null;
-
-async function fileStatsIfExists(filePath) {
-  try {
-    return await stat(filePath);
-  } catch (error) {
-    if (error?.code === "ENOENT" || error?.code === "ENOTDIR") return null;
-    throw error;
-  }
-}
-
-async function appRunnerFileExists(cwd, relativePath) {
-  const stats = await fileStatsIfExists(path.join(cwd, relativePath));
-  return !!stats?.isFile();
-}
-
-async function appRunnerDirectoryExists(cwd, relativePath) {
-  const stats = await fileStatsIfExists(path.join(cwd, relativePath));
-  return !!stats?.isDirectory();
-}
-
-async function appRunnerTextIfExists(cwd, relativePath, maxLength = 120_000) {
-  try {
-    const text = await readFile(path.join(cwd, relativePath), "utf8");
-    return text.slice(0, maxLength);
-  } catch (error) {
-    if (error?.code === "ENOENT" || error?.code === "ENOTDIR") return "";
-    return "";
-  }
-}
-
-async function appRunnerFilePrefix(filePath, maxLength = 256) {
-  let handle;
-  try {
-    handle = await open(filePath, "r");
-    const buffer = Buffer.alloc(maxLength);
-    const { bytesRead } = await handle.read(buffer, 0, maxLength, 0);
-    return buffer.subarray(0, bytesRead).toString("utf8");
-  } catch {
-    return "";
-  } finally {
-    await handle?.close().catch(() => {});
-  }
-}
-
-async function firstExistingRunnerFile(cwd, candidates) {
-  for (const candidate of candidates) {
-    if (await appRunnerFileExists(cwd, candidate)) return candidate;
-  }
-  return "";
-}
-
-async function appRunnerCommandAvailable(command, cwd) {
-  const name = String(command || "").trim();
-  if (!name) return false;
-  const key = `${name}\0${cwd || ""}`;
-  const cached = appRunnerCommandAvailability.get(key);
-  const now = Date.now();
-  if (cached && cached.expiresAt > now) return cached.available;
-
-  const result = await runCommand(name, ["--version"], {
-    cwd,
-    timeoutMs: APP_RUNNER_DETECTION_TIMEOUT_MS,
-    maxOutputLength: 2_000,
-  });
-  const available = !result.error && !result.timedOut && (result.exitCode === 0 || Boolean(result.stdout || result.stderr));
-  appRunnerCommandAvailability.set(key, { available, expiresAt: now + APP_RUNNER_COMMAND_CACHE_TTL_MS });
-  return available;
-}
-
-function appRunnerPtyDisabled() {
-  return APP_RUNNER_PTY_DISABLED_VALUES.has(String(process.env.PI_WEBUI_APP_RUNNER_PTY || "").trim().toLowerCase());
-}
-
-async function appRunnerWindowsPty() {
-  if (process.platform !== "win32" || appRunnerPtyDisabled()) return null;
-  if (!appRunnerNodePtyPromise) {
-    appRunnerNodePtyPromise = import("node-pty")
-      .then((module) => module?.spawn ? module : module?.default?.spawn ? module.default : null)
-      .catch(() => null);
-  }
-  return appRunnerNodePtyPromise;
-}
-
-async function resolveWindowsAppRunnerExecutable(command, cwd) {
-  const value = String(command || "").trim();
-  if (process.platform !== "win32" || !value) return value;
-  const hasDirectory = path.isAbsolute(value) || value.includes("/") || value.includes("\\");
-  const bases = hasDirectory
-    ? [path.isAbsolute(value) ? value : path.resolve(cwd, value)]
-    : String(process.env.PATH || process.env.Path || "").split(path.delimiter).filter(Boolean).map((directory) => path.join(directory, value));
-  const extensions = path.extname(value)
-    ? [""]
-    : String(process.env.PATHEXT || ".COM;.EXE;.BAT;.CMD").split(";").filter(Boolean).map((extension) => extension.toLowerCase()).concat("");
-  for (const base of bases) {
-    for (const extension of extensions) {
-      const candidate = `${base}${extension}`;
-      try {
-        await access(candidate);
-        return candidate;
-      } catch {
-        // Keep searching PATH/PATHEXT.
-      }
-    }
-  }
-  return value;
-}
-
-async function appRunnerScriptPtyAvailable(cwd) {
-  if (process.platform === "win32" || appRunnerPtyDisabled()) return false;
-  const now = Date.now();
-  if (appRunnerPtyScriptAvailability.expiresAt > now) return appRunnerPtyScriptAvailability.available;
-  const result = await runCommand("script", ["--version"], {
-    cwd,
-    timeoutMs: APP_RUNNER_DETECTION_TIMEOUT_MS,
-    maxOutputLength: 4_000,
-  });
-  const output = `${result.stdout || ""}\n${result.stderr || ""}`;
-  const available = !result.error && !result.timedOut && /util-linux/i.test(output);
-  appRunnerPtyScriptAvailability = { available, expiresAt: now + APP_RUNNER_PTY_SCRIPT_CACHE_TTL_MS };
-  return available;
-}
-
-function appRunnerPackageScripts(pkg) {
-  return pkg && typeof pkg.scripts === "object" && pkg.scripts ? pkg.scripts : {};
-}
-
-function preferredPackageScript(pkg) {
-  const scripts = appRunnerPackageScripts(pkg);
-  for (const script of ["dev", "start", "serve"]) {
-    if (typeof scripts[script] === "string" && scripts[script].trim()) return script;
-  }
-  return "";
-}
-
-function packageDependencyNames(pkg) {
-  return new Set([
-    ...Object.keys(pkg?.dependencies || {}),
-    ...Object.keys(pkg?.devDependencies || {}),
-    ...Object.keys(pkg?.optionalDependencies || {}),
-  ]);
-}
-
-function appRunnerId(...parts) {
-  return parts
-    .map((part) => String(part || "").trim())
-    .filter(Boolean)
-    .join(":")
-    .replace(/[^a-z0-9_.:-]+/gi, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 160);
-}
-
-function shellQuote(value) {
-  return `'${String(value ?? "").replace(/'/g, `'\\''`)}'`;
-}
-
-function appRunnerShellCommandLine(command, args = []) {
-  return [command, ...args].map(shellQuote).join(" ");
-}
-
-async function spawnAppRunnerChild(run) {
-  const baseOptions = {
-    cwd: run.cwd,
-    env: process.env,
-    stdio: ["pipe", "pipe", "pipe"],
-    windowsHide: true,
-    detached: process.platform !== "win32",
-  };
-  const windowsPty = await appRunnerWindowsPty();
-  if (windowsPty) {
-    run.executionMode = "conpty";
-    const command = await resolveWindowsAppRunnerExecutable(run.command, run.cwd);
-    return windowsPty.spawn(command, run.args || [], {
-      name: process.env.TERM || "xterm-256color",
-      cols: Math.max(20, Number.parseInt(process.env.COLUMNS || "120", 10) || 120),
-      rows: Math.max(5, Number.parseInt(process.env.LINES || "40", 10) || 40),
-      cwd: run.cwd,
-      env: process.env,
-      useConpty: true,
-    });
-  }
-  if (await appRunnerScriptPtyAvailable(run.cwd)) {
-    run.executionMode = "pty";
-    return spawn("script", [
-      "-q",
-      "-e",
-      "-f",
-      "-c",
-      `stty -echo 2>/dev/null || true; exec ${appRunnerShellCommandLine(run.command, run.args || [])}`,
-      "/dev/null",
-    ], {
-      ...baseOptions,
-      env: {
-        ...process.env,
-        TERM: process.env.TERM || "xterm-256color",
-        COLUMNS: process.env.COLUMNS || "120",
-        LINES: process.env.LINES || "40",
-      },
-    });
-  }
-  run.executionMode = "pipe";
-  return spawn(run.command, run.args || [], baseOptions);
-}
-
-function appRunnerCandidate({ id, label, kind, command, args = [], projectFile = "", description = "", shortDisplayCommand = "", priority = 100, cwd = "", custom = false, configFile = "" }) {
-  return {
-    id,
-    label,
-    kind,
-    command,
-    args,
-    displayCommand: formatCommandForDisplay(command, args),
-    shortDisplayCommand,
-    projectFile,
-    description,
-    priority,
-    cwd,
-    custom,
-    configFile,
-  };
-}
-
-function addAppRunner(runners, runner) {
-  if (!runner?.id || !runner.command) return;
-  if (runners.some((item) => item.id === runner.id)) return;
-  const duplicateIndex = runners.findIndex((item) => item.displayCommand === runner.displayCommand);
-  if (duplicateIndex >= 0) {
-    if (runner.custom && !runners[duplicateIndex].custom) runners.splice(duplicateIndex, 1, runner);
-    return;
-  }
-  runners.push(runner);
-}
-
-function appRunnerPathInside(root, target) {
-  const relative = path.relative(root, target);
-  return !relative || (!relative.startsWith("..") && !path.isAbsolute(relative));
-}
-
-function normalizeAppRunnerSearchPath(value) {
-  if (typeof value !== "string") throw makeHttpError(400, "Search path must be a string");
-  const raw = normalizeSuggestionPath(value).trim();
-  if (!raw) throw makeHttpError(400, "Search path is required");
-  if (raw.includes("\0")) throw makeHttpError(400, "Search path cannot contain null bytes");
-  if (raw.length > APP_RUNNER_SEARCH_PATH_MAX_CHARS) throw makeHttpError(400, `Search path is too long; limit is ${APP_RUNNER_SEARCH_PATH_MAX_CHARS} characters`);
-  if (path.isAbsolute(raw) || /^[a-z]:\//i.test(raw)) throw makeHttpError(400, "Search path must be relative to the project root");
-  if (raw === "." || /^\.\/+$/i.test(raw)) return ".";
-  const normalized = raw.replace(/^\.\/+/, "").replace(/\/+$/g, "");
-  if (!normalized) return ".";
-  const parts = normalized.split("/").filter(Boolean);
-  if (parts.some((part) => part === "." || part === "..")) throw makeHttpError(400, "Search path cannot contain . or .. segments");
-  return parts.join("/");
-}
-
-async function canonicalAppRunnerProjectRoot(projectRoot) {
-  try {
-    return await realpath(projectRoot);
-  } catch (error) {
-    throw makeHttpError(400, `Cannot resolve project root: ${formatCliError(error)}`);
-  }
-}
-
-async function appRunnerSearchPathStatus(projectRoot, relativePath, canonicalProjectRoot) {
-  const absolutePath = resolveProjectRelativePath(projectRoot, relativePath === "." ? "" : relativePath);
-  let canonicalPath;
-  try {
-    canonicalPath = await realpath(absolutePath);
-  } catch (error) {
-    if (error?.code === "ENOENT" || error?.code === "ENOTDIR") return { available: false, reason: `Search path does not exist: ${relativePath}` };
-    return { available: false, reason: `Cannot access search path ${relativePath}: ${formatCliError(error)}` };
-  }
-  if (!appRunnerPathInside(canonicalProjectRoot, canonicalPath)) {
-    return { available: false, reason: `Search path resolves outside the project root: ${relativePath}` };
-  }
-  const info = await fileStatsIfExists(canonicalPath).catch(() => null);
-  if (!info?.isDirectory()) return { available: false, reason: `Search path is not a directory: ${relativePath}` };
-  return { available: true, absolutePath, canonicalPath };
-}
-
-async function appRunnerCanonicalFileInsideProject(projectRoot, relativePath, canonicalProjectRoot) {
-  let absolutePath;
-  try {
-    absolutePath = resolveProjectRelativePath(projectRoot, relativePath);
-  } catch {
-    return null;
-  }
-  let canonicalPath;
-  try {
-    canonicalPath = await realpath(absolutePath);
-  } catch {
-    return null;
-  }
-  if (!appRunnerPathInside(canonicalProjectRoot, canonicalPath)) return null;
-  const info = await fileStatsIfExists(canonicalPath).catch(() => null);
-  return info?.isFile() ? { absolutePath, canonicalPath, info } : null;
-}
-
-function normalizeProjectRelativePath(value, { allowEmpty = false } = {}) {
-  const raw = normalizeSuggestionPath(value).replace(/\0/g, "").trim();
-  const withoutDot = raw.replace(/^\.\/+/, "").replace(/\/+$/g, "");
-  if (!withoutDot) {
-    if (allowEmpty) return "";
-    throw makeHttpError(400, "Path to file is required");
-  }
-  if (path.isAbsolute(withoutDot) || /^[a-z]:\//i.test(withoutDot)) throw makeHttpError(400, "Path must be relative to the project root");
-  const parts = withoutDot.split("/").filter(Boolean);
-  if (parts.some((part) => part === "." || part === "..")) throw makeHttpError(400, "Path cannot contain . or .. segments");
-  return parts.join("/").slice(0, 4096);
-}
-
-function resolveProjectRelativePath(projectRoot, relativePath) {
-  const target = path.resolve(projectRoot, relativePath || ".");
-  if (!appRunnerPathInside(projectRoot, target)) throw makeHttpError(400, "Path must stay inside the project root");
-  return target;
-}
-
-async function findAppRunnerProjectRoot(cwd) {
-  const start = await resolveCwd(cwd || options.cwd, options.cwd);
-  let fallback = "";
-  for (let current = start; current; current = path.dirname(current)) {
-    if (await appRunnerFileExists(current, APP_RUNNER_CONFIG_FILE)) return current;
-    if (!fallback && (await appRunnerFileExists(current, "package.json") || await appRunnerDirectoryExists(current, ".git"))) fallback = current;
-    const parent = path.dirname(current);
-    if (parent === current) break;
-  }
-  return fallback || start;
-}
-
-function cleanCustomRunnerCommand(value) {
-  const command = String(value || "./").trim().replace(/\s+/g, " ") || "./";
-  if (command.includes("\0") || /[\r\n]/.test(command)) throw makeHttpError(400, "Command cannot contain newlines or null bytes");
-  if (command.length > 512) throw makeHttpError(400, "Command is too long");
-  return command === "." ? "./" : command;
-}
-
-function customRunnerCommandParts(command) {
-  const clean = cleanCustomRunnerCommand(command);
-  return clean === "./" ? ["./"] : clean.split(" ").filter(Boolean);
-}
-
-function parseCustomRunnerArgs(value) {
-  const rawItems = Array.isArray(value)
-    ? value
-    : String(value || "").trim()
-      ? String(value || "").trim().split(/\s+/)
-      : [];
-  const args = [];
-  for (const item of rawItems) {
-    const text = String(item || "").trim();
-    if (!text) continue;
-    if (text.includes("\0") || /[\r\n]/.test(text)) throw makeHttpError(400, "Args cannot contain newlines or null bytes");
-    if (text.length > 2048) throw makeHttpError(400, "One arg is too long");
-    args.push(text);
-    if (args.length > APP_RUNNER_CUSTOM_ARG_LIMIT) throw makeHttpError(400, `Too many args; limit is ${APP_RUNNER_CUSTOM_ARG_LIMIT}`);
-  }
-  return args;
-}
-
-function publicCustomRunnerDefinition(runner) {
-  const command = cleanCustomRunnerCommand(runner.command);
-  const args = parseCustomRunnerArgs(runner.args);
-  const filePath = normalizeProjectRelativePath(runner.path || runner.projectFile);
-  const commandParts = customRunnerCommandParts(command);
-  const effectiveCommand = command === "./" ? `./${filePath}` : commandParts[0];
-  const effectiveArgs = command === "./" ? args : [...commandParts.slice(1), filePath, ...args];
-  return {
-    id: runner.id,
-    label: runner.label,
-    command,
-    path: filePath,
-    args,
-    displayCommand: formatCommandForDisplay(effectiveCommand, effectiveArgs),
-  };
-}
-
-function normalizeCustomRunnerDefinition(raw, projectRoot, { strict = false } = {}) {
-  const filePath = normalizeProjectRelativePath(raw?.path || raw?.projectFile);
-  const absolutePath = resolveProjectRelativePath(projectRoot, filePath);
-  const command = cleanCustomRunnerCommand(raw?.command);
-  const args = parseCustomRunnerArgs(raw?.args);
-  const label = String(raw?.label || path.basename(filePath)).trim().slice(0, 120) || path.basename(filePath);
-  const rawId = String(raw?.id || "").trim();
-  const id = appRunnerId(rawId) || appRunnerId(label, command, filePath) || appRunnerId(command, filePath);
-  if (!id) throw makeHttpError(400, "Custom runner id could not be generated");
-  if (strict && !appRunnerPathInside(projectRoot, absolutePath)) throw makeHttpError(400, "Path must stay inside the project root");
-  return { id, label, command, path: filePath, args };
-}
-
-function customAppRunnerDiagnostic(severity, message, runner = {}) {
-  const source = runner && typeof runner === "object" ? runner : {};
-  return {
-    severity,
-    message,
-    runnerId: source.id || "",
-    runnerLabel: source.label || "",
-    path: source.path || source.projectFile || "",
-  };
-}
-
-function directCustomRunnerUnavailableReason(filePath, stats) {
-  if (process.platform !== "win32" && stats && (stats.mode & 0o111) === 0) {
-    return `Path is not executable: ${filePath}. Run chmod +x ${filePath} or set Command to bash, python3, node, etc.`;
-  }
-  return "";
-}
-
-async function customAppRunnerUnavailableReason(projectRoot, runner) {
-  const filePath = runner.path;
-  const canonicalProjectRoot = await canonicalAppRunnerProjectRoot(projectRoot);
-  const file = await appRunnerCanonicalFileInsideProject(projectRoot, filePath, canonicalProjectRoot);
-  if (!file) {
-    const absolutePath = resolveProjectRelativePath(projectRoot, filePath);
-    const info = await fileStatsIfExists(absolutePath).catch(() => null);
-    if (info?.isFile()) return `Path resolves outside the project root: ${filePath}`;
-    return `Path to file does not exist: ${filePath}`;
-  }
-  const command = cleanCustomRunnerCommand(runner.command);
-  const directReason = command === "./" ? directCustomRunnerUnavailableReason(filePath, file.info) : "";
-  if (directReason) return directReason;
-  const commandParts = customRunnerCommandParts(command);
-  if (command !== "./" && !await appRunnerCommandAvailable(commandParts[0], projectRoot)) return `Command is not available: ${commandParts[0]}`;
-  return "";
-}
-
-function appRunnerSearchPathDiagnostic(severity, message, pathValue) {
-  return customAppRunnerDiagnostic(severity, message, { path: pathValue });
-}
-
-async function normalizeAppRunnerSearchPaths(rawSearchPaths, projectRoot, { requireDirectories = false, diagnostics = null } = {}) {
-  if (!Array.isArray(rawSearchPaths)) throw makeHttpError(400, `${APP_RUNNER_CONFIG_FILE} searchPaths must be an array`);
-  if (rawSearchPaths.length > APP_RUNNER_SEARCH_PATH_LIMIT) {
-    throw makeHttpError(400, `Search path limit reached (${APP_RUNNER_SEARCH_PATH_LIMIT})`);
-  }
-  const canonicalProjectRoot = await canonicalAppRunnerProjectRoot(projectRoot);
-  const searchPaths = [];
-  const availableSearchPaths = [];
-  const seen = new Set();
-  for (const rawPath of rawSearchPaths) {
-    let searchPath;
-    try {
-      searchPath = normalizeAppRunnerSearchPath(rawPath);
-    } catch (error) {
-      if (!diagnostics) throw error;
-      diagnostics.push(appRunnerSearchPathDiagnostic("error", `Invalid search path ignored: ${formatCliError(error)}`, typeof rawPath === "string" ? rawPath : ""));
-      continue;
-    }
-    if (seen.has(searchPath)) {
-      const message = `Duplicate search path ignored: ${searchPath}`;
-      if (!diagnostics) throw makeHttpError(400, message);
-      diagnostics.push(appRunnerSearchPathDiagnostic("warning", message, searchPath));
-      continue;
-    }
-    seen.add(searchPath);
-    searchPaths.push(searchPath);
-    const status = await appRunnerSearchPathStatus(projectRoot, searchPath, canonicalProjectRoot);
-    if (!status.available) {
-      if (requireDirectories) throw makeHttpError(400, status.reason);
-      diagnostics?.push(appRunnerSearchPathDiagnostic("warning", status.reason, searchPath));
-      continue;
-    }
-    availableSearchPaths.push({ path: searchPath, ...status });
-  }
-  return { searchPaths, availableSearchPaths, canonicalProjectRoot };
-}
-
-async function readAppRunnerConfig(projectRoot, { strictRead = false } = {}) {
-  const configPath = path.join(projectRoot, APP_RUNNER_CONFIG_FILE);
-  let source = {};
-  const diagnostics = [];
-  try {
-    const parsed = JSON.parse(await readFile(configPath, "utf8"));
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-      source = parsed;
-    } else {
-      const message = `${APP_RUNNER_CONFIG_FILE} must contain a JSON object`;
-      if (strictRead) throw makeHttpError(400, message);
-      diagnostics.push(customAppRunnerDiagnostic("error", message));
-    }
-  } catch (error) {
-    if (error?.code !== "ENOENT") {
-      const message = `Cannot read ${APP_RUNNER_CONFIG_FILE}: ${formatCliError(error)}`;
-      if (strictRead) throw makeHttpError(400, message);
-      diagnostics.push(customAppRunnerDiagnostic("error", message));
-      console.warn(`failed to read custom app runner config ${configPath}: ${sanitizeError(error)}`);
-    }
-  }
-  if (source.runners !== undefined && !Array.isArray(source.runners)) {
-    const message = `${APP_RUNNER_CONFIG_FILE} runners must be an array`;
-    if (strictRead) throw makeHttpError(400, message);
-    diagnostics.push(customAppRunnerDiagnostic("error", message));
-  }
-  if (source.searchPaths !== undefined && !Array.isArray(source.searchPaths)) {
-    const message = `${APP_RUNNER_CONFIG_FILE} searchPaths must be an array`;
-    if (strictRead) throw makeHttpError(400, message);
-    diagnostics.push(appRunnerSearchPathDiagnostic("error", message, ""));
-  }
-  const rawRunners = Array.isArray(source.runners) ? source.runners : [];
-  const runners = [];
-  for (const raw of rawRunners) {
-    try {
-      const runner = normalizeCustomRunnerDefinition(raw, projectRoot);
-      if (runners.some((item) => item.id === runner.id)) {
-        diagnostics.push(customAppRunnerDiagnostic("warning", `Duplicate custom runner ignored: ${runner.label || runner.path || runner.id}`, runner));
-      } else {
-        runners.push(runner);
-      }
-    } catch (error) {
-      const message = `Invalid custom runner ignored: ${formatCliError(error)}`;
-      diagnostics.push(customAppRunnerDiagnostic("error", message, raw));
-      console.warn(`skipping invalid custom app runner in ${configPath}: ${sanitizeError(error)}`);
-    }
-    if (runners.length >= APP_RUNNER_CUSTOM_LIMIT) break;
-  }
-  let searchPathData = { searchPaths: [], availableSearchPaths: [], canonicalProjectRoot: await canonicalAppRunnerProjectRoot(projectRoot) };
-  if (Array.isArray(source.searchPaths)) {
-    try {
-      searchPathData = await normalizeAppRunnerSearchPaths(source.searchPaths, projectRoot, { diagnostics });
-    } catch (error) {
-      const message = `Invalid search paths ignored: ${formatCliError(error)}`;
-      if (strictRead) throw makeHttpError(400, message);
-      diagnostics.push(appRunnerSearchPathDiagnostic("error", message, ""));
-    }
-  }
-  return { projectRoot, configPath, runners, diagnostics, ...searchPathData };
-}
-
-async function writeAppRunnerConfig(projectRoot, runners, searchPaths = []) {
-  const configPath = path.join(projectRoot, APP_RUNNER_CONFIG_FILE);
-  const normalizedRunners = [];
-  for (const runner of runners) {
-    normalizedRunners.push(normalizeCustomRunnerDefinition(runner, projectRoot, { strict: true }));
-    if (normalizedRunners.length >= APP_RUNNER_CUSTOM_LIMIT) break;
-  }
-  const { searchPaths: normalizedSearchPaths } = await normalizeAppRunnerSearchPaths(searchPaths, projectRoot);
-  const tmpFile = `${configPath}.${process.pid}.${Date.now()}.tmp`;
-  await writeFile(tmpFile, `${JSON.stringify({ version: 2, searchPaths: normalizedSearchPaths, runners: normalizedRunners }, null, 2)}\n`, { mode: 0o600 });
-  await rename(tmpFile, configPath);
-  return { projectRoot, configPath, runners: normalizedRunners, searchPaths: normalizedSearchPaths };
-}
-
-async function customAppRunnerCandidate(projectRoot, configPath, runner) {
-  const filePath = runner.path;
-  if (await customAppRunnerUnavailableReason(projectRoot, runner)) return null;
-  const command = cleanCustomRunnerCommand(runner.command);
-  const args = parseCustomRunnerArgs(runner.args);
-  const commandParts = customRunnerCommandParts(command);
-  const effectiveCommand = command === "./" ? `./${filePath}` : commandParts[0];
-  const effectiveArgs = command === "./" ? args : [...commandParts.slice(1), filePath, ...args];
-  return appRunnerCandidate({
-    id: appRunnerId("custom", runner.id),
-    label: runner.label || path.basename(filePath),
-    kind: "custom",
-    command: effectiveCommand,
-    args: effectiveArgs,
-    projectFile: filePath,
-    description: `Custom project runner from ${APP_RUNNER_CONFIG_FILE}`,
-    priority: 8,
-    cwd: projectRoot,
-    custom: true,
-    configFile: configPath,
-  });
-}
-
-async function addCustomAppRunners(runners, cwd) {
-  const projectRoot = await findAppRunnerProjectRoot(cwd);
-  const config = await readAppRunnerConfig(projectRoot);
-  for (const runner of config.runners) {
-    const candidate = await customAppRunnerCandidate(projectRoot, config.configPath, runner);
-    if (candidate) addAppRunner(runners, candidate);
-  }
-}
-
-async function getCustomAppRunnerConfigData(tab) {
-  const projectRoot = await findAppRunnerProjectRoot(tab?.cwd || options.cwd);
-  const config = await readAppRunnerConfig(projectRoot);
-  const runners = [];
-  for (const runner of config.runners) {
-    const unavailableReason = await customAppRunnerUnavailableReason(projectRoot, runner);
-    runners.push({
-      ...publicCustomRunnerDefinition(runner),
-      available: !unavailableReason,
-      unavailableReason,
-    });
-  }
-  return {
-    version: 2,
-    projectRoot,
-    displayProjectRoot: displayPath(projectRoot),
-    configFile: config.configPath,
-    displayConfigFile: displayPath(config.configPath),
-    relativeConfigFile: APP_RUNNER_CONFIG_FILE,
-    searchPaths: config.searchPaths,
-    runners,
-    diagnostics: config.diagnostics,
-  };
-}
-
-async function saveCustomAppRunner(tab, rawRunner) {
-  const projectRoot = await findAppRunnerProjectRoot(tab?.cwd || options.cwd);
-  const config = await readAppRunnerConfig(projectRoot, { strictRead: true });
-  const normalized = normalizeCustomRunnerDefinition(rawRunner, projectRoot, { strict: true });
-  const unavailableReason = await customAppRunnerUnavailableReason(projectRoot, normalized);
-  if (unavailableReason) throw makeHttpError(400, unavailableReason);
-  const runners = config.runners.filter((runner) => runner.id !== normalized.id);
-  if (runners.length >= APP_RUNNER_CUSTOM_LIMIT) throw makeHttpError(400, `Custom runner limit reached (${APP_RUNNER_CUSTOM_LIMIT})`);
-  runners.push(normalized);
-  await writeAppRunnerConfig(projectRoot, runners, config.searchPaths);
-  return getAppRunnerData(tab);
-}
-
-async function saveAppRunnerSearchPaths(tab, rawSearchPaths) {
-  const projectRoot = await findAppRunnerProjectRoot(tab?.cwd || options.cwd);
-  const config = await readAppRunnerConfig(projectRoot, { strictRead: true });
-  const { searchPaths } = await normalizeAppRunnerSearchPaths(rawSearchPaths, projectRoot, { requireDirectories: true });
-  await writeAppRunnerConfig(projectRoot, config.runners, searchPaths);
-  return getAppRunnerData(tab);
-}
-
-async function deleteCustomAppRunner(tab, runnerId) {
-  const id = appRunnerId(String(runnerId || "").replace(/^custom:/, ""));
-  if (!id) throw makeHttpError(400, "Custom runner id is required");
-  const projectRoot = await findAppRunnerProjectRoot(tab?.cwd || options.cwd);
-  const config = await readAppRunnerConfig(projectRoot);
-  const runners = config.runners.filter((runner) => runner.id !== id);
-  if (runners.length === config.runners.length) throw makeHttpError(404, "Custom runner not found");
-  await writeAppRunnerConfig(projectRoot, runners, config.searchPaths);
-  return getAppRunnerData(tab);
-}
-
-async function getAppRunnerFileBrowserData(tab, rawPath) {
-  const projectRoot = await findAppRunnerProjectRoot(tab?.cwd || options.cwd);
-  const relativeDir = normalizeProjectRelativePath(rawPath || "", { allowEmpty: true });
-  const absoluteDir = resolveProjectRelativePath(projectRoot, relativeDir || ".");
-  const stats = await fileStatsIfExists(absoluteDir);
-  if (!stats?.isDirectory()) throw makeHttpError(400, `Not a directory inside project root: ${relativeDir || "."}`);
-  let entries;
-  try {
-    entries = await readdir(absoluteDir, { withFileTypes: true });
-  } catch (error) {
-    throw makeHttpError(error?.code === "EACCES" ? 403 : 400, `Cannot read directory ${relativeDir || "."}: ${sanitizeError(error)}`);
-  }
-  const sorted = entries.sort((a, b) => {
-    if (a.isDirectory() !== b.isDirectory()) return a.isDirectory() ? -1 : 1;
-    return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" });
-  });
-  const directories = [];
-  const files = [];
-  for (const entry of sorted) {
-    if (entry.name === ".git") continue;
-    const entryRelativePath = normalizeSuggestionPath(relativeDir ? `${relativeDir}/${entry.name}` : entry.name);
-    if (entry.isDirectory()) directories.push({ name: entry.name, path: entryRelativePath, hidden: entry.name.startsWith(".") });
-    else if (entry.isFile()) files.push({ name: entry.name, path: entryRelativePath, hidden: entry.name.startsWith(".") });
-    if (directories.length + files.length >= APP_RUNNER_FILE_PICKER_LIMIT) break;
-  }
-  const parent = relativeDir ? normalizeSuggestionPath(path.posix.dirname(relativeDir)) : "";
-  return {
-    projectRoot,
-    displayProjectRoot: displayPath(projectRoot),
-    relativeDir,
-    displayRelativeDir: relativeDir || ".",
-    parent: relativeDir && parent !== "." ? parent : relativeDir ? "" : null,
-    directories,
-    files,
-    truncated: sorted.length > directories.length + files.length,
-  };
-}
-
-function packageManagerArgs(manager, script) {
-  if (manager === "bun") return ["run", script];
-  if (manager === "yarn") return script === "start" ? ["start"] : [script];
-  return script === "start" ? ["start"] : ["run", script];
-}
-
-async function addPackageManagerRunners(runners, cwd, pkg) {
-  const script = preferredPackageScript(pkg);
-  if (!script) return;
-  const packageManager = String(pkg?.packageManager || "").toLowerCase();
-  const [hasBunLock, hasPnpmLock, hasYarnLock, hasPackageLock] = await Promise.all([
-    appRunnerFileExists(cwd, "bun.lock").then((exists) => exists || appRunnerFileExists(cwd, "bun.lockb")),
-    appRunnerFileExists(cwd, "pnpm-lock.yaml"),
-    appRunnerFileExists(cwd, "yarn.lock"),
-    appRunnerFileExists(cwd, "package-lock.json"),
-  ]);
-  const managers = [
-    { id: "bun", command: "bun", label: "Bun", hint: hasBunLock || packageManager.startsWith("bun@"), priority: hasBunLock || packageManager.startsWith("bun@") ? 20 : 54 },
-    { id: "pnpm", command: "pnpm", label: "pnpm", hint: hasPnpmLock || packageManager.startsWith("pnpm@"), priority: hasPnpmLock || packageManager.startsWith("pnpm@") ? 24 : 58 },
-    { id: "npm", command: "npm", label: "npm", hint: hasPackageLock || packageManager.startsWith("npm@") || !packageManager, priority: hasPackageLock || packageManager.startsWith("npm@") || !packageManager ? 28 : 62 },
-    { id: "yarn", command: "yarn", label: "Yarn", hint: hasYarnLock || packageManager.startsWith("yarn@"), priority: hasYarnLock || packageManager.startsWith("yarn@") ? 34 : 72 },
-  ];
-
-  for (const manager of managers) {
-    if (!await appRunnerCommandAvailable(manager.command, cwd)) continue;
-    const args = packageManagerArgs(manager.id, script);
-    addAppRunner(runners, appRunnerCandidate({
-      id: appRunnerId("pkg", manager.id, script),
-      label: `${manager.label} ${script}`,
-      kind: manager.id === "bun" ? "bun" : "node",
-      command: manager.command,
-      args,
-      projectFile: "package.json",
-      description: `${manager.label} package script: ${script}`,
-      priority: manager.priority + (manager.hint ? 0 : 12),
-    }));
-  }
-}
-
-async function addNpxFrameworkRunners(runners, cwd, pkg) {
-  const dependencyNames = packageDependencyNames(pkg);
-  if (!dependencyNames.size || !await appRunnerCommandAvailable("npx", cwd)) return;
-  const frameworks = [
-    { dep: "vite", label: "npx vite", args: ["--no-install", "vite"], priority: 78 },
-    { dep: "next", label: "npx next dev", args: ["--no-install", "next", "dev"], priority: 80 },
-    { dep: "astro", label: "npx astro dev", args: ["--no-install", "astro", "dev"], priority: 82 },
-    { dep: "@storybook/react", label: "npx storybook dev", args: ["--no-install", "storybook", "dev"], priority: 86 },
-    { dep: "storybook", label: "npx storybook dev", args: ["--no-install", "storybook", "dev"], priority: 86 },
-  ];
-  for (const framework of frameworks) {
-    if (!dependencyNames.has(framework.dep)) continue;
-    addAppRunner(runners, appRunnerCandidate({
-      id: appRunnerId("npx", framework.dep),
-      label: framework.label,
-      kind: "node",
-      command: "npx",
-      args: framework.args,
-      projectFile: "package.json",
-      description: `Detected ${framework.dep} dependency`,
-      priority: framework.priority,
-    }));
-  }
-}
-
-async function addNodeEntrypointRunner(runners, cwd, hasPackageJson) {
-  if (hasPackageJson) return;
-  const entry = await firstExistingRunnerFile(cwd, APP_RUNNER_JS_ENTRIES);
-  if (!entry || !await appRunnerCommandAvailable("node", cwd)) return;
-  addAppRunner(runners, appRunnerCandidate({
-    id: appRunnerId("node", entry),
-    label: `node ${entry}`,
-    kind: "node",
-    command: "node",
-    args: [entry],
-    projectFile: entry,
-    description: "Detected JavaScript entry file",
-    priority: 88,
-  }));
-}
-
-async function addPythonRunners(runners, cwd) {
-  const entry = await firstExistingRunnerFile(cwd, APP_RUNNER_PYTHON_ENTRIES);
-  if (!entry) return;
-  if (await appRunnerCommandAvailable("uv", cwd)) {
-    addAppRunner(runners, appRunnerCandidate({
-      id: appRunnerId("python", "uv", entry),
-      label: `uv run ${entry}`,
-      kind: "python",
-      command: "uv",
-      args: ["run", entry],
-      projectFile: entry,
-      description: "Detected Python entry file",
-      priority: 36,
-    }));
-  }
-  const pythonCommand = await appRunnerCommandAvailable("python3", cwd) ? "python3" : await appRunnerCommandAvailable("python", cwd) ? "python" : "";
-  if (pythonCommand) {
-    addAppRunner(runners, appRunnerCandidate({
-      id: appRunnerId("python", pythonCommand, entry),
-      label: `${pythonCommand} ${entry}`,
-      kind: "python",
-      command: pythonCommand,
-      args: [entry],
-      projectFile: entry,
-      description: "Detected Python entry file",
-      priority: 68,
-    }));
-  }
-}
-
-async function addRustRunner(runners, cwd) {
-  if (!await appRunnerFileExists(cwd, "Cargo.toml") || !await appRunnerCommandAvailable("cargo", cwd)) return;
-  addAppRunner(runners, appRunnerCandidate({
-    id: "rust:cargo-run",
-    label: "cargo run",
-    kind: "rust",
-    command: "cargo",
-    args: ["run"],
-    projectFile: "Cargo.toml",
-    description: "Detected Rust Cargo project",
-    priority: 18,
-  }));
-}
-
-async function goRunTarget(cwd) {
-  if (await appRunnerFileExists(cwd, "main.go")) return ".";
-  if (await appRunnerDirectoryExists(cwd, "cmd")) {
-    const entries = await readdir(path.join(cwd, "cmd"), { withFileTypes: true }).catch(() => []);
-    for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
-      if (!entry.isDirectory()) continue;
-      if (await appRunnerFileExists(cwd, path.join("cmd", entry.name, "main.go"))) return `./cmd/${entry.name}`;
-    }
-  }
-  return await appRunnerFileExists(cwd, "go.mod") ? "." : "";
-}
-
-async function addGoRunner(runners, cwd) {
-  const target = await goRunTarget(cwd);
-  if (!target || !await appRunnerCommandAvailable("go", cwd)) return;
-  addAppRunner(runners, appRunnerCandidate({
-    id: appRunnerId("go", target),
-    label: `go run ${target}`,
-    kind: "go",
-    command: "go",
-    args: ["run", target],
-    projectFile: await appRunnerFileExists(cwd, "go.mod") ? "go.mod" : target,
-    description: "Detected Go/Golang app entry",
-    priority: 46,
-  }));
-}
-
-function buildZigHasRunStep(text) {
-  return /\.step\(\s*["']run["']/.test(String(text || ""));
-}
-
-async function addZigRunner(runners, cwd) {
-  if (!await appRunnerCommandAvailable("zig", cwd)) return;
-  const buildZig = await appRunnerTextIfExists(cwd, "build.zig");
-  if (buildZig && buildZigHasRunStep(buildZig)) {
-    addAppRunner(runners, appRunnerCandidate({
-      id: "zig:build-run",
-      label: "zig build run",
-      kind: "zig",
-      command: "zig",
-      args: ["build", "run"],
-      projectFile: "build.zig",
-      description: "Detected Zig build.zig run step",
-      priority: 44,
-    }));
-  }
-  const entry = await firstExistingRunnerFile(cwd, APP_RUNNER_ZIG_ENTRIES);
-  if (entry) {
-    addAppRunner(runners, appRunnerCandidate({
-      id: appRunnerId("zig", entry),
-      label: `zig run ${entry}`,
-      kind: "zig",
-      command: "zig",
-      args: ["run", entry],
-      projectFile: entry,
-      description: "Detected Zig app entry file",
-      priority: 66,
-    }));
-  }
-}
-
-function firstCmakeExecutableTarget(text) {
-  const match = String(text || "").match(/add_executable\s*\(\s*([A-Za-z0-9_.+-]+)/i);
-  return match ? match[1] : "";
-}
-
-async function addCompiledLanguageRunner(runners, cwd, { language, kind, compiler, entry, outputName, priority }) {
-  if (!entry || !await appRunnerCommandAvailable("sh", cwd) || !await appRunnerCommandAvailable(compiler, cwd)) return;
-  const output = `.pi-webui-runner/${outputName}`;
-  const compileAndRun = `mkdir -p .pi-webui-runner && ${compiler} ${shellQuote(entry)} -o ${shellQuote(output)} && ${shellQuote(`./${output}`)}`;
-  addAppRunner(runners, appRunnerCandidate({
-    id: appRunnerId(kind, entry),
-    label: `${compiler} ${entry}`,
-    kind,
-    command: "sh",
-    args: ["-lc", compileAndRun],
-    projectFile: entry,
-    description: `Detected ${language} app entry file`,
-    priority,
-  }));
-}
-
-async function addCppRunners(runners, cwd) {
-  const cmakeText = await appRunnerTextIfExists(cwd, "CMakeLists.txt");
-  const cmakeTarget = firstCmakeExecutableTarget(cmakeText);
-  const hasShell = await appRunnerCommandAvailable("sh", cwd);
-  if (cmakeTarget && hasShell && await appRunnerCommandAvailable("cmake", cwd)) {
-    const configureBuildRun = `cmake -S . -B build && cmake --build build --target ${shellQuote(cmakeTarget)} && ${shellQuote(`./build/${cmakeTarget}`)}`;
-    addAppRunner(runners, appRunnerCandidate({
-      id: appRunnerId("cmake", cmakeTarget),
-      label: `cmake run ${cmakeTarget}`,
-      kind: "cpp",
-      command: "sh",
-      args: ["-lc", configureBuildRun],
-      projectFile: "CMakeLists.txt",
-      description: "Detected C/C++ CMake executable target",
-      priority: 42,
-    }));
-    return;
-  }
-
-  await Promise.all([
-    addCompiledLanguageRunner(runners, cwd, {
-      language: "C",
-      kind: "c",
-      compiler: "cc",
-      entry: await firstExistingRunnerFile(cwd, APP_RUNNER_C_ENTRIES),
-      outputName: "main-c",
-      priority: 64,
-    }),
-    addCompiledLanguageRunner(runners, cwd, {
-      language: "C++",
-      kind: "cpp",
-      compiler: "c++",
-      entry: await firstExistingRunnerFile(cwd, APP_RUNNER_CPP_ENTRIES),
-      outputName: "main-cpp",
-      priority: 65,
-    }),
-  ]);
-}
-
-async function dockerComposePluginAvailable(cwd) {
-  const result = await runCommand("docker", ["compose", "version"], {
-    cwd,
-    timeoutMs: APP_RUNNER_DETECTION_TIMEOUT_MS,
-    maxOutputLength: 2_000,
-  });
-  return !result.error && !result.timedOut && result.exitCode === 0;
-}
-
-async function addDockerComposeRunner(runners, cwd) {
-  const composeFile = await firstExistingRunnerFile(cwd, APP_RUNNER_DOCKER_COMPOSE_FILES);
-  if (!composeFile) return;
-  if (await appRunnerCommandAvailable("docker", cwd) && await dockerComposePluginAvailable(cwd)) {
-    addAppRunner(runners, appRunnerCandidate({
-      id: appRunnerId("docker-compose", composeFile),
-      label: "docker compose up",
-      kind: "docker",
-      command: "docker",
-      args: ["compose", "-f", composeFile, "up"],
-      projectFile: composeFile,
-      description: "Detected Docker Compose file",
-      priority: 82,
-    }));
-  }
-  if (await appRunnerCommandAvailable("docker-compose", cwd)) {
-    addAppRunner(runners, appRunnerCandidate({
-      id: appRunnerId("docker-compose-standalone", composeFile),
-      label: "docker-compose up",
-      kind: "docker",
-      command: "docker-compose",
-      args: ["-f", composeFile, "up"],
-      projectFile: composeFile,
-      description: "Detected Docker Compose file",
-      priority: 84,
-    }));
-  }
-}
-
-function shellFromShebang(text) {
-  const firstLine = String(text || "").split(/\r?\n/, 1)[0] || "";
-  if (!firstLine.startsWith("#!")) return "";
-  if (/\bfish\b/.test(firstLine)) return "fish";
-  if (/\bzsh\b/.test(firstLine)) return "zsh";
-  if (/\bbash\b/.test(firstLine)) return "bash";
-  if (/\bsh\b/.test(firstLine)) return "bash";
-  return "";
-}
-
-function pythonFromShebang(text) {
-  const firstLine = String(text || "").split(/\r?\n/, 1)[0] || "";
-  return firstLine.startsWith("#!") && /\bpython(?:3(?:\.\d+)?)?\b/i.test(firstLine);
-}
-
-function shellScriptPriority(relativePath, shell) {
-  const base = path.basename(relativePath).replace(/\.(?:sh|bash|zsh|fish)$/i, "").toLowerCase();
-  const directory = path.dirname(relativePath).replace(/\\/g, "/");
-  const nameRank = ["dev", "start", "run", "serve", "server", "app", "main"].indexOf(base);
-  const dirRank = APP_RUNNER_SHELL_SCRIPT_DIRS.indexOf(directory === "." ? "" : directory);
-  const shellRank = shell === "bash" ? 0 : shell === "zsh" ? 1 : shell === "fish" ? 2 : 3;
-  return 70 + (nameRank === -1 ? 18 : nameRank) + (dirRank === -1 ? 8 : dirRank) + shellRank / 10;
-}
-
-async function shellScriptRunnerForFile(cwd, relativePath, { canonicalProjectRoot = "", runnerCwd = "" } = {}) {
-  let file;
-  if (canonicalProjectRoot) {
-    file = await appRunnerCanonicalFileInsideProject(cwd, relativePath, canonicalProjectRoot);
-    if (!file) return null;
-  }
-  const extensionShell = APP_RUNNER_SHELL_EXTENSIONS.get(path.extname(relativePath).toLowerCase()) || "";
-  let shell = extensionShell;
-  if (!shell) {
-    const text = file
-      ? await appRunnerFilePrefix(file.canonicalPath)
-      : await appRunnerTextIfExists(cwd, relativePath, 256);
-    shell = shellFromShebang(text);
-  }
-  if (!shell || !await appRunnerCommandAvailable(shell, cwd)) return null;
-  const fileName = path.basename(relativePath);
-  const directory = path.dirname(relativePath);
-  return appRunnerCandidate({
-    id: appRunnerId("shell", shell, relativePath),
-    label: fileName,
-    kind: "shell",
-    command: shell,
-    args: [relativePath],
-    projectFile: relativePath,
-    description: `Detected ${shell} shell script${directory && directory !== "." ? ` in ${directory}` : ""}`,
-    priority: shellScriptPriority(relativePath, shell),
-    cwd: runnerCwd,
-  });
-}
-
-async function pythonScriptRunnersForFile(cwd, relativePath, { canonicalProjectRoot, runnerCwd, uvAvailable, pythonCommand }) {
-  if (!uvAvailable && !pythonCommand) return [];
-  const file = await appRunnerCanonicalFileInsideProject(cwd, relativePath, canonicalProjectRoot);
-  if (!file) return [];
-  const extension = path.extname(relativePath).toLowerCase();
-  if (extension !== ".py") {
-    if (path.basename(relativePath).includes(".")) return [];
-    const text = await appRunnerFilePrefix(file.canonicalPath);
-    if (!pythonFromShebang(text)) return [];
-  }
-  const directory = path.dirname(relativePath);
-  const descriptionSuffix = directory && directory !== "." ? ` in ${directory}` : "";
-  const candidates = [];
-  if (uvAvailable) {
-    candidates.push(appRunnerCandidate({
-      id: appRunnerId("python", "uv", relativePath),
-      label: `uv run ${path.basename(relativePath)}`,
-      kind: "python",
-      command: "uv",
-      args: ["run", relativePath],
-      projectFile: relativePath,
-      description: `Detected Python script${descriptionSuffix} from a configured project discovery path`,
-      priority: 56,
-      cwd: runnerCwd,
-    }));
-  }
-  if (pythonCommand) {
-    candidates.push(appRunnerCandidate({
-      id: appRunnerId("python", pythonCommand, relativePath),
-      label: `${pythonCommand} ${path.basename(relativePath)}`,
-      kind: "python",
-      command: pythonCommand,
-      args: [relativePath],
-      projectFile: relativePath,
-      description: `Detected Python script${descriptionSuffix} from a configured project discovery path`,
-      priority: 69,
-      cwd: runnerCwd,
-    }));
-  }
-  return candidates;
-}
-
-function shellScriptEntrySupported(entry) {
-  const extension = path.extname(entry.name).toLowerCase();
-  return APP_RUNNER_SHELL_EXTENSIONS.has(extension) || !entry.name.includes(".");
-}
-
-function configuredScriptEntrySupported(entry) {
-  return shellScriptEntrySupported(entry) || path.extname(entry.name).toLowerCase() === ".py";
-}
-
-async function addConfiguredScriptRunners(runners, cwd) {
-  const projectRoot = await findAppRunnerProjectRoot(cwd);
-  const config = await readAppRunnerConfig(projectRoot);
-  const [uvAvailable, python3Available, pythonAvailable] = await Promise.all([
-    appRunnerCommandAvailable("uv", projectRoot),
-    appRunnerCommandAvailable("python3", projectRoot),
-    appRunnerCommandAvailable("python", projectRoot),
-  ]);
-  const pythonCommand = python3Available ? "python3" : pythonAvailable ? "python" : "";
-  let pythonFilesAdded = 0;
-  for (const directory of config.availableSearchPaths) {
-    const shellLimitReached = runners.filter((item) => item.kind === "shell").length >= APP_RUNNER_SHELL_SCRIPT_LIMIT;
-    if (shellLimitReached && pythonFilesAdded >= APP_RUNNER_PYTHON_SCRIPT_LIMIT) break;
-    const entries = await readdir(directory.canonicalPath, { withFileTypes: true }).catch(() => []);
-    const sortedEntries = entries
-      .filter((entry) => (entry.isFile() || entry.isSymbolicLink()) && configuredScriptEntrySupported(entry))
-      .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" }))
-      .slice(0, APP_RUNNER_CONFIGURED_SCRIPT_SCAN_LIMIT);
-    for (const entry of sortedEntries) {
-      const relativePath = directory.path === "." ? entry.name : `${directory.path}/${entry.name}`;
-      if (runners.filter((item) => item.kind === "shell").length < APP_RUNNER_SHELL_SCRIPT_LIMIT && shellScriptEntrySupported(entry)) {
-        const shellRunner = await shellScriptRunnerForFile(projectRoot, relativePath, {
-          canonicalProjectRoot: config.canonicalProjectRoot,
-          runnerCwd: projectRoot,
-        });
-        if (shellRunner) addAppRunner(runners, shellRunner);
-      }
-      if (pythonFilesAdded < APP_RUNNER_PYTHON_SCRIPT_LIMIT && (path.extname(entry.name).toLowerCase() === ".py" || !entry.name.includes("."))) {
-        const pythonRunners = await pythonScriptRunnersForFile(projectRoot, relativePath, {
-          canonicalProjectRoot: config.canonicalProjectRoot,
-          runnerCwd: projectRoot,
-          uvAvailable,
-          pythonCommand,
-        });
-        for (const pythonRunner of pythonRunners) addAppRunner(runners, pythonRunner);
-        if (pythonRunners.length) pythonFilesAdded += 1;
-      }
-      if (runners.filter((item) => item.kind === "shell").length >= APP_RUNNER_SHELL_SCRIPT_LIMIT && pythonFilesAdded >= APP_RUNNER_PYTHON_SCRIPT_LIMIT) break;
-    }
-  }
-}
-
-async function addShellScriptRunners(runners, cwd) {
-  const candidates = [];
-  for (const directory of APP_RUNNER_SHELL_SCRIPT_DIRS) {
-    const absoluteDirectory = path.join(cwd, directory || ".");
-    const stats = await fileStatsIfExists(absoluteDirectory);
-    if (!stats?.isDirectory()) continue;
-    const entries = await readdir(absoluteDirectory, { withFileTypes: true }).catch(() => []);
-    for (const entry of entries) {
-      if (!entry.isFile()) continue;
-      const relativePath = directory ? `${directory}/${entry.name}` : entry.name;
-      if (!shellScriptEntrySupported(entry)) continue;
-      candidates.push(relativePath);
-    }
-  }
-
-  for (const relativePath of candidates.slice(0, APP_RUNNER_SHELL_SCRIPT_LIMIT * 2)) {
-    const runner = await shellScriptRunnerForFile(cwd, relativePath);
-    if (runner) addAppRunner(runners, runner);
-    if (runners.filter((item) => item.kind === "shell").length >= APP_RUNNER_SHELL_SCRIPT_LIMIT) break;
-  }
-  await addConfiguredScriptRunners(runners, cwd);
-}
-
-function firstTaskFromText(text, names) {
-  for (const name of names) {
-    const pattern = new RegExp(`^[\\s\"']*${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}[\\s\"']*[:=]`, "m");
-    if (pattern.test(text)) return name;
-  }
-  return "";
-}
-
-async function addDenoRunner(runners, cwd) {
-  const hasDenoConfig = await appRunnerFileExists(cwd, "deno.json") || await appRunnerFileExists(cwd, "deno.jsonc");
-  if (!hasDenoConfig || !await appRunnerCommandAvailable("deno", cwd)) return;
-  const configText = (await appRunnerTextIfExists(cwd, "deno.json")) || (await appRunnerTextIfExists(cwd, "deno.jsonc"));
-  const task = firstTaskFromText(configText, ["dev", "start", "serve"]);
-  if (task) {
-    addAppRunner(runners, appRunnerCandidate({
-      id: appRunnerId("deno", task),
-      label: `deno task ${task}`,
-      kind: "deno",
-      command: "deno",
-      args: ["task", task],
-      projectFile: "deno.json",
-      description: "Detected Deno task",
-      priority: 52,
-    }));
-  }
-}
-
-async function addTaskFileRunners(runners, cwd) {
-  const [justText, makeText] = await Promise.all([
-    appRunnerTextIfExists(cwd, "justfile").then((text) => text || appRunnerTextIfExists(cwd, "Justfile")),
-    appRunnerTextIfExists(cwd, "Makefile").then((text) => text || appRunnerTextIfExists(cwd, "makefile")),
-  ]);
-  const justTarget = firstTaskFromText(justText, ["dev", "run", "start"]);
-  if (justTarget && await appRunnerCommandAvailable("just", cwd)) {
-    addAppRunner(runners, appRunnerCandidate({
-      id: appRunnerId("just", justTarget),
-      label: `just ${justTarget}`,
-      kind: "task",
-      command: "just",
-      args: [justTarget],
-      projectFile: "Justfile",
-      description: "Detected just recipe",
-      priority: 74,
-    }));
-  }
-  const makeTarget = firstTaskFromText(makeText, ["dev", "run", "start"]);
-  if (makeTarget && await appRunnerCommandAvailable("make", cwd)) {
-    addAppRunner(runners, appRunnerCandidate({
-      id: appRunnerId("make", makeTarget),
-      label: `make ${makeTarget}`,
-      kind: "task",
-      command: "make",
-      args: [makeTarget],
-      projectFile: "Makefile",
-      description: "Detected Make target",
-      priority: 76,
-    }));
-  }
-}
-
-function publicAppRunner(runner) {
-  if (!runner) return null;
-  const { priority: _priority, ...publicRunner } = runner;
-  return publicRunner;
-}
-
-async function detectAppRunners(tab) {
-  const cwd = tab?.cwd || options.cwd;
-  const runners = [];
-  const pkg = await readJsonFileIfExists(path.join(cwd, "package.json"));
-  await Promise.all([
-    addCustomAppRunners(runners, cwd),
-    addRustRunner(runners, cwd),
-    pkg ? addPackageManagerRunners(runners, cwd, pkg) : Promise.resolve(),
-    pkg ? addNpxFrameworkRunners(runners, cwd, pkg) : Promise.resolve(),
-    addPythonRunners(runners, cwd),
-    addGoRunner(runners, cwd),
-    addZigRunner(runners, cwd),
-    addCppRunners(runners, cwd),
-    addDockerComposeRunner(runners, cwd),
-    addShellScriptRunners(runners, cwd),
-    addDenoRunner(runners, cwd),
-    addTaskFileRunners(runners, cwd),
-    addNodeEntrypointRunner(runners, cwd, !!pkg),
-  ]);
-  return runners
-    .sort((a, b) => a.priority - b.priority || a.label.localeCompare(b.label))
-    .map(publicAppRunner);
-}
-
-function appRunnerPendingLine(run) {
-  if (!run || run.status !== "running") return "";
-  return [run.stdoutRemainder, run.stderrRemainder].map((part) => String(part || "")).filter(Boolean).join("");
-}
-
-function publicAppRunnerState(run) {
-  if (!run) return null;
-  return {
-    id: run.id,
-    runnerId: run.runnerId,
-    kind: run.kind,
-    label: run.label,
-    command: run.command,
-    args: run.args,
-    displayCommand: run.displayCommand,
-    cwd: run.cwd,
-    pid: run.pid,
-    status: run.status,
-    executionMode: run.executionMode || "pipe",
-    startedAt: run.startedAt,
-    endedAt: run.endedAt,
-    exitCode: run.exitCode,
-    signal: run.signal,
-    stopping: run.stopping === true,
-    truncated: run.truncated === true,
-    lineCount: run.lineCount || run.lines?.length || 0,
-    lines: Array.isArray(run.lines) ? [...run.lines] : [],
-    pendingLine: appRunnerPendingLine(run),
-    stdinClosed: run.stdinClosed === true,
-    stdinError: run.stdinError || "",
-    stdinWrites: run.stdinWrites || 0,
-    lastStdinAt: run.lastStdinAt || "",
-  };
-}
-
-async function getAppRunnerData(tab) {
-  const [runners, customRunnerConfig] = await Promise.all([
-    detectAppRunners(tab),
-    getCustomAppRunnerConfigData(tab),
-  ]);
-  return {
-    cwd: tab.cwd,
-    runners,
-    customRunnerConfig,
-    activeRun: publicAppRunnerState(tab.appRunner),
-  };
-}
-
-function appendAppRunnerLine(run, line) {
-  if (!run) return;
-  const text = String(line ?? "");
-  run.lines.push(text);
-  run.lineCount = (run.lineCount || 0) + 1;
-  run.outputChars = (run.outputChars || 0) + text.length + 1;
-  while (run.lines.length > APP_RUNNER_OUTPUT_LINE_LIMIT || run.outputChars > APP_RUNNER_OUTPUT_MAX_CHARS) {
-    const removed = run.lines.shift();
-    run.outputChars -= String(removed || "").length + 1;
-    run.truncated = true;
-  }
-}
-
-function appendAppRunnerChunk(tab, run, chunk, streamName) {
-  if (!run || run.status !== "running") return;
-  const key = streamName === "stderr" ? "stderrRemainder" : "stdoutRemainder";
-  const carriageReturnKey = streamName === "stderr" ? "stderrCarriageReturnPending" : "stdoutCarriageReturnPending";
-  const reduced = consumeAppRunnerTerminalChunk({
-    line: run[key],
-    carriageReturnPending: run[carriageReturnKey],
-  }, chunk);
-  run[key] = reduced.line;
-  run[carriageReturnKey] = reduced.carriageReturnPending;
-  for (const line of reduced.lines) appendAppRunnerLine(run, line);
-  scheduleAppRunnerBroadcast(tab);
-}
-
-function flushAppRunnerRemainders(run) {
-  for (const [key, carriageReturnKey] of [
-    ["stdoutRemainder", "stdoutCarriageReturnPending"],
-    ["stderrRemainder", "stderrCarriageReturnPending"],
-  ]) {
-    if (run?.[key]) {
-      appendAppRunnerLine(run, run[key]);
-      run[key] = "";
-    }
-    if (run) run[carriageReturnKey] = false;
-  }
-}
-
-function appRunnerStatusLabel(run) {
-  if (run?.stopping && run.status === "running") return "stopping";
-  if (run?.status === "done") return "exit 0";
-  if (run?.status === "failed") return run.signal ? `signal ${run.signal}` : `exit ${run.exitCode ?? "?"}`;
-  if (run?.status === "error") return "error";
-  return run?.status || "running";
-}
-
-function broadcastAppRunnerState(tab) {
-  broadcastTabEvent(tab, {
-    type: "webui_app_runner_update",
-    tabId: tab.id,
-    tabTitle: tab.title,
-    cwd: tab.cwd,
-    command: tab.appRunner?.displayCommand,
-    activeRun: publicAppRunnerState(tab.appRunner),
-    tabActivity: tabActivitySnapshot(tab),
-  });
-}
-
-function scheduleAppRunnerBroadcast(tab) {
-  if (!tab || tab.appRunnerBroadcastTimer) return;
-  tab.appRunnerBroadcastTimer = setTimeout(() => {
-    tab.appRunnerBroadcastTimer = null;
-    if (tabs.has(tab.id)) broadcastAppRunnerState(tab);
-  }, 120);
-}
-
-function appRunnerChildActive(run) {
-  if (!run?.child || run.settled) return false;
-  if (run.executionMode === "conpty") return true;
-  return run.child.exitCode === null && run.child.signalCode === null;
-}
-
-function terminateAppRunnerChild(run, signal = "SIGTERM") {
-  if (!appRunnerChildActive(run)) return false;
-  return terminateProcessTree(run.child, signal);
-}
-
-function appRunnerStdinWritable(run) {
-  if (!appRunnerChildActive(run) || run.stdinClosed === true) return false;
-  if (run.executionMode === "conpty") return typeof run.child.write === "function";
-  const stdin = run.child.stdin;
-  return !!stdin && !stdin.destroyed && !stdin.writableEnded;
-}
-
-function interruptAppRunnerChild(run) {
-  if (!appRunnerChildActive(run)) return false;
-  if (run.executionMode === "conpty" && appRunnerStdinWritable(run)) {
-    try {
-      run.child.write("\x03");
-      return true;
-    } catch {
-      // Fall back to process-tree termination below.
-    }
-  }
-  // Writing ETX to a Windows pipe is data, not a console Ctrl+C event. Kill the
-  // complete tree there so npm/bash wrappers cannot leave orphaned servers.
-  if (process.platform === "win32") return terminateAppRunnerChild(run, "SIGKILL");
-  if (appRunnerStdinWritable(run) && run.executionMode === "pty") {
-    try {
-      run.child.stdin.write("\x03", "utf8");
-      return true;
-    } catch {
-      // Fall back to process signals below.
-    }
-  }
-  return terminateAppRunnerChild(run, "SIGINT");
-}
-
-function finishAppRunner(tab, run, patch = {}) {
-  if (!run || run.settled) return;
-  run.settled = true;
-  clearTimeout(run.stopTimer);
-  flushAppRunnerRemainders(run);
-  run.endedAt = new Date().toISOString();
-  run.exitCode = patch.exitCode;
-  run.signal = patch.signal;
-  run.error = patch.error;
-  run.status = patch.error ? "error" : patch.exitCode === 0 ? "done" : "failed";
-  for (const disposable of run.ptyDisposables || []) {
-    try {
-      disposable?.dispose?.();
-    } catch {
-      // The PTY has already exited; listener cleanup is best effort.
-    }
-  }
-  run.ptyDisposables = [];
-  run.child = null;
-  run.stdinClosed = true;
-  run.stopping = false;
-  appendAppRunnerLine(run, `# ${appRunnerStatusLabel(run)} after ${Math.max(0, Math.round((Date.parse(run.endedAt) - Date.parse(run.startedAt)) / 1000))}s`);
-  if (patch.error) appendAppRunnerLine(run, `# ${patch.error}`);
-  recordEvent({ type: "webui_app_runner_exit", tabId: tab.id, tabTitle: tab.title, command: run.displayCommand, code: run.exitCode, signal: run.signal, error: run.error });
-  clearTimeout(tab.appRunnerBroadcastTimer);
-  tab.appRunnerBroadcastTimer = null;
-  broadcastAppRunnerState(tab);
-}
-
-function normalizeAppRunnerInputText(value) {
-  const text = String(value ?? "");
-  if (text.includes("\0")) throw makeHttpError(400, "App runner input cannot contain null bytes");
-  if (text.length > APP_RUNNER_INPUT_MAX_CHARS) throw makeHttpError(413, `App runner input is too long; limit is ${APP_RUNNER_INPUT_MAX_CHARS} characters`);
-  return text;
-}
-
-function sendAppRunnerInput(tab, value, { appendNewline = true, closeStdin = false } = {}) {
-  const run = tab?.appRunner;
-  if (!run || run.status !== "running") throw makeHttpError(409, "No app runner is running in this tab");
-  if (!appRunnerStdinWritable(run)) throw makeHttpError(409, "App runner stdin is closed");
-  const text = normalizeAppRunnerInputText(value);
-  const newline = run.executionMode === "conpty" && process.platform === "win32" ? "\r" : "\n";
-  const chunk = `${text}${appendNewline === false ? "" : newline}`;
-  if (!chunk && !closeStdin) throw makeHttpError(400, "App runner input is empty");
-  let buffered = false;
-  try {
-    if (run.executionMode === "conpty") {
-      if (chunk) run.child.write(chunk);
-      else if (closeStdin) run.child.write("\x04");
-      if (closeStdin) run.stdinClosed = true;
-    } else {
-      const stdin = run.child.stdin;
-      if (closeStdin) {
-        if (chunk) stdin.end(chunk, "utf8");
-        else stdin.end();
-        run.stdinClosed = true;
-      } else {
-        buffered = stdin.write(chunk, "utf8") === false;
-      }
-    }
-  } catch (error) {
-    run.stdinClosed = true;
-    run.stdinError = sanitizeError(error);
-    throw makeHttpError(409, `App runner stdin write failed: ${run.stdinError}`);
-  }
-  run.stdinWrites = (run.stdinWrites || 0) + 1;
-  run.lastStdinAt = new Date().toISOString();
-  const closeSuffix = closeStdin ? " and closed" : "";
-  if (chunk) appendAppRunnerLine(run, text ? `# stdin sent (${text.length} char${text.length === 1 ? "" : "s"})${closeSuffix}` : `# stdin sent (Enter)${closeSuffix}`);
-  else appendAppRunnerLine(run, "# stdin closed (EOF)");
-  recordEvent({ type: "webui_app_runner_stdin", tabId: tab.id, tabTitle: tab.title, command: run.displayCommand, chars: text.length, newline: appendNewline !== false, closed: closeStdin === true });
-  scheduleAppRunnerBroadcast(tab);
-  return { cwd: tab.cwd, activeRun: publicAppRunnerState(run), inputBuffered: buffered };
-}
-
-async function startAppRunner(tab, runnerId) {
-  if (tab.appRunner?.status === "running") throw makeHttpError(409, `App runner already running: ${tab.appRunner.displayCommand}`);
-  const runners = await detectAppRunners(tab);
-  const runner = runners.find((item) => item.id === runnerId) || (runners.length === 1 && !runnerId ? runners[0] : null);
-  if (!runner) throw makeHttpError(400, "Selected app runner is unavailable in this tab cwd");
-
-  const run = {
-    id: randomUUID(),
-    runnerId: runner.id,
-    kind: runner.kind,
-    label: runner.label,
-    command: runner.command,
-    args: runner.args || [],
-    displayCommand: runner.displayCommand,
-    cwd: runner.cwd || tab.cwd,
-    status: "running",
-    startedAt: new Date().toISOString(),
-    lines: [],
-    lineCount: 0,
-    outputChars: 0,
-    stdinClosed: false,
-    stdinWrites: 0,
-  };
-  appendAppRunnerLine(run, `$ ${run.displayCommand}`);
-  const child = await spawnAppRunnerChild(run);
-  run.child = child;
-  run.pid = child.pid;
-  tab.appRunner = run;
-
-  if (run.executionMode === "conpty") {
-    run.ptyDisposables = [
-      child.onData((chunk) => appendAppRunnerChunk(tab, run, chunk, "stdout")),
-      child.onExit(({ exitCode, signal }) => finishAppRunner(tab, run, { exitCode, signal })),
-    ];
-  } else {
-    child.stdin?.on("error", (error) => {
-      run.stdinClosed = true;
-      run.stdinError = sanitizeError(error);
-      if (run.status === "running") {
-        appendAppRunnerLine(run, `# stdin error: ${run.stdinError}`);
-        scheduleAppRunnerBroadcast(tab);
-      }
-    });
-    child.stdin?.on("close", () => {
-      run.stdinClosed = true;
-      if (run.status === "running") scheduleAppRunnerBroadcast(tab);
-    });
-    child.stdout.on("data", (chunk) => appendAppRunnerChunk(tab, run, chunk, "stdout"));
-    child.stderr.on("data", (chunk) => appendAppRunnerChunk(tab, run, chunk, "stderr"));
-    child.on("error", (error) => finishAppRunner(tab, run, { error: sanitizeError(error) }));
-    child.on("exit", (exitCode, signal) => finishAppRunner(tab, run, { exitCode, signal }));
-  }
-
-  recordEvent({ type: "webui_app_runner_start", tabId: tab.id, tabTitle: tab.title, command: run.displayCommand, cwd: run.cwd, pid: run.pid });
-  broadcastAppRunnerState(tab);
-  return { runners, customRunnerConfig: await getCustomAppRunnerConfigData(tab), activeRun: publicAppRunnerState(run), cwd: tab.cwd };
-}
-
-function stopAppRunnerForTab(tab, reason = "stop requested", { force = false } = {}) {
-  const run = tab?.appRunner;
-  if (!run || run.status !== "running") return false;
-  run.stopping = true;
-  const action = run.executionMode === "conpty" && !force
-    ? "sending Ctrl+C"
-    : process.platform === "win32" ? "terminating Windows process tree" : `sending ${force ? "SIGKILL" : "Ctrl+C"}`;
-  appendAppRunnerLine(run, `# ${reason}; ${action}`);
-  if (force) terminateAppRunnerChild(run, "SIGKILL");
-  else interruptAppRunnerChild(run);
-  if (!force) {
-    clearTimeout(run.stopTimer);
-    run.stopTimer = setTimeout(() => {
-      if (run.status === "running") {
-        appendAppRunnerLine(run, "# app runner did not stop within the grace period; forcing process-tree termination");
-        terminateAppRunnerChild(run, "SIGKILL");
-        scheduleAppRunnerBroadcast(tab);
-      }
-    }, APP_RUNNER_STOP_GRACE_MS);
-  }
-  broadcastAppRunnerState(tab);
-  return true;
-}
-
-function clearAppRunnerForTab(tab) {
-  if (!tab?.appRunner || tab.appRunner.status === "running") return false;
-  tab.appRunner = null;
-  broadcastAppRunnerState(tab);
-  return true;
-}
-
-function normalizeAppRunnerContextLineCount(value) {
-  const number = Number.parseInt(String(value ?? ""), 10);
-  if (!Number.isFinite(number)) return APP_RUNNER_CONTEXT_DEFAULT_LINES;
-  return Math.max(1, Math.min(APP_RUNNER_CONTEXT_MAX_LINES, number));
-}
-
-function appRunnerOutputLinesForContext(run) {
-  const lines = Array.isArray(run?.lines) ? [...run.lines] : [];
-  const pendingLine = appRunnerPendingLine(run);
-  if (pendingLine) lines.push(pendingLine);
-  return lines.map((line) => stripAnsi(line).replace(/\r\n?/g, "\n"));
-}
-
-function formatAppRunnerContextContent(tab, run, { requestedLineCount, lines, totalAvailableLines }) {
-  const status = appRunnerStatusLabel(run);
-  const capturedAt = new Date().toISOString();
-  const header = [
-    "App runner output transferred from Pi Web UI.",
-    `Command: ${stripAnsi(run?.displayCommand || run?.command || "app runner")}`,
-    `Cwd: ${stripAnsi(run?.cwd || tab?.cwd || "")}`,
-    `Status: ${status}`,
-    `Captured: last ${lines.length} of ${totalAvailableLines} available line${totalAvailableLines === 1 ? "" : "s"} (requested ${requestedLineCount})`,
-    run?.truncated ? "Note: earlier app runner output had already been truncated before this capture." : "",
-    `Captured at: ${capturedAt}`,
-  ].filter(Boolean);
-  return `${header.join("\n")}\n\n\`\`\`\`text\n${lines.join("\n").trimEnd()}\n\`\`\`\``;
-}
-
-async function transferAppRunnerContext(tab, body = {}) {
-  const run = tab?.appRunner;
-  if (!run) throw makeHttpError(409, "No app runner output is available in this tab");
-  const requestedLineCount = normalizeAppRunnerContextLineCount(body.lineCount ?? body.lines ?? body.count);
-  const allLines = appRunnerOutputLinesForContext(run);
-  const lines = allLines.slice(-requestedLineCount);
-  if (!lines.some((line) => stripAnsi(line).trim())) throw makeHttpError(400, "App runner output is empty");
-  const details = {
-    runId: run.id,
-    runnerId: run.runnerId,
-    command: run.displayCommand || run.command || "",
-    cwd: run.cwd || tab.cwd,
-    status: run.status || "running",
-    requestedLineCount,
-    lineCount: lines.length,
-    totalAvailableLines: allLines.length,
-    truncated: run.truncated === true,
-    capturedAt: new Date().toISOString(),
-  };
-  const content = formatAppRunnerContextContent(tab, run, { requestedLineCount, lines, totalAvailableLines: allLines.length });
-  const helperData = await sendWebuiHelperCommand(tab, "app-runner-context", { content, details });
-  recordEvent({ type: "webui_app_runner_context", tabId: tab.id, tabTitle: tab.title, command: details.command, lineCount: lines.length, requestedLineCount, delivery: helperData?.delivery || "context" });
-  return { ...details, delivery: helperData?.delivery || "context", activeRun: publicAppRunnerState(run) };
 }
 
 function firstDefined(...values) {
@@ -6291,2513 +3771,55 @@ async function getWorkspaceInfo(cwd, startedAt) {
   };
 }
 
-let activeGitWorkflowProcess = null;
-const GIT_CHANGES_COMMAND_TIMEOUT_MS = 5000;
-const GIT_CHANGES_DIFF_MAX_OUTPUT = 500_000;
-const GIT_FILE_DIFF_CATEGORIES = new Set(["staged", "unstaged", "conflicted", "untracked"]);
-const GIT_FILE_DIFF_LABELS = Object.freeze({
-  staged: "Staged",
-  unstaged: "Unstaged",
-  conflicted: "Conflicted",
-  untracked: "Untracked",
-});
-const GIT_PULL_TIMEOUT_MS = 15 * 60 * 1000;
-// Must remain byte-for-byte aligned with pi-extension-aur-review/src/git.ts.
-const STAGED_CONTENT_HASH_DOMAIN = "firstpick/aur-review/staged-content/v1\0";
-const STAGED_CONTENT_HASH_TIMEOUT_MS = 10_000;
-const STAGED_CONTENT_HASH_OUTPUT_LIMIT = 4 * 1024 * 1024;
-const STAGED_CONTENT_HASH_ARGS = [
-  "-c", "core.quotepath=false",
-  "-c", "diff.external=",
-  "diff", "--cached", "--binary", "--full-index", "--no-ext-diff", "--no-textconv", "--no-renames", "--",
-];
-const GIT_STATUS_KIND_RANK = Object.freeze({ changed: 0, untracked: 1, modified: 2, staged: 3, conflicted: 4 });
-
-async function getGitRoot(cwd) {
-  const result = await runCommand("git", ["rev-parse", "--show-toplevel"], { cwd, timeoutMs: 2000 });
-  if (result.exitCode !== 0) {
-    throw makeUserFacingError((result.stderr || result.stdout || "Not inside a git repository").trim());
-  }
-  return path.resolve(result.stdout.trim());
-}
-
-async function runGitReadCommandDetailed(root, args, { timeoutMs = GIT_CHANGES_COMMAND_TIMEOUT_MS, maxOutputLength = GIT_CHANGES_DIFF_MAX_OUTPUT } = {}) {
-  const result = await runCommand("git", args, {
-    cwd: root,
-    timeoutMs,
-    maxOutputLength,
-    // Prevent read-only status/diff commands from refreshing the index and
-    // feeding their own metadata writes back into the live Git watcher.
-    env: { GIT_OPTIONAL_LOCKS: "0" },
-  });
-  if (result.exitCode === 0 && !result.timedOut && !result.error) {
-    return { output: result.stdout, truncated: result.stdoutTruncated === true, capBytes: maxOutputLength };
-  }
-  const command = formatGitCommand(args);
-  const message = result.timedOut
-    ? `${command} timed out`
-    : (result.stderr || result.stdout || result.error || `${command} failed with exit code ${result.exitCode ?? "unknown"}`);
-  throw makeUserFacingError(String(message).trim());
-}
-
-async function runGitReadCommand(root, args, options = {}) {
-  return (await runGitReadCommandDetailed(root, args, options)).output;
-}
-
-/**
- * Read binary cached-diff bytes without decoding them. This is intentionally
- * separate from runCommand(), whose string buffering is appropriate for UI
- * output but would corrupt the staged-content approval token.
- */
-function runGitStagedContentHashCommand(root) {
-  return new Promise((resolve, reject) => {
-    const child = spawn("git", STAGED_CONTENT_HASH_ARGS, {
-      cwd: root,
-      stdio: ["ignore", "pipe", "pipe"],
-      windowsHide: true,
-      env: { ...process.env, GIT_OPTIONAL_LOCKS: "0", GIT_CONFIG_NOSYSTEM: "1", LC_ALL: "C" },
-    });
-    const stdout = [];
-    const stderr = [];
-    let stdoutBytes = 0;
-    let stderrBytes = 0;
-    let settled = false;
-    const finish = (error, result) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timeout);
-      if (error) reject(error);
-      else resolve(result);
-    };
-    const stop = (message) => {
-      try { child.kill("SIGKILL"); } catch { /* process already exited */ }
-      finish(makeUserFacingError(message));
-    };
-    const timeout = setTimeout(() => stop(`git diff --cached timed out after ${STAGED_CONTENT_HASH_TIMEOUT_MS / 1000} seconds`), STAGED_CONTENT_HASH_TIMEOUT_MS);
-    child.stdout.on("data", (chunk) => {
-      const bytes = Buffer.from(chunk);
-      stdoutBytes += bytes.length;
-      if (stdoutBytes > STAGED_CONTENT_HASH_OUTPUT_LIMIT) {
-        stop(`git diff --cached output exceeded the ${STAGED_CONTENT_HASH_OUTPUT_LIMIT / 1024 / 1024} MiB staged-content safety limit`);
-        return;
-      }
-      stdout.push(bytes);
-    });
-    child.stderr.on("data", (chunk) => {
-      const bytes = Buffer.from(chunk);
-      stderrBytes += bytes.length;
-      if (stderrBytes <= 64 * 1024) stderr.push(bytes);
-    });
-    child.on("error", (error) => finish(makeUserFacingError(formatCommandSpawnError("git", error))));
-    child.on("close", (exitCode) => {
-      if (exitCode !== 0) {
-        const detail = Buffer.concat(stderr).toString("utf8").trim().slice(0, 1200);
-        finish(makeUserFacingError(detail ? `git diff --cached failed: ${detail}` : `git diff --cached failed with exit code ${exitCode ?? "unknown"}`));
-        return;
-      }
-      finish(null, Buffer.concat(stdout));
-    });
-  });
-}
-
-function stagedContentHashFromDiff(stagedDiff) {
-  return createHash("sha256").update(STAGED_CONTENT_HASH_DOMAIN).update(stagedDiff).digest("hex");
-}
-
-async function readStagedContentHash(root) {
-  // `git diff --cached` correctly compares the index to the empty tree when
-  // HEAD is unborn, so no HEAD lookup is needed (or allowed) here.
-  const stagedDiff = await runGitStagedContentHashCommand(root);
-  return {
-    stagedDiff,
-    hasStagedChanges: stagedDiff.length > 0,
-    stagedContentHash: stagedDiff.length > 0 ? stagedContentHashFromDiff(stagedDiff) : null,
-  };
-}
-
-/** Read-only same-tab digest of the exact staged content git can commit. */
-async function stagedContentHashForTab(tab) {
-  const root = await getGitRoot(tab.cwd);
-  const staged = await readStagedContentHash(root);
-  return { root, hasStagedChanges: staged.hasStagedChanges, stagedContentHash: staged.stagedContentHash };
-}
-
-function expectedStagedContentHashFromBody(body = {}) {
-  const expected = body?.expectedStagedContentHash;
-  if (expected === undefined) return ""; // Legacy Guided Git flow: no review was required.
-  if (typeof expected !== "string" || !/^[a-f0-9]{64}$/i.test(expected)) {
-    throw makeHttpError(400, "expectedStagedContentHash must be a SHA-256 hex digest");
-  }
-  return expected;
-}
-
-async function assertExpectedStagedContentHash(tab, body = {}) {
-  const expected = expectedStagedContentHashFromBody(body);
-  if (!expected) return "";
-  const current = await stagedContentHashForTab(tab);
-  if (!current.hasStagedChanges || current.stagedContentHash !== expected) {
-    throw makeHttpError(409, "Staged content changed after manual approval. Return to Stage and request a new manual review before continuing.");
-  }
-  return expected;
-}
-
-function gitBranchFromPorcelainStatus(statusText) {
-  for (const line of String(statusText || "").split(/\r?\n/)) {
-    if (!line.startsWith("# branch.head ")) continue;
-    const branch = line.slice("# branch.head ".length).trim();
-    return branch && branch !== "(detached)" ? branch : "detached";
-  }
-  return "detached";
-}
-
-function addGitPorcelainTrackedSummary(summary, xy) {
-  const x = xy?.[0] || ".";
-  const y = xy?.[1] || ".";
-  if (x !== ".") summary.staged += 1;
-  if (y !== ".") summary.unstaged += 1;
-}
-
-function summarizeGitPorcelainStatus(statusText) {
-  const summary = { staged: 0, unstaged: 0, untracked: 0, conflicted: 0, ahead: 0, behind: 0 };
-  for (const line of String(statusText || "").split(/\r?\n/)) {
-    if (!line) continue;
-    if (line.startsWith("# branch.ab ")) {
-      const match = line.match(/\+(\d+)\s+-(\d+)/);
-      if (match) {
-        summary.ahead = Number.parseInt(match[1] || "0", 10) || 0;
-        summary.behind = Number.parseInt(match[2] || "0", 10) || 0;
-      }
-      continue;
-    }
-    if (line.startsWith("1 ") || line.startsWith("2 ")) {
-      addGitPorcelainTrackedSummary(summary, line.split(" ")[1] || "..");
-      continue;
-    }
-    if (line.startsWith("u ")) {
-      summary.conflicted += 1;
-      continue;
-    }
-    if (line.startsWith("? ")) summary.untracked += 1;
-  }
-  return summary;
-}
-
-function normalizeGitStatusPath(value = "") {
-  return String(value || "").replace(/\\/g, "/").replace(/^\.\/+/, "").replace(/\/+$/g, "");
-}
-
-function gitStatusKindFromPorcelainEntry(entry = {}) {
-  const x = entry.x || " ";
-  const y = entry.y || " ";
-  if (x === "?" && y === "?") return "untracked";
-  if (x === "U" || y === "U" || (x === "A" && y === "A") || (x === "D" && y === "D")) return "conflicted";
-  if (x !== " " && x !== "?" && x !== ".") return "staged";
-  if (y !== " " && y !== "?" && y !== ".") return "modified";
-  return "changed";
-}
-
-function gitStatusLabelFromPorcelainEntry(entry = {}) {
-  const x = entry.x || " ";
-  const y = entry.y || " ";
-  if (x === "?" && y === "?") return "??";
-  return `${x}${y}`.replace(/\s/g, "").trim() || "•";
-}
-
-function mergeGitStatusIndexEntry(index, repoPath, patch = {}) {
-  const key = normalizeGitStatusPath(repoPath);
-  if (!key) return;
-  const existing = index.get(key) || { changed: true, kind: "changed", status: "", direct: false, changedDescendants: 0 };
-  const existingRank = GIT_STATUS_KIND_RANK[existing.kind] ?? 0;
-  const nextRank = GIT_STATUS_KIND_RANK[patch.kind] ?? 0;
-  index.set(key, {
-    changed: true,
-    kind: nextRank > existingRank ? patch.kind : existing.kind,
-    status: patch.direct === true ? (patch.status || existing.status || "") : (existing.status || ""),
-    direct: existing.direct === true || patch.direct === true,
-    changedDescendants: (Number(existing.changedDescendants || 0) || 0) + (Number(patch.changedDescendants || 0) || 0),
-  });
-}
-
-function addGitStatusAncestorEntries(index, repoPath, kind) {
-  const parts = normalizeGitStatusPath(repoPath).split("/").filter(Boolean);
-  parts.pop();
-  let current = "";
-  for (const part of parts) {
-    current = current ? `${current}/${part}` : part;
-    mergeGitStatusIndexEntry(index, current, { kind, changedDescendants: 1 });
-  }
-}
-
-function buildGitStatusIndexFromPorcelain(statusText = "") {
-  const index = new Map();
-  for (const entry of parseGitPorcelainZEntries(statusText)) {
-    const filePath = normalizeGitStatusPath(entry.path);
-    if (!filePath) continue;
-    const kind = gitStatusKindFromPorcelainEntry(entry);
-    mergeGitStatusIndexEntry(index, filePath, { kind, status: gitStatusLabelFromPorcelainEntry(entry), direct: true });
-    addGitStatusAncestorEntries(index, filePath, kind);
-    if (entry.oldPath) addGitStatusAncestorEntries(index, entry.oldPath, kind);
-  }
-  return index;
-}
-
-async function readWorkspaceGitStatusIndex(workspaceRoot) {
-  try {
-    const root = await getGitRoot(workspaceRoot);
-    const statusText = await runGitReadCommand(root, ["status", "--porcelain=v1", "-z", "--untracked-files=all"], { maxOutputLength: 120_000 });
-    return { root, entries: buildGitStatusIndexFromPorcelain(statusText) };
-  } catch {
-    return null;
-  }
-}
-
-function gitStatusForWorkspaceEntry(workspaceRoot, entry, gitStatus) {
-  if (!gitStatus?.root || !gitStatus.entries?.size || !entry?.path) return null;
-  const absolute = path.resolve(workspaceRoot, entry.path);
-  if (absolute !== gitStatus.root && !pathInside(gitStatus.root, absolute)) return null;
-  const repoPath = normalizeGitStatusPath(path.relative(gitStatus.root, absolute).split(path.sep).join("/"));
-  const status = gitStatus.entries.get(repoPath);
-  if (!status?.changed) return null;
-  return {
-    changed: true,
-    kind: status.kind || "changed",
-    status: status.status || "",
-    direct: status.direct === true,
-    changedDescendants: Number(status.changedDescendants || 0) || 0,
-  };
-}
-
-function withFileTreeGitStatus(entries = [], workspaceRoot, gitStatus) {
-  if (!gitStatus?.entries?.size) return entries;
-  return entries.map((entry) => {
-    const status = gitStatusForWorkspaceEntry(workspaceRoot, entry, gitStatus);
-    return status ? { ...entry, gitStatus: status } : entry;
-  });
-}
-
-async function readWorkspaceGitIgnoredPaths(workspaceRoot, entries = [], gitRoot = "") {
-  try {
-    const root = path.resolve(gitRoot || await getGitRoot(workspaceRoot));
-    const candidates = new Set();
-    for (const entry of entries) {
-      if (!entry?.path) continue;
-      const absolute = path.resolve(workspaceRoot, entry.path);
-      if (absolute !== root && !pathInside(root, absolute)) continue;
-      const relative = path.relative(root, absolute);
-      if (!relative || path.isAbsolute(relative) || relative.startsWith(`..${path.sep}`)) continue;
-      candidates.add(relative.split(path.sep).join("/"));
-    }
-    if (!candidates.size) return null;
-    const input = `${[...candidates].join("\0")}\0`;
-    const result = await runCommand("git", ["check-ignore", "-z", "--stdin"], {
-      cwd: root,
-      timeoutMs: GIT_CHANGES_COMMAND_TIMEOUT_MS,
-      maxOutputLength: Math.max(20_000, input.length + 1),
-      env: { GIT_OPTIONAL_LOCKS: "0" },
-      input,
-      utf8Output: true,
-    });
-    if (![0, 1].includes(result.exitCode) || result.timedOut || result.error || result.stdoutTruncated) return null;
-    return { root, paths: new Set(result.stdout.split("\0").filter(Boolean)) };
-  } catch {
-    return null;
-  }
-}
-
-function withFileTreeGitIgnored(entries = [], workspaceRoot, gitIgnored) {
-  if (!gitIgnored?.root || !gitIgnored.paths?.size) return entries;
-  return entries.map((entry) => {
-    if (!entry?.path) return entry;
-    const absolute = path.resolve(workspaceRoot, entry.path);
-    if (absolute !== gitIgnored.root && !pathInside(gitIgnored.root, absolute)) return entry;
-    const relative = path.relative(gitIgnored.root, absolute).split(path.sep).join("/");
-    return gitIgnored.paths.has(relative) ? { ...entry, gitIgnored: true } : entry;
-  });
-}
-
-function fileTreeGitStatusPayload(workspaceRoot, gitStatus) {
-  if (!gitStatus?.root || !gitStatus.entries?.size) return null;
-  const root = path.resolve(workspaceRoot);
-  const entries = [];
-  for (const [repoPath, status] of gitStatus.entries.entries()) {
-    const absolute = path.resolve(gitStatus.root, repoPath);
-    if (absolute !== root && !pathInside(root, absolute)) continue;
-    entries.push({
-      path: path.relative(root, absolute).split(path.sep).join("/"),
-      changed: true,
-      kind: status.kind || "changed",
-      status: status.status || "",
-      direct: status.direct === true,
-      changedDescendants: Number(status.changedDescendants || 0) || 0,
-    });
-  }
-  return { root: gitStatus.root, entries };
-}
-
-function resolveGitRelativePath(root, relativePath) {
-  const normalized = String(relativePath || "").trim();
-  if (!normalized || normalized.includes("\0")) throw new Error("Invalid git path");
-  const resolved = path.resolve(root, normalized);
-  if (resolved !== root && !resolved.startsWith(`${root}${path.sep}`)) throw new Error(`Git path escapes repository: ${normalized}`);
-  return resolved;
-}
-
-function isLikelyBinaryBuffer(buffer) {
-  return Buffer.isBuffer(buffer) && buffer.includes(0);
-}
-
-function normalizeGitRelativePath(root, relativePath) {
-  const resolved = resolveGitRelativePath(root, relativePath);
-  return path.relative(root, resolved).split(path.sep).join("/");
-}
-
-const GITIGNORE_MAX_BYTES = 5 * 1024 * 1024;
-const gitignoreMutationQueues = new Map();
-
-function serializeGitignoreMutation(root, mutation) {
-  const previous = gitignoreMutationQueues.get(root) || Promise.resolve();
-  const current = previous.catch(() => {}).then(mutation);
-  gitignoreMutationQueues.set(root, current);
-  return current.finally(() => {
-    if (gitignoreMutationQueues.get(root) === current) gitignoreMutationQueues.delete(root);
-  });
-}
-
-function gitignoreEntryForTarget(root, requestedPath, kind) {
-  if (kind !== "file" && kind !== "folder") throw makeHttpError(400, "Gitignore target kind must be file or folder");
-  if (typeof requestedPath !== "string" || requestedPath.length === 0) throw makeHttpError(400, "Gitignore target path is required");
-  if (/[\0-\x1f\x7f]/.test(requestedPath)) throw makeHttpError(400, "Gitignore target path cannot contain control characters");
-
-  const slashPath = requestedPath.replace(/\\/g, "/");
-  if (path.posix.isAbsolute(slashPath) || path.win32.isAbsolute(requestedPath) || /^[A-Za-z]:/.test(requestedPath)) {
-    throw makeHttpError(400, "Gitignore target path must be repository-relative");
-  }
-  const segments = slashPath.split("/").filter(Boolean);
-  if (!segments.length || segments.some((segment) => segment === "." || segment === "..")) {
-    throw makeHttpError(400, "Gitignore target path cannot be the repository root or contain traversal segments");
-  }
-
-  const normalized = segments.join("/");
-  const target = path.resolve(root, ...segments);
-  const relative = path.relative(root, target);
-  if (!relative || relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
-    throw makeHttpError(400, "Gitignore target path must stay inside the repository");
-  }
-  const escaped = normalized.replace(/([*?\[\] ])/g, "\\$1");
-  return { path: normalized, kind, entry: `/${escaped}${kind === "folder" ? "/" : ""}` };
-}
-
-function sameFileIdentity(first, second) {
-  return first?.dev === second?.dev && first?.ino === second?.ino;
-}
-
-function gitignoreHasExactEntry(content, entry) {
-  const existing = content.toString("latin1").split(/\r\n|\n|\r/);
-  return existing.includes(Buffer.from(entry, "utf8").toString("latin1"));
-}
-
-async function appendGitignoreEntry(root, entry) {
-  const target = path.join(root, ".gitignore");
-  for (let attempt = 0; attempt < 2; attempt++) {
-    let before;
-    try {
-      before = await lstat(target);
-    } catch (error) {
-      if (error?.code !== "ENOENT") throw error;
-      before = null;
-    }
-
-    if (!before) {
-      let handle;
-      try {
-        handle = await open(target, fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_EXCL | (fsConstants.O_NOFOLLOW || 0), 0o666);
-        await handle.writeFile(`${entry}\n`, "utf8");
-        return true;
-      } catch (error) {
-        if (error?.code === "EEXIST" && attempt === 0) continue;
-        throw error;
-      } finally {
-        await handle?.close();
-      }
-    }
-
-    if (before.isSymbolicLink() || !before.isFile()) throw makeHttpError(409, "Repository .gitignore must be a regular file and cannot be a symbolic link");
-    if (before.nlink !== 1) throw makeHttpError(409, "Repository .gitignore must have exactly one hard link; replace linked copies with a regular file before retrying");
-
-    let handle;
-    try {
-      handle = await open(target, fsConstants.O_RDWR | fsConstants.O_APPEND | (fsConstants.O_NOFOLLOW || 0));
-      const opened = await handle.stat();
-      if (!opened.isFile() || !sameFileIdentity(before, opened)) throw makeHttpError(409, "Repository .gitignore changed while it was being opened");
-      if (opened.nlink !== 1) throw makeHttpError(409, "Repository .gitignore must have exactly one hard link; replace linked copies with a regular file before retrying");
-      if (opened.size > GITIGNORE_MAX_BYTES) throw makeHttpError(409, `Repository .gitignore exceeds the ${formatBytes(GITIGNORE_MAX_BYTES)} safe modification limit`);
-      const content = await handle.readFile();
-      if (gitignoreHasExactEntry(content, entry)) return false;
-      const newline = content.includes(Buffer.from("\r\n")) ? "\r\n" : "\n";
-      const lastByte = content.length ? content[content.length - 1] : null;
-      const separator = content.length && lastByte !== 0x0a && lastByte !== 0x0d ? newline : "";
-      await handle.writeFile(`${separator}${entry}${newline}`, "utf8");
-      return true;
-    } catch (error) {
-      if (error?.code === "ENOENT" && attempt === 0) continue;
-      if (error?.code === "ELOOP") throw makeHttpError(409, "Repository .gitignore cannot be a symbolic link");
-      throw error;
-    } finally {
-      await handle?.close();
-    }
-  }
-}
-
-async function addGitignoreEntry(cwd, body = {}) {
-  try {
-    const root = await realpath(await getGitRoot(cwd));
-    const target = gitignoreEntryForTarget(root, body.path, body.kind);
-    const added = await serializeGitignoreMutation(root, () => appendGitignoreEntry(root, target.entry));
-    return { root, ...target, added, changes: await readGitChanges(root) };
-  } catch (error) {
-    if (error?.statusCode) throw error;
-    const wrapped = makeHttpError(500, formatCliError(error));
-    if (error?.code) wrapped.code = error.code;
-    throw wrapped;
-  }
-}
-
-async function readGitUntrackedEntry(root, file, { maxBytes = Number.POSITIVE_INFINITY } = {}) {
-  const normalized = normalizeGitRelativePath(root, file);
-  const filePath = resolveGitRelativePath(root, normalized);
-  const info = await stat(filePath);
-  if (!info.isFile()) return { path: normalized, size: info.size, binary: false, content: "", error: "Not a regular file" };
-  if (Number.isFinite(maxBytes) && info.size > maxBytes) {
-    return { path: normalized, size: info.size, binary: false, content: "", error: `File is too large to preview (limit ${formatBytes(maxBytes)})` };
-  }
-  const buffer = await readFile(filePath);
-  const binary = isLikelyBinaryBuffer(buffer);
-  return {
-    path: normalized,
-    size: info.size,
-    binary,
-    content: binary ? "" : buffer.toString("utf8"),
-  };
-}
-
-async function readGitUntrackedEntries(root, files) {
-  const entries = [];
-  for (const file of files) {
-    try {
-      entries.push(await readGitUntrackedEntry(root, file));
-    } catch (error) {
-      entries.push({ path: file, size: 0, binary: false, content: "", error: sanitizeError(error) });
-    }
-  }
-  return entries;
-}
-
-async function readGitUntrackedFile(cwd, requestedPath, options = {}) {
-  const root = await getGitRoot(cwd);
-  const normalized = normalizeGitRelativePath(root, requestedPath);
-  const listed = await runGitReadCommand(root, ["ls-files", "--others", "--exclude-standard", "--", normalized], { maxOutputLength: 120_000 });
-  const files = listed.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-  if (!files.includes(normalized)) throw new Error(`Not an untracked file: ${normalized}`);
-  return readGitUntrackedEntry(root, normalized, options);
-}
-
-function normalizeGitFileDiffCategory(requestedCategory) {
-  const category = String(requestedCategory || "").trim();
-  if (!GIT_FILE_DIFF_CATEGORIES.has(category)) {
-    throw new Error("Git file diff category must be staged, unstaged, conflicted, or untracked");
-  }
-  return category;
-}
-
-function gitFileDiffArgs(category, normalizedPath) {
-  const args = ["diff"];
-  if (category === "staged") args.push("--cached");
-  if (category === "conflicted") args.push("--cc");
-  args.push("--no-ext-diff", "--no-textconv", "--no-color", "--unified=3", "--src-prefix=a/", "--dst-prefix=b/", "--", normalizedPath);
-  return args;
-}
-
-async function readGitFileDiff(cwd, requestedPath, requestedCategory) {
-  const root = await getGitRoot(cwd);
-  const category = normalizeGitFileDiffCategory(requestedCategory);
-  const normalizedPath = normalizeGitRelativePath(root, requestedPath);
-  const label = GIT_FILE_DIFF_LABELS[category];
-
-  if (category === "untracked") {
-    const untracked = await readGitUntrackedFile(root, normalizedPath, { maxBytes: GIT_CHANGES_DIFF_MAX_OUTPUT });
-    return {
-      root,
-      path: normalizedPath,
-      category,
-      label,
-      command: formatGitCommand(["ls-files", "--others", "--exclude-standard", "--", normalizedPath]),
-      diff: "",
-      truncated: false,
-      capBytes: GIT_CHANGES_DIFF_MAX_OUTPUT,
-      ...untracked,
-    };
-  }
-
-  const args = gitFileDiffArgs(category, normalizedPath);
-  const result = await runGitReadCommandDetailed(root, args);
-  return {
-    root,
-    path: normalizedPath,
-    category,
-    label,
-    command: formatGitCommand(args),
-    diff: result.output.trimEnd(),
-    truncated: result.truncated,
-    capBytes: result.capBytes,
-  };
-}
-
-async function gitUpstreamRef(root) {
-  try {
-    const upstream = await runGitReadCommand(root, ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"], { timeoutMs: 5000, maxOutputLength: 10_000 });
-    return upstream.trim();
-  } catch {
-    return "";
-  }
-}
-
-async function readGitIncomingChanges(root, summary) {
-  const upstream = await gitUpstreamRef(root);
-  const ahead = Number(summary?.ahead || 0) || 0;
-  const behind = Number(summary?.behind || 0) || 0;
-  const diverged = ahead > 0 && behind > 0;
-  const remote = {
-    upstream,
-    ahead,
-    behind,
-    diverged,
-    // Fast-forward pull is only possible when we are strictly behind.
-    canPull: !!upstream && behind > 0 && !diverged,
-  };
-  if (!upstream || behind <= 0) return { remote, section: null };
-
-  const diffArgs = ["diff", "--no-ext-diff", "--no-color", "--find-renames", "--unified=0", "--src-prefix=a/", "--dst-prefix=b/", "HEAD..@{upstream}"];
-  try {
-    const diff = await runGitReadCommandDetailed(root, diffArgs);
-    return {
-      remote,
-      section: {
-        key: "incoming",
-        label: `Incoming from ${upstream}`,
-        command: `git diff --unified=0 HEAD..${upstream}`,
-        diff: diff.output.trimEnd(),
-        truncated: diff.truncated,
-        capBytes: diff.capBytes,
-      },
-    };
-  } catch (error) {
-    return { remote: { ...remote, error: sanitizeError(error) }, section: null };
-  }
-}
-
-async function pullGitChanges(cwd, { remote } = {}) {
-  const root = await getGitRoot(cwd);
-  const pullArgs = ["pull", "--ff-only"];
-  if (remote === "origin") pullArgs.push("origin");
-  else if (remote) throw new Error(`Unsupported Git pull remote: ${String(remote)}`);
-  const payload = await runGuardedGitMutation(pullArgs, { cwd: root, timeoutMs: GIT_PULL_TIMEOUT_MS });
-  if (payload.data) payload.data.root = root;
-  if (payload.ok) payload.data.changes = await readGitChanges(root);
-  else {
-    payload.error = (payload.data?.stderr || payload.data?.stdout || payload.error || "git pull --ff-only failed").trim();
-    applyGitSyncFailure(payload);
-  }
-  return payload;
-}
-
-async function readGitChanges(cwd) {
-  const root = await getGitRoot(cwd);
-  const diffArgs = ["diff", "--no-ext-diff", "--no-color", "--find-renames", "--unified=0", "--src-prefix=a/", "--dst-prefix=b/"];
-  const [statusText, porcelainStatusText, unstagedDiff, stagedDiff, untrackedText] = await Promise.all([
-    runGitReadCommand(root, ["status", "--short", "--branch", "--untracked-files=all"], { maxOutputLength: 120_000 }),
-    runGitReadCommand(root, ["status", "--porcelain=2", "--branch", "--untracked-files=all"], { maxOutputLength: 120_000 }),
-    runGitReadCommandDetailed(root, diffArgs),
-    runGitReadCommandDetailed(root, ["diff", "--cached", "--no-ext-diff", "--no-color", "--find-renames", "--unified=0", "--src-prefix=a/", "--dst-prefix=b/"]),
-    runGitReadCommand(root, ["ls-files", "--others", "--exclude-standard"], { maxOutputLength: 120_000 }),
-  ]);
-  const summary = summarizeGitPorcelainStatus(porcelainStatusText);
-  const incoming = await readGitIncomingChanges(root, summary);
-  const untrackedFiles = untrackedText.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-  const untracked = await readGitUntrackedEntries(root, untrackedFiles);
-  return {
-    cwd,
-    root,
-    branch: gitBranchFromPorcelainStatus(porcelainStatusText),
-    generatedAt: new Date().toISOString(),
-    summary,
-    remote: incoming.remote,
-    status: statusText.trimEnd(),
-    sections: [
-      incoming.section,
-      { key: "staged", label: "Staged", command: "git diff --cached --unified=0", diff: stagedDiff.output.trimEnd(), truncated: stagedDiff.truncated, capBytes: stagedDiff.capBytes },
-      { key: "unstaged", label: "Unstaged", command: "git diff --unified=0", diff: unstagedDiff.output.trimEnd(), truncated: unstagedDiff.truncated, capBytes: unstagedDiff.capBytes },
-    ].filter(Boolean),
-    untracked,
-  };
-}
-
-const GIT_PANEL_HISTORY_LIMIT = 30;
-const GIT_PANEL_MAX_OUTPUT = 240_000;
-
-function parseGitNumstatZ(text = "") {
-  const stats = new Map();
-  for (const record of String(text || "").split("\0")) {
-    if (!record) continue;
-    const firstTab = record.indexOf("\t");
-    const secondTab = firstTab < 0 ? -1 : record.indexOf("\t", firstTab + 1);
-    if (firstTab < 0 || secondTab < 0) continue;
-    const additionsText = record.slice(0, firstTab);
-    const deletionsText = record.slice(firstTab + 1, secondTab);
-    const filePath = normalizeGitStatusPath(record.slice(secondTab + 1));
-    if (!filePath) continue;
-    const binary = additionsText === "-" || deletionsText === "-";
-    stats.set(filePath, {
-      additions: binary ? 0 : Number.parseInt(additionsText || "0", 10) || 0,
-      deletions: binary ? 0 : Number.parseInt(deletionsText || "0", 10) || 0,
-      binary,
-    });
-  }
-  return stats;
-}
-
-function gitPanelPathStats(entry, stagedStats, unstagedStats) {
-  const paths = [entry.path, entry.oldPath].map(normalizeGitStatusPath).filter(Boolean);
-  const aggregate = (stats) => {
-    const value = { additions: 0, deletions: 0, binary: false };
-    for (const filePath of paths) {
-      const current = stats.get(filePath);
-      if (!current) continue;
-      value.additions += Number(current.additions || 0) || 0;
-      value.deletions += Number(current.deletions || 0) || 0;
-      value.binary ||= current.binary === true;
-    }
-    return value;
-  };
-  const staged = aggregate(stagedStats);
-  const unstaged = aggregate(unstagedStats);
-  return {
-    additions: staged.additions + unstaged.additions,
-    deletions: staged.deletions + unstaged.deletions,
-    binary: staged.binary || unstaged.binary,
-    stagedAdditions: staged.additions,
-    stagedDeletions: staged.deletions,
-    stagedBinary: staged.binary,
-    unstagedAdditions: unstaged.additions,
-    unstagedDeletions: unstaged.deletions,
-    unstagedBinary: unstaged.binary,
-  };
-}
-
-function gitPanelChangeEntry(entry, stagedStats, unstagedStats) {
-  const x = entry.x || " ";
-  const y = entry.y || " ";
-  const untracked = x === "?" && y === "?";
-  const conflicted = x === "U" || y === "U" || (x === "A" && y === "A") || (x === "D" && y === "D");
-  return {
-    path: normalizeGitStatusPath(entry.path),
-    oldPath: normalizeGitStatusPath(entry.oldPath || ""),
-    status: `${x}${y}`,
-    staged: !untracked && x !== " " && x !== "?",
-    unstaged: !untracked && y !== " " && y !== "?",
-    untracked,
-    conflicted,
-    ...gitPanelPathStats(entry, stagedStats, unstagedStats),
-  };
-}
-
-function parseGitPanelHistory(text = "") {
-  const fields = String(text || "").split("\0").filter(Boolean);
-  const history = [];
-  for (let index = 0; index + 4 < fields.length && history.length < GIT_PANEL_HISTORY_LIMIT; index += 5) {
-    const [hash, shortHash, author, authoredAt, subject] = fields.slice(index, index + 5);
-    if (!hash) continue;
-    history.push({ hash, shortHash, author, authoredAt, subject });
-  }
-  return history;
-}
-
-async function readGitPanel(cwd) {
-  const root = await getGitRoot(cwd);
-  const historyPromise = runGitReadCommand(root, [
-    "log", `-n${GIT_PANEL_HISTORY_LIMIT}`, "-z", "--date=iso-strict", "--format=%H%x00%h%x00%an%x00%aI%x00%s",
-  ], { maxOutputLength: GIT_PANEL_MAX_OUTPUT }).catch(() => "");
-  const [statusText, porcelainStatusText, stagedNumstatText, unstagedNumstatText, historyText] = await Promise.all([
-    runGitReadCommand(root, ["status", "--porcelain=v1", "-z", "--untracked-files=all"], { maxOutputLength: GIT_PANEL_MAX_OUTPUT }),
-    runGitReadCommand(root, ["status", "--porcelain=2", "--branch", "--untracked-files=all"], { maxOutputLength: GIT_PANEL_MAX_OUTPUT }),
-    runGitReadCommand(root, ["diff", "--cached", "--numstat", "-z", "--no-renames", "--"], { maxOutputLength: GIT_PANEL_MAX_OUTPUT }),
-    runGitReadCommand(root, ["diff", "--numstat", "-z", "--no-renames", "--"], { maxOutputLength: GIT_PANEL_MAX_OUTPUT }),
-    historyPromise,
-  ]);
-  const stagedStats = parseGitNumstatZ(stagedNumstatText);
-  const unstagedStats = parseGitNumstatZ(unstagedNumstatText);
-  const changes = parseGitPorcelainZEntries(statusText)
-    .map((entry) => gitPanelChangeEntry(entry, stagedStats, unstagedStats))
-    .filter((entry) => entry.path);
-  return {
-    cwd,
-    root,
-    branch: gitBranchFromPorcelainStatus(porcelainStatusText),
-    generatedAt: new Date().toISOString(),
-    summary: summarizeGitPorcelainStatus(porcelainStatusText),
-    changes,
-    history: parseGitPanelHistory(historyText),
-  };
-}
-
-async function readGitCommit(cwd, requestedHash) {
-  const hash = String(requestedHash || "").trim().toLowerCase();
-  if (!/^[a-f0-9]{40}([a-f0-9]{24})?$/.test(hash)) throw makeHttpError(400, "A full Git commit hash is required");
-  const root = await getGitRoot(cwd);
-  const verified = (await runGitReadCommand(root, ["rev-parse", "--verify", `${hash}^{commit}`], { maxOutputLength: 1000 })).trim();
-  if (verified.toLowerCase() !== hash) throw makeHttpError(404, "Git commit not found in this repository");
-  const [metaText, diff] = await Promise.all([
-    runGitReadCommand(root, ["show", "-s", "-z", "--date=iso-strict", "--format=%H%x00%h%x00%an%x00%aI%x00%s", hash], { maxOutputLength: 20_000 }),
-    runGitReadCommandDetailed(root, ["show", "--format=", "--no-ext-diff", "--no-color", "--find-renames", "--unified=0", "--src-prefix=a/", "--dst-prefix=b/", hash]),
-  ]);
-  const [commit] = parseGitPanelHistory(metaText);
-  return {
-    root,
-    branch: "",
-    generatedAt: new Date().toISOString(),
-    commit: commit || { hash, shortHash: hash.slice(0, 12), author: "", authoredAt: "", subject: "" },
-    summary: { staged: 0, unstaged: 0, untracked: 0, conflicted: 0, ahead: 0, behind: 0 },
-    remote: { upstream: "", ahead: 0, behind: 0, diverged: false, canPull: false },
-    sections: [{
-      key: "commit",
-      label: `Commit ${commit?.shortHash || hash.slice(0, 12)}`,
-      command: `git show --unified=0 ${hash}`,
-      diff: diff.output.trimEnd(),
-      truncated: diff.truncated,
-      capBytes: diff.capBytes,
-    }],
-    untracked: [],
-  };
-}
-
-const GIT_LOCK_RETRY_ATTEMPTS = 3;
-const GIT_LOCK_RETRY_DELAY_MS = 250;
-const GIT_FETCH_TIMEOUT_MS = 2 * 60 * 1000;
-const GIT_CONFLICT_PREVIEW_MAX_BYTES = 200_000;
-const GIT_STASH_PATCH_MAX_OUTPUT = 200_000;
-const PROTECTED_GIT_BRANCHES = new Set(["main", "master"]);
-const NO_REMOTE_HINT = "No push destination is configured. Publish this repository or add a Git remote, then retry.";
-
 const sleepMs = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-function requireConfirmed(body, action) {
-  if (body?.confirmed !== true) throw makeHttpError(409, `${action} requires confirmed: true.`);
-}
-
-// Retry transient index.lock contention before reporting failure; the shared
-// isGitLockFailure classifier keeps this consistent with worktree mutations.
-async function runGitMutationCommand(args, options = {}) {
-  let result;
-  for (let attempt = 0; attempt < GIT_LOCK_RETRY_ATTEMPTS; attempt++) {
-    result = await runGitWorkflowCommand(args, options);
-    const ok = result.exitCode === 0 && !result.timedOut && !result.cancelled && !result.error;
-    if (ok || !isGitLockFailure(result)) return result;
-    if (attempt < GIT_LOCK_RETRY_ATTEMPTS - 1) await sleepMs(GIT_LOCK_RETRY_DELAY_MS * (attempt + 1));
-  }
-  return result;
-}
-
-function gitMutationPayload(result) {
-  const payload = gitWorkflowCommandPayload(result);
-  if (!payload.ok) {
-    let pathFailure = null;
-    if (isGitLockFailure(result)) {
-      payload.code = "REPO_BUSY";
-      payload.hint = "Another git process is using this repository. Retry once it finishes.";
-    } else {
-      pathFailure = classifyGitPathFailure(result);
-      if (pathFailure) Object.assign(payload, pathFailure);
-    }
-    payload.error = pathFailure?.error || String(result?.stderr || result?.stdout || payload.error || "git command failed").trim();
-  }
-  return payload;
-}
-
-async function gitAddAllPayload(cwd) {
-  await getGitRoot(cwd);
-  if (platform() === "win32") {
-    const untrackedText = await runGitReadCommand(cwd, ["ls-files", "--others", "--exclude-standard", "-z", "--", "."]);
-    const invalidPath = findWindowsReservedGitPath(untrackedText);
-    const pathFailure = windowsReservedGitPathFailure(invalidPath);
-    if (pathFailure) return { ok: false, ...pathFailure };
-  }
-  return gitMutationPayload(await runGitMutationCommand(["add", "."], { cwd }));
-}
-
-async function runGuardedGitMutation(args, options = {}) {
-  try {
-    return gitMutationPayload(await runGitMutationCommand(args, options));
-  } catch (error) {
-    if (/already running/i.test(error?.message || "")) {
-      return { ok: false, code: "REPO_BUSY", error: sanitizeError(error), hint: "Another git workflow command is already running in the Web UI." };
-    }
-    throw error;
-  }
-}
-
-// Turn raw git remote-operation stderr into an actionable state. Returns null
-// when no known pattern matches (caller keeps the raw error).
-function classifyGitSyncFailure(result, { push = false } = {}) {
-  const text = `${result?.stderr || ""}\n${result?.stdout || ""}`.toLowerCase();
-  if (result?.timedOut) return { code: "NETWORK", hint: "The remote did not respond before the timeout. Check connectivity and retry." };
-  if (isGitLockFailure(result)) return { code: "REPO_BUSY", hint: "Another git process is using this repository. Retry once it finishes." };
-  if (/terminal prompts disabled|authentication failed|permission denied|access denied|could not read username|could not read password|publickey|invalid credentials/.test(text)) {
-    return { code: "AUTH", hint: "Authentication failed and interactive prompts are disabled in the Web UI. Refresh your credentials or SSH agent in a terminal, then retry." };
-  }
-  if (/could not resolve host|failed to connect|connection (?:refused|reset|timed out)|network is unreachable|operation timed out/.test(text)) {
-    return { code: "NETWORK", hint: "The remote could not be reached. Check connectivity and retry." };
-  }
-  if (push && /fatal:\s+no configured push destination\./.test(text)) {
-    return { code: "NO_REMOTE", hint: NO_REMOTE_HINT };
-  }
-  if (push && /protected branch|gh006/.test(text)) {
-    return { code: "PROTECTED_BRANCH", hint: "The remote refused the push because the branch is protected. Push to a feature branch and open a PR instead." };
-  }
-  if (push && /\[rejected\]|non-fast-forward|fetch first|updates were rejected/.test(text)) {
-    return { code: "NON_FAST_FORWARD", hint: "The remote has commits you don't have. Fetch and review the incoming diff, then integrate before pushing." };
-  }
-  if (push && /has no upstream branch/.test(text)) {
-    return { code: "NO_UPSTREAM", hint: "The current branch has no upstream. Push with 'set upstream' to publish it." };
-  }
-  if (!push && /not possible to fast-forward|divergent branches|need to specify how to reconcile/.test(text)) {
-    return { code: "DIVERGED", hint: "Local and remote branches have diverged. Fetch, review the incoming diff, then merge or rebase explicitly — or integrate in a worktree." };
-  }
-  if (!push && /no tracking information/.test(text)) {
-    return { code: "NO_UPSTREAM", hint: "The current branch has no upstream to pull from. Set one or pull with an explicit remote/branch." };
-  }
-  if (/would be overwritten/.test(text)) {
-    return { code: "DIRTY_WORKTREE", hint: "Local changes would be overwritten. Stash or commit them first." };
-  }
-  if (/conflict/.test(text)) {
-    return { code: "CONFLICTS", hint: "Conflicts were created. Resolve them in the conflicts panel, then continue or abort the operation." };
-  }
-  return null;
-}
-
-function applyGitSyncFailure(payload, { push = false } = {}) {
-  if (payload.ok || payload.code) return payload;
-  const classified = classifyGitSyncFailure(payload.data, { push });
-  if (classified) {
-    payload.code = classified.code;
-    payload.hint = classified.hint;
-  }
-  return payload;
-}
-
-async function fetchGitChanges(cwd) {
-  const root = await getGitRoot(cwd);
-  const payload = await runGuardedGitMutation(
-    ["-c", "credential.interactive=false", "fetch", "--prune"],
-    { cwd: root, timeoutMs: GIT_FETCH_TIMEOUT_MS, label: "git fetch --prune" },
-  );
-  if (payload.data) payload.data.root = root;
-  if (payload.ok) {
-    // git fetch reports ref updates on stderr.
-    payload.data.summary = `${payload.data.stderr || ""}\n${payload.data.stdout || ""}`.trim();
-    payload.data.changes = await readGitChanges(root);
-  } else {
-    applyGitSyncFailure(payload);
-  }
-  return payload;
-}
-
-async function integrateGitUpstream(cwd, body = {}) {
-  const mode = String(body.mode || "").trim();
-  if (!["merge", "rebase"].includes(mode)) throw makeHttpError(400, "mode must be 'merge' or 'rebase'");
-  requireConfirmed(body, `Running git ${mode} against the upstream`);
-  const root = await getGitRoot(cwd);
-  const upstream = await gitUpstreamRef(root);
-  if (!upstream) throw makeHttpError(409, "No upstream is configured for the current branch");
-  const args = mode === "merge" ? ["merge", "--no-edit", "@{upstream}"] : ["-c", "core.editor=true", "rebase", "@{upstream}"];
-  const payload = await runGuardedGitMutation(args, { cwd: root, timeoutMs: GIT_PULL_TIMEOUT_MS, label: `git ${mode} ${upstream}` });
-  if (payload.data) {
-    payload.data.root = root;
-    payload.data.upstream = upstream;
-    payload.data.mode = mode;
-  }
-  if (payload.ok) payload.data.changes = await readGitChanges(root);
-  else applyGitSyncFailure(payload);
-  return payload;
-}
-
-// ---- Git operation (merge/rebase/cherry-pick/revert/bisect) lifecycle ----
-
-async function pathEntryExists(target) {
-  try {
-    await stat(target);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-async function gitDirPath(root) {
-  const out = await runGitReadCommand(root, ["rev-parse", "--git-dir"], { maxOutputLength: 10_000 });
-  const dir = out.trim();
-  return path.isAbsolute(dir) ? dir : path.resolve(root, dir);
-}
-
-async function detectGitOperationKind(root) {
-  const gitDir = await gitDirPath(root);
-  if ((await pathEntryExists(path.join(gitDir, "rebase-merge"))) || (await pathEntryExists(path.join(gitDir, "rebase-apply")))) return "rebase";
-  if (await pathEntryExists(path.join(gitDir, "MERGE_HEAD"))) return "merge";
-  if (await pathEntryExists(path.join(gitDir, "CHERRY_PICK_HEAD"))) return "cherry-pick";
-  if (await pathEntryExists(path.join(gitDir, "REVERT_HEAD"))) return "revert";
-  if (await pathEntryExists(path.join(gitDir, "BISECT_LOG"))) return "bisect";
-  return null;
-}
-
-function gitOperationCommands(kind) {
-  switch (kind) {
-    case "merge":
-      return { continue: ["commit", "--no-edit"], abort: ["merge", "--abort"], skip: null };
-    case "rebase":
-      return { continue: ["-c", "core.editor=true", "rebase", "--continue"], abort: ["rebase", "--abort"], skip: ["-c", "core.editor=true", "rebase", "--skip"] };
-    case "cherry-pick":
-      return { continue: ["-c", "core.editor=true", "cherry-pick", "--continue"], abort: ["cherry-pick", "--abort"], skip: ["-c", "core.editor=true", "cherry-pick", "--skip"] };
-    case "revert":
-      return { continue: ["-c", "core.editor=true", "revert", "--continue"], abort: ["revert", "--abort"], skip: ["-c", "core.editor=true", "revert", "--skip"] };
-    default:
-      return null;
-  }
-}
-
-function parseGitConflictEntries(porcelainText) {
-  const entries = [];
-  for (const line of String(porcelainText || "").split(/\r?\n/)) {
-    if (!line.startsWith("u ")) continue;
-    // u XY sub m1 m2 m3 mW h1 h2 h3 path — 10 space-separated fields, then path.
-    const fields = [];
-    let start = 0;
-    for (let index = 0; index < 10; index++) {
-      const next = line.indexOf(" ", start);
-      if (next === -1) break;
-      fields.push(line.slice(start, next));
-      start = next + 1;
-    }
-    fields.push(line.slice(start));
-    const entryPath = fields[10] || "";
-    if (entryPath) entries.push({ path: entryPath, status: fields[1] || "UU" });
-  }
-  return entries;
-}
-
-function extractConflictMarkerHunks(content, { contextLines = 2, maxHunks = 8, maxLinesPerHunk = 80 } = {}) {
-  const lines = content.split(/\r?\n/);
-  const hunks = [];
-  for (let index = 0; index < lines.length && hunks.length < maxHunks; index++) {
-    if (!lines[index].startsWith("<<<<<<<")) continue;
-    let end = index;
-    while (end < lines.length - 1 && !lines[end].startsWith(">>>>>>>")) end++;
-    const start = Math.max(0, index - contextLines);
-    const stop = Math.min(lines.length - 1, end + contextLines);
-    hunks.push({
-      startLine: start + 1,
-      truncated: stop - start + 1 > maxLinesPerHunk,
-      lines: lines.slice(start, Math.min(stop + 1, start + maxLinesPerHunk)),
-    });
-    index = end;
-  }
-  return hunks;
-}
-
-async function readGitConflictPreview(root, relPath) {
-  try {
-    const filePath = resolveGitRelativePath(root, relPath);
-    const info = await stat(filePath).catch(() => null);
-    if (!info) return { kind: "missing" };
-    if (!info.isFile()) return { kind: "unsupported", size: info.size };
-    if (info.size > GIT_CONFLICT_PREVIEW_MAX_BYTES) return { kind: "large", size: info.size };
-    const buffer = await readFile(filePath);
-    if (isLikelyBinaryBuffer(buffer)) return { kind: "binary", size: info.size };
-    const content = buffer.toString("utf8");
-    return {
-      kind: "text",
-      size: info.size,
-      hasMarkers: /^<{7}(?: |$)/m.test(content),
-      hunks: extractConflictMarkerHunks(content),
-    };
-  } catch (error) {
-    return { kind: "error", error: sanitizeError(error) };
-  }
-}
-
-async function readGitOperationSnapshot(cwd) {
-  const root = await getGitRoot(cwd);
-  const porcelainText = await runGitReadCommand(root, ["status", "--porcelain=2", "--branch", "--untracked-files=all"], { maxOutputLength: 120_000 });
-  const summary = summarizeGitPorcelainStatus(porcelainText);
-  const kind = await detectGitOperationKind(root);
-  const conflictEntries = parseGitConflictEntries(porcelainText);
-  const conflicts = [];
-  for (const entry of conflictEntries) {
-    conflicts.push({ ...entry, preview: await readGitConflictPreview(root, entry.path) });
-  }
-  const commands = gitOperationCommands(kind);
-  let bisect = null;
-  if (kind === "bisect") {
-    const log = await runGitReadCommand(root, ["bisect", "log"], { maxOutputLength: 60_000 }).catch(() => "");
-    bisect = { log: log.trimEnd().split(/\r?\n/).slice(-20).join("\n") };
-  }
-  return {
-    root,
-    branch: gitBranchFromPorcelainStatus(porcelainText),
-    operation: kind,
-    summary,
-    conflicts,
-    canContinue: Boolean(kind) && kind !== "bisect" && conflictEntries.length === 0,
-    canSkip: Boolean(commands?.skip),
-    commands: commands
-      ? {
-          continue: formatGitCommand(commands.continue.filter((arg) => arg !== "-c" && arg !== "core.editor=true")),
-          abort: formatGitCommand(commands.abort),
-          ...(commands.skip ? { skip: formatGitCommand(commands.skip.filter((arg) => arg !== "-c" && arg !== "core.editor=true")) } : {}),
-        }
-      : null,
-    bisect,
-    generatedAt: new Date().toISOString(),
-  };
-}
-
-function gitConflictResolutionAgentPrompt(operation) {
-  const conflicts = (operation.conflicts || []).map((conflict) => `- ${conflict.status || "UU"} ${JSON.stringify(String(conflict.path || ""))}`);
-  const summary = operation.summary || {};
-  return [
-    `Resolve the current Git ${operation.operation} conflicts in this working tree.`,
-    "",
-    `Repository root: ${JSON.stringify(String(operation.root || ""))}`,
-    `Branch: ${operation.branch || "detached or unknown"}`,
-    `Working tree: ${summary.staged || 0} staged, ${summary.unstaged || 0} unstaged, ${conflicts.length} conflicted`,
-    "Conflicted files:",
-    ...conflicts,
-    "",
-    "Requirements:",
-    "- Inspect git status plus the staged, unstaged, and unmerged diffs before editing.",
-    "- Resolve only the currently unmerged files and preserve the intended changes from both sides.",
-    "- Stage each resolved file with git add.",
-    `- Do not continue, skip, abort, commit, reset, or push the ${operation.operation}.`,
-    "- Verify git diff --name-only --diff-filter=U is empty, then report what you resolved and any uncertainty.",
-  ].join("\n");
-}
-
-async function openGitConflictResolutionAgentTab(sourceTab) {
-  const operation = await readGitOperationSnapshot(sourceTab.cwd);
-  if (!operation.operation || operation.operation === "bisect") throw makeHttpError(409, "No conflict-resolution Git operation is in progress");
-  if (!operation.conflicts?.length) throw makeHttpError(409, "No unmerged files remain to send to an agent");
-
-  const targetTab = await createTab({
-    title: `Resolve ${operation.operation} conflicts`,
-    titleSource: "explicit",
-    conversationStarted: true,
-    cwd: operation.root,
-  });
-  const command = { type: "prompt", message: gitConflictResolutionAgentPrompt(operation) };
-  markTabWorking(targetTab);
-  let response;
-  try {
-    response = await targetTab.rpc.send(command, PROMPT_REQUEST_TIMEOUT_MS);
-  } catch (error) {
-    markTabIdle(targetTab);
-    throw error;
-  }
-  if (response.success === false) {
-    markTabIdle(targetTab);
-    throw makeHttpError(502, response.error || "The conflict-resolution agent rejected the handoff prompt");
-  }
-  recordEvent({
-    type: "webui_git_conflict_agent_started",
-    sourceTabId: sourceTab.id,
-    tabId: targetTab.id,
-    cwd: operation.root,
-    operation: operation.operation,
-    conflicts: operation.conflicts.length,
-  });
-  return {
-    sourceTabId: sourceTab.id,
-    tab: tabMeta(targetTab),
-    tabs: listTabs(),
-    operation: {
-      operation: operation.operation,
-      root: operation.root,
-      branch: operation.branch,
-      conflicts: operation.conflicts.map(({ path: conflictPath, status }) => ({ path: conflictPath, status })),
-    },
-  };
-}
-
-async function gitOperationStageFile(cwd, body = {}) {
-  const root = await getGitRoot(cwd);
-  const kind = await detectGitOperationKind(root);
-  if (!kind) throw makeHttpError(409, "No git operation is in progress");
-  const rel = normalizeGitRelativePath(root, body.path);
-  const payload = await runGuardedGitMutation(["add", "--", rel], { cwd: root, label: `git add -- ${rel}` });
-  if (payload.data) payload.data.root = root;
-  if (payload.ok) payload.data.operation = await readGitOperationSnapshot(root);
-  return payload;
-}
-
-async function gitOperationAction(cwd, action, body = {}) {
-  const root = await getGitRoot(cwd);
-  const kind = await detectGitOperationKind(root);
-  if (!kind) throw makeHttpError(409, "No git operation is in progress");
-  if (kind === "bisect") throw makeHttpError(409, "Bisect is controlled through /api/git-operation/bisect");
-  const commands = gitOperationCommands(kind);
-
-  let args;
-  if (action === "continue") {
-    const porcelainText = await runGitReadCommand(root, ["status", "--porcelain=2"], { maxOutputLength: 120_000 });
-    if (parseGitConflictEntries(porcelainText).length > 0) {
-      return { ok: false, code: "UNMERGED_PATHS", error: "Unmerged paths remain. Resolve and stage every conflicted file before continuing." };
-    }
-    args = commands.continue;
-  } else if (action === "skip") {
-    if (!commands.skip) throw makeHttpError(409, `git ${kind} does not support skip`);
-    args = commands.skip;
-  } else if (action === "abort") {
-    requireConfirmed(body, `Aborting the ${kind} operation discards its in-progress state and`);
-    args = commands.abort;
-  } else {
-    throw makeHttpError(400, "Unknown git operation action");
-  }
-
-  const payload = await runGuardedGitMutation(args, { cwd: root, timeoutMs: GIT_PULL_TIMEOUT_MS });
-  if (payload.data) {
-    payload.data.root = root;
-    payload.data.kind = kind;
-  }
-  if (payload.ok) payload.data.operation = await readGitOperationSnapshot(root);
-  else applyGitSyncFailure(payload);
-  return payload;
-}
-
-const GIT_BISECT_VERDICTS = new Set(["good", "bad", "old", "new", "skip", "reset"]);
-
-async function gitBisectAction(cwd, body = {}) {
-  const verdict = String(body.verdict || "").trim().toLowerCase();
-  if (!GIT_BISECT_VERDICTS.has(verdict)) throw makeHttpError(400, "verdict must be one of good, bad, old, new, skip, reset");
-  const root = await getGitRoot(cwd);
-  const kind = await detectGitOperationKind(root);
-  if (kind !== "bisect") throw makeHttpError(409, "No git bisect is in progress");
-  if (verdict === "reset") requireConfirmed(body, "Resetting the bisect session");
-  const payload = await runGuardedGitMutation(["bisect", verdict], { cwd: root });
-  if (payload.data) payload.data.root = root;
-  if (payload.ok) payload.data.operation = await readGitOperationSnapshot(root);
-  return payload;
-}
-
-// ---- Stash ----
-
-function cleanGitStashRef(value) {
-  const ref = String(value || "").trim();
-  if (!/^stash@\{\d{1,4}\}$/.test(ref)) throw makeHttpError(400, "stash ref must look like stash@{0}");
-  return ref;
-}
-
-async function readGitStashes(cwd) {
-  const root = await getGitRoot(cwd);
-  const out = await runGitReadCommand(root, ["stash", "list", "--format=%gd%x09%at%x09%gs"], { maxOutputLength: 120_000 });
-  const stashes = out
-    .split(/\r?\n/)
-    .filter(Boolean)
-    .map((line) => {
-      const [ref, epoch, ...subject] = line.split("\t");
-      return { ref: ref || "", epochSeconds: Number.parseInt(epoch || "0", 10) || 0, subject: subject.join("\t") };
-    })
-    .filter((entry) => entry.ref);
-  return { root, stashes, generatedAt: new Date().toISOString() };
-}
-
-async function readGitStashPreview(cwd, requestedRef) {
-  const root = await getGitRoot(cwd);
-  const ref = cleanGitStashRef(requestedRef);
-  const [statText, patchText] = await Promise.all([
-    runGitReadCommand(root, ["stash", "show", "--include-untracked", "--stat", ref], { maxOutputLength: 120_000 }).catch((error) => `(${sanitizeError(error)})`),
-    runGitReadCommand(root, ["stash", "show", "--include-untracked", "-p", ref], { maxOutputLength: GIT_STASH_PATCH_MAX_OUTPUT }).catch(() => ""),
-  ]);
-  return { root, ref, stat: statText.trimEnd(), patch: patchText.trimEnd() };
-}
-
-async function saveGitStash(cwd, body = {}) {
-  const root = await getGitRoot(cwd);
-  const args = ["stash", "push"];
-  if (body.includeUntracked === true) args.push("--include-untracked");
-  if (body.message) args.push("-m", cleanGitCommitMessageInput(body.message));
-  const payload = await runGuardedGitMutation(args, { cwd: root });
-  if (payload.data) payload.data.root = root;
-  if (payload.ok) payload.data.stashes = (await readGitStashes(root)).stashes;
-  return payload;
-}
-
-async function applyGitStash(cwd, body = {}, { pop = false } = {}) {
-  const root = await getGitRoot(cwd);
-  const ref = cleanGitStashRef(body.ref);
-  const payload = await runGuardedGitMutation(["stash", pop ? "pop" : "apply", ref], { cwd: root });
-  if (payload.data) {
-    payload.data.root = root;
-    payload.data.ref = ref;
-  }
-  if (payload.ok) payload.data.stashes = (await readGitStashes(root)).stashes;
-  else if (!payload.code && /conflict/i.test(payload.error || "")) {
-    payload.code = "CONFLICTS";
-    payload.hint = pop
-      ? "The stash conflicts with the working tree; git kept the stash entry. Resolve the conflicts, then drop the stash manually."
-      : "The stash conflicts with the working tree. Resolve the conflicts or reset the working tree.";
-  }
-  return payload;
-}
-
-async function dropGitStash(cwd, body = {}) {
-  requireConfirmed(body, "Dropping a stash permanently deletes it and");
-  const root = await getGitRoot(cwd);
-  const ref = cleanGitStashRef(body.ref);
-  const payload = await runGuardedGitMutation(["stash", "drop", ref], { cwd: root });
-  if (payload.data) {
-    payload.data.root = root;
-    payload.data.ref = ref;
-  }
-  if (payload.ok) payload.data.stashes = (await readGitStashes(root)).stashes;
-  return payload;
-}
-
-// ---- File-level staging ----
-
-async function stageGitFile(cwd, body = {}) {
-  const root = await getGitRoot(cwd);
-  const rel = normalizeGitRelativePath(root, body.path);
-  const payload = await runGuardedGitMutation(["add", "--", rel], { cwd: root, label: `git add -- ${rel}` });
-  if (payload.data) payload.data.root = root;
-  if (payload.ok) payload.data.changes = await readGitChanges(root);
-  return payload;
-}
-
-async function unstageGitFile(cwd, body = {}) {
-  const root = await getGitRoot(cwd);
-  const rel = normalizeGitRelativePath(root, body.path);
-  let payload = await runGuardedGitMutation(["restore", "--staged", "--", rel], { cwd: root, label: `git restore --staged -- ${rel}` });
-  if (!payload.ok && /HEAD/.test(payload.error || "")) {
-    // Unborn branch (no commit yet): restore --staged has no HEAD to restore from.
-    payload = await runGuardedGitMutation(["rm", "--cached", "-r", "--", rel], { cwd: root, label: `git rm --cached -- ${rel}` });
-  }
-  if (payload.data) payload.data.root = root;
-  if (payload.ok) payload.data.changes = await readGitChanges(root);
-  return payload;
-}
-
-async function stageAllGitChanges(cwd) {
-  const root = await getGitRoot(cwd);
-  const payload = await gitAddAllPayload(root);
-  if (payload.data) payload.data.root = root;
-  return payload;
-}
-
-async function unstageAllGitChanges(cwd) {
-  const root = await getGitRoot(cwd);
-  let payload = await runGuardedGitMutation(["restore", "--staged", "--", "."], { cwd: root, label: "git restore --staged -- ." });
-  if (!payload.ok && /HEAD/.test(payload.error || "")) {
-    payload = await runGuardedGitMutation(["rm", "--cached", "-r", "--", "."], { cwd: root, label: "git rm --cached -r -- ." });
-  }
-  if (payload.data) payload.data.root = root;
-  return payload;
-}
-
-async function discardGitFile(cwd, body = {}) {
-  requireConfirmed(body, "Discarding file changes is destructive and");
-  const root = await getGitRoot(cwd);
-  const rel = normalizeGitRelativePath(root, body.path);
-  const payload = await runGuardedGitMutation(["restore", "--", rel], { cwd: root, label: `git restore -- ${rel}` });
-  if (payload.data) payload.data.root = root;
-  if (payload.ok) payload.data.changes = await readGitChanges(root);
-  return payload;
-}
-
-async function deleteGitUntrackedFile(cwd, body = {}) {
-  requireConfirmed(body, "Deleting an untracked file is destructive and");
-  const root = await getGitRoot(cwd);
-  const rel = normalizeGitRelativePath(root, body.path);
-  const listed = await runGitReadCommand(root, ["ls-files", "--others", "--exclude-standard", "--", rel], { maxOutputLength: 120_000 });
-  const files = listed.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-  if (!files.includes(rel)) throw makeHttpError(409, `Not an untracked file: ${rel}`);
-  await rm(resolveGitRelativePath(root, rel));
-  return { ok: true, data: { root, path: rel, deleted: true, changes: await readGitChanges(root) } };
-}
-
-// ---- Undo / recovery ----
-
-async function readGitUndoState(cwd) {
-  const root = await getGitRoot(cwd);
-  const [parentProbe, porcelainText, upstream, operation, lastLog] = await Promise.all([
-    runCommand("git", ["rev-parse", "--verify", "--quiet", "HEAD~1"], { cwd: root, timeoutMs: 2000 }),
-    runGitReadCommand(root, ["status", "--porcelain=2", "--branch"], { maxOutputLength: 120_000 }),
-    gitUpstreamRef(root),
-    detectGitOperationKind(root),
-    runGitReadCommand(root, ["log", "-1", "--format=%h%x09%s"], { maxOutputLength: 10_000 }).catch(() => ""),
-  ]);
-  const summary = summarizeGitPorcelainStatus(porcelainText);
-  const hasParent = parentProbe.exitCode === 0;
-  const [lastHash = "", ...subjectParts] = lastLog.trim().split("\t");
-  const lastSubject = subjectParts.join("\t");
-  // With an upstream, "unpushed" means ahead > 0; without one nothing has been
-  // published through this branch's tracking ref.
-  const unpushed = upstream ? summary.ahead > 0 : true;
-  return {
-    root,
-    hasParent,
-    upstream,
-    operation,
-    summary,
-    lastCommit: lastHash ? { hash: lastHash, subject: lastSubject } : null,
-    canUndoLastCommit: hasParent && unpushed && !operation,
-    canAmendMessage: Boolean(lastHash) && unpushed && !operation && summary.staged === 0,
-  };
-}
-
-async function undoLastGitCommit(cwd, body = {}) {
-  requireConfirmed(body, "Undoing the last commit rewrites HEAD and");
-  const state = await readGitUndoState(cwd);
-  if (!state.hasParent) throw makeHttpError(409, "HEAD has no parent commit to undo to");
-  if (state.operation) throw makeHttpError(409, `Cannot undo during a ${state.operation} operation`);
-  if (!state.canUndoLastCommit) throw makeHttpError(409, "The last commit is already pushed to the upstream; undoing it would rewrite published history");
-  const payload = await runGuardedGitMutation(["reset", "--soft", "HEAD~1"], { cwd: state.root });
-  if (payload.data) {
-    payload.data.root = state.root;
-    payload.data.undoneCommit = state.lastCommit;
-    payload.data.restoreCommand = "git reset --soft ORIG_HEAD";
-  }
-  if (payload.ok) payload.data.changes = await readGitChanges(state.root);
-  return payload;
-}
-
-async function amendLastGitCommitMessage(cwd, body = {}) {
-  requireConfirmed(body, "Amending the last commit rewrites HEAD and");
-  const message = cleanGitCommitMessageInput(body.message);
-  const state = await readGitUndoState(cwd);
-  if (!state.lastCommit) throw makeHttpError(409, "There is no commit to amend");
-  if (state.operation) throw makeHttpError(409, `Cannot amend during a ${state.operation} operation`);
-  if (state.summary.staged > 0) throw makeHttpError(409, "Staged changes present; amending now would silently add them to the last commit. Unstage or commit them first.");
-  if (!state.canAmendMessage) throw makeHttpError(409, "The last commit is already pushed to the upstream; amending it would rewrite published history");
-  const payload = await runGuardedGitMutation(["commit", "--amend", "-m", message], { cwd: state.root, label: "git commit --amend -m <message>" });
-  if (payload.data) {
-    payload.data.root = state.root;
-    payload.data.previousCommit = state.lastCommit;
-    payload.data.restoreCommand = "git reset --soft ORIG_HEAD";
-  }
-  return payload;
-}
-
-async function readGitReflog(cwd) {
-  const root = await getGitRoot(cwd);
-  const out = await runGitReadCommand(root, ["reflog", "-n", "20", "--format=%h%x09%gd%x09%cI%x09%gs"], { maxOutputLength: 120_000 });
-  const entries = out
-    .split(/\r?\n/)
-    .filter(Boolean)
-    .map((line) => {
-      const [hash, selector, date, ...subject] = line.split("\t");
-      return { hash: hash || "", selector: selector || "", date: date || "", subject: subject.join("\t") };
-    });
-  return { root, entries, generatedAt: new Date().toISOString() };
-}
-
-// ---- Submodules ----
-
-async function readGitSubmodules(cwd) {
-  const root = await getGitRoot(cwd);
-  if (!(await regularFileExists(path.join(root, ".gitmodules")))) {
-    return { root, hasSubmodules: false, submodules: [], dirty: 0 };
-  }
-  const out = await runGitReadCommand(root, ["submodule", "status", "--recursive"], { timeoutMs: 30_000, maxOutputLength: 200_000 });
-  const submodules = out
-    .split(/\r?\n/)
-    .filter(Boolean)
-    .map((line) => {
-      const flag = line[0] || " ";
-      const rest = line.slice(1).trim();
-      const firstSpace = rest.indexOf(" ");
-      const sha = firstSpace === -1 ? rest : rest.slice(0, firstSpace);
-      const remainder = firstSpace === -1 ? "" : rest.slice(firstSpace + 1);
-      const describeMatch = remainder.match(/^(.*?)( \([^)]*\))?$/);
-      return {
-        sha,
-        path: (describeMatch?.[1] ?? remainder).trim(),
-        describe: describeMatch?.[2] ? describeMatch[2].trim().replace(/^\(|\)$/g, "") : "",
-        state: flag === "-" ? "uninitialized" : flag === "+" ? "out-of-sync" : flag === "U" ? "conflicts" : "clean",
-      };
-    });
-  return { root, hasSubmodules: true, submodules, dirty: submodules.filter((item) => item.state !== "clean").length };
-}
-
-async function updateGitSubmodules(cwd, body = {}) {
-  requireConfirmed(body, "Recursively updating submodules can check out new commits and");
-  const root = await getGitRoot(cwd);
-  const payload = await runGuardedGitMutation(["submodule", "update", "--init", "--recursive"], { cwd: root, timeoutMs: GIT_PULL_TIMEOUT_MS });
-  if (payload.data) payload.data.root = root;
-  if (payload.ok) payload.data.submodules = (await readGitSubmodules(root)).submodules;
-  return payload;
-}
-
-// ---- Tags ----
-
-function cleanGitTagName(value) {
-  const name = String(value || "").trim();
-  if (!name || name.includes("\0") || name.includes("@{") || name.startsWith("-") || name.startsWith("/") || /\s/.test(name)) {
-    throw makeHttpError(400, "Invalid tag name");
-  }
-  return name;
-}
-
-async function validateGitTagName(root, name) {
-  const result = await runCommand("git", ["check-ref-format", `refs/tags/${name}`], { cwd: root, timeoutMs: 5000 });
-  if (result.exitCode !== 0) throw makeHttpError(400, `Invalid tag name: ${name}`);
-}
-
-async function readGitTags(cwd) {
-  const root = await getGitRoot(cwd);
-  const [headOut, recentOut] = await Promise.all([
-    runGitReadCommand(root, ["tag", "--points-at", "HEAD", "--sort=-creatordate"], { maxOutputLength: 60_000 }).catch(() => ""),
-    runGitReadCommand(
-      root,
-      ["for-each-ref", "refs/tags", "--sort=-creatordate", "--count=30", "--format=%(refname:short)%09%(objecttype)%09%(objectname:short)%09%(*objectname:short)%09%(creatordate:iso8601)%09%(subject)"],
-      { maxOutputLength: 120_000 },
-    ).catch(() => ""),
-  ]);
-  const headTags = headOut.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-  const tags = recentOut
-    .split(/\r?\n/)
-    .filter(Boolean)
-    .map((line) => {
-      const [name, objectType, objectName, target, date, ...subject] = line.split("\t");
-      return {
-        name: name || "",
-        annotated: objectType === "tag",
-        target: (objectType === "tag" ? target : objectName) || "",
-        date: date || "",
-        subject: subject.join("\t"),
-        atHead: headTags.includes(name || ""),
-      };
-    });
-  return { root, headTags, tags, generatedAt: new Date().toISOString() };
-}
-
-async function createGitTag(cwd, body = {}) {
-  requireConfirmed(body, "Creating a tag");
-  const root = await getGitRoot(cwd);
-  const name = cleanGitTagName(body.name);
-  await validateGitTagName(root, name);
-  const message = cleanGitCommitMessageInput(body.message || name);
-  const payload = await runGuardedGitMutation(["tag", "-a", name, "-m", message], { cwd: root, label: `git tag -a ${name} -m <message>` });
-  if (payload.data) {
-    payload.data.root = root;
-    payload.data.tag = name;
-    // Tags never leave the machine implicitly; pushing stays a separate,
-    // explicit action.
-    payload.data.pushCommand = `git push ${"origin"} ${name}`;
-  }
-  if (payload.ok) payload.data.tags = (await readGitTags(root)).tags;
-  return payload;
-}
-
-// ---- Signing diagnostics ----
-
-async function readGitSigningDiagnostics(cwd) {
-  const root = await getGitRoot(cwd);
-  const readConfig = async (args) => {
-    const result = await runCommand("git", ["config", ...args], { cwd: root, timeoutMs: 2000 });
-    return result.exitCode === 0 ? result.stdout.trim() : "";
-  };
-  const [gpgSign, gpgFormat, signingKey, lastLog] = await Promise.all([
-    readConfig(["--bool", "--get", "commit.gpgsign"]),
-    readConfig(["--get", "gpg.format"]),
-    readConfig(["--get", "user.signingkey"]),
-    runGitReadCommand(root, ["log", "-1", "--format=%h%x09%G?%x09%GS"], { maxOutputLength: 10_000 }).catch(() => ""),
-  ]);
-  const [lastHash = "", signState = "", signer = ""] = lastLog.trim().split("\t");
-  const commitSignRequired = gpgSign.toLowerCase() === "true";
-  const normalizedState = signState.trim().toUpperCase();
-  const mismatch = commitSignRequired && (!normalizedState || normalizedState === "N" || normalizedState === "E");
-  const suggestions = [];
-  if (mismatch) {
-    if (!signingKey) suggestions.push({ label: "Set your signing key (repo only)", command: "git config user.signingkey <KEY-ID>" });
-    suggestions.push({ label: "Re-sign the last commit", command: "git commit --amend --no-edit -S" });
-    suggestions.push({ label: "Disable signing for this repository", command: "git config commit.gpgsign false" });
-  }
-  return {
-    root,
-    commitSignRequired,
-    gpgFormat: gpgFormat || "(default: gpg)",
-    signingKey: signingKey || "(not set)",
-    lastCommit: lastHash ? { hash: lastHash, signState: normalizedState || "N", signer } : null,
-    mismatch,
-    suggestions,
-  };
-}
-
-function gitWorkflowMessageCwd(root, cwd) {
-  const repositoryRoot = path.resolve(root);
-  const suppliedCwd = path.resolve(String(cwd || repositoryRoot));
-  if (suppliedCwd !== repositoryRoot && !pathInside(repositoryRoot, suppliedCwd)) {
-    throw new Error(`Git workflow cwd must stay inside repository root: ${suppliedCwd}`);
-  }
-  return repositoryRoot;
-}
-
-function gitWorkflowMessageFileMeta(root, messageCwd, filePath) {
-  return {
-    path: filePath,
-    relativePath: path.relative(messageCwd, filePath).split(path.sep).join("/"),
-    repoRelativePath: path.relative(root, filePath).split(path.sep).join("/"),
-  };
-}
-
-function commitMessagePaths(baseDir) {
-  return {
-    shortPath: path.join(baseDir, "dev", "COMMIT", "staged-commit-short.txt"),
-    longPath: path.join(baseDir, "dev", "COMMIT", "staged-commit-long.txt"),
-    branchPath: path.join(baseDir, "dev", "COMMIT", "staged-branch-name.txt"),
-  };
-}
-
-function assertGitWorkflowArtifactGenerationReady(generationId, generation, kind) {
-  if (!generationId) return;
-  if (!generation || generation.id !== generationId || generation.kind !== kind) {
-    throw new Error(`This ${kind} generation is no longer active. Regenerate the artifact.`);
-  }
-  if (!generation.terminal) throw new Error(`The correlated ${kind} generation is still running.`);
-  if (!generation.successful) throw new Error(`The correlated ${kind} generation did not finish successfully. Regenerate the artifact.`);
-}
-
-async function readGitWorkflowBranchName(cwd, { generationId = "", generation = null } = {}) {
-  assertGitWorkflowArtifactGenerationReady(generationId, generation, "branch");
-  const root = await getGitRoot(cwd);
-  const messageCwd = gitWorkflowMessageCwd(root, cwd);
-  const { branchPath } = commitMessagePaths(messageCwd);
-  try {
-    const [branchText, branchStat] = await Promise.all([readFile(branchPath, "utf8"), stat(branchPath)]);
-    const branch = branchText.split(/\r?\n/).find((line) => line.trim())?.trim() || "";
-    if (!branch) throw new Error(`${branchPath} is empty`);
-    const branchFile = gitWorkflowMessageFileMeta(root, messageCwd, branchPath);
-    return {
-      root,
-      cwd: messageCwd,
-      branchPath,
-      branchRelativePath: branchFile.relativePath,
-      branchRepoRelativePath: branchFile.repoRelativePath,
-      branch,
-      mtimeMs: branchStat.mtimeMs,
-      ctimeMs: branchStat.ctimeMs,
-      ino: String(branchStat.ino),
-    };
-  } catch (error) {
-    throw new Error(`Missing generated branch name file ${branchPath}. Run /git-branch-name first. ${sanitizeError(error)}`);
-  }
-}
-
-const GIT_WORKFLOW_MESSAGE_PAIR_SETTLE_MS = 80;
-
-function gitWorkflowMessagePendingPayload(root, messageCwd, paths, generationId, reason, details = {}) {
-  const shortFile = gitWorkflowMessageFileMeta(root, messageCwd, paths.shortPath);
-  const longFile = gitWorkflowMessageFileMeta(root, messageCwd, paths.longPath);
-  return {
-    ready: false,
-    generationId,
-    reason,
-    root,
-    cwd: messageCwd,
-    shortPath: paths.shortPath,
-    longPath: paths.longPath,
-    shortRelativePath: shortFile.relativePath,
-    longRelativePath: longFile.relativePath,
-    shortRepoRelativePath: shortFile.repoRelativePath,
-    longRepoRelativePath: longFile.repoRelativePath,
-    ...details,
-  };
-}
-
-async function readGitWorkflowMessages(cwd, { generationId = "", generation = null } = {}) {
-  const root = await getGitRoot(cwd);
-  const messageCwd = gitWorkflowMessageCwd(root, cwd);
-  const paths = commitMessagePaths(messageCwd);
-  if (generationId && (!generation || generation.id !== generationId || generation.kind !== "commit" || generation.cwd !== messageCwd)) {
-    return gitWorkflowMessagePendingPayload(root, messageCwd, paths, generationId, "This commit-message generation is no longer active. Regenerate the message files.", { expired: true });
-  }
-  if (generationId && !generation.terminal) {
-    return gitWorkflowMessagePendingPayload(root, messageCwd, paths, generationId, "The correlated commit-message generation is still running.", { running: true });
-  }
-  if (generationId && !generation.successful) {
-    return gitWorkflowMessagePendingPayload(root, messageCwd, paths, generationId, "The correlated commit-message generation did not finish successfully. Regenerate the message files.", { expired: true });
-  }
-  try {
-    let pair = await readStableGitMessageArtifactPair(paths);
-    if (generationId) {
-      const readiness = gitMessageArtifactPairReadiness(generation.baseline, pair);
-      if (!readiness.ready) return gitWorkflowMessagePendingPayload(root, messageCwd, paths, generationId, readiness.reason, readiness);
-      await new Promise((resolve) => setTimeout(resolve, GIT_WORKFLOW_MESSAGE_PAIR_SETTLE_MS));
-      const settledPair = await readStableGitMessageArtifactPair(paths);
-      if (!sameGitMessageArtifactPair(pair, settledPair)) {
-        return gitWorkflowMessagePendingPayload(root, messageCwd, paths, generationId, "Generated commit message files are still settling.");
-      }
-      const settledReadiness = gitMessageArtifactPairReadiness(generation.baseline, settledPair);
-      if (!settledReadiness.ready) return gitWorkflowMessagePendingPayload(root, messageCwd, paths, generationId, settledReadiness.reason, settledReadiness);
-      pair = settledPair;
-    }
-    if (!pair.short.exists || !pair.long.exists) {
-      throw new Error(`Missing ${!pair.short.exists ? paths.shortPath : paths.longPath}`);
-    }
-    const shortFile = gitWorkflowMessageFileMeta(root, messageCwd, paths.shortPath);
-    const longFile = gitWorkflowMessageFileMeta(root, messageCwd, paths.longPath);
-    return {
-      ready: true,
-      generationId,
-      root,
-      cwd: messageCwd,
-      shortPath: paths.shortPath,
-      longPath: paths.longPath,
-      shortRelativePath: shortFile.relativePath,
-      longRelativePath: longFile.relativePath,
-      shortRepoRelativePath: shortFile.repoRelativePath,
-      longRepoRelativePath: longFile.repoRelativePath,
-      short: pair.short.text.trimEnd(),
-      long: pair.long.text.trimEnd(),
-      shortMtimeMs: Number(BigInt(pair.short.mtimeNs) / 1_000_000n),
-      longMtimeMs: Number(BigInt(pair.long.mtimeNs) / 1_000_000n),
-      shortSha256: pair.short.sha256,
-      longSha256: pair.long.sha256,
-    };
-  } catch (error) {
-    throw new Error(`Missing or unstable generated commit message files in ${path.join(messageCwd, "dev", "COMMIT")}. Run /git-staged-msg first. ${sanitizeError(error)}`);
-  }
-}
-
-function cleanGitBranchName(value) {
-  const branch = String(value || "").trim();
-  if (!branch) throw new Error("branch is required");
-  if (branch.includes("\0") || branch.includes("@{") || branch.startsWith("-") || branch.startsWith("/")) throw new Error("invalid branch name");
-  return branch;
-}
-
-function cleanGitCommitMessageInput(value) {
-  const message = String(value || "").replace(/\r\n?/g, "\n").trim();
-  if (!message) throw new Error("commit message is required");
-  if (message.includes("\0")) throw new Error("commit message contains a NUL byte");
-  if (message.length > 10000) throw new Error("commit message is too long");
-  return message;
-}
-
-function parseGitPorcelainZEntries(text) {
-  const fields = String(text || "").split("\0").filter(Boolean);
-  const entries = [];
-  for (let index = 0; index < fields.length; index++) {
-    const field = fields[index];
-    if (field.length < 4) {
-      entries.push({ x: "", y: "", path: field, unsupported: true });
-      continue;
-    }
-    const x = field[0] || " ";
-    const y = field[1] || " ";
-    const filePath = field.slice(3);
-    const entry = { x, y, path: filePath };
-    if ((x === "R" || x === "C") && index + 1 < fields.length) entry.oldPath = fields[++index];
-    entries.push(entry);
-  }
-  return entries;
-}
-
-function gitWorkflowDefaultCommitAction(entry) {
-  if (!entry || entry.y !== " ") return "";
-  if (entry.x === "A") return "created";
-  if (entry.x === "M" || entry.x === "T") return "updated";
-  if (entry.x === "D") return "deleted";
-  return "";
-}
-
-function formatGitWorkflowDefaultCommitPath(filePath) {
-  return String(filePath || "").replace(/[\0\r\n\t]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 4000);
-}
-
-async function readGitWorkflowDefaultCommitMessage(cwd) {
-  const root = await getGitRoot(cwd);
-  const statusText = await runGitReadCommand(root, ["status", "--porcelain=v1", "-z", "--untracked-files=all"], { maxOutputLength: 120_000 });
-  const entries = parseGitPorcelainZEntries(statusText);
-  const empty = (reason, extra = {}) => ({ root, message: "", reason, ...extra });
-  if (entries.length === 0) return empty("No changed files are ready for a default commit message.");
-  if (entries.length !== 1) return empty(`Expected exactly one changed file for a default commit message; found ${entries.length}.`);
-  const [entry] = entries;
-  const action = gitWorkflowDefaultCommitAction(entry);
-  const displayPath = formatGitWorkflowDefaultCommitPath(entry.path);
-  if (!action || !displayPath) {
-    return empty("The only changed file is not a staged created, updated, or deleted file.", { path: entry.path || "" });
-  }
-  return {
-    root,
-    message: `${action} ${displayPath}`,
-    action,
-    path: entry.path,
-  };
-}
-
-function cleanGitHubUsername(value) {
-  const username = String(value || "").trim().replace(/^@+/, "");
-  if (!username) throw new Error("GitHub username is required");
-  if (username.length > 39 || !/^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$/.test(username) || username.includes("--")) {
-    throw new Error("Invalid GitHub username");
-  }
-  return username;
-}
-
-function cleanGitHubRepoName(value) {
-  let repoName = String(value || "").trim();
-  const githubUrlMatch = repoName.match(/github\.com[:/][^/\s]+\/([^/\s]+?)(?:\.git)?\/?$/i);
-  if (githubUrlMatch) repoName = githubUrlMatch[1];
-  if (repoName.includes("/")) repoName = repoName.split("/").filter(Boolean).pop() || "";
-  repoName = repoName.replace(/\.git$/i, "");
-  if (!repoName) throw new Error("GitHub repository name is required");
-  if (repoName.length > 100 || repoName === "." || repoName === ".." || !/^[A-Za-z0-9._-]+$/.test(repoName)) {
-    throw new Error("Invalid GitHub repository name");
-  }
-  return repoName;
-}
-
-function gitHubOriginUrl(username, repoName) {
-  return `https://github.com/${cleanGitHubUsername(username)}/${cleanGitHubRepoName(repoName)}.git`;
-}
-
-function defaultGitRepoNameFromRoot(root) {
-  try {
-    return cleanGitHubRepoName(path.basename(root));
-  } catch {
-    return "new-repo";
-  }
-}
-
-async function ensureOutsideGitRepository(cwd) {
-  const result = await runCommand("git", ["rev-parse", "--show-toplevel"], { cwd, timeoutMs: 2000 });
-  if (result.exitCode === 0 && result.stdout.trim()) throw new Error(`Already inside a git repository: ${path.resolve(result.stdout.trim())}`);
-}
-
-async function regularFileExists(filePath) {
-  try {
-    return (await stat(filePath)).isFile();
-  } catch (error) {
-    if (error?.code === "ENOENT") return false;
-    throw error;
-  }
-}
-
-async function detectRepositoryStack(root) {
-  let names = new Set();
-  try {
-    names = new Set(await readdir(root));
-  } catch {
-    return "";
-  }
-  const detected = [];
-  if (names.has("package.json")) {
-    try {
-      const manifest = JSON.parse(await readFile(path.join(root, "package.json"), "utf8"));
-      const deps = { ...(manifest.dependencies || {}), ...(manifest.devDependencies || {}) };
-      if (deps.next) detected.push("Next.js");
-      else if (deps.react || deps.vite) detected.push("React / Vite");
-      else detected.push("Node.js / TypeScript");
-      if (deps.typescript || names.has("tsconfig.json")) detected.push("TypeScript");
-    } catch {
-      detected.push("Node.js");
-    }
-  }
-  if (names.has("pyproject.toml") || names.has("requirements.txt") || names.has("setup.py")) detected.push("Python");
-  if (names.has("manage.py")) detected.push("Django");
-  if (names.has("Cargo.toml")) detected.push("Rust");
-  if (names.has("go.mod")) detected.push("Go");
-  if (names.has("pom.xml") || names.has("build.gradle") || names.has("build.gradle.kts")) detected.push("Java / Gradle");
-  if (names.has("Dockerfile") || names.has("docker-compose.yml") || names.has("compose.yml")) detected.push("Docker");
-  return [...new Set(detected)].join(", ");
-}
-
-async function initialRepositoryFilesStatus(cwd) {
-  const root = await getGitRoot(cwd);
-  const readmePath = path.join(root, "README.md");
-  const gitignorePath = path.join(root, ".gitignore");
-  const [readmeExists, gitignoreExists, detectedStack] = await Promise.all([
-    regularFileExists(readmePath),
-    regularFileExists(gitignorePath),
-    detectRepositoryStack(root),
-  ]);
-  return { root, readmePath, gitignorePath, readmeExists, gitignoreExists, detectedStack };
-}
-
-function gitignoreLinesForStack(stackInput, detectedStack = "") {
-  const stack = `${stackInput || ""} ${detectedStack || ""}`.toLowerCase();
-  const sections = [
-    ["# OS / editors", ".DS_Store", "Thumbs.db", ".idea/", ".vscode/", "*.swp", "*.swo"],
-    ["# Local env / secrets", ".env", ".env.*", "!.env.example", "*.local"],
-    ["# Logs / temp", "*.log", "logs/", "tmp/", "temp/", ".cache/"],
-  ];
-  if (/node|npm|pnpm|yarn|bun|typescript|javascript|react|vite|next/.test(stack)) {
-    sections.push(["# Node / frontend", "node_modules/", "dist/", "build/", ".next/", "out/", "coverage/", ".turbo/", ".vite/", "*.tsbuildinfo"]);
-  }
-  if (/python|django|fastapi|flask/.test(stack)) {
-    sections.push(["# Python", "__pycache__/", "*.py[cod]", ".pytest_cache/", ".ruff_cache/", ".mypy_cache/", ".venv/", "venv/", "htmlcov/", "*.egg-info/"]);
-  }
-  if (/rust|cargo/.test(stack)) sections.push(["# Rust", "target/"]);
-  if (/\bgo\b|golang/.test(stack)) sections.push(["# Go", "bin/", "*.test", "coverage.out"]);
-  if (/java|gradle|maven|kotlin/.test(stack)) sections.push(["# Java / JVM", "target/", "build/", ".gradle/", "*.class"]);
-  if (/docker|container/.test(stack)) sections.push(["# Docker", ".docker/", "docker-compose.override.yml"]);
-  if (sections.length === 3) {
-    sections.push(["# Common dependency / build outputs", "node_modules/", ".venv/", "venv/", "target/", "dist/", "build/", "coverage/", "vendor/", "*.tmp"]);
-  }
-  const seen = new Set();
-  const lines = [];
-  for (const section of sections) {
-    lines.push(section[0]);
-    for (const pattern of section.slice(1)) {
-      if (seen.has(pattern)) continue;
-      seen.add(pattern);
-      lines.push(pattern);
-    }
-    lines.push("");
-  }
-  return `${lines.join("\n").replace(/\n{3,}/g, "\n\n").trim()}\n`;
-}
-
-async function prepareInitialRepositoryFiles(cwd, { repoName: repoNameInput, stack = "" } = {}) {
-  const before = await initialRepositoryFilesStatus(cwd);
-  const repoName = repoNameInput ? cleanGitHubRepoName(repoNameInput) : defaultGitRepoNameFromRoot(before.root);
-  if (await regularFileExists(before.readmePath)) {
-    // Explicit pre-add check: keep existing README.md unchanged.
-  } else {
-    await writeFile(before.readmePath, `# ${repoName}\n\nInitialized by Pi Web UI.\n`, "utf8");
-  }
-  let gitignoreCreated = false;
-  let gitignoreSource = before.gitignoreExists ? "existing" : "fallback";
-  if (!(await regularFileExists(before.gitignorePath))) {
-    await writeFile(before.gitignorePath, gitignoreLinesForStack(stack, before.detectedStack), "utf8");
-    gitignoreCreated = true;
-  }
-  const payload = gitMutationPayload(await runGitMutationCommand(["add", "--", "README.md", ".gitignore"], { cwd: before.root, label: "git add README.md .gitignore" }));
-  if (payload.data) {
-    payload.data.root = before.root;
-    payload.data.readme = { path: before.readmePath, exists: true, created: !before.readmeExists };
-    payload.data.gitignore = { path: before.gitignorePath, exists: true, created: gitignoreCreated, source: gitignoreSource };
-    payload.data.detectedStack = before.detectedStack;
-    payload.data.stack = stack;
-    payload.data.stdout = [
-      before.readmeExists ? `Using existing ${before.readmePath}` : `Created ${before.readmePath}`,
-      before.gitignoreExists ? `Using existing ${before.gitignorePath}` : `Created ${before.gitignorePath} (${gitignoreSource})`,
-      payload.data.stdout?.trimEnd(),
-    ].filter(Boolean).join("\n");
-  }
-  return payload;
-}
-
-async function validateGitBranchName(root, branch) {
-  const result = await runGitWorkflowCommand(["check-ref-format", "--branch", branch], { cwd: root, timeoutMs: 5000 });
-  if (result.exitCode !== 0 || result.timedOut || result.cancelled || result.error) {
-    throw new Error((result.stderr || result.stdout || result.error || `Invalid branch name: ${branch}`).trim());
-  }
-}
-
-async function currentGitBranch(root) {
-  const result = await runGitWorkflowCommand(["branch", "--show-current"], { cwd: root, timeoutMs: 5000 });
-  const branch = result.stdout.trim();
-  if (result.exitCode !== 0 || !branch) throw new Error((result.stderr || result.stdout || "Cannot determine current git branch").trim());
-  return branch;
-}
-
-async function currentGitBranchForPicker(root) {
-  try {
-    return (await runGitReadCommand(root, ["branch", "--show-current"], { timeoutMs: 5000, maxOutputLength: 10_000 })).trim();
-  } catch {
-    return "";
-  }
-}
-
-function normalizeGitBranchList(branchText, current = "") {
-  const seen = new Set();
-  const branches = [];
-  for (const line of String(branchText || "").split(/\r?\n/)) {
-    const name = line.trim();
-    if (!name || seen.has(name)) continue;
-    seen.add(name);
-    branches.push({ name, current: !!current && name === current });
-  }
-  return branches.sort((left, right) => {
-    if (left.current !== right.current) return left.current ? -1 : 1;
-    return left.name.localeCompare(right.name);
-  });
-}
-
-function configuredRemoteForRef(remoteRef, remoteNames = []) {
-  return remoteNames
-    .filter((remoteName) => remoteRef.startsWith(`${remoteName}/`))
-    .sort((left, right) => right.length - left.length || left.localeCompare(right))[0] || "";
-}
-
-function remoteBranchRecord(fullRef, symref = "", remoteNames = []) {
-  const prefix = "refs/remotes/";
-  const ref = String(fullRef || "");
-  if (!ref.startsWith(prefix) || symref) return null;
-  const remoteRef = ref.slice(prefix.length);
-  const remoteName = configuredRemoteForRef(remoteRef, remoteNames);
-  if (!remoteName) return null;
-  const name = remoteRef.slice(remoteName.length + 1);
-  if (!name) return null;
-  return { name, current: false, remote: true, remoteRef, remoteName, displayName: remoteRef };
-}
-
-async function readRemoteGitBranchData(root) {
-  const [remoteNamesText, refs] = await Promise.all([
-    runGitReadCommand(root, ["remote"], { timeoutMs: 5000, maxOutputLength: 120_000 }),
-    runGitReadCommandDetailed(root, ["for-each-ref", "--format=%(refname)%09%(symref)", "refs/remotes"], { timeoutMs: 5000, maxOutputLength: 120_000 }),
-  ]);
-  return {
-    remoteNames: remoteNamesText.split(/\r?\n/).map((line) => line.trim()).filter(Boolean),
-    refText: refs.output,
-    truncated: refs.truncated === true,
-    unavailable: false,
-  };
-}
-
-function normalizeRemoteGitBranches(remoteData, localBranchNames) {
-  // Never parse tail-truncated output: the first retained line may be a partial
-  // ref. Local branches and worktrees remain available while the UI can expose
-  // the truncation flag.
-  if (!remoteData || remoteData.truncated) return [];
-  const remoteBranches = [];
-  for (const line of String(remoteData.refText || "").split(/\r?\n/)) {
-    const [fullRef = "", symref = ""] = line.split("\t", 2);
-    const branch = remoteBranchRecord(fullRef, symref, remoteData.remoteNames);
-    // A local branch takes precedence over every same-named remote ref. Until
-    // then, retain each exact remote ref so multiple remotes stay unambiguous.
-    if (branch && !localBranchNames.has(branch.name)) remoteBranches.push(branch);
-  }
-  return remoteBranches.sort((left, right) => left.displayName.localeCompare(right.displayName));
-}
-
-async function readGitBranches(cwd) {
-  const root = await getGitRoot(cwd);
-  const [current, branchText, worktreeData, remoteData] = await Promise.all([
-    currentGitBranchForPicker(root),
-    runGitReadCommand(root, ["branch", "--format=%(refname:lstrip=2)"], { timeoutMs: 5000, maxOutputLength: 120_000 }),
-    listGitWorktrees(cwd).catch(() => null),
-    readRemoteGitBranchData(root).catch(() => ({ remoteNames: [], refText: "", truncated: false, unavailable: true })),
-  ]);
-  const occupiedByBranch = new Map();
-  for (const item of worktreeData?.occupiedBranches || []) {
-    if (!item?.branch || occupiedByBranch.has(item.branch)) continue;
-    occupiedByBranch.set(item.branch, item);
-  }
-  const localBranches = normalizeGitBranchList(branchText, current).map((branch) => {
-    const occupied = occupiedByBranch.get(branch.name);
-    return occupied ? { ...branch, occupied: true, worktreePath: occupied.path, worktreeCurrent: occupied.current === true, mainWorktree: occupied.isMainWorktree === true } : branch;
-  });
-  const remoteBranches = normalizeRemoteGitBranches(remoteData, new Set(localBranches.map((branch) => branch.name)));
-  return {
-    cwd,
-    root,
-    repoRoot: worktreeData?.repoRoot || root,
-    commonGitDir: worktreeData?.commonGitDir || "",
-    currentWorktreePath: worktreeData?.currentWorktreePath || root,
-    defaultWorktreesRoot: worktreeData?.defaultWorktreesRoot || "",
-    current,
-    generatedAt: new Date().toISOString(),
-    branches: [...localBranches, ...remoteBranches],
-    remoteBranchesTruncated: remoteData.truncated === true,
-    remoteBranchesUnavailable: remoteData.unavailable === true,
-    worktrees: worktreeData?.worktrees || [],
-    occupiedBranches: worktreeData?.occupiedBranches || [],
-  };
-}
-
-function requestedRemoteRef(body = {}) {
-  if (!Object.hasOwn(body, "remoteRef")) return null;
-  if (typeof body.remoteRef !== "string" || !body.remoteRef || body.remoteRef.trim() !== body.remoteRef) {
-    throw new Error("remoteRef must be a non-empty exact remote-tracking ref");
-  }
-  return body.remoteRef;
-}
-
-async function verifyRemoteGitBranchIntent(cwd, branch, remoteRef) {
-  const targetBranch = cleanGitBranchName(branch);
-  const branches = await readGitBranches(cwd);
-  const localBranch = branches.branches.find((item) => item.remote !== true && item.name === targetBranch);
-  if (localBranch) throw new Error(`Local git branch already exists: ${targetBranch}. Refresh the picker and use the local branch instead.`);
-  const remoteBranch = branches.branches.find((item) => item.remote === true && item.remoteRef === remoteRef);
-  if (!remoteBranch) throw new Error(`Unknown remote git branch: ${remoteRef}`);
-  if (remoteBranch.name !== targetBranch) {
-    throw new Error(`Remote git branch ${remoteRef} does not match local branch ${targetBranch}`);
-  }
-  return { root: branches.root, branch: targetBranch, remoteRef: remoteBranch.remoteRef };
-}
-
-async function switchGitBranch(cwd, branch, { create = false, remoteRef = null } = {}) {
-  if (remoteRef !== null) {
-    // Re-read the advertised remote-only record immediately before creating a
-    // tracking branch. This rejects stale refs and local-name collisions.
-    const intent = await verifyRemoteGitBranchIntent(cwd, branch, remoteRef);
-    const payload = gitMutationPayload(await runGitMutationCommand(["switch", "--track", "-c", intent.branch, intent.remoteRef], { cwd: intent.root, timeoutMs: 10 * 60 * 1000 }));
-    if (payload.ok) {
-      payload.data.branch = intent.branch;
-      payload.data.root = intent.root;
-      payload.data.switched = true;
-      payload.data.created = true;
-    } else {
-      payload.error = (payload.data?.stderr || payload.data?.stdout || payload.error || `Failed to create and switch to ${intent.branch}`).trim();
-    }
-    return payload;
-  }
-
-  const root = await getGitRoot(cwd);
-  const targetBranch = cleanGitBranchName(branch);
-  await validateGitBranchName(root, targetBranch);
-  const branches = await readGitBranches(cwd);
-  const branchExists = branches.branches.some((item) => item.remote !== true && item.name === targetBranch);
-  if (create && branchExists) throw new Error(`Local git branch already exists: ${targetBranch}`);
-  if (!create && !branchExists) throw new Error(`Unknown local git branch: ${targetBranch}`);
-  const occupied = branches.branches.find((item) => item.remote !== true && item.name === targetBranch && item.occupied && !item.worktreeCurrent);
-  if (!create && occupied?.worktreePath) {
-    return {
-      ok: false,
-      code: WORKTREE_ERROR_CODES.BRANCH_CHECKED_OUT_ELSEWHERE,
-      error: `Branch ${targetBranch} is already checked out at ${occupied.worktreePath}. Open that worktree instead of switching this checkout.`,
-      data: { branch: targetBranch, root, worktreePath: occupied.worktreePath },
-    };
-  }
-  if (!create && branches.current === targetBranch) {
-    return { ok: true, data: { command: `git switch ${targetBranch}`, stdout: "", stderr: "", exitCode: 0, branch: targetBranch, root, switched: false, created: false } };
-  }
-  const args = create ? ["switch", "-c", targetBranch] : ["switch", targetBranch];
-  const payload = gitMutationPayload(await runGitMutationCommand(args, { cwd: root, timeoutMs: 10 * 60 * 1000 }));
-  if (payload.ok) {
-    payload.data.branch = targetBranch;
-    payload.data.root = root;
-    payload.data.switched = true;
-    payload.data.created = create;
-  } else {
-    payload.error = (payload.data?.stderr || payload.data?.stdout || payload.error || `Failed to ${create ? "create and switch to" : "switch to"} ${targetBranch}`).trim();
-  }
-  return payload;
-}
-
-function normalizeWorktreeSessionMode(value) {
-  const mode = String(value || "fork-current").trim().toLowerCase();
-  if (!mode || mode === "fork" || mode === "fork-current") return "fork-current";
-  if (mode === "empty" || mode === "new") return "empty";
-  if (mode === "clone-current" || mode === "parent-only") {
-    throw makeHttpError(400, `sessionMode ${mode} is not supported yet; use fork-current or empty.`);
-  }
-  throw makeHttpError(400, "sessionMode must be fork-current or empty");
-}
-
-async function createEmptySessionFileForCwd(cwd) {
-  const manager = SessionManager.create(cwd, configuredSessionDir());
-  const sessionFile = manager.getSessionFile();
-  const header = manager.getHeader();
-  if (!sessionFile || !header) return undefined;
-  await mkdir(path.dirname(sessionFile), { recursive: true });
-  await writeFile(sessionFile, `${JSON.stringify(header)}\n`, { encoding: "utf8", flag: "wx" });
-  return sessionFile;
-}
-
-async function prepareWorktreeSessionFile(sourceTab, targetCwd, requestedMode = "fork-current") {
-  if (options.noSession) return { mode: "none", requestedMode: "none", sessionFile: undefined, warning: "Web UI was started with --no-session." };
-  const mode = normalizeWorktreeSessionMode(requestedMode);
-  if (mode === "empty") {
-    return { mode, requestedMode: mode, sessionFile: await createEmptySessionFileForCwd(targetCwd) };
-  }
-
-  const state = await currentSessionState(sourceTab).catch(() => sourceTab?.lastState || {});
-  const sourceSessionFile = state.sessionFile || tabRestorableSessionFile(sourceTab);
-  if (sourceSessionFile) {
-    requireAllowedSessionPath(sourceSessionFile);
-    const sourceInfo = await stat(sourceSessionFile).catch(() => null);
-    if (sourceInfo?.isFile()) {
-      const manager = SessionManager.forkFrom(sourceSessionFile, targetCwd, configuredSessionDir());
-      return { mode, requestedMode: mode, sessionFile: manager.getSessionFile(), parentSession: sourceSessionFile };
-    }
-  }
-
-  return {
-    mode: "empty",
-    requestedMode: mode,
-    sessionFile: await createEmptySessionFileForCwd(targetCwd),
-    warning: "Current session is not persisted yet; opened an empty session rooted at the worktree.",
-  };
-}
-
-function gitWorkspaceFromWorktreeResult(result, worktree = result?.worktree) {
-  if (!worktree?.path) return null;
-  return {
-    repoRoot: result.repoRoot || worktree.repoRoot || "",
-    commonGitDir: result.commonGitDir || worktree.commonGitDir || "",
-    worktreePath: worktree.path,
-    branch: worktree.branch || result.branch || null,
-    worktreeCount: Array.isArray(result.worktrees) ? result.worktrees.length : undefined,
-    isMainWorktree: worktree.isMainWorktree === true,
-  };
-}
-
-async function openWorktreeResultForTab(sourceTab, result, body = {}) {
-  const worktree = result?.worktree;
-  const worktreePath = worktree?.path || result?.path;
-  if (!worktreePath) throw makeHttpError(500, "Git worktree operation did not return a path");
-  if (body.openTab === false) return { ...result, session: null, tab: null, tabs: listTabs(), openedTab: false };
-
-  if (sameResolvedPath(worktreePath, sourceTab.cwd)) {
-    sourceTab.gitWorkspace = gitWorkspaceFromWorktreeResult(result, worktree);
-    scheduleSupervisorMetadataUpdate(sourceTab);
-    return { ...result, session: null, tab: tabMeta(sourceTab), tabs: listTabs(), openedTab: false, openedCurrent: true };
-  }
-
-  const existingTab = [...tabs.values()].find((item) => sameResolvedPath(item.cwd, worktreePath));
-  if (existingTab) {
-    existingTab.gitWorkspace = gitWorkspaceFromWorktreeResult(result, worktree);
-    scheduleSupervisorMetadataUpdate(existingTab);
-    return { ...result, session: null, tab: tabMeta(existingTab), tabs: listTabs(), openedTab: false, openedExistingTab: true };
-  }
-
-  const session = await prepareWorktreeSessionFile(sourceTab, worktreePath, body.sessionMode || "fork-current");
-  const tab = await createTab({
-    title: body.title,
-    titleSource: body.title ? "explicit" : undefined,
-    cwd: worktreePath,
-    sessionFile: session.sessionFile,
-    gitWorkspace: gitWorkspaceFromWorktreeResult(result, worktree),
-  });
-  recordEvent({ type: "webui_worktree_opened", tabId: tab.id, tabTitle: tab.title, cwd: tab.cwd, branch: worktree.branch || result.branch || "", sessionMode: session.mode });
-  return {
-    ...result,
-    session,
-    tab: tabMeta(tab),
-    tabs: listTabs(),
-    openedTab: true,
-    dependencyHint: "Git worktrees do not share ignored dependency directories such as node_modules or .venv; install/bootstrap dependencies manually if needed.",
-  };
-}
-
-async function cleanupCreatedWorktreeAfterFailure(sourceCwd, worktreePath) {
-  try {
-    return await removeGitWorktree(sourceCwd, worktreePath, { force: true });
-  } catch (error) {
-    return { ok: false, error: sanitizeError(error), code: error?.code || WORKTREE_ERROR_CODES.GIT_COMMAND_FAILED };
-  }
-}
-
-async function readGitWorkflowMessageFilesForTransfer(root, messageCwd = root) {
-  const { shortPath, longPath } = commitMessagePaths(messageCwd);
-  const files = [];
-  for (const sourcePath of [shortPath, longPath]) {
-    try {
-      const content = await readFile(sourcePath, "utf8");
-      files.push({ relativePath: path.relative(root, sourcePath).split(path.sep).join("/"), content });
-    } catch (error) {
-      if (error?.code !== "ENOENT") throw error;
-    }
-  }
-  return files;
-}
-
-async function snapshotGitWorkflowBranchState(root, cwd = root, expectedStagedContentHash = "") {
-  const messageCwd = gitWorkflowMessageCwd(root, cwd);
-  // Preserve raw patch bytes: string decoding would corrupt binary staged
-  // changes before `git apply --index` can copy them to the PR worktree.
-  const staged = await readStagedContentHash(root);
-  if (expectedStagedContentHash && (!staged.hasStagedChanges || staged.stagedContentHash !== expectedStagedContentHash)) {
-    throw makeHttpError(409, "Staged content changed after manual approval. Return to Stage and request a new manual review before creating a PR worktree.");
-  }
-  return {
-    stagedPatch: staged.stagedDiff,
-    stagedContentHash: staged.stagedContentHash,
-    messageFiles: await readGitWorkflowMessageFilesForTransfer(root, messageCwd),
-  };
-}
-
-async function applyGitWorkflowBranchStateToWorktree(snapshot, worktreePath) {
-  const copiedMessageFiles = [];
-  let appliedStagedPatch = false;
-  const patchBytes = Buffer.isBuffer(snapshot?.stagedPatch) ? snapshot.stagedPatch : Buffer.alloc(0);
-  if (patchBytes.length > 0) {
-    const patchPath = path.join(tmpdir(), `pi-webui-staged-worktree-${process.pid}-${Date.now()}-${randomUUID()}.patch`);
-    await writeFile(patchPath, patchBytes);
-    try {
-      const applyResult = await runGitWorkflowCommand(["apply", "--index", "--whitespace=nowarn", patchPath], {
-        cwd: worktreePath,
-        label: "git apply --index <staged diff>",
-        timeoutMs: 5 * 60 * 1000,
-      });
-      if (applyResult.exitCode !== 0 || applyResult.timedOut || applyResult.cancelled || applyResult.error) {
-        throw new Error((applyResult.stderr || applyResult.stdout || applyResult.error || "Unable to apply staged changes in the PR worktree").trim());
-      }
-      appliedStagedPatch = true;
-    } finally {
-      await rm(patchPath, { force: true }).catch(() => {});
-    }
-  }
-
-  for (const file of snapshot?.messageFiles || []) {
-    const relativePath = String(file.relativePath || "").replace(/\\/g, "/");
-    const targetPath = path.resolve(worktreePath, relativePath);
-    if (!relativePath || !pathInside(worktreePath, targetPath)) throw new Error(`Refusing to copy Git workflow file outside the worktree: ${relativePath}`);
-    await mkdir(path.dirname(targetPath), { recursive: true });
-    await writeFile(targetPath, file.content, "utf8");
-    copiedMessageFiles.push(relativePath);
-  }
-
-  return { appliedStagedPatch, copiedMessageFiles };
-}
-
-function gitWorkflowBranchWorktreeStdout({ branch, worktreePath, createdResult, opened, transfer }) {
-  const lines = [];
-  if (createdResult?.created) lines.push(`Created branch worktree ${branch} at ${worktreePath}.`);
-  else if (createdResult?.openedExisting) lines.push(`Opened existing branch worktree ${branch} at ${worktreePath}.`);
-  else lines.push(`Opened branch worktree ${branch} at ${worktreePath}.`);
-  if (transfer?.appliedStagedPatch) lines.push("Copied the source checkout's staged changes into the worktree index.");
-  else if (createdResult?.openedExisting) lines.push("Existing worktree was reused; source staged changes were not copied automatically.");
-  else lines.push("No staged changes were copied because the source index was clean.");
-  if (transfer?.copiedMessageFiles?.length) lines.push(`Copied ${transfer.copiedMessageFiles.join(", ")} for commit message selection.`);
-  if (opened?.tab?.id) lines.push(`Continue the guided Git workflow in Web UI tab ${opened.tab.title || opened.tab.id}.`);
-  lines.push("The source checkout was left on its current branch.");
-  return lines.join("\n");
-}
-
-async function createGitWorkflowBranchWorktree(tab, body = {}) {
-  const root = await getGitRoot(tab.cwd);
-  const branch = cleanGitBranchName(body.branch || body.branchName);
-  await validateGitBranchName(root, branch);
-  const expectedStagedContentHash = expectedStagedContentHashFromBody(body);
-  const snapshot = await snapshotGitWorkflowBranchState(root, tab.cwd, expectedStagedContentHash);
-  let createdResult = null;
-  try {
-    createdResult = await createGitWorktree(tab.cwd, { ...body, branchName: branch });
-    const worktreePath = createdResult.worktree?.path || createdResult.path;
-    if (!worktreePath) throw makeHttpError(500, "Git workflow worktree creation did not return a path");
-    const transfer = createdResult.created
-      ? await applyGitWorkflowBranchStateToWorktree(snapshot, worktreePath)
-      : { appliedStagedPatch: false, copiedMessageFiles: [] };
-    const opened = await openWorktreeResultForTab(tab, createdResult, { openTab: body.openTab !== false, sessionMode: body.sessionMode || "fork-current", ...body });
-    if (createdResult.created) {
-      recordEvent({ type: "webui_worktree_created", tabId: opened.tab?.id || tab.id, cwd: opened.worktree?.path || opened.path, branch });
-    }
-    recordEvent({ type: "webui_git_workflow_worktree", tabId: opened.tab?.id || tab.id, cwd: worktreePath, branch, transferredStagedChanges: transfer.appliedStagedPatch });
-    return {
-      ...opened,
-      command: createdResult.created ? formatGitCommand(["worktree", "add", "-b", branch, worktreePath]) : formatGitCommand(["worktree", "list", "--porcelain"]),
-      stdout: gitWorkflowBranchWorktreeStdout({ branch, worktreePath, createdResult, opened, transfer }),
-      stderr: "",
-      exitCode: 0,
-      branch: opened.branch || branch,
-      carriedStagedChanges: transfer.appliedStagedPatch,
-      copiedMessageFiles: transfer.copiedMessageFiles,
-    };
-  } catch (error) {
-    let cleanup = null;
-    const createdPath = createdResult?.created && !createdResult?.openedExisting ? createdResult.worktree?.path || createdResult.path : "";
-    if (createdPath) cleanup = await cleanupCreatedWorktreeAfterFailure(tab.cwd, createdPath);
-    recordEvent({ type: "webui_git_workflow_worktree_failed", tabId: tab.id, cwd: createdPath || tab.cwd, branch, error: sanitizeError(error), cleanup });
-    throw error;
-  }
-}
-
-async function createGitWorktreeTab(tab, body = {}) {
-  const remoteRef = requestedRemoteRef(body);
-  const worktreeRequest = remoteRef === null
-    ? body
-    : { ...body, branchName: (await verifyRemoteGitBranchIntent(tab.cwd, body.branchName || body.branch, remoteRef)).branch, remoteRef };
-  let createdResult = null;
-  try {
-    createdResult = await createGitWorktree(tab.cwd, worktreeRequest);
-    const opened = await openWorktreeResultForTab(tab, createdResult, { openTab: body.openTab !== false, ...body });
-    if (createdResult.created) {
-      recordEvent({ type: "webui_worktree_created", tabId: opened.tab?.id || tab.id, cwd: opened.worktree?.path || opened.path, branch: opened.branch || body.branchName || "" });
-    }
-    return opened;
-  } catch (error) {
-    let cleanup = null;
-    const createdPath = createdResult?.created && !createdResult?.openedExisting ? createdResult.worktree?.path || createdResult.path : "";
-    if (createdPath) cleanup = await cleanupCreatedWorktreeAfterFailure(tab.cwd, createdPath);
-    recordEvent({ type: "webui_worktree_create_failed", tabId: tab.id, cwd: createdPath || tab.cwd, branch: body.branchName || body.branch || "", error: sanitizeError(error), cleanup });
-    throw error;
-  }
-}
-
-async function openExistingGitWorktreeTab(tab, body = {}) {
-  const requestedPath = String(body.path || body.worktreePath || "").trim();
-  if (!requestedPath) throw makeHttpError(400, "worktree path is required");
-  const result = await openGitWorktree(tab.cwd, requestedPath);
-  return openWorktreeResultForTab(tab, result, { openTab: body.openTab !== false, ...body });
-}
-
-function openTabsInsideWorktree(worktreePath) {
-  return [...tabs.values()].filter((tab) => pathInside(worktreePath, tab.cwd));
-}
-
-async function removeGitWorktreeForTab(tab, body = {}) {
-  if (body.confirmed !== true) throw makeHttpError(409, "Removing a worktree requires confirmed: true because it deletes files under the worktree path.");
-  const requestedPath = String(body.path || body.worktreePath || "").trim();
-  if (!requestedPath) throw makeHttpError(400, "worktree path is required");
-  const activeTabs = openTabsInsideWorktree(requestedPath);
-  if (activeTabs.length) {
-    const error = makeHttpError(409, `Refusing to remove a worktree that is open in ${activeTabs.length} Web UI tab${activeTabs.length === 1 ? "" : "s"}.`);
-    error.code = WORKTREE_ERROR_CODES.WORKTREE_BUSY;
-    error.details = { path: requestedPath, tabIds: activeTabs.map((item) => item.id) };
-    throw error;
-  }
-  const result = await removeGitWorktree(tab.cwd, requestedPath, { force: body.force === true });
-  recordEvent({ type: "webui_worktree_removed", tabId: tab.id, cwd: result.path || requestedPath, branch: result.branch || "" });
-  return { ...result, tabs: listTabs() };
-}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 function sendGitWorktreeFailure(res, error) {
   sendJson(res, 200, gitWorktreeErrorPayload(error));
-}
-
-async function gitRemoteNames(root) {
-  const result = await runGitWorkflowCommand(["remote"], { cwd: root, timeoutMs: 5000 });
-  if (result.exitCode !== 0) throw new Error((result.stderr || result.stdout || "Cannot list git remotes").trim());
-  return result.stdout.split("\n").map((line) => line.trim()).filter(Boolean);
-}
-
-async function defaultGitRemote(root) {
-  const remotes = await gitRemoteNames(root);
-  if (!remotes.length) throw new Error("No git remote is configured for this repository");
-  return remotes.includes("origin") ? "origin" : remotes[0];
-}
-
-function prDescriptionPath(root, branch) {
-  const base = path.resolve(root, "dev", "PR");
-  const target = path.resolve(base, `${encodeURIComponent(branch)}.md`);
-  if (path.dirname(target) !== base) throw new Error("Resolved PR description path escapes dev/PR");
-  return { base, prPath: target };
-}
-
-async function readGitWorkflowPrDescription(cwd, { generationId = "", generation = null } = {}) {
-  assertGitWorkflowArtifactGenerationReady(generationId, generation, "pr");
-  const root = await getGitRoot(cwd);
-  const branch = await currentGitBranch(root);
-  const { prPath } = prDescriptionPath(root, branch);
-  try {
-    const [body, info] = await Promise.all([readFile(prPath, "utf8"), stat(prPath)]);
-    return {
-      root,
-      branch,
-      path: prPath,
-      body: body.trimEnd(),
-      mtimeMs: info.mtimeMs,
-      ctimeMs: info.ctimeMs,
-      ino: String(info.ino),
-    };
-  } catch (error) {
-    throw new Error(`Missing generated PR description ${prPath}. Run /pr first. ${sanitizeError(error)}`);
-  }
-}
-
-function cleanPrTitle(value) {
-  const title = String(value || "").replace(/\r?\n/g, " ").trim();
-  if (!title) throw new Error("PR title is required");
-  return title.slice(0, 300);
-}
-
-function formatWorkflowCommand(command, args) {
-  return [command, ...args.map((arg) => (/\s/.test(arg) ? JSON.stringify(arg) : arg))].join(" ");
-}
-
-function formatGitCommand(args) {
-  return formatWorkflowCommand("git", args);
-}
-
-function runWorkflowCommand(command, args, { cwd, label = formatWorkflowCommand(command, args), timeoutMs = 10 * 60 * 1000 } = {}) {
-  if (activeGitWorkflowProcess) {
-    return Promise.reject(new Error(`A git workflow command is already running: ${activeGitWorkflowProcess.label}`));
-  }
-
-  return new Promise((resolve) => {
-    const child = spawn(command, args, {
-      cwd,
-      // LC_ALL=C keeps git/gh output in English so failure classification
-      // (classifyGitSyncFailure, isGitLockFailure) works regardless of locale.
-      env: { ...process.env, GIT_TERMINAL_PROMPT: process.env.GIT_TERMINAL_PROMPT || "0", GH_PROMPT_DISABLED: process.env.GH_PROMPT_DISABLED || "1", LC_ALL: "C" },
-      stdio: ["ignore", "pipe", "pipe"],
-      windowsHide: true,
-    });
-    let stdout = "";
-    let stderr = "";
-    let timedOut = false;
-    let cancelled = false;
-    let settled = false;
-
-    const finish = (result) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timeout);
-      if (activeGitWorkflowProcess?.child === child) activeGitWorkflowProcess = null;
-      resolve({ command: label, stdout, stderr, timedOut, cancelled, ...result });
-    };
-
-    const terminate = (reason) => {
-      if (reason === "cancelled") cancelled = true;
-      if (child.exitCode === null) child.kill("SIGTERM");
-      setTimeout(() => {
-        if (child.exitCode === null) child.kill("SIGKILL");
-      }, 2000).unref();
-    };
-
-    activeGitWorkflowProcess = { child, label, cancel: () => terminate("cancelled") };
-    const timeout = setTimeout(() => {
-      timedOut = true;
-      terminate("timeout");
-    }, timeoutMs);
-
-    child.stdout.on("data", (chunk) => {
-      stdout += String(chunk);
-      if (stdout.length > 100000) stdout = stdout.slice(-100000);
-    });
-    child.stderr.on("data", (chunk) => {
-      stderr += String(chunk);
-      if (stderr.length > 100000) stderr = stderr.slice(-100000);
-    });
-    child.on("error", (error) => {
-      const message = formatCommandSpawnError(command, error);
-      finish({ exitCode: undefined, stderr: stderr || message, error: message, errorCode: error?.code });
-    });
-    // "close", not "exit": exit can fire before the stdio pipes flush,
-    // intermittently truncating collected stdout/stderr.
-    child.on("close", (exitCode, signal) => finish({ exitCode, signal }));
-  });
-}
-
-function runGitWorkflowCommand(args, options = {}) {
-  return runWorkflowCommand("git", args, { ...options, label: options.label || formatGitCommand(args) });
-}
-
-function runGitHubWorkflowCommand(args, options = {}) {
-  return runWorkflowCommand("gh", args, { ...options, label: options.label || formatWorkflowCommand("gh", args) });
-}
-
-function gitWorkflowCommandPayload(result) {
-  const ok = result.exitCode === 0 && !result.timedOut && !result.cancelled && !result.error;
-  return {
-    ok,
-    error: ok ? undefined : result.error || (result.cancelled ? "Cancelled" : result.timedOut ? "Command timed out" : `Command failed with exit code ${result.exitCode ?? result.signal ?? "unknown"}`),
-    data: result,
-  };
-}
-
-function applyGitHubPublicationFailure(payload) {
-  if (payload.ok) return payload;
-  const text = `${payload.data?.stderr || ""}\n${payload.data?.stdout || ""}\n${payload.data?.error || ""}`.toLowerCase();
-  if (payload.data?.errorCode === "ENOENT") {
-    payload.hint = "Install GitHub CLI (gh), ensure it is on PATH, then retry.";
-  } else if (/not logged into any github hosts|gh auth login|http 401|bad credentials/.test(text)) {
-    payload.code = "AUTH";
-    payload.hint = "GitHub CLI is not authenticated. Run 'gh auth login' in a terminal, then retry.";
-  } else if (/name already exists on this account|repository .+ already exists/.test(text)) {
-    payload.hint = "A GitHub repository with this directory name already exists for the authenticated account. Add that repository as a remote, or rename the local directory before retrying.";
-  }
-  return payload;
 }
 
 // Read-only workflow lookups are safe over GET; everything else mutates the
@@ -8853,142 +3875,37 @@ async function handleGitWorkflowRequest(pathname, body = {}, tabOrCwd = options.
         return { ok: true, data: await readGitWorkflowPrDescription(cwd, { generationId, generation: tab?.gitWorkflowArtifactGeneration || null }) };
       }
       case "/api/git-workflow/init":
-        await ensureOutsideGitRepository(cwd);
-        return gitMutationPayload(await runGitMutationCommand(["init"], { cwd }));
+        return await initializeGitRepository(cwd);
       case "/api/git-workflow/init-files-status":
         return { ok: true, data: await initialRepositoryFilesStatus(cwd) };
       case "/api/git-workflow/readme":
         return prepareInitialRepositoryFiles(cwd, { repoName: body.repoName, stack: body.stack });
-      case "/api/git-workflow/initial-commit": {
-        const root = await getGitRoot(cwd);
-        return gitMutationPayload(await runGitMutationCommand(["commit", "-m", "Initial commit"], { cwd: root, label: "git commit -m \"Initial commit\"" }));
-      }
-      case "/api/git-workflow/main-branch": {
-        const root = await getGitRoot(cwd);
-        return gitMutationPayload(await runGitMutationCommand(["branch", "-M", "main"], { cwd: root }));
-      }
-      case "/api/git-workflow/remote": {
-        const root = await getGitRoot(cwd);
-        const username = cleanGitHubUsername(body.username);
-        const repoName = cleanGitHubRepoName(body.repoName);
-        const remoteUrl = gitHubOriginUrl(username, repoName);
-        const payload = gitMutationPayload(await runGitMutationCommand(["remote", "add", "origin", remoteUrl], { cwd: root }));
-        if (payload.data) {
-          payload.data.root = root;
-          payload.data.remote = "origin";
-          payload.data.remoteUrl = remoteUrl;
-          payload.data.repoName = repoName;
-          payload.data.username = username;
-        }
-        return payload;
-      }
-      case "/api/git-workflow/init-push": {
-        const root = await getGitRoot(cwd);
-        return applyGitSyncFailure(gitMutationPayload(await runGitMutationCommand(["push", "-u", "origin", "main"], { cwd: root, timeoutMs: 15 * 60 * 1000 })), { push: true });
-      }
+      case "/api/git-workflow/initial-commit":
+        return await initialGitCommit(cwd);
+      case "/api/git-workflow/main-branch":
+        return await renameGitMainBranch(cwd);
+      case "/api/git-workflow/remote":
+        return await addGitOrigin(cwd, body);
+      case "/api/git-workflow/init-push":
+        return await pushInitialGitMain(cwd);
       case "/api/git-workflow/add":
         return gitAddAllPayload(cwd);
       case "/api/git-workflow/branch": {
         if (!tab) throw new Error("Git workflow branch worktree requires a Web UI tab");
         return { ok: true, data: await createGitWorkflowBranchWorktree(tab, body) };
       }
-      case "/api/git-workflow/commit": {
-        const variant = String(body.variant || "").trim();
-        if (!["short", "long", "input"].includes(variant)) throw new Error("variant must be 'short', 'long', or 'input'");
-        // Recheck here as well as in the browser. A staged index can change
-        // between the browser's read-only check and this mutating request.
-        await assertExpectedStagedContentHash(tab || { cwd }, body);
-        if (variant === "input") {
-          const root = await getGitRoot(cwd);
-          const message = cleanGitCommitMessageInput(body.message);
-          return gitMutationPayload(await runGitMutationCommand(["commit", "-m", message], { cwd: root, label: "git commit -m <input message>" }));
-        }
-        const messages = await readGitWorkflowMessages(cwd);
-        if (variant === "short") {
-          const message = messages.short.trim();
-          if (!message) throw new Error(`${messages.shortPath} is empty`);
-          return gitMutationPayload(await runGitMutationCommand(["commit", "-m", message], { cwd: messages.root, label: "git commit -m <dev/COMMIT/staged-commit-short.txt>" }));
-        }
-        if (!messages.long.trim()) throw new Error(`${messages.longPath} is empty`);
-        return gitMutationPayload(await runGitMutationCommand(["commit", "-F", messages.longPath], { cwd: messages.root, label: "git commit -F dev/COMMIT/staged-commit-long.txt" }));
-      }
-      case "/api/git-workflow/push": {
-        const root = await getGitRoot(cwd);
-        const currentBranch = await currentGitBranch(root);
-        const protectedBranch = PROTECTED_GIT_BRANCHES.has(currentBranch);
-        if (body.setUpstream) {
-          const requestedBranch = body.branch ? cleanGitBranchName(body.branch) : currentBranch;
-          if (requestedBranch !== currentBranch) throw new Error(`Current branch is ${currentBranch}, not ${requestedBranch}`);
-          const remote = await defaultGitRemote(root);
-          const payload = await runGuardedGitMutation(["push", "-u", remote, currentBranch], { cwd: root, label: `git push -u ${remote} ${currentBranch}`, timeoutMs: 15 * 60 * 1000 });
-          if (payload.data) {
-            payload.data.branch = currentBranch;
-            payload.data.protectedBranch = protectedBranch;
-            if (payload.ok) payload.data.remote = remote;
-          }
-          return applyGitSyncFailure(payload, { push: true });
-        }
-        // Plain --force is never offered; --force-with-lease still refuses to
-        // clobber remote commits we have not seen, and requires confirmation.
-        const forceWithLease = body.forceWithLease === true;
-        if (forceWithLease) requireConfirmed(body, `Force-pushing ${currentBranch} (--force-with-lease) rewrites the remote branch and`);
-        const remotes = await gitRemoteNames(root);
-        const remote = remotes.includes("origin") ? "origin" : remotes[0];
-        const args = remote
-          ? ["push", "-u", ...(forceWithLease ? ["--force-with-lease"] : []), remote, "HEAD"]
-          : ["push", ...(forceWithLease ? ["--force-with-lease"] : [])];
-        const label = remote
-          ? `git push -u${forceWithLease ? " --force-with-lease" : ""} ${remote} HEAD`
-          : undefined;
-        const payload = await runGuardedGitMutation(args, { cwd: root, label, timeoutMs: 15 * 60 * 1000 });
-        if (payload.data) {
-          payload.data.branch = currentBranch;
-          payload.data.protectedBranch = protectedBranch;
-          payload.data.forceWithLease = forceWithLease;
-          if (remote) payload.data.remote = remote;
-          else payload.data.repoName = path.basename(root);
-        }
-        return applyGitSyncFailure(payload, { push: true });
-      }
-      case "/api/git-workflow/publish": {
-        const root = await getGitRoot(cwd);
-        const repoName = cleanGitHubRepoName(path.basename(root));
-        const visibility = String(body.visibility || "").trim();
-        if (visibility !== "public" && visibility !== "private") throw makeHttpError(400, "visibility must be 'public' or 'private'");
-        requireConfirmed(body, `Publishing GitHub repository ${repoName} as ${visibility}`);
-        const remotes = await gitRemoteNames(root);
-        if (remotes.length) throw makeHttpError(409, "GitHub publication requires a repository with no configured remotes. Existing remotes are not changed or repaired.");
-        const branch = await currentGitBranch(root);
-        const protectedBranch = PROTECTED_GIT_BRANCHES.has(branch);
-        const payload = applyGitHubPublicationFailure(gitWorkflowCommandPayload(await runGitHubWorkflowCommand(
-          ["repo", "create", repoName, `--${visibility}`, "--source", ".", "--remote", "origin", "--push"],
-          { cwd: root, timeoutMs: 15 * 60 * 1000 },
-        )));
-        if (payload.ok) Object.assign(payload.data, { repoName, visibility, remote: "origin", branch, protectedBranch });
-        return payload;
-      }
-      case "/api/git-workflow/create-pr": {
-        const root = await getGitRoot(cwd);
-        const branch = await currentGitBranch(root);
-        const title = cleanPrTitle(body.title);
-        const description = String(body.body || "").trimEnd();
-        if (!description.trim()) throw new Error("PR description is required");
-        const { base, prPath } = prDescriptionPath(root, branch);
-        await mkdir(path.dirname(prPath), { recursive: true });
-        await writeFile(prPath, `${description}\n`, "utf8");
-        const payload = gitWorkflowCommandPayload(await runGitHubWorkflowCommand(["pr", "create", "--title", title, "--body-file", prPath, "--head", branch], { cwd: root, label: "gh pr create --title <title> --body-file <dev/PR/current-branch.md> --head <current-branch>", timeoutMs: 15 * 60 * 1000 }));
-        if (payload.ok) {
-          payload.data.branch = branch;
-          payload.data.path = prPath;
-          payload.data.prDirectory = base;
-        }
-        return payload;
-      }
+      case "/api/git-workflow/commit":
+        return await commitGitWorkflow(cwd, body);
+      case "/api/git-workflow/push":
+        return await pushGitWorkflow(cwd, body);
+      case "/api/git-workflow/publish":
+        return await publishGitRepository(cwd, body);
+      case "/api/git-workflow/create-pr":
+        return await createGitWorkflowPr(cwd, body);
       case "/api/git-workflow/cancel": {
-        const generation = tab?.gitWorkflowGeneration || null;
-        if (generation) generation.cancelled = true;
-        const cancelled = !!activeGitWorkflowProcess || !!generation;
-        if (activeGitWorkflowProcess) activeGitWorkflowProcess.cancel();
+        const generationCancelled = cancelGitWorkflowGeneration(tab);
+        const processCancelled = cancelGitWorkflowProcess();
+        const cancelled = processCancelled || generationCancelled;
         return { ok: true, data: { cancelled } };
       }
       default:
@@ -9723,6 +4640,263 @@ try {
   process.exit(2);
 }
 
+await initializeWebuiShellRollout({
+  additionalEvidencePaths: [
+    path.dirname(legacyWebuiSettingsFile()),
+    path.join(process.env.XDG_STATE_HOME || path.join(homedir(), ".local", "state"), "pi-webui"),
+    path.join(path.resolve(expandUserPath(agentDir)), "webui"),
+    ...[
+      process.env.PI_WEBUI_FAST_PICKS_FILE,
+      process.env.PI_WEBUI_OPTIONAL_FEATURE_MIGRATION_FILE,
+      process.env.PI_WEBUI_RESTORE_FILE,
+    ].filter(Boolean).map(filename => path.resolve(expandUserPath(filename))),
+  ],
+});
+
+const { PiRpcProcess, SupervisorPiRpcProcess } = createRpcTransportTypes({
+  assertNativeRpcAdmission, sanitizeError, requestTimeoutMs: REQUEST_TIMEOUT_MS,
+  supervisorCommandTimeoutMaxMs: RPC_SUPERVISOR_COMMAND_TIMEOUT_MAX_MS,
+});
+
+const {
+  clearSseBackpressureTimer,
+  evictSlowSseClient,
+  scheduleSseBackpressureTimeout,
+  flushSseClient,
+  writeSseFrame,
+  sendSse,
+  activateOutputMode,
+  sendSseToClient,
+} = createSseDelivery();
+
+const {
+  parseWebuiHelperResponseEvent,
+  resolveWebuiHelperResponse,
+  resolveWebuiHelperRpcResponse,
+  webuiHelperRequestMap,
+  sendWebuiHelperCommand,
+} = createHelperRequestService({ makeHttpError, sanitizeError });
+
+const {
+  pendingExtensionUiMap,
+  isPendingExtensionUiRequest,
+  pruneExpiredPendingExtensionUiRequests,
+  pendingExtensionUiRequests,
+  pendingExtensionUiRequestSummaries,
+  trackPendingExtensionUiRequest,
+  resolvePendingExtensionUiRequest,
+  clearPendingExtensionUiRequests,
+  replayPendingExtensionUiRequests,
+  cancelPendingExtensionUiRequests,
+} = createExtensionUiRequestService({
+  truncateStatusText, markTabWorking, sendSseToClient, tabActivitySnapshot, broadcastTabEvent,
+});
+
+const {
+  naturalConversationStatusState,
+  naturalConversationModeSnapshot,
+  resetNaturalConversationMode,
+  rememberNaturalConversationStatusEvent,
+  isNaturalConversationActive,
+  naturalConversationCommandBaseName,
+  naturalConversationSlashCommandName,
+  isNaturalConversationSlashCommand,
+  blockNaturalConversationAction,
+  ensureNaturalConversationRouteAllowed,
+  ensureNaturalConversationPromptSafety,
+  enforceNaturalConversationCommandAllowed,
+  naturalConversationLoadedCommandNames,
+  rememberNaturalConversationCommands,
+  naturalConversationPackageStatus,
+  naturalConversationFeatureData,
+  setNaturalConversationMode,
+} = createConversationModeService({
+  packageName: OPTIONAL_FEATURE_PACKAGES.get(NATURAL_CONVERSATION_FEATURE_ID),
+  optionalFeaturePackageStatus, getCommandData, extensionStatusMap, stripAnsi,
+  makeHttpError, sanitizeError, safeRpcData, stateIsBusyForSettings, setThinkingLevelForTab,
+  requestTimeoutMs: REQUEST_TIMEOUT_MS, statusRpcTimeoutMs: STATUS_RPC_TIMEOUT_MS,
+});
+
+const {
+  conversationVoicesData, setConversationVoice, naturalConversationVoiceProviderStatus,
+  naturalConversationUnavailableResponse, handleNaturalConversationSttTranscribe,
+  handleNaturalConversationTtsSpeech,
+} = createConversationVoiceService({
+  naturalConversationFeatureData, naturalConversationModeSnapshot, isLocalRequest,
+  makeHttpError, formatBytes, truncateStatusText,
+});
+
+const {
+  codexFastModeCommandBaseName,
+  codexFastModeStatusState,
+  codexFastModeSnapshot,
+  resetCodexFastMode,
+  codexFastModePackageStatus,
+  codexFastModeCommandState,
+  codexFastModeFeatureData,
+  waitForCodexFastModeStatus,
+  setCodexFastMode,
+} = createCodexFastModeService({
+  packageName: OPTIONAL_FEATURE_PACKAGES.get("codexFastMode"),
+  optionalFeaturePackageStatus, getCommandData, currentSessionState, tabHasActiveOutput,
+  extensionStatusMap, stripAnsi, makeHttpError, sanitizeError, sleepMs,
+  requestTimeoutMs: REQUEST_TIMEOUT_MS,
+});
+
+const {
+  getGitRoot,
+  runGitReadCommandDetailed,
+  runGitReadCommand,
+  readGitChanges,
+  readGitFileDiff,
+  readGitPanel,
+  readGitCommit,
+  readGitUntrackedFile,
+  readWorkspaceGitStatusIndex,
+  readWorkspaceGitIgnoredPaths,
+  withFileTreeGitStatus,
+  withFileTreeGitIgnored,
+  fileTreeGitStatusPayload,
+  resolveGitRelativePath,
+  normalizeGitRelativePath,
+  isLikelyBinaryBuffer,
+  parseGitPorcelainZEntries,
+  gitBranchFromPorcelainStatus,
+  summarizeGitPorcelainStatus,
+  gitUpstreamRef,
+} = createGitReadService({
+  runCommand, makeHttpError, makeUserFacingError, formatBytes, sanitizeError, formatGitCommand,
+});
+
+const gitMutations = createGitMutationService({
+  runCommand, makeHttpError, makeUserFacingError, formatBytes, sanitizeError,
+  formatCliError, formatCommandSpawnError, getGitRoot, runGitReadCommandDetailed,
+  runGitReadCommand, readGitChanges, resolveGitRelativePath, normalizeGitRelativePath,
+  isLikelyBinaryBuffer, parseGitPorcelainZEntries, gitBranchFromPorcelainStatus,
+  summarizeGitPorcelainStatus, gitUpstreamRef,
+});
+const {
+  addGitignoreEntry,
+  switchGitBranch,
+  pullGitChanges,
+  fetchGitChanges,
+  integrateGitUpstream,
+  gitOperationStageFile,
+  gitOperationAction,
+  gitBisectAction,
+  saveGitStash,
+  applyGitStash,
+  dropGitStash,
+  stageGitFile,
+  unstageGitFile,
+  stageAllGitChanges,
+  unstageAllGitChanges,
+  discardGitFile,
+  deleteGitUntrackedFile,
+  undoLastGitCommit,
+  amendLastGitCommitMessage,
+  updateGitSubmodules,
+  createGitTag,
+  gitAddAllPayload,
+  readGitOperationSnapshot,
+  readGitStashes,
+  readGitStashPreview,
+  readGitUndoState,
+  readGitReflog,
+  readGitSubmodules,
+  readGitTags,
+  readGitSigningDiagnostics,
+  readGitBranches,
+  readGitWorkflowBranchName,
+  readGitWorkflowMessages,
+  readGitWorkflowDefaultCommitMessage,
+  readGitWorkflowPrDescription,
+  initialRepositoryFilesStatus,
+  prepareInitialRepositoryFiles,
+  readStagedContentHash,
+  stagedContentHashForTab,
+  expectedStagedContentHashFromBody,
+  assertExpectedStagedContentHash,
+  gitWorkflowMessageCwd,
+  commitMessagePaths,
+  cleanGitBranchName,
+  validateGitBranchName,
+  requestedRemoteRef,
+  verifyRemoteGitBranchIntent,
+  runGitWorkflowCommand,
+  requireConfirmed,
+  initializeGitRepository,
+  initialGitCommit,
+  renameGitMainBranch,
+  addGitOrigin,
+  pushInitialGitMain,
+  commitGitWorkflow,
+  pushGitWorkflow,
+  publishGitRepository,
+  createGitWorkflowPr,
+  cancelGitWorkflowProcess,
+} = gitMutations;
+
+const {
+  createGitWorkflowBranchWorktree,
+  createGitWorktreeTab,
+  openExistingGitWorktreeTab,
+  removeGitWorktreeForTab,
+  openGitConflictResolutionAgentTab,
+  pruneGitWorktreesData,
+} = createGitWorktreeSessionService({
+  noSession: options.noSession,
+  getGitRoot, gitMutations, formatGitCommand, makeHttpError, sanitizeError,
+  configuredSessionDir, currentSessionState, tabRestorableSessionFile,
+  requireAllowedSessionPath, getOpenTabs: () => tabs.values(), createTab, tabMeta,
+  listTabs, scheduleSupervisorMetadataUpdate, recordEvent, markTabWorking, markTabIdle,
+  promptRequestTimeoutMs: PROMPT_REQUEST_TIMEOUT_MS,
+});
+
+const {
+  startGitWorkflowGeneration, consumeGitWorkflowGenerationEvent,
+  replayGitWorkflowFallbackLifecycle, cancelGitWorkflowGeneration,
+  loseGitWorkflowGeneration,
+} = createGitGenerationService({
+  getGitRoot, gitMutations, makeHttpError, sanitizeError, safeRpcData,
+  currentSessionState, availableGitWorkflowModels, stateIsBusyForSettings,
+  markTabWorking, markTabIdle, broadcastTabEvent, sendSseToClient,
+  statusRpcTimeoutMs: STATUS_RPC_TIMEOUT_MS,
+});
+
+const {
+  getFileTreeData, getFileSearchData, getFileContentData, getAurReviewReportContentData,
+  saveFileContentData, deleteFileSystemEntryData, createFileSystemEntryData,
+  moveFileSystemEntryData, openPathInDefaultEditor,
+} = createWorkspaceFilesService({
+  defaultCwd: options.cwd,
+  makeHttpError, displayPath, formatBytes, sanitizeError, runCommand,
+  isLikelyBinaryBuffer, getGitRoot, readWorkspaceGitStatusIndex,
+  readWorkspaceGitIgnoredPaths, withFileTreeGitStatus, withFileTreeGitIgnored,
+  fileTreeGitStatusPayload,
+});
+
+const {
+  getAppRunnerData,
+  getCustomAppRunnerConfigData,
+  saveCustomAppRunner,
+  saveAppRunnerSearchPaths,
+  deleteCustomAppRunner,
+  getAppRunnerFileBrowserData,
+  startAppRunner,
+  sendAppRunnerInput,
+  transferAppRunnerContext,
+  stopAppRunnerForTab,
+  clearAppRunnerForTab,
+  publicAppRunnerState,
+} = createAppRunnerService({
+  defaultCwd: options.cwd,
+  runCommand, resolveCwd, normalizeSuggestionPath, readJsonFileIfExists,
+  makeHttpError, formatCliError, sanitizeError, displayPath, stripAnsi,
+  hasTab: (id) => tabs.has(id),
+  broadcastTabEvent, tabActivitySnapshot, recordEvent, sendWebuiHelperCommand,
+});
+
 process.env.PI_WEBUI_HOST = options.host;
 process.env.PI_WEBUI_PORT = String(options.port);
 const agentRunRegistry = new AgentRunRegistry({ agentDir, port: options.port });
@@ -9831,6 +5005,8 @@ function normalizeRestoreTabDescriptor(item, seenIds) {
     title: normalizedRestoreString(item.title, 160),
     titleSource: ["explicit", "auto", "default"].includes(item.titleSource) ? item.titleSource : undefined,
     cwd: normalizedRestoreString(item.cwd || item.workspace?.cwd, 4096),
+    workspaceKind: item.workspaceKind ?? undefined,
+    noProjectId: item.noProjectId ?? undefined,
     conversationStarted: item.conversationStarted === true,
     sessionFile: normalizedRestoreString(item.sessionFile || state.sessionFile, 4096),
   };
@@ -10050,7 +5226,7 @@ async function selectedAppendSystemPromptPath() {
   return null;
 }
 
-async function buildPiLaunchForTab(tabIndex, title, tabCwd = options.cwd) {
+async function buildPiLaunchForTab(tabIndex, title, tabCwd = options.cwd, workspaceKind) {
   const args = ["--mode", "rpc", "--no-extensions", "--no-skills", "--no-prompt-templates", "--no-themes"];
   if (options.noSession) args.push("--no-session");
 
@@ -10076,7 +5252,7 @@ async function buildPiLaunchForTab(tabIndex, title, tabCwd = options.cwd) {
   // Keep tab naming inside Web UI metadata. Some bundled Pi CLI versions do not
   // support --name, and passing Web UI-generated tab titles through to child
   // RPC processes makes every tab after the first exit immediately.
-  args.push(...options.piArgs);
+  args.push(...(workspaceKind === "no-project" ? noProjectPiArgs(options.piArgs) : options.piArgs));
   return { args, prompt: appendSystemPromptDescriptor(appendSystemPromptPath) };
 }
 
@@ -10291,13 +5467,15 @@ async function initializeRpcSupervisor() {
   });
 }
 
-function supervisedTabMetadata(tab, { cwd = tab.cwd, prompt = tab.prompt } = {}) {
+function supervisedTabMetadata(tab, { cwd = tab.cwd, prompt = tab.prompt, workspaceKind = tab.workspaceKind, noProjectId = tab.noProjectId } = {}) {
   return {
     index: tab.index,
     title: tab.title,
     titleSource: tab.titleSource,
     conversationStarted: tab.conversationStarted === true,
     cwd,
+    workspaceKind,
+    noProjectId,
     sessionFile: tabRestorableSessionFile(tab),
     gitWorkspace: tab.gitWorkspace || null,
     createdAt: tab.createdAt,
@@ -10442,11 +5620,6 @@ function resetTabActivity(tab) {
 
 function tabActivitySnapshot(tab) {
   return { ...(tab.activity || createTabActivity(tab.createdAt)) };
-}
-
-function pendingExtensionUiMap(tab) {
-  if (!tab.pendingExtensionUiRequests) tab.pendingExtensionUiRequests = new Map();
-  return tab.pendingExtensionUiRequests;
 }
 
 function extensionStatusMap(tab) {
@@ -10884,96 +6057,6 @@ function rememberWebuiSubagentsStatusEvent(tab, event) {
   return true;
 }
 
-function naturalConversationStatusState(statusText) {
-  const text = stripAnsi(statusText).replace(/\s+/g, " ").trim();
-  if (!text) return { enabled: false, uiState: "off", statusText: "" };
-  const match = text.match(/voice\s*:\s*([a-z0-9_-]+)/i);
-  return { enabled: true, uiState: (match?.[1] || "listening").toLowerCase(), statusText: text };
-}
-
-function naturalConversationModeSnapshot(tab, patch = {}) {
-  const previous = tab?.conversationMode && typeof tab.conversationMode === "object" ? tab.conversationMode : {};
-  const status = naturalConversationStatusState(extensionStatusMap(tab).get(NATURAL_CONVERSATION_STATUS_KEY) || previous.statusText || "");
-  const enabled = patch.enabled ?? status.enabled ?? previous.enabled ?? false;
-  const uiState = patch.uiState || (enabled ? status.uiState || previous.uiState || "listening" : "off");
-  return {
-    featureId: NATURAL_CONVERSATION_FEATURE_ID,
-    available: patch.available ?? previous.available ?? false,
-    enabled,
-    uiState,
-    statusText: patch.statusText ?? status.statusText ?? previous.statusText ?? "",
-    allowedTools: Array.isArray(patch.allowedTools) ? patch.allowedTools : Array.isArray(previous.allowedTools) ? previous.allowedTools : ["read", "grep", "find", "ls"],
-    provider: patch.provider || previous.provider || "browser-shell",
-    startedAt: patch.startedAt ?? previous.startedAt ?? null,
-    packageInstalled: patch.packageInstalled ?? previous.packageInstalled ?? false,
-    loadedCommands: Array.isArray(patch.loadedCommands) ? patch.loadedCommands : Array.isArray(previous.loadedCommands) ? previous.loadedCommands : [],
-    updatedAt: patch.updatedAt || previous.updatedAt || new Date().toISOString(),
-  };
-}
-
-function resetNaturalConversationMode(tab) {
-  if (!tab) return;
-  tab.conversationMode = naturalConversationModeSnapshot(tab, { available: false, enabled: false, uiState: "off", statusText: "", loadedCommands: [] });
-}
-
-function rememberNaturalConversationStatusEvent(tab, event) {
-  if (event?.type !== "extension_ui_request" || event.method !== "setStatus" || event.statusKey !== NATURAL_CONVERSATION_STATUS_KEY) return;
-  const status = naturalConversationStatusState(event.statusText || "");
-  tab.conversationMode = naturalConversationModeSnapshot(tab, {
-    ...status,
-    available: true,
-    loadedCommands: tab?.conversationMode?.loadedCommands?.length ? tab.conversationMode.loadedCommands : ["talk"],
-  });
-}
-
-function isNaturalConversationActive(tab) {
-  return naturalConversationModeSnapshot(tab).enabled === true;
-}
-
-function naturalConversationCommandBaseName(name) {
-  return String(name || "").trim().toLowerCase().replace(/:\d+$/, "");
-}
-
-function naturalConversationSlashCommandName(message) {
-  const match = String(message || "").trim().match(/^\/([^\s]+)/);
-  return match ? naturalConversationCommandBaseName(match[1]) : "";
-}
-
-function isNaturalConversationSlashCommand(message) {
-  return NATURAL_CONVERSATION_COMMAND_NAMES.includes(naturalConversationSlashCommandName(message));
-}
-
-function blockNaturalConversationAction(action) {
-  throw makeHttpError(409, `Natural Conversation Mode is active; ${action}. Leave the mode first with /talk off.`);
-}
-
-function ensureNaturalConversationRouteAllowed(tab, action) {
-  if (isNaturalConversationActive(tab)) blockNaturalConversationAction(action);
-}
-
-async function ensureNaturalConversationPromptSafety(tab, command) {
-  if (!isNaturalConversationActive(tab) || !["prompt", "steer", "follow_up"].includes(command?.type)) return null;
-  tab.pendingThinkingLevel = undefined;
-  const stateResult = await safeRpcData(tab, { type: "get_state" }, STATUS_RPC_TIMEOUT_MS);
-  if (stateResult.ok && stateIsBusyForSettings(stateResult.data)) return null;
-  const response = await setThinkingLevelForTab(tab, "off", { allowPending: false });
-  return response?.success === false ? response : null;
-}
-
-function enforceNaturalConversationCommandAllowed(tab, command) {
-  if (!isNaturalConversationActive(tab)) return;
-  if (command?.type === "set_thinking_level") {
-    if (command.level !== "off") blockNaturalConversationAction("thinking is forced off");
-    return;
-  }
-  if (!["prompt", "steer", "follow_up", "abort", "abort_bash"].includes(command?.type)) {
-    blockNaturalConversationAction(`${command?.type || "this action"} is blocked`);
-  }
-  if (command?.type === "prompt" && naturalConversationSlashCommandName(command.message) && !isNaturalConversationSlashCommand(command.message)) {
-    blockNaturalConversationAction("slash commands are blocked from the Web UI shell");
-  }
-}
-
 function replayExtensionStatuses(tab, client) {
   for (const [statusKey, statusText] of extensionStatusMap(tab)) {
     sendSseToClient(client, {
@@ -11360,92 +6443,6 @@ function sendQueuedBashCommand(tab, command) {
   });
 }
 
-function isPendingExtensionUiRequest(event) {
-  return event?.type === "extension_ui_request" && EXTENSION_UI_BLOCKING_METHODS.has(event.method) && event.id;
-}
-
-function pruneExpiredPendingExtensionUiRequests(tab, nowMs = Date.now()) {
-  const pending = tab?.pendingExtensionUiRequests;
-  if (!pending) return;
-  for (const [id, request] of pending) {
-    const expiresAtMs = Date.parse(request.expiresAt || "");
-    if (Number.isFinite(expiresAtMs) && expiresAtMs <= nowMs) pending.delete(id);
-  }
-}
-
-function pendingExtensionUiRequests(tab) {
-  pruneExpiredPendingExtensionUiRequests(tab);
-  return [...(tab?.pendingExtensionUiRequests?.values() || [])];
-}
-
-function pendingExtensionUiRequestSummaries(tab) {
-  return pendingExtensionUiRequests(tab).map((request) => ({
-    id: request.id,
-    method: request.method,
-    title: truncateStatusText(request.title || request.placeholder || "", 120),
-    message: request.message ? truncateStatusText(request.message, 180) : undefined,
-    receivedAt: request.receivedAt,
-    expiresAt: request.expiresAt,
-  }));
-}
-
-function trackPendingExtensionUiRequest(tab, event) {
-  if (!isPendingExtensionUiRequest(event)) return;
-  const receivedAt = new Date().toISOString();
-  const timeoutMs = Number(event.timeout);
-  const expiresAt = Number.isFinite(timeoutMs) && timeoutMs > 0 ? new Date(Date.parse(receivedAt) + timeoutMs + 1000).toISOString() : undefined;
-  pendingExtensionUiMap(tab).set(String(event.id), { ...event, receivedAt, expiresAt });
-  if (!tab.activity?.isWorking) markTabWorking(tab, receivedAt);
-}
-
-function resolvePendingExtensionUiRequest(tab, id) {
-  if (!id) return false;
-  return !!tab?.pendingExtensionUiRequests?.delete(String(id));
-}
-
-function clearPendingExtensionUiRequests(tab) {
-  tab?.pendingExtensionUiRequests?.clear();
-}
-
-function replayPendingExtensionUiRequests(tab, client) {
-  const pending = pendingExtensionUiRequests(tab);
-  for (const request of pending) {
-    sendSseToClient(client, {
-      ...request,
-      type: "extension_ui_request",
-      replayed: true,
-      tabId: tab.id,
-      tabTitle: tab.title,
-      pendingExtensionUiRequestCount: pending.length,
-      tabActivity: tabActivitySnapshot(tab),
-    });
-  }
-}
-
-async function cancelPendingExtensionUiRequests(tab) {
-  const pending = pendingExtensionUiRequests(tab);
-  if (!pending.length) return 0;
-  const ids = [];
-  for (const request of pending) {
-    ids.push(String(request.id));
-    try {
-      await tab.rpc.writeRaw({ type: "extension_ui_response", id: request.id, cancelled: true });
-    } catch {
-      // Abort should remain best-effort even if the RPC process already exited.
-    }
-    resolvePendingExtensionUiRequest(tab, request.id);
-  }
-  broadcastTabEvent(tab, {
-    type: "webui_extension_ui_cancelled",
-    tabId: tab.id,
-    tabTitle: tab.title,
-    ids,
-    pendingExtensionUiRequestCount: pendingExtensionUiRequests(tab).length,
-    tabActivity: tabActivitySnapshot(tab),
-  });
-  return ids.length;
-}
-
 function markTabWorking(tab, timestamp = new Date().toISOString(), { runStarted = false } = {}) {
   const activity = tab.activity || createTabActivity(timestamp);
   if (!activity.isWorking || !activity.runId) activity.runId = randomUUID();
@@ -11612,18 +6609,19 @@ function updateTabActivityFromEvent(tab, event) {
 
 function defaultTabTitle(tabIndex) {
   if (options.name) return tabIndex === 1 ? options.name : `${options.name} ${tabIndex}`;
-  return `Terminal ${tabIndex}`;
+  return `Thread ${tabIndex}`;
 }
 
-async function primeTabRpc(tab) {
+async function primeTabRpc(tab, { strict = false } = {}) {
   try {
-    const response = await tab.rpc.send({ type: "get_state" }, 1500);
+    const response = await tab.rpc.send({ type: "get_state" }, strict ? 15_000 : 1500);
+    if (strict && response.success === false) throw new Error(response.error || "Pi state is unavailable");
     if (response.success !== false) {
       rememberTabState(tab, response.data);
       reconcileTabActivityFromState(tab, response.data);
     }
   } catch (error) {
-    if (!/Timed out waiting for RPC response/i.test(sanitizeError(error))) throw error;
+    if (strict || !/Timed out waiting for RPC response/i.test(sanitizeError(error))) throw error;
   }
 }
 
@@ -11637,13 +6635,7 @@ function attachRpcToTab(tab, rpc) {
     updateTabActivityFromEvent(tab, event);
     let scopedEvent = scopedGuidedGitLaunchEvent(tab, eventForTabClients(tab, event));
     if (event?.type === "pi_process_exit" || event?.type === "pi_process_error") {
-      if (tab.gitWorkflowGeneration) tab.gitWorkflowGeneration.processLost = true;
-      if (tab.gitWorkflowArtifactGeneration) {
-        tab.gitWorkflowArtifactGeneration.terminal = true;
-        tab.gitWorkflowArtifactGeneration.successful = false;
-      }
-      tab.gitWorkflowGeneration = null;
-      tab.gitWorkflowMessageGeneration = null;
+      loseGitWorkflowGeneration(tab);
       clearPendingExtensionUiRequests(tab);
       clearExtensionStatuses(tab);
       scheduleSupervisorMetadataUpdate(tab);
@@ -11666,7 +6658,7 @@ function attachRpcToTab(tab, rpc) {
   });
 }
 
-function createTabRecord({ id, index, title, titleSource, conversationStarted, cwd, createdAt = new Date().toISOString(), sessionFile, gitWorkspace, prompt, rpc }) {
+function createTabRecord({ id, index, title, titleSource, conversationStarted, cwd, workspaceKind, noProjectId, createdAt = new Date().toISOString(), sessionFile, gitWorkspace, prompt, rpc }) {
   const tab = {
     id,
     index,
@@ -11674,6 +6666,8 @@ function createTabRecord({ id, index, title, titleSource, conversationStarted, c
     titleSource,
     conversationStarted: conversationStarted === true,
     cwd,
+    workspaceKind,
+    noProjectId,
     createdAt,
     sessionFile: options.noSession ? undefined : normalizedRestoreString(sessionFile, 4096),
     gitWorkspace: gitWorkspace || null,
@@ -11702,6 +6696,7 @@ function createTabRecord({ id, index, title, titleSource, conversationStarted, c
     compactionQueueRevision: 0,
     compactionQueueDraining: false,
     cwdChangeInProgress: false,
+    noProjectResetInProgress: false,
     rpc,
     rpcUnsubscribe: undefined,
     sseClients: new Set(),
@@ -11713,7 +6708,7 @@ function createTabRecord({ id, index, title, titleSource, conversationStarted, c
   return tab;
 }
 
-async function createTab({ id: requestedId, index, title, titleSource, conversationStarted, cwd, sessionFile, gitWorkspace } = {}) {
+async function createTab({ id: requestedId, index, title, titleSource, conversationStarted, cwd, sessionFile, gitWorkspace, workspaceKind, noProjectId, freshNoProject = false } = {}) {
   const releaseAdmittedWork = nativeAdmittedWork.begin();
   try {
   if (!nativeAdmissionState) throw new Error("Update admission is not initialized.");
@@ -11724,9 +6719,12 @@ async function createTab({ id: requestedId, index, title, titleSource, conversat
   const tabTitle = explicitTitle || defaultTabTitle(tabIndex);
   const titleIsExplicit = Boolean(explicitTitle || (options.name && tabIndex === 1));
   const resolvedTitleSource = ["explicit", "auto", "default"].includes(titleSource) ? titleSource : titleIsExplicit ? "explicit" : "default";
-  const tabCwd = cwd ? await resolveCwd(cwd, options.cwd) : options.cwd;
+  const allocation = freshNoProject ? await allocateNoProjectWorkspace(agentDir) : null;
+  const requestedCwd = allocation?.cwd || cwd || options.cwd;
+  const identity = allocation || await resolveNoProjectWorkspace(agentDir, { cwd: requestedCwd, workspaceKind, noProjectId });
+  const tabCwd = identity.workspaceKind === "no-project" ? requestedCwd : cwd ? await resolveCwd(cwd, options.cwd) : options.cwd;
   const id = requestedId && !tabs.has(requestedId) ? requestedId : randomUUID();
-  const launch = await buildPiLaunchForTab(tabIndex, tabTitle, tabCwd);
+  const launch = await buildPiLaunchForTab(tabIndex, tabTitle, tabCwd, identity.workspaceKind);
   const piArgs = launch.args;
   if (sessionFile && !options.noSession) piArgs.push("--session", sessionFile);
   const piCommand = await resolvePiCommand(piArgs);
@@ -11741,6 +6739,8 @@ async function createTab({ id: requestedId, index, title, titleSource, conversat
     titleSource: resolvedTitleSource,
     conversationStarted,
     cwd: tabCwd,
+    workspaceKind: identity.workspaceKind,
+    noProjectId: identity.noProjectId,
     createdAt,
     sessionFile,
     gitWorkspace,
@@ -11763,8 +6763,12 @@ async function createTab({ id: requestedId, index, title, titleSource, conversat
       await rpc.start();
     }
     tab.prompt = launch.prompt;
-    await primeTabRpc(tab);
+    await primeTabRpc(tab, { strict: identity.workspaceKind === "no-project" });
   } catch (error) {
+    if (identity.workspaceKind === "no-project") {
+      await discardTab(tab).catch((cleanupError) => console.warn(`failed to stop rejected No Project tab: ${sanitizeError(cleanupError)}`));
+      throw new Error(`Pi RPC process failed while starting ${tabTitle}: ${sanitizeError(error)}`);
+    }
     if (!tab.rpc.isRunning()) {
       tab.rpcUnsubscribe?.();
       rpc.dispose?.();
@@ -11792,6 +6796,7 @@ async function hydrateManagedTabs(snapshot) {
       if (!descriptor?.id || !descriptor.cwd || tabs.has(descriptor.id)) {
         throw new Error("RPC supervisor returned invalid or duplicate managed tab metadata");
       }
+      const identity = await resolveNoProjectWorkspace(agentDir, descriptor);
       const tabIndex = Number.isInteger(descriptor.index) && descriptor.index > 0 ? descriptor.index : nextTabIndex;
       nextTabIndex = Math.max(nextTabIndex, tabIndex + 1);
       const tabTitle = descriptor.title || defaultTabTitle(tabIndex);
@@ -11809,6 +6814,7 @@ async function hydrateManagedTabs(snapshot) {
         titleSource: resolvedTitleSource,
         conversationStarted: descriptor.conversationStarted,
         cwd: descriptor.cwd,
+        ...identity,
         createdAt: normalizedRestoreString(metadata?.createdAt, 128) || managed.startedAt || new Date().toISOString(),
         sessionFile: descriptor.sessionFile,
         gitWorkspace: metadata?.gitWorkspace || null,
@@ -11847,6 +6853,8 @@ function tabMeta(tab) {
     titleSource: tab.titleSource || "default",
     conversationStarted: !!tab.conversationStarted,
     cwd: tab.cwd,
+    workspaceKind: tab.workspaceKind,
+    noProjectId: tab.noProjectId,
     sessionFile: tabRestorableSessionFile(tab),
     gitWorkspace: tab.gitWorkspace || null,
     prompt: normalizeTabPromptDescriptor(tab.prompt),
@@ -12374,6 +7382,8 @@ function restorableTabDescriptor(tab, state = null) {
     titleSource: tab.titleSource,
     conversationStarted: tab.conversationStarted,
     cwd: tab.cwd,
+    workspaceKind: tab.workspaceKind,
+    noProjectId: tab.noProjectId,
     sessionFile: sessionFileFromState(state) || tabRestorableSessionFile(tab),
   }, new Set());
 }
@@ -12420,6 +7430,14 @@ function workspaceLoadWarning(savedTabId, code, message) {
 
 async function workspaceLoadDescriptor(descriptor, warnings) {
   const next = { ...descriptor };
+  const identity = await resolveNoProjectWorkspace(agentDir, next);
+  if (identity.workspaceKind === "no-project") {
+    Object.assign(next, identity);
+    if (next.sessionFile && !(await stat(next.sessionFile).catch(() => null))?.isFile()) {
+      throw makeHttpError(400, "No Project saved session file is unavailable");
+    }
+    return next;
+  }
   if (next.sessionFile) {
     const sessionInfo = await stat(next.sessionFile).catch(() => null);
     if (!sessionInfo?.isFile()) {
@@ -12463,7 +7481,7 @@ async function saveCurrentWorkspaceForReplacement(saveCurrent, tabIds) {
   const descriptors = await restorableTabsForRestart();
   const descriptorIds = new Set(descriptors.map((descriptor) => descriptor.id));
   if (descriptors.length !== tabIds.length || tabIds.some((id) => !descriptorIds.has(id))) {
-    throw makeHttpError(400, `Only ${RESTORE_TAB_LIMIT} open tabs can be saved; close some tabs or choose Load without saving`);
+    throw makeHttpError(400, `Only ${RESTORE_TAB_LIMIT} open threads can be saved; close some threads or choose Load without saving`);
   }
   try {
     return await saveWebuiWorkspace({
@@ -12503,7 +7521,7 @@ async function loadWebuiWorkspace(id, body = {}) {
       }
       if (!openTabsUnchanged(openTabIds)) {
         const savedNote = savedCurrent ? "The current workspace was saved, but " : "";
-        throw makeHttpError(409, `${savedNote}open tabs changed before the workspace could be replaced`);
+        throw makeHttpError(409, `${savedNote}open threads changed before the workspace could be replaced`);
       }
       closedIds = (await closeTabs(openTabIds, { allowEmpty: true })).map((tab) => tab.id);
     }
@@ -12511,12 +7529,12 @@ async function loadWebuiWorkspace(id, body = {}) {
     const warnings = [];
     const idMap = {};
     for (const descriptor of workspace.tabs) {
-      const preflighted = await workspaceLoadDescriptor(descriptor, warnings);
       try {
+        const preflighted = await workspaceLoadDescriptor(descriptor, warnings);
         const tab = await createTab(preflighted);
         idMap[descriptor.id] = tab.id;
       } catch (error) {
-        warnings.push(workspaceLoadWarning(descriptor.id, "tab_create_failed", `Could not restore this tab: ${sanitizeError(error)}`));
+        warnings.push(workspaceLoadWarning(descriptor.id, "tab_create_failed", `Could not restore this thread: ${sanitizeError(error)}`));
       }
     }
     const groups = workspace.groups.map((group) => ({
@@ -12581,6 +7599,7 @@ async function spawnRestartServer(restorableTabs, supervisorCursor, updateRestar
 let updateStatusCache = null;
 let updateStatusCacheAt = 0;
 const componentUpdateState = new ComponentUpdateState();
+const packageUpdates = createPackageUpdates({ agentDir, cwd: options.cwd });
 
 async function canonicalUpdateIdentities({ forcePi = false } = {}) {
   const pi = await canonicalPiRuntimeIdentity({ force: forcePi });
@@ -12946,15 +7965,11 @@ function basePackageUpdateStatus(packageName, currentVersion) {
 }
 
 async function checkLatestPiReleaseStatus() {
-  const [selected, pathPi] = await Promise.all([
-    canonicalPiRuntimeIdentity({ force: true }).catch(() => null),
-    resolveUpdatePathPi({ runVersion: runCommand }),
-  ]);
-  const currentVersion = pathPi.eligible ? pathPi.version : "";
+  const currentVersion = String(piPackageJson.version || "");
   const status = basePackageUpdateStatus(PI_CODING_AGENT_PACKAGE, currentVersion);
-  status.activeRuntimeVersion = selected?.active?.version || "unknown";
-  status.pathInstallationVersion = currentVersion || "unknown";
-  status.pathGuidance = pathPi.eligible ? "" : pathPi.guidance;
+  status.activeRuntimeVersion = "unknown";
+  status.pathInstallationVersion = "unknown";
+  status.pathGuidance = "";
   const skippedReason = updateChecksSkippedReason();
   if (skippedReason) {
     status.skipped = true;
@@ -13013,25 +8028,15 @@ async function checkLatestNpmPackageStatus(packageName, currentVersion) {
 
 async function updateStatusForRequest(status, req) {
   const localRequest = isLocalRequest(req);
-  let nativeJobs = { pi: null, webui: null };
-  let nativeJobDiscoveryError = "";
-  if (localRequest) {
-    try {
-      nativeJobs = await discoverNativeJobs(await sharedUpdateRoot(), {
-        agentDir: await realpath(agentDir), ownerPackageRoot: realpathSync(packageRoot), ownerBootIdentity: bootIdentity,
-      });
-    } catch {
-      nativeJobDiscoveryError = "Durable update history could not be verified. Inspect the host before retrying or restarting.";
-    }
-  }
-  const updateInProgress = await privilegedUpdateInProgress() || Boolean(nativeJobDiscoveryError) ||
-    Object.values(nativeJobs).some(nativeJobBlocksUpdates);
+  const nativeJobs = packageUpdates.getJobs();
+  const updateInProgress = packageUpdates.running;
   return {
     ...status,
     canRunUpdate: localRequest && !updateInProgress,
     updateInProgress,
-    componentUpdates: await componentUpdatesForRequest(req, updateInProgress),
-    ...(localRequest ? { nativeJobs, nativeJobDiscoveryError } : {}),
+    restartRequired: Object.values(nativeJobs).some((job) => job?.restartRequired),
+    componentUpdates: componentUpdateState.publicStates({ localRequest, updateInProgress, webuiAvailable: true, webuiUnavailableReason: "" }),
+    ...(localRequest ? { nativeJobs, nativeJobDiscoveryError: "" } : {}),
   };
 }
 
@@ -13054,7 +8059,7 @@ async function getUpdateStatus({ force = false } = {}) {
     webui: webuiStatus,
     packages: {
       checked: false,
-      note: "Separate native Pi and Web UI actions use confirmed PATH Pi or proven npm ownership; uncertain targets require a manual update."
+      note: "Updates use PATH Pi and detected npm-global or Pi-managed Web UI installations. Restart Web UI manually after updating."
     },
   };
   updateStatusCacheAt = now;
@@ -13162,6 +8167,21 @@ function resetAutomaticTabTitleForNewSession(tab) {
   return renameTab(tab, defaultTabTitle(tab.index), { source: "default", unique: false });
 }
 
+async function createNoProjectResetTab(source) {
+  if (source.noProjectResetInProgress || source.cwdChangeInProgress) throw makeHttpError(409, "A No Project session change is already in progress");
+  source.noProjectResetInProgress = true;
+  try {
+    enforceNaturalConversationCommandAllowed(source, { type: "new_session" });
+    await requireIdleForSessionAction(source, "starting a new No Project conversation");
+    if (source.compactionQueueDraining || compactionQueueForTab(source).length) throw makeHttpError(409, "Wait for queued compaction work before starting a new conversation");
+    await resolveNoProjectWorkspace(agentDir, source);
+    const next = await createTab({ freshNoProject: true });
+    return { nextTabId: next.id, tab: tabMeta(next), tabs: listTabs(), sourceTab: tabMeta(source) };
+  } finally {
+    source.noProjectResetInProgress = false;
+  }
+}
+
 function responseWithTab(response, tab) {
   if (!response || typeof response !== "object") return response;
   return { ...response, tab: tabMeta(tab) };
@@ -13170,6 +8190,7 @@ function responseWithTab(response, tab) {
 async function updateTabCwd(id, cwd) {
   const tab = tabs.get(id);
   if (!tab) throw makeHttpError(404, `Unknown Pi tab: ${id}`);
+  if (tab.noProjectResetInProgress) throw makeHttpError(409, "A new No Project conversation is already starting");
   if (tab.cwdChangeInProgress) throw makeHttpError(409, `${tab.title} is already changing its working folder`);
 
   tab.cwdChangeInProgress = true;
@@ -13183,6 +8204,7 @@ async function updateTabCwd(id, cwd) {
 
 async function performTabCwdUpdate(tab, cwd) {
   const nextCwd = await resolveCwd(cwd, tab.cwd);
+  const identity = await resolveNoProjectWorkspace(agentDir, { cwd: nextCwd });
   if (nextCwd === tab.cwd) return { tab, changed: false };
   if (tab.rpc instanceof SupervisorPiRpcProcess && !tab.rpc.supervisor.isCurrentVersion()) {
     throw makeHttpError(503, "The detached Pi supervisor is from an older WebUI build. Fully shut down Pi WebUI (not Restart), then start it again before changing working folders.");
@@ -13194,7 +8216,7 @@ async function performTabCwdUpdate(tab, cwd) {
   if (tab.rpc?.isRunning()) await safeRpcData(tab, { type: "get_state" }, STATUS_RPC_TIMEOUT_MS);
   const sessionFile = tabRestorableSessionFile(tab);
 
-  const launch = await buildPiLaunchForTab(tab.index, tab.title, nextCwd);
+  const launch = await buildPiLaunchForTab(tab.index, tab.title, nextCwd, identity.workspaceKind);
   const piArgs = launch.args;
   if (sessionFile && !options.noSession) piArgs.push("--session", sessionFile);
   const piCommand = await resolvePiCommand(piArgs);
@@ -13217,7 +8239,7 @@ async function performTabCwdUpdate(tab, cwd) {
     if (oldRpc instanceof SupervisorPiRpcProcess) {
       const snapshot = await oldRpc.replace({
         child: { command: piCommand.command, args: piCommand.args, cwd: nextCwd },
-        metadata: supervisedTabMetadata(tab, { cwd: nextCwd, prompt: launch.prompt }),
+        metadata: supervisedTabMetadata(tab, { cwd: nextCwd, prompt: launch.prompt, workspaceKind: identity.workspaceKind || null, noProjectId: identity.noProjectId || null }),
         displayCommand: piCommand.displayCommand,
       });
       oldRpc.dispose();
@@ -13246,6 +8268,8 @@ async function performTabCwdUpdate(tab, cwd) {
     }
   }
   tab.cwd = nextCwd;
+  tab.workspaceKind = identity.workspaceKind;
+  tab.noProjectId = identity.noProjectId;
   resetTabActivity(tab);
   tab.prompt = launch.prompt;
   gitLiveWatcher.unsubscribe(tab.id);
@@ -13283,7 +8307,8 @@ async function restartTabRpc(tab, reason = "reload", restart = null) {
   if (state.data?.isStreaming) throw makeHttpError(409, "Wait for the current response to finish before reloading.");
   if (state.data?.isCompacting) throw makeHttpError(409, "Wait for compaction to finish before reloading.");
 
-  const launch = await buildPiLaunchForTab(tab.index, tab.title, tab.cwd);
+  await resolveNoProjectWorkspace(agentDir, tab);
+  const launch = await buildPiLaunchForTab(tab.index, tab.title, tab.cwd, tab.workspaceKind);
   const piArgs = launch.args;
   if (state.data?.sessionFile && !options.noSession) piArgs.push("--session", state.data.sessionFile);
   const piCommand = await resolvePiCommand(piArgs);
@@ -13336,7 +8361,7 @@ async function restartTabRpc(tab, reason = "reload", restart = null) {
 }
 
 function rpcUnavailableMessage(tab) {
-  return `Pi RPC process for ${tab?.title || "terminal"} is not running`;
+  return `Pi RPC process for ${tab?.title || "thread"} is not running`;
 }
 
 function fallbackRpcResponse(tab, command, error) {
@@ -13389,73 +8414,6 @@ async function safeRpcResponse(tab, command, timeoutMs = REQUEST_TIMEOUT_MS) {
   } catch (error) {
     const message = sanitizeError(error);
     if (/Pi RPC process is not running/i.test(message)) return responseWithPendingThinking(tab, fallbackRpcResponse(tab, command, error));
-    throw error;
-  }
-}
-
-function parseWebuiHelperResponseEvent(event) {
-  if (event?.type !== "extension_ui_request" || event.method !== "notify") return undefined;
-  const message = String(event.message || "");
-  if (!message.startsWith(WEBUI_HELPER_RESPONSE_PREFIX)) return undefined;
-  try {
-    return JSON.parse(message.slice(WEBUI_HELPER_RESPONSE_PREFIX.length));
-  } catch (error) {
-    return { ok: false, error: `Invalid Web UI helper response: ${sanitizeError(error)}` };
-  }
-}
-
-function resolveWebuiHelperResponse(tab, event) {
-  const payload = parseWebuiHelperResponseEvent(event);
-  if (!payload) return false;
-  const requestId = String(payload.requestId || "");
-  const pending = tab?.webuiHelperRequests?.get(requestId);
-  if (pending) {
-    tab.webuiHelperRequests.delete(requestId);
-    clearTimeout(pending.timeout);
-    if (payload.ok === false) pending.reject(makeHttpError(400, payload.error || "Web UI helper command failed"));
-    else pending.resolve(payload.data || {});
-  }
-  return true;
-}
-
-function resolveWebuiHelperRpcResponse(tab, event) {
-  if (event?.type !== "response" || event.command !== "prompt" || !event.id) return false;
-  return tab?.webuiHelperResponseIds?.delete(String(event.id)) === true;
-}
-
-function webuiHelperRequestMap(tab) {
-  if (!tab.webuiHelperRequests) tab.webuiHelperRequests = new Map();
-  return tab.webuiHelperRequests;
-}
-
-async function sendWebuiHelperCommand(tab, action, payload = {}, timeoutMs = WEBUI_HELPER_TIMEOUT_MS) {
-  const requestId = randomUUID();
-  const pending = new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => {
-      webuiHelperRequestMap(tab).delete(requestId);
-      tab.webuiHelperResponseIds?.delete(requestId);
-      reject(makeHttpError(504, `Timed out waiting for Web UI helper action: ${action}. Try /reload in this tab, then retry.`));
-    }, timeoutMs);
-    webuiHelperRequestMap(tab).set(requestId, { resolve, reject, timeout });
-  });
-  pending.catch(() => {});
-
-  try {
-    tab.webuiHelperResponseIds?.add(requestId);
-    const response = await tab.rpc.send({
-      id: requestId,
-      type: "prompt",
-      message: `/${WEBUI_HELPER_COMMAND} ${JSON.stringify({ requestId, action, payload })}`,
-    }, timeoutMs);
-    if (response.success === false) throw makeHttpError(400, response.error || `Web UI helper action failed: ${action}`);
-    return await pending;
-  } catch (error) {
-    tab.webuiHelperResponseIds?.delete(requestId);
-    const request = webuiHelperRequestMap(tab).get(requestId);
-    if (request) {
-      clearTimeout(request.timeout);
-      webuiHelperRequestMap(tab).delete(requestId);
-    }
     throw error;
   }
 }
@@ -14020,31 +8978,6 @@ async function annotateSkillCommandState(tab, commands) {
     });
 }
 
-function naturalConversationLoadedCommandNames(commands = []) {
-  const names = [];
-  const seen = new Set();
-  for (const command of commands || []) {
-    const baseName = naturalConversationCommandBaseName(command?.name || command?.invokeName || "");
-    if (!NATURAL_CONVERSATION_COMMAND_NAMES.includes(baseName) || seen.has(baseName)) continue;
-    seen.add(baseName);
-    names.push(baseName);
-  }
-  return names;
-}
-
-function rememberNaturalConversationCommands(tab, commands = []) {
-  const loadedCommands = naturalConversationLoadedCommandNames(commands);
-  const available = loadedCommands.length > 0;
-  tab.conversationMode = naturalConversationModeSnapshot(tab, {
-    available,
-    enabled: available ? undefined : false,
-    uiState: available ? undefined : "off",
-    statusText: available ? undefined : "",
-    loadedCommands,
-  });
-  return tab.conversationMode;
-}
-
 async function getCommandData(tab, { annotateSkills = true } = {}) {
   try {
     const response = await tab.rpc.send({ type: "get_commands" });
@@ -14061,484 +8994,6 @@ async function getCommandData(tab, { annotateSkills = true } = {}) {
   }
 }
 
-async function naturalConversationPackageStatus() {
-  try {
-    return await optionalFeaturePackageStatus(NATURAL_CONVERSATION_FEATURE_ID);
-  } catch (error) {
-    return { featureId: NATURAL_CONVERSATION_FEATURE_ID, packageName: OPTIONAL_FEATURE_PACKAGES.get(NATURAL_CONVERSATION_FEATURE_ID), installed: false, error: sanitizeError(error) };
-  }
-}
-
-async function naturalConversationFeatureData(tab, { refreshCommands = true } = {}) {
-  let commandData = null;
-  let commandError = "";
-  if (refreshCommands) {
-    try {
-      commandData = await getCommandData(tab, { annotateSkills: false });
-    } catch (error) {
-      commandError = sanitizeError(error);
-      rememberNaturalConversationCommands(tab, []);
-    }
-  }
-  const packageStatus = await naturalConversationPackageStatus();
-  tab.conversationMode = naturalConversationModeSnapshot(tab, { packageInstalled: packageStatus.installed === true });
-  const mode = naturalConversationModeSnapshot(tab);
-  const available = mode.available === true;
-  return {
-    featureId: NATURAL_CONVERSATION_FEATURE_ID,
-    packageName: OPTIONAL_FEATURE_PACKAGES.get(NATURAL_CONVERSATION_FEATURE_ID),
-    available,
-    packageInstalled: packageStatus.installed === true,
-    packageStatus,
-    commands: mode.loadedCommands,
-    mode,
-    rpcRunning: commandData?.rpcRunning !== false && !commandError,
-    unavailableReason: available
-      ? ""
-      : packageStatus.installed
-        ? "Natural Conversation package is installed, but /talk is not loaded in the active Pi tab. Reload the tab or enable the package extension."
-        : "Natural Conversation package is not installed or not visible from the Web UI package root.",
-    error: commandError || undefined,
-  };
-}
-
-async function setNaturalConversationMode(tab, body = {}) {
-  const desired = body.enabled === true;
-  const feature = await naturalConversationFeatureData(tab);
-  if (!feature.available) throw makeHttpError(404, feature.unavailableReason);
-  const commandName = feature.commands.find((name) => name === "talk") || feature.commands[0] || "talk";
-  const response = await tab.rpc.send({ type: "prompt", message: `/${commandName} ${desired ? "on" : "off"}` }, REQUEST_TIMEOUT_MS);
-  if (response.success === false) throw makeHttpError(400, response.error || `Failed to ${desired ? "enable" : "disable"} Natural Conversation Mode`);
-  tab.conversationMode = naturalConversationModeSnapshot(tab, {
-    available: true,
-    enabled: desired,
-    uiState: desired ? "listening" : "off",
-    statusText: desired ? `Voice: listening` : "",
-    loadedCommands: feature.commands,
-    packageInstalled: feature.packageInstalled,
-    startedAt: desired ? naturalConversationModeSnapshot(tab).startedAt || new Date().toISOString() : null,
-  });
-  if (desired) {
-    tab.pendingThinkingLevel = undefined;
-    await setThinkingLevelForTab(tab, "off", { allowPending: false }).catch(() => null);
-  }
-  return { ...(await naturalConversationFeatureData(tab, { refreshCommands: false })), response };
-}
-
-function codexFastModeCommandBaseName(name) {
-  return String(name || "").trim().toLowerCase().replace(/:\d+$/, "");
-}
-
-// Only exact extension-published preferences are authoritative, not RPC command success.
-function codexFastModeStatusState(statusText) {
-  const mode = codexSpeedModeFromStatus(stripAnsi(statusText));
-  return { known: mode !== null, enabled: mode !== null && mode !== "normal", mode };
-}
-
-function codexFastModeSnapshot(tab, patch = {}) {
-  const previous = tab?.codexFastMode && typeof tab.codexFastMode === "object" ? tab.codexFastMode : {};
-  const status = codexFastModeStatusState(extensionStatusMap(tab).get(CODEX_FAST_MODE_STATUS_KEY) || "");
-  const mode = patch.mode ?? (status.known ? status.mode : previous.mode ?? null);
-  const known = mode !== null && (patch.statusKnown ?? (status.known || previous.statusKnown === true));
-  return {
-    featureId: CODEX_FAST_MODE_FEATURE_ID,
-    mode,
-    enabled: mode !== null && mode !== "normal",
-    statusKnown: known,
-    updatedAt: patch.updatedAt || new Date().toISOString(),
-  };
-}
-
-function resetCodexFastMode(tab) {
-  if (!tab) return;
-  tab.codexFastMode = null;
-  tab.codexFastModeCommandName = "";
-}
-
-async function codexFastModePackageStatus() {
-  try {
-    return await optionalFeaturePackageStatus(CODEX_FAST_MODE_FEATURE_ID);
-  } catch (error) {
-    return { featureId: CODEX_FAST_MODE_FEATURE_ID, packageName: OPTIONAL_FEATURE_PACKAGES.get(CODEX_FAST_MODE_FEATURE_ID), installed: false, error: sanitizeError(error) };
-  }
-}
-
-async function codexFastModeCommandState(tab, { refreshCommands = true } = {}) {
-  if (!refreshCommands) return { commandName: String(tab?.codexFastModeCommandName || ""), rpcRunning: true, error: "" };
-  try {
-    const data = await getCommandData(tab, { annotateSkills: false });
-    const match = (data.commands || []).find((command) => codexFastModeCommandBaseName(command?.name) === CODEX_FAST_MODE_COMMAND_NAME);
-    tab.codexFastModeCommandName = match?.name ? String(match.name) : "";
-    return { commandName: tab.codexFastModeCommandName, rpcRunning: data.rpcRunning !== false, error: data.error || "" };
-  } catch (error) {
-    tab.codexFastModeCommandName = "";
-    return { commandName: "", rpcRunning: false, error: sanitizeError(error) };
-  }
-}
-
-async function codexFastModeFeatureData(tab, { refreshCommands = true } = {}) {
-  const packageStatus = await codexFastModePackageStatus();
-  const command = await codexFastModeCommandState(tab, { refreshCommands });
-  const state = await currentSessionState(tab).catch(() => tab?.lastState || {});
-  const model = state?.model?.provider && state?.model?.id
-    ? { provider: String(state.model.provider), id: String(state.model.id), api: String(state.model.api || "") }
-    : null;
-  const mode = codexFastModeSnapshot(tab);
-  tab.codexFastMode = mode;
-  const available = !!command.commandName;
-  return {
-    featureId: CODEX_FAST_MODE_FEATURE_ID,
-    packageName: OPTIONAL_FEATURE_PACKAGES.get(CODEX_FAST_MODE_FEATURE_ID),
-    available,
-    packageInstalled: packageStatus.installed === true,
-    packageStatus,
-    commandName: command.commandName,
-    enabled: mode.enabled,
-    mode: mode.mode,
-    statusKnown: mode.statusKnown,
-    busy: tabHasActiveOutput(tab),
-    model,
-    modelEligible: model?.provider === CODEX_FAST_MODE_PROVIDER,
-    ultrafastModelEligible: model?.provider === CODEX_FAST_MODE_PROVIDER && model.api === "openai-codex-responses" && model.id === "gpt-6-astra",
-    creditNotice: CODEX_FAST_MODE_CREDIT_NOTICE,
-    rpcRunning: command.rpcRunning,
-    unavailableReason: available
-      ? ""
-      : packageStatus.installed
-        ? "Codex Fast mode package is installed, but /fast-mode is not loaded in the active Pi tab. Reload the tab or enable the package extension."
-        : "Codex Fast mode package is not installed or not visible from the Web UI package root.",
-    error: command.error || undefined,
-  };
-}
-
-async function waitForCodexFastModeStatus(tab, desired) {
-  const deadline = Date.now() + CODEX_FAST_MODE_STATUS_TIMEOUT_MS;
-  do {
-    const snapshot = codexFastModeSnapshot(tab);
-    if (snapshot.statusKnown && snapshot.mode === desired) {
-      tab.codexFastMode = snapshot;
-      return snapshot;
-    }
-    if (Date.now() >= deadline) break;
-    await sleepMs(25);
-  } while (true);
-  const label = desired === "normal" ? "off" : desired === "fast" ? "on" : "ultrafast";
-  throw makeHttpError(409, `Codex Fast mode did not confirm ${label}. The extension may be outdated, or the session may have become busy; inspect /fast-mode status and retry when idle.`);
-}
-
-async function setCodexFastMode(tab, body = {}) {
-  let desired;
-  try {
-    desired = codexSpeedModeFromIntent(body);
-  } catch (error) {
-    throw makeHttpError(400, error.message);
-  }
-  const feature = await codexFastModeFeatureData(tab);
-  if (!feature.available) throw makeHttpError(404, feature.unavailableReason);
-  // A mid-turn tier change would produce a mixed-tier tool loop, so mutations are rejected while
-  // the tab is working. Reading status stays available.
-  if (feature.busy) throw makeHttpError(409, "This tab is busy; Codex Fast mode cannot change during a running turn. Wait for the turn to finish, then retry.");
-  if (desired === "ultrafast" && !feature.ultrafastModelEligible) throw makeHttpError(400, "Select GPT-6 Astra through the subscription-backed openai-codex provider before enabling Ultrafast.");
-  const argument = desired === "normal" ? "off" : desired === "fast" ? "on" : "ultrafast";
-  const response = await tab.rpc.send({ type: "prompt", message: `/${feature.commandName} ${argument}` }, REQUEST_TIMEOUT_MS);
-  if (response.success === false) throw makeHttpError(400, response.error || `Failed to select Codex speed ${desired}`);
-  // RPC success only means the extension command returned. Require its authoritative status event
-  // to confirm the requested state so a busy-transition rejection cannot become false success.
-  await waitForCodexFastModeStatus(tab, desired);
-  return { ...(await codexFastModeFeatureData(tab, { refreshCommands: false })), requested: Object.hasOwn(body, "mode") ? desired : body.enabled };
-}
-
-// Piper voice switching for the native /talk audio loop. The WebUI never
-// imports the natural-conversation package; it mirrors the package's small
-// voice catalog for display, reads voice.json / the piper voice dir for
-// state, and performs the actual switch (incl. download) by sending
-// `/talk voice <id>` over RPC so the package stays the single writer.
-const CONVERSATION_VOICE_CATALOG = [
-  { id: "en_US-lessac-medium", file: "en_US-lessac-medium.onnx", sizeMb: 63, note: "natural US English" },
-  { id: "en_GB-alba-medium", file: "en_GB-alba-medium.onnx", sizeMb: 63, note: "natural British English" },
-  { id: "de_DE-thorsten-medium", file: "de_DE-thorsten-medium.onnx", sizeMb: 63, note: "natural German" },
-  { id: "de_DE-thorsten-high", file: "de_DE-thorsten-high.onnx", sizeMb: 110, note: "German, best quality" },
-];
-const CONVERSATION_VOICE_SWITCH_TIMEOUT_MS = 10 * 60 * 1000; // downloads can take a while
-
-function conversationVoiceConfigPath() {
-  const override = String(process.env.PI_VOICE_CONFIG_PATH || "").trim();
-  return override || path.join(homedir(), ".pi", "agent", "voice.json");
-}
-
-function conversationVoiceDirs() {
-  const data = String(process.env.XDG_DATA_HOME || "").trim() || path.join(homedir(), ".local", "share");
-  return [path.join(data, "piper"), path.join(data, "piper", "voices"), path.join(data, "piper-voices")];
-}
-
-async function conversationVoicesData() {
-  let ttsProvider = null;
-  let currentModelPath = null;
-  try {
-    const config = JSON.parse(await readFile(conversationVoiceConfigPath(), "utf8"));
-    ttsProvider = config?.native?.tts?.provider ?? null;
-    if (ttsProvider === "piper") currentModelPath = config?.native?.tts?.modelPath ?? null;
-  } catch {
-    // no voice.json yet — the dropdown still lists the catalog
-  }
-
-  const onDisk = new Map();
-  for (const dir of conversationVoiceDirs()) {
-    let entries = [];
-    try {
-      entries = await readdir(dir);
-    } catch {
-      continue;
-    }
-    for (const entry of entries) {
-      if (!entry.endsWith(".onnx") || onDisk.has(entry)) continue;
-      const modelPath = path.join(dir, entry);
-      const sidecar = await stat(`${modelPath}.json`).catch(() => null);
-      if (!sidecar) continue;
-      const size = await stat(modelPath).catch(() => null);
-      onDisk.set(entry, { path: modelPath, sizeMb: size ? Math.round(size.size / (1024 * 1024)) : 0 });
-    }
-  }
-
-  const voices = CONVERSATION_VOICE_CATALOG.map((entry) => ({
-    id: entry.id,
-    sizeMb: entry.sizeMb,
-    note: entry.note,
-    downloaded: onDisk.has(entry.file),
-    current: Boolean(currentModelPath && currentModelPath.endsWith(`/${entry.file}`)),
-  }));
-  for (const [file, info] of onDisk) {
-    if (CONVERSATION_VOICE_CATALOG.some((entry) => entry.file === file)) continue;
-    voices.push({
-      id: file.replace(/\.onnx$/, ""),
-      sizeMb: info.sizeMb,
-      note: "found on disk",
-      downloaded: true,
-      current: info.path === currentModelPath,
-    });
-  }
-  return { voices, current: voices.find((voice) => voice.current)?.id ?? null, ttsProvider };
-}
-
-async function setConversationVoice(tab, body = {}) {
-  const voiceId = String(body.voice || "").trim();
-  if (!/^[\w.-]{1,120}$/.test(voiceId)) throw makeHttpError(400, "voice must be a Piper voice id (letters, digits, dot, dash, underscore)");
-  const feature = await naturalConversationFeatureData(tab);
-  if (!feature.available) throw makeHttpError(404, feature.unavailableReason);
-  const commandName = feature.commands.find((name) => name === "talk") || feature.commands[0] || "talk";
-  const response = await tab.rpc.send({ type: "prompt", message: `/${commandName} voice ${voiceId}` }, CONVERSATION_VOICE_SWITCH_TIMEOUT_MS);
-  if (response.success === false) throw makeHttpError(400, response.error || `Failed to switch the conversation voice to ${voiceId}`);
-  return { ...(await conversationVoicesData()), response };
-}
-
-const VOICE_AUDIO_MIME_TYPES = new Set(["audio/webm", "audio/wav", "audio/x-wav", "audio/mpeg", "audio/mp3", "audio/mp4", "audio/ogg", "audio/flac", "application/octet-stream"]);
-const VOICE_STT_PROVIDER_IDS = ["local", "groq", "openai", "cloudflare"];
-const VOICE_TTS_PROVIDER_IDS = ["local", "openai"];
-
-function safeVoiceEndpointLabel(value) {
-  try {
-    const parsed = new URL(String(value || ""));
-    return `${parsed.origin}${parsed.pathname}`;
-  } catch {
-    return "";
-  }
-}
-
-function naturalConversationVoiceProviderStatus(kind = "stt") {
-  const stt = kind === "stt";
-  const localUrl = stt ? process.env.PI_VOICE_STT_URL : process.env.PI_VOICE_TTS_URL;
-  const providers = [
-    {
-      id: "local",
-      label: stt ? "Local STT endpoint" : "Local TTS endpoint",
-      configured: !!localUrl,
-      env: stt ? ["PI_VOICE_STT_URL"] : ["PI_VOICE_TTS_URL"],
-      endpoint: safeVoiceEndpointLabel(localUrl),
-    },
-  ];
-  if (stt) {
-    providers.push(
-      { id: "groq", label: "Groq Whisper", configured: !!process.env.GROQ_API_KEY, env: ["GROQ_API_KEY"], defaultModel: process.env.PI_VOICE_GROQ_STT_MODEL || "whisper-large-v3-turbo" },
-      { id: "openai", label: "OpenAI transcription", configured: !!process.env.OPENAI_API_KEY, env: ["OPENAI_API_KEY"], defaultModel: process.env.PI_VOICE_OPENAI_STT_MODEL || "gpt-4o-mini-transcribe" },
-      { id: "cloudflare", label: "Cloudflare Workers AI Whisper", configured: !!(process.env.CLOUDFLARE_API_TOKEN && process.env.CLOUDFLARE_ACCOUNT_ID), env: ["CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID"], deferred: true },
-    );
-  } else {
-    providers.push({ id: "openai", label: "OpenAI speech", configured: !!process.env.OPENAI_API_KEY, env: ["OPENAI_API_KEY"], defaultModel: process.env.PI_VOICE_OPENAI_TTS_MODEL || "gpt-4o-mini-tts" });
-  }
-  return {
-    kind: stt ? "stt" : "tts",
-    providers,
-    defaultProvider: (stt ? process.env.PI_VOICE_STT_PROVIDER : process.env.PI_VOICE_TTS_PROVIDER) || (localUrl ? "local" : ""),
-    remoteConsent: stt ? "Remote WebUI raw-audio uploads require per-request remoteMicStreamingConsentAccepted=true; browser Web Speech does not use this route." : "Server-side TTS sends answer text to the selected provider only when this route is explicitly used.",
-  };
-}
-
-function naturalConversationUnavailableResponse(tab, kind = "stt") {
-  return {
-    featureId: NATURAL_CONVERSATION_FEATURE_ID,
-    available: false,
-    mode: naturalConversationModeSnapshot(tab, { available: false, enabled: false, uiState: "off" }),
-    voice: naturalConversationVoiceProviderStatus(kind),
-    message: "Natural Conversation server-side voice fallbacks are opt-in. Configure a local endpoint or explicit hosted provider env vars; browser-native audio remains the default Web UI path.",
-  };
-}
-
-function naturalConversationProviderNotConfiguredError(kind, provider, message) {
-  const error = makeHttpError(provider ? 424 : 501, message);
-  error.voice = naturalConversationVoiceProviderStatus(kind);
-  return error;
-}
-
-function requestedNaturalConversationVoiceProvider(kind, body = {}) {
-  const requested = String(body.provider || body.providerId || (kind === "stt" ? process.env.PI_VOICE_STT_PROVIDER : process.env.PI_VOICE_TTS_PROVIDER) || "").trim().toLowerCase();
-  const ids = kind === "stt" ? VOICE_STT_PROVIDER_IDS : VOICE_TTS_PROVIDER_IDS;
-  const localUrl = kind === "stt" ? process.env.PI_VOICE_STT_URL : process.env.PI_VOICE_TTS_URL;
-  const provider = requested || (localUrl ? "local" : "");
-  if (!provider) throw naturalConversationProviderNotConfiguredError(kind, "", `No Natural Conversation ${kind.toUpperCase()} provider is configured. Set ${kind === "stt" ? "PI_VOICE_STT_URL or PI_VOICE_STT_PROVIDER" : "PI_VOICE_TTS_URL or PI_VOICE_TTS_PROVIDER"}.`);
-  if (!ids.includes(provider)) throw makeHttpError(400, `Unsupported Natural Conversation ${kind.toUpperCase()} provider: ${provider}`);
-  if (provider === "local" && !localUrl) throw naturalConversationProviderNotConfiguredError(kind, provider, `Local Natural Conversation ${kind.toUpperCase()} endpoint is not configured. Set ${kind === "stt" ? "PI_VOICE_STT_URL" : "PI_VOICE_TTS_URL"}.`);
-  if (provider === "groq" && !process.env.GROQ_API_KEY) throw naturalConversationProviderNotConfiguredError(kind, provider, "Groq STT is not configured. Set GROQ_API_KEY server-side; never send it from the browser.");
-  if (provider === "openai" && !process.env.OPENAI_API_KEY) throw naturalConversationProviderNotConfiguredError(kind, provider, `OpenAI ${kind.toUpperCase()} is not configured. Set OPENAI_API_KEY server-side; never send it from the browser.`);
-  if (provider === "cloudflare") throw makeHttpError(501, "Cloudflare Workers AI STT is a selected Phase 4 provider but its adapter is deferred until the exact upload contract is validated; use local, Groq, or OpenAI for this slice.");
-  return provider;
-}
-
-function requireRemoteMicConsentForStt(req, body = {}) {
-  if (isLocalRequest(req)) return;
-  if (body.remoteMicStreamingConsentAccepted === true || body.remoteMicStreamingConsent === true) return;
-  throw makeHttpError(403, "Remote WebUI STT uploads require explicit per-tab remote microphone streaming consent before raw audio is sent to the Pi host or an STT provider.");
-}
-
-function decodeVoiceAudioBody(body = {}) {
-  const value = String(body.audioBase64 || body.audio || body.data || "").trim();
-  if (!value) throw makeHttpError(400, "audioBase64 is required for Natural Conversation STT fallback uploads");
-  const dataUrlMatch = value.match(/^data:([^;,]+);base64,(.*)$/s);
-  const mimeType = String(body.mimeType || body.contentType || dataUrlMatch?.[1] || "audio/webm").toLowerCase();
-  if (!VOICE_AUDIO_MIME_TYPES.has(mimeType)) throw makeHttpError(415, `Unsupported voice audio mime type: ${mimeType}`);
-  const base64 = (dataUrlMatch?.[2] || value).replace(/\s+/g, "");
-  if (!/^[A-Za-z0-9+/]*={0,2}$/.test(base64)) throw makeHttpError(400, "audioBase64 must be valid base64");
-  const buffer = Buffer.from(base64, "base64");
-  if (!buffer.length) throw makeHttpError(400, "audioBase64 decoded to an empty audio payload");
-  if (buffer.length > VOICE_AUDIO_BODY_LIMIT_BYTES) throw makeHttpError(413, `Audio payload is too large (limit ${formatBytes(VOICE_AUDIO_BODY_LIMIT_BYTES)})`);
-  return {
-    buffer,
-    mimeType,
-    fileName: String(body.fileName || `speech.${mimeType.includes("wav") ? "wav" : mimeType.includes("mpeg") || mimeType.includes("mp3") ? "mp3" : "webm"}`).replace(/[\\/\0]/g, "_").slice(0, 120),
-  };
-}
-
-function voiceFetchError(provider, response, text) {
-  const status = response.status >= 500 ? 502 : 400;
-  return makeHttpError(status, `${provider} voice provider returned HTTP ${response.status}: ${truncateStatusText(text || response.statusText || "request failed", 500)}`);
-}
-
-async function fetchVoiceProvider(provider, url, init = {}) {
-  const response = await fetch(url, { ...init, signal: AbortSignal.timeout(VOICE_PROVIDER_TIMEOUT_MS) });
-  if (!response.ok) throw voiceFetchError(provider, response, await response.text().catch(() => ""));
-  return response;
-}
-
-function voiceFormData(audio, body = {}, model = "") {
-  const form = new FormData();
-  form.set("file", new Blob([audio.buffer], { type: audio.mimeType }), audio.fileName);
-  if (model) form.set("model", model);
-  if (body.language) form.set("language", String(body.language));
-  if (body.prompt) form.set("prompt", String(body.prompt));
-  return form;
-}
-
-function transcriptTextFromProviderJson(json) {
-  return String(json?.text || json?.transcript || json?.data?.text || json?.result?.text || "").trim();
-}
-
-async function parseTranscriptResponse(provider, response) {
-  const contentType = String(response.headers.get("content-type") || "").toLowerCase();
-  if (contentType.includes("application/json")) {
-    const json = await response.json();
-    const text = transcriptTextFromProviderJson(json);
-    if (!text) throw makeHttpError(502, `${provider} STT provider returned JSON without a transcript text field`);
-    return text;
-  }
-  const text = (await response.text()).trim();
-  if (!text) throw makeHttpError(502, `${provider} STT provider returned an empty transcript`);
-  return text;
-}
-
-async function transcribeWithLocalProvider(audio, body = {}) {
-  const form = voiceFormData(audio, body, body.model ? String(body.model) : "");
-  const response = await fetchVoiceProvider("local STT", process.env.PI_VOICE_STT_URL, { method: "POST", body: form });
-  return parseTranscriptResponse("local", response);
-}
-
-async function transcribeWithOpenAiCompatibleProvider(provider, audio, body = {}) {
-  const openai = provider === "openai";
-  const url = openai ? "https://api.openai.com/v1/audio/transcriptions" : "https://api.groq.com/openai/v1/audio/transcriptions";
-  const model = String(body.model || (openai ? process.env.PI_VOICE_OPENAI_STT_MODEL || "gpt-4o-mini-transcribe" : process.env.PI_VOICE_GROQ_STT_MODEL || "whisper-large-v3-turbo"));
-  const form = voiceFormData(audio, body, model);
-  form.set("response_format", "json");
-  const response = await fetchVoiceProvider(`${provider} STT`, url, {
-    method: "POST",
-    headers: { authorization: `Bearer ${openai ? process.env.OPENAI_API_KEY : process.env.GROQ_API_KEY}` },
-    body: form,
-  });
-  return parseTranscriptResponse(provider, response);
-}
-
-async function handleNaturalConversationSttTranscribe(req, tab, body = {}) {
-  requireRemoteMicConsentForStt(req, body);
-  const provider = requestedNaturalConversationVoiceProvider("stt", body);
-  const audio = decodeVoiceAudioBody(body);
-  const text = provider === "local" ? await transcribeWithLocalProvider(audio, body) : await transcribeWithOpenAiCompatibleProvider(provider, audio, body);
-  return { provider, text, mimeType: audio.mimeType, byteLength: audio.buffer.length, mode: naturalConversationModeSnapshot(tab) };
-}
-
-function normalizeVoiceText(body = {}) {
-  const text = String(body.text || body.input || "").trim();
-  if (!text) throw makeHttpError(400, "text is required for Natural Conversation TTS fallback synthesis");
-  if (text.length > VOICE_TTS_TEXT_MAX_CHARS) throw makeHttpError(413, `TTS text is too long (limit ${VOICE_TTS_TEXT_MAX_CHARS} characters)`);
-  return text;
-}
-
-async function audioPayloadFromResponse(provider, response, preferredFormat = "") {
-  const contentType = String(response.headers.get("content-type") || "").toLowerCase();
-  if (contentType.includes("application/json")) {
-    const json = await response.json();
-    const audioBase64 = String(json.audioBase64 || json.audio || json.data?.audioBase64 || "").trim();
-    if (!audioBase64) throw makeHttpError(502, `${provider} TTS provider returned JSON without audioBase64`);
-    const buffer = Buffer.from(audioBase64, "base64");
-    return { audioBase64, contentType: json.mimeType || json.contentType || "audio/mpeg", format: json.format || preferredFormat || "mp3", byteLength: buffer.length };
-  }
-  const buffer = Buffer.from(await response.arrayBuffer());
-  if (!buffer.length) throw makeHttpError(502, `${provider} TTS provider returned empty audio`);
-  return { audioBase64: buffer.toString("base64"), contentType: contentType || "audio/mpeg", format: preferredFormat || (contentType.includes("wav") ? "wav" : "mp3"), byteLength: buffer.length };
-}
-
-async function synthesizeWithLocalProvider(text, body = {}) {
-  const response = await fetchVoiceProvider("local TTS", process.env.PI_VOICE_TTS_URL, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ text, voice: body.voice || process.env.PI_VOICE_TTS_VOICE || undefined, format: body.format || process.env.PI_VOICE_TTS_FORMAT || "mp3" }),
-  });
-  return audioPayloadFromResponse("local", response, body.format || process.env.PI_VOICE_TTS_FORMAT || "mp3");
-}
-
-async function synthesizeWithOpenAiProvider(text, body = {}) {
-  const format = String(body.format || process.env.PI_VOICE_OPENAI_TTS_FORMAT || "mp3");
-  const response = await fetchVoiceProvider("openai TTS", "https://api.openai.com/v1/audio/speech", {
-    method: "POST",
-    headers: { authorization: `Bearer ${process.env.OPENAI_API_KEY}`, "content-type": "application/json" },
-    body: JSON.stringify({ model: body.model || process.env.PI_VOICE_OPENAI_TTS_MODEL || "gpt-4o-mini-tts", voice: body.voice || process.env.PI_VOICE_OPENAI_TTS_VOICE || "alloy", input: text, response_format: format }),
-  });
-  return audioPayloadFromResponse("openai", response, format);
-}
-
-async function handleNaturalConversationTtsSpeech(_req, tab, body = {}) {
-  const provider = requestedNaturalConversationVoiceProvider("tts", body);
-  const text = normalizeVoiceText(body);
-  const audio = provider === "local" ? await synthesizeWithLocalProvider(text, body) : await synthesizeWithOpenAiProvider(text, body);
-  return { provider, ...audio, mode: naturalConversationModeSnapshot(tab) };
-}
-
 function resolveCliPath(value) {
   const text = String(value || "").trim();
   if (!text) return "";
@@ -14549,519 +9004,6 @@ function resolveTabPath(tab, value) {
   const text = String(value || "").trim();
   if (!text) return "";
   return path.isAbsolute(text) ? text : path.resolve(tab?.cwd || options.cwd, text);
-}
-
-async function workspaceRoot(tab) {
-  const root = path.resolve(tab?.cwd || options.cwd);
-  return { root, realRoot: await realpath(root).catch(() => root) };
-}
-
-async function resolveWorkspacePath(tab, value = "", { mustExist = true } = {}) {
-  const { root, realRoot } = await workspaceRoot(tab);
-  const text = String(value || "").trim();
-  if (text.includes("\0")) throw makeHttpError(400, "Path cannot contain null bytes");
-  const targetPath = text ? (path.isAbsolute(text) ? path.resolve(text) : path.resolve(root, text)) : root;
-  if (targetPath !== root && !pathInside(root, targetPath)) throw makeHttpError(403, "Path must stay inside the active tab working directory");
-  let info = null;
-  let realTarget = targetPath;
-  try {
-    info = await stat(targetPath);
-    realTarget = await realpath(targetPath).catch(() => targetPath);
-  } catch (error) {
-    if (mustExist) throw makeHttpError(error?.code === "ENOENT" ? 404 : 400, `Path not found: ${displayPath(targetPath)}`);
-  }
-  if (realTarget !== realRoot && !pathInside(realRoot, realTarget)) throw makeHttpError(403, "Resolved path escapes the active tab working directory");
-  const relative = path.relative(root, targetPath).split(path.sep).join("/");
-  return { root, realRoot, targetPath, realTarget, relative, info };
-}
-
-function fileViewerLanguage(filePath) {
-  const ext = path.extname(String(filePath || "")).toLowerCase();
-  if (ext === ".md" || ext === ".markdown") return "markdown";
-  return "text";
-}
-
-function fileViewerImageMimeType(filePath) {
-  return FILE_VIEWER_IMAGE_MIME_TYPES_BY_EXTENSION[path.extname(String(filePath || "")).toLowerCase()] || "";
-}
-
-function fileTreeEntryType(dirent, info) {
-  if (info?.isDirectory?.() || dirent?.isDirectory?.()) return "directory";
-  if (info?.isFile?.() || dirent?.isFile?.()) return "file";
-  return dirent?.isSymbolicLink?.() ? "symlink" : "other";
-}
-
-async function statFileTreeEntries(dirPath, dirents, root, realRoot) {
-  const ordered = [...dirents].sort((a, b) => {
-    const aRank = a.isDirectory() ? 0 : a.isFile() ? 1 : 2;
-    const bRank = b.isDirectory() ? 0 : b.isFile() ? 1 : 2;
-    return aRank - bRank || a.name.localeCompare(b.name);
-  });
-  const selected = ordered.slice(0, FILE_TREE_MAX_ENTRIES);
-  const entries = [];
-  let cursor = 0;
-  async function worker() {
-    while (cursor < selected.length) {
-      const dirent = selected[cursor++];
-      const targetPath = path.join(dirPath, dirent.name);
-      const relative = path.relative(root, targetPath).split(path.sep).join("/");
-      try {
-        const [info, realTarget] = await Promise.all([stat(targetPath), realpath(targetPath).catch(() => targetPath)]);
-        const outsideRoot = realTarget !== realRoot && !pathInside(realRoot, realTarget);
-        const type = outsideRoot ? "other" : fileTreeEntryType(dirent, info);
-        entries.push({
-          name: dirent.name,
-          path: relative,
-          type,
-          directory: type === "directory",
-          file: type === "file",
-          symlink: dirent.isSymbolicLink(),
-          outsideRoot,
-          size: info.size,
-          mtimeMs: info.mtimeMs,
-          extension: path.extname(dirent.name).toLowerCase(),
-          canOpenInWebui: type === "file",
-        });
-      } catch (error) {
-        entries.push({ name: dirent.name, path: relative, type: "error", directory: false, file: false, error: sanitizeError(error), canOpenInWebui: false });
-      }
-    }
-  }
-  const workers = Array.from({ length: Math.min(FILE_TREE_ENTRY_STAT_CONCURRENCY, selected.length) }, () => worker());
-  await Promise.all(workers);
-  entries.sort((a, b) => {
-    const aRank = a.type === "directory" ? 0 : a.type === "file" ? 1 : 2;
-    const bRank = b.type === "directory" ? 0 : b.type === "file" ? 1 : 2;
-    return aRank - bRank || a.name.localeCompare(b.name);
-  });
-  return { entries, truncated: ordered.length > selected.length, total: ordered.length };
-}
-
-async function getFileTreeData(tab, requestedPath = "") {
-  const resolved = await resolveWorkspacePath(tab, requestedPath);
-  if (!resolved.info?.isDirectory()) throw makeHttpError(400, "Path is not a directory");
-  const dirents = await readdir(resolved.targetPath, { withFileTypes: true });
-  const [listed, gitStatus] = await Promise.all([
-    statFileTreeEntries(resolved.targetPath, dirents, resolved.root, resolved.realRoot),
-    readWorkspaceGitStatusIndex(resolved.root),
-  ]);
-  const gitIgnored = await readWorkspaceGitIgnoredPaths(resolved.root, listed.entries, gitStatus?.root);
-  return {
-    root: resolved.root,
-    displayRoot: displayPath(resolved.root),
-    path: resolved.relative,
-    displayPath: displayPath(resolved.targetPath),
-    entries: withFileTreeGitIgnored(withFileTreeGitStatus(listed.entries, resolved.root, gitStatus), resolved.root, gitIgnored),
-    gitStatus: fileTreeGitStatusPayload(resolved.root, gitStatus),
-    truncated: listed.truncated,
-    total: listed.total,
-  };
-}
-
-function normalizeFileSearchQuery(value = "") {
-  const query = String(value || "").trim().replace(/\s+/g, " ");
-  if (query.includes("\0")) throw makeHttpError(400, "Search query cannot contain null bytes");
-  if (query.length > 160) throw makeHttpError(400, "Search query is too long");
-  return query;
-}
-
-function fileSearchMatches(entry, queryLower) {
-  const name = String(entry.name || "").toLowerCase();
-  const filePath = String(entry.path || "").toLowerCase();
-  return name.includes(queryLower) || filePath.includes(queryLower);
-}
-
-async function getFileSearchData(tab, rawQuery = "") {
-  const query = normalizeFileSearchQuery(rawQuery);
-  if (!query) {
-    const root = path.resolve(tab?.cwd || options.cwd);
-    return { root, displayRoot: displayPath(root), query, entries: [], truncated: false, total: 0, scanned: 0, maxDepth: FILE_SEARCH_MAX_DEPTH };
-  }
-  const resolved = await resolveWorkspacePath(tab, "");
-  if (!resolved.info?.isDirectory()) throw makeHttpError(400, "Workspace root is not a directory");
-  const gitStatus = await readWorkspaceGitStatusIndex(resolved.root);
-  const queryLower = query.toLowerCase();
-  const entries = [];
-  const queue = [{ dirPath: resolved.root, relative: "", depth: 0 }];
-  const visitedRealDirs = new Set([resolved.realRoot]);
-  let scanned = 0;
-  let truncated = false;
-
-  while (queue.length && scanned < FILE_SEARCH_MAX_SCANNED && entries.length < FILE_SEARCH_MAX_RESULTS) {
-    const current = queue.shift();
-    let dirents = [];
-    try {
-      dirents = await readdir(current.dirPath, { withFileTypes: true });
-    } catch {
-      continue;
-    }
-    dirents.sort((a, b) => {
-      const aRank = a.isDirectory() ? 0 : a.isFile() ? 1 : 2;
-      const bRank = b.isDirectory() ? 0 : b.isFile() ? 1 : 2;
-      return aRank - bRank || a.name.localeCompare(b.name);
-    });
-
-    for (const dirent of dirents) {
-      if (scanned >= FILE_SEARCH_MAX_SCANNED || entries.length >= FILE_SEARCH_MAX_RESULTS) break;
-      scanned += 1;
-      const targetPath = path.join(current.dirPath, dirent.name);
-      const relative = (current.relative ? `${current.relative}/${dirent.name}` : dirent.name).split(path.sep).join("/");
-      const depth = current.depth + 1;
-      try {
-        const [info, realTarget] = await Promise.all([stat(targetPath), realpath(targetPath).catch(() => targetPath)]);
-        const outsideRoot = realTarget !== resolved.realRoot && !pathInside(resolved.realRoot, realTarget);
-        const type = outsideRoot ? "other" : fileTreeEntryType(dirent, info);
-        const entry = {
-          name: dirent.name,
-          path: relative,
-          type,
-          directory: type === "directory",
-          file: type === "file",
-          symlink: dirent.isSymbolicLink(),
-          outsideRoot,
-          size: info.size,
-          mtimeMs: info.mtimeMs,
-          extension: path.extname(dirent.name).toLowerCase(),
-          depth,
-          canOpenInWebui: type === "file",
-        };
-        if (fileSearchMatches(entry, queryLower)) entries.push(entry);
-        if (depth < FILE_SEARCH_MAX_DEPTH && type === "directory" && !FILE_SEARCH_EXCLUDED_DIRS.has(dirent.name) && !visitedRealDirs.has(realTarget)) {
-          visitedRealDirs.add(realTarget);
-          queue.push({ dirPath: targetPath, relative, depth });
-        }
-      } catch (error) {
-        const entry = { name: dirent.name, path: relative, type: "error", directory: false, file: false, depth, error: sanitizeError(error), canOpenInWebui: false };
-        if (fileSearchMatches(entry, queryLower)) entries.push(entry);
-      }
-    }
-  }
-  truncated = queue.length > 0 || scanned >= FILE_SEARCH_MAX_SCANNED || entries.length >= FILE_SEARCH_MAX_RESULTS;
-  const gitIgnored = await readWorkspaceGitIgnoredPaths(resolved.root, entries, gitStatus?.root);
-  return {
-    root: resolved.root,
-    displayRoot: displayPath(resolved.root),
-    query,
-    entries: withFileTreeGitIgnored(withFileTreeGitStatus(entries, resolved.root, gitStatus), resolved.root, gitIgnored),
-    gitStatus: fileTreeGitStatusPayload(resolved.root, gitStatus),
-    truncated,
-    total: entries.length,
-    scanned,
-    maxDepth: FILE_SEARCH_MAX_DEPTH,
-    excludedDirs: [...FILE_SEARCH_EXCLUDED_DIRS],
-  };
-}
-
-function assertTextFileBuffer(buffer) {
-  if (isLikelyBinaryBuffer(buffer)) throw makeHttpError(415, "File appears to be binary; only text files and supported raster images can be opened in WebUI");
-}
-
-async function getFileContentData(tab, requestedPath = "") {
-  const resolved = await resolveWorkspacePath(tab, requestedPath);
-  if (!resolved.info?.isFile()) throw makeHttpError(400, "Path is not a regular file");
-  if (resolved.info.size > FILE_VIEWER_MAX_BYTES) throw makeHttpError(413, `File is too large to open in WebUI (limit ${formatBytes(FILE_VIEWER_MAX_BYTES)})`);
-  const buffer = await readFile(resolved.targetPath);
-  const extension = path.extname(resolved.targetPath).toLowerCase();
-  const imageMimeType = fileViewerImageMimeType(resolved.targetPath);
-  const shared = {
-    root: resolved.root,
-    path: resolved.relative,
-    name: path.basename(resolved.targetPath),
-    size: resolved.info.size,
-    mtimeMs: resolved.info.mtimeMs,
-    extension,
-  };
-  if (imageMimeType) {
-    return { ...shared, kind: "image", mimeType: imageMimeType, data: buffer.toString("base64") };
-  }
-  assertTextFileBuffer(buffer);
-  return { ...shared, kind: "text", content: buffer.toString("utf8"), language: fileViewerLanguage(resolved.targetPath) };
-}
-
-function aurReviewReportPathSegments(value = "") {
-  const requested = String(value || "").trim();
-  if (!requested || requested.length > 1024 || requested.includes("\0")) throw makeHttpError(400, "Report path must be a non-empty repo-root-relative path");
-  if (path.isAbsolute(requested) || path.win32.isAbsolute(requested) || requested.includes("\\")) {
-    throw makeHttpError(400, "Report path must be a repo-root-relative path");
-  }
-  const segments = requested.split("/");
-  if (segments.some((segment) => !segment || segment === "." || segment === "..")) {
-    throw makeHttpError(400, "Report path cannot contain traversal segments");
-  }
-  return segments;
-}
-
-async function canonicalGitRootForTab(tab) {
-  const root = await getGitRoot(tab.cwd);
-  try {
-    return await realpath(root);
-  } catch {
-    throw makeHttpError(404, "Git repository root is no longer accessible");
-  }
-}
-
-async function readBoundedAurReviewReport(targetPath) {
-  const handle = await open(targetPath, "r");
-  try {
-    const info = await handle.stat();
-    if (!info.isFile()) throw makeHttpError(400, "Report path is not a regular file");
-    if (info.size > FILE_VIEWER_MAX_BYTES) throw makeHttpError(413, `Report is too large to open in WebUI (limit ${formatBytes(FILE_VIEWER_MAX_BYTES)})`);
-    const chunks = [];
-    let total = 0;
-    while (true) {
-      const remaining = FILE_VIEWER_MAX_BYTES + 1 - total;
-      if (remaining <= 0) throw makeHttpError(413, `Report is too large to open in WebUI (limit ${formatBytes(FILE_VIEWER_MAX_BYTES)})`);
-      const chunk = Buffer.allocUnsafe(Math.min(64 * 1024, remaining));
-      const { bytesRead } = await handle.read(chunk, 0, chunk.length, total);
-      if (bytesRead === 0) break;
-      chunks.push(chunk.subarray(0, bytesRead));
-      total += bytesRead;
-    }
-    return { buffer: Buffer.concat(chunks, total), info };
-  } finally {
-    await handle.close().catch(() => {});
-  }
-}
-
-/** Read-only AUR-review report access rooted at the tab's canonical Git root. */
-async function getAurReviewReportContentData(tab, { path: requestedPath = "", repoRoot = "" } = {}) {
-  if (typeof repoRoot !== "string" || !repoRoot || repoRoot.includes("\0")) {
-    throw makeHttpError(400, "repoRoot is required for an AUR review report");
-  }
-  const root = await canonicalGitRootForTab(tab);
-  if (repoRoot !== root) throw makeHttpError(403, "Report repoRoot does not match this tab's canonical Git root");
-  const segments = aurReviewReportPathSegments(requestedPath);
-  let targetPath = root;
-  let info;
-  for (const [index, segment] of segments.entries()) {
-    targetPath = path.join(targetPath, segment);
-    try {
-      info = await lstat(targetPath);
-    } catch (error) {
-      throw makeHttpError(error?.code === "ENOENT" ? 404 : 400, `Report path not found: ${segments.join("/")}`);
-    }
-    if (info.isSymbolicLink()) throw makeHttpError(403, "Report path cannot contain symlinks");
-    if (index < segments.length - 1 && !info.isDirectory()) throw makeHttpError(400, "Report path contains a non-directory component");
-  }
-  if (!info?.isFile()) throw makeHttpError(400, "Report path is not a regular file");
-  const realTarget = await realpath(targetPath).catch(() => "");
-  if (!realTarget || !pathInside(root, realTarget)) throw makeHttpError(403, "Resolved report path escapes the canonical Git root");
-  const opened = await readBoundedAurReviewReport(targetPath);
-  assertTextFileBuffer(opened.buffer);
-  return {
-    root,
-    path: segments.join("/"),
-    name: path.basename(targetPath),
-    content: opened.buffer.toString("utf8"),
-    size: opened.buffer.length,
-    mtimeMs: opened.info.mtimeMs,
-    extension: path.extname(targetPath).toLowerCase(),
-    language: fileViewerLanguage(targetPath),
-  };
-}
-
-async function saveFileContentData(tab, body = {}) {
-  if (typeof body.content !== "string") throw makeHttpError(400, "File content must be a string");
-  if (body.content.includes("\0")) throw makeHttpError(400, "File content cannot contain null bytes");
-  if (Buffer.byteLength(body.content, "utf8") > FILE_VIEWER_MAX_BYTES) throw makeHttpError(413, `File is too large to save in WebUI (limit ${formatBytes(FILE_VIEWER_MAX_BYTES)})`);
-  const resolved = await resolveWorkspacePath(tab, body.path || body.filePath || "");
-  if (!resolved.info?.isFile()) throw makeHttpError(400, "Path is not a regular file");
-  if (resolved.info.size > FILE_VIEWER_MAX_BYTES) throw makeHttpError(413, `File is too large to save in WebUI (limit ${formatBytes(FILE_VIEWER_MAX_BYTES)})`);
-  assertTextFileBuffer(await readFile(resolved.targetPath));
-  const expectedMtimeMs = Number(body.mtimeMs);
-  if (Number.isFinite(expectedMtimeMs) && Math.abs(resolved.info.mtimeMs - expectedMtimeMs) > 5) {
-    throw makeHttpError(409, "File changed on disk after it was opened. Reopen it before saving.");
-  }
-  const tmpFile = `${resolved.targetPath}.${process.pid}.${Date.now()}.tmp`;
-  try {
-    await writeFile(tmpFile, body.content, { encoding: "utf8", mode: resolved.info.mode & 0o777 });
-    await rename(tmpFile, resolved.targetPath);
-  } catch (error) {
-    await rm(tmpFile, { force: true }).catch(() => {});
-    throw error;
-  }
-  const nextStats = await stat(resolved.targetPath);
-  return {
-    path: resolved.relative,
-    name: path.basename(resolved.targetPath),
-    size: nextStats.size,
-    mtimeMs: nextStats.mtimeMs,
-    extension: path.extname(resolved.targetPath).toLowerCase(),
-    language: fileViewerLanguage(resolved.targetPath),
-  };
-}
-
-function workspaceRelativePath(root, targetPath) {
-  return path.relative(root, targetPath).split(path.sep).join("/");
-}
-
-function fileOperationEntryType(info) {
-  if (info?.isDirectory?.()) return "directory";
-  if (info?.isFile?.()) return "file";
-  return "other";
-}
-
-function assertWorkspaceEntryMutable(resolved, action) {
-  if (!resolved.relative) throw makeHttpError(400, `Workspace root cannot be ${action}`);
-  const type = fileOperationEntryType(resolved.info);
-  if (type !== "file" && type !== "directory") throw makeHttpError(400, "Only regular files and directories can be modified from WebUI");
-  return type;
-}
-
-async function existingDestinationStats(targetPath) {
-  try {
-    return await stat(targetPath);
-  } catch (error) {
-    if (error?.code === "ENOENT") return null;
-    throw makeHttpError(400, `Cannot access destination: ${displayPath(targetPath)}`);
-  }
-}
-
-async function resolveWorkspaceMoveDestination(tab, source, rawDestination = "") {
-  const destinationText = String(rawDestination || "").trim();
-  if (!destinationText) throw makeHttpError(400, "Destination path is required");
-  if (destinationText.includes("\0")) throw makeHttpError(400, "Destination path cannot contain null bytes");
-
-  const candidatePath = path.isAbsolute(destinationText) ? path.resolve(destinationText) : path.resolve(source.root, destinationText);
-  if (candidatePath !== source.root && !pathInside(source.root, candidatePath)) throw makeHttpError(403, "Destination path must stay inside the active tab working directory");
-
-  const candidateInfo = await existingDestinationStats(candidatePath);
-  let targetPath = candidatePath;
-  let targetInfo = candidateInfo;
-  if (candidateInfo?.isDirectory?.()) {
-    targetPath = path.join(candidatePath, path.basename(source.targetPath));
-    targetInfo = await existingDestinationStats(targetPath);
-  }
-
-  if (path.resolve(targetPath) === path.resolve(source.targetPath)) throw makeHttpError(400, "Source and destination are the same path");
-  if (targetInfo) throw makeHttpError(409, `Destination already exists: ${workspaceRelativePath(source.root, targetPath)}`);
-  if (source.info?.isDirectory?.() && pathInside(source.targetPath, targetPath)) throw makeHttpError(400, "A directory cannot be moved into itself or one of its descendants");
-
-  const parentPath = path.dirname(targetPath);
-  if (parentPath !== source.root && !pathInside(source.root, parentPath)) throw makeHttpError(403, "Destination parent must stay inside the active tab working directory");
-  const parentInfo = await stat(parentPath).catch((error) => {
-    if (error?.code === "ENOENT") throw makeHttpError(404, `Destination parent not found: ${displayPath(parentPath)}`);
-    throw makeHttpError(400, `Cannot access destination parent: ${displayPath(parentPath)}`);
-  });
-  if (!parentInfo?.isDirectory?.()) throw makeHttpError(400, "Destination parent is not a directory");
-  const realParent = await realpath(parentPath).catch(() => parentPath);
-  if (realParent !== source.realRoot && !pathInside(source.realRoot, realParent)) throw makeHttpError(403, "Destination parent escapes the active tab working directory");
-
-  return {
-    targetPath,
-    relative: workspaceRelativePath(source.root, targetPath),
-    parentPath: workspaceRelativePath(source.root, parentPath),
-  };
-}
-
-async function deleteFileSystemEntryData(tab, body = {}) {
-  if (body.confirmed !== true) throw makeHttpError(409, "Deleting files or directories requires confirmed: true");
-  const resolved = await resolveWorkspacePath(tab, body.path || body.filePath || "");
-  const type = assertWorkspaceEntryMutable(resolved, "deleted");
-  await rm(resolved.targetPath, { recursive: type === "directory" });
-  return {
-    path: resolved.relative,
-    name: path.basename(resolved.targetPath),
-    type,
-    parentPath: workspaceRelativePath(resolved.root, path.dirname(resolved.targetPath)),
-    deleted: true,
-  };
-}
-
-// Create an empty file or a directory inside the tab's working directory (Files panel
-// "New file…" / "New folder…"). Never overwrites; parents must already exist.
-async function createFileSystemEntryData(tab, body = {}) {
-  const kind = body.type === "directory" ? "directory" : "file";
-  const resolved = await resolveWorkspacePath(tab, body.path || body.filePath || "", { mustExist: false });
-  if (resolved.targetPath === resolved.root) throw makeHttpError(400, "A name is required");
-  if (resolved.info) throw makeHttpError(409, `Already exists: ${resolved.relative}`);
-  const parentPath = path.dirname(resolved.targetPath);
-  const parentInfo = await stat(parentPath).catch(() => null);
-  if (!parentInfo?.isDirectory?.()) throw makeHttpError(404, `Parent folder not found: ${workspaceRelativePath(resolved.root, parentPath) || "."}`);
-  const realParent = await realpath(parentPath).catch(() => parentPath);
-  if (realParent !== resolved.realRoot && !pathInside(resolved.realRoot, realParent)) throw makeHttpError(403, "Parent folder escapes the active tab working directory");
-  if (kind === "directory") await mkdir(resolved.targetPath);
-  else await writeFile(resolved.targetPath, "", { encoding: "utf8", flag: "wx" });
-  const nextStats = await stat(resolved.targetPath);
-  return {
-    path: resolved.relative,
-    name: path.basename(resolved.targetPath),
-    type: kind,
-    parentPath: workspaceRelativePath(resolved.root, parentPath),
-    created: true,
-    size: nextStats.size,
-    mtimeMs: nextStats.mtimeMs,
-  };
-}
-
-async function moveFileSystemEntryData(tab, body = {}) {
-  if (body.confirmed !== true) throw makeHttpError(409, "Moving files or directories requires confirmed: true");
-  const source = await resolveWorkspacePath(tab, body.path || body.filePath || body.sourcePath || "");
-  const type = assertWorkspaceEntryMutable(source, "moved");
-  const destination = await resolveWorkspaceMoveDestination(tab, source, body.toPath || body.destinationPath || body.destination || "");
-  await rename(source.targetPath, destination.targetPath);
-  const nextStats = await stat(destination.targetPath).catch(() => null);
-  return {
-    path: source.relative,
-    destination: destination.relative,
-    name: path.basename(destination.targetPath),
-    type,
-    parentPath: workspaceRelativePath(source.root, path.dirname(source.targetPath)),
-    destinationParentPath: destination.parentPath,
-    moved: true,
-    size: nextStats?.size,
-    mtimeMs: nextStats?.mtimeMs,
-  };
-}
-
-function defaultEditorCommand(targetPath) {
-  if (process.env.PI_WEBUI_OPEN_COMMAND) {
-    const override = process.env.PI_WEBUI_OPEN_COMMAND;
-    return [".js", ".cjs", ".mjs"].includes(path.extname(override).toLowerCase())
-      ? { command: process.execPath, args: [override, targetPath] }
-      : { command: override, args: [targetPath] };
-  }
-  if (platform() === "win32") return { command: "cmd", args: ["/c", "start", "", targetPath] };
-  if (platform() === "darwin") return { command: "open", args: [targetPath] };
-  return { command: "xdg-open", args: [targetPath] };
-}
-
-function firstCommandOutputLine(value = "") {
-  return String(value || "").split(/\r?\n/).map((line) => line.trim()).find(Boolean) || "";
-}
-
-async function queryXdgMime(args = [], cwd = options.cwd) {
-  const result = await runCommand("xdg-mime", args, { cwd, timeoutMs: 1500, maxOutputLength: 4096 });
-  if (result.exitCode !== 0) return "";
-  return firstCommandOutputLine(result.stdout);
-}
-
-async function linuxDefaultEditorCommand(targetPath, { cwd = options.cwd, isFile = true } = {}) {
-  if (process.env.PI_WEBUI_OPEN_COMMAND) return defaultEditorCommand(targetPath);
-  if (!isFile) return defaultEditorCommand(targetPath);
-  const fileMime = await queryXdgMime(["query", "filetype", targetPath], cwd);
-  const fileDefaultDesktop = fileMime ? await queryXdgMime(["query", "default", fileMime], cwd) : "";
-  if (fileDefaultDesktop) return { command: "xdg-open", args: [targetPath], mime: fileMime, desktopFile: fileDefaultDesktop, fallbackToTextEditor: false };
-  const textDefaultDesktop = await queryXdgMime(["query", "default", "text/plain"], cwd);
-  if (textDefaultDesktop) {
-    return { command: "gio", args: ["launch", textDefaultDesktop, targetPath], mime: fileMime, desktopFile: textDefaultDesktop, fallbackToTextEditor: true };
-  }
-  return { ...defaultEditorCommand(targetPath), mime: fileMime, fallbackToTextEditor: false };
-}
-
-async function defaultEditorCommandForPath(targetPath, options = {}) {
-  if (platform() === "linux") return linuxDefaultEditorCommand(targetPath, options);
-  return defaultEditorCommand(targetPath);
-}
-
-async function openPathInDefaultEditor(tab, requestedPath = "") {
-  if (!String(requestedPath || "").trim()) throw makeHttpError(400, "Path to open is required");
-  const resolved = await resolveWorkspacePath(tab, requestedPath);
-  const { command, args, mime, desktopFile, fallbackToTextEditor } = await defaultEditorCommandForPath(resolved.targetPath, { cwd: resolved.root, isFile: !!resolved.info?.isFile?.() });
-  const child = spawn(command, args, { cwd: resolved.root, stdio: "ignore", detached: true, windowsHide: true });
-  child.on("error", () => {});
-  child.unref?.();
-  return { path: resolved.relative, command: [command, ...args].join(" "), mime, desktopFile, fallbackToTextEditor: !!fallbackToTextEditor };
 }
 
 function configuredSessionDir() {
@@ -15372,12 +9314,14 @@ async function runForkCommand(tab, entryId) {
     titleSource: title ? "auto" : undefined,
     conversationStarted: true,
     cwd: tab.cwd,
+    workspaceKind: tab.workspaceKind,
+    noProjectId: tab.noProjectId,
     sessionFile: fork.sessionFile,
     gitWorkspace: tab.gitWorkspace,
   });
   const forkTabMeta = tabMeta(forkTab);
   return rpcSuccess("fork", {
-    message: "Forked the current session in a new terminal tab.",
+    message: "Forked the current session in a new thread.",
     text: fork.text || "",
     result: { cancelled: false, text: fork.text || "", sessionFile: fork.sessionFile, targetEntryId: fork.targetEntryId },
     sessionFile: fork.sessionFile,
@@ -15419,7 +9363,7 @@ async function resumeSessionInNewTab(sourceTab, sessionPath) {
     sessionFile: manager.getSessionFile(),
   });
   return rpcSuccess("switch_session", {
-    message: "Resumed selected session in a new terminal tab.",
+    message: "Resumed selected session in a new thread.",
     result: { cancelled: false, sessionFile: manager.getSessionFile() },
     tab: tabMeta(resumedTab),
     tabs: listTabs(),
@@ -15656,6 +9600,16 @@ async function handleNativeSlashCommand(tab, body, req) {
       });
     }
     case "new": {
+      if (tab.workspaceKind === "no-project") {
+        if (parsed.args) throw makeHttpError(400, "Use /new without arguments to start a No Project conversation");
+        const created = await createNoProjectResetTab(tab);
+        return respondNative("new", {
+          status: "succeeded",
+          message: "Started a new No Project conversation in a new thread.",
+          ...created,
+          refresh: ["tabs", "state"],
+        });
+      }
       const response = await tab.rpc.send({ type: "new_session" });
       if (response.success === false) return response;
       tab.conversationStarted = false;
@@ -15693,7 +9647,7 @@ async function handleNativeSlashCommand(tab, body, req) {
       renameTab(tab, parsed.args, { source: "explicit" });
       return respondNative("name", {
         status: "succeeded",
-        message: `Session and tab name set to: ${tab.title}`,
+        message: `Session and thread name set to: ${tab.title}`,
         tab: tabMeta(tab),
         refresh: ["tabs"],
       });
@@ -15750,7 +9704,7 @@ async function handleNativeSlashCommand(tab, body, req) {
 async function closeTab(id, { allowLast = false } = {}) {
   const tab = tabs.get(id);
   if (!tab) throw makeHttpError(404, `Unknown Pi tab: ${id}`);
-  if (!allowLast && tabs.size <= 1) throw makeHttpError(400, "Cannot close the last Pi tab");
+  if (!allowLast && tabs.size <= 1) throw makeHttpError(400, "Cannot close the last Pi thread");
 
   let restorableState = null;
   if (!options.noSession) {
@@ -15784,9 +9738,12 @@ async function discardTab(tab) {
   tab.rpcUnsubscribe?.();
   rejectTabBashQueue(tab, new Error("Pi recovery tab initialization failed"));
   stopAppRunnerForTab(tab, "recovery initialization failed", { force: true });
-  await tab.rpc.stop();
-  tab.rpc.dispose?.();
-  tabs.delete(tab.id);
+  try {
+    await tab.rpc.stop();
+  } finally {
+    tab.rpc.dispose?.();
+    tabs.delete(tab.id);
+  }
 }
 
 function recoveryText(value, field, maxChars) {
@@ -15876,6 +9833,11 @@ function getRequestedTab(req, url, body = {}) {
   const tab = tabs.get(id);
   if (!tab) throw makeHttpError(404, `Unknown Pi tab: ${id}`);
   return tab;
+}
+
+function optionalRequestedTab(req, url, body = {}) {
+  if (!requestedTabId(req, url, body) && tabs.size === 0) return null;
+  return getRequestedTab(req, url, body);
 }
 
 function directoryPickerActiveCwd(req, url, body = {}) {
@@ -16009,7 +9971,7 @@ async function createInitialTabs() {
     }
   }
 
-  return created.length ? created : options.cwdExplicit ? [await createTab()] : [];
+  return created.length || restoreTabs.some((tab) => tab.workspaceKind === "no-project") ? created : options.cwdExplicit ? [await createTab()] : [];
 }
 
 const serverStartedAt = new Date().toISOString();
@@ -16050,29 +10012,6 @@ function outputModeMetadata() {
 
 function tabHasActiveOutput(tab) {
   return tab?.activity?.isWorking === true || tab?.lastState?.isStreaming === true || tab?.lastState?.isCompacting === true;
-}
-
-function activateOutputMode(client, activeMode, reason = "server-default-change") {
-  const nextMode = normalizeOutputMode(activeMode);
-  if (client.activeMode === nextMode) {
-    client.pendingMode = undefined;
-    return;
-  }
-  sendSse(client, {
-    type: "webui_output_mode",
-    protocolVersion: OUTPUT_MODE_PROTOCOL_VERSION,
-    previousMode: client.activeMode,
-    activeMode: nextMode,
-    reason,
-  });
-  client.activeMode = nextMode;
-  client.pendingMode = undefined;
-}
-
-function sendSseToClient(client, event) {
-  const sent = sendSse(client, event);
-  if (sent && client?.pendingMode && isOutputModeSemanticBarrier(event)) activateOutputMode(client, client.pendingMode);
-  return sent;
 }
 
 function refreshAutoOutputModes() {
@@ -16159,6 +10098,7 @@ async function saveOutputModeDefault(value) {
 
 function interfacePreferencesResponse(settings) {
   return {
+    shellRolloutCohort: validatedShellRolloutCohort(settings.shellRollout),
     preferences: settings.interfacePreferences,
     layout: settings.uiLayout,
     layoutRevision: uiLayoutRevision(settings.uiLayout),
@@ -16855,10 +10795,10 @@ const server = createServer(async (req, res) => {
     }
 
     if (url.pathname === "/api/workspaces" && req.method === "POST") {
-      if (!tabs.size) throw makeHttpError(400, "A workspace requires at least one open tab");
+      if (!tabs.size) throw makeHttpError(400, "A workspace requires at least one open thread");
       const body = await readJsonBody(req);
       const descriptors = await restorableTabsForRestart();
-      if (!descriptors.length) throw makeHttpError(400, "A workspace requires at least one open tab");
+      if (!descriptors.length) throw makeHttpError(400, "A workspace requires at least one open thread");
       let data;
       try {
         data = await saveWebuiWorkspace({
@@ -16960,7 +10900,14 @@ const server = createServer(async (req, res) => {
     if (url.pathname === "/api/tabs" && req.method === "POST") {
       if (!optionalFeatureStartupReady) throw makeHttpError(503, "Optional feature startup audit is still checking; retry after /api/health is ready");
       const body = await readJsonBody(req);
-      const tab = await createTab({ title: body.title, cwd: body.cwd });
+      const freshNoProject = validateNoProjectCreateIntent(body);
+      if (!freshNoProject && body.cwd) {
+        const cwd = await resolveCwd(body.cwd, options.cwd);
+        if ((await resolveNoProjectWorkspace(agentDir, { cwd })).workspaceKind === "no-project") {
+          throw makeHttpError(400, "Use workspaceKind: no-project to create a fresh owned conversation; resume existing conversations through session selection");
+        }
+      }
+      const tab = await createTab({ title: body.title, cwd: body.cwd, freshNoProject });
       sendJson(res, 201, { ok: true, data: { tab: tabMeta(tab), tabs: listTabs() } });
       return;
     }
@@ -16978,15 +10925,18 @@ const server = createServer(async (req, res) => {
       const body = await readJsonBody(req);
       const wanted = String(body.id || "").trim();
       const index = closedRestorableTabs.findIndex((item) => item.id === wanted);
-      if (!wanted || index === -1) throw makeHttpError(404, "That closed tab can no longer be reopened");
-      const [descriptor] = closedRestorableTabs.splice(index, 1);
+      if (!wanted || index === -1) throw makeHttpError(404, "That closed thread can no longer be reopened");
+      const descriptor = closedRestorableTabs[index];
       const tab = await createTab({
         title: descriptor.titleSource === "explicit" || descriptor.titleSource === "auto" ? descriptor.title : undefined,
         titleSource: descriptor.titleSource,
         conversationStarted: descriptor.conversationStarted,
         cwd: descriptor.cwd,
+        workspaceKind: descriptor.workspaceKind,
+        noProjectId: descriptor.noProjectId,
         sessionFile: descriptor.sessionFile,
       });
+      closedRestorableTabs.splice(index, 1);
       sendJson(res, 201, { ok: true, data: { tab: tabMeta(tab), tabs: listTabs() } });
       return;
     }
@@ -17269,7 +11219,7 @@ const server = createServer(async (req, res) => {
       if (process.env.PI_WEBUI_STARTUP_PROBE === "1") throw makeHttpError(409, "Isolated startup probes cannot plan updates.");
       const validation = validateUpdatePlanRequest(await readJsonBody(req));
       if (!validation.ok) throw makeHttpError(400, validation.error);
-      const plan = await createNativeServerPlan(validation.targets);
+      const plan = await packageUpdates.plan(validation.targets[0]);
       sendJson(res, 201, { ok: true, data: { plan } });
       return;
     }
@@ -17279,7 +11229,7 @@ const server = createServer(async (req, res) => {
       if (process.env.PI_WEBUI_STARTUP_PROBE === "1") throw makeHttpError(409, "Isolated startup probes cannot apply updates.");
       const validation = validateUpdateApplyRequest(await readJsonBody(req));
       if (!validation.ok) throw makeHttpError(400, validation.error);
-      const data = await applyNativeServerPlan(validation.transactionId, validation.planDigest);
+      const data = packageUpdates.apply(validation.transactionId, validation.planDigest);
       sendJson(res, 202, { ok: true, data });
       return;
     }
@@ -17287,9 +11237,10 @@ const server = createServer(async (req, res) => {
     const updateTransactionRoute = url.pathname.match(/^\/api\/update\/transactions\/([A-Za-z0-9._-]{1,128})$/);
     if (updateTransactionRoute && req.method === "GET") {
       requireLocalhost(req, "Viewing update transactions is only allowed from localhost");
-      const job = await finalizeNativeJob(updateTransactionRoute[1]);
+      const simpleJob = packageUpdates.getJob(updateTransactionRoute[1]);
+      const job = simpleJob || await finalizeNativeJob(updateTransactionRoute[1]);
       if (!job) throw makeHttpError(404, "Update job was not found.");
-      sendJson(res, 200, { ok: true, data: publicNativeJob(job) });
+      sendJson(res, 200, { ok: true, data: simpleJob || publicNativeJob(job) });
       return;
     }
 
@@ -17411,8 +11362,8 @@ const server = createServer(async (req, res) => {
 
     if (url.pathname === "/api/directories" && req.method === "POST") {
       const body = await readJsonBody(req);
-      const tab = getRequestedTab(req, url, body);
-      ensureNaturalConversationRouteAllowed(tab, "directory creation is blocked");
+      const tab = optionalRequestedTab(req, url, body);
+      if (tab) ensureNaturalConversationRouteAllowed(tab, "directory creation is blocked");
       const activeCwd = directoryPickerActiveCwd(req, url, body);
       sendJson(res, 201, {
         ok: true,
@@ -17440,8 +11391,8 @@ const server = createServer(async (req, res) => {
 
     if (url.pathname === "/api/path-fast-picks" && req.method === "POST") {
       const body = await readJsonBody(req);
-      const tab = getRequestedTab(req, url, body);
-      ensureNaturalConversationRouteAllowed(tab, "path fast-pick changes are blocked");
+      const tab = optionalRequestedTab(req, url, body);
+      if (tab) ensureNaturalConversationRouteAllowed(tab, "path fast-pick changes are blocked");
       const picks = await writePathFastPicks(body.picks ?? body);
       sendJson(res, 200, { ok: true, data: { picks } });
       return;
@@ -18071,7 +12022,7 @@ const server = createServer(async (req, res) => {
         "/api/git-submodules": (cwd) => readGitSubmodules(cwd),
         "/api/git-tags": (cwd) => readGitTags(cwd),
         "/api/git-signing": (cwd) => readGitSigningDiagnostics(cwd),
-        "/api/git-worktrees/prune": (cwd) => pruneGitWorktrees(cwd, { dryRun: true }),
+        "/api/git-worktrees/prune": (cwd) => pruneGitWorktreesData(cwd),
       };
       if (req.method === "GET" && GIT_READ_ROUTES[url.pathname]) {
         const tab = getRequestedTab(req, url);
@@ -18107,10 +12058,7 @@ const server = createServer(async (req, res) => {
         "/api/git-undo/amend-message": (cwd, body) => amendLastGitCommitMessage(cwd, body),
         "/api/git-submodules/update": (cwd, body) => updateGitSubmodules(cwd, body),
         "/api/git-tags/create": (cwd, body) => createGitTag(cwd, body),
-        "/api/git-worktrees/prune": (cwd, body) => {
-          requireConfirmed(body, "Pruning stale worktree records");
-          return pruneGitWorktrees(cwd, { dryRun: false });
-        },
+        "/api/git-worktrees/prune": (cwd, body) => pruneGitWorktreesData(cwd, body, { dryRun: false }),
       };
       if (req.method === "POST" && GIT_MUTATION_ROUTES[url.pathname]) {
         const body = await readJsonBody(req);
@@ -18184,6 +12132,11 @@ const server = createServer(async (req, res) => {
       if (command) {
         const tab = getRequestedTab(req, url, body);
         enforceNaturalConversationCommandAllowed(tab, command);
+        if (command.type === "new_session" && tab.workspaceKind === "no-project") {
+          const created = await createNoProjectResetTab(tab);
+          sendJson(res, 200, responseWithTab(rpcSuccess("new_session", created), tab));
+          return;
+        }
         if (command.type === "abort") await cancelPendingExtensionUiRequests(tab);
         const queuedForCompaction = maybeQueueCommandDuringCompaction(tab, command);
         if (queuedForCompaction) {

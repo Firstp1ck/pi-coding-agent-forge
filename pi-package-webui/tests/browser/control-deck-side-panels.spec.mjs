@@ -259,16 +259,30 @@ test("Right, Left, Both, Sidebar rail, independent state, overlay, singleton ARI
   await page.waitForTimeout(300);
   if (await files.getAttribute("aria-expanded") !== "true") await files.click();
   if (await controls.getAttribute("aria-expanded") !== "true") await controls.click();
+  await expect(files).toHaveAttribute("aria-expanded", "true");
+  await expect(controls).toHaveAttribute("aria-expanded", "true");
+  await files.click();
   await expect(files).toHaveAttribute("aria-expanded", "false");
   await controls.press("Alt+ArrowRight");
+  await expect(controls).toBeFocused();
   await expect(controls).toHaveAttribute("aria-expanded", "true");
-  if (await files.getAttribute("aria-expanded") !== "true") await files.click();
+  await expect(files).toHaveAttribute("aria-expanded", "false");
+  await files.click();
   await expect(files).toHaveAttribute("aria-expanded", "true");
   await files.press("Alt+ArrowRight");
+  await expect(files).toBeFocused();
   await expect(files).toHaveAttribute("aria-expanded", "true");
+  await expect(controls).toHaveAttribute("aria-expanded", "true");
+  await controls.click();
   await expect(controls).toHaveAttribute("aria-expanded", "false");
+  await expect(files).toHaveAttribute("aria-expanded", "true");
 
   await files.press("Alt+ArrowLeft");
+  await expect(files).toBeFocused();
+  await expect(files).toHaveAttribute("aria-expanded", "true");
+  await expect(controls).toHaveAttribute("aria-expanded", "false");
+  await files.click();
+  await expect(files).toHaveAttribute("aria-expanded", "false");
   const latentLeftBefore = await page.evaluate(() => JSON.parse(localStorage.getItem("pi-webui-control-deck-layout-v2") || "null")?.sectionLayout?.leftSectionIds || []);
   await selectPlacement(page, "right");
   await controls.focus();
@@ -279,6 +293,8 @@ test("Right, Left, Both, Sidebar rail, independent state, overlay, singleton ARI
   await expect.poll(() => page.locator("#sidePanelBodyRight > [data-side-panel-section]").evaluateAll((nodes) => nodes.map((node) => node.dataset.sidePanelSection))).toEqual(rightOrder);
   await selectPlacement(page, "both");
   await expect(page.locator('#sidePanelBodyLeft > [data-side-panel-section="files"]')).toHaveCount(1);
+  await expect(files).toHaveAttribute("aria-expanded", "false");
+  await expect(controls).toHaveAttribute("aria-expanded", "true");
 
   await page.locator("#toggleSidePanelLeftButton").click();
   await expect(page.locator("body")).toHaveClass(/side-panel-left-collapsed/);
@@ -315,7 +331,7 @@ test("Right, Left, Both, Sidebar rail, independent state, overlay, singleton ARI
   await expect(page.locator("#sidePanelLeft")).toBeHidden();
   const rightPlacementChatBox = await page.locator(".chat").boundingBox();
   const leftRailBox = await page.locator(".terminal-tabs-shell").boundingBox();
-  assert.ok(rightPlacementChatBox && leftRailBox && leftRailBox.x < rightPlacementChatBox.x, "Right Control Deck placement should switch the terminal/tabs rail to the left of chat");
+  assert.ok(rightPlacementChatBox && leftRailBox && leftRailBox.x < rightPlacementChatBox.x, "Right Control Deck placement should switch the thread rail to the left of chat");
 
   await page.locator("#controlDeckPlacementSelect").selectOption("left");
   await expect(page.locator("body")).not.toHaveClass(/terminal-tabs-sidebar-start/);
@@ -323,19 +339,18 @@ test("Right, Left, Both, Sidebar rail, independent state, overlay, singleton ARI
   await expect(page.locator("#sidePanel")).toBeHidden();
   const chatBox = await page.locator(".chat").boundingBox();
   const railBox = await page.locator(".terminal-tabs-shell").boundingBox();
-  assert.ok(chatBox && railBox && railBox.x > chatBox.x, "Left Control Deck placement should switch the terminal/tabs rail to the right of chat");
-  await expect(page.locator("#controlDeckPlacementStatus")).toContainText("Control Deck left, terminal/tabs right");
+  assert.ok(chatBox && railBox && railBox.x > chatBox.x, "Left Control Deck placement should switch the thread rail to the right of chat");
+  await expect(page.locator("#controlDeckPlacementStatus")).toContainText("Control Deck left, threads right");
   const newTabButton = page.locator("#newTabButton");
+  const newTabButtonBox = await newTabButton.boundingBox();
+  assert.ok(newTabButtonBox && newTabButtonBox.x >= railBox.x - 1 && newTabButtonBox.x + newTabButtonBox.width <= railBox.x + railBox.width + 1, `the right-rail compose button should stay inside its rail: ${JSON.stringify({ newTabButtonBox, railBox })}`);
   await newTabButton.hover();
-  await expect(page.locator("#newTabMenuPanel")).toBeVisible();
-  const pointerMenuBox = await page.locator("#newTabMenuPanel").boundingBox();
-  assert.ok(pointerMenuBox && pointerMenuBox.x < railBox.x && pointerMenuBox.x >= 0 && pointerMenuBox.x + pointerMenuBox.width <= 2200, `pointer-opened right-rail menu should open inward without viewport clipping: ${JSON.stringify({ pointerMenuBox, railBox })}`);
-  await page.mouse.move(chatBox.x + 20, chatBox.y + 20);
-  await expect(page.locator("#newTabMenuPanel")).toBeHidden();
+  await expect(page.locator("#newThreadDialog")).toBeHidden();
   await newTabButton.focus();
-  await expect(page.locator("#newTabMenuPanel")).toBeVisible();
-  const keyboardMenuBox = await page.locator("#newTabMenuPanel").boundingBox();
-  assert.ok(keyboardMenuBox && keyboardMenuBox.x < railBox.x && keyboardMenuBox.x >= 0 && keyboardMenuBox.x + keyboardMenuBox.width <= 2200, `keyboard-opened right-rail menu should open inward without viewport clipping: ${JSON.stringify({ keyboardMenuBox, railBox })}`);
+  await page.keyboard.press("Enter");
+  await expect(page.locator("#newThreadDialog")).toBeVisible();
+  const paletteBox = await page.locator("#newThreadDialog").boundingBox();
+  assert.ok(paletteBox && paletteBox.x >= 0 && paletteBox.x + paletteBox.width <= 2200 && paletteBox.y >= 0 && paletteBox.y + paletteBox.height <= 1000, `the new-thread palette should open without viewport clipping: ${JSON.stringify({ paletteBox })}`);
   await page.keyboard.press("Escape");
   const workspaceButton = page.locator("#workspaceDashboardToggleButton");
   await workspaceButton.hover();

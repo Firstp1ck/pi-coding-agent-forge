@@ -16,7 +16,10 @@ const actionEnd = html.indexOf("</div>", actionStart);
 const saveButton = html.indexOf('id="workspaceSaveButton"', actionStart);
 assert.ok(actionStart >= 0 && saveButton > actionStart && saveButton < actionEnd, "Save workspace must be a header action");
 assert.match(html, /workspaceSaveButton[\s\S]*?aria-label="Save workspace"/, "Save workspace must be labelled");
-assert.match(app, /applyStyledTooltip\(elements\.workspaceSaveButton,[\s\S]*?floating: false/, "Save workspace must keep only its dedicated styled tooltip instead of also binding the shared floating tooltip");
+const saveTooltip = app.match(/applyStyledTooltip\(elements\.workspaceSaveButton,[\s\S]*?\);/)?.[0];
+assert.ok(saveTooltip, "Save workspace must use the shared styled tooltip owner");
+assert.doesNotMatch(saveTooltip, /floating: false/, "Save workspace must escape clipped sidebar ancestors");
+assert.match(css, /\[data-tooltip-floating="true"\]::after[^}]*display: none !important/, "Shared tooltips must suppress duplicate pseudo tooltips");
 
 assert.match(app, /function saveWebuiWorkspace[\s\S]*?api\("\/api\/workspaces", \{ method: "POST", body, scoped: false \}\)/, "Save must use an unscoped workspace API call");
 assert.match(app, /function refreshSavedWorkspaces[\s\S]*?api\("\/api\/workspaces", \{ scoped: false \}\)/, "Workspace list must use an unscoped API call");
@@ -42,10 +45,10 @@ assert.match(app, /label: "Workspace: Save"/, "The command palette must offer wo
 assert.match(app, /label: "Workspace: Load…"/, "The command palette must offer workspace load when no tabs exist");
 assert.match(app, /function closeAllTerminalTabs[\s\S]*?allowEmpty: true/, "Close all must permit the planned zero-tab workspace-load state");
 assert.match(app, /function closeTerminalTabs[\s\S]*?if \(!tabs\.length\) setWorkspaceDashboardCollapsed\(false, \{ persist: false \}\)/, "Closing all tabs must reveal the workspace picker dashboard");
-assert.match(app, /function initializeTabs[\s\S]*?if \(!saved\.length\) await createFirstTerminalTabFromChosenDirectory\(\)/, "Fresh installs without saved workspaces must retain the first-terminal cwd prompt");
+assert.match(app, /async function initializeTabs\(\)[\s\S]*?if \(!loadedTabs\.length\)[\s\S]*?refreshSavedWorkspaces\(\)/, "Empty startup must retain saved workspace discovery without requiring a folder choice");
 
 const emptyStart = app.slice(app.indexOf("function renderEmptyStartState"), app.indexOf("function userPromptTargets"));
-assert.match(emptyStart, /title: "Load workspace"[\s\S]*?description: "Restore a saved tab constellation"[\s\S]*?openWorkspaceLoadPicker/, "The empty-start card must offer a labelled saved-workspace picker action");
+assert.match(emptyStart, /title: "Load workspace"[\s\S]*?description: "Restore a saved thread constellation"[\s\S]*?openWorkspaceLoadPicker/, "The empty-start card must offer a labelled saved-workspace picker action");
 assert.match(html, /id="workspaceLoadDialog"[\s\S]*?aria-labelledby="workspaceLoadDialogTitle"/, "The saved-workspace picker must use a labelled dialog");
 assert.match(html, /id="workspaceReplaceDialog"[\s\S]*?workspaceReplaceCurrentTabsList[\s\S]*?workspaceReplaceSaveName[\s\S]*?Load without saving[\s\S]*?Save &amp; load/, "The replacement dialog must expose current tabs, a save name, and explicit discard/save choices");
 assert.match(app, /function renderWorkspaceLoadDialog[\s\S]*?Loading saved workspaces…[\s\S]*?workspace-load-dialog-retry[\s\S]*?No saved workspaces yet[\s\S]*?loadWebuiWorkspace[\s\S]*?workspace-load-dialog-item-delete danger[\s\S]*?deleteWebuiWorkspace[\s\S]*?workspaceLoadDialogCloseButton\?\.focus/, "The dialog picker must render loading, retry/error, empty, load, and destructive delete states while preserving focus after deletion");
@@ -56,7 +59,7 @@ assert.match(app, /workspaceReplaceDiscardButton[\s\S]*?replaceOpenTabs: true, d
 assert.match(loadFlow, /const decision = await chooseWorkspaceReplacement[\s\S]*?Object\.keys\(decision\)\.length[\s\S]*?body: decision/, "Open-tab loading must send the WS1 decision body while zero-tab loading keeps an empty body");
 assert.match(loadFlow, /workspace with that name already exists[\s\S]*?confirmLabel: "Overwrite & load"[\s\S]*?overwrite: true/, "Duplicate save-and-load names must confirm overwrite before retrying");
 assert.match(loadFlow, /data\.closedIds[\s\S]*?retireClosedWorkspaceTabContexts\(closedIds\)[\s\S]*?data\.savedCurrent\?\.workspaces/, "The client must reconcile closed tabs and optional saved-current workspace metadata");
-assert.match(app, /function retireClosedWorkspaceTabContexts[\s\S]*?tabDrafts\.delete[\s\S]*?clearAttachments[\s\S]*?fileViewersByTab\.delete[\s\S]*?removeSubagentTerminalViewsForParent/, "Workspace replacement must retire per-tab client state along with closed tabs");
+assert.match(app, /function retireClosedWorkspaceTabContexts[\s\S]*?clearAttachments[\s\S]*?composerStore\.clearTab[\s\S]*?projectFiles\.forgetTab[\s\S]*?removeSubagentTerminalViewsForParent/, "Workspace replacement must retire per-tab client state along with closed tabs");
 
 assert.match(css, /body\.terminal-tabs-left \.terminal-sidebar-actions \{[\s\S]*?grid-template-columns: repeat\(4, minmax\(0, 1fr\)\)/, "The left tab layout must provide four action slots");
 assert.match(css, /\.workspace-saved-workspaces/, "Saved-workspace picker styles must be scoped");

@@ -4,9 +4,9 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const [app, server] = await Promise.all([
+const [app, runnerService] = await Promise.all([
   readFile(join(root, "public", "app.js"), "utf8"),
-  readFile(join(root, "bin", "pi-webui.mjs"), "utf8"),
+  readFile(join(root, "lib", "server", "app-runners.mjs"), "utf8"),
 ]);
 
 assert.match(
@@ -20,7 +20,7 @@ assert.match(
   "app-runner terminal lines should apply supported ANSI styling and hide unsupported ANSI controls",
 );
 assert.match(
-  server,
+  runnerService,
   /consumeAppRunnerTerminalChunk\([\s\S]*carriageReturnPending/,
   "server should preserve terminal-style carriage-return state across app-runner chunks",
 );

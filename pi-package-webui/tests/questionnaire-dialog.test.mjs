@@ -257,14 +257,14 @@ function inputHarness(prefill = "") {
 
 const cancelActiveExtensionDialogSource = functionSource("cancelActiveExtensionDialog");
 const makeCancelActiveExtensionDialog = new Function(
-  "activeDialog",
+  "extensionRequests",
   "activeDialogCancel",
   `${cancelActiveExtensionDialogSource}; return cancelActiveExtensionDialog;`,
 );
 {
   let cancellationCount = 0;
   let responseSent = false;
-  const cancelActiveExtensionDialog = makeCancelActiveExtensionDialog({ id: "active-request" }, () => {
+  const cancelActiveExtensionDialog = makeCancelActiveExtensionDialog({ active: { id: "active-request" } }, () => {
     if (responseSent) return false;
     responseSent = true;
     cancellationCount += 1;
@@ -276,7 +276,7 @@ const makeCancelActiveExtensionDialog = new Function(
   assert.equal(event.defaultPrevented, true, "native Escape cancellation must prevent the browser from closing method=dialog directly");
   assert.equal(cancellationCount, 1, "native Escape cancellation must send exactly once");
   const inactiveEvent = { defaultPrevented: false, preventDefault() { this.defaultPrevented = true; } };
-  assert.equal(makeCancelActiveExtensionDialog(null, null)(inactiveEvent), false, "inactive dialogs must ignore stray cancel events");
+  assert.equal(makeCancelActiveExtensionDialog({ active: null }, null)(inactiveEvent), false, "inactive dialogs must ignore stray cancel events");
   assert.equal(inactiveEvent.defaultPrevented, false);
 }
 assert.match(app, /elements\.dialog\.addEventListener\("cancel", cancelActiveExtensionDialog\)/, "the native dialog cancel event must use the active response guard");
@@ -504,8 +504,8 @@ assert.match(css, /@media \(max-width: 720px\), \(max-device-width: 720px\), \(p
 assert.match(css, /\.questionnaire-options button\s*\{\s*min-height:\s*3\.35rem/, "mobile questionnaire targets must exceed the 44px floor");
 assert.match(css, /@media \(prefers-reduced-motion: reduce\)\s*\{[\s\S]*?\*, \*::before, \*::after[\s\S]*?transition-duration:\s*1ms !important/, "global reduced-motion rules must cover questionnaire transitions");
 
-assert.match(html, /styles\.css\?v=154/, "questionnaire CSS needs the current stylesheet revision");
-assert.match(html, /app\.js\?v=185/, "questionnaire behavior needs the current app revision");
-assert.match(serviceWorker, /const CACHE_NAME = "pi-webui-pwa-v156"/, "questionnaire public assets need a coherent PWA cache revision");
+assert.match(html, /styles\.css\?v=167/, "questionnaire CSS needs the current stylesheet revision");
+assert.match(html, /app\.js\?v=220/, "questionnaire behavior needs the current app revision");
+assert.match(serviceWorker, /const CACHE_NAME = "pi-webui-pwa-v200"/, "questionnaire public assets need a coherent PWA cache revision");
 
 console.log("questionnaire-dialog.test.mjs passed");

@@ -84,11 +84,25 @@ async function storedLayout(page) {
   return page.evaluate((key) => JSON.parse(localStorage.getItem(key) || "null"), layoutStorageKey);
 }
 
+async function waitForControlDeckGeometry(handle) {
+  await handle.evaluate(() => document.fonts.ready);
+  await expect.poll(() => handle.evaluate((node) => {
+    const panel = document.getElementById("sidePanel");
+    const layout = document.querySelector(".layout");
+    const targetWidth = Number(node.getAttribute("aria-valuenow"));
+    return Math.abs(panel.getBoundingClientRect().width - targetWidth) < 1
+      && !layout.getAnimations().some((animation) => animation.playState === "running");
+  })).toBe(true);
+}
+
 async function resizeControlDeckBy(handle, key, count) {
+  // Keyboard steps read rendered width, which trails aria-valuenow during the CSS transition.
+  await waitForControlDeckGeometry(handle);
   for (let index = 0; index < count; index += 1) {
     const previous = await handle.getAttribute("aria-valuenow");
     await handle.press(key);
     await expect.poll(async () => handle.getAttribute("aria-valuenow")).not.toBe(previous);
+    await waitForControlDeckGeometry(handle);
   }
 }
 
@@ -265,6 +279,7 @@ test("narrow composer projection preserves the saved order of adjacent actions",
   const send = page.locator('[data-composer-action-id="send"]');
   const gridGuide = page.locator("#composerActionGridGuide");
   const resizeHandle = page.locator("#sidePanelResizeHandle");
+  await waitForControlDeckGeometry(resizeHandle);
 
   const moveToCellFromEnd = async (action, offsetFromEnd) => {
     const actionBox = await action.boundingBox();
@@ -317,6 +332,7 @@ test("sparse composer buttons keep fixed widths and stable columns when the Cont
   const send = page.locator('[data-composer-action-id="send"]');
   const gridGuide = page.locator("#composerActionGridGuide");
   const resizeHandle = page.locator("#sidePanelResizeHandle");
+  await waitForControlDeckGeometry(resizeHandle);
   const initialRowBox = await row.boundingBox();
   expect(initialRowBox).toBeTruthy();
 

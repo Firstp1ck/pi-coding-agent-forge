@@ -13,7 +13,8 @@ import { validateUpdateApplyRequest, validateUpdatePlanRequest } from "../lib/co
 
 assert.deepEqual(validateUpdatePlanRequest({ targets: ["pi"] }), { ok: true, targets: ["pi"] });
 assert.deepEqual(validateUpdatePlanRequest({ targets: ["webui"] }), { ok: true, targets: ["webui"] });
-for (const invalid of [{}, { targets: [] }, { targets: ["all"] }, { targets: ["pi", "pi"] }, { targets: ["pi", "webui"] }, { targets: ["pi"], registry: "https://evil.test" }]) {
+assert.deepEqual(validateUpdatePlanRequest({ targets: ["all"] }), { ok: true, targets: ["all"] });
+for (const invalid of [{}, { targets: [] }, { targets: ["bogus"] }, { targets: ["pi", "pi"] }, { targets: ["pi", "webui"] }, { targets: ["pi"], registry: "https://evil.test" }]) {
   assert.equal(validateUpdatePlanRequest(invalid).ok, false);
 }
 const digest = "a".repeat(64);
@@ -24,8 +25,8 @@ for (const invalid of [{ transactionId: "tx-1" }, { transactionId: "../x", planD
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const server = await readFile(path.join(root, "bin", "pi-webui.mjs"), "utf8");
-assert.match(server, /\/api\/update\/plan[\s\S]*validateUpdatePlanRequest[\s\S]*createNativeServerPlan/);
-assert.match(server, /\/api\/update\/apply[\s\S]*validateUpdateApplyRequest[\s\S]*applyNativeServerPlan/);
+assert.match(server, /\/api\/update\/plan[\s\S]*validateUpdatePlanRequest[\s\S]*packageUpdates\.plan/);
+assert.match(server, /\/api\/update\/apply[\s\S]*validateUpdateApplyRequest[\s\S]*packageUpdates\.apply/);
 assert.match(server, /Legacy update mutation is disabled/);
 assert.match(server, /validateNativePlan\(job\.plan, digest\)/);
 assert.match(server, /bootIdentity/);
@@ -83,12 +84,13 @@ try {
   assert.equal(combined.status, 400, "combined actions must be rejected without shell execution");
   const piPlan = await request(["pi"]);
   const piData = await piPlan.json();
-  assert.equal(piPlan.status, 409, JSON.stringify(piData));
-  assert.match(piData.error || "", /PATH Pi|npm-global|manual/i, "explicit fake Pi is not the verified PATH Pi");
+  assert.equal(piPlan.status, 201, JSON.stringify(piData));
+  assert.deepEqual(piData.data.plan.targets[0].command, { command: "pi", args: ["update"] });
+  assert.equal(piData.data.plan.pathPi, undefined, "no PATH provenance or version probe");
   const webuiPlan = await request(["webui"]);
   const webuiData = await webuiPlan.json();
   assert.equal(webuiPlan.status, 409, JSON.stringify(webuiData));
-  assert.match(webuiData.error || "", /manual|unproven|missing/i);
+  assert.match(webuiData.error || "", /not installed|not.*found|not.*detected/i);
 
   const refusedApply = await fetch(`http://127.0.0.1:${webuiPort}/api/update/apply`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ transactionId: "legacy-refused-only", planDigest: digest }) });
   assert.equal(refusedApply.status, 404, "legacy per-agent journals must never authorize a native update");
@@ -100,7 +102,7 @@ try {
   assert.equal(legacy.status, 410);
 
   const getStatus = async () => (await (await fetch(`http://127.0.0.1:${webuiPort}/api/update-status`)).json()).data;
-  assert.deepEqual((await getStatus()).nativeJobs, { pi: null, webui: null });
+  assert.deepEqual((await getStatus()).nativeJobs, { all: null, webui: null, pi: null });
   const stateRoot = path.join(temp, process.platform === "win32" ? "AppData/Local/PiWebUI/updates" : ".local/state/pi-webui-updates");
   const transactionId = randomUUID();
   const jobDir = path.join(stateRoot, "jobs", transactionId);
@@ -112,16 +114,15 @@ try {
     plan: { schemaVersion: 2, transactionId, requested: "webui", createdAt: new Date().toISOString(), targets: [{ id: receipt.id }],
       context: { agentDir: await realpath(path.join(temp, "agent")), ownerPackageRoot: await realpath(root), ownerBootIdentity: health.bootIdentity } } });
   const discovered = await getStatus();
-  assert.equal(discovered.nativeJobs.webui.transactionId, transactionId, "a new browser can discover the durable job without local storage");
-  assert.equal(discovered.nativeJobs.webui.phase, "partial");
-  assert.equal(discovered.nativeJobs.webui.receipts[0].stderr, "fixture failure");
+  assert.deepEqual(discovered.nativeJobs, { all: null, webui: null, pi: null }, "new jobs do not rediscover or replay legacy journals");
+  assert.equal(discovered.canRunUpdate, true);
   assert.equal(JSON.stringify(discovered).includes("fixture-private-lock-token"), false);
-  assert.equal((await getStatus()).nativeJobs.webui.transactionId, transactionId, "reconnection retains the same partial result");
   await writeFile(path.join(stateRoot, "jobs", `${randomUUID()}.json`), "invalid private record");
   const unverified = await getStatus();
-  assert.ok(unverified.nativeJobDiscoveryError);
-  assert.equal(unverified.canRunUpdate, false, "discovery failure cannot authorize another update");
-  assert.equal(unverified.nativeJobDiscoveryError.includes("invalid private record"), false, "corrupt record contents must not leak in the error");
+  assert.equal(unverified.nativeJobDiscoveryError, "");
+  assert.equal(unverified.canRunUpdate, true, "historical journal validation is not a new-command preflight");
+  assert.equal(JSON.stringify(unverified).includes("invalid private record"), false);
+
 } finally {
   child.kill("SIGTERM");
   if (child.exitCode === null) await new Promise((resolve) => child.once("exit", resolve));

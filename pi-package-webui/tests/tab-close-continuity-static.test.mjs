@@ -19,7 +19,7 @@ assert.match(app, /const closingTerminalTabIds = new Set\(\)/, "the frontend sho
 assert.match(schedule, /closingTerminalTabIds\.has\(tabContext\.tabId\)/, "continuity refreshes should skip tabs that are intentionally closing");
 assert.match(schedule, /if \(!isCurrentTabContext\(tabContext\) \|\| closingTerminalTabIds\.has\(tabContext\.tabId\)\) return;[\s\S]*continuity refresh failed/, "an in-flight refresh rejected by intentional shutdown should not produce a false error");
 assert.match(closeTabs, /for \(const id of targetIds\) closingTerminalTabIds\.add\(id\);[\s\S]*finally \{\s*for \(const id of targetIds\) closingTerminalTabIds\.delete\(id\);/, "the close lifecycle should mark every target before the request and always clear the marker afterward");
-assert.match(closeTabs, /addEvent\(`closed \$\{closedIds\.length \|\| targetTabs\.length\} terminal \$\{closedIds\.length === 1 \? "tab" : "tabs"\}`, "info"\)/, "successful terminal tab closure should be recorded as information rather than a warning");
+assert.match(closeTabs, /addEvent\(`closed \$\{closedIds\.length \|\| targetTabs\.length\} \$\{closedIds\.length === 1 \? "thread" : "threads"\}`, "info"\)/, "successful terminal tab closure should be recorded as information rather than a warning");
 assert.doesNotMatch(closeTabs, /addEvent\(`closed [^`]+`, "warn"\)/, "successful terminal tab closure should never be classified as a warning");
 
 console.log("tab-close-continuity-static.test.mjs passed");

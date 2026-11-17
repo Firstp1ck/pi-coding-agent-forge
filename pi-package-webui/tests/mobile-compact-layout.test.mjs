@@ -12,8 +12,8 @@ const [html, css, app, technical] = await Promise.all([
 ]);
 
 assert.match(html, /id="terminalTabsToggleButton"[^>]*aria-controls="terminalTabsDrawerContent"[^>]*aria-expanded="false"/, "terminal summary should control the collapsed drawer");
-assert.match(html, /id="terminalTabsDrawerContent"[^>]*aria-label="Terminal navigation"[\s\S]*id="tabBar"[\s\S]*class="terminal-sidebar-actions"[^>]*aria-label="Tab and workspace actions"[\s\S]*id="closeAllTabsButton"/, "drawer should reuse canonical tabs and workspace actions");
-assert.match(html, /id="terminalTabsBackdrop"[^>]*aria-label="Close terminal navigation"[^>]*hidden/, "drawer should expose an accessible backdrop close target");
+assert.match(html, /id="terminalTabsDrawerContent"[^>]*aria-label="Thread navigation"[\s\S]*id="tabBar"[\s\S]*class="terminal-sidebar-actions"[^>]*aria-label="Thread and workspace actions"[\s\S]*id="closeAllTabsButton"/, "drawer should reuse canonical tabs and workspace actions");
+assert.match(html, /id="terminalTabsBackdrop"[^>]*aria-label="Close thread navigation"[^>]*hidden/, "drawer should expose an accessible backdrop close target");
 assert.match(css, /body\.mobile-tabs-expanded \.terminal-tabs-shell \{[\s\S]*?position:\s*fixed;[\s\S]*?top:\s*0;[\s\S]*?right:\s*0;[\s\S]*?left:\s*0;[\s\S]*?width:\s*100vw;[\s\S]*?height:\s*var\(--visual-viewport-height, 100dvh\);[\s\S]*?border-radius:\s*0;/, "expanded terminal navigation should fill the visual viewport");
 assert.match(css, /body\.mobile-tabs-expanded \.terminal-tabs \{[\s\S]*?position:\s*static;[\s\S]*?flex-direction:\s*column;[\s\S]*?overflow-y:\s*auto/, "drawer tabs should follow the vertical left-sidebar model");
 assert.match(app, /function setMobileTabsExpanded\(expanded, \{ restoreFocus = false \} = \{\}\)[\s\S]*?setComposerActionsOpen\(false\)[\s\S]*?terminalTabsBackdrop\.hidden = !mobileTabsExpanded[\s\S]*?focusReturn\.focus/, "drawer state should coordinate competing surfaces and restore focus");
