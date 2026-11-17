@@ -107,6 +107,7 @@ Skills give Pi a reusable workflow for a particular kind of work. You normally a
 - **[Patch MD](pi-skill-patch-md/README.md)** — Create and manage reproducible PATCH.md packages with validation and rollback guidance.
 - **[Performance Optimizer](pi-skill-performance-optimizer/README.md)** — Find why software is slow or resource-heavy before recommending optimizations.
 - **[Project README](pi-skill-project-readme/README.md)** — Create, update, or review evidence-based project READMEs for the right audience.
+- **[PR Writing](pi-skill-pr-writing/README.md)** — Write pull request titles and descriptions with outcome titles, concrete evidence, and stated limits.
 - **[Refactoring Advisor](pi-skill-refactoring-advisor/README.md)** — Plan small, safe refactors that preserve behavior while improving maintainability.
 - **[Repo Explorer](pi-skill-repo-explorer/README.md)** — Map an unfamiliar repository and return the files, symbols, risks, and evidence needed for the next step.
 - **[Requirements engineering](pi-skill-requirements-engineering/README.md)** helps you find the problem behind feature requests, prepare interviews, turn notes into traceable requirements, and settle conflicts and changes with stakeholders.

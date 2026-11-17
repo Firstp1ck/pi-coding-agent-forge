@@ -1,0 +1,33 @@
+{
+  "name": "@firstpick/pi-skill-pr-writing",
+  "version": "0.1.0",
+  "description": "Agents should invoke this skill whenever they write, draft, or revise a pull request title or description. Produces short, evidence-first PR text in the style of the T3 Code and Pi maintainers.",
+  "license": "MIT",
+  "homepage": "https://github.com/Firstp1ck/pi-coding-agent-forge/tree/main/pi-skill-pr-writing#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Firstp1ck/pi-coding-agent-forge.git",
+    "directory": "pi-skill-pr-writing"
+  },
+  "keywords": [
+    "pi-package",
+    "pi",
+    "pi-coding-agent",
+    "skill",
+    "agent-skill",
+    "pull-request",
+    "github",
+    "writing"
+  ],
+  "pi": {
+    "skills": [
+      "./skills"
+    ]
+  },
+  "files": [
+    "skills",
+    "README.md",
+    "TECHNICAL.md",
+    "LICENSE"
+  ]
+}
