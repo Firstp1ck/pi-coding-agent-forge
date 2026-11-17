@@ -404,6 +404,8 @@ try {
   await replayClient.shutdown();
   await delay(200);
   assert.equal(await readSupervisorState(paths), null, "a matching supervisor shutdown must remove private state");
+  await assert.rejects(replayClient.detach(), { code: "RPC_SUPERVISOR_DISCONNECTED" },
+    "requests after the supervisor exits must carry the code the Web UI shutdown treats as benign");
 
   // A host that loses its state race must leave the new incarnation untouched.
   const safeAgentDir = path.join(work, "instance-safe-agent");

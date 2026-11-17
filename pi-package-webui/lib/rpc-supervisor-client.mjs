@@ -38,6 +38,10 @@ function replacementConnectionError(error) {
   return error?.code === "ECONNREFUSED" || error?.code === "ENOENT";
 }
 
+function disconnectedError(message) {
+  return Object.assign(new Error(message), { code: "RPC_SUPERVISOR_DISCONNECTED" });
+}
+
 function transientConnectionError(error) {
   return error?.code === "EPIPE" || error?.code === "ECONNRESET";
 }
@@ -93,7 +97,7 @@ export class RpcSupervisorClient {
     const consume = frameReader((frame) => this.#receive(frame), (error) => this.#fail(error));
     this.socket.on("data", consume);
     this.socket.on("error", (error) => this.#fail(error));
-    this.socket.on("close", () => this.#fail(new Error("RPC supervisor connection closed")));
+    this.socket.on("close", () => this.#fail(disconnectedError("RPC supervisor connection closed")));
   }
 
   #dispatchEvent(frame) {
@@ -148,7 +152,7 @@ export class RpcSupervisorClient {
   }
 
   #write(frame) {
-    if (!this.connected || this.socket.destroyed) throw new Error("RPC supervisor is not connected");
+    if (!this.connected || this.socket.destroyed) throw disconnectedError("RPC supervisor is not connected");
     this.socket.write(encodeFrame(frame));
   }
 
@@ -196,7 +200,7 @@ export class RpcSupervisorClient {
   isCurrentVersion() { return protocolCurrent(this.state.version); }
 
   request(type, payload = {}, { requestId = newRequestId() } = {}) {
-    if (!this.attached) return Promise.reject(new Error("RPC supervisor client is not attached"));
+    if (!this.attached) return Promise.reject(disconnectedError("RPC supervisor client is not attached"));
     if (this.pending.has(requestId)) return this.pending.get(requestId).promise;
     const result = deferred();
     this.pending.set(requestId, result);
@@ -240,7 +244,7 @@ export class RpcSupervisorClient {
     if (!this.connected) return;
     this.socket.end();
     this.socket.destroy();
-    this.#fail(new Error("RPC supervisor client closed"));
+    this.#fail(disconnectedError("RPC supervisor client closed"));
   }
 }
 

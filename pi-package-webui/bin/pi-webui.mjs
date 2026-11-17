@@ -5525,14 +5525,14 @@ async function prepareRpcSupervisorHandoff() {
 // During a host shutdown the supervisor can exit before this process does. The
 // following detach frame then hits a socket that is already closing, and
 // net.Socket surfaces the failed write as EPIPE (or as a closed stream). The
-// session is preserved either way, so these are transport races, not shutdown
-// failures, and must not be reported as one.
-const RPC_SHUTDOWN_RACE_CODES = new Set(["EPIPE", "ECONNRESET", "ECONNREFUSED", "ERR_STREAM_DESTROYED", "ERR_STREAM_WRITE_AFTER_END"]);
+// supervisor is already gone, so there is nothing left to detach or shut down;
+// these are transport races, not shutdown failures. If the host's service
+// manager signals the supervisor too (e.g. systemd KillMode=control-group),
+// sessions do not survive a SIGTERM stop regardless of this handling.
+const RPC_SHUTDOWN_RACE_CODES = new Set(["EPIPE", "ECONNRESET", "ERR_STREAM_DESTROYED", "ERR_STREAM_WRITE_AFTER_END"]);
 
 function isBenignRpcShutdownError(error) {
-  if (!error) return false;
-  if (RPC_SHUTDOWN_RACE_CODES.has(error.code)) return true;
-  return /RPC supervisor (is not connected|is not attached|client closed|connection closed)/i.test(String(error.message || ""));
+  return RPC_SHUTDOWN_RACE_CODES.has(error?.code) || error?.code === "RPC_SUPERVISOR_DISCONNECTED";
 }
 
 async function detachRpcSupervisor() {
