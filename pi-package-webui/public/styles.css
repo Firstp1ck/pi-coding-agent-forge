@@ -8966,6 +8966,22 @@ button.git-workflow-step:hover:not(:disabled) {
     transform: none;
   }
 }
+/* The reaction controls are absolutely positioned in the bubble's bottom-right corner so
+   they never expand the card. Nothing reserved that strip, so the buttons sat on top of the
+   last text line — permanently on touch layouts, where `@media (hover: none)` reveals them.
+   Reserve the strip instead: the buttons keep their absolute position and the text ends
+   above them. Strip height = rendered button height + the controls' own bottom offset +
+   a small gap, measured at 40px buttons on a 390px viewport and 43px on desktop. Shells
+   that override the message padding reuse the custom property. */
+.message.has-action-feedback {
+  --action-feedback-strip: calc(2.7rem + 0.48rem + 0.15rem);
+  padding-bottom: var(--action-feedback-strip);
+}
+@media (max-width: 720px), (max-device-width: 720px), (pointer: coarse) and (hover: none) {
+  .message.has-action-feedback {
+    --action-feedback-strip: calc(2.5rem + 0.38rem + 0.15rem);
+  }
+}
 .action-feedback-button {
   min-width: 44px;
   padding: 0.24rem 0.5rem;
