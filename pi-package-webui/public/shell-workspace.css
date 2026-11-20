@@ -221,9 +221,6 @@
 #focusedWorkspace .composer-input-row { gap: 6px; }
 #focusedWorkspace .message { padding: 12px; margin-bottom: 12px; border-radius: 8px; box-shadow: none; }
 #focusedWorkspace .message.assistant { border-color: transparent; background: transparent; }
-/* The focused workspace resets the message padding, so it reserves the reaction strip
-   explicitly; its height comes from the base stylesheet's custom property. */
-#focusedWorkspace .message.has-action-feedback { padding-bottom: var(--action-feedback-strip); }
 
 #focusedWorkspace .focused-navigation-resize {
   grid-column: 2;

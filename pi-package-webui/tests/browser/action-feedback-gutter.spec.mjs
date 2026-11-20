@@ -8,12 +8,8 @@ import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "@playwright/test";
 
-// Regression guard for the reaction controls (👍 / 👎 / ?) sitting on top of the last
-// text line of a message bubble. The controls are absolutely positioned in the bubble's
-// bottom-right corner on purpose (they must not expand the card), so the bubble has to
-// reserve the strip they occupy. Before the fix nothing reserved it and the buttons
-// covered the end of the last line — permanently on touch layouts, where
-// `@media (hover: none)` keeps them visible.
+// Touch layouts keep reactions visible and need a strip below the text. Desktop
+// reactions appear on hover and must preserve the original message height.
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const serverScript = join(root, "bin", "pi-webui.mjs");
@@ -226,11 +222,30 @@ test.describe("320px touch viewport", () => {
   });
 });
 
-test.describe("1440px desktop viewport", () => {
-  test.use({ viewport: { width: 1440, height: 900 }, serviceWorkers: "block" });
+for (const layout of ["classic", "focused"]) {
+  test.describe(`1440px ${layout} desktop viewport`, () => {
+    test.use({ viewport: { width: 1440, height: 900 }, serviceWorkers: "block", reducedMotion: "reduce" });
 
-  test("reaction controls stay off the last text line", async ({ page }) => {
-    await openTranscript(page);
-    await expectNoOverlap(page);
+    test("reaction controls do not increase message height", async ({ page }) => {
+      await page.addInitScript((desktopLayout) => {
+        localStorage.setItem("pi-webui-shell-preferences-v1", JSON.stringify({ v: 1, desktopLayout }));
+      }, layout);
+      await openTranscript(page);
+      await expect(page.locator("#focusedWorkspace")).toBeVisible({ visible: layout === "focused" });
+      const bubble = page.locator(".message.has-action-feedback").first();
+      const heights = await bubble.evaluate((message) => {
+        const withControls = message.getBoundingClientRect().height;
+        message.classList.remove("has-action-feedback");
+        try {
+          return { withControls, withoutControls: message.getBoundingClientRect().height };
+        } finally {
+          message.classList.add("has-action-feedback");
+        }
+      });
+      expect(heights.withControls).toBe(heights.withoutControls);
+      await bubble.hover();
+      await expect(bubble.locator(":scope > .action-feedback-controls")).toHaveCSS("opacity", "1");
+      expect(await bubble.evaluate((message) => message.getBoundingClientRect().height)).toBe(heights.withoutControls);
+    });
   });
-});
+}
