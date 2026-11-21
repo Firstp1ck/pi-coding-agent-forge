@@ -1,10 +1,8 @@
 # Technical reference: Architecture Review
 
-Advanced user setup, configuration, compatibility, security, and troubleshooting information.
+Advanced user inputs, evidence, compatibility, and limitations.
 
-[Back to the human-friendly README](README.md) · [Contributor and implementation guide](DEVELOPMENT.md)
-
-A Pi skill for architecture reviews, module boundaries, dependency direction, coupling/cohesion, SOLID concerns, system design trade-offs, layering, service boundaries, or design decisions before implementation.
+[Back to README](README.md) · [Contributor guide](DEVELOPMENT.md)
 
 ## Install
 
@@ -12,15 +10,20 @@ A Pi skill for architecture reviews, module boundaries, dependency direction, co
 pi install npm:@firstpick/pi-skill-architecture-review
 ```
 
-## Storage and optional integrations
+## Review inputs and scope
 
-Architecture decisions may be appended to the host workspace’s `MEMORY.md`. Ask for a report-only review when you do not want persistent notes.
+Supply a design, implementation area, or concrete change that has become difficult. Relevant callers, tests, glossary entries, and existing decisions help establish the actual contract. Without a named area, the skill uses recent change history to propose a bounded scope rather than surveying the entire repository by default.
 
-The workflow can consult a sibling security workspace and flag security-related findings to another reviewer when those integrations exist. They are optional host integrations and are not bundled with this package.
+## How recommendations are assessed
 
-## Example view
+An interface includes ordering, invariants, failure behavior, configuration, and side effects as well as types. Recommendations explain which knowledge moves, what callers can stop knowing, and which real change becomes easier. Retaining the current design is a valid alternative.
 
-```text
-User: Review this service split for dependency direction, ownership boundaries, and migration risk. Do not write to workspace memory.
-Agent: Produces a report-only architecture review with evidence and explicit trade-offs.
-```
+A small wrapper can be worthwhile when it owns validation, resources, or compatibility. A large file is not automatically a poor module. Dependency and line counts are evidence to interpret, not universal pass/fail thresholds.
+
+## Compatibility and verification limits
+
+When relevant, the review covers supported consumers, mixed-version data access, migration recovery, cancellation, retries, concurrency, and operational signals. Proposed checks are identified separately from checks actually executed. A dependency listing alone cannot prove the source structure is acyclic.
+
+## Output and record ownership
+
+The result identifies evidence, consequences, alternatives, and unresolved decisions. A review is read-only. Reports or ADRs are saved only when the request or active authorized workflow calls for them, using your repository's record convention. No named security agent or sibling workspace is required.

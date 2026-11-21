@@ -27,7 +27,7 @@ Pi picks a mode from your situation and asks when it is unclear:
 | Mode | Use it when |
 | --- | --- |
 | A: Preparation | You are preparing an interview, workshop, or stakeholder survey. |
-| B: Live elicitation | You or a stakeholder want to work out requirements in the chat, one question at a time. |
+| B: Live elicitation | You or a stakeholder want to work out requirements in the chat, with small question rounds shaped by the decisions. |
 | C: Evaluation | You bring notes, transcripts, emails, tickets, or a specification to analyze. |
 | D: Alignment | Stakeholders disagree or need to settle scope and priorities. |
 | E: Change | A source, decision, or agreed requirement changes. |
@@ -55,7 +55,7 @@ In a project directory, Pi first reads a bounded set of project documents, and c
 
 If the project already uses a tracker such as Jira, it stays the source of truth. Pi links to its items rather than starting a second list.
 
-If saved plans or work states exist, Pi lists them and asks which one, if any, to continue. It does not pick the newest one by default and does not edit a plan before you confirm it.
+If you explicitly select a saved plan or work state, Pi uses that choice without asking you to select it again. If the choice is ambiguous, it lists relevant candidates and asks which one, if any, to continue. It never selects by recency alone. Continuing a plan does not authorize changes to agreed scope or requirements.
 
 Choose a writable location before Pi saves anything. `requirements/<project-name>/` is only an example. The record templates are adaptable and do not override project policy, regulatory obligations, or an established approval process.
 
@@ -90,7 +90,7 @@ A project's own agreed glossary controls local domain meanings. If it conflicts 
 
 ## Upgrading from earlier versions
 
-Versions up to 0.1.0 centered on a plan-confirmation gate with an optional Grill Me interview. The current skill is organized around the five working modes above and no longer offers or checks Grill Me. Existing records and plans stay usable: Pi still lists saved plans and asks before continuing one. If you relied on Grill Me, start it yourself when you want it; the skill will treat its saved result as your input, not as stakeholder agreement.
+Versions up to 0.1.0 centered on a plan-confirmation gate with an optional Grill Me interview. The current skill is organized around the five working modes above and no longer offers or checks Grill Me. Existing records and plans stay usable: Pi asks about ambiguous continuation choices and honors explicitly selected plans. If you relied on Grill Me, start it yourself when you want it; the skill will treat its saved result as your input, not as stakeholder agreement.
 
 ## Troubleshooting
 
@@ -101,3 +101,9 @@ Versions up to 0.1.0 centered on a plan-confirmation gate with an optional Grill
 - **A write fails:** Pi keeps the full result in the conversation, names what was not saved and why, and suggests a safe retry location.
 - **A requirement remains incomplete:** it stays a draft with an open question naming who to ask and which evidence is missing. Pi should not invent a deadline.
 - **A term is unclear:** ask for a plain explanation in the current project context. Pi cites the general source when useful and says when a term is not in the glossary.
+
+## Domain language and question rounds
+
+When terminology affects a requirement, Pi checks the project glossary, tests the meaning with concrete scenarios, and keeps proposed meanings separate from agreed ones. With authorized saving, it updates existing glossary or decision records. It proposes an ADR only for a consequential trade-off worth preserving.
+
+Independent bounded choices can be grouped with recommendations; dependent questions wait for their prerequisites. An open stakeholder question can still be asked individually. This avoids both exhaustive questionnaires for small tasks and premature assumptions about unanswered decisions.

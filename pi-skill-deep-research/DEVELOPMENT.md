@@ -7,12 +7,12 @@ Contributor-only implementation, API, architecture, testing, and maintenance inf
 ## Additional implementation details
 
 - Adds the `deep-research` skill to Pi's skill library.
-- Guides agents to invoke the skill for high-stakes or complex research needing multi-source evidence, scientific/technical fact-checking, decision traces, or rigorous verification. The runner provides policy-driven classification and lightweight output checks.
+- Routes scientific claims to the existing policy-driven classifier and engineering behavior to question-appropriate primary-source research. The runner provides classification and lightweight output checks; it does not fetch sources or perform full JSON Schema validation.
 - Bundles `skills/deep-research/SKILL.md` plus any supporting references, scripts, tests, fixtures, or assets used by the skill.
 
 ## Preserved implementation and format details
 
-A Pi skill for high-stakes or complex research needing multi-source evidence, scientific/technical fact-checking, decision traces, or rigorous verification. Classification and ordering are stable for equivalent normalized evidence, while timestamps and run IDs vary.
+A Pi skill for scientific fact-checking with explicit study tiers and policy-driven classification; engineering questions use primary-source research outside the scientific classifier. Classification and ordering are stable for equivalent normalized evidence, while timestamps and run IDs vary.
 
 ## Expected usage structure
 
@@ -25,42 +25,13 @@ skills/deep-research/
   SKILL.md
   policy.json
   output-schema.json
+  references/RUNNER.md
   scripts/run_deep_research.py
   tests/test_determinism.py
   tests/fixtures/
 ```
 
-Create an initialized state file before manual use. The package tests define the current initial shape:
-
-```json
-{
-  "last_run": null,
-  "runs": [],
-  "claim_canonicalization": {},
-  "source_dedupe_fingerprints": [],
-  "metadata": {
-    "policy_version": "1.0.0",
-    "schema_version": "1.0.0",
-    "created_at": null,
-    "updated_at": null
-  }
-}
-```
-
-Then invoke the actual parser interface:
-
-```bash
-cd /path/to/installed/package/skills/deep-research
-python3 ./scripts/run_deep_research.py \
-  --topic "Research topic" \
-  --claims-file /path/to/claims.json \
-  --evidence-file /path/to/evidence.json \
-  --policy ./policy.json \
-  --schema ./output-schema.json \
-  --state /path/to/state.json \
-  --output-json /path/to/output.json \
-  --output-md /path/to/output.md
-```
+Runtime initialization and execution live in the skill-local [runner reference](skills/deep-research/references/RUNNER.md), so a copied skill folder remains self-contained. It creates a unique task directory and initializes state with exclusive creation. Concurrent investigations must not share mutable state. The runner implementation, scientific policy, and schema are unchanged.
 
 The runner’s `validate_output` function performs lightweight checks for selected required fields, ID syntax, verdict values, and key nested fields. It does not implement full JSON Schema Draft-07 validation. Reproducibility tests normalize time-varying IDs/timestamps before comparing semantic output.
 

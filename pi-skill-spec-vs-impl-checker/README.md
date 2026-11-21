@@ -24,6 +24,8 @@ Check whether the software does what its specification, plan, or documentation p
 - Evidence from the implementation
 - Missing, conflicting, or uncertain behavior
 
+The result separates what code inspection shows from what relevant checks actually verified.
+
 ## Keep in mind
 
 If either the specification or the implementation is unclear, the result will identify the gap rather than inventing intent.
@@ -38,4 +40,4 @@ Restart Pi if the skill does not appear in your current session.
 
 ## Technical details
 
-See [TECHNICAL.md](https://github.com/Firstp1ck/pi-coding-agent-forge/blob/main/pi-skill-spec-vs-impl-checker/TECHNICAL.md) for advanced usage, configuration, compatibility, and limitations.
+See [TECHNICAL.md](TECHNICAL.md) for advanced usage, configuration, compatibility, and limitations.

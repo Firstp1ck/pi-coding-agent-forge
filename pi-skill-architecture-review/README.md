@@ -24,6 +24,8 @@ Review how a software system is organized before its structure becomes difficult
 - Important trade-offs in everyday language
 - Practical changes ordered by value
 
+The review explains which knowledge callers must carry and which real changes the design makes easier.
+
 ## Keep in mind
 
 There is rarely one perfect design. Recommendations will explain the trade-offs instead of presenting personal preference as fact.
@@ -38,4 +40,4 @@ Restart Pi if the skill does not appear in your current session.
 
 ## Technical details
 
-See [TECHNICAL.md](https://github.com/Firstp1ck/pi-coding-agent-forge/blob/main/pi-skill-architecture-review/TECHNICAL.md) for advanced usage, configuration, compatibility, and limitations.
+See [TECHNICAL.md](TECHNICAL.md) for advanced usage, configuration, compatibility, and limitations.

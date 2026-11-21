@@ -1,7 +1,7 @@
 {
   "name": "@firstpick/pi-skill-refactoring-advisor",
   "version": "0.1.5",
-  "description": "Agents should invoke this skill for refactors, code smells, migrations, duplication removal, module splitting, API cleanup, or restructuring plans. Emphasizes small safe steps, behavior preservation, and verification after each change.",
+  "description": "Plan or carry out behavior-preserving refactors, migrations, duplication removal, and interface cleanup. Use concrete maintenance friction, characterization evidence, incremental changes, and compatibility checks rather than size thresholds.",
   "license": "MIT",
   "homepage": "https://github.com/Firstp1ck/pi-coding-agent-forge/tree/main/pi-skill-refactoring-advisor#readme",
   "repository": {
@@ -25,6 +25,8 @@
   "files": [
     "skills",
     "README.md",
+    "TECHNICAL.md",
+    "DEVELOPMENT.md",
     "LICENSE"
   ]
 }

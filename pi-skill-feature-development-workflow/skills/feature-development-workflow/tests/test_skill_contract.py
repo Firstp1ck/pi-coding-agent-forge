@@ -172,6 +172,8 @@ class FeatureDevelopmentWorkflowContractTests(unittest.TestCase):
                 "skills/feature-development-workflow/tests/test_skill_contract.py",
                 "tests/routing/feature-development-workflow.json",
                 "README.md",
+                "TECHNICAL.md",
+                "DEVELOPMENT.md",
                 "LICENSE",
             ],
         )

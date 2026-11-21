@@ -14,6 +14,10 @@ Create one canonical plan using the repository convention. It must include measu
 
 Name one **integration owner**. Only that owner updates shared plan state and accepts integrated results. Workers read the plan, stay within assigned ownership, and report through their own unique handoff artifacts.
 
+Prefer independently verifiable vertical slices: a narrow caller-visible behavior through the layers it needs, with acceptance evidence. Declare each slice's real blocking edges and start only dependency-ready work. For wide mechanical migrations that cannot land as independent vertical slices, use expand-contract: add the compatible form, migrate callers in bounded batches, then retire the old form after all required consumers and supported versions permit it. If intermediate states cannot pass independently, name the atomic integration boundary and defer completion until that boundary is verified.
+
+For changed interfaces, record the applicable contract: types and data shapes, invariants, ordering, errors, ownership, compatibility, and failure/recovery behavior. For persisted changes, distinguish code rollback from data recovery after new writes. Reference existing decisions instead of duplicating them. These planning refinements do not change the worker, review, or report requirements below.
+
 Completion criterion: the plan exposes an executable dependency order and makes every required outcome, owner, check, and rollback path inspectable.
 
 ## 3. Mandatory implementation outcomes

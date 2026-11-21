@@ -42,6 +42,8 @@ For example, `/recomended 2 "documentation changes"` implements the other recomm
 
 `/land-page` edits the current frontend project. Commit or stash work you need to protect, and review all five routes before choosing a direction.
 
+The `/fix` prompt scales investigation to the failure: a focused reproduction for simple repairs, and evidence-driven diagnosis for ambiguous bugs.
+
 ## Technical details
 
-See [TECHNICAL.md](https://github.com/Firstp1ck/pi-coding-agent-forge/blob/main/pi-package-prompts-code-workflows/TECHNICAL.md) for complete commands, configuration, compatibility, security, and troubleshooting information.
+See [TECHNICAL.md](TECHNICAL.md) for complete commands, configuration, compatibility, security, and troubleshooting information.

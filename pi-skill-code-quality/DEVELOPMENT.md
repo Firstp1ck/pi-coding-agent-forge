@@ -198,3 +198,7 @@ No peer-reviewed replication was established in the bounded planning search. The
 A future evaluation compares old guidance with the revised loop using the same starting repository, cumulative requirements, model settings, allowed tools, and fixed correctness suite. It records future-change success, correctness regressions, confirmed human review findings, unnecessary edits, maintenance effort, elapsed time, and declared cost. Reviewers receive diffs, requirements, and test evidence without treatment labels. Human review is required; model judgment alone is insufficient.
 
 The protocol allows at most two runs per treatment per scenario, 45 wall-clock minutes per run, and zero paid spend. Any nonzero spend or expanded trial count needs explicit approval before execution. No paid campaign is authorized. The fixtures and protocol establish an evaluation plan, not evidence of effectiveness; publish only advisory capability statements unless a separately approved evaluation produces results.
+
+## Shared test guidance
+
+`skills/code-quality/references/testing.md` is loaded for test writing or substantial test changes. It covers independent oracles, stable boundaries, justified doubles, retained lower-level tests, and honest revision-scoped execution evidence. Other skills may discover it as optional guidance; they must not depend on sibling source-checkout paths. It changes no scanner operation or metric.

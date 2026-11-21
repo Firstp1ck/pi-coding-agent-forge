@@ -1,124 +1,46 @@
 ---
 name: acceptance-tester
-description: Agents should invoke this skill as the final gate before release, handoff, or claiming completion for substantial changes. Runs acceptance/readiness checks, determines pass/fail, and gives a go/no-go recommendation.
+description: Assess readiness before release, handoff, or completion of substantial work. Verify agreed acceptance gates against current implementation and execution evidence, distinguish failures from missing evidence, and give a scoped go/no-go recommendation.
 ---
 
-# Acceptance Tester
+# Acceptance tester
 
-Final quality gate — determines whether a project is ready to proceed.
+Determine whether the requested outcome meets its agreed completion conditions. A recommendation does not authorize release, deployment, publication, or changes to another system.
 
-## Acceptance Criteria Source
+## Establish the gates
 
-The definition of done comes from the combined plan (section 8), which typically includes:
+Read the canonical requirements, task, plan, repository instructions, and applicable decisions. Use the existing definition of done and required checks; no fixed project path or named agent is required. If the definition is incomplete, propose the missing acceptance decision and identify what cannot yet be concluded.
 
-- All modules implemented
-- All tests passing
-- Linting clean
-- Application starts and core flows work
-- Documentation updated
-- Security constraints verified
+Scope the review to the change and plausible regressions. Required project-wide gates remain required. Discover commands before running checks and respect resources and active execution policy. Preserve unrelated work; a readiness review does not authorize fixes or a modifying formatter.
 
-## Acceptance Checklist
+## Verification process
 
-Run through this checklist systematically:
+For each applicable gate, record the requirement, revision/environment, evidence, and status: **passed**, **failed**, **blocked/not checked**, or **not applicable with reason**.
 
-### 1. Build Verification
-- [ ] Project builds without errors
-- [ ] No compiler/linter warnings (or all are documented exceptions)
-- [ ] All dependencies resolve correctly
+- Required build/type/lint checks, distinguishing existing failures from new failures. Document allowed warnings rather than inventing a zero-warning policy.
+- Critical user/caller behavior and primary failure paths with independent expected outcomes. A test file's existence is not passing execution.
+- Relevant integration contracts, error propagation, resource cleanup, cancellation, concurrency, and recovery.
+- Supported-version and data-format compatibility, persisted-state migration, and rollback or forward-recovery limits when affected.
+- Established security, performance, and accessibility requirements. Their importance comes from the requirement and consequence, not their category.
+- Required documentation, review findings, accepted-fix revalidation, and rollout prerequisites.
 
-### 2. Test Suite
-- [ ] Full test suite passes (`cargo test` / `npm test` / `pytest`)
-- [ ] Coverage meets target from combined plan (default: 80%)
-- [ ] No skipped or ignored tests without documented reason
+Use current execution evidence for the revision/environment being judged. Earlier reports identify checks to repeat but do not prove the current revision passes. If inspection is the only evidence, label it and state untested behavior.
 
-### 3. Core Flow Verification
-For each core user flow defined in the spec:
-- [ ] Happy path works end-to-end
-- [ ] Primary error paths handled gracefully
-- [ ] Data persists correctly across operations
+Use coverage thresholds only when the project or user established them. State what the metric measures and its gaps. Requirement mapping, line coverage, and behavior verification differ; none alone establishes readiness. Retain useful lower-level tests unless their specific coverage is shown to be redundant.
 
-### 4. Spec Completeness
-- [ ] All P0 spec requirements verified (from spec-vs-impl checker)
-- [ ] No Blocker or Critical bugs outstanding
-- [ ] All Major bugs either fixed or explicitly deferred with user approval
+## Verdict
 
-### 5. Security Constraints
-For each constraint from Zero's review:
-- [ ] Constraint is implemented
-- [ ] Constraint is tested
-- [ ] No obvious bypasses found during functional testing
+- **PASS:** applicable required gates passed with adequate current evidence and no unresolved blocking findings.
+- **CONDITIONAL PASS:** the responsible user/process explicitly accepted named residual issues or waived named gates, and remaining required gates passed. Record the decision and conditions; do not invent an exception.
+- **FAIL:** a required gate failed or a blocking defect remains.
+- **INCOMPLETE:** required evidence, an environment, or a consequential acceptance decision is unavailable. Missing evidence must not silently become a pass.
 
-### 6. Integration Points
-- [ ] Cross-module integrations work correctly
-- [ ] Error propagation across module boundaries is handled
-- [ ] Data format consistency across interfaces
+For mixed failures and missing evidence, report FAIL and list unverified gates too. A coverage percentage or reviewer count cannot substitute for the applicable project contract.
 
-## Verdict Determination
+PASS recommends Go within the assessed scope. FAIL and INCOMPLETE recommend No-Go. CONDITIONAL PASS recommends Go only within the explicitly accepted conditions. Missing, inadequate, stale, or unrun tests without an observed failure leave verification INCOMPLETE; they do not by themselves prove the implementation is broken. If an explicit project gate requires adequate tests and that gate demonstrably fails, report FAIL for that gate and keep unverified runtime behavior separate.
 
-### PASS — Ready for Next Phase
-All of these must be true:
-- Build succeeds
-- All tests pass
-- Coverage target met
-- Zero Blocker bugs
-- Zero Critical bugs
-- All P0 spec requirements verified
-- All security constraints verified
+## Report and next step
 
-### CONDITIONAL PASS
-- Minor or some Major bugs remain but none are blockers
-- User has approved deferring specific issues to v2
-- Core flows work, edge cases may have issues
+Give the verdict, scope/revision, gate/evidence table, verified defects, residual risks, and remaining actions. Identify decision owners using actual project roles. Save a report only when requested or required by the active workflow, in its established repository location.
 
-### FAIL — Return to Forge
-Any of these triggers a fail:
-- Build fails
-- Tests fail
-- Blocker bugs found
-- Critical bugs found
-- P0 spec requirement missing or broken
-- Security constraint not met
-
-## Output Format
-
-```markdown
-# Acceptance Test Report — <Project Name>
-
-**Date:** YYYY-MM-DD
-**Verdict:** PASS / CONDITIONAL PASS / FAIL
-**QA Engineer:** Watchdog
-
-## Checklist Results
-
-| Category | Status | Details |
-|---|---|---|
-| Build | PASS/FAIL | [details] |
-| Test Suite | PASS/FAIL | X/Y tests passing, Z% coverage |
-| Core Flows | PASS/FAIL | X/Y flows verified |
-| Spec Completeness | PASS/FAIL | X% requirements verified |
-| Security | PASS/FAIL | X/Y constraints verified |
-| Integration | PASS/FAIL | [details] |
-
-## Outstanding Issues
-
-| Bug | Severity | Status | Decision |
-|---|---|---|---|
-| BUG-003 | Minor | OPEN | Deferred to v2 |
-
-## Recommendation
-
-[PASS]: Project is ready for documentation (Ink) and release.
-[CONDITIONAL PASS]: Project can proceed with noted caveats.
-[FAIL]: Return to Forge. Fix items: [list].
-```
-
-## Handoff
-
-- **On PASS:** Control returns to Clawpick, who invokes Ink for documentation.
-- **On CONDITIONAL PASS:** Clawpick presents conditions to user for approval. If approved, proceeds to Ink.
-- **On FAIL:** Clawpick routes bug reports to Forge. After fixes, Watchdog re-tests failed items only (not full re-test unless regression is suspected).
-
----
-
-_Watchdog skill — Acceptance testing and release readiness assessment_
+After authorized fixes, rerun failed checks and affected regression checks. Required full-suite gates still apply. Keep unrun checks explicit; a source change that looks correct is insufficient readiness evidence.

@@ -29,6 +29,8 @@
   "files": [
     "prompts",
     "README.md",
+    "TECHNICAL.md",
+    "DEVELOPMENT.md",
     "LICENSE"
   ]
 }

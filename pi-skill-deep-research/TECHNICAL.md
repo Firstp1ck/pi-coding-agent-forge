@@ -18,6 +18,8 @@ Ask Pi a focused research question and state why the answer matters. Include use
 
 The skill separates research from final verification. Important claims are checked against the collected evidence before the result is presented.
 
+Scientific effects use the study-based pipeline. API behavior, code contracts, and version compatibility use engineering primary sources directly or an available research-orchestration skill. Mixed topics keep these methods separate; a lack of papers does not invalidate documented engineering behavior.
+
 ## What the result includes
 
 - A focused answer to the research question
@@ -29,5 +31,7 @@ The skill separates research from final verification. Important claims are check
 ## Limitations
 
 Unavailable, private, paywalled, or outdated sources can lower confidence. A completed research workflow does not turn weak source material into strong evidence.
+
+Verdicts are policy classifications over supplied scientific evidence. They are not calibrated confidence estimates or substitutes for checking study methods, applicability, and independence. No runner or scientific policy behavior changes are required by this routing distinction.
 
 The packaged runner, policy files, output format, required external state file, and reproducibility limits are contributor information documented in `DEVELOPMENT.md`.

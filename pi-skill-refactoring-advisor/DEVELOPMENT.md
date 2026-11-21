@@ -7,5 +7,9 @@ Contributor-only implementation, API, architecture, testing, and maintenance inf
 ## Additional implementation details
 
 - Adds the `refactoring-advisor` skill to Pi's skill library.
-- Guides agents to invoke the skill for refactors, code smells, migrations, duplication removal, module splitting, API cleanup, or restructuring plans. Emphasizes small safe steps, behavior preservation, and verification after each change.
+- Plans preserve existing work and make migration and data-recovery limits explicit.
 - Bundles `skills/refactoring-advisor/SKILL.md` plus any supporting references, scripts, tests, fixtures, or assets used by the skill.
+
+## Portable guidance contract
+
+The skill uses canonical project inputs and actual roles rather than fixed workspace paths or host agent names. Preserve read-only review boundaries, task authorization, current evidence, and existing user changes. Relative documentation links must resolve in the published archive. Static structure checks do not establish model compliance; evaluate realistic tasks when changing decision rules.

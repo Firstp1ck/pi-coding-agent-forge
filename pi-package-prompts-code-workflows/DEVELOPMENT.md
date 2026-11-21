@@ -36,3 +36,7 @@ From the package directory, inspect the npm archive before publication and confi
 ```bash
 npm pack --dry-run
 ```
+
+## `/fix` evidence contract
+
+The prompt distinguishes observed failures, baseline failures, and inferred causes. It preserves dirty work, derives independent regression expectations, validates the original scenario after fixing, and removes temporary instrumentation. Production-only failures can use captured evidence with explicit limits instead of inventing a successful reproduction. No delegation or new dependency is mandatory.

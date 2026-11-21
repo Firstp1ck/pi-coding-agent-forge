@@ -53,6 +53,8 @@ Apply these criteria while composing every permanent code change:
 - **Use comments for reasons.** Explain non-obvious constraints and trade-offs, not what each line does. Remove stale comments and debugging residue from task-owned code.
 - **Write meaningful tests.** Verify behavior and important edge cases. Keep characterization tests when behavior must be preserved; do not weaken tests to make a cleanup pass.
 
+When writing or substantially changing tests, read [test boundaries, independent assertions, and justified doubles](references/testing.md). Keep the chosen checks proportional to the behavior and failure risk.
+
 A useful temporary variable, wrapper, explicit type or extra branch can improve clarity or safety. Fewer lines are not automatically better code.
 
 ### 3. Inspect and finish the change

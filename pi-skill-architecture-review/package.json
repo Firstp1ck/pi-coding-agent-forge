@@ -1,7 +1,7 @@
 {
   "name": "@firstpick/pi-skill-architecture-review",
   "version": "0.1.5",
-  "description": "Agents should invoke this skill for architecture reviews, module boundaries, dependency direction, coupling/cohesion, SOLID concerns, system design trade-offs, layering, service boundaries, or design decisions before implementation.",
+  "description": "Review module boundaries, interface contracts, dependencies, and design trade-offs before implementation or during an architectural refactor. Ground recommendations in actual callers, change patterns, failure modes, and verification needs.",
   "license": "MIT",
   "homepage": "https://github.com/Firstp1ck/pi-coding-agent-forge/tree/main/pi-skill-architecture-review#readme",
   "repository": {
@@ -25,6 +25,8 @@
   "files": [
     "skills",
     "README.md",
+    "TECHNICAL.md",
+    "DEVELOPMENT.md",
     "LICENSE"
   ]
 }

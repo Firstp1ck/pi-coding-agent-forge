@@ -1,180 +1,43 @@
 ---
 name: architecture-review
-description: Agents should invoke this skill for architecture reviews, module boundaries, dependency direction, coupling/cohesion, SOLID concerns, system design trade-offs, layering, service boundaries, or design decisions before implementation.
+description: Review module boundaries, interface contracts, dependencies, and design trade-offs before implementation or during an architectural refactor. Ground recommendations in actual callers, change patterns, failure modes, and verification needs.
 ---
 
-# Architecture Review
+# Architecture review
 
-Structured architecture review for the user's projects. Evaluates module boundaries, dependency graphs, coupling/cohesion, and adherence to design principles.
+Evaluate whether the design makes the project's real changes easier and safer. A review request stays read-only; recommendations do not authorize implementation or persistent notes.
 
-## Quick Start
+## Scope and evidence
 
-### Run a Quick Architecture Check
+Read project instructions, the relevant design or plan, existing decisions, callers, and tests. Follow the repository's terminology and documentation layout. Identify the concrete problem: repeated cross-module edits, misunderstood ordering, difficult failure handling, slow verification, or an upcoming capability. Without a named area, use recent change history to choose a bounded scope.
 
-For a single module or component:
+Distinguish observed code, proposed design, and assumptions. Respect an existing ADR unless new evidence justifies revisiting its trade-off. Missing sources are a limitation, not permission to invent requirements.
 
-1. **Map the structure:** What modules/components exist? How are they organized?
-2. **Trace dependencies:** Who depends on whom? Are there cycles?
-3. **Assess coupling:** How tightly are modules connected? Can you change one without breaking others?
-4. **Evaluate cohesion:** Does each module have a single, clear responsibility?
-5. **Recommend:** Prioritized findings with rationale
+## Review process
 
----
+1. **Describe the interface callers actually rely on.** Include inputs, outputs, invariants, ordering, errors, side effects, configuration, and relevant performance constraints. Types alone are not the whole contract.
+2. **Trace ownership and dependencies.** Show where state and decisions live, which knowledge crosses boundaries, and whether dependency direction matches responsibility. Classify dependencies as in-process computation, local infrastructure, owned remote systems, or third-party services before choosing adapters and tests.
+3. **Evaluate what each abstraction hides.** If removing it makes complexity disappear, it may be forwarding without adding value. If removing it scatters policy or error handling across callers, it is earning its place. Explicit validation, resource ownership, or compatibility can justify a thin wrapper.
+4. **Follow a representative change.** Name the modules it would touch. Keep related behavior and verification together; do not combine unrelated responsibilities merely to minimize the interface.
+5. **Check the test boundary.** Can callers and tests exercise important behavior through a stable contract? Keep useful internal algorithm tests. Compare substitutes with the real dependency's relevant semantics rather than assuming a fake proves integration.
+6. **Compare proportionate alternatives.** Include keeping the current design when viable. For a consequential interface decision, compare a materially different design with usage examples, migration cost, and failure behavior. Delegation is optional and follows the active harness policy.
 
-## Architecture Review Checklist
+## Long-term contract checks
 
-### Module Boundaries
+Apply only the concerns the change actually touches:
 
-- [ ] Each module has a clear, single responsibility
-- [ ] Public APIs are minimal — expose only what's needed
-- [ ] Internal implementation details are hidden (encapsulation)
-- [ ] Module names accurately describe their responsibility
-- [ ] No "God module" that does everything
+- Compatibility with existing callers, external consumers, and supported data formats.
+- Persisted-state migration, mixed-version operation, and rollback or forward-recovery limits.
+- Ownership of resources, cancellation, timeouts, bounded retries, and partial failures.
+- Concurrency, idempotency, and invariants during interrupted or repeated operations.
+- Operational signals that distinguish success, failure, and degraded operation.
 
-### Dependency Analysis
+Do not invent line-count, dependency-count, or inheritance quotas. Splitting, abstraction, messaging, and dependency injection each need a concrete benefit. One production implementation can justify an interface when it enforces ownership or isolates a volatile dependency; a second implementation is not a universal prerequisite.
 
-- [ ] Dependencies flow in one direction (no cycles)
-- [ ] High-level modules don't depend on low-level implementation details
-- [ ] External dependencies are isolated behind abstractions
-- [ ] Dependency count per module is reasonable (< 7 direct deps as guideline)
+## Findings and verification
 
-### Coupling Assessment
+For each finding, provide the affected interface and code evidence, a realistic change or failure scenario, its consequence, and the smallest justified remedy. Separate defects from preferences and unverified risks. State what an improvement would make easier to change or verify and what it would cost.
 
-| Coupling Type | Description | Severity |
-|---|---|---|
-| Content coupling | Module directly accesses internals of another | Critical |
-| Common coupling | Modules share global mutable state | High |
-| Control coupling | Module controls flow of another via flags | Medium |
-| Stamp coupling | Modules share complex data structures | Low-Medium |
-| Data coupling | Modules share only necessary data | Acceptable |
-| Message coupling | Modules communicate via messages/events | Best |
+For proposals, name the checks needed to validate them. For an implemented design, inspect relevant tests and run authorized checks when useful. Package dependency tools do not by themselves describe source-module structure or prove an absence of cycles. Never claim a check ran from a suggested command alone.
 
-### Cohesion Assessment
-
-| Cohesion Type | Description | Quality |
-|---|---|---|
-| Coincidental | Elements grouped arbitrarily | Poor |
-| Logical | Elements grouped by category, not function | Poor |
-| Temporal | Elements grouped by when they execute | Fair |
-| Procedural | Elements grouped by execution order | Fair |
-| Communicational | Elements operate on same data | Good |
-| Sequential | Output of one is input of next | Good |
-| Functional | All elements contribute to a single task | Best |
-
----
-
-## Language-Specific Review
-
-### Rust Module Trees
-
-```bash
-# Visualize module structure
-cargo tree --depth 1
-
-# Check for circular dependencies
-cargo tree --duplicates
-
-# Analyze dependency weight
-cargo tree --edges features
-```
-
-**Key checks:**
-- `mod.rs` vs named modules — prefer named modules (`module_name.rs`) over `mod.rs` for clarity
-- `pub` vs `pub(crate)` — minimize public surface, prefer `pub(crate)` for workspace-internal APIs
-- Trait boundaries — are traits cohesive? Does each trait represent one capability?
-- Error types — one error enum per module, or shared error type with variants per module?
-- Re-exports — `pub use` in `lib.rs` should form a clean public API
-
-### React Component Hierarchies
-
-```bash
-# Analyze component tree (manual or via React DevTools)
-# Check for deep prop drilling
-# Verify state ownership lives at the right level
-```
-
-**Key checks:**
-- Component depth — deeply nested components suggest missing abstractions
-- Prop drilling — if props pass through 3+ levels, consider context or composition
-- State colocation — state should live as close to where it's used as possible
-- Component responsibility — one component, one job. If it has "and" in its description, split it
-- Hook composition — custom hooks should encapsulate one behavior
-
-### Django App Structure
-
-```bash
-# List apps and their models
-python manage.py showmigrations
-
-# Check for circular imports
-python -c "import myapp"  # Will error on circular imports
-```
-
-**Key checks:**
-- App boundaries — each Django app should be independently understandable
-- Fat models vs fat views — prefer logic in models/services, not views
-- Circular imports — usually a sign of misplaced boundaries
-- Manager vs queryset methods — use managers for creation, querysets for filtering
-- Signal usage — signals obscure control flow; prefer explicit calls for important logic
-
----
-
-## SOLID Principles Check
-
-| Principle | Question | Red Flag |
-|---|---|---|
-| **S**ingle Responsibility | Does this module have one reason to change? | Module changes for unrelated features |
-| **O**pen/Closed | Can you extend behavior without modifying existing code? | Every new feature requires editing core modules |
-| **L**iskov Substitution | Can subtypes replace their base type without breaking things? | Subclasses override methods with incompatible behavior |
-| **I**nterface Segregation | Are interfaces focused and minimal? | Implementors must stub out methods they don't need |
-| **D**ependency Inversion | Do high-level modules depend on abstractions, not details? | Business logic imports database drivers directly |
-
----
-
-## Review Output Template
-
-When delivering an architecture review, use this structure:
-
-```markdown
-## Architecture Review: [Project/Module]
-
-**Date:** YYYY-MM-DD
-**Reviewer:** Arc
-**Scope:** [What was reviewed]
-
-### Summary
-[1-2 sentences: overall health and key takeaway]
-
-### Module Map
-[Describe the current structure — list modules, their responsibilities, and key relationships]
-
-### Findings
-
-| # | Severity | Area | Finding | Recommendation |
-|---|---|---|---|---|
-| 1 | High | Coupling | Module A directly accesses B internals | Extract interface, use dependency injection |
-
-### Positive Observations
-[What's already well-designed]
-
-### Dependency Graph Notes
-[Key observations about dependency flow]
-
-### Recommendations
-1. [Prioritized by impact and effort]
-
-### Tech Debt Identified
-[New items for the debt registry, if any]
-```
-
----
-
-## Integration
-
-- **Data:** Architecture decisions logged to `MEMORY.md`
-- **Cross-reference:** Check `../workspace-security/MEMORY.md` for security-relevant architecture notes
-- **Security flag:** If architectural issues create security concerns (missing trust boundaries, shared state across security domains), flag to Zero
-
----
-
-_Arc skill — Architecture review and design assessment_
+Deliver a compact structure/dependency map when helpful, prioritized findings, retained strengths, and unresolved decisions. Save ADRs or reports only to an authorized repository location or established tracker. Do not write project architecture into global agent memory or require named agents from another environment.

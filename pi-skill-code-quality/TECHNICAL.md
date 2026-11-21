@@ -103,3 +103,7 @@ Optional analyzers are executable code. Select them only when you trust the exac
 - **The report is too large or a limit is reached:** narrow the requested scope. Do not increase the fixed limits without a documented compatibility change.
 
 For the implementation contract, test coverage, evaluation protocol, and release-acceptance status, see [DEVELOPMENT.md](DEVELOPMENT.md).
+
+## Test-writing guidance
+
+For test changes, the skill considers independent expected outcomes, boundaries that detect the intended failure, and justified substitutes for real dependencies. It preserves useful lower-level tests and allows small refactoring while checks remain green. Existing task decisions and test conventions normally suffice; only consequential unresolved choices need clarification.

@@ -24,6 +24,8 @@ Improve difficult code through small steps while keeping its behavior the same.
 - A sequence of small changes
 - Tests, checkpoints, and rollback options
 
+Plans preserve existing work and make migration and data-recovery limits explicit.
+
 ## Keep in mind
 
 Refactoring should not quietly add features or change behavior. Any such choice should be handled separately.
@@ -38,4 +40,4 @@ Restart Pi if the skill does not appear in your current session.
 
 ## Technical details
 
-See [TECHNICAL.md](https://github.com/Firstp1ck/pi-coding-agent-forge/blob/main/pi-skill-refactoring-advisor/TECHNICAL.md) for advanced usage, configuration, compatibility, and limitations.
+See [TECHNICAL.md](TECHNICAL.md) for advanced usage, configuration, compatibility, and limitations.

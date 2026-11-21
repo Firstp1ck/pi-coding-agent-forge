@@ -11,6 +11,7 @@ Contributor-only implementation, API, architecture, testing, and maintenance inf
 - `skills/requirements-engineering/references/RECORDS.md` contains adaptable project-record and plan-step templates.
 - `skills/requirements-engineering/references/WORKING-DOCUMENTS.md` contains method selection, draft document templates, readiness checks, and review guidance.
 - `skills/requirements-engineering/references/EXAMPLES.md` contains four fictional end-to-end teaching and evaluation scenarios.
+- `skills/requirements-engineering/references/DOMAIN-MODELING.md` adds project terminology and selective ADR guidance; it is not attributed to the IU method source.
 
 `README.md`, `TECHNICAL.md`, and `DEVELOPMENT.md` are included in the npm tarball so their relative navigation links work after packaging. The source PDF is excluded. The package has no runtime dependencies.
 
@@ -22,9 +23,9 @@ Every documented requirement links to a problem entry (`P-<number>`). Solution p
 
 Evidence and authority states remain separate: stakeholder statement, document claim, code observation, and model inference; draft, completed activity, interpretation, and participant-confirmed summary; content readiness, agreement, implementation approval, and implementation evidence. The requirement template carries separate `Status`, `Agreed by`, and `Approved for implementation` fields for this reason. The agent may propose priorities but never sets them.
 
-Candidate continuation plans are listed and confirmed before use; the newest is never chosen by default. Bounded, read-only project discovery precedes questions when working in a project directory. One canonical requirement register or an established tracker is used. Changes to agreed material require a change preview and confirmation from the responsible authority. Failed reads, writes, or optional integrations result in an honest limitation and next action, never fabricated state.
+Ambiguous continuation choices are listed and resolved; explicit selections are honored without a second selection gate. Recency alone never chooses a plan, and continuation does not approve changes to agreed material. Bounded, read-only project discovery precedes questions when working in a project directory. One canonical requirement register or an established tracker is used. Changes to agreed material require a change preview and confirmation from the responsible authority. Failed reads, writes, or optional integrations result in an honest limitation and next action, never fabricated state.
 
-Versions up to 0.1.0 used a nine-step workflow with a mandatory plan-confirmation gate and an optional, plan-linked Grill Me interview. The mode-based skill replaced it. Grill Me integration was removed deliberately; the contract test asserts its absence. The four reference files were kept and stripped of Grill Me content.
+Versions up to 0.1.0 used a nine-step workflow with a mandatory plan-confirmation gate and an optional, plan-linked Grill Me interview. The mode-based skill replaced it. Grill Me integration was removed deliberately; the contract test asserts its absence. The original four reference files were kept and stripped of Grill Me content. The additional DOMAIN-MODELING reference supports project terminology and selective ADRs without restoring an external interview dependency.
 
 ## Source basis
 
@@ -62,3 +63,7 @@ git diff --check -- '*.md' ':(exclude)**/node_modules/**' ':(exclude)**/vendor/*
 ```
 
 Also inspect the dry-run file list, resolve every local Markdown link, check balanced fences, and confirm that no PDF or runtime dependency is bundled. Model-run scenario checks must evaluate behavior and source attribution rather than exact prose. An unavailable interactive UI or model evaluator is a named omission, not a pass.
+
+## Domain modeling and routing maintenance
+
+`references/DOMAIN-MODELING.md` is an optional branch for disputed terminology and consequential decisions; it preserves the original source citations and separates additional workflow guidance from source-derived method. Routing fixtures use `should_trigger` and `should_not_trigger`, matching the skill evaluator. The selected-plan scenario covers explicit continuation without redundant confirmation. Historical model evaluation records do not validate this revision.

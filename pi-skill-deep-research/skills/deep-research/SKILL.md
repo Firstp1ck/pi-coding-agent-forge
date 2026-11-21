@@ -1,16 +1,23 @@
 ---
 name: deep-research
-description: Agents should invoke this skill for high-stakes or complex research needing multi-source evidence, scientific/technical fact-checking, decision traces, or rigorous verification. Runs deterministic two-phase research with schema/policy validation.
+description: Investigate scientific claims using collected studies, explicit evidence tiers, and policy-driven classification with lightweight output checks. Use for scientific fact-checking and evidence synthesis; ordinary API or code behavior belongs in primary-source engineering research, not paper-count verdicts.
 ---
 
 # Deep Research
 
-Deterministic research pipeline that produces reproducible, schema-validated
-output. Same input + same state = same output.
+Scientific evidence workflow with policy-driven classification and lightweight output checks. Classification and ordering are stable for identical evidence and relevant state; timestamps and run IDs vary. Deterministic processing does not establish source quality or scientific truth.
+
+## Choose the evidence method
+
+Use this classifier for scientific claims whose evidence can be represented by its study tiers. For engineering behavior, version compatibility, or API documentation, use official documentation, source code, specifications, and relevant observations directly, or an available research-orchestration skill. Report sources and uncertainty without running the paper-count classifier or describing missing papers as missing engineering evidence.
+
+For mixed questions, separate scientific claims from engineering claims. An explicit research request does not make scientific verdict rules appropriate for every facet. State which method supports each conclusion. The runner's existing scientific policy and output schema remain unchanged.
+
+The runner consumes pre-collected claims/evidence and an initialized state JSON. It does not retrieve sources. Use an authorized task-owned state path; no state file is bundled. Read the skill-local [isolated runner setup](references/RUNNER.md) before execution. Do not write into the installed skill directory or global memory as an incidental research side effect.
 
 ## Triggers
 
-Activate when the user asks for rigorous multi-source research or uses any of these commands:
+For these explicit entry points, first choose the evidence method above. Use the scientific pipeline when its evidence model fits:
 - `/deep-research [topic]`
 - `/deepresearch [topic]`
 - `/dpr [topic]`
@@ -19,22 +26,7 @@ Activate when the user asks for rigorous multi-source research or uses any of th
 
 ## Quick Start
 
-```bash
-S="{baseDir}/scripts"
-B="{baseDir}"
-
-# Full deterministic run (after claims + evidence are collected):
-python3 $S/run_deep_research.py \
-  --topic "Does caffeine improve focus?" \
-  --topic-summary "Common belief that caffeine enhances concentration." \
-  --claims-file /tmp/dr-claims.json \
-  --evidence-file /tmp/dr-evidence.json \
-  --policy $B/policy.json \
-  --schema $B/output-schema.json \
-  --state $B/state.json \
-  --output-json /tmp/dr-output.json \
-  --output-md /tmp/dr-output.md
-```
+Create a fresh task directory and initialize its state using [isolated runner setup](references/RUNNER.md). Collect verified claims and evidence into that directory, then run the documented command with every mutable input/output under the same task directory. Concurrent investigations must not share state or fixed temporary filenames. To resume an investigation, select its existing task directory explicitly instead of reinitializing its state.
 
 Exit codes: `0` success, `1` validation/policy error, `2` partial retrieval, `3` no-evidence fallback.
 
@@ -144,7 +136,7 @@ Could not extract structured claims from the topic. Provide explicit claims.
 
 ## Output Contract
 
-All outputs validate against `output-schema.json`. Required top-level fields:
+The intended output shape is described in `output-schema.json`. The runner performs lightweight checks on selected fields, not full JSON Schema validation. Required top-level fields:
 `topic`, `run_id`, `policy_version`, `claims[]`, `verdict_summary`, `decision_trace[]`, `failures[]`.
 
 Run IDs follow the pattern: `dr-YYYYMMDDTHHMMSSZ-<8-char topic hash>`.
@@ -174,7 +166,7 @@ skills/deep-research/
   SKILL.md              # This file
   policy.json           # Deterministic decision rules
   output-schema.json    # JSON Schema for output validation
-  state.json            # Run history, dedupe fingerprints, claim canonicalization
+  references/RUNNER.md  # Task-isolated state initialization and execution
   scripts/
     ./scripts/run_deep_research.py  # Deterministic runner (collect/normalize/classify/render/validate)
   tests/
@@ -194,7 +186,7 @@ skills/deep-research/
 | `--evidence-file` | No | JSON file with pre-collected evidence |
 | `--policy` | Yes | Path to policy.json |
 | `--schema` | No | Path to output-schema.json |
-| `--state` | Yes | Path to state.json |
+| `--state` | Yes | Authorized path to initialized state JSON; not bundled |
 | `--output-json` | No | Write JSON output to file |
 | `--output-md` | No | Write Markdown output to file |
 
@@ -204,3 +196,9 @@ skills/deep-research/
 | 1 | Validation or policy error |
 | 2 | Upstream retrieval partial |
 | 3 | No-evidence fallback produced |
+
+## Interpretation and verification
+
+Check whether sources actually support the claim, whether their populations and methods apply, and whether sources are independent. Numerical agreement is a policy classification over supplied labels, not a measured probability of truth or a substitute for scientific appraisal. Keep conflicting evidence and methodological limitations visible even when the runner returns Supported.
+
+Run only on verified, redacted inputs and an authorized state/output location. Keep inaccessible sources and partial retrieval explicit. Do not claim the runner searched the web, that a schema-valid result proves a claim, or that passing deterministic tests establishes research correctness.

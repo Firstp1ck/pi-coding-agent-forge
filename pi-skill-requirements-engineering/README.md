@@ -35,6 +35,8 @@ Other useful requests include:
 - Open questions grouped by the person who can answer them, plus stakeholder groups not yet heard
 - A decision record for conflicts, and a change preview before agreed requirements are revised
 
+Pi can also help settle domain terminology and preserve consequential decisions using your existing glossary and decision records.
+
 ## Keep in mind
 
 Pi can organize what people said and draft questions, but it cannot speak for people who were not asked, approve requirements, or authorize implementation. "Agreed" and "approved for implementation" stay separate until the right people confirm them.

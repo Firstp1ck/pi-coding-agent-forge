@@ -91,6 +91,7 @@ test("documentation layers, fences, and relative links remain valid", async () =
     "skills/code-quality/SKILL.md",
     "skills/code-quality/references/language-checks.md",
     "skills/code-quality/references/measurement-guide.md",
+    "skills/code-quality/references/testing.md",
   ];
   const documents = await Promise.all(files.map(async (file) => [file, await read(file)]));
   for (const [file, document] of documents) {

@@ -1,7 +1,7 @@
 {
   "name": "@firstpick/pi-skill-test-plan-generator",
   "version": "0.1.5",
-  "description": "Agents should invoke this skill when planning tests from specs, architecture docs, PRs, risky changes, new features, bug fixes, or release work. Generates prioritized unit, integration, E2E, regression, and edge-case coverage.",
+  "description": "Plan risk-based tests for a specification, change, migration, bug fix, or release. Map important behavior and failure modes to suitable test boundaries, existing evidence, and explicit verification gaps.",
   "license": "MIT",
   "homepage": "https://github.com/Firstp1ck/pi-coding-agent-forge/tree/main/pi-skill-test-plan-generator#readme",
   "repository": {
@@ -25,6 +25,8 @@
   "files": [
     "skills",
     "README.md",
+    "TECHNICAL.md",
+    "DEVELOPMENT.md",
     "LICENSE"
   ]
 }

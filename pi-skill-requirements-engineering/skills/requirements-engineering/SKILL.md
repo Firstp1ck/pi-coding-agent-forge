@@ -72,7 +72,9 @@ When working in a project directory, get a bounded overview before asking questi
 
 If a tracker or requirement register already exists, such as Jira, it stays the canonical source. Link to its items instead of starting a second list of REQ IDs.
 
-If saved plans or work states exist that could be continued, show each with its purpose, status, next step, and path. Let the user choose whether to continue one, name another, start fresh, or stop. Never pick the newest one automatically. Get confirmation before following or changing a plan, even when the user already named it. Leave declined plans unchanged.
+If the user explicitly chose a saved plan or work state, honor that choice without asking them to choose it again. When the choice is ambiguous, show relevant candidates with purpose, status, next step, and path, and let the user choose one, start fresh, or stop. Never select by recency alone. A continuation choice does not authorize changing agreed scope or requirements. Leave declined plans unchanged.
+
+When domain terms are disputed or design work establishes a lasting decision, read [domain modeling and selective ADRs](references/DOMAIN-MODELING.md). Preserve the project's glossary and record layout; a code observation is not stakeholder agreement.
 
 ## Choose the mode
 
@@ -117,7 +119,7 @@ Lead the conversation with the user or with a stakeholder to whom the user hands
 
 ### Conversation rules
 
-- Ask one question per message and keep messages short. Several questions at once lead to shallow answers.
+- Keep question rounds small and coherent. Ask one open question when it needs depth; batch independent, bounded decisions with recommendations when that reduces interruptions. Ask dependent questions only after their prerequisites are settled. Never guess an unanswered stakeholder decision merely to finish a round.
 - Start with the problem, even when the other person names a solution. Take the proposal seriously, record it, and ask about its purpose.
 - Ask why until the goal is clear. Two or three levels are usually enough. Stop once you recognize a business or user goal, such as less time, cost, error, or risk, more satisfaction, or meeting an obligation.
 - Summarize regularly and name the levels. Example: "Let me note this. Problem: ... Desired solution, provisional: ... Is that right?"
@@ -293,7 +295,7 @@ Terms such as "customer", "order", and "closed" can mean different things in dif
 
 ## Output format
 
-- In dialogue, write short messages with one question each. Summarize the current state regularly.
+- In dialogue, use the small question rounds described in Mode B and summarize the current state regularly.
 - Start summaries and evaluations with an overview of the problems and their P-IDs. Then list the requirements with REQ IDs and problem links, open questions by person, missing stakeholder groups, and identified conflicts.
 - Use the user's preferred format, such as tables, Jira tickets, specification chapters, or user stories. Keep the problem field and the separate states.
 - End every response with a concrete next step: who acts, what to ask or check, and how to tell it is done.
@@ -332,5 +334,6 @@ These files are relative to the skill directory. Read them only when the current
 - `references/RECORDS.md`: adaptable templates for overview, requirement register, decisions, work state, next step, and change preview.
 - `references/GLOSSARY.md`: source-based terms in plain language.
 - `references/EXAMPLES.md`: fictional example flows with prohibited outcomes.
+- `references/DOMAIN-MODELING.md`: additional workflow guidance for project terminology and selective ADRs, separate from the source-derived method.
 
 The method guidance paraphrases IU Internationale Hochschule, *Requirements Engineering*, IREN01, version 003-2023-0817, PDF pp. 14-20, 24-35, 38-52, 58-68, 101-102, and 120-149. The PDF is not bundled.

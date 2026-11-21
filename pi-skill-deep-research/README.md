@@ -1,12 +1,12 @@
 # Deep Research
 
-Answer difficult or important questions with careful source checking and visible uncertainty.
+Investigate scientific claims with careful study appraisal, explicit evidence classification, and visible uncertainty.
 
 ## Helpful when
 
-- A wrong answer could be costly.
-- Sources disagree or the topic is complicated.
-- You need more than a quick web summary.
+- You need to assess a scientific effect or evidence claim.
+- Studies disagree or apply to different populations or conditions.
+- You want scientific verdicts with an explicit decision trail.
 
 ## What to share with Pi
 
@@ -28,6 +28,8 @@ Answer difficult or important questions with careful source checking and visible
 
 Research quality depends on the available evidence. Missing, private, or outdated sources will lower confidence and be stated openly. The runner requires an initialized state JSON passed with `--state`; this package currently does not ship one. Classification and ordering are stable for identical evidence, but run IDs and timestamps vary.
 
+Ordinary engineering questions use official documentation, source code, and relevant observations instead of paper-count verdicts. The skill separates those questions before selecting its scientific pipeline. Agreement ratios describe supplied evidence labels, not a probability that a claim is true.
+
 ## Install
 
 ```bash
@@ -38,4 +40,4 @@ Restart Pi if the skill does not appear in your current session.
 
 ## Technical details
 
-See [TECHNICAL.md](https://github.com/Firstp1ck/pi-coding-agent-forge/blob/main/pi-skill-deep-research/TECHNICAL.md) for advanced usage, configuration, compatibility, and limitations.
+See [TECHNICAL.md](TECHNICAL.md) for advanced usage, configuration, compatibility, and limitations.

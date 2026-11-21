@@ -30,6 +30,10 @@ No required configuration. After installation, type `/` in Pi to autocomplete th
 
 Run it without arguments to implement all actionable recommendations. If the source recommendations or an exclusion are ambiguous, the prompt tells the agent to ask before making changes.
 
+## Focused bug fixes
+
+`/fix [issue or context]` first establishes the reported failure and checks the affected behavior after the smallest coherent repair. Difficult failures get a minimized reproduction and distinguishing hypotheses. If the failing environment is unavailable, the result labels inference and unverified behavior. A simple fix stays lightweight, preserves unrelated work, and does not automatically start agents or install dependencies.
+
 ## Landing-page concepts
 
 `/land-page [brand, stack, or visual direction]` builds five landing-page concepts for a second-brain note-taking app. It creates routes at `/1`, `/2`, `/3`, `/4`, and `/5`, with a compact route switcher on every page.

@@ -26,7 +26,7 @@ Organize a broad research project so separate questions, sources, and conclusion
 
 ## Keep in mind
 
-Broader research takes longer and may still leave unanswered questions. The shipped workflow expects the host’s `workspace-researcher/AGENTS.md` and `APPEND_SYSTEM.md`, uses web search/fetching when needed, and appends a research-history row to `workspace-researcher/MEMORY.md`; those steps are unavailable when the host files or tools are missing.
+Broader research can still leave unanswered questions. Engineering claims use version-matched documentation, source code, and relevant observations. The skill also handles narrow engineering investigations without requiring a private workspace, background agents, or saved history. Saving a report follows your request and repository conventions.
 
 ## Install
 
@@ -38,4 +38,4 @@ Restart Pi if the skill does not appear in your current session.
 
 ## Technical details
 
-See [TECHNICAL.md](https://github.com/Firstp1ck/pi-coding-agent-forge/blob/main/pi-skill-research-orchestration/TECHNICAL.md) for advanced usage, configuration, compatibility, and limitations.
+See [TECHNICAL.md](TECHNICAL.md) for advanced usage, configuration, compatibility, and limitations.

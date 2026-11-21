@@ -156,6 +156,7 @@ test("dry-run pack includes user documents and skill resources but excludes cont
     "skills/code-quality/SKILL.md",
     "skills/code-quality/references/language-checks.md",
     "skills/code-quality/references/measurement-guide.md",
+    "skills/code-quality/references/testing.md",
     "skills/code-quality/scripts/scan.mjs",
   ]) assert.equal(paths.includes(required), true, `packed file missing: ${required}`);
   assert.equal(paths.some((filename) => filename.startsWith("tests/")), false);
@@ -178,7 +179,7 @@ test("packed and extracted skill keeps script and references usable without inst
 
     const extractedRoot = path.join(extractionRoot, "package");
     const scanScript = path.join(extractedRoot, "skills", "code-quality", "scripts", "scan.mjs");
-    for (const reference of ["language-checks.md", "measurement-guide.md"]) {
+    for (const reference of ["language-checks.md", "measurement-guide.md", "testing.md"]) {
       const text = await fs.readFile(path.join(extractedRoot, "skills", "code-quality", "references", reference), "utf8");
       assert.match(text, /\S/u, `extracted reference is readable: ${reference}`);
     }

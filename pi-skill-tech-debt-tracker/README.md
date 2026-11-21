@@ -24,9 +24,11 @@ Turn recurring maintenance problems into a clear, prioritized cleanup list.
 - Priority based on impact and effort
 - Suggested sequencing and ownership
 
+Accepted trade-offs stay visible with reasons and revisit triggers, rather than becoming automatic cleanup work.
+
 ## Keep in mind
 
-Priorities depend on real business and team constraints. By default, the workflow records debt in the host’s `MEMORY.md` Tech Debt Registry; confirm that location or request a report-only backlog when no memory file is available.
+Priorities depend on real business and team constraints. Existing accepted trade-offs and project ownership matter more than a generic cleanup score.
 
 ## Install
 
@@ -38,4 +40,4 @@ Restart Pi if the skill does not appear in your current session.
 
 ## Technical details
 
-See [TECHNICAL.md](https://github.com/Firstp1ck/pi-coding-agent-forge/blob/main/pi-skill-tech-debt-tracker/TECHNICAL.md) for advanced usage, configuration, compatibility, and limitations.
+See [TECHNICAL.md](TECHNICAL.md) for advanced usage, configuration, compatibility, and limitations.

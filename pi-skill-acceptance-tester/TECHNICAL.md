@@ -1,10 +1,8 @@
 # Technical reference: Acceptance Tester
 
-Advanced user setup, configuration, compatibility, security, and troubleshooting information.
+Advanced user inputs, evidence, compatibility, and limitations.
 
-[Back to the human-friendly README](README.md) · [Contributor and implementation guide](DEVELOPMENT.md)
-
-A Pi skill for use as the final gate before release, handoff, or claiming completion for substantial changes. Runs acceptance/readiness checks, determines pass/fail, and gives a go/no-go recommendation.
+[Back to README](README.md) · [Contributor guide](DEVELOPMENT.md)
 
 ## Install
 
@@ -12,15 +10,27 @@ A Pi skill for use as the final gate before release, handoff, or claiming comple
 pi install npm:@firstpick/pi-skill-acceptance-tester
 ```
 
-## Inputs and default gates
+## Defining the assessed state
 
-Provide the agreed definition of done, requirements, test evidence, and any release constraints. When no project-specific coverage target is supplied, the workflow uses an 80% fallback target.
+Provide the target revision or worktree, the agreed completion criteria, and required environment or rollout conditions. Existing project gates remain binding. When criteria or access are missing, the assessment identifies exactly which conclusion cannot be reached.
 
-The skill can consume results from specification, security, and implementation reviews, but those companion packages are not bundled. Equivalent user-supplied evidence is acceptable; missing required evidence remains visible and may produce a no-go result.
+Evidence is tied to a revision and environment. A green report from an earlier commit can suggest checks to repeat, but it does not validate changed code. Source inspection, relevant execution, and requirement mapping are different evidence.
 
-## Example view
+## Readiness outcomes
 
-```text
-User: Check this release against the attached definition of done, test report, and security review. Give me a go/no-go verdict and list every missing gate.
-Agent: Maps the evidence to the acceptance gates, preserves unknowns, and reports a go/no-go decision.
-```
+| Outcome | Recommendation | Meaning |
+| --- | --- | --- |
+| PASS | Go within the assessed scope | Applicable required gates passed with current evidence. |
+| CONDITIONAL PASS | Go within accepted conditions only | The responsible person/process explicitly accepted named exceptions, and all remaining required gates passed. |
+| FAIL | No-Go | A required gate demonstrably failed or a blocking defect remains. |
+| INCOMPLETE | No-Go | Required evidence, access, or a consequential acceptance decision is unavailable. |
+
+An inadequate or unrun test leaves runtime verification incomplete unless a separate explicit project gate already fails on test adequacy. Missing proof is different from proof of broken behavior. Mixed failures and evidence gaps are reported as FAIL with the unverified gates still listed.
+
+## Coverage and retesting
+
+No default coverage threshold is imposed. An agreed target can remain a required gate, with its metric and limitations stated. After authorized fixes, failed and affected regression checks are repeated; project-wide gates still apply when required.
+
+## Authority and report storage
+
+A readiness review does not authorize edits, deployment, release, or publication. Accepted exceptions must come from the responsible user/process. Reports stay in the conversation unless saving is requested or required by the authorized workflow.

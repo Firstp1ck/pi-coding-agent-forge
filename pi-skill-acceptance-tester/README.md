@@ -24,6 +24,8 @@ Check whether important work is genuinely ready to release, share, or hand over.
 - The checks that passed or failed
 - Anything that still needs attention
 
+Unavailable required evidence produces an incomplete, no-go assessment instead of a guessed pass.
+
 ## Keep in mind
 
 A readiness review is only as strong as the requirements and evidence available. Missing information will be called out rather than guessed.
@@ -38,4 +40,4 @@ Restart Pi if the skill does not appear in your current session.
 
 ## Technical details
 
-See [TECHNICAL.md](https://github.com/Firstp1ck/pi-coding-agent-forge/blob/main/pi-skill-acceptance-tester/TECHNICAL.md) for advanced usage, configuration, compatibility, and limitations.
+See [TECHNICAL.md](TECHNICAL.md) for advanced usage, configuration, compatibility, and limitations.

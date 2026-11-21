@@ -7,12 +7,12 @@ Contributor-only implementation, API, architecture, testing, and maintenance inf
 ## Additional implementation details
 
 - Adds the `research-orchestration` skill to Pi's skill library.
-- Guides agents to invoke the skill for broad multi-claim research projects needing planning, parallel investigation, source merging, gap closure, citation audit, and final synthesis when narrower research skills are insufficient.
+- Covers narrow engineering investigations and broad research, with source authority chosen according to the claim. No host workspace or mandatory background agent is required.
 - Bundles `skills/research-orchestration/SKILL.md` plus any supporting references, scripts, tests, fixtures, or assets used by the skill.
 
 ## Preserved package internals
 
-A Pi skill for broad multi-claim research projects needing planning, parallel investigation, source merging, gap closure, citation audit, and final synthesis when narrower research skills are insufficient.
+The skill handles direct engineering investigations and broader multi-facet research with claim-appropriate primary sources. Specialized comparison or paper-summary skills remain optional alternatives when they better match the task.
 
 ## Install
 
@@ -43,6 +43,8 @@ skills/research-orchestration/
 ```
 
 Run helpers from `skills/research-orchestration/` or use absolute paths. By default, scripts read `./scripts/policy.json`; pass `--policy /path/to/policy.json` to override.
+
+The helper scripts remain optional. Their structural citation check does not inspect semantic source support. The skill no longer requires private workspace instructions or automatically appends research history; authorized artifacts follow the target repository's convention.
 
 Examples:
 

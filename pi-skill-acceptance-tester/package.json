@@ -1,7 +1,7 @@
 {
   "name": "@firstpick/pi-skill-acceptance-tester",
   "version": "0.1.5",
-  "description": "Agents should invoke this skill as the final gate before release, handoff, or claiming completion for substantial changes. Runs acceptance/readiness checks, determines pass/fail, and gives a go/no-go recommendation.",
+  "description": "Assess readiness before release, handoff, or completion of substantial work. Verify agreed acceptance gates against current implementation and execution evidence, distinguish failures from missing evidence, and give a scoped go/no-go recommendation.",
   "license": "MIT",
   "homepage": "https://github.com/Firstp1ck/pi-coding-agent-forge/tree/main/pi-skill-acceptance-tester#readme",
   "repository": {
@@ -25,6 +25,8 @@
   "files": [
     "skills",
     "README.md",
+    "TECHNICAL.md",
+    "DEVELOPMENT.md",
     "LICENSE"
   ]
 }

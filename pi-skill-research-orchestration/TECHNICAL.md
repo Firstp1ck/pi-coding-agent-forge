@@ -10,11 +10,11 @@ Advanced user setup, configuration, compatibility, security, and troubleshooting
 pi install npm:@firstpick/pi-skill-research-orchestration
 ```
 
-The workflow expects host-provided web search/fetch tools plus `workspace-researcher/AGENTS.md` and the applicable host policy. When those files or tools are absent, provide sources directly and treat the affected steps as blocked rather than assuming they ran.
+The workflow uses available source-reading, search, and retrieval tools under the active host policy. It requires no private workspace files or particular delegation integration. If tools or sources are unavailable, provide material directly and keep the resulting evidence limits explicit.
 
 ## When to use it
 
-Use this skill for broad research that contains several important questions, requires multiple evidence passes, or needs a final citation audit. Narrow questions are usually better served by a smaller research workflow.
+Use this skill for engineering documentation/API questions and broad investigations needing multiple evidence passes or a citation audit. A narrow lookup stays a direct, bounded pass. More specialized comparison or paper-summary skills can be used when available and a better fit.
 
 ## What to provide
 
@@ -34,8 +34,8 @@ Use this skill for broad research that contains several important questions, req
 
 ## Storage and limitations
 
-When available, the workflow appends a research-history row to `workspace-researcher/MEMORY.md`. Ask for report-only output when you do not want that persistent write.
+Results stay in the conversation unless you requested a saved artifact or the active authorized workflow requires one. Saved artifacts use existing repository conventions. The workflow does not automatically write global memory or research history.
 
-A broad workflow can still be limited by missing host files/tools or inaccessible and weak sources. Citation checks confirm that a source supports a claim; they do not guarantee that the source itself is correct.
+A broad workflow can still be limited by unavailable tools and inaccessible or weak sources. Source review checks whether material supports the stated claim. Structural citation checks establish only that references are present, not that the source is correct or entails the claim.
 
 The packaged helper scripts and their file formats are contributor information documented in `DEVELOPMENT.md`.

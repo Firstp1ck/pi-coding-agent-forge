@@ -1,174 +1,48 @@
 ---
 name: refactoring-advisor
-description: Agents should invoke this skill for refactors, code smells, migrations, duplication removal, module splitting, API cleanup, or restructuring plans. Emphasizes small safe steps, behavior preservation, and verification after each change.
+description: Plan or carry out behavior-preserving refactors, migrations, duplication removal, and interface cleanup. Use concrete maintenance friction, characterization evidence, incremental changes, and compatibility checks rather than size thresholds.
 ---
 
-# Refactoring Advisor
+# Refactoring advisor
 
-Systematic code smell detection and safe refactoring planning. Every refactoring plan ensures the codebase compiles and passes tests at every intermediate step.
+Make the next real change easier while preserving the behavior callers depend on. A request for a plan or review does not authorize edits. Separate requested behavior changes from structural changes so their effects remain assessable.
 
-## Quick Start
+## Establish the baseline
 
-### Identify and Plan a Refactoring
+Read the relevant implementation, callers, tests, project instructions, and decisions. Identify the maintenance problem with a concrete example: the same policy changes in several places, resource lifetime is unclear, or a caller must understand internal ordering.
 
-1. **Detect the smell:** What's wrong and why does it matter?
-2. **Assess the risk:** What could break? How large is the blast radius?
-3. **Check test coverage:** Are the affected areas covered? If not, add tests first.
-4. **Plan incremental steps:** Each step should leave the code in a working state.
-5. **Estimate effort:** Size the work (S/M/L/XL) and identify dependencies.
+Inspect staged, unstaged, and relevant untracked work. Record the task's starting state; do not require committing, stashing, or discarding unrelated changes. Run focused existing checks when available. Distinguish baseline failures from regressions introduced by the refactor.
 
----
+Use characterization tests where important existing behavior is not otherwise protected. Derive expected results independently from examples, documented contracts, or observed behavior. If behavior is disputed, resolve or record the conflict before encoding it as a permanent expectation.
 
-## Common Code Smells by Language
+## Choose the design
 
-### Rust
+- Keep code that changes for the same reason together. Shared syntax with different ownership or contracts may deserve separate implementations.
+- Ask what callers must know before and after: invariants, errors, ordering, configuration, and side effects as well as types.
+- Remove forwarding layers only after checking whether they enforce validation, compatibility, observability, or resource ownership.
+- Prefer a small interface that hides real complexity. Avoid replacing one difficult file with many shallow helpers that spread the same knowledge.
+- Preserve useful public and internal test boundaries. A simpler interface does not automatically make algorithm-level tests redundant.
 
-| Smell | Description | Refactoring |
-|---|---|---|
-| God struct | One struct with too many fields/methods | Extract into smaller, focused structs |
-| Unnecessary clones | `.clone()` where borrowing would work | Replace with borrows, use lifetimes |
-| Stringly typed | Using `String` where an enum fits | Introduce enum with `From` impls |
-| Match explosion | Huge `match` blocks that grow with every variant | Extract match arms into methods, use trait dispatch |
-| Unwrap sprawl | `.unwrap()` scattered through non-test code | Replace with `?` operator, proper error handling |
-| Leaky abstraction | `pub` on internal implementation details | Reduce to `pub(crate)` or `pub(super)` |
-| Monolithic `lib.rs` | Everything in one file | Split into focused modules |
-| Over-generic | Generics where a concrete type suffices | Simplify to concrete types until generics are needed |
+An available architecture-review skill can help with a consequential design decision; its absence does not block a bounded refactor. File length, field count, prop depth, or a preferred pattern alone is not evidence for restructuring.
 
-### TypeScript / React
+## Incremental execution
 
-| Smell | Description | Refactoring |
-|---|---|---|
-| Prop drilling | Props passed through 3+ component levels | Extract to context, composition, or custom hook |
-| God component | Component with 200+ lines or multiple responsibilities | Split into focused components |
-| Barrel file bloat | Index files re-exporting everything | Direct imports, remove barrel files |
-| Any escape hatch | `as any` or `// @ts-ignore` hiding type issues | Fix the types, use type guards or discriminated unions |
-| useEffect spaghetti | Multiple unrelated effects in one component | Split effects, extract to custom hooks |
-| Inline styles sprawl | Styles defined inline instead of using design system | Extract to CSS modules, Tailwind classes, or styled components |
-| Callback prop chains | Passing callbacks through many layers | Use context or state management |
-| State duplication | Same data stored in multiple state variables | Derive computed values, single source of truth |
+1. State the preserved behavior and compatibility, intended design improvement, ownership, and checks that detect regressions.
+2. Choose independently reviewable and verifiable steps. Keep intermediate states usable when possible. For an unavoidable atomic cutover, explain why, name the complete integration boundary, and defer success until it passes.
+3. Run narrow affected checks after meaningful steps. Broaden checks when shared contracts, migrations, or new failures warrant it; do not repeat the entire suite after every edit without a reason.
+4. Preserve failure handling, cancellation, resource cleanup, concurrency semantics, and persisted data behavior. Do not silently drop guards to simplify code.
+5. Inspect the final diff and validate original caller scenarios, including relevant errors. Report pre-existing failures and unrun checks separately.
 
-### Django / Python
+### Migration choices
 
-| Smell | Description | Refactoring |
-|---|---|---|
-| Fat views | Business logic in views instead of services | Extract to service layer |
-| Circular imports | Modules importing each other | Restructure boundaries, use lazy imports |
-| God model | One model with 20+ fields and many methods | Split into related models, use composition |
-| N+1 queries | Database queried in a loop | Add `select_related()` / `prefetch_related()` |
-| Magic strings | Hardcoded strings for choices, status, etc. | Use `TextChoices` / `IntegerChoices` enums |
-| Untyped functions | Missing type hints on public functions | Add type annotations, run mypy |
-| Test-free code | No tests for critical business logic | Add tests before refactoring |
-| Signal spaghetti | Complex logic hidden in Django signals | Replace with explicit method calls |
+- **Expand-contract:** add the compatible new form, migrate callers in dependency-aware batches, then remove the old form once usage and supported-version constraints permit it.
+- **Branch by abstraction:** introduce a justified contract, move callers behind it, substitute the implementation, and retire the transition mechanism when no longer needed.
+- **Incremental replacement:** route a bounded responsibility through the replacement, verify it, and migrate the remainder without maintaining competing sources of truth.
 
----
+For persisted data, check mixed-version reads/writes and whether reversal is possible after new data is written. A Git revert is not a data rollback. Name restore or forward-repair limits when needed and do not execute destructive recovery without authorization.
 
-## Refactoring Safety Protocol
+## Deliverable and safety
 
-### Before Any Refactoring
+For a plan, report the problem evidence, proposed contract, steps with checks, migration/recovery limits, and success criteria. Include deferred work in that response. For implementation, add actual changes, validation results, deviations, and remaining risks. Update a project tracker or repository record only when that write is authorized; naming a tracker as the source of truth does not authorize modifying it. Do not automatically write global memory.
 
-1. **Verify test coverage.** Run existing tests. If the area being refactored has no tests, write characterization tests first.
-2. **Create a checkpoint.** Ensure all changes are committed. The refactoring starts from a clean state.
-3. **Define the end state.** What does "done" look like? How will you verify success?
-
-### During Refactoring
-
-1. **One change at a time.** Each commit should be a single, focused refactoring step.
-2. **Compile after every change.** (`cargo check`, `tsc --noEmit`, `python -m py_compile`)
-3. **Run tests after every change.** If tests fail, fix before proceeding.
-4. **No behavior changes.** Refactoring changes structure, not behavior. If behavior must change, do it in a separate step.
-
-### After Refactoring
-
-1. **Full test suite passes.**
-2. **Clippy / ESLint / Ruff clean.** No new warnings introduced.
-3. **Review the diff.** Does the change accomplish what was intended? Any accidental behavior changes?
-
----
-
-## Refactoring Plan Template
-
-When proposing a refactoring, use this structure:
-
-```markdown
-## Refactoring Plan: [Description]
-
-**Target:** [File/module/component]
-**Smell:** [What's wrong]
-**Goal:** [What "done" looks like]
-**Risk:** Low / Medium / High
-**Effort:** S / M / L / XL
-**Test coverage:** Adequate / Needs improvement first
-
-### Pre-requisites
-- [ ] Tests pass on current code
-- [ ] [Any additional pre-reqs]
-
-### Steps
-
-1. **[Step 1 description]**
-   - Files affected: [list]
-   - Verification: `cargo check && cargo test`
-
-2. **[Step 2 description]**
-   - Files affected: [list]
-   - Verification: `cargo check && cargo test`
-
-[... more steps ...]
-
-### Rollback
-If issues arise: `git revert` to the last passing commit.
-
-### Success Criteria
-- [ ] All tests pass
-- [ ] No new clippy/lint warnings
-- [ ] [Specific architectural improvement verified]
-```
-
----
-
-## Migration Strategies
-
-### Pattern: Strangler Fig
-
-For gradually replacing a legacy module:
-
-1. Create the new module alongside the old one
-2. Route new features through the new module
-3. Gradually migrate existing callers
-4. Remove the old module when all callers are migrated
-
-**Best for:** Large-scale replacements where a clean cut is risky.
-
-### Pattern: Branch by Abstraction
-
-For replacing an implementation behind an interface:
-
-1. Introduce an abstraction (trait/interface) over the current implementation
-2. Update callers to use the abstraction
-3. Implement the new version behind the same abstraction
-4. Switch the wiring (dependency injection, feature flag)
-5. Remove the old implementation
-
-**Best for:** Swapping implementations (database, API client, algorithm).
-
-### Pattern: Parallel Change (Expand-Contract)
-
-For changing a widely-used interface:
-
-1. **Expand:** Add the new interface alongside the old one
-2. **Migrate:** Update callers one by one to use the new interface
-3. **Contract:** Remove the old interface
-
-**Best for:** API changes, function signature updates, data structure migrations.
-
----
-
-## Integration
-
-- **Data:** Refactoring plans and outcomes logged to `MEMORY.md`
-- **Tests:** Always verify test coverage before and after. Use `cargo test -- --test-threads=1`, `bun test`, or `uv run pytest`
-- **Tech debt:** If a refactoring is deferred, add it to the tech debt registry in `MEMORY.md`
-
----
-
-_Arc skill — Refactoring strategies and code smell detection_
+Do not reset the workspace or commit all changes to create a checkpoint. If a task-owned step fails, repair or reverse only its isolated edits when safe. New dependencies, public behavior changes, or broader scope require existing authorization or a decision from the user.

@@ -1,6 +1,20 @@
 {
   "skill": "requirements-engineering",
-  "shouldTrigger": [
+  "ambiguous": [
+    {
+      "prompt": "Continue the project.",
+      "decision": "List candidate continuation plans and ask which one or no plan; do not adopt a plan by recency."
+    },
+    {
+      "prompt": "Make a questionnaire.",
+      "decision": "Ask whether it is a stakeholder survey draft or a bounded owner choice and what decision it supports."
+    },
+    {
+      "prompt": "Improve the requirements.",
+      "decision": "Ask which mode and scope is meant and confirm any candidate plan before making a change."
+    }
+  ],
+  "should_trigger": [
     "Start requirements work for my empty volunteer scheduling project.",
     "Customers want an Excel export. What do they actually need?",
     "Help me prepare the interview with support about refunds.",
@@ -10,16 +24,11 @@
     "What does system boundary mean in this project?",
     "Review whether REQ-8 has an exception path and testable acceptance method."
   ],
-  "shouldNotTrigger": [
+  "should_not_trigger": [
     "Implement REQ-17 and deploy it now.",
     "Fix this failing test without changing requirements.",
     "Write product marketing copy for the shop.",
     "Grant legal approval for this policy.",
     "Send the survey to every customer."
-  ],
-  "ambiguous": [
-    {"prompt":"Continue the project.","decision":"List candidate continuation plans and ask which one or no plan; do not adopt a plan by recency."},
-    {"prompt":"Make a questionnaire.","decision":"Ask whether it is a stakeholder survey draft or a bounded owner choice and what decision it supports."},
-    {"prompt":"Improve the requirements.","decision":"Ask which mode and scope is meant and confirm any candidate plan before making a change."}
   ]
 }

@@ -82,12 +82,12 @@ test('scenario validator rejects missing rubric, duplicate IDs and missing cover
 
 test('routing prompts express both directions and ask on ambiguity', () => {
   assert.equal(routing.skill, 'requirements-engineering');
-  assert(routing.shouldTrigger.length >= 5 && routing.shouldNotTrigger.length >= 5);
+  assert(routing.should_trigger.length >= 5 && routing.should_not_trigger.length >= 5);
   assert(routing.ambiguous.length >= 2);
   for (const item of routing.ambiguous) {
     assert(item.prompt && /ask|confirm/i.test(item.decision));
   }
-  assert.equal(new Set([...routing.shouldTrigger, ...routing.shouldNotTrigger, ...routing.ambiguous.map((entry) => entry.prompt)]).size, routing.shouldTrigger.length + routing.shouldNotTrigger.length + routing.ambiguous.length);
+  assert.equal(new Set([...routing.should_trigger, ...routing.should_not_trigger, ...routing.ambiguous.map((entry) => entry.prompt)]).size, routing.should_trigger.length + routing.should_not_trigger.length + routing.ambiguous.length);
 });
 
 test('manifest and skill resource paths are portable and complete', () => {
@@ -98,7 +98,7 @@ test('manifest and skill resource paths are portable and complete', () => {
   }
   const skill = read(`${skillDir}/SKILL.md`);
   assert.match(skill, /^---\nname: requirements-engineering\n/m);
-  for (const name of ['RECORDS', 'WORKING-DOCUMENTS', 'GLOSSARY', 'EXAMPLES']) {
+  for (const name of ['RECORDS', 'WORKING-DOCUMENTS', 'GLOSSARY', 'EXAMPLES', 'DOMAIN-MODELING']) {
     const reference = `${skillDir}/references/${name}.md`;
     assert(manifest.files.includes(reference) && existsSync(path.join(root, reference)));
     assert(skill.includes(`references/${name}.md`));
@@ -108,7 +108,7 @@ test('manifest and skill resource paths are portable and complete', () => {
   }
   assert(!manifest.files.some((filename) => /\.pdf$/i.test(filename)));
   // These checks guard explicit safety instructions, not compliance by a language model.
-  assert.match(skill, /Get confirmation before following or changing a plan/);
+  assert.match(skill, /honor that choice without asking them to choose it again/);
   assert.match(skill, /confirmation from the responsible person before changing an agreed requirement/);
   assert.match(skill, /If a write is declined or fails[\s\S]{0,240}Do not claim saved state/);
   assert.match(skill, /A clear, testable requirement may be content-ready but not approved/);
