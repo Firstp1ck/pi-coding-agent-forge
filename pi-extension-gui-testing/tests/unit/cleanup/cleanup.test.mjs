@@ -216,6 +216,34 @@ test("audits: session scope reports its dir and live processes; orphan scope ski
   assert.ok(!orphans.some((l) => l.id === live));
 });
 
+test("the generic sweep leaves local-windows runtime dirs to their backend, which still reads their records (review B-F4)", async (t) => {
+  const { proc, tmp } = await scratch(t);
+  await fakeProc(proc, {});
+  // A dead owner's Windows runtime dir in the generic temp root (on Windows, os.tmpdir() is %LOCALAPPDATA%\\Temp).
+  const runtime = join(tmp, "pi-gui-testing-win-0123456789abcdef");
+  await mkdir(runtime);
+  await writeFile(join(runtime, OWNER_FILE), JSON.stringify(record({ pid: 300, backend: "local-windows" })));
+  await writeFile(join(runtime, "session.json"), JSON.stringify({ jobs: ["Local\\pi-gui-testing-0123456789abcdef-job-0000000000000001"] }));
+  // An ordinary dead session dir next to it is still the generic sweep's.
+  const generic = await ownerDir(tmp, "AbC123", record({ pid: 300 }));
+  let backendSawRecord;
+  const report = await sweepClientOrphans({
+    tmpRoot: tmp,
+    procRoot: proc,
+    signal: new AbortController().signal,
+    kill: () => {},
+    sweepers: [{ id: "local-windows", sweepOrphans: async () => ((backendSawRecord = existsSync(join(runtime, "session.json"))), []) }],
+  });
+  assert.equal(backendSawRecord, true, "the backend sweeper still finds the session record");
+  assert.deepEqual(report.removedDirs, [generic]);
+  assert.ok(existsSync(runtime));
+  assert.deepEqual((await scanSessionDirs({ tmpRoot: tmp, procRoot: proc })).map((d) => d.path), [], "nothing left for the generic scan");
+  assert.equal((await auditClientOrphans({ tmpRoot: tmp, procRoot: proc })).some((l) => l.id === runtime), false, "reported by the backend's audit, not twice");
+  // Names that only look similar stay generic.
+  const lookalike = await ownerDir(tmp, "win-short", record({ pid: 300 }));
+  assert.deepEqual((await sweepClientOrphans({ tmpRoot: tmp, procRoot: proc, signal: new AbortController().signal, kill: () => {} })).removedDirs, [lookalike]);
+});
+
 test("scanSessionDirs tolerates a missing tmp root", async () => {
   assert.deepEqual(await scanSessionDirs({ tmpRoot: "/nonexistent/gui-test-root" }), []);
 });
@@ -237,14 +265,15 @@ test("exit cleanup runs bounded synchronous commands and removes dirs; never thr
   runExitCleanupSync(
     {
       commands: () => [
-        [process.execPath, "-e", `require("fs").writeFileSync(${JSON.stringify(marker)}, "ran")`],
+        // sh starts in milliseconds; a node child could need more than the bound on a loaded host.
+        ["/bin/sh", "-c", 'printf ran > "$1"', "sh", marker],
         [process.execPath, "-e", "setTimeout(() => {}, 60000)"],
         ["/nonexistent/binary"],
         [],
       ],
       dirs: () => [dir],
     },
-    300,
+    1_000,
   );
   assert.ok(Date.now() - started < 5000, "hanging command bounded");
   assert.equal(await readFile(marker, "utf8"), "ran");

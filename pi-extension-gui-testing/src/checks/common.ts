@@ -9,6 +9,7 @@ import { dirname, join } from "node:path";
 import { VERSION } from "@earendil-works/pi-coding-agent";
 import { globalConfigPath, type BackendId } from "../config/types.ts";
 import type { Check } from "./types.ts";
+import { DOCKER_LINUX_HOST_SUPPORT, type HostSupport } from "../backends/host-support.ts";
 
 /** Minimum supported Pi version. */
 export const MIN_PI_VERSION = "1.4.0";
@@ -57,23 +58,23 @@ export function piVersionCheck(version: string = VERSION, minimum: string = MIN_
   };
 }
 
-/** Host platforms on which each implemented backend runs in this build. */
-const SUPPORTED_HOSTS: Partial<Record<BackendId, { platforms: NodeJS.Platform[]; otherwise: string }>> = {
-  "docker-linux": {
-    platforms: ["linux"],
-    otherwise: "docker-linux runs on Linux hosts in this version; Docker Desktop hosts (macOS, Windows) are planned",
-  },
+/** Host platforms on which each backend of this build runs, unless its checks pass their own. */
+const SUPPORTED_HOSTS: Partial<Record<BackendId, HostSupport>> = {
+  "docker-linux": DOCKER_LINUX_HOST_SUPPORT,
 };
 
-/** `host.os`: the backend is supported on this host (spec §4 table, restricted to what this build implements). */
-export function hostOsCheck(backend: BackendId, platform: NodeJS.Platform = process.platform): Check {
+/**
+ * `host.os`: the backend is supported on this host (spec §4 table, restricted to what this build implements).
+ *
+ * @param support Host support of the backend; backends pass their registry entry's. Defaults to the built-in table.
+ */
+export function hostOsCheck(backend: BackendId, platform: NodeJS.Platform = process.platform, support: HostSupport | undefined = SUPPORTED_HOSTS[backend]): Check {
   return {
     id: "host.os",
     description: `${backend} is supported on this host`,
     kind: "observe",
     required: true,
     async run() {
-      const support = SUPPORTED_HOSTS[backend];
       if (!support) return { status: "fail", observed: `${platform}: backend "${backend}" is not available yet` };
       if (support.platforms.includes(platform)) return { status: "pass", observed: platform };
       return { status: "fail", observed: `${platform}: ${support.otherwise}` };
@@ -167,13 +168,15 @@ export interface CommonCheckOptions {
   piVersion?: string;
   platform?: NodeJS.Platform;
   configDir?: string;
+  /** Host support for `host.os`; default: the built-in table. */
+  hostSupport?: HostSupport;
 }
 
 /** The four common checks for `backend`, in spec order. Backends prepend them to their own list. */
 export function commonChecks(backend: BackendId, options: CommonCheckOptions): Check[] {
   return [
     piVersionCheck(options.piVersion),
-    hostOsCheck(backend, options.platform),
+    hostOsCheck(backend, options.platform, options.hostSupport ?? SUPPORTED_HOSTS[backend]),
     configWritableCheck(options.configDir),
     diskFreeCheck(options.minFreeBytes, options.diskPath),
   ];

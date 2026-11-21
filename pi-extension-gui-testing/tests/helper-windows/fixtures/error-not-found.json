@@ -1,0 +1,11 @@
+{
+  "method": "launch",
+  "response": {
+    "id": 3,
+    "ok": false,
+    "error": {
+      "code": "NOT_FOUND",
+      "message": "command not found: missing"
+    }
+  }
+}

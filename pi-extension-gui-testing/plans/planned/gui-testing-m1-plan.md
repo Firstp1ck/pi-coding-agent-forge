@@ -1,6 +1,6 @@
 # Implementation plan: GUI Testing for Pi — Milestone M1
 
-Status: planned · created 2026-10-23 · integration owner: main session (Claude Opus 5.5, T3 thread `9e87038e-81a8-40bd-aa24-502d4581cc1a`; took over from thread `5dbb22a5-ffe4-446e-8cf3-2f6cd8db20be` on 2026-10-24)
+Status: implemented, Docker acceptance pending · created 2026-10-23 · integration owner: main session (Claude Opus 5.5, T3 thread `9e87038e-81a8-40bd-aa24-502d4581cc1a`; took over from thread `5dbb22a5-ffe4-446e-8cf3-2f6cd8db20be` on 2026-10-24)
 
 - Spec (source of truth for behaviour): [gui-testing-spec.md](gui-testing-spec.md)
 - Final report (created at completion): `../../reports/gui-testing-m1.html`
@@ -173,6 +173,7 @@ All commands run from `pi-extension-gui-testing/` unless stated otherwise.
 | 2026-10-24 | W2 deviations accepted: image built from a staged tar context piped to `docker build -` instead of `--build-context` (no buildx on this host; still tooling-only); apps and `exec` run in their own process group under the helper; window refs `win:0x<id>`; `sha256` over raw RGB pixels; `wait` timeout → `matched: false`; `cancel` always `ok`; `stop` `ok: false` with process leftovers; `act` fallbacks and text formats; GTK 4 coordinates corrected by the window offset; AT-SPI cache cleared before each snapshot. `docs/protocol.md` and spec §4.1 updated accordingly | integration owner |
 | 2026-10-24 | W1 deviations accepted: exit code 1 only without UI; the single remediation prompt is a `select` (apply all / review each / cancel); setup's own 10-minute dialog timer instead of Pi's `timeout`; `--fix` applies optional remediations only when the remediation step runs for a required failure; process resource ids `<pid>:<startTime>`. Spec §5.2 wording updated. Contract fix: `SessionError` rewritten without a parameter property (strip-types load failure reported by W1) | integration owner |
 | 2026-10-24 | Implementation started; this thread is integration owner; implementation workers `claude-opus-5-5`; review quorum two `gpt-6.1-sol` runs (overrides the X24 Fable seat) | user |
+| 2026-10-24 | Implementation continues on a Sailfish OS aarch64 host without Docker; Docker-dependent gates deferred to a Docker host and reported as unverified; skill drafted by owner ahead of W3 | integration owner |
 | 2026-10-24 | Round 3 fixes Y1–Y19 approved and applied to spec, plan, README, TECHNICAL: decision `W1` renamed `D8`; no-UI reports on stderr (print) / custom message (JSON, RPC); rootless Docker refused in M1, support deferred to M1c | user |
 
 ## 12. Progress record
@@ -182,10 +183,10 @@ All commands run from `pi-extension-gui-testing/` unless stated otherwise.
 | Plan review | done 2026-10-24: round 2 fixes X1–X26 and round 3 fixes Y1–Y19 approved and applied | §13.1 |
 | 0 | done 2026-10-24 | Contracts written: `src/protocol.ts`, `src/backend.ts`, `src/checks/types.ts`, `src/config/types.ts`, `src/usage/types.ts`, `src/runner/types.ts`, `src/hardening.ts`, `src/labels.ts`, `src/owner.ts`, `docs/protocol.md`, contract test `tests/contracts/owner-label.test.mjs`; `package.json` (`pi.skills`, `files`, scripts, `engines` = root range, `@types/node ^24.12.4`); root `.gitignore` ignores `pi-extension-gui-testing/plans/handoffs/` (`git check-ignore` confirmed). `npm run check` → typecheck exit 0, 2/2 tests pass. **Spike (a)** with a stub extension (`/tmp/gui-spike/spike.ts`): `pi -p "/spike-report ok"` → exit 0, stdout empty, `process.stdout.write` text and stderr text both on stderr, custom message not printed; `"/spike-report fail"` with `process.exitCode = 1` → exit 1; `--mode json` → exit 0, 3 valid JSONL records, custom message present in `message_start`/`message_end`. **Spike (b)** in `--mode rpc`: `/spike-slow` (8 s) started at 716 ms, `/spike-quick` sent ~3 s later ran at 3789 ms, slow ended at 8716 ms → a second command runs while a command handler is active, so `/gui-cleanup` can abort setup (X14 resolved). Extra finding: print mode reads stdin when it is not a TTY and hangs if stdin stays open; tests and docs must run `pi -p` with stdin closed (`</dev/null`). |
 | 1 | done 2026-10-24, gate passed | **W1** (`claude-opus-5-5`, task `…gui-testing-m1-W1-r1`, handoff `plans/handoffs/m1-W1.md`): framing codec + protocol client, runner + fake, config + flags, check runner + common checks, setup flow/doctor/report emitter, client lifecycle (temp dir, owner.json, liveness, sweep, audits, exit cleanup), usage detector + session registry; wrote only W1 paths. Owner rerun: `npm run check` → typecheck exit 0, 105/105 tests. Spot checks: `emitReport` per mode, `ownerLiveness` rules. **W2** (`claude-opus-5-5`, task `…gui-testing-m1-W2-r1`, handoff `plans/handoffs/m1-W2.md`): Python helper, Dockerfile (`debian:trixie-20261020-slim` by digest), image `pi-gui-testing-base:dev` (`sha256:35eede09…`, ~803 MB, labels base/version/protocol, entrypoint `tini -- /opt/pi-gui-testing/helper`, no `CMD`), GTK 3 smoke app baked in, sample apps GTK 4 / PySide6 / Electron / Tk; wrote only W2 paths. W2 reports GTK 3/GTK 4/PySide6/Electron `coverage: full` with act-by-ref + screenshot, Tk `none` by coordinates, READY 0.3–1.1 s. Owner rerun: in-image `python3 -m unittest discover` → 33 OK; image contract one-liner → ok; `python3 tests/helper/host/test_entrypoint.py` (production `docker run` flags) → 15 OK in 17 s (smoke flow, stale refs/captureId, exec logs, cancel/ping bypass, EOF/heartbeat/SIGTERM/mismatch teardown); `docker ps -a --filter label=pi-gui-testing.session` → none left. Sample-app run (`test_apps.py`, 3 OK) taken from W2's evidence, not rerun. Contract fix by owner: `SessionError` without parameter property. |
-| 2 | not started (paused by user 2026-10-24 after Wave 1) | Next: launch W3 (`claude-opus-5-5`) with both handoffs. Carry-over for W3/e2e: build the image from TS via the staged tar stream (see `tests/helper/host/build_image.py` for the reference implementation and validated `docker run` flags); cover the actions W2 could not exercise (`type`, `key`, `scroll`, `double_click`, `right_click`, `set_value` — add a text field to a sample app or the e2e fixture), the end-to-end `HANDOFF` path, Electron without `--shm-size`, and a UID other than 1000; map `ProtocolClientError` to `SessionError`; Electron detection does not cover `npm start` launches, so sample `launch` entries call `electron` directly. |
-| 3 | not started | |
-| 4 | not started | |
-| 5 | not started | |
+| 2 | done 2026-10-24 on Sailfish host; Docker gate open | **W3** (`claude-opus-5-5`, effort high, task `…gui-testing-m1-W3-r1-sailfish`, handoff `plans/handoffs/m1-W3.md`): docker-linux backend (all §5.4 checks, staged-tar image build, hardened `docker run`, `isolation.inspect`, mount guards + socket scan, Docker audit/sweep), §4.7 file-set builder, 8 tools, 7 commands, smoke test, `index.ts`; no W0/W1/W2 file changed. **Host change:** this wave ran on a Sailfish OS 5.2 aarch64 device (Node 26.12.1, Python 3.11, Pi 1.3.0, no Docker, no sudo); W1/W2 handoffs did not carry over (gitignored). Owner rerun: `npm run check` → typecheck exit 0, 174/174; e2e (17 tests) skip with "docker CLI not found"; `process.test.mjs` (real processes, fake `docker`) 3/3; host helper tests 30 OK + 3 need PyGObject (in-image); `pi -p "/gui-doctor docker-linux" </dev/null` → exit 1, report on stderr; `--mode json` → valid JSONL with custom message; `npm pack --dry-run` lists extension, helper, Dockerfile, testapps, skill. Base digest `debian:trixie-20261020-slim@sha256:62bd…` verified to be a multi-arch OCI index incl. arm64v8 (registry query). **Not verified (needs rootful Docker 29+ host):** e2e smoke/apps/lifecycle, in-image helper tests, image contract, S1/S3/S4/S5/S6-live/S7/S13-e2e, live Pi 1.4.0 run, image block in a live model run. |
+| 3 | done 2026-10-24 (integration + W4) | Owner reviewed W3 diff and handoff; resolved W3 open item 1 (arm64 digest). W4: `README.md`, `TECHNICAL.md` (M1 vs planned backends, check table, no-UI behaviour, tool overview, storage, mount/copy security, limits, troubleshooting), `DEVELOPMENT.md` (architecture, layout, invariants, implementation notes, test matrix, pre-publish steps, known gaps), `skills/gui-testing/SKILL.md`, root catalog line. `git diff --check` clean; fences balanced; relative links resolve. Deviation: `docs/protocol.md` stays a separate contributor doc linked from `DEVELOPMENT.md` because helper and client sources cite it (plan §5 said move). |
+| 4 | done 2026-10-24 | Six review rounds by two `openai-codex/gpt-6.1-sol` seats (xhigh, read-only); fixes Z1–Z18, Q1–Q12, P1–P8 (`claude-opus-5-5` workers + owner), R1–R4, S1–S2, T1–T2 (owner, `claude-opus-5-5`). Final round: seat A **ready**, seat B **ready after fixes** (doc phrase, applied). Every finding dispositioned and revalidated; see §13.2 |
+| 5 | done 2026-10-24 | Report `reports/gui-testing-m1.html`. **M1 code complete; Docker-dependent acceptance (S1, S3, S4, S5, S6 live, S7, S13 e2e, live Pi 1.4.0 run, image block in a live model run) still open** until the e2e suites run on a rootful Docker 29+ Linux host; see DEVELOPMENT.md "Before publishing" |
 
 ## 13. Reviews
 
@@ -266,7 +267,109 @@ Rejected: none. Carried as unverifiable to Waves 0–2: Debian package availabil
 
 ### 13.2 Post-integration review quorum (Wave 4)
 
-Not started.
+| Run | Provider / model | Task id | Status |
+|---|---|---|---|
+| R-post-A1 | Pi / `openai-codex/gpt-6.1-sol` (xhigh), seat A security/backend | `…gui-testing-m1-review-sol-A-r1` | completed 2026-10-24: **not ready**, 6 findings |
+| R-post-B1 | Pi / `openai-codex/gpt-6.1-sol` (xhigh), seat B tools/lifecycle/docs | `…gui-testing-m1-review-sol-B-r1` | completed 2026-10-24: **not ready**, 14 findings |
+
+Owner verified each finding against the code (A-F1 `tools.ts` snapshot path built from helper-supplied `snapshotId`; A-F2 `git ls-files` without `core.fsmonitor=false`; A-F3/B-F1 `lstat` on a path with symlinked ancestors; A-F5/B-F2 `closeSession` deletes the entry before `stop()` succeeds; B-F10 `renderReport` `else if`). All accepted. Fixes Z1–Z18 go to one `claude-opus-5-5` worker (W3 paths plus the listed W1 files, approved by owner); Z18 by owner.
+
+| Fix | Findings | Sev | Disposition | Fix summary |
+|---|---|---|---|---|
+| Z1 | A-F1 | critical | accepted | Treat helper responses as untrusted: client-generated artifact names, containment check for every host write, method-specific response validation |
+| Z2 | A-F2 | high | accepted | `git -c core.fsmonitor=false` (and other exec-capable config neutralised) for enumeration |
+| Z3 | A-F3, B-F1 | high | accepted | Reject paths with symlinked ancestors; containment + type re-check at copy time (`O_NOFOLLOW`-style) |
+| Z4 | A-F4 | high | accepted | Mount the realpath; after start, compare `/workspace` dev/ino inside the container with the scanned host dir; mismatch → stop (fail closed) |
+| Z5 | A-F5, B-F2 | medium/high | accepted | Keep failed sessions and exit cleanup until teardown succeeds; retryable stop; `/gui-cleanup` retries own ended sessions |
+| Z6 | A-F6 | low | accepted | Keep a directory link only when its target directory is in the synced set |
+| Z7 | B-F3 | high | accepted | Track and await pending starts/setup in shutdown; no late registration after abort |
+| Z8 | B-F4 | medium | accepted | Docker sweep whenever a `docker` CLI is on PATH, independent of verification |
+| Z9 | B-F5 | medium | accepted | `gui_export` honours signal and a timeout |
+| Z10 | B-F6 | medium | accepted | Idle activity recorded at admission; in-flight calls block idle reaping |
+| Z11 | B-F7 | medium | accepted | Drift check covers every recorded version; documented policy for existing sessions |
+| Z12 | B-F8 | medium | accepted | Count failed launches for launch-storm detection |
+| Z13 | B-F9 | medium | accepted | `.gitignore` offer for `.pi/gui.local.json` per spec §7 (no-UI: report only) |
+| Z14 | B-F10 | medium | accepted | Report shows remaining manual steps after applied fixes (W1 `src/setup/report.ts`) |
+| Z15 | B-F11 | medium | accepted | e2e cancel test uses `runtime.ownerLabel()` |
+| Z16 | B-F12 | medium | accepted | e2e real-Pi exit test leaves a live session and asserts cleanup |
+| Z17 | B-F13 | medium | accepted | Surface config warnings in command reports and tool results |
+| Z18 | B-F14 | low | accepted (owner) | `DEVELOPMENT.md` links unpackaged docs by repository URL |
+
+Fix run: `claude-opus-5-5` (effort high), task `…gui-testing-m1-fixes-Z-r1`, handoff `plans/handoffs/m1-Z.md`. Owner rerun: `npm run check` → 207/207; e2e 18 skipped (no Docker). Z18 applied by owner; TECHNICAL/DEVELOPMENT updated for the 12 user-visible changes. Residual: Z3 narrows but does not close the check-to-copy race; Z4 exact mount-source equality and dev/ino on btrfs/overlay unverified on real Docker.
+
+| Run | Provider / model | Task id | Status |
+|---|---|---|---|
+| R-post-A2 | Pi / `openai-codex/gpt-6.1-sol` (xhigh), seat A round 2 | `…gui-testing-m1-review-sol-A-r2` | completed 2026-10-24: **not ready**; A-F1/F2/F6 fixed, A-F3/F4/F5 partial; 5 new findings |
+| R-post-B2 | Pi / `openai-codex/gpt-6.1-sol` (xhigh), seat B round 2 | `…gui-testing-m1-review-sol-B-r2` | completed 2026-10-24: **not ready**; 8 of 14 fixed, 6 partial; 10 new findings |
+
+Round-2 findings, owner-verified (`.gitignore:28` `pi-session-*` matches the fixture; `ensure_venv` runs `python -m venv` without `-I` from the helper's `/workspace` cwd; `addLocalConfigToGitignore` uses `readFile`/`appendFile` without no-follow). All accepted. Fixes Q1–Q12 by one `claude-opus-5-5` worker; the helper change for Q1 (W2 path) is approved by the owner; Q12 by owner.
+
+| Fix | Findings | Sev | Fix summary |
+|---|---|---|---|
+| Q1 | A2-F1 | high | Venv creation runs `python -I` with `cwd=/` and a sanitised env; identity check runs no workspace code (helper + client) |
+| Q2 | A2-F2, B2-F2 | high | Failed starts keep a retryable record (container, owner.json, exit cleanup) until cleanup is confirmed |
+| Q3 | A2-F3, B2-F1 | high/medium | `.gitignore` write: no-follow descriptor, regular file only, refuse symlinks/special files |
+| Q4 | A2-F4 | medium | Accessibility bounds validated separately from screenshot limits |
+| Q5 | A2-F5 | medium | Log buffer bounds event count and size with overhead; bounded persistence queue and artifact size |
+| Q6 | B2-F3 | high (plausible) | Setup tracked before the first dialog; stale continuations after shutdown rejected |
+| Q7 | B2-F4, B2-F5 | medium | `.gitignore` confirm uses the setup dialog adapter, abort check before write; `--no-fix` is report-only |
+| Q8 | B2-F6 | medium | Export flush/copy abortable with an overall deadline |
+| Q9 | B2-F7 | medium | Rename the e2e Pi fixture so the repo `.gitignore` does not hide it |
+| Q10 | B2-F8 | medium | e2e Docker queries fail on non-zero status |
+| Q11 | B2-F9 | low | Config warnings also on failed `gui_launch` |
+| Q12 | B2-F10 | low | Doc inconsistencies (owner) |
+
+Fix run: `claude-opus-5-5` (effort high), task `…gui-testing-m1-fixes-Q-r1`, handoff `plans/handoffs/m1-Q.md`. Owner rerun: `npm run check` → 222/222; host helper tests pass except the 3 known `gi` errors (new `test_venv.py` 3/3); fixtures no longer ignored. Q12 and the Q doc changes applied by owner. Package unpublished on npm (E404), so the helper change needs no version bump; DEVELOPMENT now requires a version bump for any future helper change. Q1 accepted as mitigated: the identity check still triggers venv creation, which now runs only package code.
+
+| Run | Provider / model | Task id | Status |
+|---|---|---|---|
+| R-post-A3 | Pi / `openai-codex/gpt-6.1-sol` (xhigh), seat A round 3 | `…gui-testing-m1-review-sol-A-r3` | completed 2026-10-24: **not ready**; A2-F1–F4 fixed, A2-F5 partial; 1 blocking + 3 non-blocking |
+| R-post-B3 | Pi / `openai-codex/gpt-6.1-sol` (xhigh), seat B round 3 | `…gui-testing-m1-review-sol-B-r3` | completed 2026-10-24: **not ready**; B2 findings fixed except B2-F10 partial; 4 blocking + 2 non-blocking |
+
+Round-3 findings, all accepted. Owner note: `npm test` passes 3/3 runs on Node 26.12.1 here, but seat B reproduced 3 cancelled tests on Node 22.23.4 (in `engines`), so P4 is accepted as blocking.
+
+| Fix | Findings | Blocking | Fix summary |
+|---|---|---|---|
+| P1 | A3-F1 | yes | Canonicalise log events (known fields only, owned bounded copies); byte-bound `setupTail`; adversarial framing→buffer tests |
+| P2 | B3-F1 | yes | Runtime generation captured before the first await in commands; retired runtime rejects late continuations |
+| P3 | B3-F2 | yes | `/gui-cleanup --all`/backend cleanup independent of project-config parsing; fallback for default cleanup |
+| P4 | A3-F4, B3-F4 | yes | Export tests and deadline timers kept referenced while pending |
+| P5 | B3-F3 | yes | Export destination ancestors resolved (realpath) before the containment check |
+| P6 | A3-F2 | no | Pending-start exit cleanup uses the endpoint-bound removal argv |
+| P7 | A3-F3, B3-F5 | no | Drop marker drained on flush; `gui_logs` stops claiming the full log |
+| P8 | B3-F6 | no | Doc units and error strings (owner) |
+
+Fix run: `claude-opus-5-5` (effort high), task `…gui-testing-m1-fixes-P-r1`, handoff `plans/handoffs/m1-P.md`. Owner rerun: `npm run check` → 232/232 ×2 on Node 26.12.1; unit suite on Node 22.23.4 (`~/.local/share/pi-node/node-v22.23.4-linux-arm64`) → 232/232, 0 cancelled, ×3. P8 and P doc changes applied by owner.
+
+| Run | Provider / model | Task id | Status |
+|---|---|---|---|
+| R-post-A4 | Pi / `openai-codex/gpt-6.1-sol` (xhigh), seat A round 4 | `…gui-testing-m1-review-sol-A-r4` | completed 2026-10-24: **not ready**; A3-F1–F4 fixed; 1 blocking (A4-F1) |
+| R-post-B4 | Pi / `openai-codex/gpt-6.1-sol` (xhigh), seat B round 4 | `…gui-testing-m1-review-sol-B-r4` | completed 2026-10-24: **not ready**; B3 fixed except B3-F3 partial; 1 blocking (B4-F1) + 2 non-blocking |
+
+Round-4 fixes, all accepted and applied by the owner directly (the owner session is itself `claude-opus-5-5`; changes are small and local):
+
+| Fix | Findings | Blocking | Fix summary |
+|---|---|---|---|
+| R1 | A4-F1 | yes | `DiagnosticBuffer` stores `ownedSlice` copies; regression test fails on Node 22.23.4 before (200.2 MiB retained) and passes after |
+| R2 | B4-F1 | yes | Component-aware `isWithin`/`isRelativeInside` (`src/paths.ts`) for export and file-set link checks; `..kept` / `..via-link` cases added to the P5 test; `tests/unit/sync/paths.test.mjs` |
+| R3 | B4-F2 | no | P4 subprocess test removes its temp dir from the parent |
+| R4 | B4-F3 | no | `package.json` `files` excludes `helpers/**/__pycache__` and `*.pyc` (`npm pack --dry-run`: 110 files, 0 bytecode, no tests/plans) |
+
+Owner validation: `npm run check` → 234/234 on Node 26.12.1; unit suite on Node 22.23.4 → 234/234, 0 cancelled; e2e 18 skipped; no leaked `gui-export-ref-*` dirs; `git diff --check` clean.
+
+| Run | Provider / model | Task id | Status |
+|---|---|---|---|
+| R-post-A5 | Pi / `openai-codex/gpt-6.1-sol` (xhigh), seat A round 5 | `…gui-testing-m1-review-sol-A-r5` | completed 2026-10-24: **not ready**; A4-F1 fixed (0.21 MiB on Node 22); 2 blocking (A5-F1 response text slices, A5-F2 error slices) |
+| R-post-B5 | Pi / `openai-codex/gpt-6.1-sol` (xhigh), seat B round 5 | `…gui-testing-m1-review-sol-B-r5` | completed 2026-10-24: **ready after fixes**; B4-F1–F3 fixed; 1 non-blocking doc item (B5-F1 RPC has UI) |
+
+Round-5 fixes (owner): **S1** (A5-F1, A5-F2) owned copies in `src/backends/response.ts` text validator, `src/backends/docker/session.ts` `#toSessionError` and docker stderr tail, `src/tools/format.ts` `clip()`; regression test in `tests/unit/backends/session.test.mjs` fails before (180.2 MiB on Node 22) and passes after. **S2** (B5-F1) TECHNICAL distinguishes print/JSON (no prompts, exit code 1) from RPC (client answers, exit code unchanged). Validation: 235/235 on Node 26.12.1 and Node 22.23.4, 0 cancelled.
+
+| Run | Provider / model | Task id | Status |
+|---|---|---|---|
+| R-post-A6 | Pi / `openai-codex/gpt-6.1-sol` (xhigh), seat A round 6 | `…gui-testing-m1-review-sol-A-r6` | completed 2026-10-24: **ready**; A5-F1/F2 fixed (< 7.4 MiB retained on Node 22 and 26); 1 non-blocking (A6-F1 RegExp statics keep one rejected base64 field, ~16 MiB, bounded) |
+| R-post-B6 | Pi / `openai-codex/gpt-6.1-sol` (xhigh), seat B round 6 | `…gui-testing-m1-review-sol-B-r6` | completed 2026-10-24: **ready after fixes**; B5-F1 fixed; 1 non-blocking doc phrase (B6-F1 `.gitignore` prompt also in RPC) |
+
+Quorum result: both seats have no blocking findings. Owner applied both non-blocking items: **T1** (A6-F1) base64 check is a char-code loop instead of a RegExp, with `tests/unit/backends/response.test.mjs`; **T2** (B6-F1) TECHNICAL says "in print or JSON mode". Final owner validation: `npm run check` → 236/236 (Node 26.12.1); unit suite on Node 22.23.4 → 236/236, 0 cancelled; e2e 18 skipped (no Docker); host helper tests pass except the 3 PyGObject tests; `pi -p "/gui-doctor docker-linux" </dev/null` → exit 1, stdout empty, report on stderr; `--mode json` → exit 1, 3 valid JSONL records with the `gui-testing` custom message; `npm pack --dry-run` → 110 files incl. skill, no bytecode/tests/plans; Markdown `git diff --check` clean.
 
 ## 14. Worker handoff artifacts
 

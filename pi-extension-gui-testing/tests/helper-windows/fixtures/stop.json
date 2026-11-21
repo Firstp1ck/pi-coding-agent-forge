@@ -1,0 +1,11 @@
+{
+  "method": "stop",
+  "response": {
+    "id": 39,
+    "ok": true,
+    "result": {
+      "ok": true,
+      "leftovers": []
+    }
+  }
+}

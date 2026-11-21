@@ -8,20 +8,27 @@ written to ``/etc``; ``/etc/passwd`` and ``/etc/group`` are mounted by the clien
 Teardown reverses that: app and setup process groups, openbox, the AT-SPI
 launcher, then (inside a container only) every remaining process except PID 1,
 then the session bus and Xvfb.
+
+With ``PI_GUI_HELPER_MODE=host`` the same session runs on a host instead
+(``local-linux``, ``remote-linux``); see ``hostmode`` for that contract. Host
+mode never sweeps all processes: it kills only what carries its session tag.
 """
 
 import os
+import secrets
 import select
+import shutil
 import subprocess
 import sys
 import tempfile
 import threading
 import time
 
-from . import procs
+from . import hostmode, procs
 from .dispatch import ProtocolError, diag
 
 SCREEN = "1280x800x24"
+DEPS_DIR = "/deps"
 VENV_DIR = "/deps/venv"
 DEFAULT_HOME = "/home/app"
 _STEP_TIMEOUT_S = 6.0
@@ -39,6 +46,9 @@ _ATSPI_LAUNCHER_CANDIDATES = (
 
 class StartupError(Exception):
     pass
+
+
+_XVFB_ATTEMPTS = 5
 
 
 def _read_fd_line(fd, timeout_s, what):
@@ -78,6 +88,23 @@ def build_env(base, request_env, session_env):
     return env
 
 
+def venv_argv(python, venv_dir):
+    """Command that creates the app venv without importing anything from the cwd."""
+    return [python, "-I", "-m", "venv", "--system-site-packages", venv_dir]
+
+
+_VENV_ENV_KEYS = ("LANG", "LC_ALL", "LC_CTYPE", "TZ")
+
+
+def venv_env(base):
+    """Minimal environment for venv creation: no token, no ``PYTHON*``, fixed PATH."""
+    env = {"PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", "HOME": "/nonexistent"}
+    for key in _VENV_ENV_KEYS:
+        if key in base:
+            env[key] = base[key]
+    return env
+
+
 def in_container():
     """True when the helper is PID 1's child in a container PID namespace.
 
@@ -102,6 +129,40 @@ class Session:
         self._torn_down = False
         self._venv_ready = False
         self.timings = {}
+        # "container", "host", or "invalid" (start() refuses it; teardown never sweeps then).
+        self.mode = hostmode.mode_name(self.environ)
+        # Host mode (hostmode.py); all None/True in container mode.
+        self.host = None
+        self.tag = None
+        self.home = None
+        self.tmp_dir = None
+        self.xauthority = None
+        self.display_lock = None
+        self.a11y_available = True
+        self._created = []
+
+    # ----- dependency cache (deps.py) ---------------------------------------
+
+    def deps_root(self):
+        """The deps dir the cache packs and fills: ``/deps`` in containers, ``PI_GUI_DEPS_DIR`` in host mode (else None)."""
+        if self.mode == "host":
+            return self.host.deps_dir if self.host is not None else None
+        if self.mode == "container" and os.path.isdir(DEPS_DIR):
+            return DEPS_DIR
+        return None
+
+    def transfer_tmp_dir(self):
+        """Where unlinked transfer files live: the private ``tmp/`` in host mode, else the default temp dir."""
+        return self.tmp_dir if self.mode == "host" else None
+
+    def deps_unpacked(self):
+        """The deps dir was replaced: recreate the venv's interpreter links before the next exec/launch."""
+        self._venv_ready = False
+
+    @property
+    def default_cwd(self):
+        """Default ``cwd`` of ``launch``/``exec``: the host-mode workspace or ``/workspace``."""
+        return self.host.workspace if self.host is not None else "/workspace"
 
     # ----- startup -------------------------------------------------------
 
@@ -132,6 +193,12 @@ class Session:
 
     def start(self):
         """Bring up Xvfb, the bus, AT-SPI, and openbox. Raises StartupError."""
+        try:
+            hostmode.helper_mode(self.environ)
+        except hostmode.HostModeError as exc:
+            raise StartupError(str(exc)) from None
+        if self.mode == "host":
+            return self._start_host()
         t0 = time.monotonic()
         self.runtime_dir = self._runtime_dir()
         home = self.environ.get("HOME") or DEFAULT_HOME
@@ -185,6 +252,202 @@ class Session:
         self._wait_for_wm(infra_env)
         self.timings["openbox"] = time.monotonic() - t0
 
+    # ----- host mode -----------------------------------------------------
+
+    def prepare_host(self):
+        """Validate the host-mode contract and create the private dirs (no process starts)."""
+        try:
+            self.host = hostmode.HostConfig.from_environ(self.environ)
+        except hostmode.HostModeError as exc:
+            raise StartupError(str(exc)) from None
+        self.tag = secrets.token_hex(8)
+        root = self.host.runtime_dir
+        self.home = self._private_dir(os.path.join(root, "home"))
+        self.tmp_dir = self._private_dir(os.path.join(root, "tmp"))
+        self.runtime_dir = self._private_dir(os.path.join(root, "xdg"))
+        self.xauthority = os.path.join(root, "Xauthority")
+        for sub in (".config", ".cache", ".local/share", ".local/state"):
+            os.makedirs(os.path.join(self.home, sub), mode=0o700, exist_ok=True)
+
+    def _private_dir(self, path):
+        try:
+            os.mkdir(path, 0o700)
+            self._created.append(path)
+        except FileExistsError:
+            pass
+        try:
+            return hostmode.check_private_dir(path, "runtime subdirectory")
+        except hostmode.HostModeError as exc:
+            raise StartupError(str(exc)) from None
+
+    def host_base_env(self):
+        """Environment of the host-mode infrastructure (Xvfb, buses, window manager)."""
+        base = hostmode.strip_env(self.environ, _PRIVATE_ENV_PREFIX)
+        base.setdefault("PATH", hostmode.DEFAULT_PATH)
+        base.update({
+            "HOME": self.home,
+            "TMPDIR": self.tmp_dir,
+            "XDG_RUNTIME_DIR": self.runtime_dir,
+            hostmode.TAG_ENV: self.tag,
+        })
+        return base
+
+    def _start_xvfb_host(self, base):
+        if shutil.which("Xvfb", path=base.get("PATH")) is None:
+            raise StartupError("Xvfb not found on PATH")
+        tried = set()
+        last_error = None
+        record = hostmode.new_record(self.tag, self.host.runtime_dir, self.host.workspace)
+        for _ in range(_XVFB_ATTEMPTS):
+            try:
+                lock = hostmode.DisplayLock.claim(self.host.lock_dir, record, skip=tried)
+            except hostmode.HostModeError as exc:
+                raise StartupError(str(exc)) from None
+            self.display_lock = lock
+            hostmode.write_xauthority(self.xauthority, lock.number, os.urandom(16))
+            read_fd, write_fd = os.pipe()
+            try:
+                self._spawn("xvfb", ["Xvfb", ":%d" % lock.number, "-displayfd", str(write_fd),
+                                     "-auth", self.xauthority, "-screen", "0", SCREEN,
+                                     "-nolisten", "tcp", "-noreset", "+extension", "XTEST"], base, (write_fd,))
+                os.close(write_fd)
+                write_fd = None
+                lock.update(xvfbPid=self._infra["xvfb"].pid,
+                            infra=dict(lock.record["infra"], xvfb=hostmode.process_id(self._infra["xvfb"].pid)))
+                number = _read_fd_line(read_fd, _STEP_TIMEOUT_S, "Xvfb")
+            except StartupError as exc:
+                last_error = exc
+                self._stop_infra("xvfb")
+                self._remove_x_files()
+                lock.release()
+                self.display_lock = None
+                tried.add(lock.number)
+                continue
+            finally:
+                if write_fd is not None:
+                    os.close(write_fd)
+                os.close(read_fd)
+            if number != str(lock.number):
+                self._stop_infra("xvfb")
+                lock.release()
+                raise StartupError("Xvfb reported display %r instead of :%d" % (number, lock.number))
+            return ":%d" % lock.number
+        raise StartupError("Xvfb did not start on a free display after %d attempts: %s" % (_XVFB_ATTEMPTS, last_error))
+
+    def _record_infra(self, name):
+        if self.display_lock is not None and name in self._infra:
+            infra = dict(self.display_lock.record["infra"])
+            infra[name] = hostmode.process_id(self._infra[name].pid)
+            self.display_lock.update(infra=infra)
+
+    def _start_host(self):
+        t0 = time.monotonic()
+        self.prepare_host()
+        base = self.host_base_env()
+        self.display = self._start_xvfb_host(base)
+        self.timings["xvfb"] = time.monotonic() - t0
+
+        socket_path = os.path.join(self.runtime_dir, "pi-gui-bus")
+        read_fd, write_fd = os.pipe()
+        try:
+            try:
+                self._spawn("dbus", ["dbus-daemon", "--session", "--nofork", "--nopidfile",
+                                     "--address=unix:path=%s" % socket_path,
+                                     "--print-address=%d" % write_fd], base, (write_fd,))
+            except FileNotFoundError:
+                raise StartupError("dbus-daemon not found on PATH") from None
+            finally:
+                os.close(write_fd)
+            self._record_infra("dbus")
+            self.bus_address = _read_fd_line(read_fd, _STEP_TIMEOUT_S, "dbus-daemon")
+        finally:
+            os.close(read_fd)
+        self.timings["dbus"] = time.monotonic() - t0
+
+        # The helper's own process (libatspi, X tools) uses the private session only.
+        for key in hostmode.DESKTOP_ENV + hostmode.REMOVED_ENV:
+            os.environ.pop(key, None)
+        os.environ.update({"DISPLAY": self.display, "XAUTHORITY": self.xauthority,
+                           "DBUS_SESSION_BUS_ADDRESS": self.bus_address, "XDG_RUNTIME_DIR": self.runtime_dir,
+                           "HOME": self.home, "TMPDIR": self.tmp_dir})
+        infra_env = dict(base, DISPLAY=self.display, XAUTHORITY=self.xauthority, DBUS_SESSION_BUS_ADDRESS=self.bus_address)
+
+        launcher = next((p for p in _ATSPI_LAUNCHER_CANDIDATES if os.path.exists(p)), None)
+        if launcher is None:
+            self.a11y_available = False
+            diag("at-spi-bus-launcher not found; snapshots report coverage none")
+        else:
+            self._spawn("atspi", [launcher, "--launch-immediately"], infra_env)
+            self._record_infra("atspi")
+            try:
+                self._enable_a11y()
+            except Exception as exc:  # noqa: BLE001 - AT-SPI is optional on a host: degrade, do not fail
+                self.a11y_available = False
+                self._stop_infra("atspi")
+                diag("accessibility disabled: %s" % exc)
+        self.timings["atspi"] = time.monotonic() - t0
+
+        openbox = shutil.which("openbox", path=base.get("PATH"))
+        if openbox is None:
+            diag("openbox not found; running without a window manager")
+        else:
+            self._spawn("openbox", [openbox, "--sm-disable"], infra_env)
+            self._record_infra("openbox")
+            try:
+                self._wait_for_wm(infra_env)
+            except (StartupError, OSError, subprocess.SubprocessError) as exc:
+                self._stop_infra("openbox")
+                diag("running without a window manager: %s" % exc)
+        self.timings["openbox"] = time.monotonic() - t0
+
+    def _remove_x_files(self):
+        proc = self._infra.get("xvfb")
+        if self.display_lock is None or proc is None:
+            return []
+        start = (self.display_lock.record.get("infra") or {}).get("xvfb", "")
+        start = start.split(":", 1)[1] if ":" in start else None
+        return hostmode.remove_x_files(self.display_lock.number, proc.pid, start)
+
+    def _teardown_host(self, children):
+        for child in children:
+            child.kill_group(grace=2.0)
+        for name in ("openbox", "atspi"):
+            self._stop_infra(name)
+        keep = {pid for pid in (self._pid("dbus"), self._pid("xvfb")) if pid is not None}
+        if self.tag:
+            hostmode.kill_tagged(self.tag, exclude=keep)
+        for name in ("dbus", "xvfb"):
+            self._stop_infra(name)
+        if self.tag:
+            hostmode.kill_tagged(self.tag)
+        leftovers = self._remove_x_files()
+        if self.display_lock is not None and not any(p.poll() is None for p in self._infra.values()):
+            self.display_lock.release()
+        for path in reversed(self._created):
+            shutil.rmtree(path, ignore_errors=True)
+        if self.xauthority:
+            try:
+                os.unlink(self.xauthority)
+            except FileNotFoundError:
+                pass
+            except OSError:
+                pass
+        return leftovers
+
+    def _host_leftovers(self):
+        found = []
+        for name, proc in self._infra.items():
+            if proc.poll() is None:
+                found.append({"kind": "process", "id": str(proc.pid), "detail": name})
+        known = {int(item["id"]) for item in found}
+        if self.tag:
+            for pid in hostmode.tagged_processes(self.tag, exclude={os.getpid()}):
+                if pid not in known:
+                    found.append({"kind": "process", "id": str(pid), "detail": "tagged %s" % self.tag})
+        if self.display_lock is not None and not self.display_lock.released:
+            found.append({"kind": "display-lock", "id": self.display_lock.path})
+        return found
+
     def _enable_a11y(self):
         from gi.repository import Gio, GLib
 
@@ -229,6 +492,8 @@ class Session:
     # ----- environment ---------------------------------------------------
 
     def session_env(self):
+        if self.host is not None:
+            return self._host_session_env()
         return {
             "VIRTUAL_ENV": VENV_DIR,
             "npm_config_prefix": "/deps/node",
@@ -245,19 +510,54 @@ class Session:
             "QT_ACCESSIBILITY": "1",
         }
 
+    def _host_session_env(self):
+        home = self.home
+        return {
+            "HOME": home,
+            "XDG_CONFIG_HOME": os.path.join(home, ".config"),
+            "XDG_CACHE_HOME": os.path.join(home, ".cache"),
+            "XDG_DATA_HOME": os.path.join(home, ".local", "share"),
+            "XDG_STATE_HOME": os.path.join(home, ".local", "state"),
+            "TMPDIR": self.tmp_dir,
+            "XDG_RUNTIME_DIR": self.runtime_dir,
+            "XDG_SESSION_TYPE": "x11",
+            "DISPLAY": self.display,
+            "XAUTHORITY": self.xauthority,
+            "DBUS_SESSION_BUS_ADDRESS": self.bus_address,
+            "GDK_BACKEND": "x11",
+            "QT_QPA_PLATFORM": "xcb",
+            "SDL_VIDEODRIVER": "x11",
+            "ELECTRON_OZONE_PLATFORM_HINT": "x11",
+            "QT_LINUX_ACCESSIBILITY_ALWAYS_ON": "1",
+            "QT_ACCESSIBILITY": "1",
+            hostmode.TAG_ENV: self.tag,
+        }
+
     def child_env(self, request_env):
+        if self.host is not None:
+            return hostmode.build_host_env(self.environ, request_env, self.session_env(), _PRIVATE_ENV_PREFIX,
+                                           deps_dir=self.host.deps_dir)
         return build_env(self.environ, request_env, self.session_env())
 
     def tool_env(self):
         """Environment for the helper's own X tools (xdotool, xprop, import)."""
-        return build_env(self.environ, {}, self.session_env())
+        return self.child_env({})
 
     def ensure_venv(self):
-        """Create ``/deps/venv`` with ``--system-site-packages`` once (before the first exec)."""
+        """Create ``/deps/venv`` with ``--system-site-packages`` once (before the first exec).
+
+        Runs before any project code, often with ``/workspace`` holding
+        untrusted files, so the interpreter is isolated (``-I``: no cwd or
+        script dir on ``sys.path``, no ``PYTHON*`` variables, no user site),
+        starts in ``/``, and gets a minimal environment without the session
+        token.
+        """
+        if self.host is not None:
+            return  # host mode never creates /deps/venv: apps use the project's own environment
         if self._venv_ready or os.path.exists(os.path.join(VENV_DIR, "bin", "python")):
             self._venv_ready = True
             return
-        proc = subprocess.run([sys.executable, "-m", "venv", "--system-site-packages", VENV_DIR],
+        proc = subprocess.run(venv_argv(sys.executable, VENV_DIR), cwd="/", env=venv_env(self.environ),
                               stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                               timeout=120, check=False)
         if proc.returncode != 0:
@@ -289,6 +589,10 @@ class Session:
             self._torn_down = True
             children = list(self._children)
             self._children = []
+        if self.mode != "container":
+            if not already:
+                self._teardown_host(children)
+            return self._host_leftovers()
         if not already:
             for child in children:
                 child.kill_group(grace=2.0)
@@ -335,7 +639,7 @@ class Session:
             if proc.poll() is None:
                 found.append({"kind": "process", "id": str(proc.pid), "detail": name})
         known = {int(item["id"]) for item in found}
-        if in_container():
+        if self.mode == "container" and in_container():
             for pid, cmdline in procs.other_processes():
                 if pid not in known:
                     found.append({"kind": "process", "id": str(pid), "detail": cmdline[:200]})

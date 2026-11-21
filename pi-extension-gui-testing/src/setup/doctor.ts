@@ -24,6 +24,12 @@ export interface DoctorInput {
   unverify: () => Promise<void>;
   /** Inputs recorded at setup, carried over unchanged. */
   inputs?: Record<string, string>;
+  /**
+   * `false`: a probe of something other than the configured setup (e.g.
+   * `/gui-doctor --host` naming another host): neither `persist` nor
+   * `unverify` runs and the message says the verified state is unchanged. Default `true`.
+   */
+  recordState?: boolean;
   onStatus?: (text: string | undefined) => void;
   now?: () => Date;
 }
@@ -75,7 +81,13 @@ export async function runDoctor(input: DoctorInput): Promise<SetupReport> {
     }
     if (signal.aborted) throw signal.reason;
 
-    if (report.smoke?.ok) {
+    const record = input.recordState ?? true;
+    if (report.smoke?.ok && !record) {
+      report.status = "verified";
+      report.message = `${input.backend} is healthy${report.smoke.arch ? ` (${report.smoke.arch})` : ""}; verified state unchanged`;
+    } else if (!record) {
+      report.message = report.smoke ? `smoke test failed: ${report.smoke.observed}; verified state unchanged` : "required checks failed; verified state unchanged";
+    } else if (report.smoke?.ok) {
       await input.persist({
         verifiedAt: (input.now?.() ?? new Date()).toISOString(),
         toolVersions: collectToolVersions(report.results, report.smoke.facts),

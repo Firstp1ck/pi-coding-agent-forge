@@ -1,0 +1,10 @@
+{
+  "name": "s1-electron-sample",
+  "private": true,
+  "version": "0.0.0",
+  "description": "S1 sample app (Electron): a label over a large Press me button.",
+  "main": "main.js",
+  "devDependencies": {
+    "electron": "45.0.0"
+  }
+}

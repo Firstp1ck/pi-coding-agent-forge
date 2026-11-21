@@ -20,6 +20,7 @@ import {
   type Result,
 } from "../protocol.ts";
 import { classifyLine, DiagnosticBuffer, encodeRequest, FramingError, LineDecoder } from "./codec.ts";
+import { canonicalLogEvent } from "./log-event.ts";
 
 /**
  * Client-side failure codes: every protocol {@link ErrorCode} plus `CLOSED`
@@ -351,7 +352,8 @@ export class ProtocolClient {
 
   #onMessage(message: HelperMessage): void {
     if ("event" in message) {
-      this.#opts.onLog?.(message);
+      // Known fields only, with owned bounded text: nothing of the parsed line outlives this call.
+      this.#opts.onLog?.(canonicalLogEvent(message));
       return;
     }
     const response = message as Response;

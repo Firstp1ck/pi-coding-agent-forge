@@ -2,6 +2,7 @@
  * Check framework types (spec §5.3). Checks never prompt; remediation runs only
  * after one confirmation or `--fix` (R9).
  */
+import type { TargetOs } from "../config/types.ts";
 import type { CommandRunner, DockerEndpoint } from "../runner/types.ts";
 
 export type CheckStatus = "pass" | "warn" | "fail" | "blocked";
@@ -55,6 +56,8 @@ export interface CheckContext {
   dockerEndpoint?: DockerEndpoint;
   /** Absolute project root. */
   projectRoot: string;
+  /** Target OSes requested by `/gui-setup --targets`; checks fall back to the project's `targets` when unset. */
+  targets?: readonly TargetOs[];
 }
 
 export interface Check {
