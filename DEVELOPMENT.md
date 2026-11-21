@@ -288,7 +288,7 @@ Reusable scaffold for local documentation/wiki extensions analogous to the ArchW
 - `dev/scripts/package-publishable-changes.sh` – compares ordinary packages through a script-free fast path and compares packages with `prepare`, `prepack`, or `postpack` hooks through their actual temporary tarball; all file lists and contents are compared in one Node process to avoid per-file process overhead on Windows
 - `dev/scripts/publish-packages.sh` – plans/applies publish actions dynamically for all package folders or a `--targets-file` shortlist
 - `dev/scripts/bump-package-versions.sh` – checks npm published versions first and enforces the next release version for changed packages (`+0.0.1`, rolling `*.9` to next minor `.0`; bumps up or reduces down only when needed); can write publish candidates to a target list
-- `dev/scripts/release-workflow.sh` – orchestrates release checks: `--check` reports required bumps, `--plan` copies only release candidates into a temporary workspace (retaining a full copy for lifecycle hooks or local dependencies), preserves installed bundles and prepares missing ones before publish checks, and `--publish` applies required bumps and prepares missing bundles before publishing; workspace preparation and cleanup emit progress records consumed by the release UI
+- `dev/scripts/release-workflow.sh` calls the canonical Node coordinator in `pi-extension-release-npm/release/`. Check/plan/publish prepare hooks and bundles only in temporary workspaces. Comparison jobs run concurrently; publication follows selected dependency order. Per-package failures leave independent work running. Root `.release-config.json` excludes unfinished packages, currently `pi-extension-gui-testing`; private packages are skipped. The bundled wrapper uses the same coordinator. See [release implementation contracts and tests](pi-extension-release-npm/DEVELOPMENT.md).
 - `dev/scripts/sync-pi-package-symlinks.sh` – uses Pi's package resource resolver to symlink local development extensions, skills, prompts, and themes from top-level `pi-*` workspace packages into `~/.pi/agent/`; package-local `node_modules` resources referenced by Pi manifests are linked to top-level workspace packages first, so dev packages win over stale installed optional dependencies; index-based extensions are linked as directories, standalone package resources as files, and direct relative-import companion directories beside standalone files; local-only dev extensions use generated wrappers so their relative imports resolve from the source checkout; unrelated non-symlink conflicts are renamed to `.hardcoded.<timestamp>.bak`
 - `dev/scripts/validate-skill-routing-fixtures.mjs` – validates development-only `tests/routing/*.json`; schema-only by default, with optional `--settings` or `--skill-root` target coverage
 
@@ -297,7 +297,7 @@ The installer selection prompt uses Bash Readline, so you can use arrow keys, Ba
 ## Publish model
 
 - Registry: **npm**
-- Client: **npm** by default; **bun** is the fallback publisher when available
+- Client: **npm** by default; publication uses Chromium browser approval and retained receipts to track npm processing without duplicate uploads
 - Installation for users remains standard npm registry usage, e.g.:
 
 ```bash

@@ -19,6 +19,7 @@ type PackageState = {
   skipped: boolean;
   publishing: boolean;
   published: boolean;
+  processing: boolean;
   issues: Issue[];
 };
 
@@ -72,7 +73,7 @@ export type CompactReleaseView = {
 };
 
 export function compactReleaseView(output: string, style: CompactStyle = plainStyle, { expectedDirs = [], spinner }: CompactOptions = {}): CompactReleaseView {
-  const newPackage = (dir: string, checked: boolean): PackageState => ({ dir, checked, candidate: false, ready: false, blocked: false, skipped: false, publishing: false, published: false, issues: [] });
+  const newPackage = (dir: string, checked: boolean): PackageState => ({ dir, checked, candidate: false, ready: false, blocked: false, skipped: false, publishing: false, published: false, processing: false, issues: [] });
   const packages = new Map<string, PackageState>(expectedDirs.map((dir) => [dir, newPackage(dir, false)]));
   const general: Issue[] = [];
   const byName = (name: string) => [...packages.values()].find((pkg) => pkg.name === name);
@@ -86,6 +87,36 @@ export function compactReleaseView(output: string, style: CompactStyle = plainSt
     const text = line.trim();
     if (!text) {
       current = undefined;
+      continue;
+    }
+
+    const structured = text.match(/^RELEASE_NPM_(?:PROGRESS|EVENT) (\{.*\})$/);
+    if (structured) {
+      try {
+        const event = JSON.parse(structured[1]);
+        if (typeof event.target === "string" && typeof event.status === "string") {
+          const pkg = packages.get(event.target) ?? newPackage(event.target, false);
+          packages.set(event.target, pkg);
+          const status = event.originalStatus ?? event.status;
+          pkg.name = event.name ?? pkg.name;
+          pkg.localVersion ??= event.localVersion ?? event.version;
+          pkg.npmVersion = event.oldVersion ?? undefined;
+          pkg.candidate = ["publish-first", "publish-update"].includes(event.action);
+          pkg.checked = ["ready", "published", "processing", "unchanged", "skipped", "failed", "blocked", "cancelled"].includes(status);
+          pkg.ready = status === "ready";
+          pkg.published = status === "published";
+          pkg.processing = status === "processing";
+          pkg.skipped = ["unchanged", "skipped"].includes(status);
+          pkg.blocked = ["failed", "blocked", "cancelled"].includes(status);
+          pkg.publishing = !pkg.checked && ["publish", "verify"].includes(event.stage);
+          if (pkg.candidate) pkg.plan = event.oldVersion ? `${event.oldVersion} → ${event.version}` : `${event.version} (first release)`;
+          if (pkg.blocked) addIssue(pkg.issues, { tone: "error", text: `${event.stage ?? "release"}: ${event.detail ?? status}${event.logPath ? ` | log: ${event.logPath}` : ""}` });
+          for (const warning of event.warnings ?? []) addIssue(pkg.issues, { tone: "warning", text: warning });
+          active = pkg;
+          activity = undefined;
+          current = undefined;
+        }
+      } catch { /* A streamed event can be incomplete until the next chunk. */ }
       continue;
     }
 
@@ -192,12 +223,16 @@ export function compactReleaseView(output: string, style: CompactStyle = plainSt
   let toPublish = 0;
   let problems = 0;
   let checked = 0;
+  let published = 0;
+  let processing = 0;
   for (const pkg of packages.values()) {
     const failed = pkg.blocked || pkg.issues.some((issue) => issue.tone === "error");
-    const pending = !pkg.checked || (pkg.candidate && !pkg.ready && !pkg.skipped && !pkg.published);
+    const pending = pkg.processing || !pkg.checked || (pkg.candidate && !pkg.ready && !pkg.skipped && !pkg.published);
     if (pkg.checked) checked += 1;
+    if (pkg.published) published += 1;
+    if (pkg.processing) processing += 1;
     if (failed) problems += 1;
-    else if (pkg.candidate && !pkg.skipped) toPublish += 1;
+    else if (pkg.candidate && !pkg.skipped && !pkg.published && !pkg.processing) toPublish += 1;
 
     const working = pending || pkg.publishing;
     const mark = failed
@@ -208,7 +243,7 @@ export function compactReleaseView(output: string, style: CompactStyle = plainSt
     if (pkg === active) focusLine = lines.length;
     lines.push(`${pkg.dir} ${mark}`);
     if (pkg.candidate && !failed) {
-      const step = pkg.published ? "published" : pkg.publishing ? "publishing…" : pkg.skipped ? "already published" : "bump and publish";
+      const step = pkg.published ? "published" : pkg.processing ? "processing in registry; upload retained" : pkg.publishing ? "publishing…" : pkg.skipped ? "already published" : "bump and publish";
       lines.push(style("dim", `  ${pkg.plan ? `${pkg.plan} · ` : ""}${step}`));
     }
     for (const issue of pkg.issues) lines.push(style(issue.tone, `  ${issue.tone === "error" ? "✗" : "!"} ${issue.text}`));
@@ -221,7 +256,7 @@ export function compactReleaseView(output: string, style: CompactStyle = plainSt
   let summary: string | undefined;
   if (packages.size) {
     const progress = checked < packages.size ? `${checked}/${packages.size} checked` : `${packages.size} package(s)`;
-    const counts = style("dim", `${activity ? `${activity} · ` : ""}${progress} · ${toPublish} to publish · ${problems} with problems`);
+    const counts = style("dim", `${activity ? `${activity} · ` : ""}${progress} · ${toPublish} to publish${published ? ` · ${published} published` : ""}${processing ? ` · ${processing} processing` : ""} · ${problems} with problems`);
     summary = spinner ? `${style("accent", spinner)} ${counts}` : counts;
   }
   return { lines, focusLine, summary };

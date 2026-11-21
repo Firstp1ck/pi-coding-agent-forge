@@ -6,6 +6,7 @@ import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from "node:chil
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import { appendRunLog, createRunLog, formatElapsed, isCtrlC, isCtrlO, listRunLogs, saveRunLog, shellQuote, stripAnsi, type RunLog, type RunLogEntry } from "@firstpick/pi-utils";
 import { terminateProcessTree } from "./process-tree.ts";
+import { parseReleaseRecords, isReleaseFailure, structuredReleaseSummary } from "./release-records.ts";
 import { isKeyRelease, Key, matchesKey } from "@earendil-works/pi-tui";
 import { showCheckPicker, showPublishPicker } from "./publish-picker.ts";
 import { openReleaseOutputWindow, type ReleaseOutputWindow } from "./release-output-overlay.ts";
@@ -27,9 +28,11 @@ type ReleaseRunLog = RunLog;
 const EXTENSION_DIR = dirname(fileURLToPath(import.meta.url));
 const RELEASE_LOG_DIR = join(homedir(), ".pi", "agent", "release-npm-logs");
 
-function releaseScriptCommand(cwd: string, scriptName: string, args: string[] = []): string {
+export function releaseScriptCommand(cwd: string, scriptName: string, args: string[] = []): string {
   const localScripts = [join(cwd, "dev", "scripts", scriptName), join(cwd, scriptName)];
-  const localScript = localScripts.find((candidate) => existsSync(candidate));
+  const localScript = localScripts.find((candidate) => existsSync(candidate) && (scriptName !== "release-workflow.sh"
+    || existsSync(join(dirname(candidate), "release", "cli.mjs"))
+    || existsSync(join(dirname(candidate), "..", "..", "pi-extension-release-npm", "release", "cli.mjs"))));
   const scriptPath = localScript ?? join(EXTENSION_DIR, scriptName);
   const quotedArgs = args.map(shellQuote).join(" ");
   return `PI_NPM_PACKAGES_ROOT=${shellQuote(cwd)} ${shellQuote(scriptPath)}${quotedArgs ? ` ${quotedArgs}` : ""}`;
@@ -354,10 +357,11 @@ function extractPlannedPublishes(output: string): PlannedPublish[] {
 // Same package discovery as the release scripts: top-level, non-hidden directories with a package.json.
 function listPackageDirs(cwd: string): string[] {
   try {
-    return readdirSync(cwd, { withFileTypes: true })
-      .filter((entry) => entry.isDirectory() && !entry.name.startsWith(".") && existsSync(join(cwd, entry.name, "package.json")))
+    const packages = readdirSync(cwd, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory() && !entry.name.startsWith(".") && entry.name !== "node_modules" && existsSync(join(cwd, entry.name, "package.json")))
       .map((entry) => entry.name)
       .sort();
+    return packages.length ? packages : existsSync(join(cwd, "package.json")) ? ["."] : [];
   } catch {
     return [];
   }
@@ -377,6 +381,12 @@ function resolvePlannedPublishTargets(cwd: string, planned: PlannedPublish[]): {
     }
   }
 
+  if (existsSync(join(cwd, "package.json"))) {
+    try {
+      const manifest = JSON.parse(readFileSync(join(cwd, "package.json"), "utf8"));
+      if (manifest.name) packageNameToDir.set(manifest.name, ".");
+    } catch { /* Readiness reports invalid root metadata. */ }
+  }
   const targets: PlannedPublishTarget[] = [];
   const missing: PlannedPublish[] = [];
   const seenTargets = new Set<string>();
@@ -655,20 +665,7 @@ export default function releaseNpmExtension(pi: ExtensionAPI) {
         ctx.ui.notify(message, type);
       };
 
-      notifyProgress("Checking npm authentication with npm whoami...", "info");
-      const authResult = await verifyNpmAuth(ctx.cwd);
-      if (!authResult.ok) {
-        const detail = redactTokenLikeOutput(authResult.output);
-        ctx.ui.notify(
-          `npm whoami failed; aborting /release-npm before release preflight. Run /release-npm-setup or npm login, then retry.${detail ? ` ${detail}` : ""}`,
-          "error",
-        );
-        return;
-      }
-
-      const username = authResult.output.trim();
-      const authSummary = `npm authentication verified${username ? ` as ${username}` : ""}.`;
-      notifyProgress(authSummary, "success");
+      const authSummary = "Preflight compares and validates candidates. Publishing checks authentication after confirmation.";
 
       const packageDirs = listPackageDirs(ctx.cwd);
       const checkTargets = packageDirs.length ? await chooseCheckTargets(ctx, packageDirs) : packageDirs;
@@ -677,7 +674,7 @@ export default function releaseNpmExtension(pi: ExtensionAPI) {
         return;
       }
       const checkAll = checkTargets.length === packageDirs.length;
-      const planArgs = checkAll ? ["--plan", "--all"] : ["--plan", "--targets", checkTargets.join(",")];
+      const planArgs = checkAll ? ["--plan", "--all"] : ["--plan", "--targets-json", JSON.stringify(checkTargets)];
       const planStep = `release-workflow.sh ${checkAll ? "--plan --all" : `--plan --targets (${checkTargets.length} packages)`}`;
 
       const runLog = createReleaseRunLog(ctx.cwd);
@@ -855,19 +852,21 @@ export default function releaseNpmExtension(pi: ExtensionAPI) {
         return;
       }
 
-      if (!plan.ok) {
-        const logPath = finishLog("failed-preflight");
-        ctx.ui.notify(`release-workflow preflight failed; publish was not offered.${logPath ? ` Log: ${logPath}` : ""}`, "error");
-        if (ctx.hasUI) ctx.ui.setStatus(RELEASE_STATUS_KEY, ctx.ui.theme.fg("error", "Release:Failed"));
-        closeReleaseUi();
-        evaluateFailureWithLLM(pi, planStep, plan.output);
-        return;
-      }
-
       closeReleaseUi();
+      const preflightRecords = parseReleaseRecords(plan.output);
       const plannedPublishes = extractPlannedPublishes(plan.output);
-      const plannedTargetResolution = resolvePlannedPublishTargets(ctx.cwd, plannedPublishes);
-      const preflightSummary = formatPreflightSummary(plan.output);
+      const plannedTargetResolution = preflightRecords.length ? {
+        targets: preflightRecords.filter(record => record.status === "ready" && record.name && record.version
+          && ["publish-first", "publish-update"].includes(record.action)).map(record => ({
+          target: record.target, name: record.name!, version: record.version!,
+          action: record.action as PlannedPublish["action"], label: `${record.name}@${record.version}`,
+        })),
+        missing: [] as PlannedPublish[],
+      } : resolvePlannedPublishTargets(ctx.cwd, plannedPublishes);
+      const preflightSummary = preflightRecords.length
+        ? structuredReleaseSummary(preflightRecords, "Release preflight summary:")
+        : formatPreflightSummary(plan.output);
+      if (!plan.ok) ctx.ui.notify("Some preflight checks failed. Healthy ready candidates can still be published after confirmation.", "warning");
       const targetSummary = [
         "Publish targets after confirmation:",
         ...(plannedTargetResolution.targets.length
@@ -880,9 +879,11 @@ export default function releaseNpmExtension(pi: ExtensionAPI) {
       appendReleaseLog(runLog, `\n--- preflight summary ---\n${preflightSummary}\n\n${targetSummary}\n`);
       if (plannedTargetResolution.targets.length === 0) {
         closeReleaseUi();
-        if (ctx.hasUI) ctx.ui.setStatus(RELEASE_STATUS_KEY, ctx.ui.theme.fg("success", "Release:NoTargets"));
-        const logPath = finishLog("no-targets", `${preflightSummary}\n\n${targetSummary}`);
-        ctx.ui.notify(`No publish targets were detected in the pre-confirmation plan; nothing to publish.${logPath ? ` Log: ${logPath}` : ""}`, "info");
+        const processing = preflightRecords.some(record => record.status === "processing");
+        if (ctx.hasUI) ctx.ui.setStatus(RELEASE_STATUS_KEY, ctx.ui.theme.fg(!plan.ok ? "error" : processing ? "warning" : "success", !plan.ok ? "Release:Failed" : processing ? "Release:Processing" : "Release:NoTargets"));
+        const logPath = finishLog(!plan.ok ? "failed-preflight" : processing ? "processing" : "no-targets", `${preflightSummary}\n\n${targetSummary}`);
+        ctx.ui.notify(`${preflightSummary}\n${processing ? "Uploads are still processing. Run /release-npm again to verify them without re-uploading." : "No ready publish targets were detected; nothing to publish."}${logPath ? ` Log: ${logPath}` : ""}`, !plan.ok ? "error" : processing ? "warning" : "info");
+        if (!plan.ok) evaluateFailureWithLLM(pi, planStep, plan.output);
         return;
       }
 
@@ -967,7 +968,7 @@ export default function releaseNpmExtension(pi: ExtensionAPI) {
           ctx.ui.setStatus(RELEASE_STATUS_KEY, ctx.ui.theme.fg("warning", "Release:Cancelled"));
         }
         const logPath = finishLog("cancelled", preflightSummary);
-        ctx.ui.notify(`Publish cancelled after successful preflight checks.${logPath ? ` Log: ${logPath}` : ""}`, "info");
+        ctx.ui.notify(`Publish cancelled after preflight checks.${logPath ? ` Log: ${logPath}` : ""}`, "info");
         return;
       }
 
@@ -1074,43 +1075,44 @@ export default function releaseNpmExtension(pi: ExtensionAPI) {
         `  - ${failed.length ? failed.map((f) => `${f.pkg}: ${f.reason}`).join(" | ") : "none"}`,
       ].join("\n");
 
-      for (const [index, target] of selectedPublishTargets.entries()) {
-        const publishCommand = releaseScriptCommand(ctx.cwd, "release-workflow.sh", ["--publish", "--target", target.target]);
-        setPhase(`Release publishing ${index + 1}/${selectedPublishTargets.length}: ${target.target}`);
-        notifyProgress(`Running release-workflow.sh --publish --target ${target.target}...`, "info");
-        appendOutput(`\n==> Publishing target ${index + 1}/${selectedPublishTargets.length}: ${target.target} (${target.label})\n`);
-        appendOutput(`$ ${publishCommand}\n`);
-        const publish = await runScriptLive(ctx.cwd, publishCommand, appendOutput, (child) => { currentChild = child; });
-        currentChild = undefined;
-
-        if (publish.aborted) {
-          const logPath = finishLog("aborted-publish", `target=${target.target}`);
-          closeReleaseUi();
-          ctx.ui.notify(`Release workflow aborted.${logPath ? ` Log: ${logPath}` : ""}`, "warning");
-          if (ctx.hasUI) ctx.ui.setStatus(RELEASE_STATUS_KEY, ctx.ui.theme.fg("warning", "Release:Aborted"));
-          return;
+      const publishCommand = releaseScriptCommand(ctx.cwd, "release-workflow.sh", ["--publish", "--targets-json", JSON.stringify(selectedPublishTargets.map(target => target.target))]);
+      setPhase(`Release publishing ${selectedPublishTargets.length} confirmed packages`);
+      appendOutput(`$ ${publishCommand}\n`);
+      const publish = await runScriptLive(ctx.cwd, publishCommand, appendOutput, (child) => { currentChild = child; });
+      currentChild = undefined;
+      // Even a nonzero or aborted invocation may already have published packages.
+      const finalRecords = parseReleaseRecords(publish.output);
+      if (finalRecords.length) {
+        for (const target of selectedPublishTargets) {
+          if (!finalRecords.some(record => record.target === target.target)) finalRecords.push({
+            ...target, status: publish.aborted ? "cancelled" : "failed",
+            detail: "No final outcome received. Inspect the saved log and registry before retrying.",
+          });
         }
-
-        if (!publish.ok) {
-          const logPath = finishLog("failed-publish", `target=${target.target}`);
-          ctx.ui.notify(`release-workflow publish step failed for ${target.target}.${logPath ? ` Log: ${logPath}` : ""}`, "error");
-          if (ctx.hasUI) ctx.ui.setStatus(RELEASE_STATUS_KEY, ctx.ui.theme.fg("error", "Release:Failed"));
-          closeReleaseUi();
-          evaluateFailureWithLLM(pi, `release-workflow.sh --publish --target ${target.target}`, publish.output);
-          return;
-        }
-
+      } else {
         parsePublishOutput(publish.output);
+        for (const target of selectedPublishTargets) {
+          const known = [...updated, ...skipped, ...firstRelease, ...failed.map(item => item.pkg)].includes(target.label);
+          if (!known) failed.push({ pkg: target.label, reason: "No final outcome received. Inspect the saved log and registry before retrying." });
+        }
       }
-
-      if (ctx.hasUI) {
-        ctx.ui.setStatus(RELEASE_STATUS_KEY, ctx.ui.theme.fg("success", "Release:OK"));
-        ctx.ui.setWidget(RELEASE_STATUS_KEY, undefined);
-      }
+      const retainedUploads = preflightRecords.filter(record => ["published", "processing"].includes(record.status) && !finalRecords.some(final => final.target === record.target));
+      const publicationSummary = finalRecords.length || retainedUploads.length
+        ? structuredReleaseSummary([...retainedUploads, ...finalRecords], "Release summary:") : formatReleaseSummary();
+      const preflightFailures = preflightRecords.filter(isReleaseFailure);
+      const finalSummary = `${publicationSummary}${preflightFailures.length ? `\nEarlier preflight failures:\n${structuredReleaseSummary(preflightFailures, "Preflight:")}` : ""}`;
+      const failedRun = !publish.ok || failed.length > 0 || finalRecords.some(isReleaseFailure) || !plan.ok;
+      const processingRun = [...retainedUploads, ...finalRecords].some(record => record.status === "processing");
+      const status = publish.aborted ? "aborted-publish" : failedRun ? "partial-or-failed" : processingRun ? "processing" : "completed";
+      const logPath = finishLog(status, finalSummary);
       closeReleaseUi();
-      const finalSummary = formatReleaseSummary();
-      const logPath = finishLog("completed", finalSummary);
-      ctx.ui.notify(`${finalSummary}\nRelease flow completed successfully.${logPath ? `\nLog: ${logPath}` : ""}`, "success");
+      const tone = publish.aborted ? "warning" : failedRun ? "error" : processingRun ? "warning" : "success";
+      if (ctx.hasUI) ctx.ui.setStatus(RELEASE_STATUS_KEY, ctx.ui.theme.fg(tone, publish.aborted ? "Release:Aborted" : failedRun ? "Release:PartialOrFailed" : processingRun ? "Release:Processing" : "Release:OK"));
+      const outcome = publish.aborted ? "Release workflow aborted. Confirmed publications remain published."
+        : failedRun ? processingRun ? "Release ended with unverified uploads or failures. Run /release-npm again to resume verification without re-uploading." : "Release flow completed with failures. See every package outcome above."
+        : processingRun ? "Uploads submitted; registry processing is pending. Run /release-npm again to verify without re-uploading." : "Release flow completed successfully.";
+      ctx.ui.notify(`${finalSummary}\n${outcome}${logPath ? `\nLog: ${logPath}` : ""}`, tone);
+      if (!publish.ok && !publish.aborted) evaluateFailureWithLLM(pi, "release-workflow.sh --publish --targets (confirmed set)", publish.output);
       })().catch((error: unknown) => {
         cleanupReleaseUi?.();
         activeReleaseRun = undefined;

@@ -35,3 +35,5 @@ patches/
 pi-extension-gui-testing/plans/handoffs/
 
 handoffs/
+
+.release-reports/

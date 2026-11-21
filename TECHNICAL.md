@@ -27,3 +27,7 @@ Use a supported, patched Node.js runtime. The repository's `.node-version` selec
 These minimums include the fix for [CVE-2026-111497, also called Node2Shell](https://nodejs.org/en/blog/vulnerability/october-2026-security-releases), in Node.js's bundled Brotli decoder. Updating npm or JavaScript dependencies alone does not fix a vulnerable Node.js executable. Update the runtime wherever you run these packages, including containers and CI, then restart existing Node.js processes. An empty `npm audit` report does not establish that the runtime is patched. The version pin selects a runtime only in tools that read `.node-version`; the engine range normally produces an npm warning rather than preventing execution.
 
 Package-specific runtime requirements, setup, configuration, security notes, and limitations are documented in each package's `TECHNICAL.md`.
+
+## Releasing workspace packages
+
+[Release npm for Pi](pi-extension-release-npm/TECHNICAL.md) documents package selection, exclusions, isolated preparation, terminal progress, JSON reports, and retries after partial failures. Pi asks before publication. The standalone `--publish` option authorizes uploads immediately.

@@ -1,0 +1,5 @@
+{
+  "exclusions": [
+    "pi-extension-gui-testing"
+  ]
+}
