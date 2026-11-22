@@ -1,0 +1,11 @@
+{
+  "method": "depsPack",
+  "response": {
+    "id": 29,
+    "ok": false,
+    "error": {
+      "code": "BAD_REQUEST",
+      "message": "the Windows helper has no dependency cache (hello omits \"deps\")"
+    }
+  }
+}

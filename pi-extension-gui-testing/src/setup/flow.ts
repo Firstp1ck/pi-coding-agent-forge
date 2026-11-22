@@ -4,7 +4,7 @@
  * the caller supplies the checks, the smoke test, and persistence.
  */
 import type { Leftover } from "../protocol.ts";
-import type { BackendId, VerifiedBackend } from "../config/types.ts";
+import type { BackendId, TargetOs, VerifiedBackend } from "../config/types.ts";
 import type { CommandRunner, RunResult } from "../runner/types.ts";
 import { DEFAULT_CHECK_TIMEOUT_MS, type Check, type CheckResult, type SetupStatus } from "../checks/types.ts";
 import { requiredChecksPass, runChecks } from "../checks/runner.ts";
@@ -69,6 +69,8 @@ export interface SetupFlowInput {
   persist: (record: VerifiedBackend) => Promise<void>;
   /** Resolved inputs to record (never secrets). */
   inputs?: Record<string, string>;
+  /** Target OSes from `--targets`, handed to the checks as `CheckContext.targets`. */
+  targets?: readonly TargetOs[];
   /** Runs one approved item. Default: the item's argv through `runner`. */
   applyRemediation?: (item: PlanItem, signal: AbortSignal) => Promise<RunResult>;
   /** Whether `sudo` works without a password. Default: `sudo -n true` via `runner`, only asked when a sudo item exists. */
@@ -158,6 +160,7 @@ export async function runSetup(input: SetupFlowInput): Promise<SetupReport> {
     runner: input.runner,
     backend: input.backend,
     projectRoot: input.projectRoot,
+    ...(input.targets ? { targets: input.targets } : {}),
     signal,
     onResult: (r: CheckResult) => ui.setStatus(`checking ${input.backend}: ${r.id} ${r.status}`),
   };

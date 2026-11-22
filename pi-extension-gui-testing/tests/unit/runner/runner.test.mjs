@@ -44,10 +44,11 @@ test("timeout escalates to SIGKILL for a child that ignores SIGTERM, and kills i
     setInterval(() => {}, 1000);
   `;
   const started = Date.now();
-  const r = await runner.run([node, "-e", script], { timeoutMs: 150 });
+  // Long enough for the child to install its SIGTERM handler even on a loaded machine.
+  const r = await runner.run([node, "-e", script], { timeoutMs: 1_000 });
   assert.equal(r.timedOut, true);
   assert.equal(r.signal, "SIGKILL");
-  assert.ok(Date.now() - started < 3000, "bounded by timeout + grace");
+  assert.ok(Date.now() - started < 8000, "bounded by timeout + grace");
 });
 
 test("abort signal stops a running command; an already-aborted signal rejects before spawn", async () => {

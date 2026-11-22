@@ -1,4 +1,6 @@
 """Envelope, sequential queue, ping/cancel bypass, cancellation, error codes, heartbeat."""
+import os
+import re
 import threading
 import time
 import unittest
@@ -151,7 +153,15 @@ class DispatcherTests(unittest.TestCase):
 class ErrorCodeTests(unittest.TestCase):
     def test_codes_match_protocol(self):
         self.assertEqual(set(dispatch.ERROR_CODES), {"STALE_REF", "NOT_FOUND", "TIMEOUT", "HANDOFF",
-                                                     "PROTOCOL_MISMATCH", "CANCELLED", "BAD_REQUEST", "INTERNAL"})
+                                                     "PROTOCOL_MISMATCH", "CANCELLED", "BAD_REQUEST", "INTERNAL",
+                                                     "ARCHIVE_REJECTED", "TOO_LARGE"})
+        # Parity with the TypeScript contract (src/protocol.ts ErrorCode), when the source tree is present.
+        source = os.path.join(os.path.dirname(__file__), "..", "..", "src", "protocol.ts")
+        if os.path.exists(source):
+            with open(source, encoding="utf-8") as fh:
+                text = fh.read()
+            block = text.split("export type ErrorCode =", 1)[1].split(";\n", 1)[0]
+            self.assertEqual(set(re.findall(r'"([A-Z_]+)"', block)), set(dispatch.ERROR_CODES))
         self.assertEqual(dispatch.BYPASS_METHODS, ("ping", "cancel"))
         with self.assertRaises(ValueError):
             ProtocolError("WHATEVER", "x")

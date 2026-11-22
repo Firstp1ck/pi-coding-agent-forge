@@ -1,0 +1,11 @@
+{
+  "method": "launch",
+  "response": {
+    "id": 1,
+    "ok": false,
+    "error": {
+      "code": "HANDOFF",
+      "message": "app exited without opening a window; it probably handed off to another instance"
+    }
+  }
+}

@@ -63,8 +63,8 @@ class SmokeFlow(unittest.TestCase):
 
     def test_1_ready_and_hello(self):
         self.assertLess(self.h.ready_after, 10.0)
-        hello = self.h.call("hello", {"protocol": 1, "packageVersion": "0.1.0"})
-        self.assertEqual(hello["protocol"], 1)
+        hello = self.h.call("hello", {"protocol": 2, "packageVersion": "0.1.0"})
+        self.assertEqual(hello["protocol"], 2)
         self.assertEqual(hello["os"], "linux")
         self.assertIn("snapshot", hello["capabilities"])
 

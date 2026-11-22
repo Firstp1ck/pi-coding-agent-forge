@@ -5,7 +5,7 @@ The context holds only package tooling: ``helpers/linux/{Dockerfile,
 .dockerignore,helper,pi_gui_helper/}`` at its root and
 ``testapps/gtk3-smoke/`` below it. No project file ever enters it.
 
-Usage: build_image.py [--tag pi-gui-testing-base:dev] [--version 0.1.0] [--protocol 1]
+Usage: build_image.py [--tag pi-gui-testing-base:dev] [--version 0.1.0] [--protocol 2]
 """
 
 import argparse
@@ -56,7 +56,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--tag", default="pi-gui-testing-base:dev")
     parser.add_argument("--version", default="0.1.0")
-    parser.add_argument("--protocol", default="1")
+    parser.add_argument("--protocol", default="2")
     parser.add_argument("--list", action="store_true", help="print the context member names and exit")
     args = parser.parse_args(argv)
     context = build_context()

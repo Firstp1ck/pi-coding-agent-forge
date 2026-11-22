@@ -7,7 +7,7 @@ from client import Helper  # noqa: E402
 
 with Helper("w2-test-quick") as h:
     print("ready", round(h.ready_after, 2))
-    print(h.call("hello", {"protocol": 1, "packageVersion": "0.1.0"}))
+    print(h.call("hello", {"protocol": 2, "packageVersion": "0.1.0"}))
     print("launch", h.call("launch", {"cmd": "python3", "args": ["/opt/pi-gui-testing/testapps/gtk3-smoke/app.py"], "env": {}, "cwd": "/workspace"}))
     s = h.call("snapshot", {"maxNodes": 50})
     print(s["coverage"], s["truncated"])

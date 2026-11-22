@@ -36,27 +36,44 @@ test("runChecks rejects an invalid graph before running anything", async () => {
 });
 
 test("runs dependencies first and independent checks in parallel; results keep declaration order", async () => {
+  // Parallelism is proven by overlap, not by wall-clock time (a time bound flaked under load):
+  // a and b each wait until both have started. A runner that ran them one after the other
+  // would never release the first one, which then gives up after 5 s and records no overlap.
   const events = [];
-  const timed = (id, ms) => async (ctx) => {
+  let running = 0;
+  let maxRunning = 0;
+  let releaseBoth;
+  const bothStarted = new Promise((resolve) => (releaseBoth = resolve));
+  let started = 0;
+  const overlapping = (id) => async (ctx) => {
     events.push(`start ${id}`);
-    await sleep(ms);
+    running++;
+    maxRunning = Math.max(maxRunning, running);
+    if (++started === 2) releaseBoth(true);
+    let timer;
+    const overlapped = await Promise.race([bothStarted, new Promise((resolve) => (timer = setTimeout(resolve, 5_000, false)))]);
+    clearTimeout(timer);
+    running--;
     events.push(`end ${id}`);
-    return { status: "pass", observed: id, facts: { [id]: String(ctx.dependencies.size) } };
+    return { status: "pass", observed: overlapped ? "overlapped" : "ran alone", facts: { [id]: String(ctx.dependencies.size) } };
   };
-  const started = Date.now();
+  const dependent = async (ctx) => {
+    events.push(`start c (${running} running)`);
+    return { status: "pass", observed: "c", facts: { c: String(ctx.dependencies.size) } };
+  };
   const results = await runChecks(
     [
-      check("c", timed("c", 10), { dependsOn: ["a", "b"] }),
-      check("a", timed("a", 60)),
-      check("b", timed("b", 60)),
+      check("c", dependent, { dependsOn: ["a", "b"] }),
+      check("a", overlapping("a")),
+      check("b", overlapping("b")),
     ],
     options(),
   );
-  const elapsed = Date.now() - started;
   assert.deepEqual(results.map((r) => r.id), ["c", "a", "b"]);
-  assert.ok(events.indexOf("start c") > events.indexOf("end a") && events.indexOf("start c") > events.indexOf("end b"));
-  assert.ok(events.indexOf("start b") < events.indexOf("end a"), "a and b overlap");
-  assert.ok(elapsed < 150, `parallel run took ${elapsed} ms`);
+  assert.equal(maxRunning, 2, "a and b ran at the same time");
+  assert.deepEqual(results.slice(1).map((r) => r.observed), ["overlapped", "overlapped"]);
+  const startC = events.indexOf("start c (0 running)");
+  assert.ok(startC > events.indexOf("end a") && startC > events.indexOf("end b"), `c starts after a and b ended: ${events.join(", ")}`);
   assert.equal(results[0].facts.c, "2", "dependent sees its dependency results");
   assert.ok(results.every((r) => r.status === "pass" && typeof r.durationMs === "number"));
 });
