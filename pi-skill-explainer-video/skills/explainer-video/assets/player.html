@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<base href="__BASE__">
+<title>__TITLE__</title>
+<style>
+:root {
+  --ev-bg: #000;
+  --ev-accent: #3b82f6;
+  --ev-glow: rgba(37, 99, 235, 0.22);
+  --ev-text: #fafafa;
+  --ev-dim: #9b9b9f;
+  --ev-font: 'Inter', 'Geist', 'Noto Sans', 'Helvetica Neue', Arial, sans-serif;
+  --ev-mono: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
+  __THEME__
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--ev-bg); overflow: hidden; }
+body { width: __W__px; height: __H__px; position: relative; font-family: var(--ev-font); color: var(--ev-text); -webkit-font-smoothing: antialiased; }
+#ev-stage { position: absolute; inset: 0; overflow: hidden;
+  background: radial-gradient(ellipse 70% 45% at 50% -8%, var(--ev-glow), transparent 70%), var(--ev-bg); }
+/* The UI dissolves into the black stage instead of ending at a hard frame edge. */
+#ev-scenes { position: absolute; inset: 0;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 6%, #000 74%, transparent 86%), linear-gradient(to right, transparent 0, #000 6%, #000 94%, transparent 100%);
+  -webkit-mask-composite: source-in; mask-composite: intersect; }
+.ev-step { position: absolute; inset: 0; }
+.ev-scene { position: absolute; left: 0; top: 0; transform-origin: 0 0; overflow: hidden; }
+.ev-shot { display: block; width: 100%; height: 100%; }
+#ev-overlay { position: absolute; inset: 0; pointer-events: none; }
+.ev-ring { position: absolute; opacity: 0; border: 2px solid var(--ev-accent); border-radius: 14px;
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--ev-accent) 18%, transparent), 0 0 34px color-mix(in srgb, var(--ev-accent) 55%, transparent), inset 0 0 22px color-mix(in srgb, var(--ev-accent) 18%, transparent); }
+.ev-cursor { position: absolute; left: 0; top: 0; opacity: 0; transform-origin: 4px 3px; filter: drop-shadow(0 2px 4px rgba(0,0,0,.6)); }
+.ev-cursor svg { display: block; position: relative; z-index: 1; }
+.ev-click { position: absolute; left: 5px; top: 4px; width: 56px; height: 56px; border-radius: 50%; border: 2px solid var(--ev-accent); opacity: 0; }
+#ev-caption { position: absolute; left: 0; right: 0; top: 960px; height: 60px; }
+.ev-cap { position: absolute; left: 50%; top: 0; white-space: nowrap; font-size: 34px; letter-spacing: -0.01em; display: flex; align-items: center; gap: 12px; }
+.ev-num { display: inline-flex; align-items: center; justify-content: center; min-width: 34px; height: 34px; padding: 0 8px; border-radius: 8px;
+  background: #1c1c1f; border: 1px solid #2f2f33; color: #c9c9cc; font-size: 19px; font-weight: 600; margin-right: 4px; }
+.ev-bold { font-weight: 700; color: var(--ev-text); }
+.ev-rest { font-weight: 500; color: var(--ev-dim); margin-left: -2px; }
+#ev-keys { position: absolute; left: 0; right: 0; top: 885px; height: 56px; }
+.ev-key { position: absolute; left: 50%; top: 0; display: flex; align-items: center; gap: 12px; font-size: 22px; color: var(--ev-dim); white-space: nowrap; }
+.ev-key kbd { font-family: var(--ev-font); font-size: 22px; font-weight: 600; color: var(--ev-text); background: #161618; border: 1px solid #3a3a3f;
+  border-bottom-width: 3px; border-radius: 9px; padding: 6px 14px; }
+#ev-outro { position: absolute; inset: 0; opacity: 0; visibility: hidden; background: var(--ev-bg); display: flex; align-items: center; justify-content: center; }
+.ev-o-glow { position: absolute; left: 50%; top: 40%; width: 900px; height: 600px; transform: translate(-50%, -50%);
+  background: radial-gradient(closest-side, var(--ev-glow), transparent); }
+.ev-o-inner { position: relative; display: flex; flex-direction: column; align-items: center; text-align: center; }
+.ev-o-logo { width: 132px; height: 132px; border-radius: 30px; background: #0b0b0d; border: 1px solid #2c2c31; display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 10px 40px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.06); margin-bottom: 40px; overflow: hidden; }
+.ev-o-logo img { width: 104px; height: 104px; }
+.ev-o-logotext { font-size: 60px; font-weight: 800; letter-spacing: -0.04em; }
+.ev-o-title { font-size: 76px; font-weight: 800; letter-spacing: -0.035em; line-height: 1.02; }
+.ev-o-dim { color: #8d8d92; }
+.ev-o-avail { margin-top: 30px; font-size: 30px; color: #bdbdc2; display: flex; align-items: center; gap: 10px; }
+.ev-o-avail b { color: var(--ev-text); font-weight: 700; }
+.ev-o-ver { font-family: var(--ev-mono); font-size: 19px; background: #1c1c1f; border: 1px solid #2f2f33; border-radius: 7px; padding: 3px 9px; color: #c9c9cc; }
+.ev-o-url { margin-top: 34px; font-family: var(--ev-mono); font-size: 19px; color: #5d5d63; }
+#ev-progress { position: absolute; left: 0; bottom: 0; height: 3px; background: var(--ev-accent); opacity: .5; width: 0; }
+</style>
+</head>
+<body>
+<div id="ev-stage">
+  <div id="ev-scenes"></div>
+  <div id="ev-overlay"></div>
+  <div id="ev-keys"></div>
+  <div id="ev-caption"></div>
+  <div id="ev-outro"></div>
+  __PROGRESS__
+</div>
+__SCENES__
+<script>
+__ENGINE__
+</script>
+<script>
+(function () {
+  var storyboard = __DATA__;
+  var player;
+  try {
+    player = new ExplainerVideo.Player(document, storyboard);
+  } catch (err) {
+    // The renderer reads this to report the real cause (missing scene or selector).
+    window.__EV_ERROR = String(err && err.message || err);
+    document.body.textContent = window.__EV_ERROR;
+    return;
+  }
+  window.__EV = {
+    ready: function () { return player.ready(); },
+    seek: function (t) { return player.seek(t); }
+  };
+  if (__PLAY__) player.ready().then(function () { player.play(window); }, function (err) { document.body.textContent = String(err); });
+})();
+</script>
+</body>
+</html>

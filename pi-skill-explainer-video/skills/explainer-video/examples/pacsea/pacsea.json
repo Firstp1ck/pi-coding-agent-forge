@@ -1,0 +1,153 @@
+{
+  "version": 1,
+  "title": "Pacsea in 35 seconds",
+  "width": 1920,
+  "height": 1080,
+  "fps": 30,
+  "scenes": "scenes.html",
+  "theme": { "accent": "#8aa4ff", "glow": "rgba(120, 110, 255, 0.20)" },
+  "allowTerms": ["Pacsea", "Arch"],
+  "steps": [
+    {
+      "caption": { "bold": "Type a name", "rest": "to find any app." },
+      "duration": 7,
+      "scene": "pacsea",
+      "camera": [
+        { "at": 0, "rect": [0, 0, 1920, 1080] },
+        { "at": 1.2, "move": 1.0, "rect": { "target": "#search", "pad": 60 } },
+        { "at": 3.0, "rect": { "target": "#search", "pad": 60 } },
+        { "at": 4.2, "move": 1.0, "rect": [0, 40, 1300, 420] }
+      ],
+      "actions": [
+        { "at": 1.4, "type": "type", "target": "#query", "text": "firefox", "cps": 9 },
+        { "at": 2.6, "type": "hide", "target": "#list-default", "dur": 0.25, "dy": 0 },
+        { "at": 2.7, "type": "show", "target": "#list-ff", "dur": 0.35 },
+        { "at": 2.7, "type": "text", "target": "#count", "text": "9" }
+      ],
+      "highlights": [
+        { "from": 1.1, "to": 3.3, "rect": { "target": "#search", "pad": 22 } },
+        { "from": 4.6, "to": 6.8, "rect": { "target": "#r1", "pad": 6 } }
+      ]
+    },
+    {
+      "caption": { "bold": "See what it is", "rest": "before you install it." },
+      "duration": 6.5,
+      "scene": "pacsea",
+      "setup": [
+        { "type": "type", "target": "#query", "text": "firefox" },
+        { "type": "class", "target": "#list-default", "add": "off" },
+        { "type": "class", "target": "#list-ff", "remove": "off" },
+        { "type": "class", "target": "#info-default", "add": "off" },
+        { "type": "class", "target": "#info-ff", "remove": "off" },
+        { "type": "text", "target": "#count", "text": "9" }
+      ],
+      "camera": [
+        { "at": 0, "rect": [0, 600, 1300, 380] },
+        { "at": 3.4, "rect": [0, 600, 1300, 380] },
+        { "at": 4.4, "move": 1.0, "rect": [0, 700, 1100, 260] }
+      ],
+      "highlights": [
+        { "from": 0.8, "to": 3.4, "rect": { "target": "#info-desc", "pad": 8 } },
+        { "from": 4.3, "to": 6.4, "rect": { "target": "#info-size", "pad": 8 } }
+      ]
+    },
+    {
+      "caption": { "bold": "Press Space", "rest": "to add apps to your list." },
+      "duration": 7,
+      "scene": "pacsea",
+      "setup": [
+        { "type": "type", "target": "#query", "text": "firefox" },
+        { "type": "class", "target": "#list-default", "add": "off" },
+        { "type": "class", "target": "#list-ff", "remove": "off" },
+        { "type": "class", "target": "#info-default", "add": "off" },
+        { "type": "class", "target": "#info-ff", "remove": "off" },
+        { "type": "text", "target": "#count", "text": "9" }
+      ],
+      "camera": [
+        { "at": 0, "rect": [0, 40, 1920, 600] },
+        { "at": 3.4, "rect": [0, 40, 1920, 600] },
+        { "at": 4.4, "move": 1.0, "rect": { "target": "#install", "pad": 140 } }
+      ],
+      "keys": [
+        { "at": 1.0, "label": "Space", "hint": "add firefox" },
+        { "at": 2.2, "label": "↓", "dur": 0.8 },
+        { "at": 3.0, "label": "Space", "hint": "add the ad blocker" }
+      ],
+      "actions": [
+        { "at": 1.1, "type": "show", "target": "#il1" },
+        { "at": 2.3, "type": "class", "target": "#r1", "remove": "sel" },
+        { "at": 2.3, "type": "class", "target": "#r2", "add": "sel" },
+        { "at": 3.1, "type": "show", "target": "#il2" }
+      ],
+      "highlights": [
+        { "from": 0.6, "to": 3.6, "rect": [6, 52, 1300, 108] },
+        { "from": 4.6, "to": 6.9, "rect": { "target": "#install", "pad": 22 } }
+      ]
+    },
+    {
+      "caption": { "bold": "Check what will change,", "rest": "then confirm." },
+      "duration": 7.5,
+      "scene": "pacsea",
+      "setup": [
+        { "type": "type", "target": "#query", "text": "firefox" },
+        { "type": "class", "target": "#list-default", "add": "off" },
+        { "type": "class", "target": "#list-ff", "remove": "off" },
+        { "type": "class", "target": "#info-default", "add": "off" },
+        { "type": "class", "target": "#info-ff", "remove": "off" },
+        { "type": "class", "target": "#il1", "remove": "off" },
+        { "type": "class", "target": "#il2", "remove": "off" },
+        { "type": "text", "target": "#count", "text": "9" }
+      ],
+      "camera": [
+        { "at": 0, "rect": [0, 0, 1920, 1080] },
+        { "at": 1.4, "move": 0.9, "rect": { "target": "#preflight", "pad": 50 } },
+        { "at": 5.2, "rect": { "target": "#preflight", "pad": 50 } },
+        { "at": 6.0, "move": 0.8, "rect": [360, 200, 1200, 640] }
+      ],
+      "keys": [
+        { "at": 0.4, "label": "Enter", "hint": "install the list" },
+        { "at": 4.4, "label": "P", "hint": "proceed" }
+      ],
+      "actions": [
+        { "at": 0.5, "type": "show", "target": "#preflight", "dy": 16 },
+        { "at": 4.6, "type": "hide", "target": "#preflight", "dur": 0.3, "dy": 0 },
+        { "at": 4.9, "type": "show", "target": "#done" }
+      ],
+      "highlights": [
+        { "from": 1.6, "to": 3.0, "rect": { "target": "#risk", "pad": 8 } },
+        { "from": 3.0, "to": 4.5, "rect": { "target": "#pf-keys", "pad": 8 } },
+        { "from": 5.3, "to": 7.4, "rect": { "target": "#done", "pad": 6 } }
+      ]
+    },
+    {
+      "caption": { "bold": "One click", "rest": "shows every update." },
+      "duration": 6.5,
+      "scene": "pacsea",
+      "camera": [
+        { "at": 0, "rect": [380, 0, 1160, 560] },
+        { "at": 2.0, "rect": [380, 0, 1160, 560] },
+        { "at": 3.0, "move": 0.9, "rect": { "target": "#updmodal", "pad": 40 } }
+      ],
+      "cursor": [
+        { "at": 0.4, "x": 1250, "y": 300 },
+        { "at": 1.5, "x": 1000, "y": 24, "click": true },
+        { "at": 2.4, "x": 1000, "y": 24, "hide": true }
+      ],
+      "actions": [
+        { "at": 1.7, "type": "show", "target": "#updmodal", "dy": 16 }
+      ],
+      "highlights": [
+        { "from": 0.5, "to": 1.9, "rect": { "target": "#updates", "pad": 6 } },
+        { "from": 3.6, "to": 6.4, "rect": { "target": "#upd-list", "pad": 10 } }
+      ]
+    }
+  ],
+  "outro": {
+    "duration": 4.5,
+    "logo": "pacsea.svg",
+    "title": ["Install apps on Arch", "without memorizing commands"],
+    "product": "Pacsea",
+    "version": "0.8.2",
+    "url": "github.com/Firstp1ck/Pacsea"
+  }
+}

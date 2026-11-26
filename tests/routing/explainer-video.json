@@ -1,0 +1,25 @@
+{
+  "skill": "explainer-video",
+  "should_trigger": [
+    "Make a 30 second video that shows new users how to install apps with Pacsea.",
+    "Create a short release clip for our new sign-in flow, like the product launch videos on X.",
+    "Turn these four screenshots into a tutorial video with captions a non-technical person understands.",
+    "I need an explainer video for the dashboard's export feature to put in the README."
+  ],
+  "should_not_trigger": [
+    "Trim the first five seconds off this MP4 with ffmpeg.",
+    "Write a step-by-step text tutorial for installing Pacsea.",
+    "Create a slide deck about our quarterly results.",
+    "Record my screen while I reproduce this bug."
+  ],
+  "ambiguous": [
+    {
+      "prompt": "Explain how our deploy pipeline works, ideally something visual.",
+      "candidate_skills": ["explainer-video", "html-report"],
+      "decision": "Ask whether the user wants a video. Use explainer-video for a short walkthrough of a product's screens; use html-report for a long diagram-heavy explanation of internals.",
+      "reason": "Both produce visual explanations, but a 30 second captioned video suits a few user-facing steps, not detailed architecture.",
+      "review_status": "reviewed-by-agent"
+    }
+  ],
+  "notes": "Triggers on requests for a demo, walkthrough, tutorial, release or explainer video. Editing existing footage or screen recording is out of scope."
+}

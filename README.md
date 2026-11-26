@@ -97,6 +97,7 @@ Skills give Pi a reusable workflow for a particular kind of work. You normally a
 - **[Desktop Visual Design](pi-skill-desktop-visual-design/README.md)** — Style desktop apps and Quickshell components with coherent palettes, states, spacing, typography, borders, and motion.
 - **[Design Patterns](pi-skill-design-patterns/README.md)** — Choose an appropriate design pattern without adding unnecessary abstraction.
 - **[Dolt Database Version Control](pi-skill-dolt-database-version-control/README.md)** — Evaluate or use Dolt when database history, branching, merging, or rollback matters.
+- **[Explainer Video](pi-skill-explainer-video/README.md)** — Turn a few plain sentences into a short, captioned tutorial video of your app's screens.
 - **[Feature Development Workflow](pi-skill-feature-development-workflow/README.md)** — Guide a feature from scope and planning through implementation, review, and completion.
 - **[Frontend Design](pi-skill-frontend-design/README.md)** combines distinctive web design with expected interaction behavior, accessible controls, and failure recovery.
 - **[HTML Report](pi-skill-html-report/README.md)** — Create polished, self-contained HTML reports for complex explanations and investigations.

@@ -1,0 +1,46 @@
+{
+  "name": "@firstpick/pi-skill-explainer-video",
+  "version": "0.1.0",
+  "description": "Agent skill that turns a plain-language script into a short, silent tutorial or explainer video (MP4): close-up UI with smooth zooms, a glowing focus ring, numbered captions and an end card. Renders locally with headless Chromium and ffmpeg.",
+  "license": "MIT",
+  "homepage": "https://github.com/Firstp1ck/pi-coding-agent-forge/tree/main/pi-skill-explainer-video#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Firstp1ck/pi-coding-agent-forge.git",
+    "directory": "pi-skill-explainer-video"
+  },
+  "keywords": [
+    "pi-package",
+    "pi",
+    "pi-coding-agent",
+    "skill",
+    "agent-skill",
+    "explainer-video",
+    "tutorial-video",
+    "product-demo",
+    "screen-recording"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "pi": {
+    "skills": [
+      "./skills"
+    ]
+  },
+  "scripts": {
+    "test": "node --test skills/explainer-video/tests/",
+    "validate:example": "node skills/explainer-video/scripts/validate.mjs skills/explainer-video/examples/pacsea/pacsea.json --strict"
+  },
+  "files": [
+    "skills/explainer-video/SKILL.md",
+    "skills/explainer-video/assets",
+    "skills/explainer-video/references",
+    "skills/explainer-video/scripts",
+    "skills/explainer-video/examples",
+    "README.md",
+    "TECHNICAL.md",
+    "DEVELOPMENT.md",
+    "LICENSE"
+  ]
+}

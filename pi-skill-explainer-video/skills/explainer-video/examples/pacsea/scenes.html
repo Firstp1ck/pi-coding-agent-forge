@@ -1,0 +1,168 @@
+<!--
+  Recreated Pacsea main screen (v0.8.x layout) using Pacsea's default theme colours
+  from config/theme.conf. Package versions and sizes are illustrative.
+  One template serves every step; each step's "setup" puts it in the right state.
+-->
+<style>
+.pc { position: absolute; inset: 0; background: #1e1e2e; color: #cdd6f4; font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace; font-size: 20px; line-height: 30px; }
+.pc .off { opacity: 0; }
+.pc .dim { color: #7f849c; }
+.pc .lav { color: #b4befe; }
+.pc .mauve { color: #cba6f7; }
+.pc .ok { color: #a6e3a1; }
+.pc .warn { color: #f9e2af; }
+.pc .sky { color: #74c7ec; }
+.pc-top { position: absolute; left: 0; right: 0; top: 0; height: 44px; padding: 7px 14px; display: flex; gap: 12px; align-items: center; }
+.pc-top .tag { color: #1e1e2e; background: #a6e3a1; padding: 0 4px; }
+.pc-top .menu { color: #1e1e2e; background: #b4befe; padding: 0 4px; }
+.pc-top .spacer { flex: 1; }
+.pc-updates { color: #1e1e2e; background: #cba6f7; padding: 0 8px; position: absolute; left: 50%; transform: translateX(-50%); top: 7px; }
+.pc-box { position: absolute; border: 1px solid #45475a; }
+.pc-box > .title { position: absolute; top: -16px; left: 10px; background: #1e1e2e; padding: 0 4px; color: #a6adc8; }
+.pc-box.focus { border-color: #cba6f7; }
+.pc-box.focus > .title { color: #cba6f7; }
+.pc-results { left: 6px; right: 6px; top: 52px; height: 392px; padding: 6px 0; }
+.pc-list { position: absolute; left: 0; right: 0; top: 6px; }
+.pc-row { padding: 0 12px; white-space: nowrap; }
+.pc-row.sel { background: #313244; }
+.pc-row.sel::before { content: '> '; color: #cba6f7; }
+.pc-row:not(.sel)::before { content: '  '; }
+.pc-row .repo { color: #74c7ec; }
+.pc-row .repo.aur { color: #cba6f7; }
+.pc-row .name { color: #cdd6f4; font-weight: 700; margin: 0 10px 0 8px; }
+.pc-row .ver { color: #7f849c; margin-right: 10px; }
+.pc-row .inst { color: #a6e3a1; margin-left: 10px; }
+.pc-status { position: absolute; left: 0; right: 0; top: 450px; text-align: center; color: #a6e3a1; }
+.pc-history { left: 6px; top: 498px; width: 470px; height: 110px; padding: 10px 12px; }
+.pc-search { left: 492px; top: 498px; width: 930px; height: 110px; padding: 14px 14px; }
+.pc-search .prompt { color: #cba6f7; }
+.pc-search .caret { display: inline-block; width: 12px; height: 26px; background: #cdd6f4; vertical-align: -5px; margin-left: 2px; }
+.pc-install { left: 1438px; top: 498px; width: 476px; height: 110px; padding: 10px 14px; }
+.pc-install .item { color: #cdd6f4; }
+.pc-install .item::before { content: '+ '; color: #a6e3a1; }
+.pc-info { left: 6px; top: 630px; right: 6px; height: 330px; padding: 12px 14px; }
+.pc-info > div[id^='info-'] { position: absolute; left: 14px; right: 14px; top: 14px; }
+.pc .fit { width: fit-content; }
+.pc-info .k { color: #74c7ec; }
+.pc-info a { color: #cba6f7; text-decoration: underline; }
+.pc-foot { position: absolute; left: 14px; right: 14px; top: 978px; color: #a6adc8; font-size: 18px; line-height: 30px; }
+.pc-foot kbd { font: inherit; color: #1e1e2e; background: #6c7086; padding: 0 4px; margin-right: 6px; }
+.pc-modal { position: absolute; background: #1e1e2e; border: 2px solid #b4befe; padding: 26px 30px; box-shadow: 0 30px 80px rgba(0,0,0,.6); }
+.pc-modal > .title { position: absolute; top: -17px; left: 18px; background: #1e1e2e; padding: 0 6px; color: #b4befe; font-weight: 700; }
+.pc-preflight { left: 470px; top: 230px; width: 980px; height: 560px; }
+.pc-updmodal { left: 420px; top: 170px; width: 1080px; height: 600px; }
+.pc-done { position: absolute; left: 520px; top: 690px; width: 880px; padding: 10px 16px; color: #a6e3a1; border: 1px solid #a6e3a1; background: #1e2a24; }
+.pc-bar { display: inline-block; width: 300px; height: 14px; background: #313244; vertical-align: 1px; margin-left: 10px; }
+.pc-bar i { display: block; height: 100%; width: 100%; background: #a6e3a1; }
+</style>
+
+<template id="pacsea" data-width="1920" data-height="1080">
+<div class="pc">
+  <div class="pc-top">
+    <span class="dim">Results (<span id="count">15362</span>)</span>
+    <span class="menu">Sort v</span>
+    <span class="tag">[AUR]</span><span class="tag">[core]</span><span class="tag">[extra]</span><span class="tag">[multilib]</span>
+    <span class="spacer"></span>
+    <span class="menu">Config/Lists v</span><span class="menu">Panels v</span><span class="menu">Options v</span>
+  </div>
+  <span class="pc-updates" id="updates">Updates available (12)</span>
+
+  <div class="pc-box pc-results" id="results">
+    <span class="title">Results</span>
+    <div class="pc-list" id="list-default">
+      <div class="pc-row sel"><span class="repo">core</span><span class="name">acl</span><span class="ver">2.3.2-1</span>- Access control list utilities<span class="inst">[Installed]</span></div>
+      <div class="pc-row"><span class="repo">core</span><span class="name">archlinux-keyring</span><span class="ver">20251116-1</span>- Arch Linux PGP keyring<span class="inst">[Installed]</span></div>
+      <div class="pc-row"><span class="repo">core</span><span class="name">attr</span><span class="ver">2.5.2-1</span>- Extended attribute support library<span class="inst">[Installed]</span></div>
+      <div class="pc-row"><span class="repo">core</span><span class="name">audit</span><span class="ver">4.1.2-1</span>- Userspace components of the audit framework</div>
+      <div class="pc-row"><span class="repo">core</span><span class="name">base</span><span class="ver">3-2</span>- Minimal package set for a basic Arch Linux installation<span class="inst">[Installed]</span></div>
+      <div class="pc-row"><span class="repo">core</span><span class="name">bash</span><span class="ver">5.3.3-2</span>- The GNU Bourne Again shell<span class="inst">[Installed]</span></div>
+      <div class="pc-row"><span class="repo">core</span><span class="name">binutils</span><span class="ver">2.45-1</span>- Programs to assemble and manipulate binary files<span class="inst">[Installed]</span></div>
+      <div class="pc-row"><span class="repo">core</span><span class="name">bison</span><span class="ver">3.8.2-8</span>- The GNU general-purpose parser generator</div>
+      <div class="pc-row"><span class="repo">core</span><span class="name">bzip2</span><span class="ver">1.0.8-6</span>- A high-quality data compression program<span class="inst">[Installed]</span></div>
+      <div class="pc-row"><span class="repo">core</span><span class="name">coreutils</span><span class="ver">9.8-1</span>- The basic file, shell and text manipulation utilities<span class="inst">[Installed]</span></div>
+      <div class="pc-row"><span class="repo">core</span><span class="name">curl</span><span class="ver">8.17.0-1</span>- Command line tool and library for transferring data<span class="inst">[Installed]</span></div>
+      <div class="pc-row"><span class="repo">core</span><span class="name">dbus</span><span class="ver">1.16.2-1</span>- Freedesktop.org message bus system<span class="inst">[Installed]</span></div>
+    </div>
+    <div class="off pc-list" id="list-ff">
+      <div class="pc-row sel" id="r1"><span class="repo">extra</span><span class="name">firefox</span><span class="ver">146.0-1</span>- Fast, Private &amp; Safe Web Browser</div>
+      <div class="pc-row" id="r2"><span class="repo">extra</span><span class="name">firefox-ublock-origin</span><span class="ver">1.67.0-1</span>- Efficient blocker add-on for various browsers</div>
+      <div class="pc-row" id="r3"><span class="repo">extra</span><span class="name">firefox-dark-reader</span><span class="ver">4.9.110-1</span>- Inverts brightness of web pages</div>
+      <div class="pc-row"><span class="repo">extra</span><span class="name">firefox-i18n-de</span><span class="ver">146.0-1</span>- German language pack for Firefox</div>
+      <div class="pc-row"><span class="repo">extra</span><span class="name">firefox-developer-edition</span><span class="ver">147.0b4-1</span>- Developer Edition of the Firefox web browser</div>
+      <div class="pc-row"><span class="repo">extra</span><span class="name">firefox-tridactyl</span><span class="ver">1.24.4-1</span>- Vim, but in your browser</div>
+      <div class="pc-row"><span class="repo aur">aur</span><span class="name">librewolf-bin</span><span class="ver">146.0-1</span>- Community-maintained fork of Firefox, focused on privacy</div>
+      <div class="pc-row"><span class="repo aur">aur</span><span class="name">firefox-esr-bin</span><span class="ver">140.6.0-1</span>- Extended Support Release of Firefox</div>
+      <div class="pc-row"><span class="repo aur">aur</span><span class="name">firefox-pwa</span><span class="ver">2.17.0-1</span>- Install web apps as desktop apps</div>
+    </div>
+  </div>
+  <div class="pc-status">● Status: Arch systems nominal</div>
+
+  <div class="pc-box pc-history"><span class="title">Search history</span><div class="dim">▶ pacsea</div></div>
+  <div class="pc-box pc-search focus" id="search"><span class="title">Search (focused) [INSERT]</span>
+    <span class="prompt">&gt; </span><span id="query"></span><span class="caret"></span>
+  </div>
+  <div class="pc-box pc-install" id="install"><span class="title">Install List</span>
+    <div class="off item" id="il1">firefox</div>
+    <div class="off item" id="il2">firefox-ublock-origin</div>
+  </div>
+
+  <div class="pc-box pc-info" id="info"><span class="title">Package Info</span>
+    <div id="info-default">
+      <div><span class="k">Repository:</span> core</div>
+      <div><span class="k">Package Name:</span> acl</div>
+      <div><span class="k">Description:</span> Access control list utilities, libraries and headers</div>
+      <div><span class="k">Install size:</span> 330.0 KiB</div>
+    </div>
+    <div class="off" id="info-ff">
+      <div><span class="k">Repository:</span> extra</div>
+      <div><span class="k">Package Name:</span> firefox</div>
+      <div><span class="k">Version:</span> 146.0-1</div>
+      <div class="fit" id="info-desc"><span class="k">Description:</span> Fast, Private &amp; Safe Web Browser</div>
+      <div><span class="k">URL:</span> <a>https://www.mozilla.org/firefox/</a></div>
+      <div><span class="k">Licences:</span> MPL-2.0</div>
+      <div><span class="k">Depends on:</span> gtk3, nss, ffmpeg, libpulse, dbus-glib</div>
+      <div class="fit" id="info-size"><span class="k">Download size:</span> 76.3 MiB &nbsp; <span class="k">Install size:</span> 254.9 MiB</div>
+      <div><span class="k">Build date:</span> Tue Nov 11 2025</div>
+      <div><a>Show PKGBUILD</a></div>
+    </div>
+  </div>
+
+  <div class="pc-foot">
+    <div><span class="dim">GLOBALS:</span> &nbsp;<kbd>Ctrl+Q</kbd>Exit &nbsp;| <kbd>?</kbd>Help &nbsp;| <kbd>Ctrl+X</kbd>Show/Hide PKGBUILD &nbsp;| <kbd>Shift+Tab</kbd>Change Sort Mode</div>
+    <div><span class="dim">SEARCH:</span> &nbsp;&nbsp;<kbd>↑/↓</kbd>Move &nbsp;| <kbd>Space</kbd>Add to install &nbsp;| <kbd>Enter</kbd>Install &nbsp;| <kbd>Ctrl+F</kbd>Toggle fuzzy search</div>
+  </div>
+
+  <div class="off pc-modal pc-preflight" id="preflight"><span class="title">Preflight: Install</span>
+    <div><span class="sky">[2 packages]</span> <span class="sky">[Download: 79.1 MiB]</span> <span id="risk" class="ok">[Risk: Low]</span></div>
+    <div><span class="mauve">⟳ [Summary]</span> &nbsp;<span class="ok">✓ Deps</span> &nbsp;<span class="sky">✓ Files</span> &nbsp;<span class="mauve">✓ Services</span> &nbsp;<span class="dim">✓ Sandbox</span></div>
+    <br>
+    <div class="warn">Risk factors:</div>
+    <div>• None found</div>
+    <br>
+    <div class="dim">Per-package overview:</div>
+    <div id="pf-pkgs"><div>• firefox [extra] 146.0-1</div><div>• firefox-ublock-origin [extra] 1.67.0-1</div></div>
+    <br>
+    <div class="ok">Issues: none</div>
+    <br>
+    <div class="fit" id="pf-keys">Left/Right: tabs &nbsp;•&nbsp; d: dry-run &nbsp;•&nbsp; <span class="lav">p: proceed</span> &nbsp;•&nbsp; q: close</div>
+  </div>
+  <div class="off pc-done" id="done">✓ Installed firefox and firefox-ublock-origin <span class="pc-bar"><i></i></span></div>
+
+  <div class="off pc-modal pc-updmodal" id="updmodal"><span class="title">System Update</span>
+    <div class="dim">12 updates available</div>
+    <br>
+    <div id="upd-list">
+      <div><b>firefox</b> <span class="dim">145.0.2-1</span> → <span class="ok">146.0-1</span></div>
+      <div><b>linux</b> <span class="dim">6.17.8.arch1-1</span> → <span class="ok">6.17.9.arch1-1</span></div>
+      <div><b>mesa</b> <span class="dim">1:25.2.6-1</span> → <span class="ok">1:25.2.7-1</span></div>
+      <div><b>python</b> <span class="dim">3.13.8-1</span> → <span class="ok">3.13.9-1</span></div>
+      <div><b>systemd</b> <span class="dim">258.1-1</span> → <span class="ok">258.2-1</span></div>
+      <div class="dim">… and 7 more</div>
+    </div>
+    <br>
+    <div><span class="ok">[x]</span> Update mirrors first &nbsp; <span class="ok">[x]</span> Update community packages</div>
+    <br>
+    <div id="upd-keys"><span class="lav">Enter: update all</span> &nbsp;•&nbsp; Space: toggle &nbsp;•&nbsp; Esc: close</div>
+  </div>
+</div>
+</template>

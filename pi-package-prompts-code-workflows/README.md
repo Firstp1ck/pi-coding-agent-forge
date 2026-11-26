@@ -26,6 +26,7 @@ Restart Pi if the package does not appear in your current session.
 Choose the slash command that matches the job, such as `/review`, `/fix`, or `/incident`, then give Pi the relevant repository, issue, error, or change.
 
 - `/fix` — fix a reported issue end-to-end with verification.
+- `/project <outcome>` — start, update, or resume a project. For example, `/project Resume the storage migration from the active plan.`
 - `/incident` — triage incidents with impact, severity, mitigation, and investigation plan.
 - `/issue-fix` — turn an issue into root-cause analysis and implementation plan.
 - `/issue-new` — draft a clean maintainer-friendly issue.
