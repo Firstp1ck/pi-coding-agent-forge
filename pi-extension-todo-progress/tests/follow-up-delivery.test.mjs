@@ -1,10 +1,14 @@
 import assert from "node:assert/strict";
+import { existsSync } from "node:fs";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
-const { AgentSession, SessionManager } = await import(process.env.PI_GOAL_TEST_RUNTIME || "@earendil-works/pi-coding-agent");
 import { fileURLToPath, pathToFileURL } from "node:url";
+
+const runtimeUrl = process.env.PI_GOAL_TEST_RUNTIME || import.meta.resolve("@earendil-works/pi-coding-agent");
+const { DefaultResourceLoader, ModelRuntime, SessionManager, SettingsManager, createAgentSession } = await import(runtimeUrl);
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -1544,81 +1548,88 @@ test("restored waiting goals need explicit resume before any notification", asyn
   assert.equal(customMessagesOfType(harness, "todo-progress-goal-continuation").length, 0);
 });
 
-test("native Pi startup preserves hooks and pause cancels a delayed continuation", async () => {
-  const harness = createHarness(await loadExtension());
+test("native Pi startup preserves hooks and pause cancels a delayed continuation", { timeout: 15000 }, async (t) => {
+  const cwd = await mkdtemp(join(tmpdir(), "todo-native-startup-"));
+  let native;
+  let releaseStartup;
+  t.after(async () => {
+    releaseStartup?.();
+    try { if (native) { await native.abort(); native.dispose(); } }
+    finally { await rm(cwd, { recursive: true, force: true }); }
+  });
+  const extension = await loadExtension();
+  // Use the provider belonging to the selected SDK, including runtime overrides.
+  const fauxPath = createRequire(runtimeUrl).resolve.paths("@earendil-works/pi-ai")
+    .map((dir) => join(dir, "@earendil-works/pi-ai/dist/providers/faux.js")).find(existsSync);
+  assert.ok(fauxPath, "Selected SDK must include its faux provider test helper");
+  const { fauxProvider, fauxAssistantMessage } = await import(pathToFileURL(fauxPath).href);
+  const { getCurrentSystemPrompt } = await import(pathToFileURL(join(dirname(fauxPath), "..", "index.js")).href);
+  const provider = fauxProvider({ provider: "todo-startup-fixture", api: "todo-startup-fixture" });
+  const modelRuntime = await ModelRuntime.create({ authPath: join(cwd, "auth.json"), modelsPath: null, allowModelNetwork: false, refreshOnCreate: false });
+  modelRuntime.registerNativeProvider(provider.provider);
+  const settingsManager = SettingsManager.inMemory({ compaction: { enabled: false }, retry: { enabled: false }, enableInstallTelemetry: false });
   const inputs = [];
   const policies = [];
   const modelContexts = [];
-  const native = {
-    isStreaming: false,
-    model: { provider: "fixture" },
-    _modelRuntime: { hasConfiguredAuth: () => true },
-    _baseSystemPromptOptions: { selectedTools: [] },
-    _baseSystemPrompt: "Required external policy",
-    agent: { state: {}, prompt: async (messages) => native._runAgentPrompt(messages) },
-    _pendingNextTurnMessages: [],
-    _pendingToolNames: new Set(),
-    _recordSelection() {},
-    _resolveIdleWaitIfIdle() {},
-    _handlePostAgentRun: async () => false,
-    _runBeforeSettleBoundary: async () => false,
-    _finishCancelledRetry() {},
-    _startRun: AgentSession.prototype._startRun,
-    async _prepareRun(trigger) {
-      harness.runtime.idle = false;
-      return AgentSession.prototype._prepareRun.call(this, trigger);
+  let currentTurnContext;
+  const errors = [];
+  const userMessages = [];
+  const runtime = { abortCount: 0 };
+  let startupGate;
+  const loader = new DefaultResourceLoader({
+    cwd, agentDir: cwd, settingsManager,
+    noExtensions: true, noSkills: true, noPromptTemplates: true, noThemes: true, noContextFiles: true,
+    systemPrompt: "Required external policy",
+    extensionFactories: [
+      { name: "startup-policy", factory: (pi) => {
+        pi.on("input", (event) => {
+          assert.equal(event.images, undefined, "This fixture exercises text-only startup");
+          inputs.push({ text: event.text, source: event.source });
+          return { action: "transform", text: `Fixture input policy\n${event.text}`, images: event.images };
+        });
+        pi.on("before_agent_start", async () => { await startupGate?.(); });
+      } },
+      { name: "todo", factory: (pi) => extension({
+        ...pi,
+        // Hold delivery so pause can race with a continuation's native startup.
+        sendUserMessage: (content, options) => userMessages.push({ content, options }),
+      }) },
+      { name: "context-observer", factory: (pi) => {
+        pi.on("context", (event) => {
+          // Inspect this turn while the native session retains its full history.
+          const lastAssistant = event.messages.findLastIndex((message) => message.role === "assistant");
+          currentTurnContext = structuredClone(event.messages.slice(lastAssistant + 1).filter((message) => message.role !== "system"));
+        });
+      } },
+    ],
+  });
+  await loader.reload();
+  const created = await createAgentSession({ cwd, agentDir: cwd, model: provider.getModel(), modelRuntime, settingsManager, resourceLoader: loader, sessionManager: SessionManager.inMemory(cwd), noTools: "all" });
+  native = created.session;
+  assert.deepEqual(created.extensionsResult.errors, []);
+  await native.bindExtensions({ mode: "print", onError: (error) => errors.push(error), abortHandler: () => {
+    runtime.abortCount += 1;
+    native.abort().catch((error) => errors.push(error));
+  } });
+  provider.setResponses(["Section one finished", "Section two finished"].map((text) => (context) => {
+    policies.push(getCurrentSystemPrompt(context.messages));
+    modelContexts.push(currentTurnContext);
+    return fauxAssistantMessage(text);
+  }));
+  const harness = {
+    userMessages, runtime,
+    command: (name, args = "") => native.extensionRunner.getCommand(name).handler(args, native.extensionRunner.createCommandContext()),
+    emit: async (_type, event) => ({ messages: await native.extensionRunner.emitContext(event.messages) }),
+    async goalContext() {
+      return (await native.extensionRunner.emitContext([])).find((message) => message.customType === "todo-progress-goal-context")?.content || "";
     },
-    async _emitAgentSettled() {
-      this._isAgentRunActive = false;
-      harness.runtime.idle = true;
-    },
-    _flushPendingBashMessages() {},
-    _flushPendingCustomMessages() {},
-    _findLastAssistantMessage() {},
-    async _normalizePromptImages(images) {
-      assert.equal(images, undefined, "This fixture exercises text-only startup");
-      return { images: [], hints: [] };
-    },
-    getActiveToolNames: () => [],
-    _preparePromptAndToolLoadout: () => undefined,
-    async _runInputHandlers(text, images, source) {
-      return this._extensionRunner.emitInput(text, images, source);
-    },
-    _extensionRunner: {
-      hasHandlers: (type) => type === "input",
-      async emitInput(text, images, source) {
-        inputs.push({ text, source });
-        return { action: "transform", text: `Fixture input policy\n${text}`, images };
-      },
-      async emitBeforeAgentStart(prompt, images) {
-        const trigger = typeof prompt === "object" ? prompt : { messageType: "user", prompt, images };
-        const result = await harness.emit("before_agent_start", { ...trigger, systemPrompt: "Required external policy" });
-        policies.push(result.systemPrompt);
-        return { messages: [], systemPrompt: result.systemPrompt, systemPromptOptions: { selectedTools: [] } };
-      },
-    },
-    async _runAgentPrompt(messages) {
-      const abortsBeforeDelivery = harness.runtime.abortCount;
-      await harness.emit("agent_start", {});
-      for (const message of messages) {
-        await harness.emit("message_start", { message });
-        await harness.emit("message_end", { message });
-      }
-      // The model boundary must not be reached for an aborted owned delivery.
-      if (harness.runtime.abortCount === abortsBeforeDelivery) {
-        modelContexts.push((await harness.emit("context", { messages })).messages);
-      }
-    },
-    prompt: AgentSession.prototype.prompt,
   };
   await harness.command("goal", "Implement all sections of plan.md");
   const kickoff = harness.userMessages[0];
-  await AgentSession.prototype.sendUserMessage.call(native, kickoff.content, kickoff.options);
-  await harness.emit("agent_end", { messages: [assistantMessage("Section one finished")] });
-  await harness.emit("agent_settled", {});
+  await native.sendUserMessage(kickoff.content, kickoff.options);
   const continuation = harness.userMessages[1];
   assert.ok(continuation, "Premature final response must request continuation");
-  await AgentSession.prototype.sendUserMessage.call(native, continuation.content, continuation.options);
+  await native.sendUserMessage(continuation.content, continuation.options);
   assert.equal(inputs.length, 2);
   assert.ok(inputs.every((input) => input.source === "extension"));
   assert.equal(policies.length, 2);
@@ -1628,30 +1639,27 @@ test("native Pi startup preserves hooks and pause cancels a delayed continuation
   assert.equal(modelContexts[1][0].role, "custom", "Automatic continuation must not become new user authorization");
   assert.equal(modelContexts[1][0].customType, "todo-progress-goal-continuation");
 
-  await harness.emit("agent_end", { messages: [assistantMessage("Section two finished")] });
-  await harness.emit("agent_settled", {});
   const delayedContinuation = harness.userMessages[2];
   assert.ok(delayedContinuation);
-  let releaseStartup;
   let enteredStartup;
   const held = new Promise((resolve) => { releaseStartup = resolve; });
   const entered = new Promise((resolve) => { enteredStartup = resolve; });
-  const beforeStart = native._extensionRunner.emitBeforeAgentStart;
-  native._extensionRunner.emitBeforeAgentStart = async (...args) => {
+  startupGate = async () => {
     enteredStartup();
     await held;
-    return beforeStart(...args);
   };
-  const delayed = AgentSession.prototype.sendUserMessage.call(native, delayedContinuation.content, delayedContinuation.options);
+  const delayed = native.sendUserMessage(delayedContinuation.content, delayedContinuation.options);
   await entered;
   await harness.command("goal-pause");
-  const startupIsBusy = typeof AgentSession.prototype._startRun === "function";
-  assert.equal(harness.runtime.abortCount, startupIsBusy ? 1 : 0, "Pi 1.2 counts asynchronous startup as busy, so pause requests abort immediately");
+  assert.equal(native.isIdle, false, "Native asynchronous startup must remain busy");
+  assert.equal(harness.runtime.abortCount, 1, "Pi 1.2 counts asynchronous startup as busy, so pause requests abort immediately");
   releaseStartup();
   await delayed;
-  assert.equal(harness.runtime.abortCount, startupIsBusy ? 2 : 1, "The canceled owned delivery must also request native abort before model work");
+  assert.equal(harness.runtime.abortCount, 2, "The canceled owned delivery must also request native abort before model work");
   assert.equal(modelContexts.length, 2, "Delayed canceled continuation cannot reach the model boundary");
   const filtered = await harness.emit("context", { messages: [userMessage(delayedContinuation.content)] });
   assert.ok(filtered.messages.every((message) => message.customType !== "todo-progress-goal-continuation"));
   assert.match(await harness.goalContext(), /Controller status: paused/);
+  assert.equal(provider.state.callCount, 2, "Canceled startup must not invoke the provider");
+  assert.deepEqual(errors, []);
 });
