@@ -1,9 +1,8 @@
 /**
  * Host UI for Pi (earendil pi-tui components) and omp 19.2 (rows objects).
- * omp is chosen by capability (`ctx.ui.composer`, or a factory host with
- * `size()`/`requestRender()` and no Pi `terminal`) and never imports pi-tui.
- * The Pi package is a platform-specific peer loaded only on that path, with a
- * computed specifier: omp 19.2 rejects a static pi-tui import at load time.
+ * omp is detected first by capability (`ctx.ui.composer`) and never imports pi-tui.
+ * The Pi package is loaded only on the Pi path, with a computed specifier:
+ * omp 19.2 rejects a static pi-tui import at load time.
  */
 import * as codingAgent from "@earendil-works/pi-coding-agent";
 
@@ -144,16 +143,11 @@ const RAW_KEYS: Record<string, string> = {
 
 export interface HostProbe {
   ui?: object | null;
-  factoryUi?: object | null;
 }
 
-/** omp 19.2 exposes `composer` on the UI context, and its custom factory receives `size()`. */
+/** omp 19.2 exposes `composer` on the UI context before any custom factory runs. */
 export function isOmpUiHost(probe: HostProbe = {}): boolean {
-  if (probe.ui && typeof probe.ui === "object" && "composer" in probe.ui) return true;
-  const factoryUi = probe.factoryUi;
-  if (!factoryUi || typeof factoryUi !== "object") return false;
-  const host = factoryUi as { size?: unknown; requestRender?: unknown };
-  return typeof host.size === "function" && typeof host.requestRender === "function" && !("terminal" in factoryUi);
+  return Boolean(probe.ui && typeof probe.ui === "object" && "composer" in probe.ui);
 }
 
 let cached: Promise<UiHost> | undefined;

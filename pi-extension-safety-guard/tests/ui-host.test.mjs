@@ -62,21 +62,18 @@ test("rows host cycles settings and selects bash choices without pi-tui", async 
     resetUiHostForTests();
   }
 });
-test("omp capability selects rows without importing pi-tui", async () => {
+test("omp composer selects rows without importing pi-tui", async () => {
   resetUiHostForTests();
   let imported = false;
-  const refuse = async () => {
-    imported = true;
-    throw new Error("pi-tui import must not run on omp");
-  };
-  const fromComposer = await loadUiHost({ ui: { composer: {} } }, { importPiTui: refuse });
-  assert.equal(fromComposer.kind, "omp");
-  const fromFactory = await loadUiHost({
-    factoryUi: { size: () => ({ rows: 24, columns: 80 }), requestRender() { } },
-  }, { importPiTui: refuse });
-  assert.equal(fromFactory.kind, "omp");
+  const host = await loadUiHost({ ui: { composer: {} } }, {
+    importPiTui: async () => {
+      imported = true;
+      throw new Error("pi-tui import must not run on omp");
+    },
+  });
+  assert.equal(host.kind, "omp");
   assert.equal(imported, false);
-  assert.equal(isOmpUiHost({ ui: { select() { } }, factoryUi: { terminal: { rows: 24 }, requestRender() { } } }), false);
+  assert.equal(isOmpUiHost({ ui: { select() { } } }), false);
 });
 
 test("pi-tui peer loads the component host when installed", async () => {
