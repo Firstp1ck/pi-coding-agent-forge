@@ -1,7 +1,7 @@
 import path from "node:path";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { getAgentDir, getSettingsListTheme, isToolCallEventType } from "@earendil-works/pi-coding-agent";
-import { Container, Key, matchesKey, type SettingItem, SettingsList, Text } from "@earendil-works/pi-tui";
+import { getAgentDir, isToolCallEventType } from "@earendil-works/pi-coding-agent";
+import { loadUiHost } from "./src/ui-host.ts";
 import {
   SAFETY_GUARD_CATEGORIES,
   SAFETY_GUARD_CONTEXT_LINES_MAX,
@@ -320,13 +320,14 @@ async function configureSafetyGuardSetup(
     }
   }
 
+  const host = await loadUiHost({ ui: ctx.ui });
   const result = await ctx.ui.custom<"save" | undefined>((tui, theme, _keybindings, done) => {
-    const items: SettingItem[] = [
+    const items = [
       { id: "enabled", label: "General · Guard enabled", currentValue: onOff(values.enabled), values: ["on", "off"] },
       { id: "autoReview.enabled", label: "Auto-review · Review matched calls with a model", currentValue: onOff(values.autoReview.enabled), values: ["on", "off"] },
       { id: "context.before", label: "Preview · Lines before a match", currentValue: String(values.contextLines.before), values: CONTEXT_LINE_VALUES },
       { id: "context.after", label: "Preview · Lines after a match", currentValue: String(values.contextLines.after), values: CONTEXT_LINE_VALUES },
-      ...SAFETY_GUARD_CATEGORIES.map((category): SettingItem => ({
+      ...SAFETY_GUARD_CATEGORIES.map((category) => ({
         id: `category.${category}`,
         label: `Commands · ${CATEGORY_LABELS[category]}`,
         currentValue: onOff(values.categories[category]),
@@ -335,18 +336,12 @@ async function configureSafetyGuardSetup(
       { id: "protected.write", label: "Protected paths · Guard writes", currentValue: onOff(values.protectedPaths.write), values: ["on", "off"] },
       { id: "protected.edit", label: "Protected paths · Guard edits", currentValue: onOff(values.protectedPaths.edit), values: ["on", "off"] },
     ];
-
-    const container = new Container();
-    container.addChild(new Text(
-      `${theme.fg("accent", theme.bold("Safety guard setup"))}\n${theme.fg("dim", `Saved globally in ${safetyGuardConfigFile()}`)}`,
-      1,
-      0,
-    ));
-    const settingsList = new SettingsList(
+    const overlay = host.createSettingsOverlay({
+      theme,
       items,
-      Math.min(items.length + 2, 18),
-      getSettingsListTheme(),
-      (id, newValue) => {
+      title: `${theme.fg("accent", theme.bold("Safety guard setup"))}\n${theme.fg("dim", `Saved globally in ${safetyGuardConfigFile()}`)}`,
+      footer: theme.fg("dim", "  ↑/↓ move · Enter/Space change · Ctrl+S save · Esc cancel"),
+      onChange(id, newValue) {
         if (id === "enabled") values.enabled = newValue === "on";
         else if (id === "autoReview.enabled") values.autoReview.enabled = newValue === "on";
         else if (id === "context.before") values.contextLines.before = Number.parseInt(newValue, 10);
@@ -358,26 +353,17 @@ async function configureSafetyGuardSetup(
           if (SAFETY_GUARD_CATEGORIES.includes(category)) values.categories[category] = newValue === "on";
         }
       },
-      () => done(undefined),
-      { enableSearch: true },
-    );
-    container.addChild(settingsList);
-    container.addChild(new Text(theme.fg("dim", "  ↑/↓ move · Enter/Space change · Ctrl+S save · Esc cancel"), 1, 0));
-
+      onCancel: () => done(undefined),
+      onSave: () => done("save"),
+    });
     return {
-      render(width: number) {
-        return container.render(width);
-      },
-      invalidate() {
-        container.invalidate();
-      },
+      render: (width: number) => overlay.render(width),
+      invalidate: () => overlay.invalidate(),
       handleInput(data: string) {
-        if (matchesKey(data, Key.ctrl("s"))) done("save");
-        else if (data === "j") settingsList.handleInput?.("\u001b[B");
-        else if (data === "k") settingsList.handleInput?.("\u001b[A");
-        else settingsList.handleInput?.(data);
+        overlay.handleInput(data);
         tui.requestRender();
       },
+      dispose: () => overlay.dispose?.(),
     };
   });
 
