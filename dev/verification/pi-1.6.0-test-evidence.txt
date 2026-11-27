@@ -1,0 +1,1573 @@
+Pi 1.6.0 test audit: selected execution evidence
+Paths are normalized. Nonadjacent excerpts are separated by [...].
+
+=== ..pi152.baseline.log ===
+[...]
+1: node:internal/modules/run_main:111
+2:     triggerUncaughtException(
+3:     ^
+4: 
+5: AssertionError [ERR_ASSERTION]: plain selection
+6: Discovered 1 local Pi package(s) (extensions/skills/packages).
+7: 
+8: Checking package statuses: [----------------------------]   0% (0/1) elapsed 0s, left 0s
+9: Checking package statuses: [############################] 100% (1/1) elapsed 0s, left 0s
+10: WARN: skipping '@fixture/pi-extension-example' because npm latest version could not be resolved.
+11: No packages with resolvable npm latest versions discovered.
+[...]
+26: Node.js v26.13.1
+27: ✖ dev/scripts/install-pi-add.test.mjs (1101.530225ms)
+28: ℹ tests 1
+29: ℹ suites 0
+30: ℹ pass 0
+31: ℹ fail 1
+32: ℹ cancelled 0
+33: ℹ skipped 0
+34: ℹ todo 0
+35: ℹ duration_ms 1105.726765
+36: 
+37: ✖ failing tests:
+38: 
+39: test at dev/scripts/install-pi-add.test.mjs:1:1
+40: ✖ dev/scripts/install-pi-add.test.mjs (1101.530225ms)
+41:   'test failed'
+
+=== .__standalone.pi160.log ===
+[...]
+1: node:internal/modules/run_main:111
+2:     triggerUncaughtException(
+3:     ^
+4: 
+5: AssertionError [ERR_ASSERTION]: plain selection
+6: Discovered 1 local Pi package(s) (extensions/skills/packages).
+7: 
+8: Checking package statuses: [----------------------------]   0% (0/1) elapsed 0s, left 0s
+9: Checking package statuses: [############################] 100% (1/1) elapsed 0s, left 0s
+10: WARN: skipping '@fixture/pi-extension-example' because npm latest version could not be resolved.
+11: No packages with resolvable npm latest versions discovered.
+[...]
+26: Node.js v26.13.1
+27: ✖ dev/scripts/install-pi-add.test.mjs (905.431651ms)
+28: ✔ pack lifecycle packages compare generated publish artifacts (642.848102ms)
+29: ✔ packages without pack hooks retain the source-file fast path (1328.646752ms)
+30: sync Pi package symlink tests passed
+31: ✔ dev/scripts/sync-pi-package-symlinks.test.mjs (5080.263011ms)
+32: (node:2077673) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<repo>/pi-extension-archwiki-local/index.ts is not specified and it doesn't parse as CommonJS.
+33: Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+[...]
+57: ℹ cancelled 0
+58: ℹ skipped 0
+59: ℹ todo 0
+60: ℹ duration_ms 5087.94148
+61: 
+62: ✖ failing tests:
+63: 
+64: test at dev/scripts/install-pi-add.test.mjs:1:1
+65: ✖ dev/scripts/install-pi-add.test.mjs (905.431651ms)
+66:   'test failed'
+
+=== pi-extension-anthropic-auth-recovery.pi160.log ===
+[...]
+1: npm notice run @firstpick/pi-extension-anthropic-auth-recovery@0.3.1 test
+2: npm notice run node --experimental-strip-types --test tests/recovery.test.mjs && node --experimental-strip-types --test tests/symlink-layout.test.mjs && node --experimental-strip-types --test tests/package-install.test.mjs
+3: ✔ patch status summary hides already-applied targets and preserves actionable statuses (0.623763ms)
+4: ✔ startup compatibility warnings require an active Anthropic subscription login (0.221371ms)
+[...]
+32: ℹ duration_ms 77.882875
+33: ✔ packed extension installs offline with all recovery resources (645.45857ms)
+34: ℹ tests 1
+35: ℹ suites 0
+36: ℹ pass 1
+37: ℹ fail 0
+38: ℹ cancelled 0
+39: ℹ skipped 0
+40: ℹ todo 0
+41: ℹ duration_ms 676.98742
+
+=== pi-extension-aur-review.pi160.log ===
+[...]
+1: npm notice run @firstpick/pi-extension-aur-review@0.1.3 test
+2: npm notice run node --experimental-strip-types --test tests/*.test.mjs
+3: ✔ untracked replacement between lstat and open fails the bounded hash safely (93.349383ms)
+4: (node:1618394) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<repo>/pi-utils/index.ts is not specified and it doesn't parse as CommonJS.
+[...]
+22: ✔ RPC close publishes a closed review before clearing its widget (64.199065ms)
+23: ✔ command parser validates review scope/origin and only accepts start options (0.304162ms)
+24: ℹ tests 17
+25: ℹ suites 0
+26: ℹ pass 17
+27: ℹ fail 0
+28: ℹ cancelled 0
+29: ℹ skipped 0
+30: ℹ todo 0
+31: ℹ duration_ms 1470.162028
+
+=== pi-extension-brave-search.pi160.log ===
+[...]
+1: npm notice run @firstpick/pi-extension-brave-search@0.2.4 test
+2: npm notice run node --experimental-strip-types --test tests/*.test.ts
+3: ✔ serializes overlapping requests and waits between them (1.725989ms)
+4: ✔ continues the queue after a failed request (0.374172ms)
+5: ℹ tests 2
+6: ℹ suites 0
+7: ℹ pass 2
+8: ℹ fail 0
+9: ℹ cancelled 0
+10: ℹ skipped 0
+11: ℹ todo 0
+12: ℹ duration_ms 51.068078
+
+=== pi-extension-btw.pi160.log ===
+[...]
+1: npm notice run @firstpick/pi-extension-btw@0.1.6 test
+2: npm notice run node --test tests/*.test.mjs
+3: ✔ follow-up questions retain earlier /btw turns without duplicating the main transcript (0.585893ms)
+4: ✔ concurrent side-thread submissions run in order (0.485812ms)
+[...]
+10: ✔ /btw-status uses status-specific display and error presentation (0.199971ms)
+11: ✔ /btw keeps the persistent session side thread (0.145161ms)
+12: ℹ tests 9
+13: ℹ suites 0
+14: ℹ pass 9
+15: ℹ fail 0
+16: ℹ cancelled 0
+17: ℹ skipped 0
+18: ℹ todo 0
+19: ℹ duration_ms 59.518041
+
+=== pi-extension-codex-fast-mode.pi160.log ===
+[...]
+1: npm notice run @firstpick/pi-extension-codex-fast-mode@0.1.2 test
+2: npm notice run node --experimental-strip-types --test tests/*.test.ts
+3: ✔ plain-object guard excludes malformed payloads (0.652803ms)
+4: ✔ provider eligibility is exact (0.088811ms)
+[...]
+17: ✔ unsupported Ultrafast selection and invalid commands leave existing state unchanged (0.08084ms)
+18: ✔ branch-restored Ultrafast remains a preference when the model is unsupported (0.07873ms)
+19: ℹ tests 16
+20: ℹ suites 0
+21: ℹ pass 16
+22: ℹ fail 0
+23: ℹ cancelled 0
+24: ℹ skipped 0
+25: ℹ todo 0
+26: ℹ duration_ms 56.133145
+
+=== pi-extension-conditional-system-prompts.pi160.log ===
+[...]
+1: npm notice run @firstpick/pi-extension-conditional-system-prompts@0.1.3 test
+2: npm notice run node --experimental-strip-types --test tests/*.test.mjs
+3: ✔ routes the governance skill bridge only when selected tools include subagent and preserves prior prompt content (0.882894ms)
+4: ✔ injects a model-visible configuration error when governance is unavailable (0.093901ms)
+[...]
+7: ✔ caches the Windows prompt for the lifetime of an extension instance (0.202021ms)
+8: ✔ missing-file failure applies only to Windows while the subagent bridge needs no file (0.290481ms)
+9: ℹ tests 6
+10: ℹ suites 0
+11: ℹ pass 6
+12: ℹ fail 0
+13: ℹ cancelled 0
+14: ℹ skipped 0
+15: ℹ todo 0
+16: ℹ duration_ms 314.045621
+
+=== pi-extension-cursor-composer.pi160.log ===
+[...]
+1: npm notice run @firstpick/pi-extension-cursor-composer@0.2.0 test
+2: npm notice run node --import tsx --test tests/*.test.ts
+3: ✔ normalized transcripts replay system sections and deltas without duplicating stale instructions (1.319707ms)
+4: ✔ system prompt overrides and exclusions also apply to normalized transcripts (0.214141ms)
+[...]
+18: ✔ reports indeterminate for malformed audit output (0.09607ms)
+19: ✔ reports indeterminate when the SDK did not resolve exactly once (0.062241ms)
+20: ℹ tests 17
+21: ℹ suites 0
+22: ℹ pass 17
+23: ℹ fail 0
+24: ℹ cancelled 0
+25: ℹ skipped 0
+26: ℹ todo 0
+27: ℹ duration_ms 307.757919
+
+=== pi-extension-docx.pi160.log ===
+[...]
+1: npm notice run @firstpick/pi-extension-docx@0.1.6 test
+2: npm notice run tsx --test tests/*.test.mjs
+3: ✔ bounded intake inventories relationships and cross-run semantic text (15.235488ms)
+4: ✔ no-op ZIP rebuild preserves every uncompressed part (2.221401ms)
+[...]
+22: ✔ existing destination overwrite requires a matching destination hash (8.119811ms)
+23: ✔ commit re-derives the operation preservation contract from source and candidate (4.11097ms)
+24: ℹ tests 21
+25: ℹ suites 0
+26: ℹ pass 21
+27: ℹ fail 0
+28: ℹ cancelled 0
+29: ℹ skipped 0
+30: ℹ todo 0
+31: ℹ duration_ms 3411.242301
+
+=== pi-extension-docx__corpus.pi160.log ===
+[...]
+1: npm notice run @firstpick/pi-extension-docx@0.1.6 test:corpus
+2: npm notice run tsx tests/corpus/corpus.test.mjs
+3: Synthetic DOCX corpus passed 7 bounded intake/policy cases plus the feature-inventory matrix.
+
+=== pi-extension-docx__engine.pi160.log ===
+[...]
+1: npm notice run @firstpick/pi-extension-docx@0.1.6 test:engine
+2: npm notice run node scripts/test-engine.mjs
+3: SKIP: no .NET SDK is installed; engine source is present but the production engine gate remains open.
+
+=== pi-extension-docx__pi-modes.pi160.log ===
+[...]
+1: npm notice run @firstpick/pi-extension-docx@0.1.6 test:pi-modes
+2: npm notice run tsx tests/pi/mode-harness.mjs
+3: Registration and non-interactive overwrite refusal passed for print/JSON mode harnesses. Real TUI/RPC session gates remain external.
+
+=== pi-extension-feature-system-prompt.pi160.log ===
+[...]
+1: npm notice run @firstpick/pi-extension-feature-system-prompt@0.1.7 test
+2: npm notice run node --experimental-strip-types --test tests/*.test.ts
+3: (node:1625544) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<repo>/pi-utils/index.ts is not specified and it doesn't parse as CommonJS.
+4: Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+[...]
+28: ✔ tree navigation resets branch-local continuation state (0.06021ms)
+29: ✔ extension registration is inert until a lifecycle event and has no hard-coded classifier model contract (0.071211ms)
+30: ℹ tests 23
+31: ℹ suites 0
+32: ℹ pass 23
+33: ℹ fail 0
+34: ℹ cancelled 0
+35: ℹ skipped 0
+36: ℹ todo 0
+37: ℹ duration_ms 359.752433
+
+=== pi-extension-git-footer-status__standalone.pi160.log ===
+[...]
+1: (node:2075744) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<repo>/pi-extension-git-footer-status/index.ts is not specified and it doesn't parse as CommonJS.
+2: Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+3: To eliminate this warning, add "type": "module" to <repo>/pi-extension-git-footer-status/package.json.
+4: (Use `node --trace-warnings ...` to show where the warning was created)
+[...]
+82: ✔ the WebUI PI chip always advertises the isolated /calibrate action when enabled (0.593293ms)
+83: ✔ git-footer-refresh bypasses cached calibration records before republishing (0.206422ms)
+84: ℹ tests 58
+85: ℹ suites 0
+86: ℹ pass 58
+87: ℹ fail 0
+88: ℹ cancelled 0
+89: ℹ skipped 0
+90: ℹ todo 0
+91: ℹ duration_ms 1833.366365
+
+=== pi-extension-git-guided-workflow.pi160.log ===
+[...]
+1: npm notice run @firstpick/pi-extension-git-guided-workflow@0.1.8 test
+2: npm notice run node --test tests/*.test.mjs
+3: ✔ preflight resolves a nested root and parses staged, unstaged, untracked, and byte-safe paths (86.110097ms)
+4: HEAD is now at d328098 test: initial
+[...]
+226: ✔ native generation validates arguments before model use and session shutdown aborts the only active call (94.240307ms)
+227: ✔ package metadata and documentation expose only the approved package contract (0.535783ms)
+228: ℹ tests 170
+229: ℹ suites 0
+230: ℹ pass 170
+231: ℹ fail 0
+232: ℹ cancelled 0
+233: ℹ skipped 0
+234: ℹ todo 0
+235: ℹ duration_ms 18530.522318
+
+=== pi-extension-grill-me.pi160.log ===
+[...]
+1: npm notice run @firstpick/pi-extension-grill-me@0.1.8 test
+2: npm notice run node --experimental-strip-types --test tests/*.test.ts
+3: ✔ the command emits the model-guided questionnaire round contract (3.89356ms)
+4: ✔ the command starts in RPC mode when questionnaire is active (1.349137ms)
+[...]
+24: ✔ recording mutations share a queue so concurrent single and batch calls retain all turns (0.771014ms)
+25: ✔ tool guidance prefers one batch per questionnaire result rather than repeated single calls (0.151511ms)
+26: ℹ tests 20
+27: ℹ suites 0
+28: ℹ pass 20
+29: ℹ fail 0
+30: ℹ cancelled 0
+31: ℹ skipped 0
+32: ℹ todo 0
+33: ℹ duration_ms 402.479279
+
+=== pi-extension-gui-testing.pi160.log ===
+[...]
+1: npm notice run @firstpick/pi-extension-gui-testing@0.1.0 test
+2: npm notice run node --experimental-strip-types --test "tests/contracts/**/*.test.mjs" "tests/unit/**/*.test.mjs"
+3: ✔ owner label round-trips all four fields (0.807504ms)
+4: ✔ owner labels with missing or malformed fields are not parsed, so they are never swept (0.151041ms)
+[...]
+106: ✔ cost hook warns once above each threshold; without an estimator it stays silent (0.1398ms)
+107: ✔ session registry: limit with a clear message, reservation, idle detection, idempotent unregister (0.538852ms)
+108: ℹ tests 105
+109: ℹ suites 0
+110: ℹ pass 105
+111: ℹ fail 0
+112: ℹ cancelled 0
+113: ℹ skipped 0
+114: ℹ todo 0
+115: ℹ duration_ms 1178.783791
+
+=== pi-extension-image-generation.pi160.log ===
+[...]
+1: npm notice run @firstpick/pi-extension-image-generation@0.1.0 test
+2: npm notice run node --experimental-strip-types --test tests/*.test.ts
+3: ✔ command accepts quoted or bare prompts and preserves internal text (0.632003ms)
+4: ✔ invalid command arguments fail before workflow execution (0.616013ms)
+[...]
+59: ✔ ask mode puts saved default first but does not silently select it (0.707433ms)
+60: ✔ unavailable defaults and stale options fail without fallback or generation (0.760584ms)
+61: ℹ tests 58
+62: ℹ suites 0
+63: ℹ pass 58
+64: ℹ fail 0
+65: ℹ cancelled 0
+66: ℹ skipped 0
+67: ℹ todo 0
+68: ℹ duration_ms 141.672108
+
+=== pi-extension-model-research.pi160.log ===
+[...]
+1: npm notice run @firstpick/pi-extension-model-research@0.1.0 test
+2: npm notice run node --experimental-strip-types --test tests/*.test.mjs
+3: ✔ run creation accepts unrelated and same-author subjects without weakening worker identity restrictions (2.588993ms)
+4: ✔ instruction-like labels remain JSON data inside labelled blocks in every stage prompt (4.514713ms)
+[...]
+143: ✔ legacy fallback preserves exact historical IDs and does not add subjects (0.263131ms)
+144: ✔ subject rendering keeps HTML and Markdown syntax inert without losing label data (0.193181ms)
+145: ℹ tests 136
+146: ℹ suites 0
+147: ℹ pass 136
+148: ℹ fail 0
+149: ℹ cancelled 0
+150: ℹ skipped 0
+151: ℹ todo 0
+152: ℹ duration_ms 536.303956
+
+=== pi-extension-nixos-wiki-local.pi160.log ===
+[...]
+1: npm notice run @firstpick/pi-extension-nixos-wiki-local@0.1.8 test:mock
+2: npm notice run bun tests/mocktest.ts
+3: mock NixOS wiki extension tests passed
+
+=== pi-extension-quickshell-wiki-local.pi160.log ===
+[...]
+1: npm notice run @firstpick/pi-extension-quickshell-wiki-local@0.2.1 test
+2: npm notice run bun test tests/*.test.ts && python3 -m unittest discover -s tests -p 'test_*.py'
+3: bun test v1.4.5 (a7733435c)
+4: 
+[...]
+34: (pass) missing snapshot is distinct from a corrupt active snapshot [0.33ms]
+35: 
+36:  27 pass
+37:  0 fail
+38: Ran 27 tests across 2 files. [54.00ms]
+39: ...........
+40: ----------------------------------------------------------------------
+41: Ran 11 tests in 0.064s
+42: 
+43: OK
+
+=== pi-extension-raspberrypi-wiki-local.pi160.log ===
+[...]
+1: npm notice run @firstpick/pi-extension-raspberrypi-wiki-local@0.1.8 test
+2: npm notice run node --test tests/*.test.mjs
+3: ✔ does not route unrelated extension diagnostics (0.539263ms)
+4: ✔ does not intercept its own missing-corpus diagnostic (0.07079ms)
+5: ✔ routes actual Raspberry Pi support prompts (0.055421ms)
+6: ℹ tests 3
+7: ℹ suites 0
+8: ℹ pass 3
+9: ℹ fail 0
+10: ℹ cancelled 0
+11: ℹ skipped 0
+12: ℹ todo 0
+13: ℹ duration_ms 30.683585
+
+=== pi-extension-release-npm.pi160.log ===
+[...]
+1: npm notice run @firstpick/pi-extension-release-npm@0.5.3 test
+2: npm notice run node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types --test tests/*.test.mjs
+3: ✔ CLI bundle and lifecycle preparation stays temporary in plan and publish, healthy packages survive install failure (1714.063153ms)
+4: compact-release-output tests passed
+[...]
+136: ✔ snapshot traversal bounds pending filesystem work and drains it before reporting failure (35.778291ms)
+137: ✔ owned cleanup handles restrictive directories without changing outside symlink targets (1.252906ms)
+138: ℹ tests 127
+139: ℹ suites 0
+140: ℹ pass 127
+141: ℹ fail 0
+142: ℹ cancelled 0
+143: ℹ skipped 0
+144: ℹ todo 0
+145: ℹ duration_ms 51315.940188
+
+=== pi-extension-review.pi160.log ===
+[...]
+1: npm notice run @firstpick/pi-extension-review@0.1.3 test
+2: npm notice run node --experimental-strip-types --test tests/*.test.mjs
+3: ✔ range unions remove overlap and only uncovered intervals stay pending (0.853424ms)
+4: ✔ coverage derives from independently finalized evidence and duplicate reads do not inflate it (3.92062ms)
+[...]
+95: ✔ status overlay is fire-and-forget, unfocused, live, and toggles without aborting agents (2.256771ms)
+96: ✔ non-TUI status is textual and never invokes custom UI (0.14229ms)
+97: ℹ tests 88
+98: ℹ suites 0
+99: ℹ pass 88
+100: ℹ fail 0
+101: ℹ cancelled 0
+102: ℹ skipped 0
+103: ℹ todo 0
+104: ℹ duration_ms 3111.861482
+
+=== pi-extension-safety-guard.pi160.log ===
+[...]
+1: npm notice run @firstpick/pi-extension-safety-guard@0.3.3 test
+2: npm notice run node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types --import ./tests/register-typescript.mjs --test tests/*.test.mjs
+3: (node:1852650) ExperimentalWarning: stripTypeScriptTypes is an experimental feature and might change at any time
+4: (Use `node --trace-warnings ...` to show where the warning was created)
+[...]
+183: ✔ unavailable or invalid source locations never fabricate a marker (0.12953ms)
+184: ✔ parser initialization failures remain distinct from rejected syntax, including cached failure (3.286647ms)
+185: ℹ tests 156
+186: ℹ suites 0
+187: ℹ pass 156
+188: ℹ fail 0
+189: ℹ cancelled 0
+190: ℹ skipped 0
+191: ℹ todo 0
+192: ℹ duration_ms 604.536942
+
+=== pi-extension-setup-skills.pi087.targeted.log ===
+[...]
+1: file://<pi-0.87.1-node_modules>/@earendil-works/pi-coding-agent/dist/core/agent-session.js:1026
+2:         options.selectedTools = [...new Set(options.selectedTools)].filter((name) => this._toolRegistry.has(name));
+3:                                                                                                         ^
+4: 
+5: TypeError: Cannot read properties of undefined (reading 'has')
+6:     at file://<pi-0.87.1-node_modules>/@earendil-works/pi-coding-agent/dist/core/agent-session.js:1026:105
+7:     at Array.filter (<anonymous>)
+8:     at Object._preparePromptAndToolLoadout (file://<pi-0.87.1-node_modules>/@earendil-works/pi-coding-agent/dist/core/agent-session.js:1026:69)
+9:     at Object.prompt (file://<pi-0.87.1-node_modules>/@earendil-works/pi-coding-agent/dist/core/agent-session.js:1318:40)
+10:     at async Promise.all (index 0)
+11:     at async file://<repo>/pi-extension-setup-skills/tests/t3-preflight-regression.mjs:122:5
+12: 
+13: Node.js v26.13.1
+
+=== pi-extension-setup-skills.pi152.targeted.log ===
+[...]
+1: file://<pi-1.5.2-node_modules>/@earendil-works/pi-coding-agent/dist/core/agent-session.js:1720
+2:             trigger = await this._preparePrompt(text, options);
+3:                                  ^
+4: 
+5: TypeError: this._preparePrompt is not a function
+6:     at Object.prompt (file://<pi-1.5.2-node_modules>/@earendil-works/pi-coding-agent/dist/core/agent-session.js:1720:34)
+7:     at file://<repo>/pi-extension-setup-skills/tests/t3-preflight-regression.mjs:112:50
+8: 
+9: Node.js v26.13.1
+
+=== pi-extension-setup-skills.pi160.log ===
+[...]
+1: npm notice run @firstpick/pi-extension-setup-skills@0.3.0 test
+2: npm notice run bun test && node tests/t3-preflight-regression.mjs --no-skills
+3: bun test v1.4.5 (a7733435c)
+4: 
+[...]
+49: 
+50:  39 pass
+51:  0 fail
+52:  158 expect() calls
+53: Ran 39 tests across 3 files. [170.00ms]
+54: file://<pi-1.6.0-node_modules>/@earendil-works/pi-coding-agent/dist/core/agent-session.js:1729
+55:             trigger = await this._preparePrompt(text, options);
+56:                                  ^
+57: 
+58: TypeError: this._preparePrompt is not a function
+59:     at Object.prompt (file://<pi-1.6.0-node_modules>/@earendil-works/pi-coding-agent/dist/core/agent-session.js:1729:34)
+60:     at file://<repo>/pi-extension-setup-skills/tests/t3-preflight-regression.mjs:112:50
+61: 
+62: Node.js v26.13.1
+
+=== pi-extension-small-modal-reliability.pi160.log ===
+[...]
+1: npm notice run @firstpick/pi-extension-small-modal-reliability@0.1.8 test
+2: npm notice run node scripts/test.mjs
+3: (node:1853535) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<repo>/pi-extension-small-modal-reliability/index.ts is not specified and it doesn't parse as CommonJS.
+4: Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+[...]
+263: ✔ an installed read truncated by line count cannot authorize overwriting unseen lines (10.245482ms)
+264: ✔ a narrowed scope remains authorized by its unchanged approved ancestor (3.000826ms)
+265: ℹ tests 258
+266: ℹ suites 0
+267: ℹ pass 258
+268: ℹ fail 0
+269: ℹ cancelled 0
+270: ℹ skipped 0
+271: ℹ todo 0
+272: ℹ duration_ms 12306.966521
+
+=== pi-extension-stats__standalone.pi160.log ===
+[...]
+1: (node:2075743) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<repo>/pi-extension-stats/index.ts is not specified and it doesn't parse as CommonJS.
+2: Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+3: To eliminate this warning, add "type": "module" to <repo>/pi-extension-stats/package.json.
+4: (Use `node --trace-warnings ...` to show where the warning was created)
+[...]
+22: ✔ structured prompt context is deterministic apart from transport metadata (1.649818ms)
+23: ✔ README describes token-share semantics without unsupported savings claims (0.356562ms)
+24: ℹ tests 16
+25: ℹ suites 0
+26: ℹ pass 16
+27: ℹ fail 0
+28: ℹ cancelled 0
+29: ℹ skipped 0
+30: ℹ todo 0
+31: ℹ duration_ms 388.113963
+
+=== pi-extension-subagent-minimum-fanout.pi160.log ===
+[...]
+1: npm notice run @firstpick/pi-extension-subagent-minimum-fanout@0.1.6 test
+2: npm notice run node --experimental-strip-types --test tests/*.test.ts
+3: ✔ review guidance is conditional on active delegation tools and preserves existing instructions (0.829614ms)
+4: ✔ guidance preserves conditional diversity, same-model fallback, and independent review quorum (0.106291ms)
+[...]
+17: ✔ management calls remain exempt from reviewer diversity (0.07503ms)
+18: ✔ independent single-child calls, malformed input, and non-subagent tools pass through (0.077021ms)
+19: ℹ tests 16
+20: ℹ suites 0
+21: ℹ pass 16
+22: ℹ fail 0
+23: ℹ cancelled 0
+24: ℹ skipped 0
+25: ℹ todo 0
+26: ℹ duration_ms 61.518522
+
+=== pi-extension-todo-progress.pi087.targeted.log ===
+[...]
+1: (node:2060085) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<repo>/pi-utils/src/markdown.ts is not specified and it doesn't parse as CommonJS.
+2: Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+3: To eliminate this warning, add "type": "module" to <repo>/pi-utils/package.json.
+4: (Use `node --trace-warnings ...` to show where the warning was created)
+5: ✔ native Pi startup preserves hooks and pause cancels a delayed continuation (28.062292ms)
+6: ℹ tests 1
+7: ℹ suites 0
+8: ℹ pass 1
+9: ℹ fail 0
+10: ℹ cancelled 0
+11: ℹ skipped 0
+12: ℹ todo 0
+13: ℹ duration_ms 313.409126
+
+=== pi-extension-todo-progress.pi152.targeted.log ===
+[...]
+1: (node:2060062) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<repo>/pi-utils/src/markdown.ts is not specified and it doesn't parse as CommonJS.
+2: Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+3: To eliminate this warning, add "type": "module" to <repo>/pi-utils/package.json.
+4: (Use `node --trace-warnings ...` to show where the warning was created)
+5: ✖ native Pi startup preserves hooks and pause cancels a delayed continuation (27.235958ms)
+6: ℹ tests 1
+7: ℹ suites 0
+8: ℹ pass 0
+9: ℹ fail 1
+10: ℹ cancelled 0
+11: ℹ skipped 0
+[...]
+14: 
+15: ✖ failing tests:
+16: 
+17: test at tests/follow-up-delivery.test.mjs:1547:1
+18: ✖ native Pi startup preserves hooks and pause cancels a delayed continuation (27.235958ms)
+19:   TypeError [Error]: this._preparePrompt is not a function
+20:       at Object.prompt (file://<pi-1.5.2-node_modules>/@earendil-works/pi-coding-agent/dist/core/agent-session.js:1720:34)
+21:       at Object.sendUserMessage (file://<pi-1.5.2-node_modules>/@earendil-works/pi-coding-agent/dist/core/agent-session.js:2034:20)
+22:       at TestContext.<anonymous> (file://<repo>/pi-extension-todo-progress/tests/follow-up-delivery.test.mjs:1616:48)
+23:       at async Test.run (node:internal/test_runner/test:1409:7)
+24:       at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)
+
+=== pi-extension-todo-progress.pi160.log ===
+[...]
+1: npm notice run @firstpick/pi-extension-todo-progress@0.3.4 test
+2: npm notice run node --test tests/*.test.mjs
+3: (node:2014526) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<repo>/pi-utils/src/markdown.ts is not specified and it doesn't parse as CommonJS.
+4: Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+[...]
+75: ✔ restored waiting goals need explicit resume before any notification (5.320546ms)
+76: ✖ native Pi startup preserves hooks and pause cancels a delayed continuation (4.734695ms)
+77: (node:2014528) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<repo>/pi-extension-todo-progress/goal-runtime.ts is not specified and it doesn't parse as CommonJS.
+78: Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+79: To eliminate this warning, add "type": "module" to <repo>/pi-extension-todo-progress/package.json.
+80: (Use `node --trace-warnings ...` to show where the warning was created)
+81: ✔ goal checkpoints bind to identity and require status-specific evidence (1.181376ms)
+82: ✔ observable progress is deduplicated and settled runs count no-progress honestly (0.141931ms)
+[...]
+107: 
+108: ✖ failing tests:
+109: 
+110: test at tests/follow-up-delivery.test.mjs:1547:1
+111: ✖ native Pi startup preserves hooks and pause cancels a delayed continuation (4.734695ms)
+112:   TypeError [Error]: this._preparePrompt is not a function
+113:       at Object.prompt (file://<pi-1.6.0-node_modules>/@earendil-works/pi-coding-agent/dist/core/agent-session.js:1729:34)
+114:       at Object.sendUserMessage (file://<pi-1.6.0-node_modules>/@earendil-works/pi-coding-agent/dist/core/agent-session.js:2043:20)
+115:       at TestContext.<anonymous> (file://<repo>/pi-extension-todo-progress/tests/follow-up-delivery.test.mjs:1616:48)
+116:       at async Test.run (node:internal/test_runner/test:1409:7)
+117:       at async Test.processPendingSubtests (node:internal/test_runner/test:974:7)
+
+=== pi-extension-tools.pi160.log ===
+[...]
+1: npm notice run @firstpick/pi-extension-tools@0.2.7 test
+2: npm notice run bun test
+3: bun test v1.4.5 (a7733435c)
+4: 
+[...]
+68: (pass) T3 RPC resource profiles > discards stale async model work [0.21ms]
+69: (pass) T3 RPC resource profiles > discards stale async branch work [0.15ms]
+70: (pass) T3 RPC resource profiles > discards stale async session work [0.12ms]
+71: (pass) T3 RPC resource profiles > discards stale async shutdown work [0.12ms]
+72: (pass) T3 RPC resource profiles > TUI keeps its original refresh timing even with a valid marker [0.30ms]
+73: 
+74:  63 pass
+75:  0 fail
+76:  128 expect() calls
+77: Ran 63 tests across 3 files. [152.00ms]
+
+=== pi-extension-workbook.pi160.log ===
+[...]
+1: npm notice run @firstpick/pi-extension-workbook@0.1.7 test
+2: npm notice run tsx --test tests/*.test.mjs
+3: ✔ advanced formatting, metadata, print, and protection operations preserve xlsx (46.903908ms)
+4: ✔ advanced formatting, metadata, print, and protection operations preserve xlsm (20.263173ms)
+[...]
+97: ✔ VBA worker distinguishes operation/save phases and only translates trust failures (0.609023ms)
+98: ✔ VBA worker retains fail-closed automation guards and read-back verification (0.696154ms)
+99: ℹ tests 96
+100: ℹ suites 0
+101: ℹ pass 96
+102: ℹ fail 0
+103: ℹ cancelled 0
+104: ℹ skipped 0
+105: ℹ todo 0
+106: ℹ duration_ms 1009.418372
+
+=== pi-extension-workbook__pi-modes.pi160.log ===
+[...]
+1: npm notice run @firstpick/pi-extension-workbook@0.1.7 test:pi-modes
+2: npm notice run tsx tests/pi/mode-harness.mjs
+3: {
+4:   "status": "PASS",
+5:   "modes": {
+6:     "tui": "PASS",
+7:     "print": "PASS",
+8:     "json": "PASS",
+9:     "rpc": "PASS"
+10:   },
+11:   "reportPath": "<repo>/pi-extension-workbook/tests/corpus/LAST-PI-MODES.json"
+12: }
+
+=== pi-extension-workflows.pi160.log ===
+[...]
+1: npm notice run @firstpick/pi-extension-workflows@0.2.0 test
+[...]
+3: schema tests passed
+4: shell command policy tests passed
+[...]
+18: mode tests passed
+19: script parser tests passed
+20: script runtime tests passed
+21: task runner budget tests passed
+22: script runner budget tests passed
+23: script runner tests passed
+24: loader tests passed
+25: runner tests passed
+26: extension tests passed
+27: workflow-test tests passed
+
+=== pi-package-natural-conversation.pi160.log ===
+[...]
+1: npm notice run @firstpick/pi-package-natural-conversation@0.1.5 test
+2: npm notice run node --test tests/*.test.mjs
+3: ✔ default allowlist is read-only and nondestructive (4.261692ms)
+4: ✔ enable stores previous settings and applies conversation constraints (0.634983ms)
+[...]
+137: ✔ parseWav round-trips encodeWav output (0.474862ms)
+138: ✔ parseWav rejects garbage and isWav detects headers (0.147741ms)
+139: ℹ tests 112
+140: ℹ suites 0
+141: ℹ pass 112
+142: ℹ fail 0
+143: ℹ cancelled 0
+144: ℹ skipped 0
+145: ℹ todo 0
+146: ℹ duration_ms 1703.058424
+
+=== pi-package-prompts-git-pr.pi160.log ===
+[...]
+1: npm notice run @firstpick/pi-prompts-git-pr@0.1.7 test
+2: npm notice run node tests/git-staged-msg.test.mjs
+3: git-staged-msg.test.mjs passed
+
+=== pi-package-qt-webui.pi152.baseline.log ===
+[...]
+1: npm notice run @firstpick/pi-package-qt-webui@0.2.1 test
+2: npm notice run node tests/run-all.mjs
+3: ✔ portal appearance parsing accepts only bounded light and dark values (3.92079ms)
+4: ✔ portal monitor uses argument arrays, follows live changes, and waits for normal shutdown (0.851694ms)
+[...]
+86: ✔ resource commits avoid post-commit helper reads and report apply, persistence, and rollback failures honestly (2093.56175ms)
+87: ✖ helper transport handles adverse ordering, both timeout legs, and Pi exit without killing the backend (11780.768386ms)
+88: ✔ session resource results distinguish durable and ephemeral overrides (1890.734205ms)
+89: ✔ resource changes are idle-only and helper loss, timeout, and invalid profile data fail closed without blocking chat (1584.390737ms)
+90: ✔ model and thinking changes return refreshed resource capabilities without stale stored values (363.232206ms)
+91: ✔ oversized model inventories are bounded and reported (351.298795ms)
+92: ✔ oversized explicit model scopes keep scope order within the backend bound (387.747039ms)
+93: ✔ manual compaction blocks the session until Pi answers and reports bounded results or failures (897.622106ms)
+[...]
+187: ✔ launchQtWebUi reports an actionable Quickshell lookup failure (7.643828ms)
+188: ✖ package identity, command, dependency, and runtime requirements are declared (1.007866ms)
+189: ✔ package allowlist includes the Pi extension, runtime, QML, tests, and documentation (0.1372ms)
+190: ✔ README session screenshot is a nontrivial PNG (2.629013ms)
+191: ✔ development and test scripts use the source launcher without lifecycle hooks (0.141941ms)
+192: ✔ qt-webui npm bin is executable (0.437642ms)
+193: ✔ launcher uses argument arrays and disables shell execution (0.452753ms)
+194: ✖ packed package installs in isolation and resolves packaged paths (5195.755104ms)
+195: ✔ incomplete catalogs update workspace warning without posting session notices (2.06068ms)
+196: ✔ only a completed current refresh replaces the warning, including paged catalogs (0.494173ms)
+197: ✔ a failed refresh retains the warning attached to the displayed catalog (0.451392ms)
+198: ✔ completion invalidates old results before debounce and rejects delayed replies (1.284327ms)
+199: ✔ completion generations distinguish revisits, dismissal, kinds, and cursor positions (0.650093ms)
+200: ✔ acceptance independently checks the context even before a change signal runs (0.445522ms)
+[...]
+373: ✔ dialog rejection, unknown outcome, and late terminal settlement retain state across selection (1.599838ms)
+374: ✖ real Quickshell completes the deterministic backend and Pi behavior scenarios (1280.324238ms)
+375: ✔ real Quickshell applies, falls back, and recovers a Pi theme at default scale (841.115379ms)
+376: ✔ real Quickshell applies, falls back, and recovers a Pi theme at 200% scaling (840.229785ms)
+377: ✖ real Quickshell completes a model reorder and persists merged identities (3733.614382ms)
+378: ✖ real Quickshell preserves prompt, draft, and dialog intent under delayed settlement (2319.233167ms)
+379: ✔ real Quickshell keeps saved close, unsaved tab, and inactive promotion drafts separate (1261.901935ms)
+380: ✔ real bridge offers switch and new session when a resume file is missing (1005.316269ms)
+381: ✔ real Quickshell keeps Abort and recovery actions in the 560x520 window at default scale (945.527717ms)
+382: ✔ real Quickshell keeps Abort and recovery actions in the 560x520 window at 200% scaling (958.379912ms)
+383: ✖ real Quickshell completes the same scenarios at 200% scaling (685.686044ms)
+384: ✔ tool rows expand and copy at 100% scaling (1309.612035ms)
+385: ℹ ********* Start testing of qmltestrunner *********
+386: Config: Using QtTest library 6.12.0, Qt 6.12.0 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 16.2.1 20260810), endeavouros unknown
+387: PASS   : qmltestrunner::CompactToolRows::initTestCase()
+388: PASS   : qmltestrunner::CompactToolRows::test_empty_call()
+389: PASS   : qmltestrunner::CompactToolRows::test_inline_summary(light)
+[...]
+508: ℹ tests 312
+[...]
+510: ℹ pass 305
+511: ℹ fail 7
+[...]
+513: ℹ skipped 0
+[...]
+516: 
+517: ✖ failing tests:
+518: 
+519: test at tests/backend-session.test.mjs:686:1
+520: ✖ helper transport handles adverse ordering, both timeout legs, and Pi exit without killing the backend (11780.768386ms)
+521:   Error: timed out waiting for pi.status event
+522:   events: [
+523:    {
+524:     "v": 1,
+525:     "kind": "event",
+526:     "type": "backend.ready",
+527:     "seq": 1,
+[...]
+918: test at tests/package-contract.test.mjs:10:1
+919: ✖ package identity, command, dependency, and runtime requirements are declared (1.007866ms)
+920:   AssertionError [ERR_ASSERTION]: The input did not match the regular expression /^\^0\.84\./. Input:
+921:   
+922:   '^1.5.2'
+923:   
+924:       at TestContext.<anonymous> (file://<repo>/pi-package-qt-webui/tests/package-contract.test.mjs:15:10)
+925:       at Test.runInAsyncScope (node:async_hooks:226:14)
+926:       at Test.run (node:internal/test_runner/test:1402:25)
+[...]
+937: test at tests/packed-install.test.mjs:44:1
+938: ✖ packed package installs in isolation and resolves packaged paths (5195.755104ms)
+939:   AssertionError [ERR_ASSERTION]: npm install --prefix /tmp/qt-webui-packed-pKpVC8/install --ignore-scripts --no-audit --no-fund --offline /tmp/qt-webui-packed-pKpVC8/artifacts/firstpick-pi-package-qt-webui-0.2.1.tgz failed
+940:   stdout:
+941:   
+942:   stderr:
+943:   npm warn deprecated node-domexception@1.0.0: Use your platform's native DOMException instead
+944:   npm error code ENOTCACHED
+945:   npm error request to https://registry.npmjs.org/@earendil-works/pi-mcp/-/pi-mcp-1.6.1.tgz failed: cache mode is 'only-if-cached' but no cached response is available.
+946:   npm error A complete log of this run can be found in: <home>/.npm/_logs/2026-11-26T21_47_47_037Z-debug-0.log
+947:   
+948:   
+949:   1 !== 0
+950:   
+951:       at run (file://<repo>/pi-package-qt-webui/tests/packed-install.test.mjs:18:10)
+[...]
+963: test at tests/qml-smoke.test.mjs:338:1
+964: ✖ real Quickshell completes the deterministic backend and Pi behavior scenarios (1280.324238ms)
+965:   AssertionError [ERR_ASSERTION]: missing QT_WEBUI_SMOKE_THEME_LIGHT_OVERRIDE
+966:     INFO: Launching config: "<repo>/pi-package-qt-webui/qml/shell.qml"
+967:     INFO: Shell ID: "57e18363b1c70c8a944449d80e840c54" Path ID "57e18363b1c70c8a944449d80e840c54"
+968:     WARN: Detected locale "C" with character encoding "ANSI_X3.4-1968", which is not UTF-8.
+969:   Qt depends on a UTF-8 locale, and has switched to "C.UTF-8" instead.
+970:   If this causes problems, reconfigure your locale. See the locale(1) manual
+971:   for more information.
+[...]
+984:    DEBUG qml: QT_WEBUI_SMOKE_DIALOG_FOCUS
+985:    DEBUG qml: QT_WEBUI_SMOKE_FAILURE dialog dialog-select was not accepted
+986:    DEBUG qml: QT_WEBUI_SMOKE_ROWS user:user-u1:"__QT_WEBUI_STREAM__": | thinking:a2.1:"**Planning user notification strategy**\n": | text:a2.2:"authoritative final": | tool:tool-tool-1:"":ok
+987:    DEBUG qml: QT_WEBUI_SMOKE_NOTICES warning:"Ignored an invalid Pi RPC record"
+988:    DEBUG qml: QT_WEBUI_SMOKE_TABS active=tab-1 count=1 ready=true status=running ["tab-1:running:CoIuO/<b>project</b>"]
+989:    DEBUG qml: QT_WEBUI_SMOKE_FAILURE dialog dialog-select accepted a second answer
+990:    DEBUG qml: QT_WEBUI_SMOKE_ROWS user:user-u1:"__QT_WEBUI_STREAM__": | thinking:a2.1:"**Planning user notification strategy**\n": | text:a2.2:"authoritative final": | tool:tool-tool-1:"":ok
+991:    DEBUG qml: QT_WEBUI_SMOKE_NOTICES warning:"Ignored an invalid Pi RPC record"
+992:    DEBUG qml: QT_WEBUI_SMOKE_TABS active=tab-1 count=1 ready=true status=error ["tab-1:running:CoIuO/<b>project</b>"]
+993:    DEBUG qml: QT_WEBUI_SMOKE_STREAM_RECONCILED
+994:    DEBUG qml: QT_WEBUI_SMOKE_THINKING_RENDERED
+995:    DEBUG qml: QT_WEBUI_SMOKE_TOOL_CARD
+[...]
+1011: test at tests/qml-smoke.test.mjs:393:1
+1012: ✖ real Quickshell completes a model reorder and persists merged identities (3733.614382ms)
+1013:   AssertionError [ERR_ASSERTION]: missing QT_WEBUI_SMOKE_MODEL_REORDER_SAVED
+1014:     INFO: Launching config: "<repo>/pi-package-qt-webui/qml/shell.qml"
+1015:     INFO: Shell ID: "57e18363b1c70c8a944449d80e840c54" Path ID "57e18363b1c70c8a944449d80e840c54"
+1016:     WARN: Detected locale "C" with character encoding "ANSI_X3.4-1968", which is not UTF-8.
+1017:   Qt depends on a UTF-8 locale, and has switched to "C.UTF-8" instead.
+1018:   If this causes problems, reconfigure your locale. See the locale(1) manual
+1019:   for more information.
+[...]
+1031:    DEBUG qml: QT_WEBUI_SMOKE_MODEL_REORDER_COMPLETED
+1032:    DEBUG qml: QT_WEBUI_SMOKE_FAILURE timed out waiting for model order save
+1033:    DEBUG qml: QT_WEBUI_SMOKE_ROWS 
+1034:    DEBUG qml: QT_WEBUI_SMOKE_NOTICES warning:"Ignored an invalid Pi RPC record"
+1035:    DEBUG qml: QT_WEBUI_SMOKE_TABS active=tab-1 count=1 ready=true status=ready ["tab-1:ready:dDoSF/<b>project</b>"]
+1036:   
+1037:   
+1038:       at TestContext.<anonymous> (file://<repo>/pi-package-qt-webui/tests/qml-smoke.test.mjs:402:12)
+[...]
+1043:     code: 'ERR_ASSERTION',
+1044:     actual: '  INFO: Launching config: "<repo>/pi-package-qt-webui/qml/shell.qml"\n  INFO: Shell ID: "57e18363b1c70c8a944449d80e840c54" Path ID "57e18363b1c70c8a944449d80e840c54"\n  WARN: Detected locale "C" with character encoding "ANSI_X3.4-1968", which is not UTF-8.\nQt depends on a UTF-8 locale, and has switched to "C.UTF-8" instead.\nIf this causes problems, reconfigure your locale. See the locale(1) manual\nfor more information.\n  INFO: Saving logs to "/run/user/1000/quickshell/by-id/quob1fxp4pt/log.qslog"\n  WARN: --- WARNING ---\n  WARN: WAYLAND_DISPLAY is present but QT_QPA_PLATFORM is "offscreen"\n  WARN: If you are actually running wayland, set QT_QPA_PLATFORM to "wayland" or most functionality will be broken.\n DEBUG qml: QT_WEBUI_SMOKE_THEME_DARK\n  INFO: Configuration Loaded\n  WARN: This plugin does not support setting window masks\n DEBUG qml: QT_WEBUI_SMOKE_BACKEND_READY\n DEBUG qml: QT_WEBUI_SMOKE_PARSE_RECOVERED\n DEBUG qml: QT_WEBUI_SMOKE_RUNTIME_INFO\n DEBUG qml: QT_WEBUI_SMOKE_READY\n DEBUG qml: QT_WEBUI_SMOKE_MODEL_REORDER_COMPLETED\n DEBUG qml: QT_WEBUI_SMOKE_FAILURE timed out waiting for model order save\n DEBUG qml: QT_WEBUI_SMOKE_ROWS \n DEBUG qml: QT_WEBUI_SMOKE_NOTICES warning:"Ignored an invalid Pi RPC record"\n DEBUG qml: QT_WEBUI_SMOKE_TABS active=tab-1 count=1 ready=true status=ready ["tab-1:ready:dDoSF/<b>project</b>"]\n\n',
+1045:     expected: /QT_WEBUI_SMOKE_MODEL_REORDER_SAVED/,
+1046:     operator: 'match',
+1047:     diff: 'simple'
+1048:   }
+1049: 
+1050: test at tests/qml-smoke.test.mjs:409:1
+1051: ✖ real Quickshell preserves prompt, draft, and dialog intent under delayed settlement (2319.233167ms)
+1052:   AssertionError [ERR_ASSERTION]:   INFO: Launching config: "<repo>/pi-package-qt-webui/qml/shell.qml"
+1053:     INFO: Shell ID: "57e18363b1c70c8a944449d80e840c54" Path ID "57e18363b1c70c8a944449d80e840c54"
+1054:     WARN: Detected locale "C" with character encoding "ANSI_X3.4-1968", which is not UTF-8.
+1055:   Qt depends on a UTF-8 locale, and has switched to "C.UTF-8" instead.
+1056:   If this causes problems, reconfigure your locale. See the locale(1) manual
+1057:   for more information.
+1058:     INFO: Saving logs to "/run/user/1000/quickshell/by-id/gmpb1jxp4pt/log.qslog"
+[...]
+1076:    DEBUG qml: QT_WEBUI_REMEDIATION_DRAFTS
+1077:    DEBUG qml: QT_WEBUI_SMOKE_FAILURE rejected dialog not actionable
+1078:    DEBUG qml: QT_WEBUI_SMOKE_ROWS user:history-user-1:"earlier question": | thinking:history-2.1:"earlier thinking": | text:history-2.2:"earlier **answer**": | tool:tool-hist-tool:"":ok | text:history-4.1:"done": | user:user-u4:"__QT_WEBUI_STREAM__": | thinking:a5.1:"**Planning user notification strategy**\n": | text:a5.2:"authoritative final": | tool:tool-tool-1:"":ok
+1079:    DEBUG qml: QT_WEBUI_SMOKE_NOTICES error:"Could not resume the session: An extension cancelled the session switch" | info:"Resumed Resumed session (5 entries shown)" | info:"Started a new session" | info:"Resumed Resumed session (5 entries shown)" | error:"Dialog answer failed: select dialogs need a string value"
+1080:    DEBUG qml: QT_WEBUI_SMOKE_TABS active=tab-1 count=1 ready=true status=ready ["tab-1:ready:fJYWl/<b>project</b>"]
+1081:     WARN scene: @RemediationChecks.qml[13:-1]: Error: rejected dialog not actionable
+1082:   
+1083:   
+[...]
+1091:     expected: /QT_WEBUI_SMOKE_FAILURE|TypeError:|ReferenceError:|Cannot assign/,
+1092:     operator: 'doesNotMatch',
+1093:     diff: 'simple'
+1094:   }
+1095: 
+1096: test at tests/qml-smoke.test.mjs:475:1
+1097: ✖ real Quickshell completes the same scenarios at 200% scaling (685.686044ms)
+1098:   AssertionError [ERR_ASSERTION]: missing QT_WEBUI_SMOKE_THEME_LIGHT_OVERRIDE
+1099:     INFO: Launching config: "<repo>/pi-package-qt-webui/qml/shell.qml"
+1100:     INFO: Shell ID: "57e18363b1c70c8a944449d80e840c54" Path ID "57e18363b1c70c8a944449d80e840c54"
+1101:     WARN: Detected locale "C" with character encoding "ANSI_X3.4-1968", which is not UTF-8.
+1102:   Qt depends on a UTF-8 locale, and has switched to "C.UTF-8" instead.
+1103:   If this causes problems, reconfigure your locale. See the locale(1) manual
+1104:   for more information.
+[...]
+1117:    DEBUG qml: QT_WEBUI_SMOKE_DIALOG_FOCUS
+1118:    DEBUG qml: QT_WEBUI_SMOKE_FAILURE dialog dialog-select was not accepted
+1119:    DEBUG qml: QT_WEBUI_SMOKE_ROWS user:user-u1:"__QT_WEBUI_STREAM__": | thinking:a2.1:"**Planning user notification strategy**\n": | text:a2.2:"authoritative final": | tool:tool-tool-1:"":ok
+1120:    DEBUG qml: QT_WEBUI_SMOKE_NOTICES warning:"Ignored an invalid Pi RPC record"
+1121:    DEBUG qml: QT_WEBUI_SMOKE_TABS active=tab-1 count=1 ready=true status=running ["tab-1:running:r8kWZ/<b>project</b>"]
+1122:    DEBUG qml: QT_WEBUI_SMOKE_FAILURE dialog dialog-select accepted a second answer
+1123:    DEBUG qml: QT_WEBUI_SMOKE_ROWS user:user-u1:"__QT_WEBUI_STREAM__": | thinking:a2.1:"**Planning user notification strategy**\n": | text:a2.2:"authoritative final": | tool:tool-tool-1:"":ok
+1124:    DEBUG qml: QT_WEBUI_SMOKE_NOTICES warning:"Ignored an invalid Pi RPC record"
+1125:    DEBUG qml: QT_WEBUI_SMOKE_TABS active=tab-1 count=1 ready=true status=error ["tab-1:running:r8kWZ/<b>project</b>"]
+1126:    DEBUG qml: QT_WEBUI_SMOKE_STREAM_RECONCILED
+1127:    DEBUG qml: QT_WEBUI_SMOKE_THINKING_RENDERED
+1128:    DEBUG qml: QT_WEBUI_SMOKE_TOOL_CARD
+[...]
+1133:       at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+1134:       at async Test.run (node:internal/test_runner/test:1409:7)
+1135:       at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+1136:     generatedMessage: false,
+1137:     code: 'ERR_ASSERTION',
+[...]
+1139:     expected: /QT_WEBUI_SMOKE_THEME_LIGHT_OVERRIDE/,
+1140:     operator: 'match',
+1141:     diff: 'simple'
+1142:   }
+
+=== pi-package-qt-webui.pi160.log ===
+[...]
+1: npm notice run @firstpick/pi-package-qt-webui@0.2.1 test
+2: npm notice run node tests/run-all.mjs
+3: ✔ portal appearance parsing accepts only bounded light and dark values (3.890969ms)
+4: ✔ portal monitor uses argument arrays, follows live changes, and waits for normal shutdown (0.767744ms)
+[...]
+187: ✔ launchQtWebUi reports an actionable Quickshell lookup failure (7.541198ms)
+188: ✖ package identity, command, dependency, and runtime requirements are declared (1.031785ms)
+189: ✔ package allowlist includes the Pi extension, runtime, QML, tests, and documentation (0.130851ms)
+190: ✔ README session screenshot is a nontrivial PNG (2.506402ms)
+191: ✔ development and test scripts use the source launcher without lifecycle hooks (0.12557ms)
+192: ✔ qt-webui npm bin is executable (0.383522ms)
+193: ✔ launcher uses argument arrays and disables shell execution (0.371922ms)
+194: ✖ packed package installs in isolation and resolves packaged paths (4521.633029ms)
+195: ✔ incomplete catalogs update workspace warning without posting session notices (1.456397ms)
+196: ✔ only a completed current refresh replaces the warning, including paged catalogs (0.505772ms)
+197: ✔ a failed refresh retains the warning attached to the displayed catalog (0.477882ms)
+198: ✔ completion invalidates old results before debounce and rejects delayed replies (1.297496ms)
+199: ✔ completion generations distinguish revisits, dismissal, kinds, and cursor positions (0.654263ms)
+200: ✔ acceptance independently checks the context even before a change signal runs (0.460702ms)
+[...]
+373: ✔ dialog rejection, unknown outcome, and late terminal settlement retain state across selection (1.681029ms)
+374: ✖ real Quickshell completes the deterministic backend and Pi behavior scenarios (1185.84894ms)
+375: ✔ real Quickshell applies, falls back, and recovers a Pi theme at default scale (858.136512ms)
+376: ✔ real Quickshell applies, falls back, and recovers a Pi theme at 200% scaling (845.064446ms)
+377: ✖ real Quickshell completes a model reorder and persists merged identities (3740.810768ms)
+378: ✖ real Quickshell preserves prompt, draft, and dialog intent under delayed settlement (2310.35271ms)
+379: ✔ real Quickshell keeps saved close, unsaved tab, and inactive promotion drafts separate (1295.283515ms)
+380: ✔ real bridge offers switch and new session when a resume file is missing (1012.905935ms)
+381: ✔ real Quickshell keeps Abort and recovery actions in the 560x520 window at default scale (939.778995ms)
+382: ✔ real Quickshell keeps Abort and recovery actions in the 560x520 window at 200% scaling (942.529639ms)
+383: ✖ real Quickshell completes the same scenarios at 200% scaling (676.159611ms)
+384: ✔ tool rows expand and copy at 100% scaling (1388.788597ms)
+385: ℹ ********* Start testing of qmltestrunner *********
+386: Config: Using QtTest library 6.12.0, Qt 6.12.0 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 16.2.1 20260810), endeavouros unknown
+387: PASS   : qmltestrunner::CompactToolRows::initTestCase()
+388: PASS   : qmltestrunner::CompactToolRows::test_empty_call()
+389: PASS   : qmltestrunner::CompactToolRows::test_inline_summary(light)
+[...]
+508: ℹ tests 312
+[...]
+510: ℹ pass 306
+511: ℹ fail 6
+[...]
+513: ℹ skipped 0
+[...]
+516: 
+517: ✖ failing tests:
+518: 
+519: test at tests/package-contract.test.mjs:10:1
+520: ✖ package identity, command, dependency, and runtime requirements are declared (1.031785ms)
+521:   AssertionError [ERR_ASSERTION]: The input did not match the regular expression /^\^0\.84\./. Input:
+522:   
+523:   '^1.5.2'
+524:   
+525:       at TestContext.<anonymous> (file://<repo>/pi-package-qt-webui/tests/package-contract.test.mjs:15:10)
+526:       at Test.runInAsyncScope (node:async_hooks:226:14)
+527:       at Test.run (node:internal/test_runner/test:1402:25)
+[...]
+538: test at tests/packed-install.test.mjs:44:1
+539: ✖ packed package installs in isolation and resolves packaged paths (4521.633029ms)
+540:   AssertionError [ERR_ASSERTION]: npm install --prefix /tmp/qt-webui-packed-IvGdz5/install --ignore-scripts --no-audit --no-fund --offline /tmp/qt-webui-packed-IvGdz5/artifacts/firstpick-pi-package-qt-webui-0.2.1.tgz failed
+541:   stdout:
+542:   
+543:   stderr:
+544:   npm warn deprecated node-domexception@1.0.0: Use your platform's native DOMException instead
+545:   npm error code ENOTCACHED
+546:   npm error request to https://registry.npmjs.org/@earendil-works/pi-mcp/-/pi-mcp-1.6.1.tgz failed: cache mode is 'only-if-cached' but no cached response is available.
+547:   npm error A complete log of this run can be found in: <home>/.npm/_logs/2026-11-26T21_41_40_015Z-debug-0.log
+548:   
+549:   
+550:   1 !== 0
+551:   
+552:       at run (file://<repo>/pi-package-qt-webui/tests/packed-install.test.mjs:18:10)
+[...]
+564: test at tests/qml-smoke.test.mjs:338:1
+565: ✖ real Quickshell completes the deterministic backend and Pi behavior scenarios (1185.84894ms)
+566:   AssertionError [ERR_ASSERTION]: missing QT_WEBUI_SMOKE_THEME_LIGHT_OVERRIDE
+567:     INFO: Launching config: "<repo>/pi-package-qt-webui/qml/shell.qml"
+568:     INFO: Shell ID: "57e18363b1c70c8a944449d80e840c54" Path ID "57e18363b1c70c8a944449d80e840c54"
+569:     WARN: Detected locale "C" with character encoding "ANSI_X3.4-1968", which is not UTF-8.
+570:   Qt depends on a UTF-8 locale, and has switched to "C.UTF-8" instead.
+571:   If this causes problems, reconfigure your locale. See the locale(1) manual
+572:   for more information.
+[...]
+588:    DEBUG qml: QT_WEBUI_SMOKE_DIALOG_FOCUS
+589:    DEBUG qml: QT_WEBUI_SMOKE_FAILURE dialog dialog-select was not accepted
+590:    DEBUG qml: QT_WEBUI_SMOKE_ROWS user:user-u1:"__QT_WEBUI_STREAM__": | thinking:a2.1:"**Planning user notification strategy**\n": | text:a2.2:"authoritative final": | tool:tool-tool-1:"":ok
+591:    DEBUG qml: QT_WEBUI_SMOKE_NOTICES warning:"Ignored an invalid Pi RPC record"
+592:    DEBUG qml: QT_WEBUI_SMOKE_TABS active=tab-1 count=1 ready=true status=ready ["tab-1:ready:kKmZI/<b>project</b>"]
+593:    DEBUG qml: QT_WEBUI_SMOKE_FAILURE dialog dialog-select accepted a second answer
+594:    DEBUG qml: QT_WEBUI_SMOKE_ROWS user:user-u1:"__QT_WEBUI_STREAM__": | thinking:a2.1:"**Planning user notification strategy**\n": | text:a2.2:"authoritative final": | tool:tool-tool-1:"":ok
+595:    DEBUG qml: QT_WEBUI_SMOKE_NOTICES warning:"Ignored an invalid Pi RPC record"
+596:    DEBUG qml: QT_WEBUI_SMOKE_TABS active=tab-1 count=1 ready=true status=error ["tab-1:ready:kKmZI/<b>project</b>"]
+597:   
+598:   
+599:       at assertHealthyOutput (file://<repo>/pi-package-qt-webui/tests/qml-smoke.test.mjs:273:45)
+[...]
+612: test at tests/qml-smoke.test.mjs:393:1
+613: ✖ real Quickshell completes a model reorder and persists merged identities (3740.810768ms)
+614:   AssertionError [ERR_ASSERTION]: missing QT_WEBUI_SMOKE_MODEL_REORDER_SAVED
+615:     INFO: Launching config: "<repo>/pi-package-qt-webui/qml/shell.qml"
+616:     INFO: Shell ID: "57e18363b1c70c8a944449d80e840c54" Path ID "57e18363b1c70c8a944449d80e840c54"
+617:     WARN: Detected locale "C" with character encoding "ANSI_X3.4-1968", which is not UTF-8.
+618:   Qt depends on a UTF-8 locale, and has switched to "C.UTF-8" instead.
+619:   If this causes problems, reconfigure your locale. See the locale(1) manual
+620:   for more information.
+[...]
+632:    DEBUG qml: QT_WEBUI_SMOKE_MODEL_REORDER_COMPLETED
+633:    DEBUG qml: QT_WEBUI_SMOKE_FAILURE timed out waiting for model order save
+634:    DEBUG qml: QT_WEBUI_SMOKE_ROWS 
+635:    DEBUG qml: QT_WEBUI_SMOKE_NOTICES warning:"Ignored an invalid Pi RPC record"
+636:    DEBUG qml: QT_WEBUI_SMOKE_TABS active=tab-1 count=1 ready=true status=ready ["tab-1:ready:ZjvYN/<b>project</b>"]
+637:   
+638:   
+639:       at TestContext.<anonymous> (file://<repo>/pi-package-qt-webui/tests/qml-smoke.test.mjs:402:12)
+[...]
+644:     code: 'ERR_ASSERTION',
+645:     actual: '  INFO: Launching config: "<repo>/pi-package-qt-webui/qml/shell.qml"\n  INFO: Shell ID: "57e18363b1c70c8a944449d80e840c54" Path ID "57e18363b1c70c8a944449d80e840c54"\n  WARN: Detected locale "C" with character encoding "ANSI_X3.4-1968", which is not UTF-8.\nQt depends on a UTF-8 locale, and has switched to "C.UTF-8" instead.\nIf this causes problems, reconfigure your locale. See the locale(1) manual\nfor more information.\n  INFO: Saving logs to "/run/user/1000/quickshell/by-id/zba818np4pt/log.qslog"\n  WARN: --- WARNING ---\n  WARN: WAYLAND_DISPLAY is present but QT_QPA_PLATFORM is "offscreen"\n  WARN: If you are actually running wayland, set QT_QPA_PLATFORM to "wayland" or most functionality will be broken.\n DEBUG qml: QT_WEBUI_SMOKE_THEME_DARK\n  INFO: Configuration Loaded\n  WARN: This plugin does not support setting window masks\n DEBUG qml: QT_WEBUI_SMOKE_BACKEND_READY\n DEBUG qml: QT_WEBUI_SMOKE_PARSE_RECOVERED\n DEBUG qml: QT_WEBUI_SMOKE_RUNTIME_INFO\n DEBUG qml: QT_WEBUI_SMOKE_READY\n DEBUG qml: QT_WEBUI_SMOKE_MODEL_REORDER_COMPLETED\n DEBUG qml: QT_WEBUI_SMOKE_FAILURE timed out waiting for model order save\n DEBUG qml: QT_WEBUI_SMOKE_ROWS \n DEBUG qml: QT_WEBUI_SMOKE_NOTICES warning:"Ignored an invalid Pi RPC record"\n DEBUG qml: QT_WEBUI_SMOKE_TABS active=tab-1 count=1 ready=true status=ready ["tab-1:ready:ZjvYN/<b>project</b>"]\n\n',
+646:     expected: /QT_WEBUI_SMOKE_MODEL_REORDER_SAVED/,
+647:     operator: 'match',
+648:     diff: 'simple'
+649:   }
+650: 
+651: test at tests/qml-smoke.test.mjs:409:1
+652: ✖ real Quickshell preserves prompt, draft, and dialog intent under delayed settlement (2310.35271ms)
+653:   AssertionError [ERR_ASSERTION]:   INFO: Launching config: "<repo>/pi-package-qt-webui/qml/shell.qml"
+654:     INFO: Shell ID: "57e18363b1c70c8a944449d80e840c54" Path ID "57e18363b1c70c8a944449d80e840c54"
+655:     WARN: Detected locale "C" with character encoding "ANSI_X3.4-1968", which is not UTF-8.
+656:   Qt depends on a UTF-8 locale, and has switched to "C.UTF-8" instead.
+657:   If this causes problems, reconfigure your locale. See the locale(1) manual
+658:   for more information.
+659:     INFO: Saving logs to "/run/user/1000/quickshell/by-id/r2b81cnp4pt/log.qslog"
+[...]
+677:    DEBUG qml: QT_WEBUI_REMEDIATION_DRAFTS
+678:    DEBUG qml: QT_WEBUI_SMOKE_FAILURE rejected dialog not actionable
+679:    DEBUG qml: QT_WEBUI_SMOKE_ROWS user:history-user-1:"earlier question": | thinking:history-2.1:"earlier thinking": | text:history-2.2:"earlier **answer**": | tool:tool-hist-tool:"":ok | text:history-4.1:"done": | user:user-u4:"__QT_WEBUI_STREAM__": | thinking:a5.1:"**Planning user notification strategy**\n": | text:a5.2:"authoritative final": | tool:tool-tool-1:"":ok
+680:    DEBUG qml: QT_WEBUI_SMOKE_NOTICES error:"Could not resume the session: An extension cancelled the session switch" | info:"Resumed Resumed session (5 entries shown)" | info:"Started a new session" | info:"Resumed Resumed session (5 entries shown)" | error:"Dialog answer failed: select dialogs need a string value"
+681:    DEBUG qml: QT_WEBUI_SMOKE_TABS active=tab-1 count=1 ready=true status=ready ["tab-1:ready:lVX1Q/<b>project</b>"]
+682:     WARN scene: @RemediationChecks.qml[13:-1]: Error: rejected dialog not actionable
+683:   
+684:   
+[...]
+692:     expected: /QT_WEBUI_SMOKE_FAILURE|TypeError:|ReferenceError:|Cannot assign/,
+693:     operator: 'doesNotMatch',
+694:     diff: 'simple'
+695:   }
+696: 
+697: test at tests/qml-smoke.test.mjs:475:1
+698: ✖ real Quickshell completes the same scenarios at 200% scaling (676.159611ms)
+699:   AssertionError [ERR_ASSERTION]: missing QT_WEBUI_SMOKE_THEME_LIGHT_OVERRIDE
+700:     INFO: Launching config: "<repo>/pi-package-qt-webui/qml/shell.qml"
+701:     INFO: Shell ID: "57e18363b1c70c8a944449d80e840c54" Path ID "57e18363b1c70c8a944449d80e840c54"
+702:     WARN: Detected locale "C" with character encoding "ANSI_X3.4-1968", which is not UTF-8.
+703:   Qt depends on a UTF-8 locale, and has switched to "C.UTF-8" instead.
+704:   If this causes problems, reconfigure your locale. See the locale(1) manual
+705:   for more information.
+[...]
+718:    DEBUG qml: QT_WEBUI_SMOKE_DIALOG_FOCUS
+719:    DEBUG qml: QT_WEBUI_SMOKE_FAILURE dialog dialog-select was not accepted
+720:    DEBUG qml: QT_WEBUI_SMOKE_ROWS user:user-u1:"__QT_WEBUI_STREAM__": | thinking:a2.1:"**Planning user notification strategy**\n": | text:a2.2:"authoritative final": | tool:tool-tool-1:"":ok
+721:    DEBUG qml: QT_WEBUI_SMOKE_NOTICES warning:"Ignored an invalid Pi RPC record"
+722:    DEBUG qml: QT_WEBUI_SMOKE_TABS active=tab-1 count=1 ready=true status=running ["tab-1:running:X4ciL/<b>project</b>"]
+723:    DEBUG qml: QT_WEBUI_SMOKE_FAILURE dialog dialog-select accepted a second answer
+724:    DEBUG qml: QT_WEBUI_SMOKE_ROWS user:user-u1:"__QT_WEBUI_STREAM__": | thinking:a2.1:"**Planning user notification strategy**\n": | text:a2.2:"authoritative final": | tool:tool-tool-1:"":ok
+725:    DEBUG qml: QT_WEBUI_SMOKE_NOTICES warning:"Ignored an invalid Pi RPC record"
+726:    DEBUG qml: QT_WEBUI_SMOKE_TABS active=tab-1 count=1 ready=true status=error ["tab-1:running:X4ciL/<b>project</b>"]
+727:    DEBUG qml: QT_WEBUI_SMOKE_STREAM_RECONCILED
+728:    DEBUG qml: QT_WEBUI_SMOKE_THINKING_RENDERED
+729:    DEBUG qml: QT_WEBUI_SMOKE_TOOL_CARD
+[...]
+734:       at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+735:       at async Test.run (node:internal/test_runner/test:1409:7)
+736:       at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+737:     generatedMessage: false,
+738:     code: 'ERR_ASSERTION',
+[...]
+740:     expected: /QT_WEBUI_SMOKE_THEME_LIGHT_OVERRIDE/,
+741:     operator: 'match',
+742:     diff: 'simple'
+743:   }
+
+=== pi-package-questionnaire.pi160.log ===
+[...]
+1: npm notice run @firstpick/pi-package-questionnaire@0.1.1 test
+2: npm notice run node --experimental-strip-types --test tests/*.test.mjs
+3: ✔ real runtime uses only native select/input methods in both TUI and RPC modes (2.02056ms)
+4: ✔ runtime surface and installed Pi types retain the public select/input seam without a private RPC dependency (0.713693ms)
+[...]
+34: ✔ manifest, license, and packaged assets stay consistent with the shipped docs and skill (0.165651ms)
+35: ✔ skill and tool prompt guidelines make the same core promises (0.218911ms)
+36: ℹ tests 33
+37: ℹ suites 0
+38: ℹ pass 33
+39: ℹ fail 0
+40: ℹ cancelled 0
+41: ℹ skipped 0
+42: ℹ todo 0
+43: ℹ duration_ms 176.909756
+
+=== pi-package-remote-webui.pi160.log ===
+[...]
+1: npm notice run @firstpick/pi-package-remote-webui@0.1.9 test
+2: npm notice run node tests/run-all.mjs
+3: ✔ tokenizeArgs handles quoted values (0.833254ms)
+4: ✔ parseRemoteArgs defaults to open on the default port (0.151891ms)
+[...]
+21: ✔ openRemoteWebui reuses an already open WebUI (2.271242ms)
+22: ✔ closeRemoteWebui calls the close endpoint when online (2.04528ms)
+23: ℹ tests 20
+24: ℹ suites 0
+25: ℹ pass 20
+26: ℹ fail 0
+27: ℹ cancelled 0
+28: ℹ skipped 0
+29: ℹ todo 0
+30: ℹ duration_ms 78.125485
+
+=== pi-package-themes-bundle.pi160.log ===
+[...]
+1: npm notice run @firstpick/pi-themes-bundle@0.1.7 test
+2: npm notice run node --test tests/*.test.mjs
+3: ✔ all bundled themes conform to Pi's strict native contract (7.109656ms)
+4: ✔ WebUI backgrounds are published separately from Pi theme JSON (0.592153ms)
+5: ℹ tests 2
+6: ℹ suites 0
+7: ℹ pass 2
+8: ℹ fail 0
+9: ℹ cancelled 0
+10: ℹ skipped 0
+11: ℹ todo 0
+12: ℹ duration_ms 36.668555
+
+=== pi-package-webui.pi152.targeted.log ===
+[...]
+1: http-endpoints-harness.test.mjs passed
+
+=== pi-package-webui.pi160.log ===
+[...]
+1: npm notice run @firstpick/pi-package-webui@0.11.3 test
+2: npm notice run node tests/run-all.mjs
+3: ✔ construction is inert and snapshots borrow the one overview without cloning (1.392247ms)
+4: ✔ overlapping refreshes coalesce into one follow-up per in-flight batch (1.486657ms)
+[...]
+346: 
+347: AssertionError [ERR_ASSERTION]: Pi release notes should load through the server: Error: Pi release notes are unavailable while PI_OFFLINE is set
+348:     at makeHttpError (file://<repo>/pi-package-webui/bin/pi-webui.mjs:813:17)
+349:     at piReleaseNotes (file://<repo>/pi-package-webui/bin/pi-webui.mjs:726:37)
+350:     at Server.<anonymous> (file://<repo>/pi-package-webui/bin/pi-webui.mjs:11082:50)
+351:     at Server.emit (node:events:514:20)
+352:     at parserOnIncoming (node:_http_server:1464:12)
+353:     at HTTPParser.parserOnHeadersComplete (node:_http_common:125:17)
+[...]
+1623: ℹ skipped 0
+1624: ℹ todo 0
+1625: ℹ duration_ms 8.741775
+1626: workspace-files-live-updates-static.test.mjs passed
+1627: workspace-files-live-watcher.test.mjs passed
+1628: workspace-save-load-static.test.mjs passed
+1629: workspace-session-summaries tests passed
+1630: 
+1631: 1/263 test file(s) failed:
+1632:   http-endpoints-harness.test.mjs (exit 1)
+
+=== pi-package-webui.pi160.targeted-repeat.log ===
+[...]
+1: http-endpoints-harness.test.mjs passed
+
+=== pi-package-webui__corrected.pi160.log ===
+[...]
+1: npm notice run @firstpick/pi-package-webui@0.11.3 test
+2: npm notice run node tests/run-all.mjs
+3: ✔ construction is inert and snapshots borrow the one overview without cloning (1.538238ms)
+4: ✔ overlapping refreshes coalesce into one follow-up per in-flight batch (1.651828ms)
+[...]
+346: 
+347: AssertionError [ERR_ASSERTION]: runner-tools/python-tool.py should expose uv run when uv is available
+348: 
+349: false !== true
+350: 
+351:     at file://<repo>/pi-package-webui/tests/http-endpoints-harness.test.mjs:3275:12 {
+352:   generatedMessage: false,
+353:   code: 'ERR_ASSERTION',
+[...]
+1616: ℹ skipped 0
+1617: ℹ todo 0
+1618: ℹ duration_ms 8.983275
+1619: workspace-files-live-updates-static.test.mjs passed
+1620: workspace-files-live-watcher.test.mjs passed
+1621: workspace-save-load-static.test.mjs passed
+1622: workspace-session-summaries tests passed
+1623: 
+1624: 1/263 test file(s) failed:
+1625:   http-endpoints-harness.test.mjs (exit 1)
+
+=== pi-package-writer.pi160.log ===
+[...]
+1: npm notice run @firstpick/pi-package-writer@0.1.0 test
+2: npm notice run node --experimental-strip-types --test tests/*.test.ts
+3: ✔ parses book format, style blend, language, and a quoted premise independently (0.986745ms)
+4: ✔ new unit titles can be combined with an explicit project (0.329402ms)
+[...]
+52: ✔ oversized checkpoint reports an explicit limit instead of loading unlimited context (0.987565ms)
+53: ✔ missing and incomplete workspaces are reported without silent replacement (0.621733ms)
+54: ℹ tests 51
+55: ℹ suites 0
+56: ℹ pass 51
+57: ℹ fail 0
+58: ℹ cancelled 0
+59: ℹ skipped 0
+60: ℹ todo 0
+61: ℹ duration_ms 121.234743
+
+=== pi-skill-code-quality.pi160.log ===
+[...]
+1: npm notice run @firstpick/pi-skill-code-quality@0.1.8 test
+2: npm notice run node --unhandled-rejections=strict --test tests/core.test.mjs tests/git.test.mjs tests/capture.test.mjs tests/classification.test.mjs tests/safety.test.mjs tests/metrics.test.mjs tests/report.test.mjs tests/cli.test.mjs tests/adapters.test.mjs tests/contract.test.mjs tests/packaging.test.mjs tests/evaluation.test.mjs tests/evaluation/parser-growth/protected.test.mjs tests/evaluation/repeated-error-handling/protected.test.mjs tests/evaluation/validation-boundary/protected.test.mjs
+3: ✔ missing optional analyzer is unavailable rather than an empty clean result (14.963516ms)
+4: ✔ frozen analyzer workspaces detect mutation without modifying captured source (6.667343ms)
+[...]
+90: ✔ batch cancellation reaps a hanging trusted child without an unobserved request (33.094857ms)
+91: ✔ capture rejects non-positive resource limits and fixed retry policy changes (0.787824ms)
+92: ℹ tests 89
+93: ℹ suites 0
+94: ℹ pass 81
+95: ℹ fail 0
+96: ℹ cancelled 0
+97: ℹ skipped 8
+98: ℹ todo 0
+99: ℹ duration_ms 1910.947927
+
+=== pi-skill-deep-research.pi160.log ===
+[...]
+1: PASS: test_reproducibility
+2: PASS: test_no_peer_reviewed_fallback
+3: PASS: test_no_evidence_at_all
+4: PASS: test_tie_break_determinism
+5: PASS: test_schema_validation
+6: PASS: test_state_update
+7: PASS: test_verdict_classification
+8: PASS: test_markdown_output
+9: PASS: test_missing_claims_file
+10: 
+11: ============================================================
+12: Results: 9 passed, 0 failed, 9 total
+
+=== pi-skill-desktop-visual-design.pi160.log ===
+[...]
+1: npm notice run @firstpick/pi-skill-desktop-visual-design@0.1.1 test
+2: npm notice run node --test tests/skill-contract.test.mjs
+3: ✔ standalone apps must follow the live system color scheme (0.920245ms)
+4: ✔ fallback visual guidance follows the restrained Omarchy profile (0.10511ms)
+[...]
+6: ✔ fallback recipes preserve framed hierarchy and restrained landmarks (0.05763ms)
+7: ✔ routing recognizes forced-light desktop regressions (0.154051ms)
+8: ℹ tests 5
+9: ℹ suites 0
+10: ℹ pass 5
+11: ℹ fail 0
+12: ℹ cancelled 0
+13: ℹ skipped 0
+14: ℹ todo 0
+15: ℹ duration_ms 31.932921
+
+=== pi-skill-dolt-database-version-control.pi160.log ===
+[...]
+1: npm notice run @firstpick/pi-skill-dolt-database-version-control@0.1.4 test
+2: npm notice run python3 -m unittest discover -s skills/dolt-database-version-control/tests -p 'test_*.py'
+3: .....
+4: ----------------------------------------------------------------------
+5: Ran 5 tests in 0.001s
+6: 
+7: OK
+
+=== pi-skill-explainer-video.pi160.log ===
+[...]
+1: npm notice run @firstpick/pi-skill-explainer-video@0.1.0 test
+2: npm notice run node --test skills/explainer-video/tests/
+3: ✔ a timed action on an element nested in a set-up element takes effect (418.747749ms)
+4: ✔ a selector that matches nothing is reported by name (233.24594ms)
+[...]
+29: ✔ caption tracks require a starting box, increasing times and on-screen positions (0.231781ms)
+30: ✔ continuous captions reject independently placed shots, hidden relocations and zero-duration moves (0.209161ms)
+31: ℹ tests 28
+32: ℹ suites 0
+33: ℹ pass 28
+34: ℹ fail 0
+35: ℹ cancelled 0
+36: ℹ skipped 0
+37: ℹ todo 0
+38: ℹ duration_ms 2821.446813
+
+=== pi-skill-feature-development-workflow.pi160.log ===
+[...]
+1: npm notice run @firstpick/pi-skill-feature-development-workflow@0.1.3 test
+2: npm notice run python3 -B -m unittest discover -s skills/feature-development-workflow/tests -p 'test_*.py'
+3: ............
+4: ----------------------------------------------------------------------
+5: Ran 12 tests in 0.002s
+6: 
+7: OK
+
+=== pi-skill-frontend-design.pi160.log ===
+[...]
+1: npm notice run @firstpick/pi-skill-frontend-design@0.1.1 test
+2: npm notice run node --test tests/skill-contract.test.mjs
+3: ✔ package metadata exposes one installable Pi skill (0.819765ms)
+4: ✔ skill frontmatter follows the Agent Skills contract (0.229851ms)
+[...]
+12: ✔ package documentation has working local links, balanced fences, and no banned punctuation (2.998085ms)
+13: ✔ every declared package file exists (0.273691ms)
+14: ℹ tests 11
+15: ℹ suites 0
+16: ℹ pass 11
+17: ℹ fail 0
+18: ℹ cancelled 0
+19: ℹ skipped 0
+20: ℹ todo 0
+21: ℹ duration_ms 38.522035
+
+=== pi-skill-html-report.pi160.log ===
+[...]
+1: npm notice run @firstpick/pi-skill-html-report@0.1.3 test
+2: npm notice run python3 -B -m unittest discover -s skills/html-report/tests -p 'test_*.py'
+3: .............
+4: ----------------------------------------------------------------------
+5: Ran 13 tests in 0.482s
+6: 
+7: OK
+
+=== pi-skill-lab-qc-presentation-theme.pi160.log ===
+[...]
+1: npm notice run @firstpick/pi-skill-lab-qc-presentation-theme@0.1.9 test
+2: npm notice run python3 -m unittest discover -s skills/lab-qc-presentation-theme/tests -p 'test_*.py'
+3: .....
+4: ----------------------------------------------------------------------
+5: Ran 5 tests in 0.001s
+6: 
+7: OK
+
+=== pi-skill-patch-md.pi160.log ===
+[...]
+1: npm notice run @firstpick/pi-skill-patch-md@0.1.6 test
+2: npm notice run node --test tests/*.test.mjs
+3: ✔ strict v2 preserves every shell fence and nested variables resolve (3.410978ms)
+4: ✔ strict v2 supports CRLF without changing command semantics (0.577982ms)
+[...]
+24: ✔ T3 patch storage is outside live userdata and respects its configured home (0.06951ms)
+25: ✔ storage does not migrate rollback state or authorize silent application (0.10224ms)
+26: ℹ tests 23
+27: ℹ suites 0
+28: ℹ pass 23
+29: ℹ fail 0
+30: ℹ cancelled 0
+31: ℹ skipped 0
+32: ℹ todo 0
+33: ℹ duration_ms 745.22196
+
+=== pi-skill-project-readme.pi160.log ===
+[...]
+1: npm notice run @firstpick/pi-skill-project-readme@0.1.2 test
+2: npm notice run python3 -B -m unittest discover -s skills/project-readme/tests -p "test_*.py"
+3: ...................
+4: ----------------------------------------------------------------------
+5: Ran 19 tests in 0.010s
+6: 
+7: OK
+
+=== pi-skill-repo-explorer.pi160.log ===
+[...]
+1: F............................
+2: ======================================================================
+3: FAIL: test_corpus_is_extensive_polyglot_and_declares_34_facts (test_bash_usage_benchmark.BashUsageBenchmarkTests.test_corpus_is_extensive_polyglot_and_declares_34_facts)
+4: ----------------------------------------------------------------------
+5: Traceback (most recent call last):
+6:   File "<repo>/pi-skill-repo-explorer/skills/repo-explorer/tests/test_bash_usage_benchmark.py", line 41, in test_corpus_is_extensive_polyglot_and_declares_34_facts
+7:     self.assertGreaterEqual(len(files), 35)
+8:     ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^
+9: AssertionError: 33 not greater than or equal to 35
+10: 
+11: ----------------------------------------------------------------------
+12: Ran 29 tests in 14.380s
+13: 
+14: FAILED (failures=1)
+
+=== pi-skill-requirements-engineering.pi160.log ===
+[...]
+1: npm notice run @firstpick/pi-skill-requirements-engineering@0.1.1 test
+2: npm notice run node --test tests/*.test.mjs
+3: ✔ model inputs and separate rubrics cover all success criteria and branches (1.259407ms)
+4: ✔ scenario validator rejects missing rubric, duplicate IDs and missing coverage (4.140871ms)
+[...]
+7: ✔ bundled Markdown links and fences resolve (0.914065ms)
+8: ✔ dry-run archive has exactly declared resources and no source PDF or fixtures (164.736683ms)
+9: ℹ tests 6
+10: ℹ suites 0
+11: ℹ pass 6
+12: ℹ fail 0
+13: ℹ cancelled 0
+14: ℹ skipped 0
+15: ℹ todo 0
+16: ℹ duration_ms 205.908741
+
+=== pi-skill-rust-rewrite.pi160.log ===
+[...]
+1: npm notice run @firstpick/pi-skill-rust-rewrite@0.2.0 test
+2: npm notice run node --test tests/package.test.mjs
+3: ✔ manifest declares a public, discoverable skill package (0.832274ms)
+4: ✔ package ships the skill, its references, and documentation without runtime code (0.410732ms)
+[...]
+11: ✔ all local Markdown links and anchors resolve (1.582998ms)
+12: ✔ Markdown code fences are balanced (3.770459ms)
+13: ℹ tests 10
+14: ℹ suites 0
+15: ℹ pass 10
+16: ℹ fail 0
+17: ℹ cancelled 0
+18: ℹ skipped 0
+19: ℹ todo 0
+20: ℹ duration_ms 39.307939
+
+=== pi-skill-sailfishos.pi160.log ===
+[...]
+1: npm notice run @firstpick/pi-skill-sailfishos@0.1.0 test
+2: npm notice run python3 -B -m unittest discover -s tests -p "test_*.py" -v
+3: test_help_does_not_inspect (test_inspect.InspectionTests.test_help_does_not_inspect) ... ok
+4: test_invalid_argument_does_not_inspect (test_inspect.InspectionTests.test_invalid_argument_does_not_inspect) ... ok
+[...]
+15: test_docs_have_working_relative_links_and_safe_layers (test_package_contract.PackageContractTests.test_docs_have_working_relative_links_and_safe_layers) ... ok
+16: test_no_personal_memory_in_runtime_bundle (test_package_contract.PackageContractTests.test_no_personal_memory_in_runtime_bundle) ... ok
+17: test_portable_skill_and_runtime_resources (test_package_contract.PackageContractTests.test_portable_skill_and_runtime_resources) ... ok
+18: test_publishable_pi_manifest (test_package_contract.PackageContractTests.test_publishable_pi_manifest) ... ok
+19: test_source_evidence_ids_resolve (test_package_contract.PackageContractTests.test_source_evidence_ids_resolve) ... ok
+20: 
+21: ----------------------------------------------------------------------
+22: Ran 17 tests in 0.024s
+23: 
+24: OK (skipped=2)
+
+=== pi-skill-shoo-auth.pi160.log ===
+[...]
+1: npm notice run @firstpick/pi-skill-shoo-auth@0.1.4 test
+2: npm notice run python3 -m unittest discover -s skills/shoo-auth/tests -p 'test_*.py'
+3: .....
+4: ----------------------------------------------------------------------
+5: Ran 5 tests in 0.000s
+6: 
+7: OK
+
+=== pi-skill-stop-slop.pi160.log ===
+[...]
+1: npm notice run @firstpick/pi-skill-stop-slop@0.1.0 test
+2: npm notice run node --test
+3: ✔ every supported rule has a positive example (81.547062ms)
+4: ✔ simple concrete prose is not required to have a penalty (0.230561ms)
+[...]
+46: ✔ manifest ships the skill, CLI, references and documentation, without runtime dependencies (4.579063ms)
+47: ✔ first-party Markdown links resolve and fences balance (1.064046ms)
+48: ℹ tests 45
+49: ℹ suites 0
+50: ℹ pass 45
+51: ℹ fail 0
+52: ℹ cancelled 0
+53: ℹ skipped 0
+54: ℹ todo 0
+55: ℹ duration_ms 2559.797719
+
+=== pi-skill-subagent-governance.pi160.log ===
+[...]
+1: npm notice run @firstpick/pi-skill-subagent-governance@0.1.4 test
+2: npm notice run python3 -B -m unittest discover -s skills/subagent-governance/tests -p 'test_*.py'
+3: .................
+4: ----------------------------------------------------------------------
+5: Ran 17 tests in 0.003s
+6: 
+7: OK
+
+=== pi-utils.pi160.log ===
+[...]
+1: npm notice run @firstpick/pi-utils@0.3.2 test
+2: npm notice run node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types tests/initial-prompt-estimate-state.test.mjs && node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types tests/reusable-utils.test.mjs && node tests/resource-management.test.mjs && node tests/tui-setup-option-selector.test.mjs && node tests/scoped-resource-command.test.mjs && node tests/tui-resource-selector.test.mjs && node tests/tui-model-profile-selector.test.mjs
+3: resource-management.test.mjs passed
+4: tui-setup-option-selector.test.mjs passed
+5: scoped-resource-command.test.mjs passed
+6: tui-resource-selector.test.mjs passed
+7: tui-model-profile-selector.test.mjs passed
+
+=== services__issue-bot-gateway.pi152.corrected-baseline.log ===
+[...]
+1: npm notice run @firstpick/issue-bot-gateway@0.1.0 test
+2: npm notice run tsx --test test/shared-*.test.ts test/intake-*.test.ts test/consumer-*.test.ts test/d1-*.test.ts test/e2e-*.test.ts
+3: ✔ GitHub App JWT accepts both PKCS#8 and GitHub-style PKCS#1 PEM keys (23.014386ms)
+4: {"event":"issue_bot_terminal","submission_id":"AAAAAAAAAAAAAAAAAAAAAA","status":"created","reason_code":"acceptable"}
+[...]
+40: ✔ admission defaults closed, origin failures fail closed, quota failure and queue failure create no pending prose (1.7858ms)
+41: ✖ policy-v1 catalog and every canonical template remain byte-compatible with the live browser catalog (12.293723ms)
+42: ✔ submission validation rejects unknown fields and unsafe Unicode while normalizing canonical input (2.893964ms)
+43: ✔ queue digest preimage and exact message validation reject tampering (6.202581ms)
+44: ✔ verdict schema permits only the frozen creation authorization tuple (0.714384ms)
+45: ℹ tests 33
+46: ℹ suites 0
+47: ℹ pass 32
+[...]
+53: 
+54: ✖ failing tests:
+55: 
+56: test at test/shared-contracts.test.ts:1:753
+57: ✖ policy-v1 catalog and every canonical template remain byte-compatible with the live browser catalog (12.293723ms)
+58:   AssertionError [ERR_ASSERTION]: the parity fixture must extract the live OPTIONAL_FEATURES labels
+59:       at TestContext.<anonymous> (<repo>/services/issue-bot-gateway/test/shared-contracts.test.ts:19:10)
+60:       at Test.runInAsyncScope (node:async_hooks:226:14)
+61:       at Test.run (node:internal/test_runner/test:1402:25)
+62:       at Test.start (node:internal/test_runner/test:1262:17)
+63:       at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+64:     generatedMessage: false,
+65:     code: 'ERR_ASSERTION',
+66:     actual: false,
+67:     expected: true,
+68:     operator: '==',
+69:     diff: 'simple'
+70:   }
+
+=== services__issue-bot-gateway.pi160.log ===
+[...]
+1: npm notice run @firstpick/issue-bot-gateway@0.1.0 test
+2: npm notice run tsx --test test/shared-*.test.ts test/intake-*.test.ts test/consumer-*.test.ts test/d1-*.test.ts test/e2e-*.test.ts
+3: ✔ GitHub App JWT accepts both PKCS#8 and GitHub-style PKCS#1 PEM keys (39.373079ms)
+4: {"event":"issue_bot_terminal","submission_id":"AAAAAAAAAAAAAAAAAAAAAA","status":"created","reason_code":"acceptable"}
+[...]
+40: ✔ admission defaults closed, origin failures fail closed, quota failure and queue failure create no pending prose (1.93267ms)
+41: ✖ policy-v1 catalog and every canonical template remain byte-compatible with the live browser catalog (13.075306ms)
+42: ✔ submission validation rejects unknown fields and unsafe Unicode while normalizing canonical input (2.238601ms)
+43: ✔ queue digest preimage and exact message validation reject tampering (5.95999ms)
+44: ✔ verdict schema permits only the frozen creation authorization tuple (0.721574ms)
+45: ℹ tests 33
+46: ℹ suites 0
+47: ℹ pass 32
+[...]
+53: 
+54: ✖ failing tests:
+55: 
+56: test at test/shared-contracts.test.ts:1:753
+57: ✖ policy-v1 catalog and every canonical template remain byte-compatible with the live browser catalog (13.075306ms)
+58:   AssertionError [ERR_ASSERTION]: the parity fixture must extract the live OPTIONAL_FEATURES labels
+59:       at TestContext.<anonymous> (<repo>/services/issue-bot-gateway/test/shared-contracts.test.ts:19:10)
+60:       at Test.runInAsyncScope (node:async_hooks:226:14)
+61:       at Test.run (node:internal/test_runner/test:1402:25)
+62:       at Test.start (node:internal/test_runner/test:1262:17)
+63:       at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+64:     generatedMessage: false,
+65:     code: 'ERR_ASSERTION',
+66:     actual: false,
+67:     expected: true,
+68:     operator: '==',
+69:     diff: 'simple'
+70:   }

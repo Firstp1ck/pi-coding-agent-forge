@@ -1,0 +1,942 @@
+{
+  "title": "Pi 1.6.0 repository test audit",
+  "completed_at_utc": "2026-11-26T21:53:31.528070+00:00",
+  "source": {
+    "head": "d826eadebd928d0e13f5d647f4ceb14dbd92dbfb",
+    "working_tree_changes": [
+      "pi-skill-explainer-video/skills/explainer-video/SKILL.md",
+      "pi-skill-explainer-video/skills/explainer-video/assets/engine.js",
+      "pi-skill-explainer-video/skills/explainer-video/assets/player.html",
+      "pi-skill-explainer-video/skills/explainer-video/references/storyboard.md",
+      "pi-skill-explainer-video/skills/explainer-video/references/style.md",
+      "pi-skill-explainer-video/skills/explainer-video/scripts/lib/storyboard.mjs",
+      "pi-skill-explainer-video/skills/explainer-video/tests/render.test.mjs",
+      "pi-skill-explainer-video/skills/explainer-video/tests/storyboard.test.mjs"
+    ],
+    "working_tree_file_sha256": {
+      "pi-skill-explainer-video/skills/explainer-video/SKILL.md": "11826bc56101e134333d0d8e804e647f9bc34c9ba4348584d713a7c4a70aed99",
+      "pi-skill-explainer-video/skills/explainer-video/assets/engine.js": "cad8bda25ecbd03a221edcc6d4b7bce094275370b1be42cdee67a5ce28c73424",
+      "pi-skill-explainer-video/skills/explainer-video/assets/player.html": "8928e1d2dc958dc33352949571aa80b19c4488d04a722d7254476dc8ffcfc873",
+      "pi-skill-explainer-video/skills/explainer-video/references/storyboard.md": "609c5d3b5f51482f8200c587bb51a9b3c5581328f743639917170143e938e6f2",
+      "pi-skill-explainer-video/skills/explainer-video/references/style.md": "c1b5bbf7c9b1773b0f9c8499dc0fabe044e2f8c73930d4d2a3ca6fab556417d1",
+      "pi-skill-explainer-video/skills/explainer-video/scripts/lib/storyboard.mjs": "a1199f2e0184bfa44e4ab2a4a9b67064b5395f2d79ca8960d1ebe96ae38bb662",
+      "pi-skill-explainer-video/skills/explainer-video/tests/render.test.mjs": "638ab05c5f04e41754a59e976868da98823115526da2e6c3756c3da8d5ac97f0",
+      "pi-skill-explainer-video/skills/explainer-video/tests/storyboard.test.mjs": "deb2806a70c9b09e887b11681caf7b58be8d2e7a62cef47ea324f490ec9be7df"
+    }
+  },
+  "environment": {
+    "os": "Linux 7.3.5-zen1-1-zen",
+    "node": "26.13.1",
+    "bun": "1.4.5",
+    "python": "3.14.10",
+    "pi_sdk_versions": {
+      "1.6.0": {
+        "pi-ai": "1.6.0",
+        "pi-agent-core": "1.6.0",
+        "pi-coding-agent": "1.6.0",
+        "pi-tui": "1.6.0"
+      },
+      "1.5.2": {
+        "pi-ai": "1.5.2",
+        "pi-agent-core": "1.5.2",
+        "pi-coding-agent": "1.5.2",
+        "pi-tui": "1.5.2"
+      },
+      "0.87.1": {
+        "pi-ai": "0.87.1",
+        "pi-agent-core": "0.87.1",
+        "pi-coding-agent": "0.87.1",
+        "pi-tui": "0.87.1"
+      }
+    },
+    "launcher": "t3-build",
+    "max_concurrent_suites": 2,
+    "qt_platform": "offscreen",
+    "isolated_source": true,
+    "manifests_and_lockfiles_changed": false
+  },
+  "method": "Substitute direct Pi SDK module links and Pi CLI in an isolated source copy, reuse other installed dependencies. Preserve test-created fake packages and version literals.",
+  "conclusion": "No failure unique to 1.6.0 demonstrated against 1.5.2. Two session fixtures fail against both. Todo Progress targeted fixture passes with 0.87.1.",
+  "main_summary": {
+    "suites": 53,
+    "passed": 48,
+    "failed": 5
+  },
+  "supplemental_summary": {
+    "commands": 9,
+    "passed": 6,
+    "failed": 2,
+    "skipped": 1
+  },
+  "main_suites": [
+    {
+      "package": "pi-extension-anthropic-auth-recovery",
+      "script": "test",
+      "command": "node --experimental-strip-types --test tests/recovery.test.mjs && node --experimental-strip-types --test tests/symlink-layout.test.mjs && node --experimental-strip-types --test tests/package-install.test.mjs",
+      "exit_code": 0,
+      "timeout": false,
+      "duration_seconds": 0.96,
+      "evidence_section": "pi-extension-anthropic-auth-recovery.pi160.log",
+      "outcome": "passed"
+    },
+    {
+      "package": "pi-extension-aur-review",
+      "script": "test",
+      "command": "node --experimental-strip-types --test tests/*.test.mjs",
+      "exit_code": 0,
+      "timeout": false,
+      "duration_seconds": 1.57,
+      "evidence_section": "pi-extension-aur-review.pi160.log",
+      "outcome": "passed"
+    },
+    {
+      "package": "pi-extension-brave-search",
+      "script": "test",
+      "command": "node --experimental-strip-types --test tests/*.test.ts",
+      "exit_code": 0,
+      "timeout": false,
+      "duration_seconds": 0.16,
+      "evidence_section": "pi-extension-brave-search.pi160.log",
+      "outcome": "passed"
+    },
+    {
+      "package": "pi-extension-btw",
+      "script": "test",
+      "command": "node --test tests/*.test.mjs",
+      "exit_code": 0,
+      "timeout": false,
+      "duration_seconds": 0.16,
+      "evidence_section": "pi-extension-btw.pi160.log",
+      "outcome": "passed"
+    },
+    {
+      "package": "pi-extension-codex-fast-mode",
+      "script": "test",
+      "command": "node --experimental-strip-types --test tests/*.test.ts",
+      "exit_code": 0,
+      "timeout": false,
+      "duration_seconds": 0.16,
+      "evidence_section": "pi-extension-codex-fast-mode.pi160.log",
+      "outcome": "passed"
+    },
+    {
+      "package": "pi-extension-conditional-system-prompts",
+      "script": "test",
+      "command": "node --experimental-strip-types --test tests/*.test.mjs",
+      "exit_code": 0,
+      "timeout": false,
+      "duration_seconds": 0.41,
+      "evidence_section": "pi-extension-conditional-system-prompts.pi160.log",
+      "outcome": "passed"
+    },
+    {
+      "package": "pi-extension-cursor-composer",
+      "script": "test",
+      "command": "node --import tsx --test tests/*.test.ts",
+      "exit_code": 0,
+      "timeout": false,
+      "duration_seconds": 0.41,
+      "evidence_section": "pi-extension-cursor-composer.pi160.log",
+      "outcome": "passed"
+    },
+    {
+      "package": "pi-extension-docx",
+      "script": "test",
+      "command": "tsx --test tests/*.test.mjs",
+      "exit_code": 0,
+      "timeout": false,
+      "duration_seconds": 3.57,
+      "evidence_section": "pi-extension-docx.pi160.log",
+      "outcome": "passed"
+    },
+    {
+      "package": "pi-extension-feature-system-prompt",
+      "script": "test",
+      "command": "node --experimental-strip-types --test tests/*.test.ts",
+      "exit_code": 0,
+      "timeout": false,
+      "duration_seconds": 0.46,
+      "evidence_section": "pi-extension-feature-system-prompt.pi160.log",
+      "outcome": "passed"
+    },
+    {
+      "package": "pi-extension-git-guided-workflow",
+      "script": "test",
+      "command": "node --test tests/*.test.mjs",
+      "exit_code": 0,
+      "timeout": false,
+      "duration_seconds": 18.64,
+      "evidence_section": "pi-extension-git-guided-workflow.pi160.log",
+      "outcome": "passed"
+    },
+    {
+      "package": "pi-extension-grill-me",
+      "script": "test",
+      "command": "node --experimental-strip-types --test tests/*.test.ts",
+      "exit_code": 0,
+      "timeout": false,
+      "duration_seconds": 0.51,
+      "evidence_section": "pi-extension-grill-me.pi160.log",
+      "outcome": "passed"
+    },
+    {
+      "package": "pi-extension-gui-testing",
+      "script": "test",
+      "command": "node --experimental-strip-types --test \"tests/contracts/**/*.test.mjs\" \"tests/unit/**/*.test.mjs\"",
+      "exit_code": 0,
+      "timeout": false,
+      "duration_seconds": 1.27,
+      "evidence_section": "pi-extension-gui-testing.pi160.log",
+      "outcome": "passed"
+    },
+    {
+      "package": "pi-extension-image-generation",
+      "script": "test",
+      "command": "node --experimental-strip-types --test tests/*.test.ts",
+      "exit_code": 0,
+      "timeout": false,
+      "duration_seconds": 0.26,
+      "evidence_section": "pi-extension-image-generation.pi160.log",
+      "outcome": "passed"
+    },
+    {
+      "package": "pi-extension-model-research",
+      "script": "test",
+      "command": "node --experimental-strip-types --test tests/*.test.mjs",
+      "exit_code": 0,
+      "timeout": false,
+      "duration_seconds": 0.61,
+      "evidence_section": "pi-extension-model-research.pi160.log",
+      "outcome": "passed"
+    },
+    {
+      "package": "pi-extension-nixos-wiki-local",
+      "script": "test:mock",
+      "command": "bun tests/mocktest.ts",
+      "exit_code": 0,
+      "timeout": false,
+      "duration_seconds": 0.21,
+      "evidence_section": "pi-extension-nixos-wiki-local.pi160.log",
+      "outcome": "passed"
+    },
+    {
+      "package": "pi-extension-quickshell-wiki-local",
+      "script": "test",
+      "command": "bun test tests/*.test.ts && python3 -m unittest discover -s tests -p 'test_*.py'",
+      "exit_code": 0,
+      "timeout": false,
+      "duration_seconds": 0.26,
+      "evidence_section": "pi-extension-quickshell-wiki-local.pi160.log",
+      "outcome": "passed"
+    },
+    {
+      "package": "pi-extension-raspberrypi-wiki-local",
+      "script": "test",
+      "command": "node --test tests/*.test.mjs",
+      "exit_code": 0,
+      "timeout": false,
+      "duration_seconds": 0.11,
+      "evidence_section": "pi-extension-raspberrypi-wiki-local.pi160.log",
+      "outcome": "passed"
+    },
+    {
+      "package": "pi-extension-release-npm",
+      "script": "test",
+      "command": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types --test tests/*.test.mjs",
+      "exit_code": 0,
+      "timeout": false,
+      "duration_seconds": 51.44,
+      "evidence_section": "pi-extension-release-npm.pi160.log",
+      "outcome": "passed"
+    },
+    {
+      "package": "pi-extension-review",
+      "script": "test",
+      "command": "node --experimental-strip-types --test tests/*.test.mjs",
+      "exit_code": 0,
+      "timeout": false,
+      "duration_seconds": 3.22,
+      "evidence_section": "pi-extension-review.pi160.log",
+      "outcome": "passed"
+    },
+    {
+      "package": "pi-extension-safety-guard",
+      "script": "test",
+      "command": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types --import ./tests/register-typescript.mjs --test tests/*.test.mjs",
+      "exit_code": 0,
+      "timeout": false,
+      "duration_seconds": 0.71,
+      "evidence_section": "pi-extension-safety-guard.pi160.log",
+      "outcome": "passed"
+    },
+    {
+      "package": "pi-extension-setup-skills",
+      "script": "test",
+      "command": "bun test && node tests/t3-preflight-regression.mjs --no-skills",
+      "exit_code": 1,
+      "timeout": false,
+      "duration_seconds": 0.81,
+      "evidence_section": "pi-extension-setup-skills.pi160.log",
+      "outcome": "failed"
+    },
+    {
+      "package": "pi-extension-small-modal-reliability",
+      "script": "test",
+      "command": "node scripts/test.mjs",
+      "exit_code": 0,
+      "timeout": false,
+      "duration_seconds": 13.78,
+      "evidence_section": "pi-extension-small-modal-reliability.pi160.log",
+      "outcome": "passed"
+    },
+    {
+      "package": "pi-extension-subagent-minimum-fanout",
+      "script": "test",
+      "command": "node --experimental-strip-types --test tests/*.test.ts",
+      "exit_code": 0,
+      "timeout": false,
+      "duration_seconds": 0.16,
+      "evidence_section": "pi-extension-subagent-minimum-fanout.pi160.log",
+      "outcome": "passed"
+    },
+    {
+      "package": "pi-extension-todo-progress",
+      "script": "test",
+      "command": "node --test tests/*.test.mjs",
+      "exit_code": 1,
+      "timeout": false,
+      "duration_seconds": 0.86,
+      "evidence_section": "pi-extension-todo-progress.pi160.log",
+      "outcome": "failed"
+    },
+    {
+      "package": "pi-extension-tools",
+      "script": "test",
+      "command": "bun test",
+      "exit_code": 0,
+      "timeout": false,
+      "duration_seconds": 0.21,
+      "evidence_section": "pi-extension-tools.pi160.log",
+      "outcome": "passed"
+    },
+    {
+      "package": "pi-extension-workbook",
+      "script": "test",
+      "command": "tsx --test tests/*.test.mjs",
+      "exit_code": 0,
+      "timeout": false,
+      "duration_seconds": 1.17,
+      "evidence_section": "pi-extension-workbook.pi160.log",
+      "outcome": "passed"
+    },
+    {
+      "package": "pi-extension-workflows",
+      "script": "test",
+      "command": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types tests/schema.test.mjs && node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types tests/shell-command-policy.test.mjs && node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types tests/bundled-workflow.test.mjs && node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types tests/script-schema.test.mjs && node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types tests/token-budget.test.mjs && node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types tests/persistence.test.mjs && node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types tests/inspector.test.mjs && node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types tests/advanced.test.mjs && node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types tests/workflow-policy-setup.test.mjs && node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types tests/policy-worktree.test.mjs && node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types tests/replay.test.mjs && node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types tests/launch-approval.test.mjs && node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types tests/saved-workflows.test.mjs && node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types tests/run-manager.test.mjs && node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types tests/scheduler.test.mjs && node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types tests/mode.test.mjs && node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types tests/script-parser.test.mjs && node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types tests/script-runtime.test.mjs && node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types tests/task-runner-budget.test.mjs && node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types tests/script-runner-budget.test.mjs && node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types tests/script-runner.test.mjs && node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types tests/loader.test.mjs && node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types tests/runner.test.mjs && node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types tests/extension.test.mjs && node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types tests/workflow-test.test.mjs",
+      "exit_code": 0,
+      "timeout": false,
+      "duration_seconds": 4.62,
+      "evidence_section": "pi-extension-workflows.pi160.log",
+      "outcome": "passed"
+    },
+    {
+      "package": "pi-package-natural-conversation",
+      "script": "test",
+      "command": "node --test tests/*.test.mjs",
+      "exit_code": 0,
+      "timeout": false,
+      "duration_seconds": 1.82,
+      "evidence_section": "pi-package-natural-conversation.pi160.log",
+      "outcome": "passed"
+    },
+    {
+      "package": "pi-package-prompts-git-pr",
+      "script": "test",
+      "command": "node tests/git-staged-msg.test.mjs",
+      "exit_code": 0,
+      "timeout": false,
+      "duration_seconds": 0.11,
+      "evidence_section": "pi-package-prompts-git-pr.pi160.log",
+      "outcome": "passed"
+    },
+    {
+      "package": "pi-package-qt-webui",
+      "script": "test",
+      "command": "node tests/run-all.mjs",
+      "exit_code": 1,
+      "timeout": false,
+      "duration_seconds": 158.88,
+      "evidence_section": "pi-package-qt-webui.pi160.log",
+      "outcome": "failed"
+    },
+    {
+      "package": "pi-package-questionnaire",
+      "script": "test",
+      "command": "node --experimental-strip-types --test tests/*.test.mjs",
+      "exit_code": 0,
+      "timeout": false,
+      "duration_seconds": 0.26,
+      "evidence_section": "pi-package-questionnaire.pi160.log",
+      "outcome": "passed"
+    },
+    {
+      "package": "pi-package-remote-webui",
+      "script": "test",
+      "command": "node tests/run-all.mjs",
+      "exit_code": 0,
+      "timeout": false,
+      "duration_seconds": 0.21,
+      "evidence_section": "pi-package-remote-webui.pi160.log",
+      "outcome": "passed"
+    },
+    {
+      "package": "pi-package-themes-bundle",
+      "script": "test",
+      "command": "node --test tests/*.test.mjs",
+      "exit_code": 0,
+      "timeout": false,
+      "duration_seconds": 0.11,
+      "evidence_section": "pi-package-themes-bundle.pi160.log",
+      "outcome": "passed"
+    },
+    {
+      "package": "pi-package-webui",
+      "script": "test",
+      "command": "node tests/run-all.mjs",
+      "exit_code": 1,
+      "timeout": false,
+      "duration_seconds": 270.59,
+      "id": "pi-package-webui__corrected",
+      "timeout_seconds": 900,
+      "evidence_section": "pi-package-webui__corrected.pi160.log",
+      "outcome": "failed"
+    },
+    {
+      "package": "pi-package-writer",
+      "script": "test",
+      "command": "node --experimental-strip-types --test tests/*.test.ts",
+      "exit_code": 0,
+      "timeout": false,
+      "duration_seconds": 0.21,
+      "evidence_section": "pi-package-writer.pi160.log",
+      "outcome": "passed"
+    },
+    {
+      "package": "pi-skill-code-quality",
+      "script": "test",
+      "command": "node --unhandled-rejections=strict --test tests/core.test.mjs tests/git.test.mjs tests/capture.test.mjs tests/classification.test.mjs tests/safety.test.mjs tests/metrics.test.mjs tests/report.test.mjs tests/cli.test.mjs tests/adapters.test.mjs tests/contract.test.mjs tests/packaging.test.mjs tests/evaluation.test.mjs tests/evaluation/parser-growth/protected.test.mjs tests/evaluation/repeated-error-handling/protected.test.mjs tests/evaluation/validation-boundary/protected.test.mjs",
+      "exit_code": 0,
+      "timeout": false,
+      "duration_seconds": 2.02,
+      "evidence_section": "pi-skill-code-quality.pi160.log",
+      "outcome": "passed"
+    },
+    {
+      "package": "pi-skill-desktop-visual-design",
+      "script": "test",
+      "command": "node --test tests/skill-contract.test.mjs",
+      "exit_code": 0,
+      "timeout": false,
+      "duration_seconds": 0.11,
+      "evidence_section": "pi-skill-desktop-visual-design.pi160.log",
+      "outcome": "passed"
+    },
+    {
+      "package": "pi-skill-dolt-database-version-control",
+      "script": "test",
+      "command": "python3 -m unittest discover -s skills/dolt-database-version-control/tests -p 'test_*.py'",
+      "exit_code": 0,
+      "timeout": false,
+      "duration_seconds": 0.11,
+      "evidence_section": "pi-skill-dolt-database-version-control.pi160.log",
+      "outcome": "passed"
+    },
+    {
+      "package": "pi-skill-explainer-video",
+      "script": "test",
+      "command": "node --test skills/explainer-video/tests/",
+      "exit_code": 0,
+      "timeout": false,
+      "duration_seconds": 2.92,
+      "evidence_section": "pi-skill-explainer-video.pi160.log",
+      "outcome": "passed"
+    },
+    {
+      "package": "pi-skill-feature-development-workflow",
+      "script": "test",
+      "command": "python3 -B -m unittest discover -s skills/feature-development-workflow/tests -p 'test_*.py'",
+      "exit_code": 0,
+      "timeout": false,
+      "duration_seconds": 0.11,
+      "evidence_section": "pi-skill-feature-development-workflow.pi160.log",
+      "outcome": "passed"
+    },
+    {
+      "package": "pi-skill-frontend-design",
+      "script": "test",
+      "command": "node --test tests/skill-contract.test.mjs",
+      "exit_code": 0,
+      "timeout": false,
+      "duration_seconds": 0.11,
+      "evidence_section": "pi-skill-frontend-design.pi160.log",
+      "outcome": "passed"
+    },
+    {
+      "package": "pi-skill-html-report",
+      "script": "test",
+      "command": "python3 -B -m unittest discover -s skills/html-report/tests -p 'test_*.py'",
+      "exit_code": 0,
+      "timeout": false,
+      "duration_seconds": 0.61,
+      "evidence_section": "pi-skill-html-report.pi160.log",
+      "outcome": "passed"
+    },
+    {
+      "package": "pi-skill-lab-qc-presentation-theme",
+      "script": "test",
+      "command": "python3 -m unittest discover -s skills/lab-qc-presentation-theme/tests -p 'test_*.py'",
+      "exit_code": 0,
+      "timeout": false,
+      "duration_seconds": 0.11,
+      "evidence_section": "pi-skill-lab-qc-presentation-theme.pi160.log",
+      "outcome": "passed"
+    },
+    {
+      "package": "pi-skill-patch-md",
+      "script": "test",
+      "command": "node --test tests/*.test.mjs",
+      "exit_code": 0,
+      "timeout": false,
+      "duration_seconds": 0.86,
+      "evidence_section": "pi-skill-patch-md.pi160.log",
+      "outcome": "passed"
+    },
+    {
+      "package": "pi-skill-project-readme",
+      "script": "test",
+      "command": "python3 -B -m unittest discover -s skills/project-readme/tests -p \"test_*.py\"",
+      "exit_code": 0,
+      "timeout": false,
+      "duration_seconds": 0.11,
+      "evidence_section": "pi-skill-project-readme.pi160.log",
+      "outcome": "passed"
+    },
+    {
+      "package": "pi-skill-requirements-engineering",
+      "script": "test",
+      "command": "node --test tests/*.test.mjs",
+      "exit_code": 0,
+      "timeout": false,
+      "duration_seconds": 0.31,
+      "evidence_section": "pi-skill-requirements-engineering.pi160.log",
+      "outcome": "passed"
+    },
+    {
+      "package": "pi-skill-rust-rewrite",
+      "script": "test",
+      "command": "node --test tests/package.test.mjs",
+      "exit_code": 0,
+      "timeout": false,
+      "duration_seconds": 0.11,
+      "evidence_section": "pi-skill-rust-rewrite.pi160.log",
+      "outcome": "passed"
+    },
+    {
+      "package": "pi-skill-sailfishos",
+      "script": "test",
+      "command": "python3 -B -m unittest discover -s tests -p \"test_*.py\" -v",
+      "exit_code": 0,
+      "timeout": false,
+      "duration_seconds": 0.16,
+      "evidence_section": "pi-skill-sailfishos.pi160.log",
+      "outcome": "passed"
+    },
+    {
+      "package": "pi-skill-shoo-auth",
+      "script": "test",
+      "command": "python3 -m unittest discover -s skills/shoo-auth/tests -p 'test_*.py'",
+      "exit_code": 0,
+      "timeout": false,
+      "duration_seconds": 0.11,
+      "evidence_section": "pi-skill-shoo-auth.pi160.log",
+      "outcome": "passed"
+    },
+    {
+      "package": "pi-skill-stop-slop",
+      "script": "test",
+      "command": "node --test",
+      "exit_code": 0,
+      "timeout": false,
+      "duration_seconds": 2.67,
+      "evidence_section": "pi-skill-stop-slop.pi160.log",
+      "outcome": "passed"
+    },
+    {
+      "package": "pi-skill-subagent-governance",
+      "script": "test",
+      "command": "python3 -B -m unittest discover -s skills/subagent-governance/tests -p 'test_*.py'",
+      "exit_code": 0,
+      "timeout": false,
+      "duration_seconds": 0.11,
+      "evidence_section": "pi-skill-subagent-governance.pi160.log",
+      "outcome": "passed"
+    },
+    {
+      "package": "pi-utils",
+      "script": "test",
+      "command": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types tests/initial-prompt-estimate-state.test.mjs && node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types tests/reusable-utils.test.mjs && node tests/resource-management.test.mjs && node tests/tui-setup-option-selector.test.mjs && node tests/scoped-resource-command.test.mjs && node tests/tui-resource-selector.test.mjs && node tests/tui-model-profile-selector.test.mjs",
+      "exit_code": 0,
+      "timeout": false,
+      "duration_seconds": 1.42,
+      "evidence_section": "pi-utils.pi160.log",
+      "outcome": "passed"
+    },
+    {
+      "package": "services/issue-bot-gateway",
+      "script": "test",
+      "command": "tsx --test test/shared-*.test.ts test/intake-*.test.ts test/consumer-*.test.ts test/d1-*.test.ts test/e2e-*.test.ts",
+      "exit_code": 1,
+      "timeout": false,
+      "duration_seconds": 0.86,
+      "evidence_section": "services__issue-bot-gateway.pi160.log",
+      "outcome": "failed"
+    }
+  ],
+  "supplemental_suites": [
+    {
+      "package": "pi-extension-stats",
+      "id": "pi-extension-stats__standalone",
+      "argv": [
+        "node",
+        "--experimental-strip-types",
+        "--test",
+        "tests/stats-payload.test.mjs"
+      ],
+      "exit_code": 0,
+      "timeout": false,
+      "duration_seconds": 0.41,
+      "evidence_section": "pi-extension-stats__standalone.pi160.log",
+      "command": [
+        "node",
+        "--experimental-strip-types",
+        "--test",
+        "tests/stats-payload.test.mjs"
+      ],
+      "outcome": "passed"
+    },
+    {
+      "package": "pi-extension-git-footer-status",
+      "id": "pi-extension-git-footer-status__standalone",
+      "argv": [
+        "node",
+        "--experimental-strip-types",
+        "--test",
+        "tests/git-snapshot.test.mjs",
+        "tests/provider-usage-integration.test.mjs",
+        "tests/provider-usage.test.mjs",
+        "tests/speed-persistence.test.mjs",
+        "tests/stale-ctx.test.mjs",
+        "tests/visibility-persistence.test.mjs",
+        "tests/webui-pi-calibration-action.test.mjs"
+      ],
+      "exit_code": 0,
+      "timeout": false,
+      "duration_seconds": 1.87,
+      "evidence_section": "pi-extension-git-footer-status__standalone.pi160.log",
+      "command": [
+        "node",
+        "--experimental-strip-types",
+        "--test",
+        "tests/git-snapshot.test.mjs",
+        "tests/provider-usage-integration.test.mjs",
+        "tests/provider-usage.test.mjs",
+        "tests/speed-persistence.test.mjs",
+        "tests/stale-ctx.test.mjs",
+        "tests/visibility-persistence.test.mjs",
+        "tests/webui-pi-calibration-action.test.mjs"
+      ],
+      "outcome": "passed"
+    },
+    {
+      "package": "pi-skill-deep-research",
+      "argv": [
+        "python3",
+        "skills/deep-research/tests/test_determinism.py"
+      ],
+      "exit_code": 0,
+      "timeout": false,
+      "duration_seconds": 0.41,
+      "evidence_section": "pi-skill-deep-research.pi160.log",
+      "command": [
+        "python3",
+        "skills/deep-research/tests/test_determinism.py"
+      ],
+      "outcome": "passed"
+    },
+    {
+      "package": ".",
+      "id": ".__standalone",
+      "argv": [
+        "node",
+        "--experimental-strip-types",
+        "--test",
+        "dev/scripts/install-pi-add.test.mjs",
+        "dev/scripts/package-publishable-changes.test.mjs",
+        "dev/scripts/sync-pi-package-symlinks.test.mjs",
+        "tests/pi-wiki-start-compat.test.mjs"
+      ],
+      "exit_code": 1,
+      "timeout": false,
+      "duration_seconds": 5.12,
+      "evidence_section": ".__standalone.pi160.log",
+      "command": [
+        "node",
+        "--experimental-strip-types",
+        "--test",
+        "dev/scripts/install-pi-add.test.mjs",
+        "dev/scripts/package-publishable-changes.test.mjs",
+        "dev/scripts/sync-pi-package-symlinks.test.mjs",
+        "tests/pi-wiki-start-compat.test.mjs"
+      ],
+      "outcome": "failed"
+    },
+    {
+      "package": "pi-extension-docx",
+      "id": "pi-extension-docx__engine",
+      "script": "test:engine",
+      "exit_code": 0,
+      "timeout": false,
+      "duration_seconds": 0.11,
+      "evidence_section": "pi-extension-docx__engine.pi160.log",
+      "command": [
+        "npm",
+        "run",
+        "test:engine"
+      ],
+      "outcome": "skipped, no .NET SDK"
+    },
+    {
+      "package": "pi-extension-docx",
+      "id": "pi-extension-docx__corpus",
+      "script": "test:corpus",
+      "exit_code": 0,
+      "timeout": false,
+      "duration_seconds": 0.21,
+      "evidence_section": "pi-extension-docx__corpus.pi160.log",
+      "command": [
+        "npm",
+        "run",
+        "test:corpus"
+      ],
+      "outcome": "passed"
+    },
+    {
+      "package": "pi-extension-docx",
+      "id": "pi-extension-docx__pi-modes",
+      "script": "test:pi-modes",
+      "exit_code": 0,
+      "timeout": false,
+      "duration_seconds": 0.66,
+      "evidence_section": "pi-extension-docx__pi-modes.pi160.log",
+      "command": [
+        "npm",
+        "run",
+        "test:pi-modes"
+      ],
+      "outcome": "passed"
+    },
+    {
+      "package": "pi-extension-workbook",
+      "id": "pi-extension-workbook__pi-modes",
+      "script": "test:pi-modes",
+      "exit_code": 0,
+      "timeout": false,
+      "duration_seconds": 6.77,
+      "evidence_section": "pi-extension-workbook__pi-modes.pi160.log",
+      "command": [
+        "npm",
+        "run",
+        "test:pi-modes"
+      ],
+      "outcome": "passed"
+    },
+    {
+      "package": "pi-skill-repo-explorer",
+      "argv": [
+        "python3",
+        "-B",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "skills/repo-explorer/tests",
+        "-p",
+        "test_*.py"
+      ],
+      "exit_code": 1,
+      "timeout": false,
+      "duration_seconds": 14.48,
+      "evidence_section": "pi-skill-repo-explorer.pi160.log",
+      "command": [
+        "python3",
+        "-B",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "skills/repo-explorer/tests",
+        "-p",
+        "test_*.py"
+      ],
+      "outcome": "failed"
+    }
+  ],
+  "comparisons": [
+    {
+      "package": "pi-extension-setup-skills",
+      "runtime": "pi152",
+      "command": [
+        "node",
+        "tests/t3-preflight-regression.mjs",
+        "--no-skills"
+      ],
+      "exit_code": 1,
+      "evidence_section": "pi-extension-setup-skills.pi152.targeted.log",
+      "outcome": "failed"
+    },
+    {
+      "package": "pi-extension-setup-skills",
+      "runtime": "pi087",
+      "command": [
+        "node",
+        "tests/t3-preflight-regression.mjs",
+        "--no-skills"
+      ],
+      "exit_code": 1,
+      "evidence_section": "pi-extension-setup-skills.pi087.targeted.log",
+      "outcome": "failed"
+    },
+    {
+      "package": "pi-extension-todo-progress",
+      "runtime": "pi152",
+      "command": [
+        "node",
+        "--test",
+        "--test-name-pattern=native Pi startup preserves hooks and pause cancels a delayed continuation",
+        "tests/follow-up-delivery.test.mjs"
+      ],
+      "exit_code": 1,
+      "evidence_section": "pi-extension-todo-progress.pi152.targeted.log",
+      "outcome": "failed"
+    },
+    {
+      "package": "pi-extension-todo-progress",
+      "runtime": "pi087",
+      "command": [
+        "node",
+        "--test",
+        "--test-name-pattern=native Pi startup preserves hooks and pause cancels a delayed continuation",
+        "tests/follow-up-delivery.test.mjs"
+      ],
+      "exit_code": 0,
+      "evidence_section": "pi-extension-todo-progress.pi087.targeted.log",
+      "outcome": "passed"
+    },
+    {
+      "package": "pi-package-qt-webui",
+      "runtime": "1.5.2",
+      "command": [
+        "npm",
+        "test"
+      ],
+      "exit_code": 1,
+      "evidence_section": "pi-package-qt-webui.pi152.baseline.log",
+      "outcome": "failed"
+    },
+    {
+      "package": "services/issue-bot-gateway",
+      "runtime": "1.5.2",
+      "command": [
+        "npm",
+        "test"
+      ],
+      "exit_code": 1,
+      "evidence_section": "services__issue-bot-gateway.pi152.corrected-baseline.log",
+      "outcome": "failed"
+    },
+    {
+      "package": ".",
+      "runtime": "not exercised; fake Pi and npm commands only",
+      "command": [
+        "node",
+        "--test",
+        "dev/scripts/install-pi-add.test.mjs"
+      ],
+      "exit_code": 1,
+      "evidence_section": "..pi152.baseline.log",
+      "outcome": "failed"
+    },
+    {
+      "package": "pi-package-webui",
+      "runtime": "1.5.2",
+      "command": [
+        "node",
+        "tests/http-endpoints-harness.test.mjs"
+      ],
+      "exit_code": 0,
+      "evidence_section": "pi-package-webui.pi152.targeted.log",
+      "outcome": "passed"
+    },
+    {
+      "package": "pi-package-webui",
+      "runtime": "1.6.0",
+      "command": [
+        "node",
+        "tests/http-endpoints-harness.test.mjs"
+      ],
+      "exit_code": 0,
+      "evidence_section": "pi-package-webui.pi160.targeted-repeat.log",
+      "outcome": "passed"
+    }
+  ],
+  "intermittent_failure": {
+    "package": "pi-package-webui",
+    "file": "tests/http-endpoints-harness.test.mjs",
+    "full_suite_result": "failed uv run assertion at line 3275 after PI_OFFLINE was removed",
+    "targeted_1_5_2": "passed",
+    "targeted_1_6_0": "passed",
+    "cause": "not isolated; no clean full-suite rerun observed"
+  },
+  "superseded_runs": [
+    {
+      "package": "pi-package-webui",
+      "script": "test",
+      "command": "node tests/run-all.mjs",
+      "exit_code": 1,
+      "timeout": false,
+      "duration_seconds": 240.84,
+      "evidence_section": "pi-package-webui.pi160.log",
+      "outcome": "failed"
+    }
+  ],
+  "discarded_probe": {
+    "package": "services/issue-bot-gateway",
+    "command": [
+      "node",
+      "--experimental-strip-types",
+      "--test",
+      "test/shared-contracts.test.ts"
+    ],
+    "reason": "Bare Node cannot resolve the test's .js-to-.ts imports. Replaced with the declared npm test command; this invocation error is not a product finding."
+  },
+  "coverage_limits": [
+    "Fresh install from every package lockfile not tested",
+    "DOCX engine skipped because no .NET SDK",
+    "Real DOCX TUI/RPC confirmation not tested",
+    "Workbook Windows Excel/VBA/native host and signed-VBA checks not run",
+    "Quickshell Wiki optional full corpus not configured",
+    "Separate WebUI Playwright browser suite and WebKit not run",
+    "External models and manual interactive terminal keyboard behavior not tested",
+    "Suite-owned skips retained"
+  ]
+}

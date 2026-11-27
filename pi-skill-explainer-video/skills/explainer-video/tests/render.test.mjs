@@ -180,3 +180,27 @@ test('the rendered fast-slow caption covers most of its distance by mid-flight',
     assert.ok(samplePixel(frame, 985, 605)[2] < 120, 'caption reached the far half');
   });
 });
+
+test('sections start and end on black and shade the app only while their card shows', { skip }, () => {
+  const sb = storyboard();
+  sb.framing = 'full-app';
+  sb.format = 'episode';
+  const card = (kind) => ({ scene: 's', duration: 3, transition: 'cut', section: { kind, title: `${kind} title` } });
+  sb.steps = [card('opening'), { ...sb.steps[0], transition: 'cut' }, card('chapter'), card('closing')];
+  withFixture(sb, (dir) => {
+    const result = run([join(dir, 'video.json'), '--no-video', '--stills', '0,1.5,4.5,7.5,12', '--stills-dir', dir]);
+    assert.equal(result.status, 0, result.stderr);
+    const at = (time, x, y) => samplePixel(join(dir, `video-${time}s.png`), x, y);
+    for (const [x, y] of [[300, 100], [960, 540], [1600, 1000]]) {
+      assert.deepEqual(at('0.00', x, y), [0, 0, 0], `opening frame is black at ${x},${y}`);
+      assert.deepEqual(at('12.00', x, y), [0, 0, 0], `closing frame is black at ${x},${y}`);
+    }
+    // The default 0.62 shade leaves 38% of the blue app showing.
+    for (const time of ['1.50', '7.50']) {
+      const [r, g, b] = at(time, 300, 100);
+      assert.ok(r < 10 && g < 10 && b > 85 && b < 110, `shaded app at ${time}s: ${[r, g, b]}`);
+    }
+    const plain = at('4.50', 300, 100);
+    assert.ok(plain[0] > 240 && plain[2] < 15, `an ordinary shot is unshaded: ${plain}`);
+  });
+});

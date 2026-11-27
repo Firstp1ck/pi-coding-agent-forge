@@ -15,6 +15,8 @@
   var OUTRO_DEFAULT = 4;
   var VIEW = { x: 150, y: 60, w: 1620, h: 820 };
   var MAX_ZOOM = 3.2;
+  var SECTION_FADE = 0.5;
+  var SECTION_SHADE = 0.62;
 
   function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
   function lerp(a, b, k) { return a + (b - a) * k; }
@@ -51,13 +53,73 @@
     return Math.min(a, b);
   }
 
+  /** True on the very last frame of a video that ends on a step rather than an outro. */
+  function isFinalFrame(t, seg, sb) {
+    return !sb.outro && seg.index === sb.steps.length - 1 && t === seg.end;
+  }
+
   /** The incoming shot chooses the transition for both sides of its edit. */
-  function stepOpacity(t, seg, sb) {
+  function stepEdges(seg, sb) {
     var next = sb.steps[seg.index + 1];
-    if (!next && !sb.outro && sb.framing === 'full-app' && t === seg.end) return 1;
-    var fadeIn = seg.index > 0 && sb.steps[seg.index].transition !== 'cut';
-    var fadeOut = next ? next.transition !== 'cut' : !!sb.outro;
-    return segmentOpacity(t, seg.start, seg.end, fadeIn, fadeOut);
+    return {
+      fadeIn: seg.index > 0 && sb.steps[seg.index].transition !== 'cut',
+      fadeOut: next ? next.transition !== 'cut' : !!sb.outro
+    };
+  }
+
+  function stepOpacity(t, seg, sb) {
+    if (isFinalFrame(t, seg, sb) && (sb.framing === 'full-app' || sb.steps[seg.index].section)) return 1;
+    var edges = stepEdges(seg, sb);
+    return segmentOpacity(t, seg.start, seg.end, edges.fadeIn, edges.fadeOut);
+  }
+
+  /**
+   * Opacity of a section card (title plus shade) and of the full-frame black layer,
+   * at step-local time tl. An opening rises from black and a closing sinks to black;
+   * on any other edge the card fades over the still app. A zero ramp holds the card
+   * to the edge, so a closing with fadeOut 0 keeps its title on the final frame.
+   * @param {{kind:string, fadeIn?:number, fadeOut?:number}} section
+   * @param {number} tl seconds since the step started
+   * @param {number} duration step length in seconds
+   * @returns {{card:number, black:number}}
+   */
+  function sectionLayers(section, tl, duration) {
+    var fadeIn = section.fadeIn != null ? Number(section.fadeIn) : SECTION_FADE;
+    var fadeOut = section.fadeOut != null ? Number(section.fadeOut) : SECTION_FADE;
+    var rise = ramp(tl, 0, fadeIn);
+    var fall = fadeOut > 0 ? 1 - ramp(tl, duration - fadeOut, fadeOut) : 1;
+    var fromBlack = section.kind === 'opening';
+    var toBlack = section.kind === 'closing';
+    return {
+      card: (fromBlack ? 1 : rise) * (toBlack ? 1 : fall),
+      black: Math.max(fromBlack ? 1 - rise : 0, toBlack ? 1 - fall : 0)
+    };
+  }
+
+  /** Step-local time at which a focusFade entrance starts: the first spotlight, or the step start. */
+  function focusStart(step) {
+    var times = (step.spotlights || []).map(function (s) { return Number(s.from); }).filter(isFinite);
+    return times.length ? Math.min.apply(null, times) : 0;
+  }
+
+  /**
+   * Caption visibility (0..1) for a step at absolute time t.
+   * Continuous captions hold across ordinary edits and fade only where a section card
+   * interrupts the sequence. focusFade replaces the incoming fade with a ramp shared
+   * with the step's spotlights.
+   */
+  function captionOpacity(t, seg, sb) {
+    var step = sb.steps[seg.index];
+    var prev = sb.steps[seg.index - 1];
+    var next = sb.steps[seg.index + 1];
+    var continuous = sb.captionMotion === 'continuous';
+    var edges = continuous ? { fadeIn: !!(prev && prev.section), fadeOut: !!(next && next.section) } : stepEdges(seg, sb);
+    var focused = step.focusFade != null;
+    if (focused) edges.fadeIn = false;
+    var holdLast = isFinalFrame(t, seg, sb) && (continuous || sb.framing === 'full-app');
+    var a = holdLast ? 1 : segmentOpacity(t, seg.start, seg.end, edges.fadeIn, edges.fadeOut);
+    if (focused) a *= ramp(t - seg.start, focusStart(step), Number(step.focusFade));
+    return a;
   }
 
   /**
@@ -179,7 +241,10 @@
     this.sceneLayer = doc.getElementById('ev-scenes');
     if (this.fullApp) this.sceneLayer.classList.add('ev-full-app');
     this.overlay = doc.getElementById('ev-overlay');
+    this.sectionLayer = doc.getElementById('ev-sections');
+    this.black = doc.getElementById('ev-black');
     this.steps = [];
+    this.captions = [];
     this._build();
   }
 
@@ -254,6 +319,8 @@
       self.steps.push({
         def: step,
         host: host,
+        card: step.section ? self._buildSection(step.section) : null,
+        opacity: 0,
         shade: shade,
         scene: scene,
         size: size,
@@ -269,9 +336,24 @@
 
     this.caption = doc.getElementById('ev-caption');
     if (this.sb.captionMotion === 'continuous') this.caption.classList.add('ev-continuous');
+    if (this.sb.captionStyle === 'two-line') this.caption.classList.add('ev-two-line');
     this.keycap = doc.getElementById('ev-keys');
     this.outro = doc.getElementById('ev-outro');
     this._buildOutro();
+  };
+
+  /** A full-frame card: shade over the still app, with the title block centred on it. */
+  Player.prototype._buildSection = function (section) {
+    var card = this.doc.createElement('div');
+    card.className = 'ev-section ev-section-' + escapeHtml(section.kind);
+    var shade = section.shade != null ? Number(section.shade) : SECTION_SHADE;
+    card.style.background = 'rgba(0,0,0,' + clamp(shade, 0, 1) + ')';
+    card.innerHTML = '<div class="ev-sec-inner">' +
+      '<div class="ev-sec-title">' + escapeHtml(section.title) + '</div>' +
+      (section.body ? '<div class="ev-sec-body">' + escapeHtml(section.body) + '</div>' : '') +
+      (section.credit ? '<div class="ev-sec-credit">' + escapeHtml(section.credit) + '</div>' : '') + '</div>';
+    this.sectionLayer.appendChild(card);
+    return card;
   };
 
   Player.prototype._buildOutro = function () {
@@ -351,6 +433,8 @@
       }
     }
     (st.def.setup || []).forEach(function (a) { apply(a, 1, true); });
+    // A section card holds the app still: setup applies, timed actions wait for the next shot.
+    if (st.def.section) return;
     st.actions.forEach(function (a) {
       var at = Number(a.at);
       if (tl < at) return;
@@ -359,14 +443,19 @@
     });
   };
 
+  function activeSpotlights(step, tl) {
+    return (step.spotlights || []).filter(function (spot) {
+      return tl >= spot.from && tl < (spot.to == null ? step.duration : spot.to);
+    });
+  }
+
   /** Paint the union of the lit regions onto a single scrim in scene coordinates. */
   Player.prototype._renderSpotlights = function (st, t) {
     if (!st.shade) return;
-    var active = st.def.spotlights.filter(function (spot) {
-      return t >= spot.from && t < (spot.to == null ? st.def.duration : spot.to);
-    });
+    var active = activeSpotlights(st.def, t);
     st.shade.hidden = !active.length;
     if (!active.length) return;
+    st.shade.style.opacity = st.def.focusFade != null ? String(ramp(t, focusStart(st.def), Number(st.def.focusFade))) : '';
     var canvas = st.shade;
     // Rasterize full-window outlines at playback resolution even for a small source image.
     var resolution = this.fullApp && this.sb.spotlightOutline ? st.cam.s : 1;
@@ -405,12 +494,19 @@
     var tl = t - seg.start;
     var opacity = stepOpacity(t, seg, this.sb);
     var visible = opacity > 0.001;
+    st.opacity = visible ? opacity : 0;
     st.host.style.opacity = String(opacity);
     st.host.style.visibility = visible ? 'visible' : 'hidden';
     st.cursor.style.opacity = '0';
     st.highlights.forEach(function (el) { el.style.opacity = '0'; });
-    if (!visible) return;
     var tc = clamp(tl, 0, st.def.duration);
+    var paused = !!st.def.section;
+    if (st.card) {
+      var cardOpacity = visible ? sectionLayers(st.def.section, tc, st.def.duration).card * opacity : 0;
+      st.card.style.opacity = String(cardOpacity);
+      st.card.style.visibility = cardOpacity > 0.001 ? 'visible' : 'hidden';
+    }
+    if (!visible) return;
 
     this._applyActions(st, tc);
 
@@ -418,13 +514,13 @@
     var cam;
     if (this.fullApp) {
       cam = fitCamera([0, 0, st.size[0], st.size[1]], this.view, Infinity);
-    } else if (st.camera.length) {
+    } else if (st.camera.length && !paused) {
       var rect = sampleTrack(st.camera, tc, function (key) { return self._rect(st, key.rect); });
       cam = fitCamera(rect, this.view, this.maxZoom);
     } else {
       cam = fitCamera([0, 0, st.size[0], st.size[1]], this.view, this.maxZoom);
     }
-    var drift = this.fullApp || st.def.drift === false ? 1 : 1 + 0.012 * ramp(tl, 0, st.def.duration);
+    var drift = this.fullApp || paused || st.def.drift === false ? 1 : 1 + 0.012 * ramp(tl, 0, st.def.duration);
     var cx = this.view.x + this.view.w / 2;
     var cy = this.view.y + this.view.h / 2;
     cam = { s: cam.s * drift, tx: cx - (cx - cam.tx) * drift, ty: cy - (cy - cam.ty) * drift };
@@ -432,6 +528,7 @@
     st.cam = cam;
     st.scene.style.transform = 'translate(' + cam.tx.toFixed(2) + 'px,' + cam.ty.toFixed(2) + 'px) scale(' + cam.s.toFixed(5) + ')';
 
+    if (paused) return;
     this._renderSpotlights(st, tc);
     (st.def.highlights || []).forEach(function (h, i) {
       var from = Number(h.from);
@@ -478,15 +575,17 @@
 
   Player.prototype._renderCaption = function (t) {
     var sb = this.sb;
+    var twoLine = sb.captionStyle === 'two-line';
     var html = '';
+    var shown = [];
     this.timeline.steps.forEach(function (seg, i) {
       var c = sb.steps[i].caption;
-      if (!c) return;
+      if (!c || sb.steps[i].section) return;
       var continuous = sb.captionMotion === 'continuous';
-      var lastFrame = !sb.outro && i === sb.steps.length - 1 && t === seg.end;
-      var a = continuous ? Number(t >= seg.start && (t < seg.end || lastFrame)) : stepOpacity(t, seg, sb);
+      var a = captionOpacity(t, seg, sb);
       if (a <= 0.001) return;
-      var dy = (1 - easeOut(ramp(t - seg.start, -0.1, 0.5))) * 8;
+      // The two-line preset fades in place so both baselines never move.
+      var dy = twoLine ? 0 : (1 - easeOut(ramp(t - seg.start, -0.1, 0.5))) * 8;
       var num = c.number != null ? c.number : i + 1;
       var placement = '';
       if (c.box) {
@@ -495,19 +594,24 @@
         if (continuous || (c.track && c.track.length)) dy = 0;
         placement = 'left:' + position.x + 'px;top:' + position.y + 'px;width:' + Number(c.box[2]) + 'px;';
       }
-      var shift = c.box ? 'translateY(' + dy.toFixed(2) + 'px)' : 'translate(-50%,' + dy.toFixed(2) + 'px)';
+      var shift = c.box || twoLine ? 'translateY(' + dy.toFixed(2) + 'px)' : 'translate(-50%,' + dy.toFixed(2) + 'px)';
+      var text = '<span class="ev-bold">' + escapeHtml(c.bold) + '</span>' +
+        (c.rest ? ' <span class="ev-rest">' + escapeHtml(c.rest) + '</span>' : '');
       html += '<div class="ev-cap' + (c.box ? ' ev-cap-placed' : '') + '" style="' + placement + 'opacity:' + a.toFixed(3) + ';transform:' + shift + '">' +
         (num ? '<span class="ev-num">' + escapeHtml(num) + '</span>' : '') +
-        '<span class="ev-bold">' + escapeHtml(c.bold) + '</span>' +
-        (c.rest ? ' <span class="ev-rest">' + escapeHtml(c.rest) + '</span>' : '') + '</div>';
+        (twoLine ? '<span class="ev-text">' + text + '</span>' : text) + '</div>';
+      shown.push({ step: i, opacity: a });
     });
     this.caption.innerHTML = html;
+    var nodes = this.caption.children;
+    this.captions = shown.map(function (entry, k) { return { step: entry.step, opacity: entry.opacity, el: nodes[k] }; });
   };
 
   Player.prototype._renderKeys = function (t) {
     var sb = this.sb;
     var html = '';
     this.timeline.steps.forEach(function (seg, i) {
+      if (sb.steps[i].section) return;
       if (sb.steps[i + 1] && sb.steps[i + 1].transition === 'cut' && t >= seg.end) return;
       (sb.steps[i].keys || []).forEach(function (k) {
         var at = seg.start + Number(k.at);
@@ -540,8 +644,82 @@
     this.timeline.steps.forEach(function (seg, i) { self._renderStep(self.steps[i], seg, t); });
     this._renderCaption(t);
     this._renderKeys(t);
+    this._renderBlack(t);
     this._renderOutro(t);
     return t;
+  };
+
+  /** Opening and closing sections fade the whole frame from and to black, glow included. */
+  Player.prototype._renderBlack = function (t) {
+    var sb = this.sb;
+    var black = 0;
+    this.timeline.steps.forEach(function (seg, i) {
+      var section = sb.steps[i].section;
+      if (!section || t < seg.start || t > seg.end) return;
+      var tl = clamp(t - seg.start, 0, sb.steps[i].duration);
+      black = Math.max(black, sectionLayers(section, tl, sb.steps[i].duration).black);
+    });
+    this.blackLevel = black;
+    if (!this.black) return;
+    this.black.style.opacity = String(black);
+    this.black.style.visibility = black > 0.001 ? 'visible' : 'hidden';
+  };
+
+  function round2(v) { return Math.round(v * 100) / 100; }
+  function rectOf(b) { return [round2(b.left), round2(b.top), round2(b.width), round2(b.height)]; }
+
+  /**
+   * Seek to t and report what is on screen in output pixels, for layout checks.
+   * The primary step is the most visible one (the incoming step wins a tie at an edit);
+   * caption, spotlights and avoid regions belong to that step.
+   * @param {number} t seconds
+   * @returns {{time:number, step:number|null,
+   *   section: {kind:string, step:number, title:string, opacity:number, black:number, rect:number[], textOverflow:boolean}|null,
+   *   caption: {rect:number[], textOverflow:boolean, opacity:number}|null,
+   *   spotlights: {rect:number[], opacity:number}[], avoid: number[][]}}
+   */
+  Player.prototype.inspect = function (t) {
+    t = this.seek(t);
+    var frame = { w: Number(this.sb.width || 1920), h: Number(this.sb.height || 1080) };
+    var primary = -1;
+    var best = 0.001;
+    this.steps.forEach(function (st, i) { if (st.opacity >= best) { best = st.opacity; primary = i; } });
+    var out = { time: t, step: primary < 0 ? null : primary, section: null, caption: null, spotlights: [], avoid: [] };
+    if (primary < 0) return out;
+    var st = this.steps[primary];
+    var seg = this.timeline.steps[primary];
+    var tc = clamp(t - seg.start, 0, st.def.duration);
+    var self = this;
+    var toOutput = function (r) { return [round2(r[0] * st.cam.s + st.cam.tx), round2(r[1] * st.cam.s + st.cam.ty), round2(r[2] * st.cam.s), round2(r[3] * st.cam.s)]; };
+    var outside = function (b) { return b.left < -0.5 || b.top < -0.5 || b.right > frame.w + 0.5 || b.bottom > frame.h + 0.5; };
+
+    if (st.card) {
+      var inner = st.card.firstChild.getBoundingClientRect();
+      out.section = {
+        kind: st.def.section.kind, step: primary, title: String(st.def.section.title),
+        opacity: round2(Number(st.card.style.opacity)), black: round2(this.blackLevel || 0),
+        rect: rectOf(inner), textOverflow: outside(inner)
+      };
+      return out;
+    }
+
+    var cap = this.captions.filter(function (c) { return c.step === primary; })[0];
+    if (cap) {
+      var b = cap.el.getBoundingClientRect();
+      var overflow = outside(b);
+      var text = cap.el.querySelector('.ev-text');
+      if (text) overflow = overflow || text.scrollHeight > text.clientHeight + 1;
+      else if (this.sb.captionMotion === 'continuous' && cap.el.classList.contains('ev-cap-placed')) {
+        overflow = overflow || b.height > parseFloat(this.doc.defaultView.getComputedStyle(cap.el).minHeight) + 1;
+      }
+      out.caption = { rect: rectOf(b), textOverflow: overflow, opacity: round2(cap.opacity) };
+    }
+    var spotAlpha = st.shade && st.shade.style.opacity !== '' ? Number(st.shade.style.opacity) : 1;
+    out.spotlights = activeSpotlights(st.def, tc).map(function (spot) {
+      return { rect: toOutput(self._rect(st, spot.rect)), opacity: round2(spotAlpha * st.opacity) };
+    });
+    out.avoid = (st.def.avoid || []).map(function (spec) { return toOutput(self._rect(st, spec)); });
+    return out;
   };
 
   /**
@@ -602,6 +780,9 @@
     VIEW: VIEW,
     buildTimeline: buildTimeline,
     segmentOpacity: segmentOpacity,
+    sectionLayers: sectionLayers,
+    focusStart: focusStart,
+    captionOpacity: captionOpacity,
     sampleTrack: sampleTrack,
     captionPlacement: captionPlacement,
     fitCamera: fitCamera,

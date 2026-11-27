@@ -35,6 +35,7 @@ Paths in the storyboard (scenes file, screenshots, logo) are relative to the sto
 | `spotlightOutline` | no | `true` outlines every active spotlight in cyan with a dark edge and soft outer band. The stroke keeps the same thickness on screen as the scene scales. |
 | `captionMotion` | no | `"continuous"` keeps a single caption plaque visible across edits. Match each incoming `box` to the previous final position and width and follow new targets with timed glides. |
 | `captionEase` | no | `"fast-slow"` gives caption glides a quick launch and a long slowdown. A glide covers about three quarters of its distance by halfway through its allotted time. Holds and arrival times come from the caption track. |
+| `captionStyle` | no | `"two-line"` gives every caption a fixed two-line block with a fixed line pitch. The badge, the text column and both baselines stay on the same pixels whatever the wording, and captions fade in place without the small upward slide. A caption that needs a third line still renders, and `inspect` reports it as overflow. Without this field captions keep the default one-line style. |
 | `framing` | no | `"full-app"` fits the entire scene inside the output throughout, preserving its aspect ratio and edges. Use a complete app image or scene. Close with a caption on the final app state. |
 | `view` | no | Box the camera fits targets into, default `{"x":150,"y":60,"w":1620,"h":820}` |
 | `maxZoom` | no | Largest zoom factor, default 3.2 |
@@ -73,6 +74,9 @@ Paths in the storyboard (scenes file, screenshots, logo) are relative to the sto
 | `keys` | Key chips: `at`, `label`, optional `hint`, optional `dur` (default 1.1 s) |
 | `cursor` | Pointer keyframes: `at`, `x`, `y` in scene pixels, optional `click`, optional `hide` on the last key |
 | `actions` | Timed changes inside the scene, see below |
+| `section` | Turns the step into an opening, chapter or closing card over the still app. See [Section cards](#section-cards) |
+| `focusFade` | Seconds. The caption and the spotlight scrim fade in together, starting at the step's first spotlight `from` (or at the step start when there are none). It replaces the caption's usual incoming crossfade. Start plus `focusFade` must fit in the step |
+| `avoid` | Rects (same forms as below) the caption must not cover, such as a dialog or a changed result. Nothing moves the caption; the layout check compares the regions with the rendered caption |
 
 ### Rects
 
@@ -112,6 +116,68 @@ For text that follows the feature within a shot, keep the caption width fixed an
 ```
 
 With continuous captions, use the same width throughout. Finish a move, hold while the viewer reads, then start the next glide from that position. A long crossing needs more time than a change to the next row. The renderer keeps a two-line minimum height. Shorten copy that would introduce a third line. Check calls to action and chapter boundaries as well as moves within a shot. Measure the largest change between consecutive encoded frames, since a continuous path can still be too fast to follow.
+
+### Section cards
+
+A step with `section` shows a title card over its app image or scene. The app stays visible under a shade, so viewers keep their bearings.
+
+```json
+{
+  "scene": "queue",
+  "duration": 4,
+  "setup": [{ "type": "text", "target": "#status", "text": "Draft" }],
+  "section": {
+    "kind": "chapter",
+    "title": "Approve a draft",
+    "body": "Check the summary, then send it back.",
+    "credit": "Illustrative sample",
+    "fadeIn": 0.5,
+    "fadeOut": 0.5,
+    "shade": 0.62
+  }
+}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `kind` | `"opening"` (first step only), `"chapter"` or `"closing"` (last step only, and not together with an `outro`) |
+| `title` | Required. Keep it to about eight words |
+| `body`, `credit` | Optional lines under the title. Use `credit` for a disclosure such as "Illustrative sample" |
+| `fadeIn`, `fadeOut` | Seconds, default 0.5 each. Together they must fit inside `duration` |
+| `shade` | 0–1, default 0.62. How strongly the app under the card is darkened |
+
+The ramps work differently by kind:
+
+- An **opening** rises from black over `fadeIn`, then the card fades out over `fadeOut` and the app is left showing.
+- A **chapter** card fades in and out over the app.
+- A **closing** card fades in over the app, then the whole frame fades to black over `fadeOut`. The final frame is black. Set `fadeOut: 0` to end on the card instead.
+
+A section holds the app still. `setup` applies, but the step has no caption, no drift, and no `camera`, `spotlights`, `highlights`, `cursor`, `keys`, `actions`, `focusFade` or `avoid`; validation rejects those fields. The neighbouring steps' captions only overlap the card during the usual crossfade at its edges; use `transition: "cut"` on the card and on the step after it for a clean switch.
+
+With `captionMotion: "continuous"`, a section ends the caption sequence. The caption before it fades out, and the first caption after it may start anywhere and fades in. Captions on consecutive ordinary steps still have to start where the previous one ended. Give the step after a chapter `focusFade` so its caption and spotlight arrive together; a mid-sequence `focusFade` is rejected because it would hide a continuous caption.
+
+### Layout inspection
+
+The player page exposes `window.__EV.inspect(t)`. It seeks to `t` (seconds), exactly like `seek`, and returns what is on screen in output pixels:
+
+```json
+{
+  "time": 6,
+  "step": 1,
+  "section": null,
+  "caption": { "rect": [300, 800, 600, 69.6], "textOverflow": false, "opacity": 1 },
+  "spotlights": [{ "rect": [960, 360, 360, 180], "opacity": 1 }],
+  "avoid": [[924, 324, 432, 252]]
+}
+```
+
+- `step` is the most visible step at `t`; at a crossfade the incoming step wins the tie. `caption`, `spotlights` and `avoid` belong to that step. `step` is `null` while only the outro shows.
+- `rect` values are `[x, y, width, height]`, taken from the rendered layout, so they include font metrics and the caption's current position along its track.
+- `caption.textOverflow` is true when the caption crosses the frame edge, when a two-line caption needs a third line, or when a continuous placed caption grows past its two-line minimum.
+- `spotlights` lists the active regions. Their `opacity` is the scrim's visibility, including a `focusFade` entrance.
+- While a section card is the primary step, `section` is `{kind, step, title, opacity, black, rect, textOverflow}`. `opacity` is the card's, `black` is the full-frame black layer and `rect` is the title block. `caption` is `null` and the lists are empty.
+
+Every value depends only on `t`, so any seek order returns the same report.
 
 ### Actions
 
