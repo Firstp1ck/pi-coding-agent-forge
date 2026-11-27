@@ -35,3 +35,7 @@ No required configuration. After installation, type `/` in Pi to autocomplete th
 ## Dependencies
 
 No repository-local Pi extensions, tools, skills, or other prompt packages are required. This bundle only contributes prompt templates through `pi.prompts`.
+
+## Oh My Pi compatibility
+
+OMP 19.2.1 discovers these templates as slash commands when you link the package. Run `omp plugin list` to check the link, then start a fresh session.

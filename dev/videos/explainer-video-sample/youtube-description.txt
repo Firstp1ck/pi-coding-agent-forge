@@ -1,0 +1,8 @@
+Stockroom: update an item's quantity
+
+Find Sample box, change its quantity from 4 to 6, and check the saved result. Stockroom is a fictional app with illustrative data. Original music: Small steps, generated locally for this sample.
+
+Chapters
+00:00 Find Sample box
+00:26 Change the count
+00:50 Check the saved result

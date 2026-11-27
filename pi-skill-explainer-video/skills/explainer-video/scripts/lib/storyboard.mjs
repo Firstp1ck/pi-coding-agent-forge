@@ -91,6 +91,8 @@ function checkRect(spec, where, size, errors) {
     }
   } else if (!spec || typeof spec.target !== 'string' || !spec.target) {
     errors.push(`${where}: rect must be [x, y, w, h] or {"target": "<css selector>", "pad"?: number}`);
+  } else if (spec.pad != null && (typeof spec.pad !== 'number' || !Number.isFinite(spec.pad))) {
+    errors.push(`${where}: pad must be a finite number`);
   }
 }
 
@@ -171,6 +173,7 @@ export function validateStoryboard(sb, ctx = {}) {
     });
   };
   if (sb.allowTerms != null && !Array.isArray(sb.allowTerms)) errors.push('allowTerms must be an array of words');
+  if (sb.description != null && (typeof sb.description !== 'string' || !sb.description.trim())) errors.push('description must be non-empty text');
   const allow = new Set((Array.isArray(sb.allowTerms) ? sb.allowTerms : []).map((t) => String(t).toLowerCase()));
 
   if (sb.spotlightOutline != null && typeof sb.spotlightOutline !== 'boolean') errors.push('spotlightOutline must be a boolean');
@@ -380,10 +383,10 @@ export function validateStoryboard(sb, ctx = {}) {
 /**
  * Assemble the self-contained player page for a storyboard.
  * @param {{sb: object, dir: string, scenesHtml: string}} loaded result of loadStoryboard
- * @param {{play?: boolean}} options play=true adds real-time playback and a progress bar
+ * @param {{play?: boolean, fps?: number}} options play adds playback; fps is the renderer's effective frame rate
  * @returns {string} HTML
  */
-export function buildPage(loaded, { play = false } = {}) {
+export function buildPage(loaded, { play = false, fps } = {}) {
   const { sb, dir, scenesHtml } = loaded;
   const template = readFileSync(join(ASSETS, 'player.html'), 'utf8');
   const engineSource = readFileSync(join(ASSETS, 'engine.js'), 'utf8');
@@ -396,7 +399,7 @@ export function buildPage(loaded, { play = false } = {}) {
     theme.mono && `--ev-mono: ${theme.mono};`
   ].filter(Boolean).join(' ');
   // Inline JSON must not be able to close the script element.
-  const data = JSON.stringify(sb).replace(/</g, '\\u003c');
+  const data = JSON.stringify(fps == null ? sb : { ...sb, fps }).replace(/</g, '\\u003c');
   const escapeText = (s) => String(s).replace(/[&<>]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[ch]);
   const replacements = {
     __BASE__: pathToFileURL(dir + '/').href,

@@ -19,6 +19,14 @@ pi install npm:@firstpick/pi-prompts-agent-memory
 
 Restart Pi if the package does not appear in your current session.
 
+With Oh My Pi (OMP), link this checkout from the repository root and start a new OMP session.
+
+```bash
+omp plugin link ./pi-package-prompts-agent-memory
+```
+
+These commands use your existing Pi memory files under `~/.pi/agent/`, including when you invoke them from OMP.
+
 ## How to use it
 
 Run `/update-memory` when you want Pi to review and tidy durable memory. Confirm that the proposed notes are accurate and do not contain secrets before keeping them.

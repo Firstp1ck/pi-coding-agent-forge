@@ -51,7 +51,8 @@ body { width: __W__px; height: __H__px; position: relative; font-family: var(--e
 #ev-caption.ev-two-line { top: 936px; height: 96px; }
 .ev-two-line .ev-cap { left: 220px; width: 1480px; white-space: normal; display: flex; align-items: flex-start; gap: 14px; line-height: 44px; }
 .ev-two-line .ev-cap-placed { display: flex; line-height: 42px; }
-.ev-two-line .ev-num { flex: none; margin: 5px 0 0; }
+.ev-two-line .ev-num { flex: 0 0 48px; width: 48px; min-width: 48px; padding: 0 4px; white-space: nowrap; overflow-wrap: normal; margin: 5px 0 0; }
+.ev-two-line .ev-num-hidden { visibility: hidden; }
 .ev-two-line .ev-cap-placed .ev-num { margin: 4px 0 0; vertical-align: 0; }
 .ev-two-line .ev-text { display: block; flex: 1 1 0; min-width: 0; height: 88px; overflow-wrap: anywhere; }
 .ev-two-line .ev-cap-placed .ev-text { height: 84px; }

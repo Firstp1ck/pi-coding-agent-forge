@@ -5,8 +5,8 @@ argument-hint: "[language: en|de] [scope: auto|never|required]"
 Create commit messages for the **currently staged files only**.
 
 Preferences supplied by the caller:
-- Output language: `${1:-en}` (`en` = English, `de` = German).
-- Conventional Commit scope policy: `${2:-auto}`.
+- Output language: `$1` (default `en` for English, `de` for German).
+- Conventional Commit scope policy: `$2` (default `auto`).
   - `auto`: include a concise scope only when the staged work has one clear component.
   - `never`: use `<type>: <summary>` without a scope.
   - `required`: always choose a concise lowercase scope and use `<type>(<scope>): <summary>`.

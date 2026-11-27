@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -24,10 +24,10 @@ const SCENES = `<style>
  * Load a storyboard in headless Chromium, wait for the player, run `probe` (a function
  * source taking the page's __EV and returning JSON-safe data) and return its result.
  */
-function runInPage(sb, probe) {
+function runInPage(sb, probe, scenesHtml = SCENES) {
   const dir = mkdtempSync(join(tmpdir(), 'ev-inspect-'));
   try {
-    let html = buildPage({ sb, dir, scenesHtml: SCENES });
+    let html = buildPage({ sb, dir, scenesHtml });
     const runner = `<script>window.__EV.ready().then(function () { return (${probe})(window.__EV); })
       .then(function (r) { return JSON.stringify(r); }, function (e) { return JSON.stringify({ error: String(e && e.message || e) }); })
       .then(function (s) { var p = document.createElement('pre'); p.id = 'ev-out'; p.textContent = s; document.body.appendChild(p); });</script>`;
@@ -104,6 +104,22 @@ test('inspect is independent of seek order', { skip }, () => {
   assert.equal(focus.spotlights[0].opacity, focus.caption.opacity, 'spotlight and caption share one ramp');
 });
 
+test('target-based zoom cameras measure the same geometry after arbitrary seeks', { skip }, () => {
+  const sb = { version: 1, steps: [
+    shot('Inspect', 'the dialog.', {
+      camera: [{ at: 0, rect: { target: '#dialog', pad: 17 } }, { at: 4, rect: [0, 0, 400, 300] }],
+      spotlights: [{ from: 0, rect: { target: '#dialog', pad: 3 } }]
+    }), shot('Read', 'the result.')
+  ] };
+  const result = runInPage(sb, `function (ev) {
+    var times = [0.567, 1.233, 2.967, 3.9];
+    var forward = times.map(ev.inspect);
+    var jumpy = times.map(function (t) { ev.seek(7.9); ev.seek(0.01); return ev.inspect(t); });
+    return { forward: forward, jumpy: jumpy };
+  }`);
+  assert.deepEqual(result.jumpy, result.forward);
+});
+
 test('two-line captions keep the badge and both baselines fixed across wording and a chapter', { skip }, () => {
   const sb = { version: 1, format: 'episode', captionStyle: 'two-line', steps: [
     shot('Open', 'the queue.'),
@@ -151,10 +167,12 @@ test('a section pauses inputs and hides ordinary overlays, while default caption
   const result = runInPage(sb, `function (ev) {
     ev.seek(2.5);
     var defaultMarkup = document.querySelector('#ev-caption .ev-cap').innerHTML;
+    ev.inspect(4.5);
+    var earlyKeys = document.querySelectorAll('#ev-keys .ev-key').length;
     var report = ev.inspect(6);
     var visible = function (sel) { return Array.prototype.filter.call(document.querySelectorAll(sel), function (el) { return Number(el.style.opacity) > 0; }).length; };
     var host = document.querySelectorAll('.ev-step')[1];
-    return { report: report, defaultMarkup: defaultMarkup, captions: document.querySelectorAll('#ev-caption .ev-cap').length,
+    return { report: report, earlyKeys: earlyKeys, defaultMarkup: defaultMarkup, captions: document.querySelectorAll('#ev-caption .ev-cap').length,
       keys: document.querySelectorAll('#ev-keys .ev-key').length, cursors: visible('.ev-cursor'), rings: visible('.ev-ring'),
       label: host.querySelector('#label').textContent, drift: host.querySelector('.ev-scene').style.transform };
   }`);
@@ -163,9 +181,57 @@ test('a section pauses inputs and hides ordinary overlays, while default caption
   assert.equal(result.report.section.opacity, 1);
   assert.equal(result.captions, 0);
   assert.equal(result.keys, 0);
+  assert.equal(result.earlyKeys, 0, 'the preceding key badge ends when the section takes over');
   assert.equal(result.cursors, 0);
   assert.equal(result.rings, 0);
   assert.equal(result.label, 'paused', 'setup still applies under the card');
   // The 300px-tall scene fits the 820px view box at 820 / 300; a drift push would scale past it.
   assert.match(result.drift, /scale\(2\.73333\)/, 'no drift push on a held card');
+});
+
+test('hard section cuts remove instructional captions on the exact incoming frame', { skip }, () => {
+  const sb = { version: 1, format: 'episode', captionMotion: 'continuous', steps: [
+    shot('Read', 'the queue.', { transition: 'cut', caption: { bold: 'Read', rest: 'the queue.', box: [300, 800, 600] } }),
+    { scene: 's', duration: 4, transition: 'cut', section: { kind: 'chapter', title: 'Next' } },
+    shot('Check', 'the result.', { transition: 'cut', caption: { bold: 'Check', rest: 'the result.', box: [300, 800, 600] } }),
+    { scene: 's', duration: 4, transition: 'cut', section: { kind: 'closing', title: 'Done' } }
+  ] };
+  const results = runInPage(sb, `function (ev) {
+    return [3.99, 4, 4.04, 4.08, 11.99, 12, 12.04].map(function (t) {
+      ev.seek(t); return document.querySelectorAll('#ev-caption .ev-cap').length;
+    });
+  }`);
+  assert.deepEqual(results, [1, 0, 0, 0, 1, 0, 0]);
+});
+
+test('two-line captions reserve their badge column for 9, 10, 100 and hidden numbers', { skip }, () => {
+  const sb = { version: 1, captionStyle: 'two-line', steps: [9, 10, 100, ''].map((number) =>
+    shot('Read', 'the queue.', { transition: 'cut', caption: { number, bold: 'Read', rest: 'the queue.', box: [1120, 800, 700] } })) };
+  const positions = runInPage(sb, `function (ev) {
+    return [2, 6, 10, 14].map(function (t) {
+      ev.seek(t);
+      var badge = document.querySelector('#ev-caption .ev-num');
+      var range = document.createRange(); range.selectNodeContents(badge);
+      var digits = range.getBoundingClientRect(), box = badge.getBoundingClientRect();
+      return { textLeft: document.querySelector('#ev-caption .ev-text').getBoundingClientRect().left,
+        fits: !badge.textContent || (digits.top >= box.top && digits.bottom <= box.bottom && digits.left >= box.left && digits.right <= box.right) };
+    });
+  }`);
+  assert.deepEqual(positions.map(p => p.textLeft), Array(4).fill(positions[0].textLeft));
+  assert.ok(positions.every(p => p.fits), 'badge digits stay inside the badge');
+});
+
+test('the Stockroom opening click lands inside the named item row', { skip }, () => {
+  const folder = new URL('../examples/stockroom/', import.meta.url);
+  const sb = JSON.parse(readFileSync(new URL('storyboard.json', folder), 'utf8'));
+  const scenes = readFileSync(new URL('scenes.html', folder), 'utf8');
+  const result = runInPage(sb, `function (ev) {
+    ev.seek(22);
+    var row = document.querySelectorAll('.ev-step')[3].querySelector('#sample-row').getBoundingClientRect();
+    var cursor = document.querySelectorAll('.ev-cursor')[3].getBoundingClientRect();
+    return { row: [row.left, row.top, row.right, row.bottom], point: [cursor.left + 4, cursor.top + 3] };
+  }`, scenes);
+  const [left, top, right, bottom] = result.row;
+  assert.ok(result.point[0] > left && result.point[0] < right && result.point[1] > top && result.point[1] < bottom,
+    `click ${result.point} must be inside item row ${result.row}`);
 });

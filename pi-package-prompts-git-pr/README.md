@@ -19,6 +19,12 @@ pi install npm:@firstpick/pi-prompts-git-pr
 
 Restart Pi if the package does not appear in your current session.
 
+With Oh My Pi (OMP), link this checkout from the repository root and start a new OMP session.
+
+```bash
+omp plugin link ./pi-package-prompts-git-pr
+```
+
 ## How to use it
 
 Stage or prepare the relevant Git changes, then choose a prompt such as `/git-staged-msg`, `/pr`, or `/pr-review-branch`. Review generated text before committing or publishing it.

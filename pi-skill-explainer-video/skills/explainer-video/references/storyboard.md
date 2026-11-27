@@ -80,7 +80,7 @@ Paths in the storyboard (scenes file, screenshots, logo) are relative to the sto
 
 ### Rects
 
-Either `[x, y, width, height]` in scene pixels, or `{"target": "<css selector>", "pad": 10}`. A target rect follows the element's live position, so it stays right after layout changes. Prefer targets.
+Either `[x, y, width, height]` in scene pixels, or `{"target": "<css selector>", "pad": 10}`. `pad`, when supplied, must be a finite number. A target rect follows the element's live position, so it stays right after layout changes. Prefer targets.
 
 ### Spotlights and caption placement
 
@@ -164,6 +164,7 @@ The player page exposes `window.__EV.inspect(t)`. It seeks to `t` (seconds), exa
 {
   "time": 6,
   "step": 1,
+  "opacity": 1,
   "section": null,
   "caption": { "rect": [300, 800, 600, 69.6], "textOverflow": false, "opacity": 1 },
   "spotlights": [{ "rect": [960, 360, 360, 180], "opacity": 1 }],
@@ -172,6 +173,7 @@ The player page exposes `window.__EV.inspect(t)`. It seeks to `t` (seconds), exa
 ```
 
 - `step` is the most visible step at `t`; at a crossfade the incoming step wins the tie. `caption`, `spotlights` and `avoid` belong to that step. `step` is `null` while only the outro shows.
+- `opacity` is the primary step's own visibility: 1 on a settled frame, below 1 during a crossfade, 0 while only the outro shows.
 - `rect` values are `[x, y, width, height]`, taken from the rendered layout, so they include font metrics and the caption's current position along its track.
 - `caption.textOverflow` is true when the caption crosses the frame edge, when a two-line caption needs a third line, or when a continuous placed caption grows past its two-line minimum.
 - `spotlights` lists the active regions. Their `opacity` is the scrim's visibility, including a `focusFade` entrance.
@@ -226,3 +228,11 @@ Elements start the step exactly as the template defines them. A common pattern i
 - Use fixed pixel sizes so the layout does not depend on the window.
 - Use local fonts and images only, so the video renders the same on every run and machine.
 - Give every element you target a unique `id`.
+
+## Delivery fields
+
+`description` is optional non-empty text for the introductory paragraph in the copy-ready description. Include what viewers learn, any illustrative-data disclosure and soundtrack attribution.
+
+`chapters` is an optional non-empty array of `{ "start": 0, "title": "Find the item" }`. Times are seconds from the beginning of the delivered movie. Assembly rounds them to MP4 milliseconds, then checks strictly increasing starts beginning at zero, before the movie ends, with distinct whole-second description timestamps. Titles are non-empty single lines. Without this list, section starts define chapters; a zero chapter is added when needed. Both embedded chapters and description timestamps come from that list. The general storyboard validator does not validate chapters; assembly does.
+
+See [the complete Stockroom example](../examples/stockroom/storyboard.json) for all production fields together.

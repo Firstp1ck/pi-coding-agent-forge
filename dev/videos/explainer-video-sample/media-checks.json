@@ -1,0 +1,60 @@
+{
+  "streams": [
+    {
+      "codec_name": "h264",
+      "codec_type": "video",
+      "width": 1920,
+      "height": 1080,
+      "r_frame_rate": "24/1",
+      "start_time": "0.000000",
+      "duration": "64.000000",
+      "nb_frames": "1536"
+    },
+    {
+      "codec_name": "aac",
+      "codec_type": "audio",
+      "sample_rate": "48000",
+      "channels": 2,
+      "r_frame_rate": "0/0",
+      "start_time": "0.000000",
+      "duration": "64.000000",
+      "nb_frames": "3001"
+    },
+    {
+      "codec_name": "bin_data",
+      "codec_type": "data",
+      "r_frame_rate": "0/0",
+      "start_time": "0.000000",
+      "duration": "64.000000",
+      "nb_frames": "3"
+    }
+  ],
+  "chapters": [
+    {
+      "start_time": "0.000000",
+      "end_time": "26.000000",
+      "tags": {
+        "title": "Find Sample box"
+      }
+    },
+    {
+      "start_time": "26.000000",
+      "end_time": "50.000000",
+      "tags": {
+        "title": "Change the count"
+      }
+    },
+    {
+      "start_time": "50.000000",
+      "end_time": "64.000000",
+      "tags": {
+        "title": "Check the saved result"
+      }
+    }
+  ],
+  "decodedLastFrame": {
+    "index": 1535,
+    "maxGray": 0,
+    "meanGray": 0.0
+  }
+}

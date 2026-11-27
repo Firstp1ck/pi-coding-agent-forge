@@ -1,6 +1,6 @@
 {
   "name": "@firstpick/pi-prompts-git-pr",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "Reusable Pi prompt templates for commits, pull requests, and PR review workflows.",
   "scripts": {
     "test": "node tests/git-staged-msg.test.mjs"
@@ -24,11 +24,11 @@
   ],
   "pi": {
     "prompts": [
-      "./prompts"
+      "./commands"
     ]
   },
   "files": [
-    "prompts",
+    "commands",
     "README.md",
     "LICENSE"
   ]

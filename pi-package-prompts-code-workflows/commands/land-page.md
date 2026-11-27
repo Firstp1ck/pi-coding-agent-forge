@@ -5,7 +5,7 @@ argument-hint: "[brand, stack, or visual direction]"
 
 Design and implement five distinct landing page concepts for a note-taking application that acts as a second brain.
 
-Additional context: `${ARGUMENTS:-No additional context provided}`
+Additional context: `$ARGUMENTS`. If empty, use the project context.
 
 Start by inspecting the repository, its local instructions, the existing frontend stack, and its design conventions. Reuse the current framework, routing system, components, and dependencies where they fit.
 

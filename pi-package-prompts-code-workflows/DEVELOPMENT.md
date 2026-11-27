@@ -31,7 +31,7 @@ The prompt stays framework-neutral so it can follow the target project's router 
 
 ## Validation
 
-From the package directory, inspect the npm archive before publication and confirm every file in `prompts/` is present:
+From the package directory, inspect the npm archive before publication and confirm every file in `commands/` is present:
 
 ```bash
 npm pack --dry-run

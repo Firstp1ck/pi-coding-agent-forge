@@ -10,13 +10,15 @@ Start with the product and something the viewer wants to do with it. For a techn
 
 ## Decide what to show
 
+Copy the [episode brief and timing template](references/episode-template.md) beside the storyboard. Record the audience and permissions, exact revision and language, sample's starting state, visible outcome and disclosure. Check each demonstrated command separately against a fixture. Do not assume `--dry-run` prevents every install, deletion, network request or paid action.
+
 - Read the project's description and verify the workflow in its current UI or source. Give the film a product-led title such as “Project name: Review a change.” Put the sample document, package or account inside the demonstration. A viewer who has never heard of the sample should still recognize what the video teaches.
 - For a series, inventory the user-facing features, group them by task and update the requested storyboard against the revisions being filmed. Distinguish released features from previews. Use the requested scouts, creators, reviewers and feature worktrees when specified. If the user asks to approve one pilot, deliver that cut for feedback before producing the series.
 - Use about three minutes per episode for a feature series unless the user specifies another runtime. A single-action release clip can run 20–40 seconds. Pick fixtures that actually exercise the feature and keep the selected item identifiable from input through result. Disclose illustrative data or simulated outcomes.
 
 ## Stage a walkthrough
 
-Start from the [runnable full-window example](examples/walkthrough/storyboard.json). Replace its fictional interface with real captures or an accurate recreation. Use the same dimensions across states. Keep the toolbar, footer and surrounding workspace visible through dialogs, the intro and the credits.
+Start from the [complete Stockroom example](examples/stockroom/storyboard.json) or the [minimal full-window example](examples/walkthrough/storyboard.json). Replace its fictional interface with real captures or an accurate recreation. Use the same dimensions across states. Keep the toolbar, footer and surrounding workspace visible through dialogs, the intro and the credits.
 
 1. Open on the app. Give the product title and learning summary a visible entrance, a readable hold and a handoff to the first input. Check that their type size and placement read as an opening at ordinary playback size.
 2. Use `framing: "full-app"`, timed `spotlights` and `spotlightOutline: true`. Dim the surrounding space enough to guide attention while preserving context. Outline the exact row, control or result. When an action affects a second pane, briefly show their relationship.
@@ -24,7 +26,7 @@ Start from the [runnable full-window example](examples/walkthrough/storyboard.js
 4. Vary the timing with the work. Let a query fill, a result appear and a selection travel. Give dense results a longer hold. At a major change of task, pause input, reveal the new goal as a chapter heading and guide attention to the next workspace. Use enough scale and motion for the viewer to recognize the change in a single viewing.
 5. End on the result. For a YouTube episode, bring in legible project and music credits over that state, hold them and give the film a clear visual ending. Match the type, contrast and accents to the project.
 
-For full-page intro, chapter and outro transitions, use a screen-wide overlay. Smoothly darken the entire app beyond its normal spotlight level, hold the heading and supporting details for several seconds, then lift the overlay or fade out. Use the [section-card staging guide](references/style.md#full-page-section-cards) to pace the copy.
+Use a step `section` for opening, chapter and closing cards. Use `captionStyle: "two-line"` to keep the numbered action and instruction on separate fixed lines. Add `focusFade: 0.35` to the first action after a card for a coordinated entrance. Declare dialogs or supporting results as `avoid` rectangles when captions must clear them. For full-page transitions, the section paints a screen-wide overlay. Smoothly darken the entire app beyond its normal spotlight level, hold the heading and supporting details for several seconds, then lift the overlay or fade out. Use the [section-card staging guide](references/style.md#full-page-section-cards) to pace the copy.
 
 The [storyboard reference](references/storyboard.md) documents coordinates, timing and transitions. The [visual guide](references/style.md) includes the original motion references and a close-up treatment for release clips. The [writing guide](references/writing.md) covers caption length and language.
 
@@ -34,7 +36,8 @@ The renderer needs Node.js 22+, headless Chromium and FFmpeg with libx264. Captu
 
 ```bash
 node scripts/validate.mjs path/to/storyboard.json
-node scripts/render.mjs path/to/storyboard.json --no-video --sheet out/sheet.png
+node scripts/render.mjs path/to/storyboard.json --no-video --check-layout --report out/layout.json
+node scripts/render.mjs path/to/storyboard.json --no-video --sheet out/sheet.png --sheet-mode shots
 node scripts/render.mjs path/to/storyboard.json --out out/visual.mp4
 ```
 
@@ -44,4 +47,4 @@ When asking for feedback on the opening, chapter change and ending, provide a sh
 
 ## Package and deliver
 
-For a YouTube cut, follow the [publishing asset guide](references/youtube.md) for the thumbnail, beat cues, soundtrack mix, credits and timestamped description. The renderer produces a silent visual master. Keep the editable storyboard and sources with the finished movie. Provide a playable file, runtime and a timestamp that lets the user judge the change. State what was verified and what data is illustrative.
+For a YouTube cut, follow the [publishing asset guide](references/youtube.md) for the thumbnail, beat cues, soundtrack mix, credits and timestamped description. The renderer produces a silent visual master. Use `scripts/assemble.mjs` to add a supplied soundtrack, embed chapters, generate the description and verify the delivery. Set `description` to the learning summary and disclosure; use `chapters` for explicit starts or let section cards define them. Generate the final shot sheet from the delivered MP4. Keep the editable storyboard and sources with the finished movie. Provide a playable file, runtime and a timestamp that lets the user judge the change. State what was verified and what data is illustrative.

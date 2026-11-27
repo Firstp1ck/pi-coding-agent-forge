@@ -1,0 +1,62 @@
+<style>
+.stockroom { position:absolute; inset:0; background:#101a27; color:#e9eff5; font:26px/1.4 'DejaVu Sans',sans-serif; }
+.topbar { height:84px; border-bottom:1px solid #324152; display:flex; align-items:center; padding:0 38px; gap:20px; background:#182635; }
+.mark { background:#7ce2bf; color:#102b26; border-radius:12px; padding:3px 13px; font-weight:800; }
+.product { font-size:30px; font-weight:700; letter-spacing:-1px; }
+.topbar small { margin-left:auto; color:#acc0d0; font-size:20px; }
+.sidebar { position:absolute; top:84px; bottom:48px; width:270px; border-right:1px solid #324152; padding:42px 24px; }
+.nav { padding:16px 20px; margin:8px 0; color:#9bb0c3; }
+.nav.active { color:#98ecd1; background:#203d3c; border-radius:10px; }
+.workspace { position:absolute; left:320px; right:65px; top:128px; }
+.eyebrow { color:#8eaaa9; font-size:18px; letter-spacing:2px; text-transform:uppercase; }
+.workspace h1 { margin:9px 0 30px; font-size:48px; font-weight:600; letter-spacing:-1.5px; }
+.search { width:870px; border:1px solid #657a8e; border-radius:12px; height:64px; padding:10px 20px; color:#8199af; background:#172637; }
+.query { color:#eef7fa; }
+.table { border:1px solid #3d5062; border-radius:16px; margin-top:32px; overflow:hidden; }
+.row { display:grid; grid-template-columns:2fr 1fr 1fr; align-items:center; height:86px; padding:0 26px; border-bottom:1px solid #2e4051; }
+.row:last-child { border-bottom:0; }
+.row.heading { height:60px; font-size:20px; color:#91a8bc; background:#172637; }
+.row.selected { background:#1c3c3b; box-shadow:inset 4px 0 #82e6bf; }
+.muted { color:#8fa6ba; font-size:22px; }
+.pill { color:#a5f2d4; font-size:19px; }
+.hint { margin-top:26px; color:#829bae; font-size:21px; }
+.hidden { display:none; }
+.detail { position:absolute; left:320px; top:128px; width:1535px; }
+.detail h1 { font-size:48px; margin:10px 0 4px; }
+.detail-card { margin-top:34px; border:1px solid #405466; border-radius:16px; background:#152535; padding:34px; display:flex; justify-content:space-between; align-items:center; }
+.value { font-size:76px; line-height:1.2; font-weight:600; color:#a0efd0; }
+.button { display:inline-block; background:#83e4bc; color:#102d27; border-radius:10px; padding:14px 30px; font-size:24px; font-weight:700; }
+.saved { color:#a2efcd; margin-top:28px; }
+.dialog-backdrop { position:absolute; inset:84px 0 48px; background:#020a1270; }
+.dialog { position:absolute; left:670px; top:265px; width:660px; height:475px; background:#1e3043; border:1px solid #8397a8; border-radius:20px; box-shadow:0 20px 80px #0009; padding:36px 42px; }
+.dialog h2 { margin:0 0 8px; font-size:36px; }
+.dialog label { display:block; margin-top:35px; margin-bottom:12px; color:#a6bdce; font-size:23px; }
+.input { border:2px solid #87e3c1; border-radius:9px; padding:12px 18px; background:#142333; width:100%; height:66px; font-size:29px; }
+.dialog-footer { display:flex; align-items:center; justify-content:space-between; margin-top:36px; }
+.footer { position:absolute; bottom:0; height:48px; width:100%; padding:10px 30px; background:#182635; color:#97afc1; font-size:18px; display:flex; justify-content:space-between; }
+</style>
+<template id="stockroom" data-width="1920" data-height="1080">
+  <div class="stockroom">
+    <div class="topbar"><span class="mark">S</span><span class="product">Stockroom</span><small>Illustrative product walkthrough</small></div>
+    <div class="sidebar"><div class="eyebrow">Workspace</div><div class="nav active">Items</div><div class="nav">Activity</div><div class="nav">Settings</div></div>
+    <div id="list" class="workspace">
+      <div class="eyebrow">Inventory</div><h1>Items</h1>
+      <div id="search" class="search"><span id="query">Search items</span></div>
+      <div class="table">
+        <div class="row heading"><span>Item name</span><span>Quantity</span><span>Location</span></div>
+        <div id="sample-row" class="row"><span>Sample box <span class="pill">In stock</span></span><span>4</span><span class="muted">Shelf A</span></div>
+        <div id="other-row" class="row"><span>Label roll</span><span>12</span><span class="muted">Shelf B</span></div>
+      </div><div class="hint">Select an item to view its details.</div>
+    </div>
+    <div id="detail" class="detail hidden">
+      <div class="eyebrow">Items / Detail</div><h1>Sample box</h1><div class="muted">Shelf A · Item ST-004</div>
+      <div class="detail-card"><div id="quantity-result"><div class="muted">Quantity</div><div id="saved-quantity" class="value">4</div></div><span id="edit" class="button">Edit item</span></div>
+      <div id="saved-note" class="saved hidden">Changes saved · Sample box has 6 in stock.</div>
+    </div>
+    <div id="dialog-layer" class="hidden"><div class="dialog-backdrop"></div><div id="dialog" class="dialog">
+      <h2>Edit item</h2><div class="muted">Sample box · Shelf A</div><label>Quantity</label><div id="quantity-input" class="input">4</div>
+      <div class="dialog-footer"><span class="muted">Cancel</span><span id="save" class="button">Save changes</span></div>
+    </div></div>
+    <div class="footer"><span>Local demo · Invented records</span><span>Items workspace · English</span></div>
+  </div>
+</template>

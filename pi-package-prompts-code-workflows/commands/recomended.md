@@ -4,7 +4,7 @@ argument-hint: "[exclusions: numbers, labels, or descriptions]"
 ---
 Implement the actionable recommendations from the agent's most recent relevant response.
 
-Exclusions supplied with this command: `${@:-none}`
+Exclusions supplied with this command: `$ARGUMENTS`. An empty value means no exclusions.
 
 Selection rules:
 1. Treat every supplied argument as an exclusion, not as extra implementation scope.

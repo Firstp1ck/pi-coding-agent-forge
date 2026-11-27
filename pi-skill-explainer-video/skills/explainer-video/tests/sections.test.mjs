@@ -17,6 +17,16 @@ function episode(steps, overrides = {}) {
 const errorsOf = (sb) => validateStoryboard(sb, { scenes }).errors;
 const near = (actual, expected, label) => assert.ok(Math.abs(actual - expected) < 1e-9, `${label}: expected ${expected}, got ${actual}`);
 
+test('target rectangles reject padding that cannot produce finite geometry', () => {
+  for (const pad of ['8px', Infinity, NaN, {}]) {
+    for (const field of ['avoid', 'spotlights']) {
+      const rect = { target: '#dialog', pad };
+      const sb = episode([shot('Read', { [field]: field === 'avoid' ? [rect] : [{ from: 0, rect }] }), shot('Done')]);
+      assert.match(errorsOf(sb).join('\n'), /pad must be a finite number/, `${field}: ${String(pad)}`);
+    }
+  }
+});
+
 test('a chapter card fades in and out over the still app with the default half-second ramps', () => {
   const layers = (tl) => engine.sectionLayers({ kind: 'chapter' }, tl, 5);
   for (const [tl, cardAlpha] of [[0, 0], [0.25, 0.5], [0.5, 1], [2.5, 1], [4.75, 0.5], [5, 0]]) {

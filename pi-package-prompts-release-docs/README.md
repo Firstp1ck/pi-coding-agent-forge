@@ -19,6 +19,12 @@ pi install npm:@firstpick/pi-prompts-release-docs
 
 Restart Pi if the package does not appear in your current session.
 
+With Oh My Pi (OMP), link this checkout from the repository root and start a new OMP session.
+
+```bash
+omp plugin link ./pi-package-prompts-release-docs
+```
+
 ## How to use it
 
 Choose the prompt for the document you need, such as `/announce-version` or `/readme-update`, and point Pi at the real changes or release information.

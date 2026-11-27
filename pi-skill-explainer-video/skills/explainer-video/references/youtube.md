@@ -14,3 +14,14 @@ ffprobe -v error -show_streams -show_chapters -show_format youtube.mp4
 ```
 
 If the visual master has no embedded chapters, use the rendered shot times to write the description. To embed chapters, author FFmetadata chapter entries from the same timeline and map that metadata input's chapters when muxing. Check loudness, peaks, fade, stream lengths and chapter boundaries in the finished file. Hand over the MP4, thumbnail and copy-ready description together.
+
+## Verified assembly
+
+Prefer the packaged assembly command for masters from this renderer:
+
+```bash
+node scripts/assemble.mjs storyboard.json --visual visual.mp4 --audio score.wav \
+  --out youtube.mp4 --description youtube-description.txt --sheet sheet.png
+```
+
+Set `description` to the learning summary, illustration disclosure and music credit. Put explicit starts in `chapters`, or let section steps define them. Assembly uses one chapter list for both the MP4 and description, rejects stale masters and verifies streams and chapter boundaries before replacing delivery files. The sheet is decoded from that delivery. The manual FFmpeg command above remains useful for other editors' files, but does not perform those checks.

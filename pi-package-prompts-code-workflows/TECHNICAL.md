@@ -59,3 +59,9 @@ No repository-local Pi extensions, tools, skills, or other prompt packages are r
 ## Troubleshooting
 
 If a prompt such as `/land-page` does not appear, restart Pi and type `/` to refresh prompt autocomplete. Check that the package appears in `pi list` and is enabled in `pi config`.
+
+## Oh My Pi compatibility
+
+OMP 19.2.1 discovers these templates as slash commands when you link the package. Run `omp plugin list` to check the link, then start a fresh session.
+
+OMP keeps its built-in `/review`. The other eight package commands are available under the names listed here.

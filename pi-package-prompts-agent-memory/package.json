@@ -1,6 +1,6 @@
 {
   "name": "@firstpick/pi-prompts-agent-memory",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Reusable Pi prompt templates for maintaining durable agent memory.",
   "license": "MIT",
   "homepage": "https://github.com/Firstp1ck/pi-coding-agent-forge/tree/main/pi-package-prompts-agent-memory#readme",
@@ -20,11 +20,11 @@
   ],
   "pi": {
     "prompts": [
-      "./prompts"
+      "./commands"
     ]
   },
   "files": [
-    "prompts",
+    "commands",
     "README.md",
     "LICENSE"
   ]

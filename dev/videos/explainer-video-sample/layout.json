@@ -1,0 +1,70 @@
+{
+  "storyboard": "/home/firstpick/npm-packages/pi-skill-explainer-video/skills/explainer-video/examples/stockroom/storyboard.json",
+  "ok": true,
+  "fps": 24,
+  "width": 1920,
+  "height": 1080,
+  "total": 64,
+  "frames": 1536,
+  "passes": [
+    "forward",
+    "reverse",
+    "shuffled"
+  ],
+  "screenshotFrames": 30,
+  "tolerance": {
+    "edge": 0.5,
+    "overlap": 1,
+    "continuity": 1,
+    "visible": 0.02,
+    "settled": 0.99
+  },
+  "failures": [],
+  "continuity": [
+    {
+      "edit": 3,
+      "time": 14,
+      "rule": "continuous",
+      "beforeFrame": 335,
+      "afterFrame": 336,
+      "ok": true
+    },
+    {
+      "edit": 4,
+      "time": 20,
+      "rule": "continuous",
+      "beforeFrame": 479,
+      "afterFrame": 480,
+      "ok": true
+    },
+    {
+      "edit": 7,
+      "time": 38,
+      "rule": "continuous",
+      "beforeFrame": 911,
+      "afterFrame": 912,
+      "ok": true
+    },
+    {
+      "edit": 8,
+      "time": 44,
+      "rule": "continuous",
+      "beforeFrame": 1055,
+      "afterFrame": 1056,
+      "ok": true
+    },
+    {
+      "edit": 9,
+      "time": 50,
+      "rule": "continuous",
+      "beforeFrame": 1199,
+      "afterFrame": 1200,
+      "ok": true
+    }
+  ],
+  "limits": [
+    "During a crossfade only the more visible step is inspected, so the outgoing caption is not checked for its last half fade.",
+    "Overlap uses the caption box and the spotlight or avoid rectangles; the checker does not find dialogs or controls on its own. Declare them as avoid regions.",
+    "The seek-order check compares inspect geometry and a canonical copy of the stage DOM for every frame, and screenshots for sampled frames only. Canvas pixels (the spotlight scrim) are compared only in those screenshots."
+  ]
+}

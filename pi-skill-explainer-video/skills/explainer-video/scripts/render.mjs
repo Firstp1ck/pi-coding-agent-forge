@@ -1,41 +1,56 @@
 #!/usr/bin/env node
 /*
- * Render a storyboard to MP4, stills, a contact sheet or a playable preview page.
+ * Render a storyboard to MP4, stills, a contact sheet or a playable preview page, and
+ * check the rendered layout.
  *
  * Needs Node 22+ (built-in WebSocket), a Chromium-family browser and ffmpeg.
  * The browser runs headless with a throwaway profile; nothing opens on screen.
  */
 import { spawn, spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync, mkdirSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync, mkdirSync, renameSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve, basename, dirname } from 'node:path';
+import { join, resolve, basename, dirname, extname } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { setTimeout as sleep } from 'node:timers/promises';
-import { loadStoryboard, validateStoryboard, buildPage } from './lib/storyboard.mjs';
+import { loadStoryboard, validateStoryboard, buildPage, engine } from './lib/storyboard.mjs';
+import { which, findChromium, openBrowser, loadPlayer } from './lib/browser.mjs';
+import { PAGE_HELPER, LIMITS, TOLERANCE, analyzeLayout, frameCount, firstFrameAt, sampleFrames, seekOrderFailures, shuffledOrder } from './lib/layout.mjs';
+import { holdFrames, sheetPaths, pageCount, composeSheets } from './lib/sheet.mjs';
+import { renderFingerprint, aliasErrors } from './lib/delivery.mjs';
 
 const USAGE = `usage: render.mjs <storyboard.json> [options]
 
   --out <file.mp4>       video path (default: next to the storyboard)
-  --no-video             skip the video (use with --stills, --sheet or --preview)
+  --no-video             skip the video (use with --stills, --sheet, --preview or --check-layout)
   --stills <t,t,...>     save PNG frames at these times in seconds
   --stills-dir <dir>     where stills go (default: <storyboard dir>/stills)
-  --sheet <file.png>     save a 4x3 contact sheet of evenly spaced frames
+  --sheet <file.png>     save a contact sheet
+  --sheet-mode <mode>    overview: 4x3 grid of evenly spaced frames (default)
+                         shots: one labeled frame per step at its reading hold;
+                         more than 32 steps continue in <file>-p2.png, -p3.png, ...
+  --check-layout         inspect every frame before rendering: caption overflow and frame
+                         edges, captions over active spotlights or avoid regions, caption
+                         continuity at ordinary edits and seek-order independence.
+                         Problems are listed with timestamps and the command exits 1
+                         without writing stills, sheets or video
+  --report <file.json>   with --check-layout, also write the findings as JSON
   --preview <file.html>  save a page that plays the video in a browser
   --fps <n>              override the storyboard frame rate
   --crf <n>              x264 quality, lower is better (default 18)
   --chromium <path>      browser binary (default: $CHROME_PATH, then PATH lookup)
   --force                render even when the storyboard has validation errors`;
 
-const COMMAND_TIMEOUT_MS = 30_000;
-const BROWSER_START_TIMEOUT_MS = 20_000;
+const SHEET_MODES = new Set(['overview', 'shots']);
+const SHOT_SAMPLES_MAX = 60;
+const REPORT_LINES_MAX = 40;
 
 function parseArgs(argv) {
   const opts = { video: true, crf: 18 };
-  const valueFlags = new Set(['--out', '--stills', '--stills-dir', '--sheet', '--preview', '--fps', '--crf', '--chromium']);
+  const valueFlags = new Set(['--out', '--stills', '--stills-dir', '--sheet', '--sheet-mode', '--report', '--preview', '--fps', '--crf', '--chromium']);
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--no-video') opts.video = false;
     else if (a === '--force') opts.force = true;
+    else if (a === '--check-layout') opts.checkLayout = true;
     else if (a === '--help' || a === '-h') opts.help = true;
     else if (valueFlags.has(a)) {
       const v = argv[++i];
@@ -57,146 +72,19 @@ function parseArgs(argv) {
   }
   if (opts.fps != null && (!Number.isInteger(opts.fps) || opts.fps < 12 || opts.fps > 60)) throw new Error('--fps must be a whole number from 12 to 60');
   if (opts.crf != null && (opts.crf < 0 || opts.crf > 51)) throw new Error('--crf must be from 0 to 51');
+  if (opts.sheetMode != null) {
+    if (!SHEET_MODES.has(opts.sheetMode)) throw new Error('--sheet-mode must be overview or shots');
+    if (!opts.sheet) throw new Error('--sheet-mode needs --sheet');
+  }
+  opts.sheetMode ??= 'overview';
+  if (opts.report && !opts.checkLayout) throw new Error('--report needs --check-layout');
   return opts;
 }
 
-function which(name) {
-  const r = spawnSync('sh', ['-c', 'command -v "$1"', 'sh', name], { encoding: 'utf8' });
-  return r.status === 0 ? r.stdout.trim() : null;
-}
-
-function findChromium(explicit) {
-  if (explicit) return explicit;
-  if (process.env.CHROME_PATH) return process.env.CHROME_PATH;
-  for (const name of ['chromium', 'chromium-browser', 'google-chrome-stable', 'google-chrome', 'brave-browser', 'microsoft-edge']) {
-    const found = which(name);
-    if (found) return found;
-  }
-  throw new Error('no Chromium-family browser found; install chromium or pass --chromium <path>');
-}
-
-/** Minimal Chrome DevTools Protocol client over the browser WebSocket. */
-class Cdp {
-  constructor(ws) {
-    this.ws = ws;
-    this.nextId = 1;
-    this.pending = new Map();
-    this.listeners = [];
-    ws.addEventListener('message', (ev) => {
-      const msg = JSON.parse(typeof ev.data === 'string' ? ev.data : Buffer.from(ev.data).toString('utf8'));
-      if (msg.id != null && this.pending.has(msg.id)) {
-        const { resolve: ok, reject, timer, method } = this.pending.get(msg.id);
-        this.pending.delete(msg.id);
-        clearTimeout(timer);
-        if (msg.error) reject(new Error(`${method}: ${msg.error.message}`));
-        else ok(msg.result);
-      } else if (msg.method) {
-        for (const l of this.listeners) l(msg);
-      }
-    });
-    ws.addEventListener('close', () => {
-      for (const { reject, timer, method } of this.pending.values()) {
-        clearTimeout(timer);
-        reject(new Error(`${method}: browser connection closed`));
-      }
-      this.pending.clear();
-    });
-  }
-
-  static async connect(url) {
-    const ws = new WebSocket(url);
-    await new Promise((ok, fail) => {
-      ws.addEventListener('open', ok, { once: true });
-      ws.addEventListener('error', () => fail(new Error(`cannot connect to browser at ${url}`)), { once: true });
-    });
-    return new Cdp(ws);
-  }
-
-  send(method, params = {}, sessionId) {
-    const id = this.nextId++;
-    return new Promise((ok, reject) => {
-      const timer = setTimeout(() => {
-        this.pending.delete(id);
-        reject(new Error(`${method}: no reply within ${COMMAND_TIMEOUT_MS / 1000}s`));
-      }, COMMAND_TIMEOUT_MS);
-      this.pending.set(id, { resolve: ok, reject, timer, method });
-      this.ws.send(JSON.stringify({ id, method, params, ...(sessionId ? { sessionId } : {}) }));
-    });
-  }
-
-  waitFor(method, sessionId) {
-    return new Promise((ok, reject) => {
-      const timer = setTimeout(() => reject(new Error(`timed out waiting for ${method}`)), COMMAND_TIMEOUT_MS);
-      const listener = (msg) => {
-        if (msg.method === method && (!sessionId || msg.sessionId === sessionId)) {
-          clearTimeout(timer);
-          this.listeners = this.listeners.filter((l) => l !== listener);
-          ok(msg.params);
-        }
-      };
-      this.listeners.push(listener);
-    });
-  }
-
-  close() { this.ws.close(); }
-}
-
-async function launchBrowser(binary, profileDir) {
-  const args = [
-    '--headless=new', '--disable-gpu', '--hide-scrollbars', '--mute-audio', '--no-first-run',
-    '--no-default-browser-check', '--disable-extensions', '--disable-background-networking',
-    '--force-device-scale-factor=1', '--font-render-hinting=none', '--allow-file-access-from-files',
-    '--remote-debugging-port=0', `--user-data-dir=${profileDir}`, 'about:blank'
-  ];
-  // Own process group, so cleanup can stop Chromium's helper processes too. A helper
-  // that outlives the main process can recreate the profile folder after it is removed.
-  const proc = spawn(binary, args, { stdio: ['ignore', 'ignore', 'pipe'], detached: process.platform !== 'win32' });
-  let stderr = '';
-  proc.stderr.on('data', (d) => { stderr = (stderr + d).slice(-4000); });
-  let spawnError = null;
-  proc.once('error', (err) => { spawnError = err; });
-  const exited = new Promise((ok) => proc.once('exit', (code) => ok(code)));
-  const portFile = join(profileDir, 'DevToolsActivePort');
-  const deadline = Date.now() + BROWSER_START_TIMEOUT_MS;
-  while (Date.now() < deadline) {
-    if (spawnError) throw new Error(`cannot start browser ${binary}: ${spawnError.message}`);
-    if (proc.exitCode != null) throw new Error(`browser exited with code ${proc.exitCode}:\n${stderr}`);
-    if (existsSync(portFile)) {
-      const [port, path] = readFileSync(portFile, 'utf8').trim().split('\n');
-      if (port && path) return { proc, exited, wsUrl: `ws://127.0.0.1:${port}${path}` };
-    }
-    await sleep(100);
-  }
-  killGroup(proc, 'SIGKILL');
-  throw new Error(`browser did not start within ${BROWSER_START_TIMEOUT_MS / 1000}s:\n${stderr}`);
-}
-
-function killGroup(proc, signal) {
-  try {
-    if (process.platform !== 'win32' && proc.pid) process.kill(-proc.pid, signal);
-    else proc.kill(signal);
-  } catch {
-    // ESRCH: the group is already gone.
-  }
-}
-
-async function stopBrowser(browser) {
-  if (!browser) return;
-  if (browser.proc.exitCode != null) {
-    killGroup(browser.proc, 'SIGKILL');
-    return;
-  }
-  killGroup(browser.proc, 'SIGTERM');
-  const abort = new AbortController();
-  const timeout = sleep(3000, 'timeout', { signal: abort.signal }).catch(() => 'exited');
-  await Promise.race([browser.exited, timeout]);
-  abort.abort();
-  killGroup(browser.proc, 'SIGKILL');
-}
-
-function startEncoder(out, fps, crf) {
+function startEncoder(out, fps, crf, comment) {
   const args = ['-y', '-loglevel', 'error', '-f', 'image2pipe', '-framerate', String(fps), '-c:v', 'png', '-i', '-',
-    '-c:v', 'libx264', '-preset', 'medium', '-crf', String(crf), '-pix_fmt', 'yuv420p', '-movflags', '+faststart', out];
+    '-c:v', 'libx264', '-preset', 'medium', '-crf', String(crf), '-pix_fmt', 'yuv420p', '-metadata', `comment=${comment}`,
+    '-movflags', '+faststart', out];
   const proc = spawn('ffmpeg', args, { stdio: ['pipe', 'ignore', 'pipe'] });
   let stderr = '';
   proc.stderr.on('data', (d) => { stderr = (stderr + d).slice(-4000); });
@@ -213,6 +101,78 @@ function startEncoder(out, fps, crf) {
     async finish() { proc.stdin.end(); await done; },
     abort() { proc.kill('SIGKILL'); },
     done
+  };
+}
+
+/** Up to `max` frames spread over every step's first, middle and last frame. */
+function screenshotFrames(timeline, fps, frames) {
+  const picks = new Set();
+  for (const seg of timeline.steps) {
+    const lo = firstFrameAt(seg.start, fps);
+    const hi = Math.min(frames - 1, firstFrameAt(seg.end, fps) - 1);
+    for (const k of [lo, Math.round((lo + hi) / 2), hi]) if (k >= 0 && k < frames) picks.add(k);
+  }
+  const all = [...picks].sort((a, b) => a - b);
+  if (all.length <= SHOT_SAMPLES_MAX) return all;
+  return Array.from({ length: SHOT_SAMPLES_MAX }, (_, i) => all[Math.floor((i * all.length) / SHOT_SAMPLES_MAX)]);
+}
+
+/**
+ * Inspect every frame forward, reverse and shuffled, compare screenshots of sampled frames in
+ * two orders, and apply the layout rules.
+ * @returns {Promise<object>} report object; `failures` is empty when the layout passes
+ */
+async function checkLayout(session, loaded, { fps, width, height, total, file, forward }) {
+  const { sb } = loaded;
+  const frames = forward.length;
+  const progress = (pass) => (done) => process.stderr.write(`\rlayout: ${pass} pass ${done}/${frames} frames`);
+  const reverseOrder = forward.map((_, k) => frames - 1 - k);
+  const reverse = await sampleFrames(session, reverseOrder, fps, progress('reverse'));
+  process.stderr.write('\n');
+  const jumpyOrder = shuffledOrder(frames);
+  const jumpy = await sampleFrames(session, jumpyOrder, fps, progress('shuffled'));
+  process.stderr.write('\n');
+  const inFrameOrder = (results, order) => {
+    const sigs = new Array(frames);
+    results.forEach((r, j) => { sigs[order[j]] = r.sig; });
+    return sigs;
+  };
+  const reference = forward.map((r) => r.sig);
+  const failures = [
+    ...seekOrderFailures(reference, inFrameOrder(reverse, reverseOrder), 'reverse', fps),
+    ...seekOrderFailures(reference, inFrameOrder(jumpy, jumpyOrder), 'shuffled', fps)
+  ];
+
+  const timeline = engine.buildTimeline(sb);
+  const shotFrames = screenshotFrames(timeline, fps, frames);
+  const capture = async (k) => {
+    await session.evaluate(`window.__EV.seek(${k / fps})`);
+    return session.screenshot();
+  };
+  const first = new Map();
+  for (const k of shotFrames) first.set(k, await capture(k));
+  for (const j of shuffledOrder(shotFrames.length, 0x9e3779b9)) {
+    const k = shotFrames[j];
+    if (!first.get(k).equals(await capture(k))) {
+      failures.push({ kind: 'seek-order', step: null, pass: 'screenshot', from: k / fps, to: k / fps, firstFrame: k, frames: 1,
+        message: `at ${(k / fps).toFixed(3)}s (frame ${k}): screenshot differs when frames are seeked in shuffled order` });
+    }
+  }
+  process.stderr.write(`layout: compared ${shotFrames.length} screenshots in two seek orders\n`);
+
+  const analysis = analyzeLayout(sb, forward.map((r) => r.inspect), { fps, width, height });
+  failures.push(...analysis.failures);
+  failures.sort((a, b) => a.from - b.from || a.kind.localeCompare(b.kind));
+  return {
+    storyboard: resolve(file),
+    ok: failures.length === 0,
+    fps, width, height, total, frames,
+    passes: ['forward', 'reverse', 'shuffled'],
+    screenshotFrames: shotFrames.length,
+    tolerance: TOLERANCE,
+    failures,
+    continuity: analysis.continuity,
+    limits: LIMITS
   };
 }
 
@@ -238,30 +198,43 @@ async function main() {
   }
 
   const name = basename(opts.file).replace(/\.json$/i, '');
+  const sourcePaths = [resolve(opts.file), ...(loaded.sb.scenes ? [resolve(loaded.dir, loaded.sb.scenes)] : []),
+    ...loaded.sb.steps.map((step) => step.image).filter(Boolean).map((path) => resolve(loaded.dir, path)),
+    ...(loaded.sb.outro?.logo ? [resolve(loaded.dir, loaded.sb.outro.logo)] : [])];
+  const stillDir = resolve(opts.stillsDir || join(loaded.dir, 'stills'));
+  const outputPaths = [
+    ...(opts.video ? [resolve(opts.out || join(loaded.dir, `${name}.mp4`))] : []),
+    ...[opts.preview, opts.report].filter(Boolean).map((path) => resolve(path)),
+    ...(opts.sheet ? sheetPaths(resolve(opts.sheet), opts.sheetMode === 'shots' ? pageCount(loaded.sb.steps.length) : 1) : []),
+    ...(opts.stills || []).map((t) => join(stillDir, `${name}-${t.toFixed(2)}s.png`))
+  ];
+  const aliases = aliasErrors([
+    ...sourcePaths.map((path) => ({ role: 'render source', path, output: false })),
+    ...outputPaths.map((path) => ({ role: 'render output', path, output: true }))
+  ]);
+  if (aliases.length) throw new Error(aliases.join('\n'));
   if (opts.preview) {
     const previewPath = resolve(opts.preview);
     mkdirSync(dirname(previewPath), { recursive: true });
-    writeFileSync(previewPath, buildPage(loaded, { play: true }));
+    writeFileSync(previewPath, buildPage(loaded, { play: true, fps: opts.fps }));
     console.error(`preview: ${previewPath} (loads images from ${loaded.dir})`);
   }
-  if (!opts.video && !opts.stills && !opts.sheet) return;
-  if (opts.video && !which('ffmpeg')) throw new Error('ffmpeg not found on PATH');
+  if (!opts.video && !opts.stills && !opts.sheet && !opts.checkLayout) return;
+  const overviewSheet = opts.sheet && opts.sheetMode === 'overview';
+  if ((opts.video || overviewSheet) && !which('ffmpeg')) throw new Error(`ffmpeg not found on PATH (needed for ${opts.video ? 'the video' : '--sheet'})`);
 
   const fps = opts.fps || loaded.sb.fps || 30;
   const width = loaded.sb.width || 1920;
   const height = loaded.sb.height || 1080;
+  const frames = frameCount(total, fps);
   const work = mkdtempSync(join(tmpdir(), 'explainer-video-'));
-  let browser;
-  let cdp;
+  let session;
   let encoder;
   let partialVideo = null;
   const cleanup = async () => {
-    if (encoder) {
-      encoder.abort();
-      if (partialVideo) rmSync(partialVideo, { force: true });
-    }
-    cdp?.close();
-    await stopBrowser(browser);
+    if (encoder) encoder.abort();
+    if (partialVideo) rmSync(partialVideo, { force: true });
+    await session?.close();
     rmSync(work, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   };
   const onSignal = () => { cleanup().finally(() => process.exit(130)); };
@@ -270,36 +243,38 @@ async function main() {
 
   try {
     const pagePath = join(work, 'page.html');
-    writeFileSync(pagePath, buildPage(loaded, { play: false }));
-    browser = await launchBrowser(findChromium(opts.chromium), join(work, 'profile'));
-    cdp = await Cdp.connect(browser.wsUrl);
-    const { targetId } = await cdp.send('Target.createTarget', { url: 'about:blank' });
-    const { sessionId } = await cdp.send('Target.attachToTarget', { targetId, flatten: true });
-    const send = (method, params) => cdp.send(method, params, sessionId);
-    await send('Page.enable');
-    await send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false });
-    const loadedEvent = cdp.waitFor('Page.loadEventFired', sessionId);
-    await send('Page.navigate', { url: pathToFileURL(pagePath).href });
-    await loadedEvent;
-
-    const evaluate = async (expression) => {
-      const r = await send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true });
-      if (r.exceptionDetails) {
-        const ex = r.exceptionDetails;
-        throw new Error(`page error: ${ex.exception?.description || ex.text}`);
-      }
-      return r.result.value;
-    };
-    const startError = await evaluate('window.__EV_ERROR || null');
-    if (startError) throw new Error(startError);
-    const playerType = await evaluate('typeof window.__EV');
-    if (playerType !== 'object') throw new Error('player did not start; check the scenes file for broken HTML or script errors');
-    await evaluate('window.__EV.ready()');
+    writeFileSync(pagePath, buildPage(loaded, { play: false, fps }));
+    session = await openBrowser(findChromium(opts.chromium), join(work, 'profile'));
+    await loadPlayer(session, pathToFileURL(pagePath).href, width, height);
     const capture = async (t) => {
-      await evaluate(`window.__EV.seek(${t})`);
-      const { data } = await send('Page.captureScreenshot', { format: 'png', optimizeForSpeed: true });
-      return Buffer.from(data, 'base64');
+      await session.evaluate(`window.__EV.seek(${t})`);
+      return session.screenshot();
     };
+
+    const shots = opts.sheet && opts.sheetMode === 'shots';
+    let forward = null;
+    if (opts.checkLayout || shots) {
+      await session.evaluate(PAGE_HELPER);
+      forward = await sampleFrames(session, Array.from({ length: frames }, (_, k) => k), fps,
+        (done) => process.stderr.write(`\rlayout: forward pass ${done}/${frames} frames`));
+      process.stderr.write('\n');
+    }
+
+    if (opts.checkLayout) {
+      const report = await checkLayout(session, loaded, { fps, width, height, total, file: opts.file, forward });
+      if (opts.report) {
+        const reportPath = resolve(opts.report);
+        mkdirSync(dirname(reportPath), { recursive: true });
+        writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`);
+        console.error(`report: ${reportPath}`);
+      }
+      if (!report.ok) {
+        for (const f of report.failures.slice(0, REPORT_LINES_MAX)) console.error(`layout: ${f.message}`);
+        if (report.failures.length > REPORT_LINES_MAX) console.error(`layout: ... and ${report.failures.length - REPORT_LINES_MAX} more${opts.report ? ' in the report' : ''}`);
+        throw new Error(`layout check failed: ${report.failures.length} problem(s) in ${frames} frames`);
+      }
+      console.error(`layout: ok, ${frames} frames, ${report.continuity.length} edit(s) checked for caption continuity`);
+    }
 
     if (opts.stills) {
       const dir = resolve(opts.stillsDir || join(loaded.dir, 'stills'));
@@ -311,8 +286,8 @@ async function main() {
       }
     }
 
-    if (opts.sheet) {
-      if (!which('ffmpeg')) throw new Error('ffmpeg not found on PATH (needed for --sheet)');
+    let shotTiles = null;
+    if (opts.sheet && !shots) {
       const count = 12;
       for (let i = 0; i < count; i++) {
         const t = (total * (i + 0.5)) / count;
@@ -321,17 +296,26 @@ async function main() {
       const sheet = resolve(opts.sheet);
       mkdirSync(dirname(sheet), { recursive: true });
       const r = spawnSync('ffmpeg', ['-y', '-loglevel', 'error', '-framerate', '1', '-i', join(work, 'sheet%03d.png'),
-        '-vf', 'scale=480:-1,tile=4x3:padding=6:color=0x222222', '-frames:v', '1', sheet], { encoding: 'utf8' });
-      if (r.status !== 0) throw new Error(`contact sheet failed: ${r.stderr}`);
+        '-vf', 'scale=480:-1,tile=4x3:padding=6:color=0x222222', '-frames:v', '1', sheet], { encoding: 'utf8', timeout: 60_000 });
+      if (r.status !== 0) throw new Error(`contact sheet failed: ${r.error?.message || r.stderr}`);
       console.error(`sheet: ${sheet}`);
+    } else if (shots) {
+      // Captured now, laid out after the video, because composing replaces the player page.
+      shotTiles = [];
+      for (const shot of holdFrames(loaded.sb, forward.map((r) => r.inspect), fps)) {
+        const image = join(work, `shot${String(shot.step).padStart(4, '0')}.png`);
+        writeFileSync(image, await capture(shot.time));
+        shotTiles.push({ image, label: shot.label });
+      }
     }
 
     if (opts.video) {
       const out = resolve(opts.out || join(loaded.dir, `${name}.mp4`));
       mkdirSync(dirname(out), { recursive: true });
-      encoder = startEncoder(out, fps, opts.crf);
-      partialVideo = out;
-      const frames = Math.round(total * fps);
+      // Encode beside the destination and rename at the end, so a failed or interrupted
+      // render leaves the previous video in place.
+      partialVideo = join(dirname(out), `.${basename(out, extname(out))}.partial-${process.pid}${extname(out) || '.mp4'}`);
+      encoder = startEncoder(partialVideo, fps, opts.crf, renderFingerprint(loaded, fps));
       const started = Date.now();
       for (let i = 0; i < frames; i++) {
         await Promise.race([encoder.write(await capture(i / fps)), encoder.done]);
@@ -341,8 +325,18 @@ async function main() {
       }
       await encoder.finish();
       encoder = null;
+      renameSync(partialVideo, out);
+      partialVideo = null;
       process.stderr.write('\n');
       console.error(`video: ${out} (${total.toFixed(1)}s, ${frames} frames, ${fps} fps, rendered in ${((Date.now() - started) / 1000).toFixed(0)}s)`);
+    }
+
+    if (shotTiles) {
+      const sheet = resolve(opts.sheet);
+      mkdirSync(dirname(sheet), { recursive: true });
+      const outputs = sheetPaths(sheet, pageCount(shotTiles.length));
+      await composeSheets(session, shotTiles, outputs, { width, height, work });
+      for (const [p, file] of outputs.entries()) console.error(`sheet: ${file} (${shotTiles.length} shots, page ${p + 1} of ${outputs.length})`);
     }
   } finally {
     process.off('SIGINT', onSignal);

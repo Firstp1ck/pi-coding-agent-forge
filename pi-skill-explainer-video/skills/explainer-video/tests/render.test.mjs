@@ -188,12 +188,13 @@ test('sections start and end on black and shade the app only while their card sh
   const card = (kind) => ({ scene: 's', duration: 3, transition: 'cut', section: { kind, title: `${kind} title` } });
   sb.steps = [card('opening'), { ...sb.steps[0], transition: 'cut' }, card('chapter'), card('closing')];
   withFixture(sb, (dir) => {
-    const result = run([join(dir, 'video.json'), '--no-video', '--stills', '0,1.5,4.5,7.5,12', '--stills-dir', dir]);
+    const result = run([join(dir, 'video.json'), '--no-video', '--stills', '0,1.5,4.5,7.5,11.9666666667,12', '--stills-dir', dir]);
     assert.equal(result.status, 0, result.stderr);
     const at = (time, x, y) => samplePixel(join(dir, `video-${time}s.png`), x, y);
     for (const [x, y] of [[300, 100], [960, 540], [1600, 1000]]) {
       assert.deepEqual(at('0.00', x, y), [0, 0, 0], `opening frame is black at ${x},${y}`);
       assert.deepEqual(at('12.00', x, y), [0, 0, 0], `closing frame is black at ${x},${y}`);
+      assert.deepEqual(at('11.97', x, y), [0, 0, 0], `last encoded frame is black at ${x},${y}`);
     }
     // The default 0.62 shade leaves 38% of the blue app showing.
     for (const time of ['1.50', '7.50']) {
@@ -203,4 +204,22 @@ test('sections start and end on black and shade the app only while their card sh
     const plain = at('4.50', 300, 100);
     assert.ok(plain[0] > 240 && plain[2] < 15, `an ordinary shot is unshaded: ${plain}`);
   });
+});
+
+test('fractional-duration movies end on an encoded black frame at the effective fps', { skip }, () => {
+  for (const overridden of [false, true]) {
+    const sb = { version: 1, fps: overridden ? 30 : 12, framing: 'full-app', scenes: 'scenes.html', steps: [
+      { scene: 's', duration: 3, caption: { bold: 'Read.' } },
+      { scene: 's', duration: 3.03, transition: 'cut', section: { kind: 'closing', title: 'Done' } }
+    ] };
+    withFixture(sb, (dir) => {
+      const output = join(dir, 'movie.mp4');
+      const result = run([join(dir, 'video.json'), '--out', output, ...(overridden ? ['--fps', '12'] : [])]);
+      assert.equal(result.status, 0, result.stderr);
+      const frame = join(dir, 'last.png');
+      const decode = spawnSync('ffmpeg', ['-v', 'error', '-i', output, '-vf', 'select=eq(n\\,71)', '-frames:v', '1', frame], { encoding: 'utf8', timeout: 20_000 });
+      assert.equal(decode.status, 0, decode.stderr);
+      assert.deepEqual(samplePixel(frame), [0, 0, 0], `encoded last frame is black with override=${overridden}`);
+    });
+  }
 });

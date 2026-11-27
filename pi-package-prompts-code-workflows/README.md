@@ -21,6 +21,14 @@ pi install npm:@firstpick/pi-prompts-code-workflows
 
 Restart Pi if the package does not appear in your current session.
 
+With Oh My Pi (OMP), link this checkout from the repository root and start a new OMP session.
+
+```bash
+omp plugin link ./pi-package-prompts-code-workflows
+```
+
+OMP keeps its built-in `/review`. The other eight package commands are available under the names listed here.
+
 ## How to use it
 
 Choose the slash command that matches the job, such as `/review`, `/fix`, or `/incident`, then give Pi the relevant repository, issue, error, or change.

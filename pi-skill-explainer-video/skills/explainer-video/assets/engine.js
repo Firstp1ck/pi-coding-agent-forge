@@ -113,7 +113,8 @@
     var prev = sb.steps[seg.index - 1];
     var next = sb.steps[seg.index + 1];
     var continuous = sb.captionMotion === 'continuous';
-    var edges = continuous ? { fadeIn: !!(prev && prev.section), fadeOut: !!(next && next.section) } : stepEdges(seg, sb);
+    var edges = stepEdges(seg, sb);
+    if (continuous) edges = { fadeIn: !!(prev && prev.section) && edges.fadeIn, fadeOut: !!(next && next.section) && edges.fadeOut };
     var focused = step.focusFade != null;
     if (focused) edges.fadeIn = false;
     var holdLast = isFinalFrame(t, seg, sb) && (continuous || sb.framing === 'full-app');
@@ -376,17 +377,23 @@
 
   /**
    * Resolve a rect spec to scene coordinates.
-   * Arrays are used as-is; {target, pad} measures the element and inverts the
-   * camera transform that is currently applied to the scene.
+   * Arrays are used as-is. Measure targets without the rounded camera transform:
+   * inverting that transform accumulates sub-pixel differences across seeks.
    */
   Player.prototype._rect = function (st, spec) {
     if (Array.isArray(spec)) return spec.map(Number);
     var el = st.scene.querySelector(spec.target);
     if (!el) throw new Error('Rect target "' + spec.target + '" matches nothing in scene "' + (st.def.scene || st.def.image) + '"');
-    var b = el.getBoundingClientRect();
-    var c = st.cam;
-    var pad = spec.pad != null ? Number(spec.pad) : 10;
-    return [(b.left - c.tx) / c.s - pad, (b.top - c.ty) / c.s - pad, b.width / c.s + pad * 2, b.height / c.s + pad * 2];
+    var transform = st.scene.style.transform;
+    try {
+      st.scene.style.transform = 'none';
+      var b = el.getBoundingClientRect();
+      var origin = st.scene.getBoundingClientRect();
+      var pad = spec.pad != null ? Number(spec.pad) : 10;
+      return [b.left - origin.left - pad, b.top - origin.top - pad, b.width + pad * 2, b.height + pad * 2];
+    } finally {
+      st.scene.style.transform = transform;
+    }
   };
 
   /** Reset every touched element, then replay setup and the actions that started by local time tl. */
@@ -598,7 +605,7 @@
       var text = '<span class="ev-bold">' + escapeHtml(c.bold) + '</span>' +
         (c.rest ? ' <span class="ev-rest">' + escapeHtml(c.rest) + '</span>' : '');
       html += '<div class="ev-cap' + (c.box ? ' ev-cap-placed' : '') + '" style="' + placement + 'opacity:' + a.toFixed(3) + ';transform:' + shift + '">' +
-        (num ? '<span class="ev-num">' + escapeHtml(num) + '</span>' : '') +
+        (num ? '<span class="ev-num">' + escapeHtml(num) + '</span>' : twoLine ? '<span class="ev-num ev-num-hidden" aria-hidden="true"></span>' : '') +
         (twoLine ? '<span class="ev-text">' + text + '</span>' : text) + '</div>';
       shown.push({ step: i, opacity: a });
     });
@@ -610,8 +617,12 @@
   Player.prototype._renderKeys = function (t) {
     var sb = this.sb;
     var html = '';
+    var latestSection = -1;
     this.timeline.steps.forEach(function (seg, i) {
-      if (sb.steps[i].section) return;
+      if (sb.steps[i].section && t >= seg.start) latestSection = i;
+    });
+    this.timeline.steps.forEach(function (seg, i) {
+      if (sb.steps[i].section || i < latestSection) return;
       if (sb.steps[i + 1] && sb.steps[i + 1].transition === 'cut' && t >= seg.end) return;
       (sb.steps[i].keys || []).forEach(function (k) {
         var at = seg.start + Number(k.at);
@@ -658,7 +669,12 @@
       if (!section || t < seg.start || t > seg.end) return;
       var tl = clamp(t - seg.start, 0, sb.steps[i].duration);
       black = Math.max(black, sectionLayers(section, tl, sb.steps[i].duration).black);
-    });
+      // The last encoded frame precedes the endpoint, and rounding a fractional
+      // duration can move it more than one frame away from that endpoint.
+      var fps = Number(sb.fps || 30);
+      var lastFrame = (Math.round(this.timeline.total * fps) - 1) / fps;
+      if (section.kind === 'closing' && section.fadeOut !== 0 && seg.index === sb.steps.length - 1 && t >= lastFrame) black = 1;
+    }, this);
     this.blackLevel = black;
     if (!this.black) return;
     this.black.style.opacity = String(black);
@@ -673,7 +689,8 @@
    * The primary step is the most visible one (the incoming step wins a tie at an edit);
    * caption, spotlights and avoid regions belong to that step.
    * @param {number} t seconds
-   * @returns {{time:number, step:number|null,
+   * `opacity` is the primary step's own visibility, so a check can tell a settled frame from a crossfade.
+   * @returns {{time:number, step:number|null, opacity:number,
    *   section: {kind:string, step:number, title:string, opacity:number, black:number, rect:number[], textOverflow:boolean}|null,
    *   caption: {rect:number[], textOverflow:boolean, opacity:number}|null,
    *   spotlights: {rect:number[], opacity:number}[], avoid: number[][]}}
@@ -684,7 +701,7 @@
     var primary = -1;
     var best = 0.001;
     this.steps.forEach(function (st, i) { if (st.opacity >= best) { best = st.opacity; primary = i; } });
-    var out = { time: t, step: primary < 0 ? null : primary, section: null, caption: null, spotlights: [], avoid: [] };
+    var out = { time: t, step: primary < 0 ? null : primary, opacity: primary < 0 ? 0 : round2(best), section: null, caption: null, spotlights: [], avoid: [] };
     if (primary < 0) return out;
     var st = this.steps[primary];
     var seg = this.timeline.steps[primary];

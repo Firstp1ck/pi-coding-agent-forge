@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const prompt = await readFile(join(root, "prompts", "git-staged-msg.md"), "utf8");
+const prompt = await readFile(join(root, "commands", "git-staged-msg.md"), "utf8");
 
 const rootCommand = 'REPO_ROOT="$(git rev-parse --show-toplevel)"';
 const diffCommand = 'git -C "$REPO_ROOT" diff --cached';

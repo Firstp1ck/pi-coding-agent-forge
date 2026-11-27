@@ -2,7 +2,7 @@
 description: Write a short, plain-language PR description from the branch diff and save under dev/PR.
 argument-hint: "[language: en|de]"
 ---
-Create a PR description for the current branch in `${1:-en}` (`en` = English, `de` = German).
+Create a PR description for the current branch in the language given by `$1` (default `en` for English, `de` for German).
 
 Read the branch diff and commits against the repository default branch (`main`, `master`, or upstream default). Check the repository's contribution guidance and PR template, including `.github/PULL_REQUEST_TEMPLATE.md` if present. Follow required formatting and disclosure rules; otherwise use the style below.
 
