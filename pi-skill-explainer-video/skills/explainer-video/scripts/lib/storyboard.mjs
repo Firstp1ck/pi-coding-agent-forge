@@ -130,6 +130,11 @@ export function validateStoryboard(sb, ctx = {}) {
   if (sb.allowTerms != null && !Array.isArray(sb.allowTerms)) errors.push('allowTerms must be an array of words');
   const allow = new Set((Array.isArray(sb.allowTerms) ? sb.allowTerms : []).map((t) => String(t).toLowerCase()));
 
+  if (sb.spotlightOutline != null && typeof sb.spotlightOutline !== 'boolean') errors.push('spotlightOutline must be a boolean');
+  if (sb.captionMotion != null && sb.captionMotion !== 'continuous') errors.push('captionMotion must be "continuous" when specified');
+  if (sb.captionEase != null && sb.captionEase !== 'fast-slow') errors.push('captionEase must be "fast-slow" when specified');
+  if (sb.framing != null && sb.framing !== 'full-app') errors.push('framing must be "full-app" when specified');
+  if (sb.framing === 'full-app' && sb.outro) errors.push('full-app framing uses a final on-screen caption in place of an outro');
   if (sb.version !== 1) errors.push('version must be 1');
   for (const key of ['width', 'height', 'fps']) {
     if (sb[key] != null && (!Number.isInteger(sb[key]) || sb[key] <= 0)) errors.push(`${key} must be a positive integer`);
@@ -146,9 +151,13 @@ export function validateStoryboard(sb, ctx = {}) {
     errors.push(`step ${i + 1} must be an object`);
     return false;
   });
-  if (steps.length < LIMITS.stepMin || steps.length > LIMITS.stepMax) {
+  const episode = sb.format === 'episode';
+  if (sb.format != null && !episode && sb.format !== 'clip') errors.push('format must be "clip" or "episode"');
+  if (episode && steps.length < LIMITS.stepMin) {
+    errors.push(`an episode needs at least ${LIMITS.stepMin} steps`);
+  } else if (!episode && (steps.length < LIMITS.stepMin || steps.length > LIMITS.stepMax)) {
     errors.push(`use ${LIMITS.stepMin}–${LIMITS.stepMax} steps (found ${steps.length})`);
-  } else if (steps.length < LIMITS.stepIdealMin || steps.length > LIMITS.stepIdealMax) {
+  } else if (!episode && (steps.length < LIMITS.stepIdealMin || steps.length > LIMITS.stepIdealMax)) {
     warnings.push(`3–5 steps read best; this video has ${steps.length}`);
   }
 
@@ -160,6 +169,10 @@ export function validateStoryboard(sb, ctx = {}) {
     }
     const dur = typeof d === 'number' ? d : 0;
 
+    if (step.transition != null && !['fade', 'cut'].includes(step.transition)) {
+      errors.push(`${at}: transition must be "fade" or "cut"`);
+    }
+    if (step.drift != null && typeof step.drift !== 'boolean') errors.push(`${at}: drift must be a boolean`);
     let size = null;
     if (step.image != null && typeof step.image !== 'string') {
       errors.push(`${at}: image must be a file path`);
@@ -179,6 +192,41 @@ export function validateStoryboard(sb, ctx = {}) {
     if (!isObject(c) || typeof c.bold !== 'string' || !c.bold.trim()) {
       errors.push(`${at}: caption.bold is required`);
     } else {
+      if (sb.captionMotion === 'continuous') {
+        const previous = steps[i - 1]?.caption;
+        const end = Array.isArray(previous?.track) ? previous.track.at(-1) : null;
+        if (!Array.isArray(c.box)) errors.push(`${at}: continuous captions need a caption.box`);
+        if (Array.isArray(c.box) && Array.isArray(previous?.box) &&
+            (c.box[0] !== (end?.x ?? previous.box[0]) || c.box[1] !== (end?.y ?? previous.box[1]) || c.box[2] !== previous.box[2])) {
+          errors.push(`${at}: continuous caption must start at the previous endpoint with the same width`);
+        }
+      }
+      if (c.box != null) {
+        const box = c.box;
+        if (!Array.isArray(box) || box.length !== 3 || !box.every(Number.isFinite) ||
+            box[0] < 0 || box[1] < 0 || box[2] <= 0 || box[0] + box[2] > (sb.width || 1920) || box[1] >= (sb.height || 1080)) {
+          errors.push(`${at}: caption.box must be an on-screen [left, top, width] in output pixels`);
+        }
+      }
+      if (c.track != null) {
+        if (!Array.isArray(c.box)) errors.push(`${at}: caption.track needs a starting caption.box`);
+        let previousTime = 0;
+        list(c.track, `${at} caption.track`).forEach((key, j) => {
+          const where = `${at} caption.track[${j}]`;
+          checkTime(key.at, `${where}.at`, dur, errors);
+          if (key.at <= previousTime) errors.push(`${where}: arrival must be later than the preceding position`);
+          previousTime = key.at;
+          if (!Number.isFinite(key.x) || key.x < 0 || key.x + (c.box?.[2] || 0) > (sb.width || 1920) ||
+              !Number.isFinite(key.y) || key.y < 0 || key.y >= (sb.height || 1080)) {
+            errors.push(`${where}: x and y must place the caption inside the frame`);
+          }
+          if (sb.captionMotion === 'continuous' && (key.move === 0 || key.transition === 'fade')) {
+            errors.push(`${where}: continuous caption movement needs a visible glide`);
+          }
+          if (key.move != null && (!Number.isFinite(key.move) || key.move < 0)) errors.push(`${where}: move must be a nonnegative duration`);
+          if (key.transition != null && !['glide', 'fade'].includes(key.transition)) errors.push(`${where}: transition must be glide or fade`);
+        });
+      }
       const bold = words(c.bold).length;
       const total = bold + words(c.rest).length;
       if (bold > LIMITS.boldWordsMax) warnings.push(`${at}: bold lead has ${bold} words; keep it to ${LIMITS.boldWordsMax} or fewer`);
@@ -192,6 +240,15 @@ export function validateStoryboard(sb, ctx = {}) {
     list(step.camera, `${at} camera`).forEach((k, j) => {
       checkTime(k.at, `${at} camera[${j}]`, dur, errors);
       checkRect(k.rect, `${at} camera[${j}]`, size, errors);
+    });
+    list(step.spotlights, `${at} spotlights`).forEach((spot, j) => {
+      const where = `${at} spotlights[${j}]`;
+      checkTime(spot.from, `${where}.from`, dur, errors);
+      if (spot.to != null) {
+        checkTime(spot.to, `${where}.to`, dur, errors);
+        if (spot.to <= spot.from) errors.push(`${where}: "to" must be after "from"`);
+      }
+      checkRect(spot.rect, `${where}.rect`, size, errors);
     });
     list(step.highlights, `${at} highlights`).forEach((h, j) => {
       checkTime(h.from, `${at} highlights[${j}].from`, dur, errors);
@@ -212,6 +269,11 @@ export function validateStoryboard(sb, ctx = {}) {
     const checkAction = (a, where, timed) => {
       if (!ACTION_TYPES.has(a.type)) errors.push(`${where}: type must be one of ${[...ACTION_TYPES].join(', ')}`);
       if (typeof a.target !== 'string' || !a.target) errors.push(`${where}: target must be a CSS selector`);
+      if (a.type === 'show' || a.type === 'hide') {
+        for (const axis of ['dx', 'dy']) {
+          if (a[axis] != null && !Number.isFinite(a[axis])) errors.push(`${where}: ${axis} must be a finite number`);
+        }
+      }
       if (timed) checkTime(a.at, where, dur, errors);
       if (a.type === 'type' && typeof a.text !== 'string') errors.push(`${where}: "type" needs text`);
       if (a.type === 'text' && typeof a.text !== 'string' && typeof a.html !== 'string') errors.push(`${where}: "text" needs text or html`);
@@ -221,7 +283,7 @@ export function validateStoryboard(sb, ctx = {}) {
     list(step.actions, `${at} actions`).forEach((a, j) => checkAction(a, `${at} actions[${j}]`, true));
 
     const moves = (key) => (Array.isArray(step[key]) ? step[key].length : 0);
-    if (!moves('highlights') && moves('camera') < 2 && !moves('actions') && !moves('cursor')) {
+    if (sb.framing !== 'full-app' && step.drift !== false && !moves('spotlights') && !moves('highlights') && moves('camera') < 2 && !moves('actions') && !moves('cursor')) {
       warnings.push(`${at}: nothing moves or gets highlighted; add a camera move, a highlight or an action`);
     }
   });
@@ -237,7 +299,7 @@ export function validateStoryboard(sb, ctx = {}) {
     });
     if (o.duration != null && (typeof o.duration !== 'number' || o.duration < 2 || o.duration > 8)) errors.push('outro.duration must be 2–8 seconds');
     if (o.logo && ctx.dir && !existsSync(resolve(ctx.dir, o.logo))) errors.push(`outro logo not found: ${o.logo}`);
-  } else {
+  } else if (sb.framing !== 'full-app') {
     warnings.push('no outro: an end card with the product name helps viewers remember what they saw');
   }
 
@@ -246,7 +308,7 @@ export function validateStoryboard(sb, ctx = {}) {
     steps: steps.map((step) => ({ duration: Number.isFinite(step.duration) && step.duration > 0 ? step.duration : 0 })),
     outro: isObject(sb.outro) ? { duration: Number.isFinite(sb.outro.duration) ? sb.outro.duration : undefined } : null
   }).total;
-  if (total > LIMITS.totalWarn) warnings.push(`video runs ${total.toFixed(1)}s; 20–40s holds attention best`);
+  if (!episode && total > LIMITS.totalWarn) warnings.push(`video runs ${total.toFixed(1)}s; consider splitting this clip or using episode format`);
   return { errors, warnings, total };
 }
 

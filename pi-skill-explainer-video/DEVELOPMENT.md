@@ -37,7 +37,7 @@ The page is a single file because Chromium refuses ES module imports from `file:
 
 ## Validation rules
 
-Errors block rendering (unless `--force`): schema shape, unknown scenes or images, times outside a step, malformed rects, 2–6 steps, 3–12 s per step, captions over 14 words, an outro without a one- or two-line title. With `--force` the renderer still computes the length from the valid steps.
+Errors block rendering (unless `--force`): schema shape, unknown scenes or images, times outside a step, malformed rects, 2–6 steps in clip format or at least two in episode format, 3–12 s per step, captions over 14 words, an outro without a one- or two-line title. With `--force` the renderer still computes the length from the valid steps.
 
 The step and duration limits cap a video at 80 s (6 × 12 s plus an 8 s outro), so there is no separate total-length error.
 

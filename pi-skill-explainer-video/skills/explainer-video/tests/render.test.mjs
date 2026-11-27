@@ -45,9 +45,9 @@ function run(args) {
   return spawnSync(process.execPath, [render, ...args, '--chromium', browser], { encoding: 'utf8', timeout: 60_000 });
 }
 
-/** RGB of the frame centre, read with ffmpeg so the test needs no PNG decoder. */
-function centrePixel(png) {
-  const r = spawnSync('ffmpeg', ['-v', 'error', '-i', png, '-vf', 'crop=1:1:960:470', '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-'], { timeout: 20_000 });
+/** RGB at an output coordinate, read with ffmpeg so the test needs no PNG decoder. */
+function samplePixel(png, x = 960, y = 470) {
+  const r = spawnSync('ffmpeg', ['-v', 'error', '-i', png, '-vf', `crop=1:1:${x}:${y}`, '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-'], { timeout: 20_000 });
   assert.equal(r.status, 0, String(r.stderr));
   return [...r.stdout];
 }
@@ -56,8 +56,8 @@ test('a timed action on an element nested in a set-up element takes effect', { s
   withFixture(storyboard(), (dir) => {
     const r = run([join(dir, 'video.json'), '--no-video', '--stills', '0.5,2', '--stills-dir', dir]);
     assert.equal(r.status, 0, r.stderr);
-    const [before] = [centrePixel(join(dir, 'video-0.50s.png'))];
-    const after = centrePixel(join(dir, 'video-2.00s.png'));
+    const [before] = [samplePixel(join(dir, 'video-0.50s.png'))];
+    const after = samplePixel(join(dir, 'video-2.00s.png'));
     assert.ok(before[2] > 200 && before[0] < 60, `blue before the action, got ${before}`);
     assert.ok(after[0] > 200 && after[2] < 60, `red after the action, got ${after}`);
   });
@@ -80,5 +80,103 @@ test('a missing browser fails cleanly and leaves no temp directory', { skip }, (
     assert.doesNotMatch(r.stderr, /at .*render\.mjs/, 'no stack trace');
     const after = readdirSync(tmpdir()).filter((n) => n.startsWith('explainer-video-')).length;
     assert.equal(after, before);
+  });
+});
+
+test('a cut switches between fully opaque scenes at the edit frame', { skip }, () => {
+  const sb = storyboard();
+  sb.steps[1].transition = 'cut';
+  withFixture(sb, (dir) => {
+    const result = run([join(dir, 'video.json'), '--no-video', '--stills', '2.99,3', '--stills-dir', dir]);
+    assert.equal(result.status, 0, result.stderr);
+    const before = samplePixel(join(dir, 'video-2.99s.png'));
+    const after = samplePixel(join(dir, 'video-3.00s.png'));
+    assert.ok(before[0] > 240 && before[2] < 10, `outgoing red frame: ${before}`);
+    assert.ok(after[2] > 240 && after[0] < 10, `incoming blue frame: ${after}`);
+  });
+});
+
+test('full-app fits all edges, preserves overlapping spotlights and places the caption over the dimmed UI', { skip }, () => {
+  const sb = storyboard();
+  sb.framing = 'full-app';
+  const step = sb.steps[0];
+  step.caption.box = [700, 700, 400];
+  step.camera = [{ at: 0, rect: [50, 50, 40, 40] }];
+  step.spotlights = [
+    { from: 0, to: 2, rect: [0, 0, 60, 80] },
+    { from: 0, to: 2, rect: [30, 0, 60, 80] }
+  ];
+  withFixture(sb, (dir) => {
+    const result = run([join(dir, 'video.json'), '--no-video', '--stills', '0.5', '--stills-dir', dir]);
+    assert.equal(result.status, 0, result.stderr);
+    const png = join(dir, 'video-0.50s.png');
+    // A 4:3 fixture fits this 16:9 frame between x=240 and x=1680.
+    for (const [x, y] of [[241, 2], [370, 30], [535, 30]]) {
+      assert.ok(samplePixel(png, x, y)[2] > 245, `unshaded blue at ${x},${y}`);
+    }
+    const dim = samplePixel(png, 1678, 1078)[2];
+    assert.ok(dim > 90 && dim < 125, `dimmed bottom-right corner: ${dim}`);
+    assert.ok(samplePixel(png, 730, 708)[2] < dim - 20, 'caption backing at the requested location');
+  });
+});
+
+test('the visible caption moves along its authored path and clears its old position', { skip }, () => {
+  const sb = storyboard();
+  sb.framing = 'full-app';
+  const step = sb.steps[0];
+  step.actions = [];
+  step.caption.box = [400, 600, 270];
+  step.caption.track = [{ at: 2, x: 1100, y: 600, move: 1 }];
+  withFixture(sb, (dir) => {
+    const result = run([join(dir, 'video.json'), '--no-video', '--stills', '0.5,1.5,2.5', '--stills-dir', dir]);
+    assert.equal(result.status, 0, result.stderr);
+    for (const [time, left] of [['0.50', 400], ['1.50', 750], ['2.50', 1100]]) {
+      const png = join(dir, `video-${time}s.png`);
+      assert.ok(samplePixel(png, left + 25, 605)[2] < 120, `caption at ${left}, time ${time}`);
+      if (left !== 400) assert.ok(samplePixel(png, 425, 605)[2] > 240, 'previous position cleared');
+    }
+  });
+});
+
+test('active controls have a bright outline and the caption stays visible across an edit', { skip }, () => {
+  const sb = storyboard();
+  sb.framing = 'full-app';
+  sb.captionMotion = 'continuous';
+  sb.spotlightOutline = true;
+  const [first, second] = sb.steps;
+  for (const step of sb.steps) {
+    step.actions = [];
+    step.spotlights = [{ from: 0, rect: [45, 80, 55, 40] }];
+  }
+  first.caption = { bold: 'Select', rest: 'the result.', box: [400, 600, 300], track: [{ at: 2.5, x: 850, y: 600, move: 2 }] };
+  second.caption = { bold: 'Read', rest: 'the result.', box: [850, 600, 300] };
+  withFixture(sb, (dir) => {
+    const result = run([join(dir, 'video.json'), '--no-video', '--stills', '1.5,2.99,3.01', '--stills-dir', dir]);
+    assert.equal(result.status, 0, result.stderr);
+    const midpoint = join(dir, 'video-1.50s.png');
+    const [r, g, b] = samplePixel(midpoint, 602, 350);
+    assert.ok(r > 95 && r < 140 && g > 200 && b > 235, `expected cyan outline, got ${[r, g, b]}`);
+    assert.ok(samplePixel(midpoint, 650, 605)[2] < 95, 'caption visible halfway through its glide');
+    for (const time of ['2.99', '3.01']) {
+      assert.ok(samplePixel(join(dir, `video-${time}s.png`), 875, 605)[2] < 95, 'caption backing stays in place at the boundary');
+    }
+  });
+});
+
+test('the rendered fast-slow caption covers most of its distance by mid-flight', { skip }, () => {
+  const sb = storyboard();
+  sb.framing = 'full-app';
+  sb.captionMotion = 'continuous';
+  sb.captionEase = 'fast-slow';
+  const [first, second] = sb.steps;
+  for (const step of sb.steps) step.actions = [];
+  first.caption = { bold: 'Select', box: [400, 600, 200], track: [{ at: 2, x: 1100, y: 600, move: 1 }] };
+  second.caption = { bold: 'Read', box: [1100, 600, 200] };
+  withFixture(sb, (dir) => {
+    const result = run([join(dir, 'video.json'), '--no-video', '--stills', '1.5', '--stills-dir', dir]);
+    assert.equal(result.status, 0, result.stderr);
+    const frame = join(dir, 'video-1.50s.png');
+    assert.ok(samplePixel(frame, 775, 605)[2] > 240, 'caption cleared the balanced midpoint');
+    assert.ok(samplePixel(frame, 985, 605)[2] < 120, 'caption reached the far half');
   });
 });

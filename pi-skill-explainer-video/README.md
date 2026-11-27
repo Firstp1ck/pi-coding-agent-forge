@@ -1,8 +1,6 @@
 # Explainer Video
 
-Turn a few plain sentences about your app into a short, silent tutorial video that anyone can follow.
-
-The videos look like modern product release clips: a black stage, the app's screen shown large, the camera gliding to the part that matters, a glowing ring around it, and one numbered caption per step, such as **"3  Press Space** to add apps to your list." They end on a card with the product name and version.
+Create captioned walkthroughs of a software project. Keep the whole app visible, highlight the active feature and float a short caption beside it. For YouTube, the skill also guides intro and section transitions, a product-led thumbnail, music, credits and a timestamped description.
 
 ## Helpful when
 
@@ -23,7 +21,7 @@ The videos look like modern product release clips: a black stage, the app's scre
 
 ## What you'll get
 
-- An MP4 video, 1920x1080 at 30 fps, usually 20–40 seconds with three to five steps.
+- A 1080p MP4. Short release clips typically run 20–40 seconds. Feature episodes can run around three minutes.
 - A contact sheet of frames so you can check every step at a glance before sharing.
 - The storyboard and scene files, so you can change a caption or timing and render again.
 

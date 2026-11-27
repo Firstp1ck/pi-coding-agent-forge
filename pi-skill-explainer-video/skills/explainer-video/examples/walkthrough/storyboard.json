@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "format": "episode",
+  "title": "Review Desk: Review a draft",
+  "framing": "full-app",
+  "captionMotion": "continuous",
+  "captionEase": "fast-slow",
+  "spotlightOutline": true,
+  "scenes": "scenes.html",
+  "steps": [
+    {
+      "scene": "queue",
+      "duration": 5,
+      "transition": "cut",
+      "spotlights": [{"from": 0, "rect": {"target": ".task", "pad": 5}}],
+      "caption": {"number": "", "bold": "Review a draft.", "rest": "Approve it and check its status.", "box": [130, 475, 660]}
+    },
+    {
+      "scene": "queue",
+      "duration": 6,
+      "transition": "cut",
+      "spotlights": [{"from": 0, "rect": {"target": "#approve", "pad": 6}}],
+      "caption": {"bold": "Choose Approve", "rest": "when the draft is ready.", "box": [130, 475, 660],
+        "track": [{"at": 2.6, "move": 2.6, "x": 1130, "y": 455}]}
+    },
+    {
+      "scene": "queue",
+      "duration": 5,
+      "transition": "cut",
+      "setup": [{"type": "text", "target": "#status", "text": "Approved"}, {"type": "hide", "target": "#approve"}],
+      "spotlights": [{"from": 0, "rect": {"target": "#status", "pad": 8}}],
+      "caption": {"bold": "Approved", "rest": "appears beside the draft.", "box": [1130, 455, 660]}
+    }
+  ]
+}

@@ -40,9 +40,11 @@ Cut words that add nothing:
 
 Follow the order a first-time user works in. Usually: find or open something, look at it, act on it, confirm the result. End on the payoff, not on settings.
 
-Number the steps. The numbers tell the viewer how far along they are.
+Use numbers when the viewer needs to follow an ordered procedure. An intro, section heading or credit can use `caption.number: ""` to leave the words on their own.
 
 ## Check before rendering
+
+Try swapping the sample item for another valid one. Captions, section headings and the publication description should still explain the workflow. Keep names and sample values visible in the UI. Mention one in the explanation only when it teaches an input rule, distinguishes a required selection or changes the outcome.
 
 - Read all captions aloud in order. Do they tell one story?
 - Does each one name a single action?

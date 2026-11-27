@@ -1,0 +1,16 @@
+<!-- Fictional interface for the reusable walkthrough starter. -->
+<style>
+.review { width:1920px; height:1080px; background:#1c2229; color:#dae2eb; font:38px system-ui,sans-serif; }
+.review header,.review footer { position:absolute; left:0; right:0; padding:24px 60px; background:#262e37; }
+.review header { top:0; font-weight:600; } .review footer { bottom:0; font-size:28px; }
+.review section { position:absolute; left:100px; right:100px; top:165px; }
+.review h2 { margin:0 0 48px; font-size:48px; }
+.review .task { display:flex; align-items:center; gap:24px; padding:26px; border:2px solid #56616e; }
+.review .task strong { margin-right:auto; } .review button { padding:12px 26px; color:#daebf9; background:#2c4558; border:2px solid #7898af; font:inherit; }
+.review .state { color:#c4dccb; }
+</style>
+<template id="queue" data-width="1920" data-height="1080">
+  <div class="review"><header>Review Desk</header><section><h2>Review queue</h2>
+    <div class="task"><strong>Draft proposal</strong><span id="status" class="state">Pending</span><button id="approve">Approve</button></div>
+  </section><footer>Workspace / Reviews</footer></div>
+</template>

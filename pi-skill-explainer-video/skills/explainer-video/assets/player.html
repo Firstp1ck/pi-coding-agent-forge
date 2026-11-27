@@ -24,6 +24,8 @@ body { width: __W__px; height: __H__px; position: relative; font-family: var(--e
 #ev-scenes { position: absolute; inset: 0;
   -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 6%, #000 74%, transparent 86%), linear-gradient(to right, transparent 0, #000 6%, #000 94%, transparent 100%);
   -webkit-mask-composite: source-in; mask-composite: intersect; }
+#ev-scenes.ev-full-app { -webkit-mask-image: none; mask-image: none; }
+.ev-shade { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2147483647; }
 .ev-step { position: absolute; inset: 0; }
 .ev-scene { position: absolute; left: 0; top: 0; transform-origin: 0 0; overflow: hidden; }
 .ev-shot { display: block; width: 100%; height: 100%; }
@@ -39,6 +41,11 @@ body { width: __W__px; height: __H__px; position: relative; font-family: var(--e
   background: #1c1c1f; border: 1px solid #2f2f33; color: #c9c9cc; font-size: 19px; font-weight: 600; margin-right: 4px; }
 .ev-bold { font-weight: 700; color: var(--ev-text); }
 .ev-rest { font-weight: 500; color: var(--ev-dim); margin-left: -2px; }
+.ev-cap-placed { position: fixed; display: block; white-space: normal; overflow-wrap: anywhere; font-size: 32px;
+  line-height: 1.3; padding: 14px 20px; color: #fff; background: rgba(13,16,24,.84); border-radius: 10px; }
+.ev-continuous .ev-cap-placed { min-height: calc(2.6em + 28px); align-content: center; }
+.ev-cap-placed .ev-num { vertical-align: .12em; margin-right: 10px; }
+.ev-cap-placed .ev-rest { color: #dadee7; margin-left: 0; }
 #ev-keys { position: absolute; left: 0; right: 0; top: 885px; height: 56px; }
 .ev-key { position: absolute; left: 50%; top: 0; display: flex; align-items: center; gap: 12px; font-size: 22px; color: var(--ev-dim); white-space: nowrap; }
 .ev-key kbd { font-family: var(--ev-font); font-size: 22px; font-weight: 600; color: var(--ev-text); background: #161618; border: 1px solid #3a3a3f;

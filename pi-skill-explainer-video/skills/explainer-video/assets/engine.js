@@ -51,6 +51,15 @@
     return Math.min(a, b);
   }
 
+  /** The incoming shot chooses the transition for both sides of its edit. */
+  function stepOpacity(t, seg, sb) {
+    var next = sb.steps[seg.index + 1];
+    if (!next && !sb.outro && sb.framing === 'full-app' && t === seg.end) return 1;
+    var fadeIn = seg.index > 0 && sb.steps[seg.index].transition !== 'cut';
+    var fadeOut = next ? next.transition !== 'cut' : !!sb.outro;
+    return segmentOpacity(t, seg.start, seg.end, fadeIn, fadeOut);
+  }
+
   /**
    * Interpolate a keyframe track at local time t. Keys must be sorted by `at`.
    * A key's value is reached at its own `at`. The move toward it starts after the
@@ -75,6 +84,41 @@
       }
     }
     return valueOf(keys[keys.length - 1]);
+  }
+
+  // Distance under a smoothstep velocity ramp, normalized to end at one.
+  function rampDistance(u) { return u * u * u * (2 - u); }
+
+  function captionProgress(p, continuous, captionEase) {
+    if (captionEase === 'fast-slow') {
+      var peakAt = 0.14;
+      if (p < peakAt) return peakAt * rampDistance(p / peakAt);
+      return 1 - (1 - peakAt) * rampDistance((1 - p) / (1 - peakAt));
+    }
+    return continuous ? p * p * (3 - 2 * p) : easeInOut(p);
+  }
+
+  /** The caption keeps its line breaks while its left and top edges follow the action. */
+  function captionPlacement(caption, t, continuous, captionEase) {
+    var x = caption.box[0], y = caption.box[1], previousTime = 0;
+    var track = caption.track || [];
+    for (var i = 0; i < track.length; i++) {
+      var key = track[i];
+      var move = Math.min(key.move == null ? 0.55 : key.move, key.at - previousTime);
+      if (t < key.at) {
+        var progress = ramp(t, key.at - move, move);
+        if (!continuous && key.transition === 'fade') {
+          var outgoing = progress < 0.5;
+          return { x: outgoing ? x : key.x, y: outgoing ? y : key.y, alpha: easeInOut(Math.abs(1 - 2 * progress)) };
+        }
+        var k = captionProgress(progress, continuous, captionEase);
+        return { x: lerp(x, key.x, k), y: lerp(y, key.y, k), alpha: 1 };
+      }
+      x = key.x;
+      y = key.y;
+      previousTime = key.at;
+    }
+    return { x: x, y: y, alpha: 1 };
   }
 
   /** Scale and offset that fit scene rect r = [x,y,w,h] into the view box. */
@@ -127,11 +171,13 @@
     this.doc = doc;
     this.sb = sb;
     this.timeline = buildTimeline(sb);
-    this.view = Object.assign({}, VIEW, sb.view || {});
+    this.fullApp = sb.framing === 'full-app';
+    this.view = this.fullApp ? { x: 0, y: 0, w: sb.width || 1920, h: sb.height || 1080 } : Object.assign({}, VIEW, sb.view || {});
     this.maxZoom = Number(sb.maxZoom || MAX_ZOOM);
     // Everything above the caption band; the stage mask fades the rest to black.
     this.coverArea = { w: Number(sb.width || 1920), h: this.view.y + this.view.h + 20, margin: 60 };
     this.sceneLayer = doc.getElementById('ev-scenes');
+    if (this.fullApp) this.sceneLayer.classList.add('ev-full-app');
     this.overlay = doc.getElementById('ev-overlay');
     this.steps = [];
     this._build();
@@ -162,6 +208,12 @@
       if (size) {
         scene.style.width = size[0] + 'px';
         scene.style.height = size[1] + 'px';
+      }
+      var shade = null;
+      if (step.spotlights && step.spotlights.length) {
+        shade = doc.createElement('canvas');
+        shade.className = 'ev-shade';
+        scene.appendChild(shade);
       }
       host.appendChild(scene);
       self.sceneLayer.appendChild(host);
@@ -202,6 +254,7 @@
       self.steps.push({
         def: step,
         host: host,
+        shade: shade,
         scene: scene,
         size: size,
         highlights: highlights,
@@ -215,6 +268,7 @@
     });
 
     this.caption = doc.getElementById('ev-caption');
+    if (this.sb.captionMotion === 'continuous') this.caption.classList.add('ev-continuous');
     this.keycap = doc.getElementById('ev-keys');
     this.outro = doc.getElementById('ev-outro');
     this._buildOutro();
@@ -284,9 +338,12 @@
         case 'show':
         case 'hide': {
           var v = a.type === 'show' ? easeOut(k) : 1 - easeOut(k);
+          var dx = Number(a.dx || 0);
           var dy = Number(a.dy != null ? a.dy : 10);
           el.style.opacity = String(v);
-          el.style.transform = dy && k < 1 ? 'translateY(' + ((1 - v) * (a.type === 'show' ? dy : -dy)).toFixed(2) + 'px)' : '';
+          var offset = (1 - v) * (a.type === 'show' ? 1 : -1);
+          el.style.transform = (dx || dy) && k < 1
+            ? 'translate(' + (offset * dx).toFixed(2) + 'px,' + (offset * dy).toFixed(2) + 'px)' : '';
           break;
         }
         default:
@@ -302,10 +359,51 @@
     });
   };
 
+  /** Paint the union of the lit regions onto a single scrim in scene coordinates. */
+  Player.prototype._renderSpotlights = function (st, t) {
+    if (!st.shade) return;
+    var active = st.def.spotlights.filter(function (spot) {
+      return t >= spot.from && t < (spot.to == null ? st.def.duration : spot.to);
+    });
+    st.shade.hidden = !active.length;
+    if (!active.length) return;
+    var canvas = st.shade;
+    // Rasterize full-window outlines at playback resolution even for a small source image.
+    var resolution = this.fullApp && this.sb.spotlightOutline ? st.cam.s : 1;
+    var width = Math.max(1, Math.round(st.size[0] * resolution));
+    var height = Math.max(1, Math.round(st.size[1] * resolution));
+    if (canvas.width !== width) canvas.width = width;
+    if (canvas.height !== height) canvas.height = height;
+    var ctx = canvas.getContext('2d');
+    ctx.setTransform(width / st.size[0], 0, 0, height / st.size[1], 0, 0);
+    ctx.clearRect(0, 0, st.size[0], st.size[1]);
+    ctx.fillStyle = 'rgba(0,0,0,0.58)';
+    ctx.fillRect(0, 0, st.size[0], st.size[1]);
+    var self = this;
+    var regions = active.map(function (spot) { return self._rect(st, spot.rect); });
+    regions.forEach(function (r) { ctx.clearRect(r[0], r[1], r[2], r[3]); });
+    if (this.sb.spotlightOutline === true) {
+      // Trace outside the lit pixels so even a one-line label stays readable.
+      var px = 1 / st.cam.s;
+      ctx.beginPath();
+      regions.forEach(function (r) {
+        ctx.roundRect(r[0] - 2 * px, r[1] - 2 * px, r[2] + 4 * px, r[3] + 4 * px, 5 * px);
+      });
+      ctx.lineWidth = 14 * px;
+      ctx.strokeStyle = 'rgba(78,205,255,.24)';
+      ctx.stroke();
+      ctx.lineWidth = 7 * px;
+      ctx.strokeStyle = '#102330';
+      ctx.stroke();
+      ctx.lineWidth = 4 * px;
+      ctx.strokeStyle = '#70dcff';
+      ctx.stroke();
+    }
+  };
+
   Player.prototype._renderStep = function (st, seg, t) {
     var tl = t - seg.start;
-    var isLast = seg.index === this.steps.length - 1;
-    var opacity = segmentOpacity(t, seg.start, seg.end, seg.index > 0, !isLast || !!this.sb.outro);
+    var opacity = stepOpacity(t, seg, this.sb);
     var visible = opacity > 0.001;
     st.host.style.opacity = String(opacity);
     st.host.style.visibility = visible ? 'visible' : 'hidden';
@@ -318,21 +416,23 @@
 
     var self = this;
     var cam;
-    if (st.camera.length) {
+    if (this.fullApp) {
+      cam = fitCamera([0, 0, st.size[0], st.size[1]], this.view, Infinity);
+    } else if (st.camera.length) {
       var rect = sampleTrack(st.camera, tc, function (key) { return self._rect(st, key.rect); });
       cam = fitCamera(rect, this.view, this.maxZoom);
     } else {
       cam = fitCamera([0, 0, st.size[0], st.size[1]], this.view, this.maxZoom);
     }
-    // Slow drift so held shots never look frozen; too small to read as a zoom.
-    var drift = 1 + 0.012 * ramp(tl, 0, st.def.duration);
+    var drift = this.fullApp || st.def.drift === false ? 1 : 1 + 0.012 * ramp(tl, 0, st.def.duration);
     var cx = this.view.x + this.view.w / 2;
     var cy = this.view.y + this.view.h / 2;
     cam = { s: cam.s * drift, tx: cx - (cx - cam.tx) * drift, ty: cy - (cy - cam.ty) * drift };
-    if (st.def.clamp !== false) cam = clampCamera(cam, st.size, this.coverArea);
+    if (!this.fullApp && st.def.clamp !== false) cam = clampCamera(cam, st.size, this.coverArea);
     st.cam = cam;
     st.scene.style.transform = 'translate(' + cam.tx.toFixed(2) + 'px,' + cam.ty.toFixed(2) + 'px) scale(' + cam.s.toFixed(5) + ')';
 
+    this._renderSpotlights(st, tc);
     (st.def.highlights || []).forEach(function (h, i) {
       var from = Number(h.from);
       var to = Number(h.to != null ? h.to : st.def.duration);
@@ -378,16 +478,25 @@
 
   Player.prototype._renderCaption = function (t) {
     var sb = this.sb;
-    var count = this.timeline.steps.length;
     var html = '';
     this.timeline.steps.forEach(function (seg, i) {
       var c = sb.steps[i].caption;
       if (!c) return;
-      var a = segmentOpacity(t, seg.start, seg.end, i > 0, i < count - 1 || !!sb.outro);
+      var continuous = sb.captionMotion === 'continuous';
+      var lastFrame = !sb.outro && i === sb.steps.length - 1 && t === seg.end;
+      var a = continuous ? Number(t >= seg.start && (t < seg.end || lastFrame)) : stepOpacity(t, seg, sb);
       if (a <= 0.001) return;
       var dy = (1 - easeOut(ramp(t - seg.start, -0.1, 0.5))) * 8;
       var num = c.number != null ? c.number : i + 1;
-      html += '<div class="ev-cap" style="opacity:' + a.toFixed(3) + ';transform:translate(-50%,' + dy.toFixed(2) + 'px)">' +
+      var placement = '';
+      if (c.box) {
+        var position = captionPlacement(c, t - seg.start, continuous, sb.captionEase);
+        a *= position.alpha;
+        if (continuous || (c.track && c.track.length)) dy = 0;
+        placement = 'left:' + position.x + 'px;top:' + position.y + 'px;width:' + Number(c.box[2]) + 'px;';
+      }
+      var shift = c.box ? 'translateY(' + dy.toFixed(2) + 'px)' : 'translate(-50%,' + dy.toFixed(2) + 'px)';
+      html += '<div class="ev-cap' + (c.box ? ' ev-cap-placed' : '') + '" style="' + placement + 'opacity:' + a.toFixed(3) + ';transform:' + shift + '">' +
         (num ? '<span class="ev-num">' + escapeHtml(num) + '</span>' : '') +
         '<span class="ev-bold">' + escapeHtml(c.bold) + '</span>' +
         (c.rest ? ' <span class="ev-rest">' + escapeHtml(c.rest) + '</span>' : '') + '</div>';
@@ -399,6 +508,7 @@
     var sb = this.sb;
     var html = '';
     this.timeline.steps.forEach(function (seg, i) {
+      if (sb.steps[i + 1] && sb.steps[i + 1].transition === 'cut' && t >= seg.end) return;
       (sb.steps[i].keys || []).forEach(function (k) {
         var at = seg.start + Number(k.at);
         var dur = Number(k.dur || 1.1);
@@ -493,6 +603,7 @@
     buildTimeline: buildTimeline,
     segmentOpacity: segmentOpacity,
     sampleTrack: sampleTrack,
+    captionPlacement: captionPlacement,
     fitCamera: fitCamera,
     clampCamera: clampCamera,
     Player: Player

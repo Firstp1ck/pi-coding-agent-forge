@@ -28,6 +28,17 @@ test('timeline places steps back to back and appends the outro', () => {
   assert.equal(tl.total, 15.5);
 });
 
+test('episode length allows a three-minute walkthrough while retaining shot validation', () => {
+  const sb = minimal({ format: 'episode' });
+  sb.steps = Array.from({ length: 36 }, () => structuredClone(sb.steps[0]));
+  assert.deepEqual(validateStoryboard(sb, { scenes }).errors, []);
+  assert.deepEqual(validateStoryboard(sb, { scenes }).warnings, []);
+  assert.ok(validateStoryboard({ ...sb, format: 'clip' }, { scenes }).errors.length);
+  assert.ok(validateStoryboard({ ...sb, format: 'unknown' }, { scenes }).errors.length);
+  sb.steps.at(-1).highlights[0].from = 9;
+  assert.ok(validateStoryboard(sb, { scenes }).errors.some((e) => e.includes('step 36')));
+});
+
 test('neighbouring steps crossfade: both half visible at the boundary', () => {
   const out = engine.segmentOpacity(5, 0, 5, false, true);
   const inn = engine.segmentOpacity(5, 5, 10, true, true);
@@ -159,4 +170,93 @@ test('allowTerms and image of the wrong type are named errors', () => {
   const { errors } = validateStoryboard(sb, { scenes });
   assert.ok(errors.includes('allowTerms must be an array of words'));
   assert.ok(errors.includes('step 1: image must be a file path'));
+});
+
+test('authored holds validate and invalid motion controls are reported', () => {
+  const sb = minimal();
+  const step = sb.steps[1];
+  step.drift = false;
+  step.transition = 'cut';
+  delete step.highlights;
+  assert.deepEqual(validateStoryboard(sb, { scenes }).warnings, []);
+  step.drift = 'false';
+  step.transition = 'zoom';
+  step.actions = [{ at: 1, type: 'show', target: '#row', dx: 'east' }];
+  const { errors } = validateStoryboard(sb, { scenes });
+  for (const field of ['transition', 'drift', 'dx']) assert.ok(errors.some((e) => e.includes(field)));
+});
+
+test('full-app accepts an on-app ending and validates spotlight times and caption bounds', () => {
+  const sb = minimal({ framing: 'full-app', outro: null });
+  const step = sb.steps[0];
+  step.caption.box = [50, 650, 550];
+  step.spotlights = [{ from: 0, to: 3, rect: [0, 0, 20, 20] }];
+  assert.deepEqual(validateStoryboard(sb, { scenes }).errors, []);
+  assert.deepEqual(validateStoryboard(sb, { scenes }).warnings, []);
+  step.caption.box = [1650, 900, 850];
+  step.spotlights[0].to = 6;
+  const { errors } = validateStoryboard(sb, { scenes });
+  assert.ok(errors.some((e) => e.includes('caption.box')));
+  assert.ok(errors.some((e) => e.includes('spotlights[0].to')));
+});
+
+test('a caption holds, glides, and can change sides while invisible', () => {
+  const caption = { box: [10, 20, 600], track: [
+    { at: 2, x: 210, y: 60, move: 1 },
+    { at: 4, x: 500, y: 600, move: 1, transition: 'fade' }
+  ] };
+  const at = (t) => engine.captionPlacement(caption, t);
+  assert.deepEqual(at(1), { x: 10, y: 20, alpha: 1 });
+  assert.deepEqual(at(1.5), { x: 110, y: 40, alpha: 1 });
+  assert.deepEqual(at(3), { x: 210, y: 60, alpha: 1 });
+  assert.equal(at(3.25).x, 210);
+  assert.equal(at(3.5).alpha, 0);
+  assert.equal(at(3.75).x, 500);
+  assert.deepEqual(at(4.5), { x: 500, y: 600, alpha: 1 });
+});
+
+test('fast-slow travel peaks early and coasts to a stop', () => {
+  const caption = { box: [0, 0, 200], track: [{ at: 1, x: 100, y: 0, move: 1 }] };
+  const at = (t) => engine.captionPlacement(caption, t, true, 'fast-slow').x;
+  assert.equal(at(0), 0);
+  assert.equal(at(1), 100);
+  assert.equal(engine.captionPlacement(caption, 0.5, true).x, 50);
+  const distances = Array.from({ length: 100 }, (_, i) => at((i + 1) / 100) - at(i / 100));
+  assert.ok(distances.every((d) => d >= 0));
+  const peak = distances.indexOf(Math.max(...distances));
+  assert.ok(peak >= 10 && peak < 20);
+  assert.ok(at(0.5) > 70 && at(0.5) < 80);
+  assert.ok(at(0.75) > 95);
+  assert.ok(distances[0] < 0.02 && distances.at(-1) < 0.02);
+  const sb = minimal({ captionEase: 'fast-slow' });
+  assert.deepEqual(validateStoryboard(sb, { scenes }).errors, []);
+  sb.captionEase = 'typo';
+  assert.ok(validateStoryboard(sb, { scenes }).errors.some((e) => e.includes('captionEase')));
+});
+
+test('caption tracks require a starting box, increasing times and on-screen positions', () => {
+  const sb = minimal();
+  const c = sb.steps[0].caption;
+  c.box = [100, 100, 600];
+  c.track = [{ at: 1, x: 200, y: 200 }, { at: 2, x: 50, y: 600, move: 0.4, transition: 'fade' }];
+  assert.deepEqual(validateStoryboard(sb, { scenes }).errors, []);
+  c.track[1] = { at: 1, x: 1800, y: 100, move: -0.5, transition: 'fly' };
+  const errors = validateStoryboard(sb, { scenes }).errors.join('\n');
+  for (const defect of ['arrival', 'inside the frame', 'nonnegative', 'glide or fade']) assert.ok(errors.includes(defect));
+  delete c.box;
+  assert.ok(validateStoryboard(sb, { scenes }).errors.some((e) => e.includes('starting caption.box')));
+});
+
+test('continuous captions reject independently placed shots, hidden relocations and zero-duration moves', () => {
+  const sb = minimal({ captionMotion: 'continuous', spotlightOutline: true });
+  for (const step of sb.steps) step.caption.box = [100, 200, 700];
+  assert.deepEqual(validateStoryboard(sb, { scenes }).errors, []);
+  sb.steps[0].caption.track = [{ at: 2, x: 210, y: 205, move: 1 }];
+  assert.ok(validateStoryboard(sb, { scenes }).errors.some((e) => e.includes('previous endpoint')));
+  for (const step of sb.steps.slice(1)) step.caption.box = [210, 205, 700];
+  assert.deepEqual(validateStoryboard(sb, { scenes }).errors, []);
+  for (const invalid of [{ transition: 'fade' }, { move: 0 }]) {
+    sb.steps[1].caption.track = [{ at: 1, x: 210, y: 205, ...invalid }];
+    assert.ok(validateStoryboard(sb, { scenes }).errors.some((e) => e.includes('visible glide')));
+  }
 });

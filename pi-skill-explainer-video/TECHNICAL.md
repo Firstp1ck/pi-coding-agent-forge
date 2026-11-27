@@ -96,4 +96,4 @@ The screen in that example is a recreation in Pacsea's default theme colours. Pa
 - No audio or voice-over. Videos are designed to work muted.
 - One caption per step. Use more steps rather than longer captions.
 - The layout is tuned for 1920x1080. Other sizes render but need a custom `view` box.
-- 2–6 steps of 3–12 seconds each, so at most 80 seconds with the end card. Split longer topics into a series.
+- Clip format uses 2–6 steps of 3–12 seconds each. Set `"format": "episode"` for a longer walkthrough. Shot timing and continuity checks still apply.
