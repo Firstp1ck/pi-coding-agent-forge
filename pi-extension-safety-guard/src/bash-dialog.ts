@@ -1,6 +1,6 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { SelectList, Text, visibleWidth } from "@earendil-works/pi-tui";
 import { bashSelectionHint, bashSelectionSummary, formatBashPrompt, type BashPrompt } from "./bash-prompt.ts";
+import { adaptKeys, loadUiHost, terminalRows } from "./ui-host.ts";
 
 export async function showBashPrompt(ctx: ExtensionContext, prompt: BashPrompt): Promise<string | undefined> {
   const options = ["Block", ...prompt.choices.keys()];
@@ -9,7 +9,8 @@ export async function showBashPrompt(ctx: ExtensionContext, prompt: BashPrompt):
     return ctx.ui.select(`Safety Guard: bash approval\n\n${prompt.message}\n\n${bashSelectionSummary(prompt.choices)}`, options, { signal: ctx.signal });
   }
 
-  let cleanup = () => {};
+  const host = await loadUiHost({ ui: ctx.ui });
+  let cleanup = () => { };
   try {
     return await ctx.ui.custom<string | undefined>((tui, theme, keys, done) => {
       let offset = 0;
@@ -28,7 +29,7 @@ export async function showBashPrompt(ctx: ExtensionContext, prompt: BashPrompt):
       // The signal can change between entering custom() and constructing the component.
       if (ctx.signal?.aborted) queueMicrotask(abort);
 
-      const list = new SelectList(options.map((value) => ({ value, label: value })), options.length, {
+      const list = host.createSelectList(options.map((value) => ({ value, label: value })), options.length, {
         selectedPrefix: (text) => theme.fg("accent", text),
         selectedText: (text) => theme.fg("accent", theme.bold(text)),
         description: (text) => theme.fg("muted", text),
@@ -37,8 +38,9 @@ export async function showBashPrompt(ctx: ExtensionContext, prompt: BashPrompt):
       });
       list.onSelect = ({ value }) => finish(value);
       list.onCancel = () => finish();
-      const hint = (id: Parameters<typeof keys.getKeys>[0]) => keys.getKeys(id).join("/");
-      const wrap = (text: string, width: number) => new Text(text, 0, 0).render(width);
+      const keybindings = adaptKeys(keys);
+      const hint = (id: string) => keybindings.labels(id).join("/");
+      const wrap = (text: string, width: number) => host.wrap(text, width);
 
       return {
         render(width: number) {
@@ -47,13 +49,13 @@ export async function showBashPrompt(ctx: ExtensionContext, prompt: BashPrompt):
           const choices = list.render(columns);
           const selected = list.getSelectedItem()?.label ?? "Block";
           // Native lists truncate labels. Keep the complete selected scope visible on narrow terminals.
-          const selection = visibleWidth(selected) + 4 > columns ? wrap(theme.fg("text", selected), columns) : [];
+          const selection = host.visibleWidth(selected) + 4 > columns ? wrap(theme.fg("text", selected), columns) : [];
           const choice = prompt.choices.get(selected);
           const scopeHint = wrap(theme.fg(choice?.lifetime ? "warning" : "muted", bashSelectionHint(choice)), columns);
           const help = wrap(theme.fg("dim", `${hint("tui.select.up")}/${hint("tui.select.down")} choose  ${hint("tui.select.confirm")} select  ${hint("tui.select.cancel")} block`), columns);
           const body = wrap(formatBashPrompt(prompt, theme), columns);
           const scrollHint = wrap(theme.fg("muted", `${hint("tui.select.pageUp")}/${hint("tui.select.pageDown")} scroll details`), columns);
-          const available = Math.max(1, tui.terminal.rows - title.length - choices.length - selection.length - scopeHint.length - help.length - 5);
+          const available = Math.max(1, terminalRows(tui) - title.length - choices.length - selection.length - scopeHint.length - help.length - 5);
           const scrolling = body.length > available;
           pageSize = Math.max(1, available - (scrolling ? scrollHint.length : 0));
           maxOffset = Math.max(0, body.length - pageSize);
@@ -65,9 +67,9 @@ export async function showBashPrompt(ctx: ExtensionContext, prompt: BashPrompt):
         },
         invalidate() { list.invalidate(); },
         handleInput(data: string) {
-          if (keys.matches(data, "tui.select.cancel")) finish();
-          else if (keys.matches(data, "tui.select.pageUp")) offset = Math.max(0, offset - pageSize);
-          else if (keys.matches(data, "tui.select.pageDown")) offset = Math.min(maxOffset, offset + pageSize);
+          if (keybindings.matches(data, "tui.select.cancel")) finish();
+          else if (keybindings.matches(data, "tui.select.pageUp")) offset = Math.max(0, offset - pageSize);
+          else if (keybindings.matches(data, "tui.select.pageDown")) offset = Math.min(maxOffset, offset + pageSize);
           else list.handleInput(data);
           tui.requestRender();
         },
